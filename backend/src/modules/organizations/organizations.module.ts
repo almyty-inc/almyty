@@ -17,6 +17,7 @@ import { OrganizationsController } from './organizations.controller';
 import { InvitesController } from './invites.controller';
 import { GatewaysModule } from '../gateways/gateways.module';
 import { RunnerModule } from '../runner/runner.module';
+import { ConnectionsModule } from '../connections/connections.module';
 import { ResourceHandoverHelper } from './resource-handover.helper';
 
 @Module({
@@ -37,6 +38,9 @@ import { ResourceHandoverHelper } from './resource-handover.helper';
     // A departing member's private runners are deleted through the runner
     // service's own delete path (ResourceHandoverHelper).
     forwardRef(() => RunnerModule),
+    // A departing member's own connections are wiped, then revoked at the
+    // provider (ConnectionOffboardingService, via ResourceHandoverHelper).
+    forwardRef(() => ConnectionsModule),
   ],
   providers: [OrganizationsService, OrganizationsInvitesHelper, TeamMembershipHelper, ResourceHandoverHelper],
   controllers: [OrganizationsController, InvitesController],

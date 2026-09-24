@@ -1,7 +1,7 @@
 import { Inject, forwardRef } from '@nestjs/common';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { v7 as uuidv7 } from 'uuid';
@@ -26,7 +26,13 @@ import {
   scopeToOrganizationId,
   itemToEntity,
   entityToItem,
+  userScopeId,
 } from './canonical-memory.helpers';
+
+/** Scope ids a caller in `organizationId` may address by memory id. */
+function visibleScopeIds(organizationId: string, userId?: string | null): string[] {
+  return userId ? [organizationId, userScopeId(organizationId, userId)] : [organizationId];
+}
 import { EmbeddingService, EmbeddingResult } from '../embedding.service';
 import { CanonicalSearchHelper } from './canonical-search.helper';
 import { CanonicalMemoryOpsHelper } from './canonical-ops.helper';
@@ -207,8 +213,12 @@ export class CanonicalMemoryService {
    * tenant's memory by guessing or leaking a uuid. Making it optional
    * would leave the same hole one forgetful call site away.
    */
-  async get(id: string, organizationId: string): Promise<MemoryItem | null> {
-    const row = await this.repo.findOne({ where: { id, scopeId: organizationId } });
+  async get(id: string, organizationId: string, userId?: string | null): Promise<MemoryItem | null> {
+    // The organization's scopes plus the caller's own `user` scope: another
+    // member's user memory answers exactly like a missing id.
+    const row = await this.repo.findOne({
+      where: { id, scopeId: In(visibleScopeIds(organizationId, userId)) },
+    });
     return row ? entityToItem(row) : null;
   }
 
@@ -242,7 +252,9 @@ export class CanonicalMemoryService {
   ): Promise<boolean> {
     // Scoped for the same reason as get(): unscoped, `?mode=hard` was an
     // unrecoverable delete of another tenant's memory by uuid alone.
-    const row = await this.repo.findOne({ where: { id, scopeId: organizationId } });
+    const row = await this.repo.findOne({
+      where: { id, scopeId: In(visibleScopeIds(organizationId, actor.user_id)) },
+    });
     if (!row) return false;
     if (mode === 'hard') {
       await this.repo.delete({ id });
@@ -281,7 +293,9 @@ export class CanonicalMemoryService {
       // Scoped: unscoped, this overwrote another tenant's memory with
       // attacker-supplied content. Agents read memory as grounding, so
       // that is prompt injection that persists.
-      const oldRow = await manager.findOne(CanonicalMemory, { where: { id: oldId, scopeId: organizationId } });
+      const oldRow = await manager.findOne(CanonicalMemory, {
+        where: { id: oldId, scopeId: In(visibleScopeIds(organizationId, actor.user_id)) },
+      });
       if (!oldRow) throw new MemoryError({ kind: 'not_found', id: oldId });
       if (oldRow.mode !== 'memory') {
         throw new MemoryError({

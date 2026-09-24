@@ -63,7 +63,6 @@ const KNOWN_CREATION_SITES = [
   join('modules', 'mcp-sources', 'mcp-sources.service.ts'),
   join('modules', 'tool-hub', 'tool-hub.service.ts'),
   join('modules', 'runner', 'runner-capability.publisher.ts'),
-  join('modules', 'memory', 'canonical', 'memory-capability.publisher.ts'),
 ].sort();
 
 const files = walk(SRC).map((f) => ({ rel: relative(SRC, f), src: readFileSync(f, 'utf8') }));

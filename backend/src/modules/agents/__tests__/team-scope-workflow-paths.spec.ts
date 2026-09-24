@@ -285,7 +285,16 @@ describe('team scope is an execution boundary (workflow paths)', () => {
         getRepeatableJobs: jest.fn().mockResolvedValue([{ id: 'schedule-team-agent', key: 'k-1' }]),
         removeRepeatableByKey: jest.fn().mockResolvedValue(undefined),
       };
-      const svc = new AgentSchedulerService({} as any, engine, agents as any, queue as any, m.executionAccess, executions as any);
+      // Everyone in CAST is an active org member, so the owner-membership
+      // check passes and the execution gate decides (team, private).
+      const users = fakeRepository<any>(
+        [CAST.member, CAST.nonMember, CAST.admin, CAST.owner].map((id) => ({
+          id,
+          isActive: true,
+          organizationMemberships: [{ organizationId: CAST.org, role: 'member', isActive: true }],
+        })),
+      );
+      const svc = new AgentSchedulerService({} as any, engine, agents as any, queue as any, m.executionAccess, executions as any, users as any);
       return { svc, queue };
     }
     const tick = (svc: AgentSchedulerService, agentId: string) =>

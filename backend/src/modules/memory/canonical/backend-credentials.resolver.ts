@@ -2,15 +2,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { Credential } from '../../../entities/credential.entity';
-import { CredentialsService } from '../../credentials/credentials.service';
+import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
 import { CanonicalMemoryWorkspaceConfig } from './canonical-memory-config.entity';
 import { BackendCredentials } from './backends/memory-backend.interface';
 import { ScopeRef } from './canonical.types';
+import { scopeToOrganizationId } from './canonical-memory.helpers';
 
 /**
  * Resolve a backend's credentials for a given (scope, backend_id)
- * pair from the org's encrypted credential store.
+ * pair from the org's credential store.
  *
  * Routing config in `memory_workspace_config.overrides.routing`
  * carries one credential id per backend the scope is allowed to
@@ -27,105 +27,57 @@ import { ScopeRef } from './canonical.types';
  *     }
  *   }
  *
- * The Credential row's `config` JSON (decrypted on read by
- * CredentialsService) maps onto BackendCredentials fields. Field
- * names are the same — `apiKey`, `baseUrl`, `engine`, `bearer`,
- * `project`, `location` — so a typical credential row stores:
+ * The secret is read through CredentialRefResolver, the one seam every
+ * consumer uses (docs/connections.md): it checks the row belongs to the
+ * organization and is active, keeps a private row to its owner, asks the
+ * use policy (grants) and org governance, and decrypts. This used to call
+ * CredentialsService.findById -- the dashboard read, which masks every
+ * secret -- so a backend was handed `mem0****-key` and could never
+ * authenticate, and none of those checks ran.
  *
- *   { apiKey: '<token>', baseUrl: 'https://api.mem0.ai' }
+ * The decrypted config maps onto BackendCredentials fields of the same
+ * name (`apiKey`, `baseUrl`, `engine`, `bearer`, `project`, `location`);
+ * backend-specific string fields are forwarded as well.
  *
- * Vertex needs more keys (project, location, engine, bearer); the
- * resolver simply forwards everything in the decrypted config that
- * lands on the BackendCredentials interface.
- *
- * Cache: per (scope_type, scope_id, backend_id), bounded — refreshes
- * every TTL_MS so credential rotations propagate without bouncing
- * the service.
+ * Nothing is cached: a rotation or a revoked grant applies on the next
+ * call, as it does for every other consumer.
  */
 @Injectable()
 export class BackendCredentialsResolver {
   private readonly logger = new Logger(BackendCredentialsResolver.name);
-  private readonly cache = new Map<string, { creds: BackendCredentials | null; at: number }>();
-  private static readonly TTL_MS = 60_000;
-  private static readonly MAX_ENTRIES = 256;
 
   constructor(
     @InjectRepository(CanonicalMemoryWorkspaceConfig)
     private readonly configRepo: Repository<CanonicalMemoryWorkspaceConfig>,
-    private readonly credentialsService: CredentialsService,
+    private readonly credentialRefs: CredentialRefResolver,
   ) {}
 
   /**
    * Resolve credentials for `(scope, backendId)`. Returns `null` when
-   * the scope hasn't pinned a credential id for the backend — backends
-   * that need creds throw on their next call so the caller sees a
-   * clear error rather than a silent unauth request.
+   * the scope hasn't pinned a usable credential for the backend --
+   * backends that need creds throw on their next call so the caller sees
+   * a clear error rather than a silent unauth request.
    */
   async resolve(scope: ScopeRef, backendId: string): Promise<BackendCredentials | null> {
-    const key = `${scope.scope_type}|${scope.scope_id}|${backendId}`;
-    const cached = this.cache.get(key);
-    if (cached && Date.now() - cached.at < BackendCredentialsResolver.TTL_MS) {
-      return cached.creds;
-    }
-
     const cfg = await this.configRepo.findOne({
       where: { scopeType: scope.scope_type, scopeId: scope.scope_id },
     });
     const credentialId = ((cfg?.overrides as any)?.routing?.credentials ?? {})[backendId];
-    if (!credentialId) {
-      this.set(key, null);
-      return null;
-    }
+    if (!credentialId) return null;
 
-    let row: Credential;
+    const organizationId = scopeToOrganizationId(scope.scope_type, scope.scope_id);
     try {
-      row = await this.credentialsService.findById(credentialId, scope.scope_id);
+      const resolved = await this.credentialRefs.resolve(organizationId, credentialId, {
+        context: { purpose: 'memory_backend', resourceType: 'memory_backend', resourceId: backendId },
+      });
+      return pickKnownFields(resolved.config ?? {});
     } catch (e: any) {
-      // findById throws NotFoundException when the row doesn't
-      // belong to this org — same as missing.
-      this.logger.warn(`credential ${credentialId} not found for scope ${scope.scope_id}: ${e.message}`);
-      this.set(key, null);
+      // Not found (including another org's row), inactive, expired, a
+      // private row, or refused by policy: the backend gets nothing.
+      this.logger.warn(`credential ${credentialId} not usable for memory backend ${backendId}: ${e?.message ?? e}`);
       return null;
     }
-
-    const decrypted = decryptedConfig(row);
-    const creds = pickKnownFields(decrypted);
-    this.set(key, creds);
-    return creds;
   }
-
-  private set(key: string, creds: BackendCredentials | null): void {
-    if (this.cache.size >= BackendCredentialsResolver.MAX_ENTRIES) {
-      const oldest = this.cache.keys().next().value;
-      if (oldest !== undefined) this.cache.delete(oldest);
-    }
-    this.cache.set(key, { creds, at: Date.now() });
-  }
-
-  /**
-   * Invalidate the cache entry for a credential rotation. Called by
-   * the credentials controller when a row is updated, so the next
-   * memory dispatch picks up the rotated key.
-   */
-  invalidate(scope: ScopeRef, backendId?: string): void {
-    if (backendId) {
-      this.cache.delete(`${scope.scope_type}|${scope.scope_id}|${backendId}`);
-      return;
-    }
-    const prefix = `${scope.scope_type}|${scope.scope_id}|`;
-    for (const k of Array.from(this.cache.keys())) {
-      if (k.startsWith(prefix)) this.cache.delete(k);
-    }
-  }
-}
-
-/**
- * The Credential entity's `config` JSON is decrypted by
- * CredentialsService.findById on read. The fields we expect to see
- * on a memory-backend credential row map 1:1 to BackendCredentials.
- */
-function decryptedConfig(row: Credential): Record<string, unknown> {
-  return (row.config ?? {}) as Record<string, unknown>;
 }
 
 function pickKnownFields(config: Record<string, unknown>): BackendCredentials {

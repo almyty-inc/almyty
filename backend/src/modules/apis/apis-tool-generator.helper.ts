@@ -7,14 +7,14 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import { createHash } from 'crypto';
 import * as v8 from 'v8';
 
 import { Api, ApiType } from '../../entities/api.entity';
 import { SchemaFormat } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
-import { Tool } from '../../entities/tool.entity';
+import { Tool, ToolStatus } from '../../entities/tool.entity';
 
 import { ToolsService } from '../tools/tools.service';
 import {
@@ -92,10 +92,12 @@ export class ApisToolGeneratorHelper {
     });
 
     // Quota (see tools/tool-quota.ts for the reject-not-truncate policy).
-    // Only operations whose tool name is not already taken add a row; the
-    // rest update in place. This check is unlocked and only refuses early,
-    // before any row is built; writeToolBatch below re-checks the whole
-    // batch under the organization's lock as it writes it.
+    // Only operations whose tool name no live tool holds add a row; the
+    // rest update in place. A deleted tool frees its name, so it neither
+    // counts here nor gets "updated" below: its name gets a fresh row.
+    // This check is unlocked and only refuses early, before any row is
+    // built; writeToolBatch below re-checks the whole batch under the
+    // organization's lock as it writes it.
     assertWithinPerSchemaCap(activeOperations.length, `API '${api.name}'`);
     const plannedNames = [
       ...new Set(activeOperations.map((op) => this.generateSemanticToolName(api.name, op))),
@@ -103,7 +105,7 @@ export class ApisToolGeneratorHelper {
     const alreadyThere = plannedNames.length
       ? await this.apiRepository.manager
           .getRepository(Tool)
-          .count({ where: { organizationId: api.organizationId, name: In(plannedNames) } })
+          .count({ where: { organizationId: api.organizationId, name: In(plannedNames), status: Not(ToolStatus.DELETED) } })
       : 0;
     await precheckToolQuota(
       this.apiRepository.manager,

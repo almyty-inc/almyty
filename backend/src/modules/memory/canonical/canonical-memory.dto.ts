@@ -174,10 +174,15 @@ export class PutMemoryDto {
   @Max(1)
   confidence?: number;
 
-  @ApiProperty({ type: ProvenanceDto })
+  /**
+   * Accepted for compatibility and ignored: the server records provenance
+   * itself (see CanonicalMemoryController.callerProvenance).
+   */
+  @ApiPropertyOptional({ type: ProvenanceDto, deprecated: true })
+  @IsOptional()
   @ValidateNested()
   @Type(() => ProvenanceDto)
-  provenance: ProvenanceDto;
+  provenance?: ProvenanceDto;
 }
 
 export class SearchMemoryDto {

@@ -4,6 +4,7 @@ import { Conversation } from '../../../entities/conversation.entity';
 import { MessageRole, ToolCall } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse, StreamChunk } from '../llm-providers.service';
+import { stepKindSignal } from '../dto/llm-providers.dto';
 import { callLlmProviderHttp, callLlmProviderHttpStream } from './safe-request';
 import { requireModel } from '../model-errors';
 
@@ -231,6 +232,16 @@ export async function callAnthropicStream(
   let currentBlockIndex = -1;
   let currentBlockType = '';
 
+  // Whether this reply is an answer or a tool step, reported once that
+  // is certain. A Claude message can open with a text block and follow
+  // it with a tool_use block, so text that has streamed says nothing
+  // about the step: a tool_use block start makes it a tool step at once,
+  // and a text step is only certain at message_delta, after every block
+  // has closed. The one earlier certainty: a request that offered no
+  // tools cannot get a tool_use block back.
+  const stepKind = stepKindSignal(onChunk);
+  if (tools.length === 0) stepKind.decide('text');
+
   return new Promise<ChatResponse>((resolve, reject) => {
     let buffer = '';
     let currentEventType = '';
@@ -269,6 +280,7 @@ export async function callAnthropicStream(
               currentBlockIndex = parsed.index ?? (currentBlockIndex + 1);
               currentBlockType = parsed.content_block?.type || '';
               if (currentBlockType === 'tool_use') {
+                stepKind.decide('tool');
                 toolBlocks.set(currentBlockIndex, {
                   id: parsed.content_block.id || '',
                   name: parsed.content_block.name || '',
@@ -292,7 +304,13 @@ export async function callAnthropicStream(
               break;
 
             case 'message_delta':
-              if (parsed.delta?.stop_reason) stopReason = parsed.delta.stop_reason;
+              if (parsed.delta?.stop_reason) {
+                stopReason = parsed.delta.stop_reason;
+                // message_delta comes after the last content block has
+                // closed; no block, tool_use or otherwise, can start after
+                // it. This is the first point a text reply is certain.
+                stepKind.decide(toolBlocks.size > 0 || stopReason === 'tool_use' ? 'tool' : 'text');
+              }
               if (parsed.usage?.output_tokens) outputTokens = parsed.usage.output_tokens;
               break;
           }
@@ -303,6 +321,9 @@ export async function callAnthropicStream(
     });
 
     stream.on('end', () => {
+      // A stream that ended without a message_delta: settle it on what
+      // was accumulated, which is what the runtime will act on.
+      stepKind.decide(toolBlocks.size > 0 ? 'tool' : 'text');
       const responseTime = Date.now() - startTime;
 
       // Build tool calls from accumulated blocks

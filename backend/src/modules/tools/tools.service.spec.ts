@@ -1,3 +1,4 @@
+import { Not } from 'typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { unlimitedToolQuotaManager } from '../../test/tool-quota.fake';
@@ -1235,7 +1236,7 @@ describe('ToolsService', () => {
 
       expect(result).toBe(tool);
       expect(toolRepo.findOne).toHaveBeenCalledWith({
-        where: { name: 'SpecificTool', organizationId: 'org-1' },
+        where: { name: 'SpecificTool', organizationId: 'org-1', status: Not(ToolStatus.DELETED) },
       });
     });
 

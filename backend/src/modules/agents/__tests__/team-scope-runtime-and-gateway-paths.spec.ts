@@ -257,6 +257,15 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
     });
   });
 
+  // The parent agent may start and create agents at all (the #783 gate);
+  // which ones is then the run principal's scope.
+  const spawner = (id: string, visibility: 'org' | 'team' | 'private') =>
+    agentRow(id, visibility, {
+      agentConfig: { canCreateAgents: true, canCallAgents: true },
+      // A child only gets tools its parent has (#783); scope then decides.
+      toolIds: ['team-tool', 'org-tool', 'private-tool'],
+    } as any);
+
   describe('invoke_agent, from inside a run', () => {
     const helper = () =>
       new AgentBuiltInToolsHelper(agents as any, queue as any, {} as any, runtime, {} as any);
@@ -271,7 +280,7 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
         'invoke_agent',
         { agentId: 'team-agent', input: 'hi' },
         parentRun(userPrincipal(who)),
-        agentRow('org-agent', 'org'),
+        spawner('org-agent', 'org'),
       );
       expect(out?.error).toBeUndefined();
       const [child] = runs.rows();
@@ -285,15 +294,15 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
         'invoke_agent',
         { agentId: 'team-agent', input: 'hi' },
         parentRun(userPrincipal(CAST.nonMember), CAST.admin),
-        agentRow('org-agent', 'org'),
+        spawner('org-agent', 'org'),
       );
       expect(out?.error).toBe('Failed to invoke agent: Agent not found');
       expect(runs.rows()).toHaveLength(0);
     });
 
     it('starts a private agent only for a run its owner started', async () => {
-      const own = await helper().executeBuiltInTool('invoke_agent', { agentId: 'private-agent', input: 'hi' }, parentRun(userPrincipal(CAST.owner)), agentRow('org-agent', 'org'));
-      const admins = await helper().executeBuiltInTool('invoke_agent', { agentId: 'private-agent', input: 'hi' }, parentRun(userPrincipal(CAST.admin)), agentRow('org-agent', 'org'));
+      const own = await helper().executeBuiltInTool('invoke_agent', { agentId: 'private-agent', input: 'hi' }, parentRun(userPrincipal(CAST.owner)), spawner('owner-parent', 'private'));
+      const admins = await helper().executeBuiltInTool('invoke_agent', { agentId: 'private-agent', input: 'hi' }, parentRun(userPrincipal(CAST.admin)), spawner('owner-parent', 'private'));
       expect(own?.error).toBeUndefined();
       expect(admins?.error).toBe('Failed to invoke agent: Agent not found');
       expect(runs.rows()).toHaveLength(1);
@@ -310,7 +319,7 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
         'create_agent',
         { name: 'helper', instructions: 'help', toolIds },
         parentRun(principal),
-        agentRow('org-agent', 'org'),
+        spawner('org-agent', 'org'),
       );
     const temporaries = () => agents.rows().filter((a) => a.isTemporary);
 

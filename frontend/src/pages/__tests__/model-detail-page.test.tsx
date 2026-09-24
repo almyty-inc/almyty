@@ -6,6 +6,7 @@ import { QueryClient } from '@tanstack/react-query'
 import { render } from '../../test/setup'
 import { ModelDetailPage, whyNotUsable } from '../model-detail'
 import { modelsApi } from '../../lib/models-api'
+import { LEAVE_WITHOUT_ASKING } from '../../hooks/use-leave-guard'
 import { llmProvidersApi } from '../../lib/api'
 import { modelAdaptersApi, modelDeploymentsApi } from '../../lib/deployments-api'
 import { hfAdapter, makeDeployment } from '@/components/models/hosting/__tests__/fixtures'
@@ -151,6 +152,6 @@ describe('ModelDetailPage', () => {
     expect(await screen.findByText('Remove this model?')).toBeInTheDocument()
     await userEvent.click(screen.getAllByRole('button', { name: 'Remove' }).at(-1)!)
     await waitFor(() => expect(modelsApi.remove).toHaveBeenCalledWith('h1'))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/models'))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/models', { state: LEAVE_WITHOUT_ASKING }))
   })
 })

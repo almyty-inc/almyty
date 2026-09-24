@@ -52,7 +52,7 @@ describe('OrganizationsService membership lookups are organization-scoped', () =
       undefined,
       // Removal hands the member's private resources over in the same
       // transaction; that is covered by its own spec.
-      { handOverPrivateResources: jest.fn().mockResolvedValue([]) } as any,
+      { handOverPrivateResources: jest.fn().mockResolvedValue([]), revokeWipedConnectionsAtProviders: jest.fn().mockResolvedValue(undefined) } as any,
       { publishCommitted: jest.fn() } as any,
     );
     fakeManager([[UserOrganization, userOrganizations]]);

@@ -412,7 +412,7 @@ export class LlmChatRunnerHelper {
         // the outbound tool HTTP request and the LLM provider
         // follow-up both, not just one.
         const executionOptions: ToolExecutionOptions = {
-          userId: session.userId || 'system',
+          userId: session.userId ?? undefined,
           // A chat's tool loop runs as the chat's user: a team tool only for
           // its team, a private one only for its owner, nothing but org
           // tools for a chat with no user.

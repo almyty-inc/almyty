@@ -249,7 +249,7 @@ export class GatewayProtocolService {
 
       // Execute the tool
       const executionOptions: ToolExecutionOptions = {
-        userId: request.userId || 'system',
+        userId: request.userId ?? undefined,
         // The gateway's scope, not the caller's: a gateway serves only what
         // its own visibility covers (ExecutionAccessService).
         principal: gatewayPrincipal(gateway, request.userId),
@@ -355,7 +355,7 @@ export class GatewayProtocolService {
 
     try {
       const executionOptions: ToolExecutionOptions = {
-        userId: request.userId || 'system',
+        userId: request.userId ?? undefined,
         // The gateway's scope, not the caller's: a gateway serves only what
         // its own visibility covers (ExecutionAccessService).
         principal: gatewayPrincipal(gateway, request.userId),

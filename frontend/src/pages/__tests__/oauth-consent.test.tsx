@@ -22,6 +22,7 @@ const QUERY = new URLSearchParams({
   response_type: 'code',
   code_challenge: 'chal',
   code_challenge_method: 'S256',
+  resource: 'https://api.example/acme/support',
 })
 
 vi.mock('react-router-dom', async () => {
@@ -78,6 +79,18 @@ describe('the OAuth consent screen after a failed approval', () => {
     expect(screen.getByRole('button', { name: 'Deny' })).toBeEnabled()
     expect(screen.getByRole('button', { name: /Try again|Approve/ })).toBeEnabled()
     expect(screen.getByText('Call this gateway’s tools')).toBeInTheDocument()
+  })
+
+  it('forwards the RFC 8707 resource to the code-issuing POST', async () => {
+    // The authorize GET hands it over on the query string; dropping it here
+    // left every code, and so every token, without the audience asked for.
+    ;(apiPost as any).mockResolvedValue({ code: 'auth-code' })
+    render(<OAuthConsentPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }, WAIT))
+    await waitFor(() => expect(apiPost).toHaveBeenCalled(), WAIT)
+    expect((apiPost as any).mock.calls[0][1]).toMatchObject({
+      resource: 'https://api.example/acme/support',
+    })
   })
 
   it('lets the user retry the approval', async () => {

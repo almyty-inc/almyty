@@ -138,22 +138,40 @@ export function decideToolRequest(
 }
 
 /**
- * The part of a policy a sandboxed tool's own network calls can be held
- * to: its allowed and blocked domains. The sandbox net guard sees sockets,
- * not HTTP requests, so `requireHttps` and `allowedHttpMethods` do not
- * translate; the executors that make HTTP requests themselves enforce
- * those. Null when the policy restricts no host.
+ * The part of a policy a sandboxed tool's own network traffic is held
+ * to by the sandbox net guard: allowed and blocked domains on every
+ * connection, `requireHttps` on every connection (plaintext refused) and
+ * every request, and `allowedHttpMethods` on every request made through
+ * fetch / http / https / http2. `maxResponseSizeBytes` stays with the
+ * executors, which read the response. Null when the policy sets none of
+ * these.
  *
  * This file is also loaded inside the sandbox worker (by the net guard),
  * so it must keep importing nothing.
  */
 export function sandboxHostPolicy(
   policy: GatewayToolSecurityPolicy | null | undefined,
-): { allowedDomains: string[]; blockedDomains: string[] } | null {
+): {
+  allowedDomains: string[];
+  blockedDomains: string[];
+  requireHttps: boolean;
+  allowedHttpMethods: string[];
+} | null {
   const allowedDomains = (policy?.allowedDomains ?? []).filter((d) => typeof d === 'string' && d.trim());
   const blockedDomains = (policy?.blockedDomains ?? []).filter((d) => typeof d === 'string' && d.trim());
-  if (allowedDomains.length === 0 && blockedDomains.length === 0) return null;
-  return { allowedDomains, blockedDomains };
+  const requireHttps = policy?.requireHttps === true;
+  const allowedHttpMethods = (policy?.allowedHttpMethods ?? [])
+    .filter((m) => typeof m === 'string' && m.trim())
+    .map((m) => m.trim().toUpperCase());
+  if (
+    allowedDomains.length === 0 &&
+    blockedDomains.length === 0 &&
+    !requireHttps &&
+    allowedHttpMethods.length === 0
+  ) {
+    return null;
+  }
+  return { allowedDomains, blockedDomains, requireHttps, allowedHttpMethods };
 }
 
 /**

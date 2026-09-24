@@ -1,7 +1,7 @@
 import { Inject, forwardRef } from '@nestjs/common';
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, Not } from 'typeorm';
 
 import { Tool, ToolStatus, ToolExecutionMethod } from '../../entities/tool.entity';
 import { ToolVersion } from '../../entities/tool-version.entity';
@@ -655,8 +655,15 @@ export class ToolsService {
     return this.toolVersionRepository.save(version);
   }
 
+  /**
+   * The live tool with this name, if any. Deleting a tool is a soft
+   * delete: the row stays for history, but its name is free (the partial
+   * `tools_org_name_uq` index skips it), so nothing may treat it as the
+   * tool of that name. Answering with it made a re-import "update" the
+   * dead row, which stayed deleted while reported as generated.
+   */
   async findByName(name: string, organizationId: string): Promise<Tool | null> {
-    return this.toolRepository.findOne({ where: { name, organizationId } });
+    return this.toolRepository.findOne({ where: { name, organizationId, status: Not(ToolStatus.DELETED) } });
   }
 
   // ── Delegations to ToolsStatsHelper ──

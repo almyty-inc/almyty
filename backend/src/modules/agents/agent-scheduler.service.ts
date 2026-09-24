@@ -15,6 +15,8 @@ import {
   UserPrincipal,
   userPrincipal,
 } from '../../common/authorization/execution-access.service';
+import { User } from '../../entities/user.entity';
+import { hasEffectiveMembership } from '../../common/authorization/membership';
 
 
 export interface AgentScheduleConfig {
@@ -91,6 +93,8 @@ export class AgentSchedulerService implements OnModuleInit {
     private readonly executionAccess: ExecutionAccessService,
     @InjectRepository(AgentExecution)
     private readonly executionRepo: Repository<AgentExecution>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
   ) {}
 
   async onModuleInit() {
@@ -155,6 +159,43 @@ export class AgentSchedulerService implements OnModuleInit {
    * on the agent (settings.modelIssue + schedule.pausedReason) that the
    * UI surfaces. Re-enabling the schedule after fixing the model clears it.
    */
+  /**
+   * The user a scheduled run acts as. `null` is an agent with no recorded
+   * owner, which runs as nobody (agentOwnerUserId). `undefined` is an
+   * owner who can no longer run it: the account is inactive or is no
+   * longer an effective member of the agent's organization.
+   */
+  private async scheduleOwner(agent: Agent): Promise<string | null | undefined> {
+    const ownerId = agentOwnerUserId(agent);
+    if (!ownerId) return null;
+    const user = await this.userRepo
+      .findOne({ where: { id: ownerId }, relations: { organizationMemberships: true } })
+      .catch(() => null);
+    if (!user || user.isActive === false) return undefined;
+    return hasEffectiveMembership(user.organizationMemberships, agent.organizationId) ? user.id : undefined;
+  }
+
+  /** Pause a schedule whose owner can no longer run it, and say why. */
+  private async pauseForOwner(agent: Agent): Promise<void> {
+    const settings = { ...(agent.settings || {}) };
+    if (settings.schedule) {
+      settings.schedule = {
+        ...settings.schedule,
+        enabled: false,
+        pausedReason: {
+          code: 'OWNER_NOT_MEMBER',
+          message:
+            'The member who owns this agent is no longer active in the organization, so its schedule was paused. Re-enable it as a current member to start it again.',
+          detectedAt: new Date().toISOString(),
+        } as any,
+      };
+    }
+    agent.settings = settings;
+    await this.agentRepo.save(agent);
+    await this.removeRepeatableJob(agent.id);
+    this.logger.warn(`[SCHEDULED_RUN] Paused schedule for agent ${agent.id}: its owner is not a current member`);
+  }
+
   async pauseForBrokenModel(agentId: string, organizationId: string, err: unknown): Promise<void> {
     const agent = await this.agentRepo.findOne({ where: { id: agentId, organizationId } });
     if (!agent) return;
@@ -421,13 +462,24 @@ export class AgentSchedulerService implements OnModuleInit {
         return;
       }
 
+      // A scheduled run acts as the agent's creator. It used to take the
+      // user id written into the job when the schedule was set and run as
+      // them on every tick, whether or not they were still in the
+      // organization -- a removed member's schedule kept running with
+      // their identity (and their private tools and credentials). An
+      // owner has to be an active, current member at tick time; an agent
+      // with no recorded owner runs as nobody (see agentOwnerUserId).
+      const owner = await this.scheduleOwner(agent);
+      if (owner === undefined) {
+        await this.pauseForOwner(agent);
+        return;
+      }
+
       this.logger.log(`[SCHEDULED_RUN] Executing agent ${agentId}`);
-      // As the agent's owner now, not the `userId` snapshotted into the
-      // job when the schedule was enqueued (see agentOwnerUserId), and
-      // authorized as them now: a schedule whose owner has left the agent's
-      // team (or the organization) must stop, visibly, rather than keep
-      // running a team agent for somebody outside the team.
-      const principal = userPrincipal(agentOwnerUserId(agent), 'schedule');
+      // Then the scope: the owner, as they are now, must still be allowed
+      // to run this agent (a team agent whose owner left the team stops,
+      // visibly, instead of running for somebody outside it).
+      const principal = userPrincipal(owner ?? null, 'schedule');
       const access = await this.executionAccess.canExecute(principal, agent);
       if (!access.allowed) {
         await this.pauseForLostAccess(agent, principal, access.reason);
@@ -436,7 +488,7 @@ export class AgentSchedulerService implements OnModuleInit {
       const execution = await this.executionEngine.execute(
         agent,
         organizationId,
-        principal.userId,
+        owner,
         {
           input,
           metadata: { triggerType: 'scheduled' },

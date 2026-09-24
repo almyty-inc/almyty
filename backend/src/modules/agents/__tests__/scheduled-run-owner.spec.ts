@@ -21,7 +21,12 @@ const NEW_OWNER = '22222222-2222-4222-8222-222222222222';
 function build(agent: Record<string, any>) {
   const execute = jest.fn(async () => ({ nodeResults: [] }));
   const agents = fakeRepository<any>([agent]);
-  // The real execution gate: the new owner is a member of the agent's org.
+  // The owner a tick runs as has to be a current member (see the owner
+  // membership checks in agent-scheduler.service.spec.ts), and then allowed
+  // by the real execution gate.
+  const users = fakeRepository<any>([
+    { id: NEW_OWNER, isActive: true, organizationMemberships: [{ organizationId: 'org-1', role: 'member', isActive: true }] },
+  ]);
   const m = membershipFixture();
   m.member('org-1', NEW_OWNER);
   const scheduler = new AgentSchedulerService(
@@ -31,6 +36,7 @@ function build(agent: Record<string, any>) {
     {} as any,
     m.executionAccess,
     fakeRepository<any>([]) as any,
+    users as any,
   );
   return { scheduler, execute };
 }

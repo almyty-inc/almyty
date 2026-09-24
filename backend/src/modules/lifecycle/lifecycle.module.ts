@@ -11,6 +11,7 @@ import { OnboardingModule } from '../onboarding/onboarding.module';
 import { LifecycleEmailService } from './lifecycle-email.service';
 import { LifecycleController } from './lifecycle.controller';
 import { LifecycleEmailProcessor, LIFECYCLE_EMAIL_QUEUE } from './lifecycle-email.processor';
+import { DEV_ONLY_JWT_SECRET } from '../auth/dev-jwt-secret';
 
 /**
  * New-signup activation lifecycle emails (welcome + up to 3 nudges).
@@ -38,7 +39,7 @@ import { LifecycleEmailProcessor, LIFECYCLE_EMAIL_QUEUE } from './lifecycle-emai
           );
         }
         return {
-          secret: secret || 'dev-only-jwt-secret-change-me-in-production',
+          secret: secret || DEV_ONLY_JWT_SECRET,
           // No expiresIn: an unsubscribe link should keep working forever.
           signOptions: { issuer: 'almyty', audience: 'almyty-api' },
           verifyOptions: { issuer: 'almyty', audience: 'almyty-api' },

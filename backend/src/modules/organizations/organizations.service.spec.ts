@@ -101,6 +101,7 @@ describe('OrganizationsService', () => {
           provide: ResourceHandoverHelper,
           useValue: {
             handOverPrivateResources: jest.fn().mockResolvedValue([]),
+            revokeWipedConnectionsAtProviders: jest.fn().mockResolvedValue(undefined),
             demoteTeamResources: jest.fn().mockResolvedValue([]),
           },
         },
