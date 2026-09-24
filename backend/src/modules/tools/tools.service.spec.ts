@@ -1252,9 +1252,9 @@ describe('ToolsService', () => {
   // ─── createFromOperation ───────────────────────────────────────────────────
 
   describe('createFromOperation', () => {
-    it('should auto-generate a tool from an operation', async () => {
+    it('should auto-generate a tool from an operation, recorded as the importing user\'s', async () => {
       const op = makeOperation();
-      const tool = makeTool({ status: ToolStatus.ACTIVE, createdBy: 'system' });
+      const tool = makeTool({ status: ToolStatus.ACTIVE, createdBy: 'user-importer', generated: true } as any);
 
       operationRepo.findOne.mockResolvedValue(op);
       toolRepo.create.mockReturnValue(tool);
@@ -1266,6 +1266,7 @@ describe('ToolsService', () => {
         name: 'listPets',
         description: 'List all pets',
         organizationId: 'org-1',
+        createdBy: 'user-importer',
       });
 
       expect(result).toBe(tool);
@@ -1273,9 +1274,30 @@ describe('ToolsService', () => {
         expect.objectContaining({
           operationId: op.id,
           status: ToolStatus.ACTIVE,
-          createdBy: 'system',
+          createdBy: 'user-importer',
+          generated: true,
         }),
       );
+      expect(toolVersionRepo.create).toHaveBeenCalledWith(expect.objectContaining({ createdBy: 'user-importer' }));
+    });
+
+    it('records no creator, never a sentinel, when no user is known', async () => {
+      const op = makeOperation();
+      operationRepo.findOne.mockResolvedValue(op);
+      toolRepo.create.mockImplementation((row: any) => row);
+      toolRepo.save.mockImplementation(async (row: any) => row);
+      toolVersionRepo.create.mockImplementation((row: any) => row);
+      toolVersionRepo.save.mockImplementation(async (row: any) => row);
+
+      const result = await service.createFromOperation(op, {
+        name: 'listPets',
+        description: 'List all pets',
+        organizationId: 'org-1',
+      });
+
+      expect(result.createdBy).toBeNull();
+      expect(result.generated).toBe(true);
+      expect(toolVersionRepo.create).toHaveBeenCalledWith(expect.objectContaining({ createdBy: null }));
     });
 
     it('should throw NotFoundException when operation is not found', async () => {
