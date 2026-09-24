@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 
 import { Tool, ToolStatus, ToolType } from '../../../entities/tool.entity';
 import { ScopeType } from './canonical.types';
+import { assertToolQuota } from '../../tools/tool-quota';
 
 interface MemoryCapabilityDef {
   method: 'store' | 'recall' | 'list' | 'search';
@@ -130,6 +131,13 @@ export class MemoryCapabilityPublisher {
         .andWhere('"organizationId" = :orgId', { orgId: args.organizationId })
         .execute();
 
+      // Counted after the delete and on the same transaction, so a
+      // re-publish of the same scope needs no new slots.
+      await assertToolQuota(
+        mgr,
+        args.organizationId,
+        MemoryCapabilityPublisher.CAPABILITIES.length,
+      );
       const rows: Tool[] = [];
       for (const cap of MemoryCapabilityPublisher.CAPABILITIES) {
         const row = repo.create({

@@ -155,6 +155,12 @@ export class Organization {
     return (this.gateways?.length || 0) < maxGateways;
   }
 
+  /**
+   * Reads the `tools` relation, so it is only meaningful when that
+   * relation was loaded -- and no production path loads it. Not an
+   * enforcement point: every tool insert goes through
+   * `assertToolQuota` in modules/tools/tool-quota.ts, which COUNTs.
+   */
   canAddMoreTools(): boolean {
     const maxTools = this.settings?.maxTools;
     if (!maxTools) return true;

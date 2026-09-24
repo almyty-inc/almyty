@@ -15,6 +15,7 @@ import { Organization } from '../../../entities/organization.entity';
 import { User } from '../../../entities/user.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
+import { unlimitedToolQuotaManager } from '../../../test/tool-quota.fake';
 
 describe('ToolsService - Custom Tool Creation', () => {
   let service: ToolsService;
@@ -30,6 +31,7 @@ describe('ToolsService - Custom Tool Creation', () => {
         {
           provide: getRepositoryToken(Tool),
           useValue: {
+            manager: unlimitedToolQuotaManager(),
             create: jest.fn((data) => ({ ...data, id: 'tool-123' })),
             save: jest.fn((tool) => Promise.resolve(tool)),
             find: jest.fn(),

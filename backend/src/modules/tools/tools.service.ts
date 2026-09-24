@@ -28,6 +28,7 @@ import {
 } from '../../common/authorization/private-visibility';
 import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
+import { assertToolQuota } from './tool-quota';
 export type { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats };
 
 @Injectable()
@@ -85,10 +86,9 @@ export class ToolsService {
         throw new ForbiddenException('User does not have permission to create tools');
       }
 
-      // Check organization limits
-      if (!organization.canAddMoreTools()) {
-        throw new BadRequestException('Organization has reached tool limit');
-      }
+      // Check organization limits: a real COUNT, not the unloaded
+      // `organization.tools` relation canAddMoreTools() used to read.
+      await assertToolQuota(this.toolRepository.manager, organizationId);
 
       // Validate categories if provided
       let categories: ToolCategory[] = [];
