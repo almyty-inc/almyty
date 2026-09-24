@@ -1,7 +1,7 @@
-import { FindOperator } from 'typeorm';
 import { NotFoundException } from '@nestjs/common';
 
 import { NotificationsService } from '../notifications.service';
+import { fakeRepository } from '../../../test/fake-repository';
 import {
   NOTIFICATION_DEFAULTS,
   NOTIFICATION_EVENT_TYPES,
@@ -10,74 +10,25 @@ import { OrganizationRole } from '../../../entities/user-organization.entity';
 import { TeamRole } from '../../../entities/user-team.entity';
 
 /**
- * In-memory repository fake covering the subset NotificationsService
- * uses: findOne/find/findAndCount/count with plain equality plus the
- * In / IsNull / MoreThan operators, create, save, update.
+ * The shared truthful repository, plus the column defaults the table gives
+ * a new row (`createdAt`, `readAt`) and `patch` for editing a stored row
+ * directly. The earlier fake stored and handed back the caller's own
+ * object, so `updatePreferences` could drop its `save(existing)` and the
+ * in-memory mutation still read as persisted.
  */
 function makeRepo(prefix: string, seed: any[] = []) {
-  let idCounter = 0;
-  const store: any[] = [...seed];
-
-  const matches = (row: any, where: any): boolean => {
-    if (!where) return true;
-    return Object.entries(where).every(([key, expected]) => {
-      const actual = row[key];
-      if (expected instanceof FindOperator) {
-        const type = (expected as any).type ?? (expected as any)._type;
-        const value = (expected as any).value ?? (expected as any)._value;
-        switch (type) {
-          case 'isNull':
-            return actual === null || actual === undefined;
-          case 'in':
-            return (value as any[]).includes(actual);
-          case 'moreThan':
-            return actual > value;
-          default:
-            throw new Error(`fake repo: unsupported operator "${type}"`);
-        }
-      }
-      return actual === expected;
-    });
-  };
-
-  const whereMatches = (row: any, where: any): boolean =>
-    Array.isArray(where) ? where.some((w) => matches(row, w)) : matches(row, where);
-
-  return {
-    store,
-    create: (data: any) => ({ ...data }),
-    save: jest.fn(async (row: any) => {
-      if (!row.id) {
-        row.id = `${prefix}-${++idCounter}`;
-        row.createdAt = row.createdAt ?? new Date();
-        if (!('readAt' in row)) row.readAt = null;
-        store.push(row);
-      } else if (!store.includes(row)) {
-        const idx = store.findIndex((r) => r.id === row.id);
-        if (idx >= 0) store[idx] = row;
-        else store.push(row);
-      }
-      return row;
-    }),
-    findOne: jest.fn(async ({ where }: any) => {
-      const rows = store.filter((r) => whereMatches(r, where));
-      rows.sort((a, b) => +new Date(b.createdAt ?? 0) - +new Date(a.createdAt ?? 0));
-      return rows[0] ?? null;
-    }),
-    find: jest.fn(async ({ where }: any = {}) => store.filter((r) => whereMatches(r, where))),
-    findAndCount: jest.fn(async ({ where, skip = 0, take }: any = {}) => {
-      const rows = store
-        .filter((r) => whereMatches(r, where))
-        .sort((a, b) => +new Date(b.createdAt ?? 0) - +new Date(a.createdAt ?? 0));
-      return [rows.slice(skip, take ? skip + take : undefined), rows.length];
-    }),
-    count: jest.fn(async ({ where }: any = {}) => store.filter((r) => whereMatches(r, where)).length),
-    update: jest.fn(async (criteria: any, patch: any) => {
-      const rows = store.filter((r) => whereMatches(r, criteria));
-      rows.forEach((r) => Object.assign(r, patch));
-      return { affected: rows.length };
-    }),
-  };
+  const repo = fakeRepository<any>({ seed, idPrefix: prefix });
+  const store = repo.save.getMockImplementation()!;
+  repo.save.mockImplementation(async (row: any) => {
+    if (!row.id) {
+      row.createdAt = row.createdAt ?? new Date();
+      if (!('readAt' in row)) row.readAt = null;
+    }
+    return store(row);
+  });
+  return Object.assign(repo, {
+    patch: (id: string, changes: Record<string, any>) => repo.seed({ ...repo.row(id), ...changes }),
+  });
 }
 
 describe('NotificationsService', () => {
@@ -105,10 +56,13 @@ describe('NotificationsService', () => {
       { userId: 'user-1', organizationId: 'org-1', role: OrganizationRole.MEMBER, isActive: true, inviteAccepted: true, inviteToken: null },
       // Pending invite (never accepted) — must NOT receive role-targeted rows.
       { userId: 'user-2', organizationId: 'org-1', role: OrganizationRole.ADMIN, isActive: true, inviteAccepted: false, inviteToken: 'tok' },
+      // Revoked (deactivated) admin -- must NOT receive role-targeted rows either.
+      { userId: 'revoked-1', organizationId: 'org-1', role: OrganizationRole.ADMIN, isActive: false, inviteAccepted: true, inviteToken: null },
     ]);
     userTeamRepo = makeRepo('ut', [
       { userId: 'lead-1', teamId: 'team-1', role: TeamRole.LEAD, isActive: true },
       { userId: 'user-1', teamId: 'team-1', role: TeamRole.MEMBER, isActive: true },
+      { userId: 'former-lead', teamId: 'team-1', role: TeamRole.LEAD, isActive: false },
     ]);
     mail = { sendTemplate: jest.fn().mockResolvedValue(true) };
     service = new NotificationsService(
@@ -138,8 +92,8 @@ describe('NotificationsService', () => {
     it('writes an in-app row and sends an email per default-on prefs', async () => {
       await emitApproval({ userIds: ['user-1'] });
 
-      expect(notifRepo.store).toHaveLength(1);
-      expect(notifRepo.store[0]).toMatchObject({
+      expect(notifRepo.rows()).toHaveLength(1);
+      expect(notifRepo.rows()[0]).toMatchObject({
         userId: 'user-1',
         organizationId: 'org-1',
         type: 'approval.pending',
@@ -158,7 +112,7 @@ describe('NotificationsService', () => {
 
       await emitApproval({ userIds: ['user-1'] });
 
-      expect(notifRepo.store.filter((n) => n.type === 'approval.pending')).toHaveLength(0);
+      expect(notifRepo.rows().filter((n) => n.type === 'approval.pending')).toHaveLength(0);
       expect(mail.sendTemplate).toHaveBeenCalledTimes(1);
     });
 
@@ -167,7 +121,7 @@ describe('NotificationsService', () => {
 
       await emitApproval({ userIds: ['user-1'] });
 
-      expect(notifRepo.store).toHaveLength(1);
+      expect(notifRepo.rows()).toHaveLength(1);
       expect(mail.sendTemplate).not.toHaveBeenCalled();
     });
 
@@ -181,7 +135,7 @@ describe('NotificationsService', () => {
         email: { template: 'run.failed', params: {} },
       });
 
-      expect(notifRepo.store).toHaveLength(1); // in-app default on
+      expect(notifRepo.rows()).toHaveLength(1); // in-app default on
       expect(mail.sendTemplate).not.toHaveBeenCalled(); // email default off
     });
 
@@ -191,9 +145,9 @@ describe('NotificationsService', () => {
     });
 
     it('skips users without an email address for the email channel', async () => {
-      userRepo.store.push({ id: 'no-mail', email: null, firstName: 'X' });
+      userRepo.seed({ id: 'no-mail', email: null, firstName: 'X' });
       await emitApproval({ userIds: ['no-mail'] });
-      expect(notifRepo.store).toHaveLength(1);
+      expect(notifRepo.rows()).toHaveLength(1);
       expect(mail.sendTemplate).not.toHaveBeenCalled();
     });
   });
@@ -201,16 +155,16 @@ describe('NotificationsService', () => {
   // ── roleTarget resolution ──────────────────────────────────────────
 
   describe('roleTarget resolution', () => {
-    it('resolves org owners + admins, excluding pending invitees and plain members', async () => {
+    it('resolves org owners + admins, excluding pending invitees, revoked rows and plain members', async () => {
       await emitApproval({
         roleTarget: { orgRoles: [OrganizationRole.OWNER, OrganizationRole.ADMIN] },
       });
 
-      const recipients = notifRepo.store.map((n) => n.userId).sort();
+      const recipients = notifRepo.rows().map((n) => n.userId).sort();
       expect(recipients).toEqual(['admin-1', 'owner-1']);
     });
 
-    it('adds the team LEAD (not team members) when teamLeadOfTeamId is set', async () => {
+    it('adds the active team LEAD (not team members) when teamLeadOfTeamId is set', async () => {
       await emitApproval({
         roleTarget: {
           orgRoles: [OrganizationRole.OWNER, OrganizationRole.ADMIN],
@@ -218,7 +172,7 @@ describe('NotificationsService', () => {
         },
       });
 
-      const recipients = notifRepo.store.map((n) => n.userId).sort();
+      const recipients = notifRepo.rows().map((n) => n.userId).sort();
       expect(recipients).toEqual(['admin-1', 'lead-1', 'owner-1']);
     });
 
@@ -229,7 +183,7 @@ describe('NotificationsService', () => {
         excludeUserIds: ['user-1'],
       });
 
-      const recipients = notifRepo.store.map((n) => n.userId).sort();
+      const recipients = notifRepo.rows().map((n) => n.userId).sort();
       expect(recipients).toEqual(['owner-1']);
     });
   });
@@ -241,13 +195,13 @@ describe('NotificationsService', () => {
       await emitApproval({ userIds: ['user-1'] });
       await emitApproval({ userIds: ['user-1'] });
 
-      expect(notifRepo.store).toHaveLength(2);
+      expect(notifRepo.rows()).toHaveLength(2);
       expect(mail.sendTemplate).toHaveBeenCalledTimes(1);
     });
 
     it('sends again once the window has passed', async () => {
       await emitApproval({ userIds: ['user-1'] });
-      notifRepo.store[0].createdAt = new Date(Date.now() - 11 * 60 * 1000);
+      notifRepo.patch(notifRepo.rows()[0].id, { createdAt: new Date(Date.now() - 11 * 60 * 1000) });
 
       await emitApproval({ userIds: ['user-1'] });
       expect(mail.sendTemplate).toHaveBeenCalledTimes(2);
@@ -330,7 +284,7 @@ describe('NotificationsService', () => {
     });
 
     it('supports unreadOnly and pagination', async () => {
-      await service.markRead('user-1', notifRepo.store[0].id);
+      await service.markRead('user-1', notifRepo.rows()[0].id);
 
       const unread = await service.list('user-1', { unreadOnly: true });
       expect(unread.total).toBe(2);
@@ -342,7 +296,7 @@ describe('NotificationsService', () => {
     });
 
     it('markRead 404s for another user\'s notification', async () => {
-      const foreign = notifRepo.store.find((n) => n.userId === 'user-2');
+      const foreign = notifRepo.rows().find((n) => n.userId === 'user-2');
       await expect(service.markRead('user-1', foreign.id)).rejects.toThrow(NotFoundException);
     });
 
@@ -389,7 +343,7 @@ describe('NotificationsService', () => {
         'run.failed': 'bogus' as any,
       });
       expect(res.matrix['run.failed']).toEqual(NOTIFICATION_DEFAULTS['run.failed']);
-      expect(prefRepo.store).toHaveLength(0);
+      expect(prefRepo.rows()).toHaveLength(0);
     });
   });
 
@@ -415,7 +369,7 @@ describe('NotificationsService', () => {
       expect(await service.hasRecentOrgNotification('org-1', 'retention.sweep', 24 * 3600_000)).toBe(true);
       expect(await service.hasRecentOrgNotification('org-2', 'retention.sweep', 24 * 3600_000)).toBe(false);
 
-      notifRepo.store[0].createdAt = new Date(Date.now() - 25 * 3600_000);
+      notifRepo.patch(notifRepo.rows()[0].id, { createdAt: new Date(Date.now() - 25 * 3600_000) });
       expect(await service.hasRecentOrgNotification('org-1', 'retention.sweep', 24 * 3600_000)).toBe(false);
     });
   });
