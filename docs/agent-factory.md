@@ -60,7 +60,7 @@ Publishing is idempotent: doing it twice re-syncs the existing gateway rather th
 
 Publishing refuses two things that would otherwise produce a surface that is live and useless. A platform whose credentials are absent (`REQUIRED_CREDENTIALS`, read off what each adapter actually uses, never invented) and a workflow agent behind a chat surface, which the runtime turns away at the first message with "not in autonomous mode".
 
-Channel distributions take those credentials on the distribution itself (Bot token and Signing secret for Slack) rather than sending the operator to Gateways. Publishing with them filled goes live.
+Channel distributions take those credentials on the distribution itself (Bot token and Signing secret for Slack) rather than sending the operator to Gateways. Publishing with them filled goes live. The values never sit on the distribution row: they go into one credential the distribution manages (`metadata.managedBy.kind = 'app_distribution'`), the row keeps `credentialId` and `credentialKeys` (names only), every read shows them masked, and publishing hands the gateway the reference rather than a copy. Removing the distribution deletes that credential.
 
 ![Slack distribution dialog with platform credential fields](../docs-site/public/screenshots/apps-slack-credentials.png)
 
