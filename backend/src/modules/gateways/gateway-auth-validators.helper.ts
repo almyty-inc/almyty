@@ -501,6 +501,26 @@ export class GatewayAuthValidators {
         };
       }
 
+      // The token is a member's delegation and ends with the membership.
+      // Removing a member leaves the tokens they authorized in place, so
+      // the holder is checked here the way the Basic and JWT validators
+      // beside this one check theirs: an active user with an effective
+      // membership in the gateway's organization, or no access. A token
+      // naming no user is nobody's delegation and is refused too.
+      const holder = oauthToken.userId
+        ? await this.userRepository.findOne({
+            where: { id: oauthToken.userId },
+            relations: { organizationMemberships: true },
+          })
+        : null;
+      if (!holder || !holder.isActive || !hasEffectiveMembership(holder.organizationMemberships, gatewayOrgId)) {
+        return {
+          isValid: false,
+          error: 'OAuth2 token holder is not a member of this organization',
+          errorCode: 'OAUTH2_TOKEN_HOLDER_NOT_MEMBER',
+        };
+      }
+
       if (oauthToken.expiresAt < new Date()) {
         return {
           isValid: false,
