@@ -19,6 +19,7 @@ import { SdkCodeAssemblerService } from '../node-sandbox/sdk-code-assembler.serv
 import { ToolExecutionOptions, ToolExecutionResult } from '../tool-execution.types';
 import { getByDotPath } from '../tool-execution-utils';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
+import { ToolInvocationBudget } from './tool-invocation-budget';
 
 @Injectable()
 export class ToolScriptExecutor {
@@ -151,6 +152,7 @@ export class ToolScriptExecutor {
         timeoutMs: tool.configuration?.timeout ?? api?.timeoutMs ?? 30000,
         signal: options.signal,
         invokeTool: this.buildInvokeToolCallback(options),
+        ...this.sandboxTenancy(options),
       });
 
       let resultData = sandboxResult.data;
@@ -203,6 +205,7 @@ export class ToolScriptExecutor {
         timeoutMs: tool.configuration?.timeout ?? api?.timeoutMs ?? 30000,
         signal: options.signal,
         invokeTool: this.buildInvokeToolCallback(options),
+        ...this.sandboxTenancy(options),
       });
 
       return {
@@ -237,37 +240,70 @@ export class ToolScriptExecutor {
    * in the SAME tenant context (organization + user) as the outer
    * call.
    *
+   * Every nested call draws on one ToolInvocationBudget shared by the
+   * whole tree under the root execution (depth, total calls, calls in
+   * flight). Without it a tool that invoked itself filled the shared
+   * sandbox pool with its own ancestors and wedged it for every tenant.
+   *
    * We use ModuleRef.get(..., { strict: false }) because importing
    * ToolExecutorService directly would introduce a circular import
    * (ToolExecutorService → ToolScriptExecutor → ToolExecutorService).
    * Lazy resolution through the Nest DI container breaks the cycle
    * at runtime.
    *
-   * AbortSignal propagation: the outer signal is forwarded to the
-   * nested invocation, so cancelling the outer request tears down
-   * every nested tool in flight as well.
+   * AbortSignal propagation: the sandbox hands us a signal that fires
+   * when the CALLING worker ends for any reason (its own timeout, the
+   * outer request being cancelled), so nested work never outlives the
+   * tool that asked for it.
    */
   private buildInvokeToolCallback(
     options: ToolExecutionOptions,
   ): (toolId: string, params: Record<string, any>, signal?: AbortSignal) => Promise<any> {
+    const depth = (options.invocation?.depth ?? 0) + 1;
+    // One budget per root execution: created here for a root tool, and
+    // handed down unchanged to everything beneath it.
+    const budget = options.invocation?.budget ?? ToolInvocationBudget.fromEnv();
+
     return async (toolId: string, params: Record<string, any>, signal?: AbortSignal) => {
-      // Lazy import to break the circular dependency — the
-      // orchestrator (ToolExecutorService) injects us, so we
-      // can't inject it back.
-      const { ToolExecutorService } = await import('../tool-executor.service');
-      const orchestrator = this.moduleRef.get(ToolExecutorService, { strict: false });
-      if (!orchestrator) {
-        throw new Error('Tool executor service not available for nested invocation');
+      const release = budget.claim(depth);
+      try {
+        // Lazy import to break the circular dependency — the
+        // orchestrator (ToolExecutorService) injects us, so we
+        // can't inject it back.
+        const { ToolExecutorService } = await import('../tool-executor.service');
+        const orchestrator = this.moduleRef.get(ToolExecutorService, { strict: false });
+        if (!orchestrator) {
+          throw new Error('Tool executor service not available for nested invocation');
+        }
+        const result = await orchestrator.executeTool(toolId, params, {
+          userId: options.userId,
+          organizationId: options.organizationId,
+          signal: signal ?? options.signal,
+          invocation: { depth, budget },
+        });
+        if (!result.success) {
+          throw new Error(result.error ?? 'Nested tool invocation failed');
+        }
+        return result.data;
+      } finally {
+        release();
       }
-      const result = await orchestrator.executeTool(toolId, params, {
-        userId: options.userId,
-        organizationId: options.organizationId,
-        signal: signal ?? options.signal,
-      });
-      if (!result.success) {
-        throw new Error(result.error ?? 'Nested tool invocation failed');
-      }
-      return result.data;
+    };
+  }
+
+  /**
+   * Who a sandbox execution is for, as the pool needs to know it: the
+   * organization (the pool caps how many workers and queue entries one
+   * organization may hold) and whether this is a nested `tools.invoke`
+   * call (which runs on its caller's slot rather than queueing for a new
+   * one -- the caller is blocked on it, so queueing would deadlock).
+   */
+  private sandboxTenancy(
+    options: ToolExecutionOptions,
+  ): { organizationId: string; nested: boolean } {
+    return {
+      organizationId: options.organizationId,
+      nested: (options.invocation?.depth ?? 0) > 0,
     };
   }
 

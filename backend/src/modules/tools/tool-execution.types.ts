@@ -10,6 +10,7 @@
  */
 
 import { GatewayToolSecurityPolicy } from '../../common/security/gateway-tool-policy';
+import type { ToolInvocationBudget } from './executors/tool-invocation-budget';
 export { GatewayToolSecurityPolicy };
 
 export interface ToolExecutionOptions {
@@ -66,6 +67,18 @@ export interface ToolExecutionOptions {
    * allowedRoles / allowedOrganizations there, or do the plumbing.
    */
   scopes?: string[];
+  /**
+   * Set only on a call made by `tools.invoke`: how deep in the nested
+   * call tree it sits (1 = called by the root tool) and the budget the
+   * whole tree shares. See `executors/tool-invocation-budget.ts`. Absent
+   * means this is a root execution.
+   */
+  invocation?: ToolInvocationContext;
+}
+
+export interface ToolInvocationContext {
+  depth: number;
+  budget: ToolInvocationBudget;
 }
 
 export interface ToolExecutionResult {
