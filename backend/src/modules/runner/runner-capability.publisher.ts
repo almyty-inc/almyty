@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 
 import { Runner } from '../../entities/runner.entity';
 import {
@@ -8,6 +8,7 @@ import {
   ToolStatus,
   ToolType,
 } from '../../entities/tool.entity';
+import { assertToolQuota } from '../tools/tool-quota';
 
 interface CapabilityDef {
   method: string;
@@ -136,6 +137,13 @@ export class RunnerCapabilityPublisher {
           names,
         })
         .execute();
+      // Counted after the deletes and on the same transaction, so a
+      // re-registration that only replaces its own rows needs no slots.
+      await assertToolQuota(
+        mgr,
+        runner.organizationId,
+        RunnerCapabilityPublisher.CAPABILITIES.length,
+      );
       const rows: Tool[] = [];
       for (const cap of RunnerCapabilityPublisher.CAPABILITIES) {
         const row = repo.create({
@@ -145,6 +153,14 @@ export class RunnerCapabilityPublisher {
           status: ToolStatus.ACTIVE,
           version: '1.0.0',
           organizationId: runner.organizationId,
+          // The tools inherit the runner's visibility and owner. They
+          // used to be minted with the column defaults -- org-wide, no
+          // owner -- so every member of the organization saw and could
+          // call `runner.<name>.shell.exec` on a runner whose owner had
+          // scoped it to a team.
+          visibility: runner.visibility ?? 'org',
+          teamId: runner.visibility === 'team' ? runner.teamId : null,
+          createdBy: runner.ownerUserId,
           parameters: cap.parameters,
           runnerConfig: {
             runnerId: runner.id,
@@ -169,11 +185,12 @@ export class RunnerCapabilityPublisher {
   /**
    * Drop every Tool row that points at this runner. Called on
    * unregister and on runner deletion. Uses the partial index from
-   * the migration (tools_runner_id_idx) for the lookup.
+   * the migration (tools_runner_id_idx) for the lookup. Pass the
+   * caller's EntityManager to delete inside its transaction.
    */
-  async unpublish(runnerId: string): Promise<number> {
-    const result = await this.tools
-      .createQueryBuilder()
+  async unpublish(runnerId: string, manager?: EntityManager): Promise<number> {
+    const qb = manager ? manager.createQueryBuilder() : this.tools.createQueryBuilder();
+    const result = await qb
       .delete()
       .from(Tool)
       .where(`"runnerConfig"->>'runnerId' = :runnerId`, { runnerId })

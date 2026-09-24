@@ -1,16 +1,13 @@
 import { Inject, forwardRef } from '@nestjs/common';
 import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, DataSource } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import axios from 'axios';
-import { createHash } from 'crypto';
-import * as v8 from 'v8';
 
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
-import { ApiSchema, SchemaFormat } from '../../entities/api-schema.entity';
+import { ApiSchema } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
 import { Resource } from '../../entities/resource.entity';
-import { Tool } from '../../entities/tool.entity';
 import { Organization } from '../../entities/organization.entity';
 
 import { SchemaParserService } from '../schema-parser/schema-parser.service';
@@ -18,9 +15,11 @@ import { ToolsService } from '../tools/tools.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { ApisImportHelper } from './apis-import.helper';
 import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
-import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
-import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
+import { assertNotOthersPrivate, nameTaken, resolveVisibilityWrite } from '../../common/authorization/private-visibility';
+import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { Credential } from '../../entities/credential.entity';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { hasInlineApiSecret, inlineApiAuthView, splitInlineApiAuth } from '../credentials/inline-api-auth.helper';
@@ -107,6 +106,26 @@ export class ApisService {
     return inlineApiAuthView(auth, resolved.config) as Api['authentication'];
   }
 
+  /**
+   * Visibility, team and owner for a new API. The creator owns it, so
+   * 'private' is private to them; a team scope is checked against the
+   * creator's memberships.
+   */
+  private async scopeForNewApi(
+    organizationId: string,
+    userId: string | undefined,
+    visibility: ResourceVisibility | undefined,
+    teamId: string | null | undefined,
+  ) {
+    if (userId) await this.accessPolicy.assertCanScopeToTeam(userId, organizationId, visibility, teamId);
+    return resolveVisibilityWrite({
+      requestedVisibility: visibility,
+      requestedTeamId: teamId,
+      current: { ownerId: userId ?? null },
+      callerId: userId,
+      noun: 'API',
+    });
+  }
   async create(createApiData: CreateApiData, userId?: string): Promise<Api> {
     // Check if organization exists
     const organization = await this.organizationRepository.findOne({
@@ -136,20 +155,22 @@ export class ApisService {
     });
 
     if (existingApi) {
-      throw new BadRequestException('API with this name already exists in the organization');
+      throw nameTaken('API', createApiData.name);
     }
 
-    if (userId) {
-      await this.accessPolicy.assertCanScopeToTeam(
-        userId,
-        createApiData.organizationId,
-        (createApiData as any).visibility,
-        (createApiData as any).teamId,
-      );
-    }
+    // The creator owns the API; 'private' means private to them.
+    const scope = await this.scopeForNewApi(
+      createApiData.organizationId,
+      userId,
+      (createApiData as any).visibility,
+      (createApiData as any).teamId,
+    );
 
     const api = this.apiRepository.create({
       ...createApiData,
+      visibility: scope.visibility,
+      teamId: scope.teamId,
+      ownerUserId: userId ?? null,
       status: ApiStatus.DRAFT,
     });
 
@@ -174,8 +195,10 @@ export class ApisService {
    * internal caller (worker, cron job, new code path) was
    * implicitly trusting the id. Defence in depth now lives at
    * this layer.
+   *
+   * With a `caller`, another member's private API is "not found".
    */
-  async findOne(id: string, organizationId: string): Promise<Api | null> {
+  async findOne(id: string, organizationId: string, caller?: { id: string }): Promise<Api | null> {
     // Only eager-load `operations` — that's the one relation any
     // caller actually consumes (generateToolsFromApi falls back to
     // `api.operations` when preloadedOperations isn't supplied).
@@ -189,10 +212,12 @@ export class ApisService {
     // hold. On re-imports the existing operations + resources
     // amplified this enough to OOM the worker before tool
     // generation even started.
-    return this.apiRepository.findOne({
+    const api = await this.apiRepository.findOne({
       where: { id, organizationId },
       relations: { operations: true },
     });
+    if (api && caller) await assertNotOthersPrivate(this.accessPolicy, caller, api, 'API');
+    return api;
   }
 
   async findAllByOrganization(
@@ -212,7 +237,7 @@ export class ApisService {
     );
 
     const qb = this.apiRepository.createQueryBuilder('api');
-    await this.accessPolicy.applyListFilter(qb, caller, organizationId, 'api');
+    await this.accessPolicy.applyListFilter(qb, caller, organizationId, 'api', { ownerColumn: 'ownerUserId' });
     if (type) qb.andWhere('api.type = :type', { type });
     if (status) qb.andWhere('api.status = :status', { status });
     // Count, don't load: a Stripe-class API has hundreds of operations
@@ -251,7 +276,10 @@ export class ApisService {
     rateLimits?: any;
     timeoutMs?: number;
     retryAttempts?: number;
-  }, organizationId: string): Promise<Api> {
+    visibility?: ResourceVisibility;
+    teamId?: string | null;
+  }, organizationId: string, userId?: string): Promise<Api> {
+    const scope = await this.scopeForNewApi(organizationId, userId, data.visibility, data.teamId);
     // Check if organization exists
     const organization = await this.organizationRepository.findOne({
       where: { id: organizationId },
@@ -277,7 +305,7 @@ export class ApisService {
     });
 
     if (existingApi) {
-      throw new BadRequestException('API with this name already exists in the organization');
+      throw nameTaken('API', data.name);
     }
 
     const api = this.apiRepository.create({
@@ -295,6 +323,9 @@ export class ApisService {
       timeoutMs: data.timeoutMs || 30000,
       retryAttempts: data.retryAttempts || 3,
       version: '1.0.0',
+      visibility: scope.visibility,
+      teamId: scope.teamId,
+      ownerUserId: userId ?? null,
     });
 
     let saved = await this.apiRepository.save(api);
@@ -315,12 +346,15 @@ export class ApisService {
     description?: string;
     dependencies: Record<string, string>;
     npmRegistry?: any;
-  }, organizationId: string): Promise<Api> {
+    visibility?: ResourceVisibility;
+    teamId?: string | null;
+  }, organizationId: string, userId?: string): Promise<Api> {
+    const scope = await this.scopeForNewApi(organizationId, userId, data.visibility, data.teamId);
     const organization = await this.organizationRepository.findOne({ where: { id: organizationId } });
     if (!organization) throw new NotFoundException('Organization not found');
 
     const existingApi = await this.apiRepository.findOne({ where: { name: data.name, organizationId } });
-    if (existingApi) throw new BadRequestException('API with this name already exists');
+    if (existingApi) throw nameTaken('API', data.name);
 
     if (!data.dependencies || Object.keys(data.dependencies).length === 0) {
       throw new BadRequestException('At least one npm package is required');
@@ -336,6 +370,9 @@ export class ApisService {
       dependencies: data.dependencies,
       npmRegistry: data.npmRegistry || null,
       sdkMaps: {},
+      visibility: scope.visibility,
+      teamId: scope.teamId,
+      ownerUserId: userId ?? null,
     });
 
     const saved = await this.apiRepository.save(api);
@@ -350,13 +387,14 @@ export class ApisService {
     organizationId: string,
     userId?: string,
   ): Promise<Api> {
-    const api = await this.findOne(id, organizationId);
+    const api = await this.findOne(id, organizationId, userId ? { id: userId } : undefined);
 
     if (!api) {
       throw new NotFoundException('API not found');
     }
 
     // Authorization: org owner/admin always, team-scoped requires team lead.
+    // The owner of a private API manages it (canAccess passes the owner).
     if (userId) {
       const decision = await this.accessPolicy.canAccess({ id: userId }, api, 'manage');
       if (!decision.allowed) {
@@ -364,6 +402,15 @@ export class ApisService {
       }
     }
 
+    // A rename is held to the same organization-wide uniqueness as create
+    // (see nameTaken): the API's name seeds its generated tool names.
+    if (typeof updateApiData.name === 'string' && updateApiData.name !== api.name) {
+      const clash = await this.apiRepository.findOne({
+        where: { name: updateApiData.name, organizationId },
+        select: { id: true },
+      });
+      if (clash && clash.id !== api.id) throw nameTaken('API', updateApiData.name);
+    }
     // Re-validate team scoping if it's being changed.
     if (userId && ((updateApiData as any).visibility !== undefined || (updateApiData as any).teamId !== undefined)) {
       const updateAnyEarly = updateApiData as any;
@@ -372,19 +419,64 @@ export class ApisService {
       await this.accessPolicy.assertCanScopeToTeam(userId, organizationId, nextVis, nextTeamId);
     }
 
-    Object.assign(api, updateApiData);
-    // Sanitize team-scoping after the spread so a flip back to 'org'
-    // clears the dangling teamId (the DB constraint allows it but it
-    // leaves a stale UUID hanging on the row otherwise).
     const updateAny = updateApiData as any;
-    if (updateAny.visibility === 'org') {
-      api.teamId = null;
-    } else if (updateAny.visibility === 'team' && updateAny.teamId !== undefined) {
-      api.teamId = updateAny.teamId;
+    const scopeChanging = updateAny.visibility !== undefined || updateAny.teamId !== undefined;
+    // Only the recorded owner may make an API private; a row with no
+    // recorded owner becomes the caller's.
+    const scope = scopeChanging
+      ? resolveVisibilityWrite({
+          requestedVisibility: updateAny.visibility,
+          requestedTeamId: updateAny.visibility === undefined && api.visibility !== 'team' ? undefined : updateAny.teamId,
+          current: { visibility: api.visibility, teamId: api.teamId, ownerId: api.ownerUserId },
+          callerId: userId,
+          noun: 'API',
+        })
+      : null;
+    const becomesPrivate = scope?.visibility === 'private' && api.visibility !== 'private';
+    // Going private takes the API's generated tools private too (below),
+    // which would detach them from the shared agents and gateways that use
+    // them. Refuse and say which, as making one of those tools private does.
+    if (becomesPrivate && userId && scope?.ownerId) {
+      const goingPrivate: Array<{ id: string }> = await this.dataSource.query(
+        `SELECT id FROM tools
+          WHERE "organizationId" = $1 AND status <> 'deleted'
+            AND ("apiId" = $2 OR "operationId" IN (SELECT id FROM operations WHERE "apiId" = $2))
+            AND ("createdBy" IS NULL OR "createdBy" = 'system' OR "createdBy" = $3::varchar)`,
+        [organizationId, api.id, scope.ownerId],
+      );
+      await assertNoSharedDependents(
+        this.dataSource.manager,
+        this.accessPolicy,
+        { noun: 'API', organizationId, targets: goingPrivate.map((t) => ({ kind: 'tool' as const, id: t.id })) },
+        userId,
+      );
+    }
+
+    const { visibility: _v, teamId: _t, ownerUserId: _o, ...rest } = updateAny;
+    Object.assign(api, rest);
+    if (scope) {
+      api.visibility = scope.visibility;
+      api.teamId = scope.teamId;
+      api.ownerUserId = scope.ownerId;
     }
     // An inline secret in the new authentication moves to the store.
     await this.moveInlineAuth(api);
     const saved = await this.apiRepository.save(api);
+
+    // The tools generated from an API are its public face; a private API
+    // with org-wide tools would still be usable by everyone. Take the
+    // generated ones (and the owner's own) private with it. Tools other
+    // members built on top of it keep their owner and stop resolving the
+    // API at run time.
+    if (becomesPrivate && saved.ownerUserId) {
+      await this.dataSource.query(
+        `UPDATE tools SET visibility = 'private', "teamId" = NULL, "createdBy" = $3::varchar
+          WHERE "organizationId" = $1
+            AND ("apiId" = $2 OR "operationId" IN (SELECT id FROM operations WHERE "apiId" = $2))
+            AND ("createdBy" IS NULL OR "createdBy" = 'system' OR "createdBy" = $3::varchar)`,
+        [organizationId, saved.id, saved.ownerUserId],
+      );
+    }
 
     // Audit log (fire-and-forget)
     this.auditLogService.logUpdate(organizationId, userId, AuditResource.API, saved.id, saved.name);
@@ -402,6 +494,7 @@ export class ApisService {
     if (!existing) {
       throw new NotFoundException('API not found');
     }
+    if (userId) await assertNotOthersPrivate(this.accessPolicy, { id: userId }, existing, 'API');
 
     // Authorization: org owner/admin always, team-scoped requires team lead.
     if (userId) {

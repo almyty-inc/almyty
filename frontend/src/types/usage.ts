@@ -1,4 +1,4 @@
-import type { Gateway, Tool, LlmProvider, User, Organization, Api, ApiAuthType } from './index';
+import type { Gateway, Tool, LlmProvider, User, Organization, ApiAuthType } from './index';
 import type { RouteAttribution } from './models';
 import type { CollaborationParticipant } from '@/components/agents/builder/collaboration';
 // Usage Metrics Types
@@ -206,6 +206,9 @@ export interface Agent {
     prompt: string
   }
   toolIds?: string[]
+  /** 'private' = only its owner (createdBy) can see or use it. */
+  visibility?: 'private' | 'team' | 'org'
+  teamId?: string | null
   modelConfig?: {
     providerId?: string
     model?: string

@@ -19,7 +19,6 @@ describe('AgentsController', () => {
   let controller: AgentsController;
   let executionController: AgentExecutionController;
   let mgmtController: AgentManagementController;
-  let runsController: AgentRunsController;
   let agentsService: jest.Mocked<AgentsService>;
   let executionEngine: jest.Mocked<AgentExecutionEngine>;
   let runtimeService: jest.Mocked<AgentRuntimeService>;
@@ -123,7 +122,6 @@ describe('AgentsController', () => {
     controller = module.get<AgentsController>(AgentsController);
     executionController = module.get<AgentExecutionController>(AgentExecutionController);
     mgmtController = module.get<AgentManagementController>(AgentManagementController);
-    runsController = module.get<AgentRunsController>(AgentRunsController);
     agentsService = module.get(AgentsService);
     executionEngine = module.get(AgentExecutionEngine);
     runtimeService = module.get(AgentRuntimeService);
@@ -235,7 +233,7 @@ describe('AgentsController', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAgent);
-      expect(agentsService.getAgent).toHaveBeenCalledWith('agent-1', 'org-1');
+      expect(agentsService.getAgent).toHaveBeenCalledWith('agent-1', 'org-1', { id: 'user-1' });
     });
 
     it('should handle not found error', async () => {
@@ -411,7 +409,7 @@ describe('AgentsController', () => {
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAgent);
       expect(result.message).toBe('Agent activated successfully');
-      expect(agentsService.activateAgent).toHaveBeenCalledWith('agent-1', 'org-1');
+      expect(agentsService.activateAgent).toHaveBeenCalledWith('agent-1', 'org-1', 'user-1');
     });
 
     it('should handle activation error', async () => {
@@ -431,7 +429,7 @@ describe('AgentsController', () => {
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAgent);
       expect(result.message).toBe('Agent deactivated successfully');
-      expect(agentsService.deactivateAgent).toHaveBeenCalledWith('agent-1', 'org-1');
+      expect(agentsService.deactivateAgent).toHaveBeenCalledWith('agent-1', 'org-1', 'user-1');
     });
 
     it('should handle deactivation error', async () => {

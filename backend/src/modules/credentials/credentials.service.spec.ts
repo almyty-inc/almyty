@@ -147,8 +147,9 @@ describe('CredentialsService', () => {
       // drops the call goes undetected and a team_member can see
       // every credential in the org.
       expect(accessPolicy.applyListFilter).toHaveBeenCalledTimes(2);
-      expect(accessPolicy.applyListFilter).toHaveBeenCalledWith(credQb, { id: 'user-1' }, 'org-1', 'c');
-      expect(accessPolicy.applyListFilter).toHaveBeenCalledWith(providerQb, { id: 'user-1' }, 'org-1', 'p');
+      // ownerColumn: the caller's own private rows come back, nobody else's.
+      expect(accessPolicy.applyListFilter).toHaveBeenCalledWith(credQb, { id: 'user-1' }, 'org-1', 'c', { ownerColumn: 'ownerUserId' });
+      expect(accessPolicy.applyListFilter).toHaveBeenCalledWith(providerQb, { id: 'user-1' }, 'org-1', 'p', { ownerColumn: 'ownerUserId' });
     });
   });
 
@@ -330,7 +331,7 @@ describe('CredentialsService', () => {
       credentialRepository.findOne.mockResolvedValue(existing);
       credentialRepository.save.mockResolvedValue(existing);
 
-      const result = await service.update(
+      await service.update(
         'cred-1',
         { name: 'Updated Name', config: { apiKey: 'new-key-value-here' } },
         'org-1',
@@ -485,7 +486,7 @@ describe('CredentialsService', () => {
       expect(result.apis[0].name).toBe('Weather API');
       expect(llmProviderRepository.find).toHaveBeenCalledWith({
         where: { credentialId: 'cred-1', organizationId: 'org-1' },
-        select: { id: true, name: true, type: true, status: true },
+        select: { id: true, name: true, type: true, status: true, visibility: true, ownerUserId: true },
       });
     });
 

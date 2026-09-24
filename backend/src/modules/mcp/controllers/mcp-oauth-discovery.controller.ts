@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { getBaseUrl } from '../../../common/config/base-url';
+import { isPrivateGateway } from '../../gateways/private-gateway';
 
 /**
  * Root-level OAuth discovery routes per RFC 8414 Section 3 and RFC 9728.
@@ -90,7 +91,9 @@ export class McpOAuthDiscoveryController {
     const gateway = await this.gatewayRepository.findOne({
       where: { endpoint, organizationId: org.id, status: GatewayStatus.ACTIVE },
     });
-    if (!gateway) {
+    // Discovery is anonymous, so a private gateway is absent here: the
+    // same 404 an unknown slug gets.
+    if (!gateway || isPrivateGateway(gateway)) {
       throw new HttpException('Gateway not found', HttpStatus.NOT_FOUND);
     }
   }

@@ -23,6 +23,24 @@ class FakeRepo {
     }
     return { affected: 0 };
   }
+  // The tool quota reads the organization through the same transactional
+  // manager; no organization row means no maxTools, so publishing fits.
+  async findOne() {
+    return null;
+  }
+  /**
+   * The DELETE/SELECT builders the publisher issues, evaluated by their
+   * exact SQL. The builder this replaces read `params.runnerId` from any
+   * clause and ignored the SQL, so the by-name delete matched nothing,
+   * could lose its organization predicate or go missing entirely, and
+   * unpublish's WHERE could match every runner, all with the suite green.
+   */
+  private static readonly CLAUSES: Record<string, (r: Tool, p: any) => boolean> = {
+    [`"runnerConfig"->>'runnerId' = :runnerId`]: (r, p) => r.runnerConfig?.runnerId === p.runnerId,
+    [`t."runnerConfig"->>'runnerId' = :runnerId`]: (r, p) => r.runnerConfig?.runnerId === p.runnerId,
+    ['"organizationId" = :organizationId AND name IN (:...names)']: (r, p) =>
+      r.organizationId === p.organizationId && (p.names as string[]).includes(r.name),
+  };
   createQueryBuilder() {
     const self = this;
     const filters: Array<(r: Tool) => boolean> = [];
@@ -30,17 +48,17 @@ class FakeRepo {
     const qb: any = {
       delete: () => { mode = 'delete'; return qb; },
       from: () => qb,
-      where: (_clause: string, params: any) => {
-        filters.push((r) => r.runnerConfig?.runnerId === params.runnerId);
+      where: (clause: string, params: any) => {
+        const p = FakeRepo.CLAUSES[clause];
+        if (!p) throw new Error(`the clause "${clause}" is not modelled`);
+        filters.push((r) => p(r, params));
         return qb;
       },
       execute: async () => {
-        if (mode === 'delete') {
-          const before = self.rows.length;
-          self.rows = self.rows.filter((r) => !filters.every((f) => f(r)));
-          return { affected: before - self.rows.length };
-        }
-        return { affected: 0 };
+        if (mode !== 'delete') throw new Error('only DELETE is executed');
+        const before = self.rows.length;
+        self.rows = self.rows.filter((r) => !filters.every((f) => f(r)));
+        return { affected: before - self.rows.length };
       },
       getMany: async () => self.rows.filter((r) => filters.every((f) => f(r))),
     };
@@ -128,5 +146,22 @@ describe('RunnerCapabilityPublisher', () => {
     expect(rows1.length).toBe(rows2.length);
     expect(rows1.every((r) => r.runnerConfig?.runnerId === 'runner-1')).toBe(true);
     expect(rows2.every((r) => r.runnerConfig?.runnerId === 'runner-2')).toBe(true);
+  });
+
+  it('a republish takes over a name left behind by a replaced runner, in this organization only', async () => {
+    const repo = new FakeRepo();
+    const pub = new RunnerCapabilityPublisher(repo as any);
+    // A reaped runner's rows still hold the name; another organization
+    // has its own runner of the same name.
+    await pub.publish(makeRunner({ id: 'runner-old' }));
+    await pub.publish(makeRunner({ id: 'runner-other-org', organizationId: 'org-2' }));
+
+    const fresh = await pub.publish(makeRunner({ id: 'runner-new' }));
+
+    const org1 = repo.rows.filter((r) => r.organizationId === 'org-1');
+    const org2 = repo.rows.filter((r) => r.organizationId === 'org-2');
+    expect(org1.map((r) => r.runnerConfig?.runnerId)).toEqual(fresh.map(() => 'runner-new'));
+    expect(org2).toHaveLength(fresh.length);
+    expect(org2.every((r) => r.runnerConfig?.runnerId === 'runner-other-org')).toBe(true);
   });
 });

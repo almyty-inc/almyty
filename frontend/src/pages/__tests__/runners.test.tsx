@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 import { render } from '../../test/setup'
 import { RunnersPage } from '../runners'
 
 vi.mock('../../lib/api', () => ({
-  runnersApi: { getAll: vi.fn() },
+  runnersApi: { getAll: vi.fn(), unregister: vi.fn() },
 }))
 
 vi.mock('../../store/organization', () => ({
@@ -21,17 +22,19 @@ vi.mock('../../store/app', () => ({
 import { runnersApi } from '../../lib/api'
 
 const mockedGetAll = runnersApi.getAll as ReturnType<typeof vi.fn>
+const mockedUnregister = runnersApi.unregister as ReturnType<typeof vi.fn>
 
 describe('RunnersPage', () => {
   beforeEach(() => {
     mockedGetAll.mockReset()
+    mockedUnregister.mockReset()
   })
 
   it('renders the empty state with a Start a runner CTA when no runners are registered', async () => {
     mockedGetAll.mockResolvedValue([])
     render(<RunnersPage />)
     await waitFor(() => {
-      expect(screen.getByText(/no runners registered/i)).toBeInTheDocument()
+      expect(screen.getByText(/no runners yet/i)).toBeInTheDocument()
     })
     // CTA appears in both the header and the empty-state body. Testing
     // that at least one is wired to /runners/new.
@@ -57,11 +60,55 @@ describe('RunnersPage', () => {
     })
   })
 
+  it('marks an abandoned setup as never connected and shows a private runner as private', async () => {
+    mockedGetAll.mockResolvedValue([
+      makeRunner({ id: 'r1', name: 'half-set-up', state: 'registered', runtimeInfo: null, lastHeartbeatAt: null, visibility: 'private' }),
+    ])
+    render(<RunnersPage />)
+    await waitFor(() => {
+      expect(screen.getByText('half-set-up')).toBeInTheDocument()
+      expect(screen.getByText('never connected')).toBeInTheDocument()
+      expect(screen.getByText('private')).toBeInTheDocument()
+    })
+  })
+
   it('renders an error state with retry when the query fails', async () => {
     mockedGetAll.mockRejectedValue(new Error('boom'))
     render(<RunnersPage />)
     await waitFor(() => {
       expect(screen.getByText(/couldn't load runners/i)).toBeInTheDocument()
+    })
+  })
+
+  describe('delete', () => {
+    const openDelete = async () => {
+      mockedGetAll.mockResolvedValue([makeRunner({ id: 'r3', name: 'old-machine', state: 'offline' })])
+      const user = userEvent.setup()
+      render(<RunnersPage />)
+      await user.click(await screen.findByRole('button', { name: /actions/i }))
+      await user.click(await screen.findByText('Delete'))
+      return { user, dialog: await screen.findByRole('alertdialog') }
+    }
+
+    it('asks before deleting, naming the runner', async () => {
+      const { dialog } = await openDelete()
+      expect(within(dialog).getByText(/delete runner old-machine\?/i)).toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: 'Delete runner' })).toBeInTheDocument()
+      expect(mockedUnregister).not.toHaveBeenCalled()
+    })
+
+    it('Keep it leaves the runner alone', async () => {
+      const { user, dialog } = await openDelete()
+      await user.click(within(dialog).getByRole('button', { name: 'Keep it' }))
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+      expect(mockedUnregister).not.toHaveBeenCalled()
+    })
+
+    it('deletes the runner once confirmed', async () => {
+      mockedUnregister.mockResolvedValue({})
+      const { user, dialog } = await openDelete()
+      await user.click(within(dialog).getByRole('button', { name: 'Delete runner' }))
+      await waitFor(() => expect(mockedUnregister).toHaveBeenCalledWith('r3'))
     })
   })
 })
@@ -72,13 +119,14 @@ function makeRunner(overrides: Partial<any>): any {
     name: overrides.name ?? 'r-x',
     state: overrides.state ?? 'online',
     labels: overrides.labels ?? {},
-    runtimeInfo: overrides.runtimeInfo ?? {
+    visibility: overrides.visibility ?? 'org',
+    runtimeInfo: 'runtimeInfo' in overrides ? overrides.runtimeInfo : {
       os: 'darwin', arch: 'arm64', hostname: 'host',
       cpuCount: 8, memoryMb: 16000, runnerVersion: '0.1.0',
       binaries: { node: 'v20', git: 'git 2.47.0', python: null },
     },
     config: overrides.config ?? { maxConcurrent: 4 },
-    lastHeartbeatAt: overrides.lastHeartbeatAt ?? new Date(Date.now() - 5000).toISOString(),
+    lastHeartbeatAt: 'lastHeartbeatAt' in overrides ? overrides.lastHeartbeatAt : new Date(Date.now() - 5000).toISOString(),
     registeredAt: overrides.registeredAt ?? new Date().toISOString(),
   }
 }

@@ -1,22 +1,21 @@
 /**
  * OperationsTab — searchable list of API operations parsed from a schema.
  *
- * Owns the operation search/method filter state, the selected-operation
- * detail dialog, and copy-to-clipboard for full endpoints. Used by the API
+ * Owns the operation search/method filter state and the expanded
+ * operation: clicking a row opens its details (full endpoint with copy,
+ * parameters, related tools) in place under the row. Used by the API
  * detail page (`pages/api-detail.tsx`).
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Code, Copy, Search, Upload } from 'lucide-react'
+import { ChevronDown, ChevronRight, Code, Search, Upload } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Label } from '@/components/ui/label'
+import { CopyField } from '@/components/ui/copy-field'
 import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
-import { useNotifications } from '@/store/app'
 import { Api, ApiOperation, Tool } from '@/types'
 
 interface OperationsTabProps {
@@ -28,8 +27,7 @@ interface OperationsTabProps {
 
 export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }: OperationsTabProps) {
   const navigate = useNavigate()
-  const { success } = useNotifications()
-  const [selectedOperation, setSelectedOperation] = useState<ApiOperation | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [operationSearch, setOperationSearch] = useState('')
   const [methodFilter, setMethodFilter] = useState<string>('ALL')
 
@@ -76,7 +74,7 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
           ) : (
             <div className="space-y-4">
               {/* Search and method filter */}
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -86,7 +84,7 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
                     onChange={(e) => setOperationSearch(e.target.value)}
                   />
                 </div>
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-1">
                   {['ALL', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((method) => (
                     <Button
                       key={method}
@@ -101,21 +99,23 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
                 </div>
               </div>
               <div className="space-y-2">
-              {filteredOperations.map((operation: ApiOperation) => (
-                <div
-                  key={operation.id}
-                  className="flex items-center justify-between p-4 border rounded hover:bg-muted cursor-pointer group"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelectedOperation(operation)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      setSelectedOperation(operation)
-                    }
-                  }}
+              {filteredOperations.map((operation: ApiOperation) => {
+                const expanded = expandedId === operation.id
+                return (
+                <div key={operation.id} className="rounded border">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-muted"
+                  aria-expanded={expanded}
+                  aria-controls={`operation-${operation.id}`}
+                  onClick={() => setExpandedId(expanded ? null : operation.id)}
                 >
-                  <div className="flex items-center space-x-3 flex-1">
+                  <div className="flex min-w-0 flex-1 items-center space-x-3">
+                    {expanded ? (
+                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    )}
                     {operation.method && (
                       <Badge
                         variant={
@@ -125,14 +125,14 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
                           operation.method === 'DELETE' ? 'destructive' :
                           'outline'
                         }
-                        className="font-mono w-20 justify-center"
+                        className="font-mono w-20 justify-center shrink-0"
                       >
                         {operation.method}
                       </Badge>
                     )}
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1">
                       {(operation.endpoint || operation.path) && (
-                        <code className="text-sm font-mono font-medium block mb-1">
+                        <code className="text-sm font-mono font-medium block mb-1 break-all">
                           {operation.endpoint || operation.path}
                         </code>
                       )}
@@ -146,8 +146,19 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
                       </Badge>
                     )}
                   </div>
+                </button>
+                {expanded && (
+                  <OperationDetails
+                    id={`operation-${operation.id}`}
+                    api={api}
+                    operation={operation}
+                    apiTools={apiTools}
+                    onViewTool={(toolId) => navigate(`/tools/${toolId}`)}
+                  />
+                )}
                 </div>
-              ))}
+                )
+              })}
               {filteredOperations.length === 0 && (
                 <div className="text-center py-8 text-muted-foreground text-sm">
                   No operations match your search.
@@ -159,98 +170,77 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
         </CardContent>
       </Card>
 
-      {/* Operation Detail Dialog */}
-      <Dialog open={!!selectedOperation} onOpenChange={(open) => !open && setSelectedOperation(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {selectedOperation?.method && (
-                <Badge variant="outline" className="font-mono">
-                  {selectedOperation.method}
-                </Badge>
-              )}
-              {selectedOperation?.endpoint || selectedOperation?.path}
-            </DialogTitle>
-          </DialogHeader>
-          {selectedOperation && (
-            <div className="space-y-4">
-              <div>
-                <Label>Description</Label>
-                <p className="text-sm text-muted-foreground">{selectedOperation.name || 'No description'}</p>
-              </div>
-
-              <div>
-                <Label>Full Endpoint</Label>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 bg-muted p-2 rounded text-xs">
-                    {api.baseUrl}{selectedOperation.endpoint || selectedOperation.path}
-                  </code>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    aria-label="Copy full endpoint URL"
-                    onClick={() => {
-                      const fullEndpoint = `${api.baseUrl}${selectedOperation.endpoint || selectedOperation.path || ''}`
-                      navigator.clipboard.writeText(fullEndpoint)
-                      success('Copied', 'Full endpoint copied')
-                    }}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              {selectedOperation.parameters && (() => {
-                const params = selectedOperation.parameters
-                // Check if parameters is an array with items, or an object with non-empty values
-                const hasContent = Array.isArray(params)
-                  ? params.length > 0
-                  : typeof params === 'object' && Object.values(params).some((v: unknown) =>
-                      v && typeof v === 'object' ? (Array.isArray(v) ? v.length > 0 : Object.keys(v as Record<string, unknown>).length > 0) : !!v
-                    )
-                return (
-                  <div>
-                    <Label>Parameters</Label>
-                    {hasContent ? (
-                      <div className="bg-muted p-3 rounded text-xs max-h-48 overflow-y-auto">
-                        <pre>{JSON.stringify(params, null, 2)}</pre>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground mt-1">No parameters required</p>
-                    )}
-                  </div>
-                )
-              })()}
-
-              <div>
-                <Label>Related Tools</Label>
-                <div className="space-y-1">
-                  {apiTools.filter((tool: Tool) =>
-                    (tool as unknown as Record<string, string>).operationId === selectedOperation.id ||
-                    tool.metadata?.sourceOperation?.name === selectedOperation.name
-                  ).length > 0 ? (
-                    apiTools
-                      .filter((tool: Tool) =>
-                        (tool as unknown as Record<string, string>).operationId === selectedOperation.id ||
-                        tool.metadata?.sourceOperation?.name === selectedOperation.name
-                      )
-                      .map((tool: Tool) => (
-                        <div key={tool.id} className="flex items-center justify-between p-2 border rounded">
-                          <span className="text-sm">{tool.name}</span>
-                          <Button size="sm" variant="ghost" onClick={() => navigate(`/tools/${tool.id}`)}>
-                            View tool
-                          </Button>
-                        </div>
-                      ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No tools generated for this operation yet</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </>
+  )
+}
+
+function OperationDetails({
+  id,
+  api,
+  operation,
+  apiTools,
+  onViewTool,
+}: {
+  id: string
+  api: Api
+  operation: ApiOperation
+  apiTools: Tool[]
+  onViewTool: (toolId: string) => void
+}) {
+  const params = operation.parameters
+  // Parameters is an array, or an object whose values may all be empty.
+  const hasParams = Array.isArray(params)
+    ? params.length > 0
+    : !!params && typeof params === 'object' && Object.values(params).some((v: unknown) =>
+        v && typeof v === 'object' ? (Array.isArray(v) ? v.length > 0 : Object.keys(v as Record<string, unknown>).length > 0) : !!v
+      )
+  const relatedTools = apiTools.filter((tool: Tool) =>
+    (tool as unknown as Record<string, string>).operationId === operation.id ||
+    tool.metadata?.sourceOperation?.name === operation.name
+  )
+
+  return (
+    <div id={id} className="space-y-4 border-t bg-muted/30 p-4" data-testid="operation-details">
+      <div>
+        <h4 className="text-sm font-medium">Description</h4>
+        <p className="text-sm text-muted-foreground">{operation.description || operation.name || 'No description'}</p>
+      </div>
+
+      <div className="space-y-1">
+        <h4 className="text-sm font-medium">Full endpoint</h4>
+        <CopyField value={`${api.baseUrl}${operation.endpoint || operation.path || ''}`} label="Full endpoint" />
+      </div>
+
+      {params && (
+        <div>
+          <h4 className="text-sm font-medium">Parameters</h4>
+          {hasParams ? (
+            <div className="bg-muted p-3 rounded text-xs max-h-48 overflow-y-auto">
+              <pre>{JSON.stringify(params, null, 2)}</pre>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground mt-1">No parameters required</p>
+          )}
+        </div>
+      )}
+
+      <div>
+        <h4 className="text-sm font-medium">Related tools</h4>
+        <div className="space-y-1">
+          {relatedTools.length > 0 ? (
+            relatedTools.map((tool: Tool) => (
+              <div key={tool.id} className="flex items-center justify-between rounded border bg-background p-2">
+                <span className="text-sm">{tool.name}</span>
+                <Button size="sm" variant="ghost" onClick={() => onViewTool(tool.id)}>
+                  View tool
+                </Button>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">No tools generated for this operation yet</p>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }

@@ -1,19 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { AlertTriangle, ListChecks, X, ChevronDown, ChevronRight, Search } from 'lucide-react'
+import { AlertTriangle, ListChecks } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 import { useAgentPipeline } from '@/components/agents/builder/use-agent-pipeline'
 import { BuilderToolbar } from '@/components/agents/builder/builder-toolbar'
@@ -28,6 +20,7 @@ import {
   type CollaborationState,
 } from '@/components/agents/builder/collaboration'
 import { workflowIssues, type BuilderIssue, type GraphNode, type GraphEdge } from '@/components/agents/builder/validate-graph'
+import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 
 import { agentsApi, toolsApi } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
@@ -73,10 +66,8 @@ export function AgentBuilderPage() {
   const [agentCollaboration, setAgentCollaboration] = useState<CollaborationState>(EMPTY_COLLABORATION)
 
   const [showTestPanel, setShowTestPanel] = useState(false)
-
-  // ── Tool picker state ──────────────────────────────────────────────────
-  const [toolSearch, setToolSearch] = useState('')
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [agentVisibility, setAgentVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
+  const [showVisibility, setShowVisibility] = useState(false)
 
   // ── Pipeline state (nodes, edges, undo/redo, CRUD) ─────────────────────
   const pipeline = useAgentPipeline()
@@ -146,6 +137,7 @@ export function AgentBuilderPage() {
       setAgentModelConfig(agent.modelConfig || {})
       setAgentMemoryConfig(agent.memoryConfig || { enabled: false, autoSave: false })
       setAgentConfig(agent.agentConfig || { canCallAgents: false, canCreateAgents: false })
+      setAgentVisibility({ visibility: agent.visibility ?? 'org', teamId: agent.teamId ?? null })
       if (agent.collaboration) {
         setAgentCollaboration(collaborationFromAgent(agent.collaboration))
       }
@@ -351,6 +343,10 @@ export function AgentBuilderPage() {
         name: agentName,
         description: agentDescription || undefined,
         mode: agentMode,
+        // Sent on every save: 'private' makes the agent the saver's alone,
+        // and an edit must not quietly reset an existing scope.
+        visibility: agentVisibility.visibility,
+        teamId: agentVisibility.teamId,
       }
 
       if (agentMode === 'workflow') {
@@ -471,6 +467,9 @@ export function AgentBuilderPage() {
         onSave={handleSave}
         onExport={handleExport}
         onBack={() => navigate('/agents')}
+        visibility={agentVisibility.visibility}
+        visibilityOpen={showVisibility}
+        onVisibilityClick={() => setShowVisibility((open) => !open)}
       />
 
       {/*
@@ -545,6 +544,25 @@ export function AgentBuilderPage() {
         )
       )}
 
+      {/*
+        Who can see and use the agent, opened from the toolbar. Inline under
+        the toolbar rather than in a dialog so the canvas stays in view.
+      */}
+      {showVisibility && (
+        <div
+          id="agent-visibility-panel"
+          role="region"
+          aria-label="Agent visibility"
+          className="px-4 py-3 border-b bg-background shrink-0"
+        >
+          <VisibilityField
+            organizationId={currentOrganization?.id ?? ''}
+            value={agentVisibility}
+            onChange={setAgentVisibility}
+            noun="this agent"
+          />
+        </div>
+      )}
       {/* Main content: Workflow pipeline or Autonomous config */}
       {agentMode === 'autonomous' ? (
         <AutonomousConfig

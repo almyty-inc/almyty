@@ -5,6 +5,8 @@
  * callers pass operations / strings directly.
  */
 
+import { graphqlName, graphqlTypeRef } from '../../common/security/untrusted-text';
+
 export function jsonTypeToGraphQLType(t: string | undefined): string {
   switch ((t || '').toLowerCase()) {
     case 'integer':
@@ -48,8 +50,11 @@ export function buildGraphQLSelectionSet(operation: any): string {
     return `{\n    __typename\n  }`;
   }
 
+  // Field names are schema text: reduced to GraphQL Names so a crafted
+  // name can't add lines (or a code fence) to the rendered query.
   const lines: string[] = [];
-  for (const [name, prop] of Object.entries(props)) {
+  for (const [rawName, prop] of Object.entries(props)) {
+    const name = graphqlName(rawName, 'field');
     const inner = unwrapReturnType(prop);
     if (!inner) continue;
     if (inner.type === 'object') {
@@ -71,13 +76,14 @@ export function buildGraphQLQueryTemplate(operation: any): string {
     operation.type === 'mutation' || operation.type === 'subscription'
       ? operation.type
       : 'query';
-  const opName = operation.name || 'op';
+  const opName = graphqlName(operation.name || 'op');
   const vars = (operation.parameters?.body?.variables?.properties || {}) as Record<string, any>;
   const required = new Set<string>(operation.parameters?.body?.variables?.required || []);
 
   const declarations: string[] = [];
   const args: string[] = [];
-  for (const [name, schema] of Object.entries(vars)) {
+  for (const [rawName, schema] of Object.entries(vars)) {
+    const name = graphqlName(rawName, 'arg');
     // The GraphQL parser stores the original type signature on
     // `schema.gqlType` ("ID!", "[String!]!", "Int") — use it directly
     // when present so re-rendered queries faithfully match the
@@ -86,10 +92,10 @@ export function buildGraphQLQueryTemplate(operation: any): string {
     // mapping plus a `required` boolean.
     let decl: string;
     if (typeof schema?.gqlType === 'string' && schema.gqlType.length > 0) {
-      decl = schema.gqlType;
+      decl = graphqlTypeRef(schema.gqlType);
     } else {
       const gqlType = jsonTypeToGraphQLType(schema?.type);
-      const bang = required.has(name) ? '!' : '';
+      const bang = required.has(rawName) ? '!' : '';
       decl = `${gqlType}${bang}`;
     }
     declarations.push(`$${name}: ${decl}`);

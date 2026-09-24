@@ -20,7 +20,6 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { CacheModule } from '@nestjs/cache-manager';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { BullModule } from '@nestjs/bull';
 
 // Entities
 import { User } from '../entities/user.entity';
@@ -93,6 +92,8 @@ import { GatewaysService } from '../modules/gateways/gateways.service';
 import { OrganizationsService } from '../modules/organizations/organizations.service';
 import { OrganizationsInvitesHelper } from '../modules/organizations/organizations-invites.helper';
 import { TeamMembershipHelper } from '../modules/organizations/team-membership.helper';
+import { ResourceHandoverHelper } from '../modules/organizations/resource-handover.helper';
+import { RunnerService } from '../modules/runner/runner.service';
 
 // Audit
 import { AuditLogService } from '../modules/audit-log/audit-log.service';
@@ -266,6 +267,9 @@ const mockRedis = {
     OrganizationsService,
     OrganizationsInvitesHelper,
     TeamMembershipHelper,
+    ResourceHandoverHelper,
+    // Only the member-offboarding runner delete reaches it here.
+    { provide: RunnerService, useValue: { deleteForDepartedOwner: async () => {} } },
 
     // Audit (mock — just needs to exist)
     {
@@ -275,6 +279,8 @@ const mockRedis = {
         logCreate: () => {},
         logUpdate: () => {},
         logDelete: () => {},
+        logInTransaction: async () => ({}),
+        publishCommitted: () => {},
       },
     },
 

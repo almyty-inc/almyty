@@ -14,6 +14,7 @@ import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { gatewayServableTo, resourceServableThroughGateway } from './private-gateway';
 
 /**
  * Copy / remove operations for gateway-tool associations.
@@ -52,11 +53,11 @@ export class GatewayToolTransferHelper {
         this.gatewayRepository.findOne({ where: { id: targetGatewayId, organizationId } }),
       ]);
 
-      if (!sourceGateway) {
+      if (!sourceGateway || !gatewayServableTo(sourceGateway, userId)) {
         throw new NotFoundException('Source gateway not found');
       }
 
-      if (!targetGateway) {
+      if (!targetGateway || !gatewayServableTo(targetGateway, userId)) {
         throw new NotFoundException('Target gateway not found');
       }
 
@@ -85,6 +86,14 @@ export class GatewayToolTransferHelper {
       const skipped: Array<{ toolId: string; reason: string }> = [];
 
       for (const sourceTool of sourceTools) {
+        // A private tool only travels to a gateway private to its owner.
+        if (!resourceServableThroughGateway(targetGateway, sourceTool.tool)) {
+          skipped.push({
+            toolId: sourceTool.toolId,
+            reason: 'Tool is private; it can only be served through a gateway that is private to its owner',
+          });
+          continue;
+        }
         if (existingToolIds.has(sourceTool.toolId) && !overrideExisting) {
           skipped.push({
             toolId: sourceTool.toolId,

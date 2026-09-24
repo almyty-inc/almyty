@@ -1,9 +1,9 @@
 import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsNumber, Min, Max, IsBoolean, MaxLength, IsUUID, ValidateIf } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 
 import { LlmProviderType, LlmProviderStatus } from '../../../entities/llm-provider.entity';
 import { MessageRole, MessageContent } from '../../../entities/message.entity';
-import { ConversationStatus } from '../../../entities/conversation.entity';
+import { RESOURCE_VISIBILITIES, type ResourceVisibility } from '../../../common/authorization/access-policy.service';
 
 export class CreateLlmProviderBodyDto {
   @IsString()
@@ -99,8 +99,8 @@ export class CreateLlmProviderBodyDto {
   // The VisibilityField component always emits both; without these
   // entries on the whitelist the ValidationPipe 400s the request.
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsString()
@@ -156,8 +156,8 @@ export class UpdateLlmProviderBodyDto {
   // The VisibilityField component always emits both; without these
   // entries on the whitelist the ValidationPipe 400s the request.
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsString()

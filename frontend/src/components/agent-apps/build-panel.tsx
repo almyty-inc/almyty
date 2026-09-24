@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, Copy, Download, Hammer, Lock, ShieldAlert } from 'lucide-react'
+import { AlertTriangle, Copy, Download, Hammer, Lock, ShieldAlert } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -15,7 +15,6 @@ import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useCopy } from '@/lib/clipboard'
 import { credentialsApi } from '@/lib/api'
-import { SigningCredentialDialog } from './signing-credential-dialog'
 import {
   agentAppsApi,
   formatBytes,
@@ -30,6 +29,8 @@ export interface BuildPanelProps {
   /** The certificate this distribution signs with, if it names one. */
   signingCredentialId?: string | null
   onSigningCredentialChange?: (credentialId: string) => void
+  /** Opens the page that adds a certificate of this kind. */
+  onAddCertificate?: (kind: 'apple' | 'authenticode') => void
 }
 
 /** Stands in for "nothing selected", because a Select cannot take ''. */
@@ -59,12 +60,12 @@ export function BuildPanel({
   target,
   signingCredentialId,
   onSigningCredentialChange,
+  onAddCertificate,
 }: BuildPanelProps) {
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
   const copy = useCopy()
   const [platform, setPlatform] = useState<string>('')
-  const [addingCertificate, setAddingCertificate] = useState(false)
 
   const { data: platforms } = useQuery({
     queryKey: ['app-build-platforms', app.slug, target],
@@ -184,7 +185,7 @@ export function BuildPanel({
             value={signingCredentialId || UNSIGNED}
             onValueChange={(value) =>
               value === 'new'
-                ? setAddingCertificate(true)
+                ? onAddCertificate?.(chosen.signing!.kind)
                 : onSigningCredentialChange(value === UNSIGNED ? '' : value)
             }
           >
@@ -198,22 +199,14 @@ export function BuildPanel({
                   {c.name}
                 </SelectItem>
               ))}
-              <SelectItem value="new">Add a certificate...</SelectItem>
+              {onAddCertificate && <SelectItem value="new">Add a certificate...</SelectItem>}
             </SelectContent>
           </Select>
         </div>
       )}
 
-      {chosen?.signing && (
-        <SigningCredentialDialog
-          open={addingCertificate}
-          onOpenChange={setAddingCertificate}
-          kind={chosen.signing.kind}
-          onCreated={(id) => onSigningCredentialChange?.(id)}
-        />
-      )}
-
       <Button
+        type="button"
         className="w-full"
         disabled={!platform || start.isPending || capabilities?.canBuild === false}
         onClick={() => start.mutate()}

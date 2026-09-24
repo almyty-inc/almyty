@@ -11,9 +11,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from '@/components/ui/dialog'
+import { Field, InlineFormActions } from '@/components/layout/form-page'
 
 import { approvalsApi } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/utils'
@@ -133,6 +131,7 @@ export function ApprovalsPage() {
                     </CardTitle>
                     <CardDescription className="mt-2 text-foreground">{row.reason}</CardDescription>
                   </div>
+                  {decisionFor?.row.id !== row.id && (
                   <div className="flex items-center gap-2 shrink-0">
                     <Button
                       size="sm"
@@ -151,6 +150,7 @@ export function ApprovalsPage() {
                       <X className="h-4 w-4 mr-1" /> Reject
                     </Button>
                   </div>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground space-y-1">
@@ -170,65 +170,49 @@ export function ApprovalsPage() {
                     </pre>
                   </details>
                 )}
+                {decisionFor?.row.id === row.id && (
+                  <form
+                    className="mt-3 space-y-3 rounded-lg border bg-background p-3 text-sm text-foreground"
+                    aria-label={decisionFor.intent === 'approve' ? 'Approve this action' : 'Reject this action'}
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      const args = { id: row.id, reason: decisionReason.trim() || undefined }
+                      if (decisionFor.intent === 'approve') approveMutation.mutate(args)
+                      else rejectMutation.mutate(args)
+                    }}
+                  >
+                    <p className="flex items-start gap-2">
+                      {decisionFor.intent === 'approve' ? (
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
+                      ) : (
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" aria-hidden="true" />
+                      )}
+                      {decisionFor.intent === 'approve'
+                        ? 'The run resumes where it paused, with this approval as the answer to its request.'
+                        : 'The run is cancelled for good; it cannot be resumed.'}
+                    </p>
+                    <Field id={`decision-reason-${row.id}`} label="Note (optional)" hint="Saved with the decision.">
+                      <Textarea
+                        rows={2}
+                        autoFocus
+                        value={decisionReason}
+                        onChange={(e) => setDecisionReason(e.target.value)}
+                        placeholder={decisionFor.intent === 'approve' ? 'Why this is OK to proceed' : 'Why this should not proceed'}
+                      />
+                    </Field>
+                    <InlineFormActions
+                      onCancel={() => { setDecisionFor(null); setDecisionReason('') }}
+                      submitLabel={decisionFor.intent === 'approve' ? 'Approve' : 'Reject'}
+                      submitVariant={decisionFor.intent === 'approve' ? 'default' : 'destructive'}
+                      submitting={approveMutation.isPending || rejectMutation.isPending}
+                    />
+                  </form>
+                )}
               </CardContent>
             </Card>
           ))}
         </div>
       )}
-
-      <Dialog open={!!decisionFor} onOpenChange={(o) => { if (!o) { setDecisionFor(null); setDecisionReason('') } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {decisionFor?.intent === 'approve' ? (
-                <><Check className="h-5 w-5 text-emerald-500" /> Approve this action?</>
-              ) : (
-                <><AlertCircle className="h-5 w-5 text-red-500" /> Reject this action?</>
-              )}
-            </DialogTitle>
-            <DialogDescription>
-              {decisionFor?.intent === 'approve'
-                ? 'The agent run will resume from where it paused, with this approval as the result of the request_approval tool call.'
-                : 'The agent run will be cancelled. This is a terminal state — the run cannot be resumed.'}
-            </DialogDescription>
-          </DialogHeader>
-          {decisionFor && (
-            <div className="space-y-3">
-              <div className="text-sm bg-muted rounded p-3">{decisionFor.row.reason}</div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">Reason (optional)</label>
-                <Textarea
-                  rows={3}
-                  value={decisionReason}
-                  onChange={(e) => setDecisionReason(e.target.value)}
-                  placeholder={decisionFor.intent === 'approve' ? 'Why this is OK to proceed' : 'Why this should not proceed'}
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setDecisionFor(null); setDecisionReason('') }}>Cancel</Button>
-            {decisionFor?.intent === 'approve' ? (
-              <Button
-                onClick={() => approveMutation.mutate({ id: decisionFor!.row.id, reason: decisionReason || undefined })}
-                disabled={approveMutation.isPending}
-              >
-                {approveMutation.isPending ? <LoadingSpinner size="sm" className="mr-2" /> : <Check className="h-4 w-4 mr-1" />}
-                Approve
-              </Button>
-            ) : (
-              <Button
-                variant="destructive"
-                onClick={() => rejectMutation.mutate({ id: decisionFor!.row.id, reason: decisionReason || undefined })}
-                disabled={rejectMutation.isPending}
-              >
-                {rejectMutation.isPending ? <LoadingSpinner size="sm" className="mr-2" /> : <X className="h-4 w-4 mr-1" />}
-                Reject
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

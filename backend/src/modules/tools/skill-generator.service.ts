@@ -2,9 +2,10 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { Tool, ToolType, ToolExecutionMethod } from '../../entities/tool.entity';
+import { Tool } from '../../entities/tool.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
+import { isOthersPrivate, servableOnGateway } from '../../common/authorization/private-visibility';
 import { SkillRendererHelper } from './skill-renderer.helper';
 import { dedupeSharedSegments } from './skill-graphql.helper';
 
@@ -40,7 +41,7 @@ export class SkillGeneratorService {
    * @param organizationId Required. Without this any authenticated user
    *   could request another org's tool skill just by guessing a UUID.
    */
-  async generateToolSkill(toolId: string, organizationId: string): Promise<SkillOutput> {
+  async generateToolSkill(toolId: string, organizationId: string, caller?: { id: string } | null): Promise<SkillOutput> {
     if (!organizationId) {
       throw new NotFoundException(`Tool not found: ${toolId}`);
     }
@@ -49,7 +50,9 @@ export class SkillGeneratorService {
       relations: { categories: true, operation: { api: true } },
     });
 
-    if (!tool) {
+    // With a caller (undefined = internal, already-filtered use), another
+    // member's private tool is "not found"; null means an anonymous caller.
+    if (!tool || (caller !== undefined && isOthersPrivate(tool, caller?.id))) {
       throw new NotFoundException(`Tool not found: ${toolId}`);
     }
 
@@ -78,7 +81,7 @@ export class SkillGeneratorService {
       throw new NotFoundException(`Gateway not found: ${gatewayId}`);
     }
 
-    const tools = await this.getGatewayTools(gatewayId);
+    const tools = await this.getGatewayTools(gatewayId, gateway);
 
     if (tools.length === 0) {
       return {
@@ -131,7 +134,7 @@ export class SkillGeneratorService {
       throw new NotFoundException(`Gateway not found: ${gatewayId}`);
     }
 
-    const tools = await this.getGatewayTools(gatewayId);
+    const tools = await this.getGatewayTools(gatewayId, gateway);
     const gatewaySlug = this.gatewayEndpointSlug(gateway);
 
     return tools.map((tool) => {
@@ -224,12 +227,13 @@ export class SkillGeneratorService {
    * The variable list comes from operation.parameters.body.variables;
    * when types are unknown we fall back to `String`.
    */
-  private async getGatewayTools(gatewayId: string): Promise<Tool[]> {
+  private async getGatewayTools(gatewayId: string, gateway: { visibility?: any; ownerUserId?: string | null }): Promise<Tool[]> {
     const gatewayTools = await this.gatewayToolRepository.find({
       where: { gatewayId, isActive: true },
       relations: { tool: { categories: true, operation: { api: true } } },
     });
 
-    return gatewayTools.map(gt => gt.tool).filter(Boolean);
+    // A private tool is served only on its owner's own private gateway.
+    return servableOnGateway(gatewayTools.map(gt => gt.tool).filter(Boolean), gateway);
   }
 }

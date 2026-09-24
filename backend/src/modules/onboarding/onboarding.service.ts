@@ -1,14 +1,36 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository } from 'typeorm';
+import { In, IsNull, MoreThan, Not, Repository } from 'typeorm';
 
 import { Api } from '../../entities/api.entity';
-import { Gateway } from '../../entities/gateway.entity';
+import { Gateway, GatewayType } from '../../entities/gateway.entity';
 import { Agent } from '../../entities/agent.entity';
 import { User } from '../../entities/user.entity';
 import { RequestLog } from '../../entities/request-log.entity';
 import { LlmProvider, LlmProviderStatus } from '../../entities/llm-provider.entity';
-import { OnboardingState, OnboardingSteps } from './dto/onboarding.dto';
+import { Tool, ToolStatus } from '../../entities/tool.entity';
+import { AgentApp } from '../../entities/agent-app.entity';
+import { AppDistribution, DistributionStatus } from '../../entities/agent-app-distribution.entity';
+import { Runner } from '../../entities/runner.entity';
+import {
+  OnboardingLinks,
+  OnboardingState,
+  OnboardingSteps,
+  PAGE_INTRO_TOPICS,
+  PageIntroTopic,
+} from './dto/onboarding.dto';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { notOthersPrivateGateway, notOthersPrivateTool } from '../monitoring/private-rows';
+
+type Viewer = { id: string };
+
+/**
+ * A request log the viewer may count: not traffic through another
+ * member's private gateway or tool. Binds :privateViewerId.
+ */
+function visibleLog(alias: string): string {
+  return `${notOthersPrivateGateway(`${alias}."gatewayId"`)} AND ${notOthersPrivateTool(`${alias}."toolId"`)}`;
+}
 
 /**
  * User-Agent substring that identifies a request originating from the
@@ -19,10 +41,20 @@ import { OnboardingState, OnboardingSteps } from './dto/onboarding.dto';
 const ALMYTY_FRONTEND_UA = 'almyty-frontend';
 
 /**
- * Computes the onboarding "golden path" checklist purely from entity
- * state. Nothing here reads a "user clicked Next" flag — the checklist
- * is a projection of what actually exists in the org, so CLI-driven
- * work checks itself off on the next dashboard visit (criterion #2).
+ * A distribution counts as shipped once it is served (`live`) or its
+ * artifact was produced (`built`). `draft`, `building` and `failed` do not:
+ * nobody can reach the agent through them yet.
+ */
+const SHIPPED_DISTRIBUTION_STATUSES = [DistributionStatus.LIVE, DistributionStatus.BUILT];
+
+/**
+ * Computes the platform guide's steps purely from entity state. Nothing
+ * here reads a "user clicked Next" flag -- every step is a projection of
+ * what actually exists in the org, so CLI-driven work checks itself off
+ * on the next visit (criterion #2).
+ *
+ * Every read is a count or a single-row lookup on an indexed
+ * organization column; no step scans a table.
  */
 @Injectable()
 export class OnboardingService {
@@ -39,42 +71,93 @@ export class OnboardingService {
     private readonly requestLogRepo: Repository<RequestLog>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(Tool)
+    private readonly toolRepo: Repository<Tool>,
+    @InjectRepository(AgentApp)
+    private readonly appRepo: Repository<AgentApp>,
+    @InjectRepository(AppDistribution)
+    private readonly distributionRepo: Repository<AppDistribution>,
+    @InjectRepository(Runner)
+    private readonly runnerRepo: Repository<Runner>,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
+  /**
+   * Every step counts what the caller can see, not what the org holds:
+   * another member's private provider, API, tool, gateway or agent -- and
+   * traffic through their private gateway or tool -- neither ticks a step
+   * nor becomes the guide's link, for org admins too. A tick the caller
+   * cannot follow to anything would tell them the private resource exists.
+   * Apps and distributions have no private tier and stay org-wide.
+   */
   async getState(organizationId: string, userId: string): Promise<OnboardingState> {
+    const viewer: Viewer = { id: userId };
     const [
       hasProvider,
       hasApi,
-      hasGatewayWithTool,
+      hasTools,
+      gatewayWithTool,
       firstCallLog,
       externalCallExists,
-      dismissed,
+      firstAgent,
+      hasAgentRun,
+      firstApp,
+      hasShippedDistribution,
+      hasRunner,
+      prefs,
     ] = await Promise.all([
-      this.hasHealthyProvider(organizationId),
-      this.hasApi(organizationId),
-      this.hasGatewayWithTool(organizationId),
-      this.firstSuccessfulCall(organizationId),
-      this.hasExternalClientCall(organizationId),
-      this.isDismissedFor(userId),
+      this.hasHealthyProvider(organizationId, viewer),
+      this.hasApi(organizationId, viewer),
+      this.hasTools(organizationId, viewer),
+      this.gatewayWithTool(organizationId, viewer),
+      this.firstSuccessfulCall(organizationId, viewer),
+      this.hasExternalClientCall(organizationId, viewer),
+      this.firstAgent(organizationId, viewer),
+      this.hasSuccessfulAgentRun(organizationId, viewer),
+      this.firstApp(organizationId),
+      this.hasShippedDistribution(organizationId),
+      this.hasConnectedRunner(organizationId, userId),
+      this.preferencesFor(userId),
     ]);
 
     const steps: OnboardingSteps = {
       provider: hasProvider,
       api: hasApi,
-      gateway: hasGatewayWithTool,
+      tools: hasTools,
+      gateway: !!gatewayWithTool,
       first_call: !!firstCallLog,
       external_client: externalCallExists,
+      agent: !!firstAgent,
+      agent_run: hasAgentRun,
+      app: !!firstApp,
+      distribution: hasShippedDistribution,
+      runner: hasRunner,
+    };
+
+    const links: OnboardingLinks = {
+      gateway: gatewayWithTool
+        ? {
+            id: gatewayWithTool.id,
+            name: gatewayWithTool.name,
+            type: gatewayWithTool.type,
+            endpoint: gatewayWithTool.endpoint,
+          }
+        : null,
+      agent: firstAgent ? { id: firstAgent.id, name: firstAgent.name } : null,
+      app: firstApp ? { slug: firstApp.slug, name: firstApp.name } : null,
     };
 
     // Activation is the earliest successful call once the org owns a gateway
     // of its own. Gateways an older build seeded as a sample workspace (tagged
     // metadata.sampleWorkspace) still do not count, so poking at one cannot
     // close onboarding.
-    const activatedRealAt = await this.realActivationAt(organizationId, firstCallLog);
+    const activatedRealAt = await this.realActivationAt(organizationId, viewer, firstCallLog);
 
     return {
       steps,
-      dismissed,
+      links,
+      dismissed: prefs.dismissed,
+      dismissedIntros: prefs.dismissedIntros,
       activatedRealAt,
     };
   }
@@ -88,26 +171,119 @@ export class OnboardingService {
    * step counted a provider whose key had been rejected on every call.
    * Same pair the router uses (model-router.service.ts).
    */
-  private async hasHealthyProvider(organizationId: string): Promise<boolean> {
+  private async hasHealthyProvider(organizationId: string, viewer: Viewer): Promise<boolean> {
     const count = await this.providerRepo.count({
-      where: { organizationId, status: LlmProviderStatus.ACTIVE, isHealthy: true },
+      where: await this.accessPolicy.visibleWhere<LlmProvider>(
+        viewer,
+        organizationId,
+        { status: LlmProviderStatus.ACTIVE, isHealthy: true },
+        { ownerColumn: 'ownerUserId' },
+      ),
     });
     return count > 0;
   }
 
-  private async hasApi(organizationId: string): Promise<boolean> {
-    const count = await this.apiRepo.count({ where: { organizationId } });
+  private async hasApi(organizationId: string, viewer: Viewer): Promise<boolean> {
+    const count = await this.apiRepo.count({
+      where: await this.accessPolicy.visibleWhere<Api>(viewer, organizationId, {}, { ownerColumn: 'ownerUserId' }),
+    });
     return count > 0;
   }
 
-  private async hasGatewayWithTool(organizationId: string): Promise<boolean> {
-    // A non-system gateway with at least one assigned tool (join row).
-    const count = await this.gatewayRepo
+  /** Generated from an API or written by hand; a deleted tool is gone. */
+  private async hasTools(organizationId: string, viewer: Viewer): Promise<boolean> {
+    const count = await this.toolRepo.count({
+      where: await this.accessPolicy.visibleWhere<Tool>(
+        viewer,
+        organizationId,
+        { status: Not(ToolStatus.DELETED) },
+        { ownerColumn: 'createdBy' },
+      ),
+    });
+    return count > 0;
+  }
+
+  /**
+   * A non-system gateway with at least one assigned tool (join row), MCP
+   * first because that is the one a coding harness connects to with a
+   * single command. One row, so the guide can link to its integrations.
+   */
+  private async gatewayWithTool(organizationId: string, viewer: Viewer): Promise<Gateway | null> {
+    const qb = this.gatewayRepo
       .createQueryBuilder('gw')
       .innerJoin('gw.tools', 'gt')
+      .select(['gw.id', 'gw.name', 'gw.type', 'gw.endpoint', 'gw.createdAt'])
       .where('gw.organizationId = :organizationId', { organizationId })
-      .andWhere('gw.isSystem = false')
-      .getCount();
+      .andWhere('gw.isSystem = false');
+    await this.accessPolicy.applyListFilter(qb, viewer, organizationId, 'gw', { ownerColumn: 'ownerUserId' });
+    return qb
+      .orderBy(`CASE WHEN gw.type = '${GatewayType.MCP}' THEN 0 ELSE 1 END`, 'ASC')
+      .addOrderBy('gw.createdAt', 'ASC')
+      .limit(1)
+      .getOne();
+  }
+
+  /**
+   * The oldest agent the org built. `isTemporary` agents are scratch
+   * copies the runtime spawns for a sub-agent step, not something a
+   * person made.
+   */
+  private async firstAgent(organizationId: string, viewer: Viewer): Promise<Pick<Agent, 'id' | 'name'> | null> {
+    return this.agentRepo.findOne({
+      where: await this.accessPolicy.visibleWhere<Agent>(
+        viewer,
+        organizationId,
+        { isTemporary: false },
+        { ownerColumn: 'createdBy' },
+      ),
+      select: { id: true, name: true },
+      order: { createdAt: 'ASC' },
+    });
+  }
+
+  /**
+   * `successfulExecutions` is bumped by both engines on a successful
+   * finish (workflow: agent-execution-state.helper; autonomous:
+   * agent-runtime-misc.helper), so one counter answers "has any agent of
+   * this org ever worked" without reading either runs table.
+   */
+  private async hasSuccessfulAgentRun(organizationId: string, viewer: Viewer): Promise<boolean> {
+    const count = await this.agentRepo.count({
+      where: await this.accessPolicy.visibleWhere<Agent>(
+        viewer,
+        organizationId,
+        { isTemporary: false, successfulExecutions: MoreThan(0) },
+        { ownerColumn: 'createdBy' },
+      ),
+    });
+    return count > 0;
+  }
+
+  private async firstApp(organizationId: string): Promise<Pick<AgentApp, 'slug' | 'name'> | null> {
+    return this.appRepo.findOne({
+      where: { organizationId },
+      select: { slug: true, name: true },
+      order: { createdAt: 'ASC' },
+    });
+  }
+
+  private async hasShippedDistribution(organizationId: string): Promise<boolean> {
+    const count = await this.distributionRepo.count({
+      where: { organizationId, status: In(SHIPPED_DISTRIBUTION_STATUSES) },
+    });
+    return count > 0;
+  }
+
+  /**
+   * "Run it on your machines" is per person: a runner belongs to one user
+   * in one org (unique on ownerUserId + organizationId). It counts once it
+   * has actually connected -- a registration whose daemon never sent a
+   * heartbeat is a token, not a machine.
+   */
+  private async hasConnectedRunner(organizationId: string, userId: string): Promise<boolean> {
+    const count = await this.runnerRepo.count({
+      where: { organizationId, ownerUserId: userId, lastHeartbeatAt: Not(IsNull()) },
+    });
     return count > 0;
   }
 
@@ -121,17 +297,23 @@ export class OnboardingService {
    * ORed across `gateways` and `request_logs`, so no index could serve
    * it and an unbounded read of every tenant's logs answered a
    * checklist tick.
+   *
+   * `limit(1)`: TypeORM's getOne() does not add a LIMIT by itself, so
+   * without it this fetched every successful log the org ever wrote
+   * and kept the first.
    */
-  private async firstSuccessfulCall(organizationId: string): Promise<RequestLog | null> {
+  private async firstSuccessfulCall(organizationId: string, viewer: Viewer): Promise<RequestLog | null> {
     return this.requestLogRepo
       .createQueryBuilder('log')
       .where('log.organizationId = :orgId', { orgId: organizationId })
       .andWhere('log.statusCode >= 200 AND log.statusCode < 300')
+      .andWhere(visibleLog('log'), { privateViewerId: viewer.id })
       .orderBy('log.timestamp', 'ASC')
+      .limit(1)
       .getOne();
   }
 
-  private async hasExternalClientCall(organizationId: string): Promise<boolean> {
+  private async hasExternalClientCall(organizationId: string, viewer: Viewer): Promise<boolean> {
     const count = await this.requestLogRepo
       .createQueryBuilder('log')
       .where('log.organizationId = :orgId', { orgId: organizationId })
@@ -141,13 +323,19 @@ export class OnboardingService {
         "(log.userAgent IS NULL OR log.userAgent NOT ILIKE :ua)",
         { ua: `%${ALMYTY_FRONTEND_UA}%` },
       )
+      .andWhere(visibleLog('log'), { privateViewerId: viewer.id })
       .getCount();
     return count > 0;
   }
 
-  private async isDismissedFor(userId: string): Promise<boolean> {
+  private async preferencesFor(
+    userId: string,
+  ): Promise<{ dismissed: boolean; dismissedIntros: PageIntroTopic[] }> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
-    return user?.preferences?.onboardingDismissed === true;
+    return {
+      dismissed: user?.preferences?.onboardingDismissed === true,
+      dismissedIntros: introsFrom(user?.preferences),
+    };
   }
 
   /**
@@ -157,24 +345,56 @@ export class OnboardingService {
    */
   private async realActivationAt(
     organizationId: string,
+    viewer: Viewer,
     firstCall: RequestLog | null,
   ): Promise<string | null> {
     if (!firstCall) return null;
-    const nonSampleGateway = await this.gatewayRepo
+    const qb = this.gatewayRepo
       .createQueryBuilder('gw')
       .where('gw.organizationId = :organizationId', { organizationId })
       .andWhere('gw.isSystem = false')
       .andWhere(
         "(gw.metadata IS NULL OR gw.metadata->>'sampleWorkspace' IS NULL)",
-      )
-      .getCount();
+      );
+    await this.accessPolicy.applyListFilter(qb, viewer, organizationId, 'gw', { ownerColumn: 'ownerUserId' });
+    const nonSampleGateway = await qb.getCount();
     return nonSampleGateway > 0 ? firstCall.timestamp.toISOString() : null;
   }
 
   async setDismissed(userId: string, dismissed: boolean): Promise<void> {
+    await this.updatePreferences(userId, () => ({ onboardingDismissed: dismissed }));
+  }
+
+  /** Close one page intro for this user. Idempotent. */
+  async dismissIntro(userId: string, topic: PageIntroTopic): Promise<void> {
+    await this.updatePreferences(userId, (prefs) => {
+      const current = introsFrom(prefs);
+      return { onboardingDismissedIntros: current.includes(topic) ? current : [...current, topic] };
+    });
+  }
+
+  /** Bring every page intro back for this user. */
+  async resetIntros(userId: string): Promise<void> {
+    await this.updatePreferences(userId, () => ({ onboardingDismissedIntros: [] }));
+  }
+
+  private async updatePreferences(
+    userId: string,
+    patch: (prefs: Record<string, any>) => Record<string, any>,
+  ): Promise<void> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) return;
-    const preferences = { ...(user.preferences || {}), onboardingDismissed: dismissed };
+    const current = user.preferences || {};
+    const preferences = { ...current, ...patch(current) };
     await this.userRepo.update({ id: userId }, { preferences } as any);
   }
+}
+
+/** Stored intro dismissals, keeping only topics that still exist. */
+function introsFrom(prefs: Record<string, any> | null | undefined): PageIntroTopic[] {
+  const raw = prefs?.onboardingDismissedIntros;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((t): t is PageIntroTopic =>
+    (PAGE_INTRO_TOPICS as readonly string[]).includes(t),
+  );
 }

@@ -1,6 +1,6 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -12,7 +12,6 @@ import { User } from '../../entities/user.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 import { GatewayAuthType } from '../../entities/gateway-auth.entity';
-import { compileSafeRegex, boundRegexInput } from '../../common/security/regex-safety';
 import { hashKey, isIpInCIDR, isIpInRanges, validateAuthConfiguration, validateKeyFormat } from './gateway-auth-utils';
 import {
   findEffectiveMembership,
@@ -147,7 +146,11 @@ export class GatewayAuthValidators {
     const apiKeyRecord = await this.apiKeyRepository.findOne({
       where: [
         { keyHash, isActive: true, gatewayId: authConfig.gatewayId, organizationId: gateway.organizationId },
-        { keyHash, isActive: true, gatewayId: null as any, organizationId: gateway.organizationId },
+        // IsNull(), not a bare null: TypeORM refuses a null in a where
+        // object (invalidWhereValuesBehavior defaults to throw), so the
+        // whole lookup threw and every API-key request on the gateway
+        // came back as an 'Authentication system error'.
+        { keyHash, isActive: true, gatewayId: IsNull(), organizationId: gateway.organizationId },
       ],
       relations: { user: { organizationMemberships: true } },
     });
@@ -336,7 +339,7 @@ export class GatewayAuthValidators {
         organizationId: gateway.organizationId,
       };
 
-    } catch (error) {
+    } catch {
       return {
         isValid: false,
         error: 'Invalid basic auth format',
@@ -426,7 +429,7 @@ export class GatewayAuthValidators {
         },
       };
 
-    } catch (error) {
+    } catch {
       return {
         isValid: false,
         error: 'Invalid JWT token',
@@ -527,7 +530,7 @@ export class GatewayAuthValidators {
     authConfig: GatewayAuth,
     headers: Record<string, string>,
     query: Record<string, string>,
-    body?: any
+    _body?: any
   ): Promise<AuthenticationResult> {
     // Custom auth logic would be implemented based on the configuration
     // This is a placeholder implementation

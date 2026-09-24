@@ -10,7 +10,7 @@ import { ApisService } from '../apis/apis.service';
 import { ToolsService } from '../tools/tools.service';
 import { GatewaysService } from '../gateways/gateways.service';
 import { AgentStatus } from '../../entities/agent.entity';
-import { AgentNotActive, agentIsInvokable, runsOnAutonomousRuntime } from '../agents/agent-invocation';
+import { agentIsInvokable, runsOnAutonomousRuntime } from '../agents/agent-invocation';
 import { AgentsService } from '../agents/agents.service';
 import { AgentExecutionEngine } from '../agents/agent-execution.engine';
 import { AgentRuntimeService } from '../agents/agent-runtime.service';
@@ -880,7 +880,7 @@ export class AlmytyMcpService {
           privacyTier: args.privacyTier,
           providerId: args.providerId,
           selectable: args.selectable,
-        });
+        }, userId ?? null);
         return { total: cards.length, models: cards.map(modelCardView) };
       }
       case 'sync_models': {
@@ -1070,15 +1070,15 @@ export class AlmytyMcpService {
         const timeframe = String(args.timeframe ?? '7d');
         switch (args.report) {
           case 'overview':
-            return get(AnalyticsService).getOverview(orgId);
+            return get(AnalyticsService).getOverview(orgId, userId);
           case 'tools':
-            return get(AnalyticsService).getToolUsage(orgId, timeframe);
+            return get(AnalyticsService).getToolUsage(orgId, timeframe, userId);
           case 'gateways':
-            return get(AnalyticsService).getGatewayUsage(orgId, timeframe);
+            return get(AnalyticsService).getGatewayUsage(orgId, timeframe, userId);
           case 'models':
-            return get(AnalyticsService).getLlmUsage(orgId, timeframe);
+            return get(AnalyticsService).getLlmUsage(orgId, timeframe, userId);
           case 'agent_runs':
-            return get(AnalyticsService).getAgentRunsSummary(orgId);
+            return get(AnalyticsService).getAgentRunsSummary(orgId, userId);
           case 'alerts': {
             const alerts = await get(MonitoringService).getActiveAlerts(orgId);
             return { total: alerts.length, alerts };

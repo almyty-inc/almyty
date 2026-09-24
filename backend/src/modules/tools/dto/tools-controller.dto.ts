@@ -1,7 +1,40 @@
-import { IsString, IsOptional, IsEnum, IsArray, IsObject, IsNumber, Min, Max, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsArray, IsObject, IsNumber, Min, Max, MaxLength, ValidateBy } from 'class-validator';
+import { RESOURCE_VISIBILITIES, ResourceVisibility } from '../../../common/authorization/access-policy.service';
 import { Transform, Type } from 'class-transformer';
 
 import { ToolType, ToolStatus, ToolExecutionMethod } from '../../../entities/tool.entity';
+
+/** Ceiling on a tool's `configuration.timeout`, in ms. Same as ExecuteToolDto.timeout. */
+export const MAX_TOOL_TIMEOUT_MS = 300_000;
+
+/**
+ * Bounds `configuration.timeout` and leaves every other key of
+ * `configuration` alone (mcp, cache, rateLimit, ... are read by other
+ * paths). `configuration` was checked as "an object" only, so a tool
+ * could be saved with a timeout of 10^9 ms -- and a sandbox worker held
+ * its slot of the shared pool for as long as the timeout allowed. The
+ * sandbox clamps at run time as well; this rejects it at the door.
+ */
+function HasBoundedTimeout(): PropertyDecorator {
+  return ValidateBy({
+    name: 'hasBoundedTimeout',
+    validator: {
+      validate: (value: unknown) => {
+        if (value === null || typeof value !== 'object') return true; // @IsObject reports it
+        const timeout = (value as { timeout?: unknown }).timeout;
+        if (timeout === undefined || timeout === null) return true;
+        return (
+          typeof timeout === 'number' &&
+          Number.isFinite(timeout) &&
+          timeout > 0 &&
+          timeout <= MAX_TOOL_TIMEOUT_MS
+        );
+      },
+      defaultMessage: () =>
+        `configuration.timeout must be a number of milliseconds between 1 and ${MAX_TOOL_TIMEOUT_MS}`,
+    },
+  });
+}
 
 export class CreateToolBodyDto {
   @IsString()
@@ -44,6 +77,7 @@ export class CreateToolBodyDto {
 
   @IsOptional()
   @IsObject()
+  @HasBoundedTimeout()
   configuration?: {
     timeout?: number;
     retries?: number;
@@ -129,8 +163,8 @@ export class CreateToolBodyDto {
   // The VisibilityField component always emits both; without these
   // entries on the whitelist the ValidationPipe 400s the request.
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsString()
@@ -158,6 +192,7 @@ export class UpdateToolBodyDto {
 
   @IsOptional()
   @IsObject()
+  @HasBoundedTimeout()
   configuration?: {
     timeout?: number;
     retries?: number;
@@ -232,8 +267,8 @@ export class UpdateToolBodyDto {
   // The VisibilityField component always emits both; without these
   // entries on the whitelist the ValidationPipe 400s the request.
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsString()

@@ -8,9 +8,10 @@ import { validateUrl } from '../../common/security/url-validator';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { Tool } from '../../entities/tool.entity';
+import { withoutOthersPrivate } from '../../common/authorization/private-visibility';
 import { Organization } from '../../entities/organization.entity';
 
-import { McpTool, McpCapabilities, McpSession } from './types/mcp.types';
+import { McpTool, McpCapabilities } from './types/mcp.types';
 import { McpSessionService } from './mcp-session.service';
 
 export interface VirtualServer {
@@ -95,7 +96,9 @@ export class McpGatewayService {
         })
       : [];
 
-    if (tools.length !== serverData.toolIds.length) {
+    // A virtual server is an org-wide surface: a private tool cannot be
+    // put on one (it would be callable by every member).
+    if (tools.length !== serverData.toolIds.length || tools.some((t) => t.visibility === 'private')) {
       throw new BadRequestException('Some tools not found or not accessible');
     }
 
@@ -230,7 +233,9 @@ export class McpGatewayService {
         })
       : [];
 
-    return tools.map(tool => ({
+    // A virtual server is shared by the organization; private tools are
+    // never served through it.
+    return withoutOthersPrivate(tools, null).map(tool => ({
       name: tool.name,
       description: tool.description || `Tool from virtual server ${server.name}`,
       inputSchema: tool.parameters || {
@@ -449,7 +454,7 @@ export class McpGatewayService {
         // Update peer status
         peer.isActive = true;
         peer.lastSeen = new Date();
-      } catch (error) {
+      } catch {
         isHealthy = false;
         peer.isActive = false;
       }

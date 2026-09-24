@@ -3,11 +3,10 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
+import { buildThrottlerOptions } from './common/security/throttler-options';
 import { CacheModule } from '@nestjs/cache-manager';
 import { BullModule } from '@nestjs/bull';
 import { RedisModule } from '@nestjs-modules/ioredis';
-import * as redisStore from 'cache-manager-redis-store';
 import { versionsConfig } from 'typeorm-versions';
 import { CustomVersionSubscriber } from './common/custom-version-subscriber';
 import { VersionContextInterceptor } from './common/interceptors/version-context.interceptor';
@@ -115,9 +114,6 @@ import { CredentialRefModule } from './modules/credentials/credential-ref.module
 // runtime via the ee-loader — NOT statically imported here, so this file
 // compiles in the OSS build without the commercial tree present.
 import { loadEeModules } from './ee-loader';
-
-// Configuration
-import { databaseConfig } from './config/database.config';
 
 // Optional single-image frontend serving (almyty/almyty). Returns [] for the
 // plain api image, so the module tree is unchanged when SERVE_FRONTEND is off.
@@ -230,30 +226,13 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
     // Rate limiting — backed by Redis so limits are shared across replicas
     // (in-memory storage would multiply the effective limit by the pod count
     // and reset on every restart). Falls back to in-memory only if no Redis
-    // host is configured (e.g. a single-process local run).
+    // host is configured (e.g. a single-process local run). The options,
+    // including the per-client tracker the guard buckets on, are built in
+    // common/security/throttler-options.ts so they can be tested.
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
-        const host = configService.get('REDIS_HOST');
-        // @nestjs/throttler v5+ takes ttl in MILLISECONDS. RATE_LIMIT_TTL
-        // stays in seconds (that's what the deploy configs set), so convert
-        // here. Passing seconds straight through made the window 60ms —
-        // 100 requests per 60ms — i.e. the global rate limit never fired.
-        const ttlSeconds = Number(configService.get('RATE_LIMIT_TTL', 60));
-        const config: any = {
-          throttlers: [{
-            ttl: ttlSeconds * 1000,
-            limit: Number(configService.get('RATE_LIMIT_MAX', 100)),
-          }],
-        };
-        if (host) {
-          const port = configService.get('REDIS_PORT', 6379);
-          config.storage = new ThrottlerStorageRedisService(
-            `redis://${host}:${port}`,
-          );
-        }
-        return config;
-      },
+      useFactory: (configService: ConfigService) =>
+        buildThrottlerOptions(configService),
     }),
 
     // Caching

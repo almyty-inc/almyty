@@ -5,7 +5,7 @@ import { Repository, In } from 'typeorm';
 import { Request, Response } from 'express';
 import * as crypto from 'crypto';
 
-import { Agent, AgentStatus } from '../../entities/agent.entity';
+import { Agent } from '../../entities/agent.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';

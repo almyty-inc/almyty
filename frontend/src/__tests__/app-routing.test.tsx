@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { MemoryRouter } from 'react-router-dom'
+import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { render, screen, waitFor } from '@testing-library/react'
 
-import App from '@/App'
+import { createAppRoutes } from '@/App'
 
 /**
  * Production-readiness: an unknown *authenticated* URL used to render the
@@ -58,12 +58,10 @@ vi.mock('@/pages/hosted-chat', () => ({
   HostedChatPage: ({ slug }: { slug: string }) => <div>Hosted chat {slug}</div>,
 }))
 
+// The same route tree main.tsx hands createBrowserRouter, in memory.
 function renderAt(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <App />
-    </MemoryRouter>,
-  )
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [path] })
+  return render(<RouterProvider router={router} />)
 }
 
 describe('App authed routing', () => {

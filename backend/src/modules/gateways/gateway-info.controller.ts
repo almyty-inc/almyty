@@ -15,6 +15,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@ne
 import { GatewaysService } from './gateways.service';
 import { SkillGeneratorService } from '../tools/skill-generator.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PrivateGatewayGuard } from './private-gateway.guard';
 import { batchAsync } from '../../common/utils/batch-async';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -22,7 +23,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 @Controller('gateways')
 @ApiTags('Gateways')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateGatewayGuard)
 export class GatewayInfoController {
   constructor(
     private readonly gatewaysService: GatewaysService,
@@ -46,7 +47,7 @@ export class GatewayInfoController {
         );
       }
 
-      const results = await this.gatewaysService.searchSkillsAcrossGateways(organizationId, query || '');
+      const results = await this.gatewaysService.searchSkillsAcrossGateways(organizationId, query || '', req.user.id);
 
       return {
         success: true,
@@ -75,7 +76,7 @@ export class GatewayInfoController {
         );
       }
 
-      const gateways = await this.gatewaysService.getAllUserGateways(organizationId);
+      const gateways = await this.gatewaysService.getAllUserGateways(organizationId, req.user.id);
 
       const result = await batchAsync(gateways, 5, async (gateway) => {
         const orgSlug = gateway.organization?.slug || gateway.organization?.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'unknown';
@@ -177,7 +178,7 @@ export class GatewayInfoController {
         );
       }
 
-      const stats = await this.gatewaysService.getOrganizationGatewayStats(organizationId);
+      const stats = await this.gatewaysService.getOrganizationGatewayStats(organizationId, req.user.id);
 
       return {
         success: true,
@@ -217,6 +218,7 @@ export class GatewayInfoController {
         orgSlug,
         gatewaySlug,
         organizationId,
+        req.user?.id ?? null,
       );
       return {
         success: true,

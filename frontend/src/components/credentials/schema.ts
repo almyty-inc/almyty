@@ -1,5 +1,12 @@
 import { z } from 'zod'
 
+/** The credential types the vault form offers. */
+export const SECRET_TYPES = [
+  { value: 'api_key', label: 'API Key' }, { value: 'bearer_token', label: 'Bearer Token' },
+  { value: 'basic_auth', label: 'Basic Auth' }, { value: 'oauth2', label: 'OAuth2' },
+  { value: 'jwt', label: 'JWT' }, { value: 'custom', label: 'Custom' },
+]
+
 // Mirrors backend/src/modules/credentials/dto/credentials.dto.ts:
 //   name @MaxLength(200), description @MaxLength(2000), type @MaxLength(50).
 /**

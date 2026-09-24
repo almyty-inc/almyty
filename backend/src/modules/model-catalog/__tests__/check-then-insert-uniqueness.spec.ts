@@ -12,6 +12,7 @@ import { BadRequestException } from '@nestjs/common';
 import { ApisToolGeneratorHelper } from '../../apis/apis-tool-generator.helper';
 import { ModelCatalogService } from '../model-catalog.service';
 import { ApiType, ApiStatus } from '../../../entities/api.entity';
+import { unlimitedToolQuotaManager } from '../../../test/tool-quota.fake';
 
 const uniqueViolation = (constraint: string) =>
   Object.assign(new Error(`duplicate key value violates unique constraint "${constraint}"`), {
@@ -44,7 +45,7 @@ describe('tool generation - tools_org_name_uq', () => {
       updateFromOperation: jest.fn().mockImplementation(async (id) => ({ id, name: 'pet_store_get_pet' })),
     };
     const helper = new ApisToolGeneratorHelper(
-      { findOne: jest.fn().mockResolvedValue(api) } as any,
+      { findOne: jest.fn().mockResolvedValue(api), manager: unlimitedToolQuotaManager() } as any,
       toolsService as any,
       { findOne: jest.fn().mockResolvedValue(api) } as any,
     );
@@ -67,7 +68,7 @@ describe('tool generation - tools_org_name_uq', () => {
       updateFromOperation: jest.fn(),
     };
     const helper = new ApisToolGeneratorHelper(
-      { findOne: jest.fn().mockResolvedValue(api) } as any,
+      { findOne: jest.fn().mockResolvedValue(api), manager: unlimitedToolQuotaManager() } as any,
       toolsService as any,
       { findOne: jest.fn().mockResolvedValue(api) } as any,
     );

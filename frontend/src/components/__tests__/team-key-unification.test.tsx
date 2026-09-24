@@ -90,9 +90,10 @@ describe('team mutations reach every team consumer', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Teams' }))
     await user.click(screen.getByRole('button', { name: /Create team/i }))
-    const dialog = within(await screen.findByRole('dialog'))
-    await user.type(dialog.getByLabelText('Team Name'), 'Platform')
-    await user.click(dialog.getByRole('button', { name: 'Create team' }))
+    // Inline in the Teams card now, not a dialog.
+    const form = within(await screen.findByRole('form', { name: 'Create team' }))
+    await user.type(form.getByLabelText(/Team name/), 'Platform')
+    await user.click(form.getByRole('button', { name: 'Create team' }))
 
     await waitFor(() => expect(organizationsApi.createTeam).toHaveBeenCalled())
     await waitFor(() =>

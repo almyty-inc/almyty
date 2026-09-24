@@ -140,8 +140,12 @@ A runner is a long-running daemon that registers **any machine you control** wit
 That is the general capability. One thing it is particularly good at is driving a CLI coding agent (Claude Code, Codex, gemini, aider) against a real checkout in one coherent session.
 
 ```bash
-npx @almyty/runner start --name my-laptop
+npm i -g @almyty/runner @almyty/auth
+almyty-auth login
+almyty-runner start --name my-laptop
 ```
+
+The login is what identifies and authorises the runner, not the name. Who else can see and use it is its visibility: Private (the default), Team, or Org-wide.
 
 By default the runner uses **host isolation**: dispatched commands run as the user who started it, on that machine. Package installs are refused by default, and `allowedCwdRoots` / `denyPatterns` narrow it further — see [the runner README](packages/runner/README.md#what-that-command-lets-almyty-do-to-your-machine), which the daemon also summarizes at boot.
 
@@ -152,8 +156,8 @@ Or open `/runners/new` in the UI for a guided setup. See [docs/runner.md](docs/r
 For tests outside the containers, use Node 26+ and install dependencies from the repository root. These commands all run from that same directory:
 
 ```bash
-npm --prefix backend ci --legacy-peer-deps
-npm --prefix frontend ci --legacy-peer-deps
+npm --prefix backend ci
+npm --prefix frontend ci
 npm --prefix backend run test           # default suite; DB-gated tests are skipped
 npm --prefix backend run test:full      # includes DB integration; needs local PostgreSQL + Redis
 npm --prefix frontend run test -- --run # vitest

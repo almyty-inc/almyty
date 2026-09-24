@@ -2,7 +2,7 @@ import React from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { GitFork } from 'lucide-react'
 
-export function ParallelNode({ data, selected }: NodeProps) {
+export function ParallelNode({ selected }: NodeProps) {
   return (
     <div className={`rounded-xl border-2 bg-card shadow-sm w-[220px] hover:shadow-md transition-shadow ${selected ? 'border-primary ring-2 ring-primary' : 'border-border'}`}>
       <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-orange-500 !border-orange-600" />

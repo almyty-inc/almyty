@@ -8,13 +8,23 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Tool } from '../../entities/tool.entity';
 
-import { Agent, AgentStatus, AgentPipeline, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agent.entity';
+import { Agent, AgentStatus, AgentPipeline } from '../../entities/agent.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
 import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { AgentAuditService } from './agent-audit.service';
 import { AgentCollaboration, collaborationProblems } from './collaboration-participants';
-import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
+import {
+  assertAttachable,
+  assertNotOthersPrivate,
+  isOthersPrivate,
+  resolveVisibilityWrite,
+} from '../../common/authorization/private-visibility';
+import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
+import { collectAgentReferences, collectProviderReferences } from './agent-references';
+import { LlmProvider } from '../../entities/llm-provider.entity';
+import { providerUsableBy } from '../llm-providers/private-provider';
 
 export interface AgentSearchFilters {
   search?: string;
@@ -51,7 +61,7 @@ export interface CreateAgentInput {
   metadata?: Record<string, any>;
   webhookUrl?: string;
   // Team-scoping fields from the dashboard's VisibilityField.
-  visibility?: 'org' | 'team';
+  visibility?: ResourceVisibility;
   teamId?: string | null;
 }
 export interface UpdateAgentInput {
@@ -74,7 +84,7 @@ export interface UpdateAgentInput {
   metadata?: Record<string, any>;
   webhookUrl?: string;
   // Team-scoping fields from the dashboard's VisibilityField.
-  visibility?: 'org' | 'team';
+  visibility?: ResourceVisibility;
   teamId?: string | null;
 }
 
@@ -240,6 +250,81 @@ export class AgentsService {
     }
   }
 
+  /**
+   * Refuse wiring another user's private tool or agent -- or any private
+   * one into an agent that is not private to the same owner.
+   *
+   * An org-wide agent that calls a private tool hands that tool to every
+   * member who can run the agent, so "just me" would stop meaning it.
+   * The references live in `toolIds`, `tool_call` / `sub_agent` pipeline
+   * nodes and the collaboration roster; all of them are checked. Ids that
+   * do not resolve are left to the existing checks.
+   */
+  private async assertPrivateReferencesAllowed(
+    agent: {
+      id?: string;
+      visibility?: ResourceVisibility | null;
+      createdBy?: string | null;
+      toolIds?: string[] | null;
+      pipeline?: AgentPipeline | null;
+      collaboration?: Agent['collaboration'] | null;
+    },
+    organizationId: string,
+  ): Promise<void> {
+    const { toolIds, agentIds } = collectAgentReferences(agent);
+    if (agent.id) agentIds.delete(agent.id);
+    const parent = { visibility: agent.visibility ?? 'org', ownerId: agent.createdBy ?? null, noun: 'agent' };
+    if (toolIds.size) {
+      const tools = await this.agentRepository.manager.getRepository(Tool).find({
+        where: { id: In([...toolIds]), organizationId },
+        select: { id: true, name: true, organizationId: true, visibility: true, teamId: true, createdBy: true },
+      });
+      assertAttachable(parent, tools, 'tool');
+    }
+    if (agentIds.size) {
+      const agents = await this.agentRepository.find({
+        where: { id: In([...agentIds]), organizationId },
+        select: { id: true, name: true, organizationId: true, visibility: true, teamId: true, createdBy: true },
+      });
+      assertAttachable(parent, agents, 'agent');
+    }
+  }
+
+  /**
+   * Refuse naming an LLM provider the saving user cannot use: one that is
+   * not in this organization, or another member's private provider. The
+   * run would refuse it anyway (llm-provider-secrets, the router), so say
+   * no where somebody is looking. Both cases get the same message, so the
+   * answer does not tell the caller a private provider with that id exists.
+   * A save with no known user cannot own a private provider: fail closed.
+   *
+   * Only references the save adds are checked (`previous` is the stored
+   * agent on update), so an agent whose provider was since deleted can
+   * still be edited in other ways.
+   */
+  private async assertProvidersUsable(
+    next: Parameters<typeof collectProviderReferences>[0],
+    previous: Parameters<typeof collectProviderReferences>[0] | null,
+    organizationId: string,
+    userId: string | null | undefined,
+  ): Promise<void> {
+    const before = previous ? collectProviderReferences(previous) : new Set<string>();
+    const added = [...collectProviderReferences(next)].filter((id) => !before.has(id));
+    if (added.length === 0) return;
+    const found = await this.agentRepository.manager.getRepository(LlmProvider).find({
+      where: { id: In(added), organizationId },
+      select: { id: true, visibility: true, ownerUserId: true },
+    });
+    const usable = new Set(found.filter((p) => providerUsableBy(p, userId)).map((p) => p.id));
+    const refused = added.filter((id) => !usable.has(id));
+    if (refused.length) {
+      throw new BadRequestException(
+        `These providers are not available in this organization: ${refused.join(', ')}. ` +
+          'Choose another provider in Models.',
+      );
+    }
+  }
+
   async createAgent(
     createDto: CreateAgentInput,
     organizationId: string,
@@ -270,12 +355,43 @@ export class AgentsService {
         createDto.visibility,
         createDto.teamId,
       );
+      // The creator owns the agent; 'private' means private to them.
+      // Drop a stray teamId unless the agent is team-scoped.
+      const scope = resolveVisibilityWrite({
+        requestedVisibility: createDto.visibility,
+        requestedTeamId: createDto.teamId,
+        current: { ownerId: userId },
+        callerId: userId,
+        noun: 'agent',
+      });
 
       // Validate pipeline (only for workflow mode)
       const mode = createDto.mode || 'workflow';
       if (mode === 'workflow' && createDto.pipeline) {
         this.validation.validatePipeline(createDto.pipeline);
       }
+
+      await this.assertPrivateReferencesAllowed(
+        {
+          visibility: scope.visibility,
+          createdBy: userId,
+          toolIds: createDto.toolIds,
+          pipeline: createDto.pipeline,
+          collaboration: createDto.collaboration as Agent['collaboration'],
+        },
+        organizationId,
+      );
+      await this.assertProvidersUsable(
+        {
+          modelConfig: createDto.modelConfig as Agent['modelConfig'],
+          pipeline: createDto.pipeline,
+          agentConfig: createDto.agentConfig as Agent['agentConfig'],
+          collaboration: createDto.collaboration as Agent['collaboration'],
+        },
+        null,
+        organizationId,
+        userId,
+      );
 
       const agent = this.agentRepository.create({
         name: createDto.name,
@@ -298,12 +414,8 @@ export class AgentsService {
         metadata: createDto.metadata || {},
         webhookUrl: createDto.webhookUrl || null,
         createdBy: userId,
-        // Team-scoping (#133 partial fix did credentials; this is the
-        // matching change for agents). Default to 'org' so omitted
-        // payloads keep the historical behavior; drop a stray teamId
-        // when visibility='org'.
-        visibility: createDto.visibility ?? 'org',
-        teamId: createDto.visibility === 'team' ? (createDto.teamId ?? null) : null,
+        visibility: scope.visibility,
+        teamId: scope.teamId,
       });
 
       if (agent.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);
@@ -325,7 +437,13 @@ export class AgentsService {
     }
   }
 
-  async getAgent(id: string, organizationId: string): Promise<Agent> {
+  /**
+   * Fetch an agent by id within an organization. With a `caller`,
+   * another member's private agent is "not found" (404, never 403, so
+   * its existence is not confirmed). System paths that act on an agent
+   * as its owner (scheduler, heartbeat, runtime) call without a caller.
+   */
+  async getAgent(id: string, organizationId: string, caller?: { id: string } | null): Promise<Agent> {
     const agent = await this.agentRepository.findOne({
       where: { id, organizationId },
     });
@@ -333,15 +451,28 @@ export class AgentsService {
     if (!agent) {
       throw new NotFoundException(`Agent not found: ${id}`);
     }
+    if (caller !== undefined) {
+      await assertNotOthersPrivate(this.accessPolicy, caller, agent, 'Agent');
+    }
 
     return agent;
   }
 
-  async findByName(name: string, organizationId: string): Promise<Agent | null> {
+  /**
+   * Resolve an agent by name (exact, case-insensitive, then slug) for
+   * the OpenAI/Anthropic-compatible surfaces. Another member's private
+   * agent never matches: with no `callerId` no private agent does.
+   */
+  async findByName(name: string, organizationId: string, callerId?: string | null): Promise<Agent | null> {
+    const notOthersPrivate = `(agent.visibility IS DISTINCT FROM 'private' OR agent."createdBy" = :_me)`;
+    const me = callerId ?? null;
     // Try exact match first
-    let agent = await this.agentRepository.findOne({
-      where: { name, organizationId },
-    });
+    let agent = await this.agentRepository
+      .createQueryBuilder('agent')
+      .where('agent.organizationId = :organizationId', { organizationId })
+      .andWhere('agent.name = :name', { name })
+      .andWhere(notOthersPrivate, { _me: me })
+      .getOne();
     if (agent) return agent;
 
     // Try case-insensitive match
@@ -349,6 +480,7 @@ export class AgentsService {
       .createQueryBuilder('agent')
       .where('agent.organizationId = :organizationId', { organizationId })
       .andWhere('LOWER(agent.name) = LOWER(:name)', { name })
+      .andWhere(notOthersPrivate, { _me: me })
       .getOne();
     if (agent) return agent;
 
@@ -358,15 +490,22 @@ export class AgentsService {
       .createQueryBuilder('agent')
       .where('agent.organizationId = :organizationId', { organizationId })
       .andWhere('LOWER(agent.name) = LOWER(:name)', { name: deslugified })
+      .andWhere(notOthersPrivate, { _me: me })
       .getOne();
     return agent;
   }
 
-  async findAllActive(organizationId: string): Promise<Agent[]> {
-    return this.agentRepository.find({
+  /**
+   * Active agents of an organization, as listed by `/v1/models`. Another
+   * member's private agents are left out; with no `callerId` every
+   * private agent is.
+   */
+  async findAllActive(organizationId: string, callerId?: string | null): Promise<Agent[]> {
+    const agents = await this.agentRepository.find({
       where: { organizationId, status: AgentStatus.ACTIVE },
       order: { createdAt: 'DESC' },
     });
+    return agents.filter((a) => !isOthersPrivate(a, callerId ?? null));
   }
 
   async getAgents(filters: AgentSearchFilters): Promise<{
@@ -385,7 +524,7 @@ export class AgentsService {
     // Apply team-scope visibility BEFORE the additional filters
     // (status, search, sort, paging) so the filter participates in
     // the same WHERE block as the rest of the query.
-    await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'agent');
+    await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'agent', { ownerColumn: 'createdBy' });
 
     if (filters.search) {
       queryBuilder.andWhere(
@@ -427,7 +566,7 @@ export class AgentsService {
     organizationId: string,
     userId?: string,
   ): Promise<Agent> {
-    const agent = await this.getAgent(id, organizationId);
+    const agent = await this.getAgent(id, organizationId, userId ? { id: userId } : undefined);
 
     // Permission check: admin+ can update any agent, members can only update their own
     if (userId) {
@@ -462,15 +601,69 @@ export class AgentsService {
     this.assertWebhookUrl(updateDto.webhookUrl);
     this.assertCollaboration(updateDto.collaboration);
     await this.assertToolsInOrg(updateDto.toolIds, agent.organizationId);
-    Object.assign(agent, updateDto);
-    if (updateDto.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);
-    // Sanitize the team-scoping fields after the spread so a flip
-    // back to visibility='org' doesn't leave the old teamId dangling.
-    if (updateDto.visibility === 'org') {
-      agent.teamId = null;
-    } else if (updateDto.visibility === 'team' && updateDto.teamId !== undefined) {
-      agent.teamId = updateDto.teamId;
+
+    // Only the agent's owner may make it (or keep it) private; an agent
+    // with no recorded owner becomes the caller's.
+    const scopeChanging = updateDto.visibility !== undefined || updateDto.teamId !== undefined;
+    const scope = scopeChanging
+      ? resolveVisibilityWrite({
+          requestedVisibility: updateDto.visibility,
+          requestedTeamId: updateDto.visibility === undefined && agent.visibility !== 'team' ? undefined : updateDto.teamId,
+          current: { visibility: agent.visibility, teamId: agent.teamId, ownerId: agent.createdBy ?? null },
+          callerId: userId,
+          noun: 'agent',
+        })
+      : null;
+
+    // The agent as it will be saved must not reference a private tool or
+    // agent it is not entitled to (a newly attached one, or an existing
+    // one when the agent itself stops being private). Checked whenever
+    // the scope or any reference changes.
+    const referencesChanging =
+      updateDto.toolIds !== undefined || updateDto.pipeline !== undefined || updateDto.collaboration !== undefined;
+    if (scopeChanging || referencesChanging) {
+      await this.assertPrivateReferencesAllowed(
+        {
+          id: agent.id,
+          visibility: scope?.visibility ?? agent.visibility,
+          createdBy: scope?.ownerId ?? agent.createdBy,
+          toolIds: updateDto.toolIds ?? agent.toolIds,
+          pipeline: updateDto.pipeline ?? agent.pipeline,
+          collaboration: (updateDto.collaboration as Agent['collaboration']) ?? agent.collaboration,
+        },
+        organizationId,
+      );
     }
+    // Going private would detach this agent from the shared agents that
+    // call it as a sub-agent or collaborator. Refuse and say which.
+    if (scope?.visibility === 'private' && agent.visibility !== 'private' && userId) {
+      await assertNoSharedDependents(
+        this.agentRepository.manager,
+        this.accessPolicy,
+        { noun: 'agent', organizationId, targets: [{ kind: 'agent', id: agent.id }] },
+        userId,
+      );
+    }
+    await this.assertProvidersUsable(
+      {
+        modelConfig: updateDto.modelConfig !== undefined ? (updateDto.modelConfig as Agent['modelConfig']) : agent.modelConfig,
+        pipeline: updateDto.pipeline ?? agent.pipeline,
+        agentConfig: updateDto.agentConfig !== undefined ? (updateDto.agentConfig as Agent['agentConfig']) : agent.agentConfig,
+        collaboration: updateDto.collaboration !== undefined ? (updateDto.collaboration as Agent['collaboration']) : agent.collaboration,
+      },
+      agent,
+      organizationId,
+      userId,
+    );
+
+    const { visibility: _v, teamId: _t, ...rest } = updateDto;
+    Object.assign(agent, rest);
+    if (scope) {
+      agent.visibility = scope.visibility;
+      agent.teamId = scope.teamId;
+      if (scope.ownerId) agent.createdBy = scope.ownerId;
+    }
+    if (updateDto.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);
     const saved = await this.agentRepository.save(agent);
 
     this.logger.log(`[UPDATE_AGENT] Agent updated: id=${saved.id}`);
@@ -489,7 +682,7 @@ export class AgentsService {
   }
 
   async deleteAgent(id: string, organizationId: string, userId?: string): Promise<void> {
-    const agent = await this.getAgent(id, organizationId);
+    const agent = await this.getAgent(id, organizationId, userId ? { id: userId } : undefined);
 
     // Permission check: admin+ can delete any agent, members can only delete their own
     if (userId) {
@@ -512,7 +705,7 @@ export class AgentsService {
   }
 
   async activateAgent(id: string, organizationId: string, userId?: string): Promise<Agent> {
-    const agent = await this.getAgent(id, organizationId);
+    const agent = await this.getAgent(id, organizationId, userId ? { id: userId } : undefined);
     if (userId) await this.checkAgentPermission(agent, organizationId, userId, 'edit_agents');
     await this.readiness.assertReady(agent, userId);
 
@@ -528,7 +721,7 @@ export class AgentsService {
   }
 
   async deactivateAgent(id: string, organizationId: string, userId?: string): Promise<Agent> {
-    const agent = await this.getAgent(id, organizationId);
+    const agent = await this.getAgent(id, organizationId, userId ? { id: userId } : undefined);
     agent.status = AgentStatus.INACTIVE;
     const saved = await this.agentRepository.save(agent);
     this.logger.log(`[DEACTIVATE_AGENT] Agent deactivated: id=${id}`);
@@ -541,7 +734,7 @@ export class AgentsService {
   }
 
   async getReadiness(id: string, organizationId: string, userId: string) {
-    const agent = await this.getAgent(id, organizationId);
+    const agent = await this.getAgent(id, organizationId, { id: userId });
     const decision = await this.accessPolicy.canAccess({ id: userId }, agent, 'read');
     if (!decision.allowed) throw new ForbiddenException(decision.reason);
     return this.readiness.inspect(agent, userId);

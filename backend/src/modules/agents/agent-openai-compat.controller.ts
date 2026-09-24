@@ -23,11 +23,10 @@ import * as crypto from 'crypto';
 import { ApiKey } from '../../entities/api-key.entity';
 import { Agent } from '../../entities/agent.entity';
 import { AgentsService } from './agents.service';
-import { AgentExecutionEngine, StreamEvent } from './agent-execution.engine';
+import { AgentExecutionEngine } from './agent-execution.engine';
 import { AgentOpenAIStreamHelper } from './agent-openai-stream.helper';
 import {
   CompatRateLimiter,
-  COMPAT_RATE_LIMIT_RPM,
   type CompatRateLimitInfo,
 } from './compat-rate-limit.helper';
 import {
@@ -137,7 +136,7 @@ export class AgentOpenAICompatController {
         );
       }
 
-      const resolved = await this.resolveAgent(body.model, apiKey.organizationId);
+      const resolved = await this.resolveAgent(body.model, apiKey.organizationId, apiKey.userId);
       agentId = resolved.id;
 
       // 4. Map OpenAI messages to agent input
@@ -203,7 +202,7 @@ export class AgentOpenAICompatController {
       // Touch lastUsedAt (throttled partial update)
       await this.touchApiKeyLastUsed(apiKey);
 
-      const agents = await this.agentsService.findAllActive(apiKey.organizationId);
+      const agents = await this.agentsService.findAllActive(apiKey.organizationId, apiKey.userId);
 
       const response = {
         object: 'list',
@@ -363,7 +362,9 @@ export class AgentOpenAICompatController {
 
   // ─── Agent Resolution ────────────────────────────────────────────────
 
-  private async resolveAgent(model: string, organizationId: string): Promise<Agent> {
+  // A private agent answers only to its owner's own API key: the key's
+  // user is the caller for the visibility check.
+  private async resolveAgent(model: string, organizationId: string, callerId: string | null): Promise<Agent> {
     // model format: "agent:uuid" or "agent:agent-name" or plain "uuid"/"name"
     const agentRef = model.replace(/^agent:/, '');
 
@@ -372,13 +373,13 @@ export class AgentOpenAICompatController {
     // to the caller and we lose the actual signal.
     let agent: Agent | null = null;
     try {
-      agent = await this.agentsService.getAgent(agentRef, organizationId);
+      agent = await this.agentsService.getAgent(agentRef, organizationId, callerId ? { id: callerId } : null);
     } catch (err) {
       if (!(err instanceof NotFoundException)) throw err;
     }
 
     if (!agent) {
-      agent = await this.agentsService.findByName(agentRef, organizationId);
+      agent = await this.agentsService.findByName(agentRef, organizationId, callerId);
     }
 
     if (!agent) {

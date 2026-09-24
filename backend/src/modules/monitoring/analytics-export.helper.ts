@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { Between, Raw, Repository } from 'typeorm';
+import {
+  notOthersPrivateAgent,
+  notOthersPrivateAgentRun,
+  notOthersPrivateGateway,
+  notOthersPrivateProvider,
+  notOthersPrivateTool,
+} from './private-rows';
 
 import { RequestLog } from '../../entities/request-log.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
@@ -12,6 +19,8 @@ export interface ExportQuery {
   organizationId: string;
   from?: Date;
   to?: Date;
+  /** Who is exporting; other users' private gateways/providers are left out. */
+  callerId: string;
 }
 
 /**
@@ -37,6 +46,13 @@ export class AnalyticsExportHelper {
     }
     const from = query.from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const to = query.to || new Date();
+    // Every row set below drops rows tied to another member's private
+    // gateway, provider, agent or tool -- an org admin exporting included.
+    // No known caller binds null, which leaves every private resource's
+    // rows out: fail closed.
+    const privateViewerId = query.callerId ?? null;
+    const unlessNull = (column: string, fragment: (c: string) => string) =>
+      `(${column} IS NULL OR ${fragment(column)})`;
 
     if (query.type === 'requests') {
       const logs = await this.requestLogRepository
@@ -44,6 +60,9 @@ export class AnalyticsExportHelper {
         .innerJoin('log.gateway', 'gw')
         .where('gw.organizationId = :orgId', { orgId: query.organizationId })
         .andWhere('log.timestamp BETWEEN :from AND :to', { from, to })
+        // Not another member's private gateway's or private tool's traffic.
+        .andWhere(notOthersPrivateGateway('log."gatewayId"'), { privateViewerId })
+        .andWhere(unlessNull('log."toolId"', notOthersPrivateTool), { privateViewerId })
         // Only the columns the export emits.
         //
         // `take(10000)` bounds the row count and nothing bounded the row
@@ -76,7 +95,15 @@ export class AnalyticsExportHelper {
       // untruncated json and the HTTP executor allows 10MB responses,
       // and the CSV below uses neither.
       const execs = await this.toolExecutionRepository.find({
-        where: { organizationId: query.organizationId, createdAt: Between(from, to) },
+        where: {
+          organizationId: query.organizationId,
+          createdAt: Between(from, to),
+          // Not another member's private tool, nor a call made through
+          // their private gateway or by a run of their private agent.
+          toolId: Raw((column) => notOthersPrivateTool(column), { privateViewerId }),
+          gatewayId: Raw((column) => unlessNull(column, notOthersPrivateGateway), { privateViewerId }),
+          runId: Raw((column) => unlessNull(column, notOthersPrivateAgentRun), { privateViewerId }),
+        },
         select: {
           id: true, toolId: true, userId: true, organizationId: true, success: true,
           executionTime: true, cached: true, retryCount: true, error: true, createdAt: true,
@@ -100,7 +127,15 @@ export class AnalyticsExportHelper {
       // (which holds the system prompt) and `metadata`, and the column
       // list below uses neither.
       const sessions = await this.conversationRepository.find({
-        where: { organizationId: query.organizationId, createdAt: Between(from, to) },
+        where: {
+          organizationId: query.organizationId,
+          createdAt: Between(from, to),
+          // Not another member's private provider's, agent's or
+          // gateway's sessions.
+          providerId: Raw((column) => unlessNull(column, notOthersPrivateProvider), { privateViewerId }),
+          agentId: Raw((column) => unlessNull(column, notOthersPrivateAgent), { privateViewerId }),
+          gatewayId: Raw((column) => unlessNull(column, notOthersPrivateGateway), { privateViewerId }),
+        },
         select: {
           // `type` is in the CSV column list below but is not a column on
           // Conversation, so that column has always come out empty --

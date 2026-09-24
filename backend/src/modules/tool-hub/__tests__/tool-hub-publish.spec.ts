@@ -4,6 +4,7 @@ import { FindOperator } from 'typeorm';
 import { ToolHubService } from '../tool-hub.service';
 import { ToolExecutionMethod, ToolStatus } from '../../../entities/tool.entity';
 import { seedPublicToolTemplates } from '../public-templates.seed';
+import { unlimitedToolQuotaManager } from '../../../test/tool-quota.fake';
 
 /**
  * Publishing is the tool hub's only authoring path, so these tests carry
@@ -41,6 +42,10 @@ class FakeRepo<T extends Record<string, any>> {
     return row;
   }
 
+  async find({ where }: any): Promise<any[]> {
+    return this.rows.filter((row) => this.matches(row, where));
+  }
+
   async findOne({ where }: any): Promise<any> {
     return this.rows.find((row) => this.matches(row, where)) ?? null;
   }
@@ -63,6 +68,7 @@ class FakeRepo<T extends Record<string, any>> {
 function makeService() {
   const templateRepository = new FakeRepo<any>('tpl');
   const toolRepository = new FakeRepo<any>('tool');
+  (toolRepository as any).manager = unlimitedToolQuotaManager();
   const apiRepository = new FakeRepo<any>('api');
   const auditLogService = { logCreate: jest.fn(), logUpdate: jest.fn(), logDelete: jest.fn() };
 

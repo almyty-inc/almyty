@@ -25,6 +25,7 @@ import { A2AServerService } from '../a2a/a2a-server.service';
 import { A2AAgentCardService } from '../a2a/a2a-agent-card.service';
 import { AcpServerService } from '../acp/acp-server.service';
 import { AcpDiscoveryService } from '../acp/acp-discovery.service';
+import { isPrivateGateway } from './private-gateway';
 
 /**
  * Per-protocol delegation for gateways exposed under
@@ -160,7 +161,10 @@ export class UnifiedGatewayDelegation {
     const isChannel = UnifiedGatewayDelegation.CHANNEL_TYPES.has(gateway.type);
 
     let auth: any = null;
-    if (!isDiscovery && !isChannel) {
+    // A private gateway authenticates every request, discovery and channel
+    // webhooks included: the resolver serves it to its owner only and
+    // answers everyone else with the not-found a missing gateway gets.
+    if (isPrivateGateway(gateway) || (!isDiscovery && !isChannel)) {
       // The org and the gateway (with its auth configs) are already in
       // hand from the unified controller — hand them over so the resolver
       // does not repeat both lookups.
@@ -333,10 +337,17 @@ export class UnifiedGatewayDelegation {
       return res.json(result);
     }
 
+    // The caller the gateway's own auth identified (an API key's or OAuth
+    // token's user), as UTCP does. With no user, tools/call and tools/get
+    // treat the caller as nobody: another member's private tool -- and on
+    // a private gateway, which only its owner reaches, the owner's own --
+    // is refused rather than run on no one's behalf. Passing null here made
+    // a private gateway useless to its owner and ran every call unattributed.
+    const callerId: string | undefined = auth?.userId || (req as any).user?.sub || (req as any).user?.id || undefined;
     const result = await this.mcpService.handleJsonRpcMessage(
       body,
       gateway.organizationId,
-      null,
+      callerId,
       gateway.id,
     );
 

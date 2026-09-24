@@ -12,6 +12,7 @@ import { encryptField, decryptField, isEncrypted } from '../../../common/securit
 import { CredentialType } from '../../../entities/credential.entity';
 import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
 import { FakeCredentialStore, makeCredentialRefFake } from '../../../test/credential-ref.fake';
+import { unlimitedToolQuotaManager } from '../../../test/tool-quota.fake';
 
 describe('McpSourcesService', () => {
   let service: McpSourcesService;
@@ -58,6 +59,7 @@ describe('McpSourcesService', () => {
       remove: jest.fn(async (x: any) => x),
     };
     toolRepository = {
+      manager: unlimitedToolQuotaManager(),
       find: jest.fn().mockResolvedValue([]),
       create: jest.fn((x: any) => x),
       save: jest.fn(async (x: any) => ({ id: `tool-${x.name}`, ...x })),

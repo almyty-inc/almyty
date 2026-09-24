@@ -21,14 +21,14 @@ import { ToolExecutorService } from '../tools/tool-executor.service';
 import { CliGeneratorService } from '../tools/cli-generator.service';
 import { CodegenService } from '../tools/codegen.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { batchAsync } from '../../common/utils/batch-async';
+import { PrivateGatewayGuard } from './private-gateway.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('gateways')
 @ApiTags('Gateways')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateGatewayGuard)
 export class GatewaySkillsController {
   private readonly logger = new Logger(GatewaySkillsController.name);
 

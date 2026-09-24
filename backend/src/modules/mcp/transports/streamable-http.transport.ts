@@ -176,6 +176,13 @@ export class StreamableHttpTransport extends EventEmitter {
         this.sendErrorResponse(res, WORKER_ERROR_CODES.UNKNOWN_SESSION, 'session not in this org');
         return;
       }
+      if (!this.sameUser(known, userId)) {
+        // Same org, different user. A session is bound to the user who
+        // minted it; another member posting on it could answer that
+        // user's runner dispatches or inject coding output into them.
+        this.sendErrorResponse(res, WORKER_ERROR_CODES.UNKNOWN_SESSION, 'session not yours');
+        return;
+      }
       session = known;
     } else {
       session = this.createSession(organizationId, userId);
@@ -305,6 +312,12 @@ export class StreamableHttpTransport extends EventEmitter {
       // Cross-tenant attempt; refuse loudly rather than leaking session
       // existence by returning UNKNOWN_SESSION.
       this.sendErrorResponse(res, WORKER_ERROR_CODES.UNKNOWN_SESSION, 'session not in this org');
+      return;
+    }
+    if (!this.sameUser(session, _userId)) {
+      // Same org, different user: opening someone else's stream would
+      // preempt theirs and deliver the dispatches meant for their runner.
+      this.sendErrorResponse(res, WORKER_ERROR_CODES.UNKNOWN_SESSION, 'session not yours');
       return;
     }
 
@@ -472,6 +485,16 @@ export class StreamableHttpTransport extends EventEmitter {
     this.sessionMintedHere.add(id);
     this.registerSession(session); // cross-pod registry (no-op without redis)
     return session;
+  }
+
+  /**
+   * Is `userId` the user this session was minted for? A session minted
+   * without a user (none today; every route in front of this transport
+   * is JWT-guarded) is not bound to one.
+   */
+  private sameUser(session: StreamableSession, userId: string | undefined): boolean {
+    if (!session.userId) return true;
+    return session.userId === userId;
   }
 
   /** Publish a session's existence so any replica can adopt it. */

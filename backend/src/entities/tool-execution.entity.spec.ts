@@ -1,5 +1,4 @@
 import { ToolExecution } from './tool-execution.entity';
-import { Repository } from 'typeorm';
 
 describe('ToolExecution Entity', () => {
   let execution: ToolExecution;

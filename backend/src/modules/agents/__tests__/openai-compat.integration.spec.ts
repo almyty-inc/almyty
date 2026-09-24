@@ -336,7 +336,7 @@ describe('OpenAI Compatibility', () => {
       agentsService.getAgent.mockResolvedValue(makeAgent());
 
       executionEngine.execute.mockImplementation(
-        async (agent: any, orgId: string, userId: string | null, opts: any, onEvent?: Function) => {
+        async (_agent: any, _orgId: string, _userId: string | null, _opts: any, _onEvent?: Function) => {
           throw new Error('LLM provider crashed');
         },
       );
@@ -827,7 +827,8 @@ describe('OpenAI Compatibility', () => {
       );
 
       // Should strip the "agent:" prefix and look up by ID
-      expect(agentsService.getAgent).toHaveBeenCalledWith('agent-abc-123', 'org-1');
+      // The API key's user is the caller: a private agent answers only to its owner's key.
+      expect(agentsService.getAgent).toHaveBeenCalledWith('agent-abc-123', 'org-1', { id: 'user-1' });
     });
 
     it('should fall back to name-based lookup when ID lookup fails', async () => {
@@ -854,7 +855,7 @@ describe('OpenAI Compatibility', () => {
         res,
       );
 
-      expect(agentsService.findByName).toHaveBeenCalledWith('my-agent', 'org-1');
+      expect(agentsService.findByName).toHaveBeenCalledWith('my-agent', 'org-1', 'user-1');
     });
 
     it('should reject inactive agents', async () => {

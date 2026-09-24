@@ -5,6 +5,10 @@ import { Repository } from 'typeorm';
 import { AuditLog } from '../../entities/audit-log.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
 
+/** Runs of agents that are private to somebody other than :_privateMe. */
+const NOT_OTHERS_PRIVATE_AGENT_RUN =
+  `NOT EXISTS (SELECT 1 FROM agents pa WHERE pa.id = run."agentId" AND pa.visibility = 'private' AND pa."createdBy" IS DISTINCT FROM :_privateMe)`;
+
 /**
  * A fallback that remembers it was used.
  *
@@ -16,7 +20,7 @@ import { AgentRun } from '../../entities/agent-run.entity';
  * panel down; what changes is that the answer now says it is partial.
  */
 function recorded<T>(failures: string[], name: string, fallback: T) {
-  return (err: unknown): T => {
+  return (_err: unknown): T => {
     failures.push(name);
     return fallback;
   };
@@ -126,7 +130,10 @@ export class AnalyticsSummariesHelper {
     };
   }
 
-  async getAgentRunsSummary(organizationId: string) {
+  // Runs of another member's private agent are not in this caller's
+  // summary: their ids, counts and cost would describe a resource the
+  // caller is not allowed to know exists.
+  async getAgentRunsSummary(organizationId: string, callerId?: string | null) {
     if (!organizationId) {
       throw new Error('getAgentRunsSummary requires organizationId');
     }
@@ -142,6 +149,7 @@ export class AnalyticsSummariesHelper {
         .select('run.status', 'status')
         .addSelect('COUNT(*)', 'count')
         .where('run.organizationId = :orgId', { orgId: organizationId })
+        .andWhere(NOT_OTHERS_PRIVATE_AGENT_RUN, { _privateMe: callerId ?? null })
         .andWhere('run.createdAt >= :since', { since: last7d })
         .groupBy('run.status')
         .getRawMany()
@@ -163,6 +171,7 @@ export class AnalyticsSummariesHelper {
         .createQueryBuilder('run')
         .select('AVG(run.executionTime)', 'avg')
         .where('run.organizationId = :orgId', { orgId: organizationId })
+        .andWhere(NOT_OTHERS_PRIVATE_AGENT_RUN, { _privateMe: callerId ?? null })
         .andWhere('run.createdAt >= :since', { since: last7d })
         .andWhere('run.executionTime > 0')
         .getRawOne()
@@ -172,6 +181,7 @@ export class AnalyticsSummariesHelper {
         .createQueryBuilder('run')
         .select('SUM(run.totalCost)', 'total')
         .where('run.organizationId = :orgId', { orgId: organizationId })
+        .andWhere(NOT_OTHERS_PRIVATE_AGENT_RUN, { _privateMe: callerId ?? null })
         .andWhere('run.createdAt >= :since', { since: last7d })
         .getRawOne()
         .then(r => parseFloat(r?.total || '0'))
@@ -185,6 +195,7 @@ export class AnalyticsSummariesHelper {
         .addSelect('AVG(run.executionTime)', 'avgDuration')
         .addSelect('SUM(run.totalCost)', 'cost')
         .where('run.organizationId = :orgId', { orgId: organizationId })
+        .andWhere(NOT_OTHERS_PRIVATE_AGENT_RUN, { _privateMe: callerId ?? null })
         .andWhere('run.createdAt >= :since', { since: last7d })
         .groupBy('run.agentId')
         .orderBy('COUNT(*)', 'DESC')
@@ -198,6 +209,7 @@ export class AnalyticsSummariesHelper {
         .addSelect("SUM(CASE WHEN run.status = 'completed' THEN 1 ELSE 0 END)", 'completed')
         .addSelect("SUM(CASE WHEN run.status = 'failed' THEN 1 ELSE 0 END)", 'failed')
         .where('run.organizationId = :orgId', { orgId: organizationId })
+        .andWhere(NOT_OTHERS_PRIVATE_AGENT_RUN, { _privateMe: callerId ?? null })
         .andWhere('run.createdAt >= :since', { since: last7d })
         .groupBy('bucket')
         .orderBy('bucket', 'ASC')

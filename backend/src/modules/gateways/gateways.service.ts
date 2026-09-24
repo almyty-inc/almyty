@@ -1,11 +1,11 @@
 import { ConflictException, Inject, Optional, forwardRef } from '@nestjs/common';
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, Like, MoreThanOrEqual } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { Gateway, GatewayKind, GatewayType, GatewayStatus } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
-import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity';
+import { GatewayAuth } from '../../entities/gateway-auth.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
@@ -17,7 +17,9 @@ import { GatewayInitHelper } from './gateway-init.helper';
 import { canPublishHostedChat } from './channels/hosted-chat.config';
 import { EE_ENTITLEMENTS } from '../licensing/license.constants';
 import { OrgLicenseResolver } from '../licensing/org-license.resolver';
-import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { AccessPolicyService, normaliseVisibility, resourceOwnerId, type ResourceVisibility } from '../../common/authorization/access-policy.service';
+import { Agent } from '../../entities/agent.entity';
+import { PRIVATE_CAPABLE_GATEWAY_TYPES, gatewayServableTo, resourceServableThroughGateway } from './private-gateway';
 import {
   encryptChannelConfigSecrets,
   hasInlineChannelSecret,
@@ -78,6 +80,8 @@ export interface CreateGatewayDto {
     timeout?: number;
   };
   metadata?: Record<string, any>;
+  visibility?: ResourceVisibility;
+  teamId?: string | null;
 }
 
 export interface UpdateGatewayDto {
@@ -125,6 +129,8 @@ export interface UpdateGatewayDto {
     timeout?: number;
   };
   metadata?: Record<string, any>;
+  visibility?: ResourceVisibility;
+  teamId?: string | null;
 }
 
 export interface GatewaySearchFilters {
@@ -270,6 +276,20 @@ export class GatewaysService {
         message: entitlementRefusals.map(r => r.message).join(' '),
         refusals: entitlementRefusals,
       });
+    }
+  }
+
+  /**
+   * Only the protocol surfaces (MCP, UTCP, Skills, A2A, ACP, OpenAI chat)
+   * can be private: a channel is reached by people outside almyty with no
+   * user identity, so a private one could never answer its owner either.
+   */
+  private assertPrivateCapable(type: GatewayType): void {
+    if (!PRIVATE_CAPABLE_GATEWAY_TYPES.has(type)) {
+      throw new BadRequestException(
+        'Only MCP, UTCP, Skills, A2A, ACP and OpenAI-compatible gateways can be private; ' +
+          'chat channels are reached by people who do not sign in to almyty',
+      );
     }
   }
 
@@ -545,8 +565,17 @@ export class GatewaysService {
       await this.accessPolicy.assertCanScopeToTeam(
         userId,
         organizationId,
-        (createGatewayDto as any).visibility,
-        (createGatewayDto as any).teamId,
+        createGatewayDto.visibility,
+        createGatewayDto.teamId,
+      );
+      const scope = normaliseVisibility(createGatewayDto.visibility, createGatewayDto.teamId);
+      if (scope.visibility === 'private') this.assertPrivateCapable(createGatewayDto.type);
+      // What the gateway serves must be at least as private as the
+      // gateway itself (a private agent only behind its owner's private
+      // gateway). Checked on an unsaved row, so only the agent applies.
+      await this.assertContentsServable(
+        { ...scope, ownerUserId: userId, organizationId, agentId: createGatewayDto.agentId } as Gateway,
+        userId,
       );
 
       // Channel secrets go to the credential store, never onto the row.
@@ -567,6 +596,11 @@ export class GatewaysService {
         endpoint,
         organizationId,
         status: initialStatus,
+        visibility: scope.visibility,
+        teamId: scope.teamId,
+        // Always record who made it: a private gateway needs its owner,
+        // and an org gateway flipped to private later keeps the creator.
+        ownerUserId: userId,
       });
 
       // The row, its channel secret and its default auth config are
@@ -641,10 +675,7 @@ export class GatewaysService {
       }
 
       // Authorization: org owner/admin always, team-scoped requires team lead
-      const decision = await this.accessPolicy.canAccess({ id: userId }, gateway, 'manage');
-      if (!decision.allowed) {
-        throw new ForbiddenException(decision.reason);
-      }
+      await this.assertCanManage(gateway, userId);
 
       // Re-validate team scoping if it's being changed.
       const updateAnyEarly = updateGatewayDto as any;
@@ -656,6 +687,8 @@ export class GatewaysService {
 
       // Capture old values for change tracking (before mutation)
       const oldValues = { name: gateway.name, description: gateway.description, configuration: gateway.configuration, rateLimitConfig: gateway.rateLimitConfig, metadata: gateway.metadata };
+      // The owner is recorded by the server, never taken from a body.
+      const recordedOwner = gateway.ownerUserId ?? null;
 
       // API responses mask channel secrets; an edit dialog that
       // round-trips the whole configuration sends the mask back for
@@ -665,13 +698,29 @@ export class GatewaysService {
 
       // Update fields
       Object.assign(gateway, updateGatewayDto);
-      // Sanitize team-scoping after the spread so flipping back to
-      // visibility='org' clears the dangling teamId.
+      gateway.ownerUserId = recordedOwner;
+      // Sanitize scoping after the spread: 'org' and 'private' carry no
+      // teamId, so flipping away from 'team' clears the dangling one.
       const updateAny = updateGatewayDto as any;
-      if (updateAny.visibility === 'org') {
-        gateway.teamId = null;
-      } else if (updateAny.visibility === 'team' && updateAny.teamId !== undefined) {
-        gateway.teamId = updateAny.teamId;
+      const scopeChanged = updateAny.visibility !== undefined || updateAny.teamId !== undefined;
+      if (scopeChanged) {
+        const scope = normaliseVisibility(gateway.visibility, gateway.teamId);
+        gateway.visibility = scope.visibility;
+        gateway.teamId = scope.teamId;
+      }
+      if (gateway.visibility === 'private') {
+        this.assertPrivateCapable(gateway.type);
+        // Only the recorded owner can make a gateway private. A row with
+        // no recorded creator (made before owners were recorded) becomes
+        // the caller's.
+        if (!gateway.ownerUserId) {
+          gateway.ownerUserId = userId;
+        } else if (gateway.ownerUserId !== userId) {
+          throw new ForbiddenException('Only the gateway\'s owner can make it private');
+        }
+      }
+      if (scopeChanged || updateAny.agentId !== undefined) {
+        await this.assertContentsServable(gateway, userId);
       }
 
       // Validate configuration if updated
@@ -725,6 +774,9 @@ export class GatewaysService {
     orgSlug: string,
     gatewayNameSlug: string,
     callerOrganizationId: string,
+    // Another member's private gateway resolves exactly like a slug that
+    // does not exist. Required so no caller forgets to say who is asking.
+    callerId: string | null,
   ): Promise<Gateway> {
     const organization = await this.organizationRepository.findOne({
       where: { slug: orgSlug },
@@ -738,6 +790,7 @@ export class GatewaysService {
       where: { organizationId: organization.id, endpoint: `/${gatewayNameSlug}` },
       relations: { tools: { tool: true }, authConfigs: true },
     });
+    if (gateway && !gatewayServableTo(gateway, callerId)) gateway = null;
 
     // Fallback: match by slugified name
     if (!gateway) {
@@ -747,6 +800,7 @@ export class GatewaysService {
       });
       gateway = gateways.find(g =>
         g.name.toLowerCase().replace(/\s+/g, '-') === gatewayNameSlug
+          && gatewayServableTo(g, callerId)
       ) || null;
     }
 
@@ -757,10 +811,19 @@ export class GatewaysService {
     return gateway;
   }
 
+  /**
+   * Load a gateway of the organization.
+   *
+   * `caller` is who is asking. Another user's private gateway is reported
+   * as not found -- to org owners and admins too -- so its existence is
+   * not confirmed. Internal callers that act for the platform rather than
+   * for a person (stats roll-ups, the channel pipeline) omit it.
+   */
   async getGateway(
     gatewayId: string,
     organizationId: string,
-    includeRelations = true
+    includeRelations = true,
+    caller?: { id: string } | null,
   ): Promise<Gateway> {
     const relations = includeRelations ? {
       tools: { tool: true },
@@ -775,8 +838,62 @@ export class GatewaysService {
     if (!gateway) {
       throw new NotFoundException('Gateway not found');
     }
+    if (caller !== undefined && !gatewayServableTo(gateway, caller?.id)) {
+      throw new NotFoundException('Gateway not found');
+    }
 
     return gateway;
+  }
+
+  /**
+   * The manage gate, with one refinement over canAccess: another user's
+   * private gateway is a 404, not a 403, so a caller probing ids learns
+   * nothing about it.
+   */
+  private async assertCanManage(gateway: Gateway, userId: string): Promise<void> {
+    if (!gatewayServableTo(gateway, userId)) {
+      throw new NotFoundException('Gateway not found');
+    }
+    const decision = await this.accessPolicy.canAccess({ id: userId }, gateway, 'manage');
+    if (!decision.allowed) {
+      throw new ForbiddenException(decision.reason);
+    }
+  }
+
+  /**
+   * What a gateway serves has to be at least as private as the gateway.
+   *
+   * A private agent or tool is its owner's alone; putting it behind a
+   * gateway that answers anyone else would hand it out. So a private
+   * resource can only sit behind a gateway private to the same owner,
+   * and another user's private resource is reported as not found.
+   */
+  async assertContentsServable(gateway: Gateway, userId: string): Promise<void> {
+    if (gateway.agentId) {
+      const agent = await this.gatewayRepository.manager?.findOne(Agent, {
+        where: { id: gateway.agentId, organizationId: gateway.organizationId },
+        select: { id: true, visibility: true, createdBy: true },
+      });
+      if (agent?.visibility === 'private' && resourceOwnerId(agent) !== userId) {
+        throw new NotFoundException('Agent not found');
+      }
+      if (agent && !resourceServableThroughGateway(gateway, agent)) {
+        throw new BadRequestException(
+          'A private agent can only be served through a gateway that is private to the same owner',
+        );
+      }
+    }
+    if (gateway.id) {
+      const rows = await this.gatewayToolRepository.find({
+        where: { gatewayId: gateway.id },
+        relations: { tool: true },
+      });
+      if ((rows ?? []).some((row) => row.tool && !resourceServableThroughGateway(gateway, row.tool))) {
+        throw new BadRequestException(
+          'This gateway serves private tools; it can only be private to their owner',
+        );
+      }
+    }
   }
 
   async getGateways(filters: GatewaySearchFilters): Promise<{
@@ -829,7 +946,7 @@ export class GatewaysService {
           .where('gt."gatewayId" = gateway.id'),
       'gateway_toolCount',
     );
-    await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'gateway');
+    await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'gateway', { ownerColumn: 'ownerUserId' });
 
     // Apply filters
     if (filters.search) {
@@ -912,10 +1029,7 @@ export class GatewaysService {
     const gateway = await this.getGateway(gatewayId, organizationId, false);
 
     // Authorization: org owner/admin always, team-scoped requires team lead
-    const decision = await this.accessPolicy.canAccess({ id: userId }, gateway, 'manage');
-    if (!decision.allowed) {
-      throw new ForbiddenException(decision.reason);
-    }
+    await this.assertCanManage(gateway, userId);
 
     if (gateway.status === GatewayStatus.ACTIVE) {
       return gateway;
@@ -1001,10 +1115,7 @@ export class GatewaysService {
     const gateway = await this.getGateway(gatewayId, organizationId, false);
 
     // Authorization: org owner/admin always, team-scoped requires team lead
-    const decision2 = await this.accessPolicy.canAccess({ id: userId }, gateway, 'manage');
-    if (!decision2.allowed) {
-      throw new ForbiddenException(decision2.reason);
-    }
+    await this.assertCanManage(gateway, userId);
 
     if (gateway.status === GatewayStatus.INACTIVE) {
       return gateway;
@@ -1049,10 +1160,7 @@ export class GatewaysService {
     }
 
     // Authorization: org owner/admin always, team-scoped requires team lead
-    const decision3 = await this.accessPolicy.canAccess({ id: userId }, gateway, 'manage');
-    if (!decision3.allowed) {
-      throw new ForbiddenException(decision3.reason);
-    }
+    await this.assertCanManage(gateway, userId);
 
     await this.releaseChannelCredential(gateway);
     await this.gatewayRepository.remove(gateway);

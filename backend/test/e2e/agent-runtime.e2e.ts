@@ -13,7 +13,7 @@
  *   STAGING_URL=https://api.staging.almyty.com TEST_EMAIL=test@apif.ai TEST_PASSWORD=TestPass123! npx tsx test/e2e/agent-runtime.e2e.ts
  */
 
-import axios, { AxiosInstance, AxiosError } from 'axios';
+import axios, { AxiosInstance } from 'axios';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -571,9 +571,6 @@ async function test06_ParallelCollaborationWithJudge(): Promise<TestResult> {
     assert(output.length > 20, `Output too short: ${output.substring(0, 200)}`);
 
     // Verify collaboration steps exist
-    const collabSteps = (run.steps || []).filter((s: any) =>
-      s.type?.includes('collaboration') || s.type?.includes('parallel') || s.type?.includes('judge'),
-    );
     // It's OK if steps don't explicitly name "collaboration_parallel" — the output is enough
     assert(run.steps?.length >= 1, `Expected at least 1 step, got ${run.steps?.length ?? 0}`);
 
@@ -744,11 +741,6 @@ async function test10_AuditLogVerify(): Promise<TestResult> {
     assert(Array.isArray(logs), `Audit logs should be an array. Got: ${typeof logs}`);
     assert(logs.length > 0, `Expected at least some audit log entries`);
 
-    // Check that there are agent-related entries
-    const hasAgentEntry = logs.some((l: any) =>
-      l.action?.includes('agent') || l.resourceType?.includes('agent') ||
-      l.action?.includes('create') || l.action?.includes('Agent'),
-    );
     // This is a soft check — audit logs might not be granular enough
     // Just verifying the endpoint works and returns data is sufficient
     assert(logs.length > 0, 'Audit log should have entries after running tests');
@@ -812,7 +804,7 @@ async function test12_RunCancellation(): Promise<TestResult> {
     await sleep(1000);
 
     // Cancel the run
-    const cancelRes = extractData(await api.post(`/agents/${agent.id}/runs/${runId}/cancel`));
+    await api.post(`/agents/${agent.id}/runs/${runId}/cancel`);
 
     // Check the run status
     await sleep(1000);

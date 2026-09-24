@@ -13,12 +13,13 @@ import {
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PrivateApiGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CredentialService, CreateCredentialDto, UpdateCredentialDto } from './credential.service';
 import { CreateApiCredentialBodyDto, UpdateApiCredentialBodyDto } from './dto/api-credential.dto';
 
 @Controller('apis')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateApiGuard)
 export class ApisCredentialsController {
   constructor(private readonly credentialService: CredentialService) {}
 

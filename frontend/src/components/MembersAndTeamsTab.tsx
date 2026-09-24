@@ -6,10 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Field, InlineFormActions } from '@/components/layout/form-page'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -26,14 +25,17 @@ interface MembersAndTeamsTabProps {
 export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) {
   const { success, error, warning } = useNotifications()
   const queryClient = useQueryClient()
-  const [createTeamDialogOpen, setCreateTeamDialogOpen] = useState(false)
-  const [inviteMemberDialogOpen, setInviteMemberDialogOpen] = useState(false)
+  // Every create/configure flow here is an inline form in the card it
+  // belongs to: invite in Members, create in Teams, add-member and edit on
+  // the team itself.
+  const [creatingTeam, setCreatingTeam] = useState(false)
+  const [inviting, setInviting] = useState(false)
   // Confirmed before it happens: removing someone cuts their access
   // immediately and there is no undo.
   const { confirm, dialog: confirmDialog } = useConfirm()
-  const [addToTeamDialogOpen, setAddToTeamDialogOpen] = useState(false)
-  const [editTeamDialogOpen, setEditTeamDialogOpen] = useState(false)
-  const [selectedTeam, setSelectedTeam] = useState<any>(null)
+  const [addToTeamId, setAddToTeamId] = useState<string | null>(null)
+  const [editTeamId, setEditTeamId] = useState<string | null>(null)
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [selectedMemberToAdd, setSelectedMemberToAdd] = useState('')
   const [selectedMemberRole, setSelectedMemberRole] = useState('member')
   const [newTeamName, setNewTeamName] = useState('')
@@ -77,7 +79,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organization-teams', organizationId] })
       success('Team created', 'Team has been created successfully.')
-      setCreateTeamDialogOpen(false)
+      setCreatingTeam(false)
       setNewTeamName('')
       setNewTeamDescription('')
     },
@@ -120,7 +122,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       } else {
         success('Member invited', 'Invitation has been sent.')
       }
-      setInviteMemberDialogOpen(false)
+      setInviting(false)
       setNewMemberEmail('')
       setNewMemberRole('member')
     },
@@ -150,7 +152,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organization-teams', organizationId] })
       success('Member added to team', 'Member has been added to the team successfully.')
-      setAddToTeamDialogOpen(false)
+      setAddToTeamId(null)
       setSelectedMemberToAdd('')
       setSelectedMemberRole('member')
     },
@@ -169,7 +171,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organization-teams', organizationId] })
       success('Team updated', 'Team has been updated successfully.')
-      setEditTeamDialogOpen(false)
+      setEditTeamId(null)
     },
     onError: (err: any) => {
       error('Failed to update team', getApiErrorMessage(err, 'Please try again.'))
@@ -228,10 +230,10 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
 
   const handleCreateTeam = () => {
     if (!newTeamName.trim()) {
-      error('Team name required', 'Please enter a team name.')
+      setFormErrors({ newTeamName: 'Enter a team name.' })
       return
     }
-    
+    setFormErrors({})
     createTeamMutation.mutate({
       name: newTeamName.trim(),
       description: newTeamDescription.trim() || undefined,
@@ -240,49 +242,54 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
 
   const handleInviteMember = () => {
     if (!newMemberEmail.trim()) {
-      error('Email required', 'Please enter an email address.')
+      setFormErrors({ newMemberEmail: 'Enter an email address.' })
       return
     }
-    
+    setFormErrors({})
     inviteMemberMutation.mutate({
       email: newMemberEmail.trim(),
       role: newMemberRole,
     })
   }
 
-  const handleAddToTeam = () => {
-    if (!selectedMemberToAdd || !selectedTeam) {
-      error('Selection required', 'Please select a member and team.')
+  const handleAddToTeam = (team: any) => {
+    if (!selectedMemberToAdd) {
+      setFormErrors({ memberToAdd: 'Choose a member to add.' })
       return
     }
-
+    setFormErrors({})
     addToTeamMutation.mutate({
-      teamId: selectedTeam.id,
+      teamId: team.id,
       userId: selectedMemberToAdd,
       role: selectedMemberRole,
     })
   }
 
+  // One inline team form open at a time.
   const openAddToTeamDialog = (team: any) => {
-    setSelectedTeam(team)
-    setAddToTeamDialogOpen(true)
+    setEditTeamId(null)
+    setSelectedMemberToAdd('')
+    setSelectedMemberRole('member')
+    setFormErrors({})
+    setAddToTeamId(team.id)
   }
 
   const openEditTeamDialog = (team: any) => {
-    setSelectedTeam(team)
+    setAddToTeamId(null)
     setEditTeamName(team.name)
     setEditTeamDescription(team.description || '')
-    setEditTeamDialogOpen(true)
+    setFormErrors({})
+    setEditTeamId(team.id)
   }
 
   const handleEditTeam = () => {
-    if (!editTeamName.trim() || !selectedTeam) {
-      error('Team name required', 'Please enter a team name.')
+    if (!editTeamName.trim() || !editTeamId) {
+      setFormErrors({ editTeamName: 'Enter a team name.' })
       return
     }
-
+    setFormErrors({})
     editTeamMutation.mutate({
-      teamId: selectedTeam.id,
+      teamId: editTeamId,
       name: editTeamName.trim(),
       description: editTeamDescription.trim() || undefined,
     })
@@ -305,33 +312,38 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                 Manage who has access to this organization
               </CardDescription>
             </div>
-            <Button onClick={() => setInviteMemberDialogOpen(true)}>
-              <UserPlus className="h-4 w-4 mr-2" />
-              Invite member
-            </Button>
-            <Dialog open={inviteMemberDialogOpen} onOpenChange={(next) => { setInviteMemberDialogOpen(next); if (!next) { inviteMemberMutation.reset(); setNewMemberEmail(""); } }}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Invite member</DialogTitle>
-                  <DialogDescription>
-                    Send an invitation to join this organization
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="email">Email Address</Label>
+            {!inviting && (
+              <Button onClick={() => setInviting(true)}>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Invite member
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {inviting && (
+              <form
+                onSubmit={(e) => { e.preventDefault(); handleInviteMember() }}
+                className="space-y-4 rounded-lg border bg-muted/30 p-4"
+                aria-label="Invite member"
+                noValidate
+              >
+                <div>
+                  <h4 className="text-sm font-semibold">Invite member</h4>
+                  <p className="text-xs text-muted-foreground">Send an invitation to join this organization.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field id="email" label="Email address" required error={formErrors.newMemberEmail}>
                     <Input
-                      id="email"
                       type="email"
                       placeholder="user@example.com"
                       value={newMemberEmail}
                       onChange={(e) => setNewMemberEmail(e.target.value)}
+                      autoFocus
                     />
-                  </div>
-                  <div>
-                    <Label htmlFor="role">Role</Label>
+                  </Field>
+                  <Field id="role" label="Role">
                     <Select value={newMemberRole} onValueChange={setNewMemberRole}>
-                      <SelectTrigger>
+                      <SelectTrigger id="role">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -339,23 +351,15 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                         <SelectItem value="admin">Admin</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setInviteMemberDialogOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button 
-                      onClick={handleInviteMember}
-                      disabled={inviteMemberMutation.isPending}
-                    >
-                      {inviteMemberMutation.isPending ? 'Sending...' : 'Send invitation'}
-                    </Button>
-                  </div>
+                  </Field>
                 </div>
-              </DialogContent>
-            </Dialog>
-          </CardHeader>
-          <CardContent>
+                <InlineFormActions
+                  onCancel={() => { setInviting(false); inviteMemberMutation.reset(); setNewMemberEmail('') }}
+                  submitLabel={inviteMemberMutation.isPending ? 'Sending...' : 'Send invitation'}
+                  submitting={inviteMemberMutation.isPending}
+                />
+              </form>
+            )}
             {membersLoading ? (
               <LoadingSpinner />
             ) : (
@@ -387,7 +391,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                           onClick={async () => {
                             const ok = await confirm({
                               title: `Remove ${[member.firstName, member.lastName].filter(Boolean).join(' ') || 'this member'}?`,
-                              description: 'They lose access to this organization immediately. Anything they created stays, and you can invite them again.',
+                              description: 'They lose access to this organization immediately. Anything they created stays, their private resources move to you, and you can invite them again.',
                               confirmLabel: 'Remove member',
                               destructive: true,
                             })
@@ -462,67 +466,60 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                 Organize members into teams for better collaboration
               </CardDescription>
             </div>
-            <Button onClick={() => setCreateTeamDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create team
-            </Button>
-            <Dialog open={createTeamDialogOpen} onOpenChange={setCreateTeamDialogOpen}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create team</DialogTitle>
-                  <DialogDescription>
-                    Create a new team to organize your members
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="team-name">Team Name</Label>
-                    <Input
-                      id="team-name"
-                      placeholder="e.g. Development Team"
-                      value={newTeamName}
-                      onChange={(e) => setNewTeamName(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="team-description">Description (optional)</Label>
-                    <Textarea
-                      id="team-description"
-                      placeholder="What does this team work on?"
-                      value={newTeamDescription}
-                      onChange={(e) => setNewTeamDescription(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setCreateTeamDialogOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button 
-                      onClick={handleCreateTeam}
-                      disabled={createTeamMutation.isPending}
-                    >
-                      {createTeamMutation.isPending ? 'Creating...' : 'Create team'}
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+            {!creatingTeam && (
+              <Button onClick={() => setCreatingTeam(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create team
+              </Button>
+            )}
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {creatingTeam && (
+              <form
+                onSubmit={(e) => { e.preventDefault(); handleCreateTeam() }}
+                className="space-y-4 rounded-lg border bg-muted/30 p-4"
+                aria-label="Create team"
+                noValidate
+              >
+                <h4 className="text-sm font-semibold">Create team</h4>
+                <Field id="team-name" label="Team name" required error={formErrors.newTeamName}>
+                  <Input
+                    placeholder="e.g. Development team"
+                    value={newTeamName}
+                    onChange={(e) => setNewTeamName(e.target.value)}
+                    autoFocus
+                  />
+                </Field>
+                <Field id="team-description" label="Description (optional)">
+                  <Textarea
+                    placeholder="What does this team work on?"
+                    value={newTeamDescription}
+                    onChange={(e) => setNewTeamDescription(e.target.value)}
+                  />
+                </Field>
+                <InlineFormActions
+                  onCancel={() => setCreatingTeam(false)}
+                  submitLabel={createTeamMutation.isPending ? 'Creating...' : 'Create team'}
+                  submitting={createTeamMutation.isPending}
+                />
+              </form>
+            )}
             {teamsLoading ? (
               <LoadingSpinner />
             ) : teams.length === 0 ? (
-              <EmptyState
-                icon={Users}
-                title="No teams yet"
-                description="Create teams to organize your organization members"
-                action={
-                  <Button onClick={() => setCreateTeamDialogOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create first team
-                  </Button>
-                }
-              />
+              !creatingTeam && (
+                <EmptyState
+                  icon={Users}
+                  title="No teams yet"
+                  description="Create teams to organize your organization members"
+                  action={
+                    <Button onClick={() => setCreatingTeam(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create first team
+                    </Button>
+                  }
+                />
+              )
             ) : (
               <div className="space-y-3">
                 {teams.map((team: any) => (
@@ -574,7 +571,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                             if (team.isDefault) return
                             const ok = await confirm({
                               title: 'Delete this team?',
-                              description: `"${team.name}" will be deleted. Its members stay in the organization. This cannot be undone.`,
+                              description: `"${team.name}" will be deleted. Its members stay in the organization, and its resources become visible to the whole organization. This cannot be undone.`,
                               confirmLabel: 'Delete team',
                               destructive: true,
                             })
@@ -585,6 +582,73 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                         </Button>
                       </div>
                     </div>
+
+                    {editTeamId === team.id && (
+                      <form
+                        onSubmit={(e) => { e.preventDefault(); handleEditTeam() }}
+                        className="mb-3 space-y-4 rounded-lg border bg-muted/30 p-4"
+                        aria-label={`Edit team ${team.name}`}
+                        noValidate
+                      >
+                        <h5 className="text-sm font-semibold">Edit team</h5>
+                        <Field id={`edit-team-name-${team.id}`} label="Team name" required error={formErrors.editTeamName}>
+                          <Input value={editTeamName} onChange={(e) => setEditTeamName(e.target.value)} autoFocus />
+                        </Field>
+                        <Field id={`edit-team-description-${team.id}`} label="Description">
+                          <Textarea value={editTeamDescription} onChange={(e) => setEditTeamDescription(e.target.value)} />
+                        </Field>
+                        <InlineFormActions
+                          onCancel={() => setEditTeamId(null)}
+                          submitLabel={editTeamMutation.isPending ? 'Saving...' : 'Save changes'}
+                          submitting={editTeamMutation.isPending}
+                        />
+                      </form>
+                    )}
+
+                    {addToTeamId === team.id && (
+                      <form
+                        onSubmit={(e) => { e.preventDefault(); handleAddToTeam(team) }}
+                        className="mb-3 space-y-4 rounded-lg border bg-muted/30 p-4"
+                        aria-label={`Add member to ${team.name}`}
+                        noValidate
+                      >
+                        <h5 className="text-sm font-semibold">Add member to {team.name}</h5>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <Field id={`members-select-member-${team.id}`} label="Member" required error={formErrors.memberToAdd}>
+                            <Select value={selectedMemberToAdd} onValueChange={setSelectedMemberToAdd}>
+                              <SelectTrigger id={`members-select-member-${team.id}`}>
+                                <SelectValue placeholder="Choose a member" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {members.filter((member: any) =>
+                                  !team.members?.some((tm: any) => tm.userId === member.userId)
+                                ).map((member: any) => (
+                                  <SelectItem key={member.userId} value={member.userId}>
+                                    {member.firstName} {member.lastName} ({member.email})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                          <Field id={`members-role-in-team-${team.id}`} label="Role in team">
+                            <Select value={selectedMemberRole} onValueChange={setSelectedMemberRole}>
+                              <SelectTrigger id={`members-role-in-team-${team.id}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="member">Member</SelectItem>
+                                <SelectItem value="lead">Lead</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                        </div>
+                        <InlineFormActions
+                          onCancel={() => setAddToTeamId(null)}
+                          submitLabel={addToTeamMutation.isPending ? 'Adding...' : 'Add member'}
+                          submitting={addToTeamMutation.isPending}
+                        />
+                      </form>
+                    )}
                     
                     {team.members && team.members.length > 0 && (
                       <div className="mt-4 pt-4 border-t space-y-3">
@@ -654,101 +718,6 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
         </Card>
       </TabsContent>
     </Tabs>
-
-    {/* Add Member to Team Dialog */}
-    <Dialog open={addToTeamDialogOpen} onOpenChange={setAddToTeamDialogOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add member to {selectedTeam?.name}</DialogTitle>
-          <DialogDescription>
-            Select an organization member to add to this team
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="members-select-member">Select Member</Label>
-            <Select value={selectedMemberToAdd} onValueChange={setSelectedMemberToAdd}>
-              <SelectTrigger id="members-select-member">
-                <SelectValue placeholder="Choose a member" />
-              </SelectTrigger>
-              <SelectContent>
-                {members.filter((member: any) => 
-                  !selectedTeam?.members?.some((tm: any) => tm.userId === member.userId)
-                ).map((member: any) => (
-                  <SelectItem key={member.userId} value={member.userId}>
-                    {member.firstName} {member.lastName} ({member.email})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="members-role-in-team">Role in Team</Label>
-            <Select value={selectedMemberRole} onValueChange={setSelectedMemberRole}>
-              <SelectTrigger id="members-role-in-team">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="member">Member</SelectItem>
-                <SelectItem value="lead">Lead</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setAddToTeamDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleAddToTeam}
-              disabled={addToTeamMutation.isPending || !selectedMemberToAdd}
-            >
-              {addToTeamMutation.isPending ? 'Adding...' : 'Add member'}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-
-    {/* Edit Team Dialog */}
-    <Dialog open={editTeamDialogOpen} onOpenChange={setEditTeamDialogOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit team</DialogTitle>
-          <DialogDescription>
-            Update team settings and information
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="edit-team-name">Team Name</Label>
-            <Input
-              id="edit-team-name"
-              value={editTeamName}
-              onChange={(e) => setEditTeamName(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="edit-team-description">Description</Label>
-            <Textarea
-              id="edit-team-description"
-              value={editTeamDescription}
-              onChange={(e) => setEditTeamDescription(e.target.value)}
-            />
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setEditTeamDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleEditTeam}
-              disabled={editTeamMutation.isPending}
-            >
-              {editTeamMutation.isPending ? 'Saving...' : 'Save changes'}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
       {confirmDialog}
     </>
   )

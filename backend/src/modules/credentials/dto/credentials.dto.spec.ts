@@ -59,6 +59,11 @@ describe('CreateCredentialDto', () => {
     expect(errs).toContain('visibility:isEnum');
   });
 
+  it('accepts the private tier', async () => {
+    const errs = await violations(CreateCredentialDto, { ...base(), visibility: 'private' });
+    expect(errs.filter((e) => e.startsWith('visibility:'))).toEqual([]);
+  });
+
   it('rejects non-UUID teamId', async () => {
     const errs = await violations(CreateCredentialDto, { ...base(), teamId: 'not-a-uuid' });
     expect(errs).toContain('teamId:isUuid');

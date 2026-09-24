@@ -19,7 +19,7 @@ import { UsageMetric } from './usage-metric.entity';
 
 export { LlmProviderType } from './llm-provider-type';
 import { LlmProviderType } from './llm-provider-type';
-import { PROVIDER_PROFILES, profileAuthHeaders, profileBaseUrl, providerProfile } from '../modules/llm-providers/provider-profile';
+import { profileAuthHeaders, profileBaseUrl, providerProfile } from '../modules/llm-providers/provider-profile';
 
 export enum LlmProviderStatus {
   ACTIVE = 'active',
@@ -203,10 +203,14 @@ export class LlmProvider {
    * AccessPolicyService.applyListFilter.
    */
   @Column({ type: 'varchar', length: 8, default: 'org' })
-  visibility: 'org' | 'team';
+  visibility: 'org' | 'team' | 'private';
 
   @Column({ type: 'uuid', nullable: true })
   teamId: string | null;
+
+  /** Who created it; required when visibility is 'private' (the owner). */
+  @Column({ type: 'uuid', nullable: true })
+  ownerUserId: string | null;
 
   /** The inference key: a Credential row in the org's store. */
   @Column({ type: 'uuid', nullable: true })

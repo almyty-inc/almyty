@@ -77,7 +77,11 @@ describe('the orchestrator resolves the policy before dispatch', () => {
   it('loads the policy for the gateway the call came through', () => {
     expect(executor).toContain('this.gatewayToolRepository.findOne({');
     expect(executor).toContain('where: { gatewayId: options.gatewayId, toolId: tool.id }');
-    expect(executor).toContain('securityPolicy: gatewayTool?.securityPolicy ?? null');
+    // A nested tools.invoke call falls back to its caller's policy when its
+    // own row has none; the row is still read first.
+    expect(executor).toContain(
+      'securityPolicy: gatewayTool?.securityPolicy ?? options.inheritedSecurityPolicy ?? null',
+    );
   });
 
   it('resolves it BEFORE anything dispatches the tool', () => {

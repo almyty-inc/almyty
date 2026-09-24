@@ -8,6 +8,7 @@ import { AdapterRegistry } from '../adapters/adapter.registry';
 import { StubAdapter } from '../adapters/stub.adapter';
 import { TogetherAdapter } from '../adapters/together.adapter';
 import { ModelDeploymentsService, validateAgainstSchema } from '../model-deployments.service';
+import { FakeRepo, ensureTestKey, fakeAudit, fakeEnvelope, fakeQueue, fakeRepo, newDeployment } from './gates/fakes';
 
 describe('validateAgainstSchema', () => {
   const schema = { type: 'object', properties: { token: { type: 'string' }, replicas: { type: 'integer' }, mode: { type: 'string', enum: ['a', 'b'] } }, required: ['token'] };
@@ -189,5 +190,60 @@ describe('ModelDeploymentsService', () => {
     expect(service).toMatch(/@InjectRepository\(Model\)[^\n]*models\?: Repository<Model>/);
     const module = readFileSync(join(__dirname, '..', 'model-deployments.module.ts'), 'utf-8');
     expect(module).toMatch(/forFeature\(\[[^\]]*\bModel\b[^\]]*\]\)/);
+  });
+});
+
+/**
+ * The doubles above answer the same deployment and the same version
+ * whatever `where` they are handed, so the organization predicate on
+ * list/get (and so scale/teardown) and on the version a deployment is
+ * created from could each be deleted with this module green. These run
+ * the service over truthful tables holding two organizations' rows.
+ */
+describe('ModelDeploymentsService organization scoping', () => {
+  const VERSION = { id: 'v-1', organizationId: 'org-1', name: 'qwen', base: 'qwen3-0.6b', registryUri: 's3://r/q@1', quantizations: [], manifestSha: 'x' };
+  let deployments: FakeRepo<ModelDeployment>;
+  let queue: ReturnType<typeof fakeQueue>;
+  let service: ModelDeploymentsService;
+
+  beforeEach(() => {
+    ensureTestKey();
+    deployments = fakeRepo<ModelDeployment>(newDeployment, [
+      Object.assign(new ModelDeployment(), {
+        id: 'd-1', organizationId: 'org-1', providerType: 'stub', modelVersionId: 'v-1', providerConfig: {},
+        desired: { replicas: 1, minScale: 0, maxScale: 1 }, state: 'ready', createdAt: new Date(),
+      }),
+    ]);
+    const registry = new AdapterRegistry();
+    registry.register(new StubAdapter({ architectures: ['qwen3'] }));
+    queue = fakeQueue();
+    service = new ModelDeploymentsService(
+      deployments as any, fakeRepo<any>(() => ({}), [VERSION]) as any, fakeRepo<any>(() => ({})) as any,
+      queue as any, registry, fakeEnvelope as any, fakeAudit() as any,
+    );
+  });
+
+  it('no other organization can list, read, scale or tear down a deployment', async () => {
+    expect(await service.list('org-2')).toEqual([]);
+    await expect(service.get('org-2', 'd-1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.scale('org-2', 'd-1', 0, 'u-2')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.teardown('org-2', 'd-1', 'u-2')).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(deployments.get('d-1')).toMatchObject({ state: 'ready', desired: { replicas: 1 } });
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+
+  it('persists its own scale and teardown', async () => {
+    await service.scale('org-1', 'd-1', 0, 'u-1');
+    expect(deployments.get('d-1').desired.replicas).toBe(0);
+    await service.teardown('org-1', 'd-1', 'u-1');
+    expect(deployments.get('d-1')).toMatchObject({ state: 'tearing_down', desired: { teardownRequested: true } });
+  });
+
+  it('refuses to deploy another organization’s registered version', async () => {
+    await expect(
+      service.create('org-2', 'u-2', { modelVersionId: 'v-1', providerType: 'stub', providerConfig: { token: 'valid' } }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(deployments.rows()).toHaveLength(1);
   });
 });

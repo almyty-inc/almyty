@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 
 import { GatewaysService } from '../gateways.service';
+import { fakeRepository } from '../../../test/fake-repository';
 
 /**
  * `GET /gateways/resolve/:orgSlug/:gatewaySlug` acted on the slug in the
@@ -22,12 +23,12 @@ describe('resolveGateway is scoped to the caller\'s organization', () => {
   const VICTIM_ORG_ID = 'org-victim';
   const CALLER_ORG_ID = 'org-caller';
 
-  function makeService(overrides: { org?: any; gateway?: any } = {}) {
-    const organizationRepository = { findOne: jest.fn(async () => overrides.org ?? null) };
-    const gatewayRepository = {
-      findOne: jest.fn(async () => overrides.gateway ?? null),
-      find: jest.fn(async () => (overrides.gateway ? [overrides.gateway] : [])),
-    };
+  // Repositories that evaluate their `where`: a double that answered with
+  // the victim gateway however it was queried could not tell a scoped
+  // lookup from an unscoped one, which is all this file is about.
+  function makeService(overrides: { orgs?: any[]; gateways?: any[] } = {}) {
+    const organizationRepository = fakeRepository<any>(overrides.orgs ?? []);
+    const gatewayRepository = fakeRepository<any>(overrides.gateways ?? []);
     const service = Object.create(GatewaysService.prototype) as GatewaysService;
     (service as any).organizationRepository = organizationRepository;
     (service as any).gatewayRepository = gatewayRepository;
@@ -35,6 +36,7 @@ describe('resolveGateway is scoped to the caller\'s organization', () => {
   }
 
   const VICTIM_ORG = { id: VICTIM_ORG_ID, slug: 'victim-corp' };
+  const CALLER_ORG = { id: CALLER_ORG_ID, slug: 'caller-corp' };
   const VICTIM_GATEWAY = {
     id: 'gw-secret',
     name: 'Prod Gateway',
@@ -44,12 +46,12 @@ describe('resolveGateway is scoped to the caller\'s organization', () => {
 
   it('refuses a slug belonging to another organization', async () => {
     const { service, gatewayRepository } = makeService({
-      org: VICTIM_ORG,
-      gateway: VICTIM_GATEWAY,
+      orgs: [VICTIM_ORG, CALLER_ORG],
+      gateways: [VICTIM_GATEWAY],
     });
 
     await expect(
-      service.resolveGateway('victim-corp', 'prod-gateway', CALLER_ORG_ID),
+      service.resolveGateway('victim-corp', 'prod-gateway', CALLER_ORG_ID, 'caller-user'),
     ).rejects.toBeInstanceOf(NotFoundException);
 
     // Not merely filtered afterwards: the gateway is never loaded.
@@ -58,19 +60,43 @@ describe('resolveGateway is scoped to the caller\'s organization', () => {
   });
 
   it('says the same thing for a slug that does not exist', async () => {
-    const { service } = makeService({ org: null });
+    const { service } = makeService({ orgs: [CALLER_ORG] });
     await expect(
-      service.resolveGateway('no-such-org', 'prod-gateway', CALLER_ORG_ID),
+      service.resolveGateway('no-such-org', 'prod-gateway', CALLER_ORG_ID, 'caller-user'),
     ).rejects.toThrow(/Gateway not found/);
   });
 
   it('resolves a gateway in the caller\'s own organization', async () => {
     const { service } = makeService({
-      org: { id: CALLER_ORG_ID, slug: 'caller-corp' },
-      gateway: { ...VICTIM_GATEWAY, organizationId: CALLER_ORG_ID },
+      orgs: [VICTIM_ORG, CALLER_ORG],
+      gateways: [VICTIM_GATEWAY, { ...VICTIM_GATEWAY, id: 'gw-own', organizationId: CALLER_ORG_ID }],
     });
 
-    const gateway = await service.resolveGateway('caller-corp', 'prod-gateway', CALLER_ORG_ID);
-    expect(gateway.id).toBe('gw-secret');
+    const gateway = await service.resolveGateway('caller-corp', 'prod-gateway', CALLER_ORG_ID, 'caller-user');
+    expect(gateway.id).toBe('gw-own');
+  });
+
+  // Endpoint slugs are unique per organization, not globally, so both
+  // gateway lookups must carry `organizationId` as well as the org guard.
+  it('will not match another organization\'s row that shares the endpoint slug', async () => {
+    const { service } = makeService({
+      orgs: [VICTIM_ORG, CALLER_ORG],
+      gateways: [VICTIM_GATEWAY],
+    });
+
+    await expect(
+      service.resolveGateway('caller-corp', 'prod-gateway', CALLER_ORG_ID, 'caller-user'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('will not match another organization\'s row by its name either', async () => {
+    const { service } = makeService({
+      orgs: [VICTIM_ORG, CALLER_ORG],
+      gateways: [{ ...VICTIM_GATEWAY, endpoint: '/something-else' }],
+    });
+
+    await expect(
+      service.resolveGateway('caller-corp', 'prod-gateway', CALLER_ORG_ID, 'caller-user'),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

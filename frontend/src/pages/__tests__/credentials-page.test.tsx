@@ -99,7 +99,7 @@ describe('CredentialsPage vault delete', () => {
     // The confirm has to name the secret -- "Are you sure?" over a vault row
     // tells you nothing about which one you are about to destroy.
     const dialog = await screen.findByRole('alertdialog')
-    expect(dialog).toHaveTextContent('Delete credential?')
+    expect(dialog).toHaveTextContent('Delete this credential?')
     expect(dialog).toHaveTextContent('Stripe API Key')
 
     // Nothing has been deleted yet.
@@ -188,5 +188,34 @@ describe('CredentialsPage dates', () => {
     // lastUsedAt is null, which must still read as "Never" rather than
     // an Invalid Date.
     expect(screen.getByText('Never')).toBeInTheDocument()
+  })
+})
+
+// Creating a credential or an access key is a page now, not a dialog: every
+// entry point on the list is a link to that page.
+describe('CredentialsPage entry points', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    ;(credentialsApi.getAll as any).mockResolvedValue([])
+    ;(accessKeysApi.getAll as any).mockResolvedValue([])
+  })
+
+  it('links the header button and the empty vault to /credentials/new', async () => {
+    route.pathname = '/credentials'
+    render(<CredentialsPage />)
+    await screen.findByText('No credentials yet')
+    const links = screen.getAllByRole('link', { name: /Add credential/i })
+    expect(links).toHaveLength(2)
+    for (const link of links) expect(link).toHaveAttribute('href', '/credentials/new')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('links Generate key to /credentials/access-keys/new', async () => {
+    route.pathname = '/credentials/access-keys'
+    render(<CredentialsPage />)
+    await screen.findByText('No access keys yet')
+    const links = screen.getAllByRole('link', { name: /Generate key/i })
+    expect(links).toHaveLength(2)
+    for (const link of links) expect(link).toHaveAttribute('href', '/credentials/access-keys/new')
   })
 })

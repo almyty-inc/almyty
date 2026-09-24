@@ -18,8 +18,23 @@ import { Gateway } from '../../entities/gateway.entity';
 import { Agent } from '../../entities/agent.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
-import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { AccessPolicyService, normaliseVisibility, type ResourceVisibility } from '../../common/authorization/access-policy.service';
+import { gatewayServableTo } from '../gateways/private-gateway';
+import { providerUsableBy } from '../llm-providers/private-provider';
 import { batchAsync } from '../../common/utils/batch-async';
+
+/**
+ * Whether `userId` may see this credential at all. A private ("just me")
+ * credential exists for its owner only -- org admins included -- and a
+ * caller with no user is nobody's owner.
+ */
+export function credentialVisibleTo(
+  credential: Pick<Credential, 'visibility' | 'ownerUserId'>,
+  userId: string | null | undefined,
+): boolean {
+  if (credential.visibility !== 'private') return true;
+  return !!credential.ownerUserId && !!userId && credential.ownerUserId === userId;
+}
 
 @Injectable()
 export class CredentialsService {
@@ -55,14 +70,14 @@ export class CredentialsService {
     const credentialsQb = this.credentialRepository
       .createQueryBuilder('c')
       .orderBy('c.createdAt', 'DESC');
-    await this.accessPolicy.applyListFilter(credentialsQb, caller, organizationId, 'c');
+    await this.accessPolicy.applyListFilter(credentialsQb, caller, organizationId, 'c', { ownerColumn: 'ownerUserId' });
     const credentials = await credentialsQb.getMany();
 
     // LLM provider keys not yet linked to a credential. Apply the
     // same team filter — provider rows carry their own visibility
     // / teamId columns.
     const providersQb = this.llmProviderRepository.createQueryBuilder('p');
-    await this.accessPolicy.applyListFilter(providersQb, caller, organizationId, 'p');
+    await this.accessPolicy.applyListFilter(providersQb, caller, organizationId, 'p', { ownerColumn: 'ownerUserId' });
     const providers = await providersQb.getMany();
 
     const results: any[] = credentials.map((cred) => this.maskCredential(cred));
@@ -90,12 +105,13 @@ export class CredentialsService {
     return results;
   }
 
-  async findById(id: string, organizationId: string): Promise<Credential> {
+  async findById(id: string, organizationId: string, caller?: { id: string }): Promise<Credential> {
     const credential = await this.credentialRepository.findOne({
       where: { id, organizationId },
     });
 
-    if (!credential) {
+    // Another user's private credential is reported as not found.
+    if (!credential || (caller && !credentialVisibleTo(credential, caller.id))) {
       throw new NotFoundException('Credential not found');
     }
 
@@ -118,7 +134,7 @@ export class CredentialsService {
       // Both columns exist on the Credential entity; the service used
       // to silently drop them so every UI-created credential ended up
       // org-visible regardless of what the user picked.
-      visibility?: 'org' | 'team';
+      visibility?: ResourceVisibility;
       teamId?: string | null;
     },
     organizationId: string,
@@ -136,6 +152,15 @@ export class CredentialsService {
         data.teamId,
       );
     }
+    const scope = normaliseVisibility(data.visibility, data.teamId);
+    // A private credential is the creator's personal one: ownerUserId is
+    // the owner the access policy checks, and in the connections model
+    // (docs/connections.md) the same column already means "belongs to
+    // this user", so grants and connections:manage treat it as personal
+    // too. There is no owner without a user.
+    if (scope.visibility === 'private' && !userId) {
+      throw new BadRequestException('A private credential needs an owner');
+    }
     const credential = this.credentialRepository.create({
       name: data.name,
       description: data.description,
@@ -148,8 +173,9 @@ export class CredentialsService {
       scopes: data.scopes,
       expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
       metadata: data.metadata,
-      visibility: data.visibility ?? 'org',
-      teamId: data.visibility === 'team' ? (data.teamId ?? null) : null,
+      visibility: scope.visibility,
+      teamId: scope.teamId,
+      ownerUserId: scope.visibility === 'private' ? userId! : null,
     });
 
     // Encrypt sensitive data before saving. Org-aware envelope path: a
@@ -181,7 +207,7 @@ export class CredentialsService {
       isActive?: boolean;
       metadata?: Record<string, any>;
       // Team-scoping fields sent by the dashboard's VisibilityField.
-      visibility?: 'org' | 'team';
+      visibility?: ResourceVisibility;
       teamId?: string | null;
     },
     organizationId: string,
@@ -191,7 +217,10 @@ export class CredentialsService {
       where: { id, organizationId },
     });
 
-    if (!credential) {
+    // Another user's private credential does not exist for this caller
+    // (org admins included); an internal caller with no user cannot be
+    // its owner either.
+    if (!credential || !credentialVisibleTo(credential, userId)) {
       throw new NotFoundException('Credential not found');
     }
 
@@ -220,13 +249,24 @@ export class CredentialsService {
     if (data.expiresAt !== undefined) credential.expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
     if (data.isActive !== undefined) credential.isActive = data.isActive;
     if (data.metadata !== undefined) credential.metadata = data.metadata;
-    if (data.visibility !== undefined) {
-      credential.visibility = data.visibility;
-      // Clear teamId when flipping back to 'org' so we don't leave a
-      // dangling team reference on a now-org-wide credential.
-      credential.teamId = data.visibility === 'team' ? (data.teamId ?? null) : null;
-    } else if (data.teamId !== undefined && credential.visibility === 'team') {
-      credential.teamId = data.teamId;
+    if (data.visibility !== undefined || data.teamId !== undefined) {
+      // 'org' and 'private' carry no teamId.
+      const scope = normaliseVisibility(
+        data.visibility ?? credential.visibility,
+        data.teamId !== undefined ? data.teamId : credential.teamId,
+      );
+      if (scope.visibility === 'private' && credential.visibility !== 'private') {
+        // Making a credential private makes it the caller's personal one:
+        // only its recorded owner may do that (for an org credential,
+        // which has none, the caller becomes the owner).
+        if (!userId) throw new ForbiddenException('A private credential needs an owner');
+        if (credential.ownerUserId && credential.ownerUserId !== userId) {
+          throw new ForbiddenException('Only the credential\'s owner can make it private');
+        }
+        credential.ownerUserId = userId;
+      }
+      credential.visibility = scope.visibility;
+      credential.teamId = scope.teamId;
     }
 
     if (data.config !== undefined) {
@@ -248,7 +288,7 @@ export class CredentialsService {
       where: { id, organizationId },
     });
 
-    if (!credential) {
+    if (!credential || !credentialVisibleTo(credential, userId)) {
       throw new NotFoundException('Credential not found');
     }
 
@@ -270,20 +310,24 @@ export class CredentialsService {
   async getUsage(
     id: string,
     organizationId: string,
+    caller?: { id: string },
   ): Promise<{ llmProviders: any[]; apis: any[] }> {
     const credential = await this.credentialRepository.findOne({
       where: { id, organizationId },
     });
 
-    if (!credential) {
+    if (!credential || (caller && !credentialVisibleTo(credential, caller.id))) {
       throw new NotFoundException('Credential not found');
     }
 
-    // Find LLM providers using this credential
-    const llmProviders = await this.llmProviderRepository.find({
+    // Find LLM providers using this credential (not another user's
+    // private ones: those are not the caller's to know about).
+    const llmProviders = (await this.llmProviderRepository.find({
       where: { credentialId: id, organizationId },
-      select: { id: true, name: true, type: true, status: true },
-    });
+      select: { id: true, name: true, type: true, status: true, visibility: true, ownerUserId: true },
+    }))
+      .filter((p) => !caller || providerUsableBy(p, caller.id))
+      .map(({ visibility: _v, ownerUserId: _o, ...rest }) => rest);
 
     // Find APIs that have credentials with this id
     const apis = await this.apiRepository.find({
@@ -302,12 +346,15 @@ export class CredentialsService {
   // Inbound access keys
   // ──────────────────────────────────────────────
 
-  async findAllAccessKeys(organizationId: string): Promise<any[]> {
-    const keys = await this.apiKeyRepository.find({
+  async findAllAccessKeys(organizationId: string, caller?: { id: string }): Promise<any[]> {
+    const keys = (await this.apiKeyRepository.find({
       where: { organizationId },
       relations: { gateway: true },
       order: { createdAt: 'DESC' },
-    });
+    }))
+      // A key bound to another user's private gateway would name that
+      // gateway; it is theirs to list, not anyone else's.
+      .filter((key) => !key.gateway || !caller || gatewayServableTo(key.gateway, caller.id));
 
     // Enrich with agent info where applicable
     const enriched = await batchAsync(keys, 5, async (key) => {
@@ -372,7 +419,8 @@ export class CredentialsService {
       const gateway = await this.gatewayRepository.findOne({
         where: { id: data.gatewayId, organizationId },
       });
-      if (!gateway) {
+      // Another user's private gateway does not exist for this caller.
+      if (!gateway || !gatewayServableTo(gateway, userId)) {
         throw new NotFoundException('Gateway not found');
       }
     }

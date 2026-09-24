@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Put,
   Patch,
   Delete,
   Body,
@@ -15,19 +14,16 @@ import {
   HttpStatus,
   HttpException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsNumber, Min, Max, IsBoolean } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 
 import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, LlmProviderSearchFilters } from './llm-providers.service';
 import { LlmModelsHelper } from './llm-models.helper';
 import { getProviderDisplayName, getProviderDescription, getProviderFeatures, getProviderKeyUrl, getProviderDocsUrl } from './llm-provider-catalog';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PrivateProviderGuard } from './private-provider.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
-import { MessageRole, MessageContent } from '../../entities/message.entity';
-import { ConversationStatus } from '../../entities/conversation.entity';
+import { LlmProviderType } from '../../entities/llm-provider.entity';
 import {
   CreateLlmProviderBodyDto,
   UpdateLlmProviderBodyDto,
@@ -52,7 +48,7 @@ export function failureStatus(error: unknown, fallback: HttpStatus): number {
 @Controller('llm-providers')
 @ApiTags('LLM Providers')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateProviderGuard)
 export class LlmProvidersController {
   constructor(
     private readonly llmProvidersService: LlmProvidersService,
@@ -177,7 +173,8 @@ export class LlmProvidersController {
       const provider = await this.llmProvidersService.getProvider(
         providerId,
         organizationId,
-        canViewSecrets
+        canViewSecrets,
+        { id: req.user.id },
       );
 
       return {

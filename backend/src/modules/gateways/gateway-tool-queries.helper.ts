@@ -8,6 +8,8 @@ import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { User } from '../../entities/user.entity';
+import { resourceOwnerId } from '../../common/authorization/access-policy.service';
+import { gatewayServableTo, isPrivateGateway, resourceServableThroughGateway } from './private-gateway';
 
 export interface GatewayToolSearchFilters {
   gatewayId: string;
@@ -143,7 +145,16 @@ export class GatewayToolQueriesHelper {
     const queryBuilder = this.toolRepository
       .createQueryBuilder('tool')
       .where('tool.organizationId = :organizationId', { organizationId })
-      .andWhere('tool.status = :status', { status: ToolStatus.ACTIVE });
+      .andWhere('tool.status = :status', { status: ToolStatus.ACTIVE })
+      // Private tools are offered only for a gateway private to their
+      // owner: anything else would expose them (and another user's
+      // private tool is not theirs to see at all).
+      .andWhere(
+        isPrivateGateway(gateway)
+          ? `(tool.visibility <> 'private' OR tool."createdBy" = :gatewayOwner)`
+          : `tool.visibility <> 'private'`,
+        { gatewayOwner: gateway.ownerUserId ?? null },
+      );
 
     if (associatedToolIds.length > 0) {
       queryBuilder.andWhere('tool.id NOT IN (:...associatedIds)', { associatedIds: associatedToolIds });
@@ -164,7 +175,7 @@ export class GatewayToolQueriesHelper {
         where: { id: gatewayId, organizationId },
       });
 
-      if (!gateway) {
+      if (!gateway || !gatewayServableTo(gateway, userId)) {
         throw new NotFoundException('Gateway not found');
       }
 
@@ -204,8 +215,16 @@ export class GatewayToolQueriesHelper {
         }
 
         const tool = tools.find(t => t.id === toolId);
-        if (!tool) {
+        if (!tool || (tool.visibility === 'private' && resourceOwnerId(tool) !== userId)) {
+          // Another user's private tool does not exist for this caller.
           skipped.push({ toolId, reason: 'Tool not found in this organization' });
+          continue;
+        }
+        if (!resourceServableThroughGateway(gateway, tool)) {
+          skipped.push({
+            toolId,
+            reason: `Tool '${tool.name}' is private; it can only be served through a gateway that is private to you.`,
+          });
           continue;
         }
 

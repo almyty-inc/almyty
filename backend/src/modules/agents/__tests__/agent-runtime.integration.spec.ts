@@ -338,7 +338,7 @@ describe('AgentRuntimeService (integration)', () => {
     });
 
     it('should stringify non-string input', async () => {
-      const run = await service.startRun('agent-1', 'org-1', 'user-1', { task: 'do stuff', priority: 'high' });
+      await service.startRun('agent-1', 'org-1', 'user-1', { task: 'do stuff', priority: 'high' });
 
       const lastMsg = messageStore[messageStore.length - 1];
       expect(lastMsg.content).toBe(JSON.stringify({ task: 'do stuff', priority: 'high' }));
@@ -356,6 +356,15 @@ describe('AgentRuntimeService (integration)', () => {
       await expect(
         service.startRun('workflow-agent', 'org-1', 'user-1', 'test'),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('refuses another member\'s private agent, and a run with no user, as not found', async () => {
+      agentStore.push(makeAgent({ id: 'private-agent', visibility: 'private', createdBy: 'owner-1' } as any));
+
+      await expect(service.startRun('private-agent', 'org-1', 'user-1', 'test')).rejects.toThrow(NotFoundException);
+      await expect(service.startRun('private-agent', 'org-1', null, 'test')).rejects.toThrow(NotFoundException);
+      const own = await service.startRun('private-agent', 'org-1', 'owner-1', 'test');
+      expect(own.agentId).toBe('private-agent');
     });
 
     it('should set parentRunId when provided', async () => {
@@ -430,7 +439,7 @@ describe('AgentRuntimeService (integration)', () => {
       // passed, so the key assertion is the *opposite* one below: a
       // previously-permitted value is still permitted, AND the next test
       // verifies that a value that SHOULD trip the limit actually does.
-      const result = await service.processStep(run.id);
+      await service.processStep(run.id);
 
       const updatedRun = runStore.find(r => r.id === run.id);
       // Should NOT be BUDGET_EXCEEDED — $0.50 is under the $1.00 cap.
@@ -448,7 +457,7 @@ describe('AgentRuntimeService (integration)', () => {
       run.limits = { maxCostCents: 100 };
       await mockRunRepo.save(run);
 
-      const result = await service.processStep(run.id);
+      await service.processStep(run.id);
       let updatedRun = runStore.find(r => r.id === run.id);
       expect(updatedRun!.error ?? '').not.toMatch(/^BUDGET_EXCEEDED/);
 

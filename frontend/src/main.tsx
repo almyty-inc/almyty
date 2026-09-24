@@ -2,9 +2,10 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
-import { BrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 
-import App from './App.tsx'
+import { createAppRoutes } from './App.tsx'
+import { AppErrorFallback } from '@/components/layout/route-error'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { initAnalytics } from '@/lib/analytics'
 import { initSentry } from '@/lib/sentry'
@@ -41,13 +42,23 @@ const queryClient = new QueryClient({
   },
 })
 
+// A data router, not <BrowserRouter>: create and configure flows are pages,
+// and a page with unsaved changes asks before it is left (useLeaveGuard).
+// react-router's useBlocker only works under a data router, and so does
+// errorElement, which is how a page that throws shows an error instead of
+// a white screen (see createAppRoutes in App.tsx).
+const router = createBrowserRouter(createAppRoutes())
+
+// The outer ErrorBoundary is for errors above or outside the router (a
+// provider, the router itself). Route render errors never reach it: the
+// route errorElements catch them first and keep the shell up.
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <ErrorBoundary fallbackRender={(error) => <AppErrorFallback error={error} />}>
       <QueryClientProvider client={queryClient}>
-        <App />
+        <RouterProvider router={router} />
         <ReactQueryDevtools initialIsOpen={false} />
       </QueryClientProvider>
-    </BrowserRouter>
+    </ErrorBoundary>
   </React.StrictMode>,
 )

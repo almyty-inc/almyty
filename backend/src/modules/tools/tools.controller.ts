@@ -14,9 +14,7 @@ import {
   HttpStatus,
   HttpException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum, IsArray, IsObject, IsNumber, Min, Max } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 
 import {
   CreateToolBodyDto,
@@ -34,14 +32,14 @@ import { CliGeneratorService } from './cli-generator.service';
 import { CodegenService } from './codegen.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PrivateToolGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { ToolType, ToolStatus, ToolExecutionMethod } from '../../entities/tool.entity';
 
 
 @Controller('organizations/:organizationId/tools')
 @ApiTags('Tools')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateToolGuard)
 export class ToolsController {
   constructor(
     private readonly toolsService: ToolsService,
@@ -133,7 +131,7 @@ export class ToolsController {
     @Request() req: any,
   ) {
     try {
-      const tool = await this.toolsService.getTool(toolId, organizationId);
+      const tool = await this.toolsService.getTool(toolId, organizationId, true, { id: req.user?.sub || req.user?.id });
 
       return {
         success: true,
@@ -336,7 +334,7 @@ export class ToolsController {
   async getToolVersions(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('toolId', ParseUUIDPipe) toolId: string,
-    @Request() req: any,
+    @Request() _req: any,
   ) {
     try {
       const versions = await this.toolsService.getToolVersions(toolId, organizationId);
@@ -367,7 +365,7 @@ export class ToolsController {
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('toolId', ParseUUIDPipe) toolId: string,
     @Query('timeframe') timeframe: 'hour' | 'day' | 'week' | 'month' = 'day',
-    @Request() req: any,
+    @Request() _req: any,
   ) {
     try {
       const stats = await this.toolsService.getToolUsageStats(toolId, organizationId, timeframe);
@@ -398,7 +396,7 @@ export class ToolsController {
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('apiId', ParseUUIDPipe) apiId: string,
     @Body(ValidationPipe) generateDto: GenerateToolsFromApiDto,
-    @Request() req: any,
+    @Request() _req: any,
   ) {
     try {
       // Get the API
@@ -452,7 +450,7 @@ export class ToolsController {
   async regenerateTool(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('toolId', ParseUUIDPipe) toolId: string,
-    @Request() req: any,
+    @Request() _req: any,
   ) {
     try {
       const tool = await this.toolGeneratorService.regenerateToolFromOperation(toolId, organizationId);
@@ -483,7 +481,7 @@ export class ToolsController {
     @Request() req: any,
   ) {
     try {
-      const stats = await this.toolsService.getOrganizationToolStats(organizationId);
+      const stats = await this.toolsService.getOrganizationToolStats(organizationId, req.user?.sub || req.user?.id);
 
       return {
         success: true,

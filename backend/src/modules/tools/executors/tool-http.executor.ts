@@ -40,8 +40,6 @@ import {
   getByDotPath,
   applyJsonBodyTemplate,
   substituteHeaderValue,
-  assertSafeNextPageUrl,
-  evaluateHttpSuccessCondition,
   encodeFormUrlencoded,
   generateRequestId,
 } from '../tool-execution-utils';

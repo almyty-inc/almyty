@@ -19,9 +19,7 @@ describe('McpService', () => {
   let service: McpService;
   let toolRepository: any;
   let resourceRepository: any;
-  let organizationRepository: any;
   let gatewayRepository: any;
-  let gatewayToolRepository: any;
   let toolsService: any;
   let toolExecutorService: any;
 
@@ -114,9 +112,7 @@ describe('McpService', () => {
     service = module.get<McpService>(McpService);
     toolRepository = module.get(getRepositoryToken(Tool));
     resourceRepository = module.get(getRepositoryToken(Resource));
-    organizationRepository = module.get(getRepositoryToken(Organization));
     gatewayRepository = module.get(getRepositoryToken(Gateway));
-    gatewayToolRepository = module.get(getRepositoryToken(GatewayTool));
     toolsService = module.get(ToolsService);
     toolExecutorService = module.get(ToolExecutorService);
   });

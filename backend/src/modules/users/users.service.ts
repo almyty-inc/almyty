@@ -292,7 +292,7 @@ export class UsersService {
     return this.getUserStats(id);
   }
 
-  async getUserActivity(id: string, days: number = 30): Promise<any[]> {
+  async getUserActivity(id: string, _days: number = 30): Promise<any[]> {
     // This would typically query activity logs or metrics
     // For now, return basic API key usage data
     const apiKeys = await this.apiKeyRepository.find({

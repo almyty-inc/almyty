@@ -46,6 +46,18 @@ this layer from becoming a second execution model.
 Compiled nodes carry `roleKey`, never a model, so a compiled graph is
 exactly as portable as the strategy that produced it.
 
+### Workflow agents only
+
+Strategies, roles and the orchestrator apply to workflow agents. An
+autonomous agent has no graph: it runs the ReAct loop on its own
+`modelConfig`, which never reads `settings.execution` or the agent's
+roles. Wiring a strategy into that loop would be the second execution
+model this layer exists not to be, so instead the Execution tab shows an
+autonomous agent one line saying so, and `PUT /agents/:id/execution`
+refuses a strategy or an enabled orchestrator on one with
+`STRATEGY_WORKFLOW_ONLY` (400). Clearing a leftover choice is still
+accepted.
+
 ### A check is a branch
 
 A `verify` step's `next` is its **failure** path, and the compiler emits

@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ModuleRef } from '@nestjs/core';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { AxiosRequestConfig } from 'axios';
 import { ToolExecutorService } from './tool-executor.service';
 import { ToolCacheRateLimitHelper } from './tool-cache-rate-limit.helper';
 import { ToolStatsHelper } from './tool-stats.helper';
@@ -16,7 +15,7 @@ import { hashCacheObject, sleep as sleepUtil } from './tool-execution-utils';
 import { Tool, ToolType, ToolStatus } from '../../entities/tool.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
-import { Api, ApiType } from '../../entities/api.entity';
+import { Api } from '../../entities/api.entity';
 import { ApiSchema } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
 import { User } from '../../entities/user.entity';
@@ -29,7 +28,6 @@ import { RunnerCallService } from '../runner/runner-call.service';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
 import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
 import { McpClientError } from '../mcp-sources/mcp-client.service';
-import axios from 'axios';
 
 jest.mock('axios', () => {
   const mockAxios: any = jest.fn();
@@ -39,7 +37,6 @@ jest.mock('axios', () => {
     default: mockAxios,
   };
 });
-const mockedAxios = axios as unknown as jest.MockedFunction<any>;
 
 // The retry loop in the orchestrator calls `sleep` from the shared
 // utils module for its exponential backoff. Live setTimeout would
@@ -55,9 +52,6 @@ describe('ToolExecutorService', () => {
   let toolRepository: any;
   let toolExecutionRepository: any;
   let userRepository: any;
-  let apiRepository: any;
-  let operationRepository: any;
-  let credentialRepository: any;
   let mockRedis: any;
 
   beforeEach(async () => {
@@ -227,9 +221,6 @@ describe('ToolExecutorService', () => {
     toolRepository = module.get(getRepositoryToken(Tool));
     toolExecutionRepository = module.get(getRepositoryToken(ToolExecution));
     userRepository = module.get(getRepositoryToken(User));
-    apiRepository = module.get(getRepositoryToken(Api));
-    operationRepository = module.get(getRepositoryToken(Operation));
-    credentialRepository = module.get(getRepositoryToken(Credential));
   });
 
   describe('executeTool', () => {

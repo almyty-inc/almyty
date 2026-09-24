@@ -5,8 +5,8 @@ import { AuthHelper } from './helpers/auth.helper'
 /**
  * Inference providers: the APIs models are called through, with their keys.
  * /llm-providers is its own page, reached from the Models header. Adding one
- * is a page too (/llm-providers/new); testing and editing one are still
- * dialogs on the list page, and a row's details are the provider's own page.
+ * is a page too (/llm-providers/new); testing and editing one happen in place
+ * on the provider's own page (/llm-providers/:id). No dialogs.
  */
 
 /** The row actions menu: a button whose only name is the sr-only "Actions". */
@@ -128,16 +128,12 @@ test.describe('Inference providers', () => {
     await page.waitForLoadState('networkidle')
 
     await openRowActions(page, 'Connection Test Provider')
-    await page.getByRole('menuitem', { name: 'Test Connection' }).click()
+    await page.getByRole('menuitem', { name: 'Test connection' }).click()
 
-    // Testing is still a dialog on the list page.
-    const testDialog = page.getByRole('dialog')
-    await expect(testDialog).toBeVisible({ timeout: 10000 })
-    await expect(testDialog.getByText('Test inference provider: Connection Test Provider')).toBeVisible()
-
-    await testDialog.getByRole('button', { name: 'Test Provider' }).click()
-
-    await expect(testDialog.getByText(/success|error|response/i).first()).toBeVisible({ timeout: 20000 })
+    // The test runs on the provider's own page and answers there, inline.
+    await expect(page).toHaveURL(/\/llm-providers\/[^/?]+$/, { timeout: 10000 })
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByTestId('provider-test-result')).toContainText(/Connection OK|Connection failed/, { timeout: 20000 })
   })
 
   test('should edit provider configuration', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
@@ -156,29 +152,27 @@ test.describe('Inference providers', () => {
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
 
-    // The menu has two Edit entries: the dialog one comes first, the
-    // generic one after the separator opens the provider's page.
+    // Edit opens the provider's edit page (not a dialog).
     await openRowActions(page, 'Edit Test Provider')
-    await page.getByRole('menuitem', { name: 'Edit', exact: true }).first().click()
+    await page.getByRole('menuitem', { name: 'Edit', exact: true }).click()
 
-    const editDialog = page.getByRole('dialog')
-    await expect(editDialog).toBeVisible({ timeout: 10000 })
-    await expect(editDialog.getByRole('heading', { name: 'Edit inference provider' })).toBeVisible()
+    await expect(page).toHaveURL(/\/llm-providers\/[^/?]+\/edit$/, { timeout: 10000 })
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    const editForm = page.getByRole('form', { name: 'Edit provider' })
+    await expect(editForm).toBeVisible()
 
-    const nameInput = editDialog.locator('#editProviderName')
-    await expect(nameInput).toBeVisible()
+    const nameInput = editForm.locator('#editProviderName')
     await nameInput.clear()
     await nameInput.fill('Updated Provider Name')
 
-    const tempInput = editDialog.locator('#editTemperature')
-    await expect(tempInput).toBeVisible()
+    const tempInput = editForm.locator('#editTemperature')
     await tempInput.clear()
     await tempInput.fill('0.5')
 
-    await editDialog.getByRole('button', { name: 'Save changes' }).click()
+    await editForm.getByRole('button', { name: 'Save changes' }).click()
 
-    await assertHelper.assertToastMessage(/updated|saved/i)
-    await expect(page.getByText('Updated Provider Name')).toBeVisible()
+    await assertHelper.assertToastMessage(/saved|updated/i)
+    await expect(page.getByRole('heading', { name: 'Updated Provider Name' })).toBeVisible()
   })
 
   test('should delete provider with confirmation', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
@@ -204,7 +198,7 @@ test.describe('Inference providers', () => {
     await expect(deleteDialog).toBeVisible({ timeout: 10000 })
     await expect(deleteDialog.getByRole('heading', { name: 'Delete provider?' })).toBeVisible()
 
-    await deleteDialog.getByRole('button', { name: 'Delete', exact: true }).click()
+    await deleteDialog.getByRole('button', { name: 'Delete provider' }).click()
 
     await expect(page.getByText('To Delete Provider')).not.toBeVisible({ timeout: 10000 })
   })

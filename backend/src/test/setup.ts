@@ -12,7 +12,7 @@ if (process.env.RUN_DB_INTEGRATION === '1') {
   jest.setTimeout(120_000);
 }
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { DataSource } from 'typeorm';
 
 // Mock console methods to keep tests quiet
 global.console = {

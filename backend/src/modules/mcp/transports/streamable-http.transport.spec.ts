@@ -421,9 +421,39 @@ describe('StreamableHttpTransport', () => {
       // Pod B (no local session) opens the GET stream — must adopt, not 404.
       const podB = makeTransport(redis);
       const resB = mockRes();
-      await podB.handleStream(mockReq({ 'Mcp-Session-Id': sid }), resB, 'org');
+      await podB.handleStream(mockReq({ 'Mcp-Session-Id': sid }), resB, 'org', 'user');
       expect(resB._statusCode).not.toBe(404);
       expect(resB._headers['Content-Type']).toBe('text/event-stream');
+      await podA.shutdown(); await podB.shutdown();
+    });
+
+    it('refuses another member of the same org the session, on the adopting pod too', async () => {
+      const redis = makeRedisBus();
+      const podA = makeTransport(redis);
+      const resA = mockRes();
+      await podA.handlePost(
+        mockReq({}, { v: WORKER_PROTOCOL_VERSION, type: 'event', id: 'e1', ts: 1, payload: { kind: 'runner.hello' } }),
+        resA, 'org', 'alice',
+      );
+      const sid = resA._headers['Mcp-Session-Id'];
+
+      // Bob, same org, opens Alice's stream on another pod: he would
+      // preempt her stream and receive her runner's dispatches.
+      const podB = makeTransport(redis);
+      const resStream = mockRes();
+      await podB.handleStream(mockReq({ 'Mcp-Session-Id': sid }), resStream, 'org', 'bob');
+      expect(resStream._headers['Content-Type']).not.toBe('text/event-stream');
+
+      // ...or posts envelopes on it (a forged response to her dispatch).
+      const emitted: unknown[] = [];
+      podA.on('envelope', (env) => emitted.push(env));
+      const resPost = mockRes();
+      await podA.handlePost(
+        mockReq({ 'Mcp-Session-Id': sid }, { v: WORKER_PROTOCOL_VERSION, type: 'event', id: 'e2', ts: 2, payload: { kind: 'runner.hello' } }),
+        resPost, 'org', 'bob',
+      );
+      expect(emitted).toHaveLength(0);
+      expect(resPost._statusCode).not.toBe(202);
       await podA.shutdown(); await podB.shutdown();
     });
 

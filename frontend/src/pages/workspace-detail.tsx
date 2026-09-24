@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Layers, Trash2 } from 'lucide-react'
 
@@ -41,7 +41,6 @@ interface Workspace {
 
 export function WorkspaceDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { success, error: errNotif } = useNotifications()
   const [confirmRelease, setConfirmRelease] = useState(false)

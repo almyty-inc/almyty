@@ -1,9 +1,9 @@
 import { Inject, forwardRef } from '@nestjs/common';
-import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, Like, In, MoreThanOrEqual } from 'typeorm';
+import { Repository, In } from 'typeorm';
 
-import { Tool, ToolStatus, ToolType, ToolExecutionMethod } from '../../entities/tool.entity';
+import { Tool, ToolStatus, ToolExecutionMethod } from '../../entities/tool.entity';
 import { ToolVersion } from '../../entities/tool-version.entity';
 import { ToolCategory } from '../../entities/tool-category.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
@@ -19,7 +19,16 @@ import { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats } from 
 import { ToolsOperationHelper } from './tools-operation.helper';
 import { ToolsStatsHelper } from './tools-stats.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import {
+  assertAttachable,
+  assertNotOthersPrivate,
+  isOthersPrivate,
+  nameTaken,
+  resolveVisibilityWrite,
+} from '../../common/authorization/private-visibility';
+import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
+import { assertToolQuota } from './tool-quota';
 export type { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats };
 
 @Injectable()
@@ -77,10 +86,9 @@ export class ToolsService {
         throw new ForbiddenException('User does not have permission to create tools');
       }
 
-      // Check organization limits
-      if (!organization.canAddMoreTools()) {
-        throw new BadRequestException('Organization has reached tool limit');
-      }
+      // Check organization limits: a real COUNT, not the unloaded
+      // `organization.tools` relation canAddMoreTools() used to read.
+      await assertToolQuota(this.toolRepository.manager, organizationId);
 
       // Validate categories if provided
       let categories: ToolCategory[] = [];
@@ -97,6 +105,22 @@ export class ToolsService {
         }
       }
 
+      // Validate team scoping before persisting.
+      await this.accessPolicy.assertCanScopeToTeam(
+        userId,
+        organizationId,
+        (createToolDto as any).visibility,
+        (createToolDto as any).teamId,
+      );
+      // The creator owns the tool; 'private' means private to them.
+      const scope = resolveVisibilityWrite({
+        requestedVisibility: createToolDto.visibility,
+        requestedTeamId: createToolDto.teamId,
+        current: { ownerId: userId },
+        callerId: userId,
+        noun: 'tool',
+      });
+
       // Validate operation if provided
       let operation: Operation | null = null;
       if (createToolDto.operationId) {
@@ -105,9 +129,10 @@ export class ToolsService {
           relations: { api: true },
         });
 
-        if (!operation || operation.api.organizationId !== organizationId) {
+        if (!operation || operation.api.organizationId !== organizationId || isOthersPrivate(operation.api, userId)) {
           throw new BadRequestException('Operation not found or not accessible');
         }
+        assertAttachable({ visibility: scope.visibility, ownerId: userId, noun: 'tool' }, [operation.api], 'API');
       }
 
       // Validate apiId if provided
@@ -115,18 +140,11 @@ export class ToolsService {
         const api = await this.apiRepository.findOne({
           where: { id: createToolDto.apiId, organizationId },
         });
-        if (!api) {
+        if (!api || isOthersPrivate(api, userId)) {
           throw new BadRequestException('API not found or not accessible in this organization');
         }
+        assertAttachable({ visibility: scope.visibility, ownerId: userId, noun: 'tool' }, [api], 'API');
       }
-
-      // Validate team scoping before persisting.
-      await this.accessPolicy.assertCanScopeToTeam(
-        userId,
-        organizationId,
-        (createToolDto as any).visibility,
-        (createToolDto as any).teamId,
-      );
 
       // Create the tool
       // Custom tools (with code or httpConfig) are ACTIVE by default, auto-generated are DRAFT
@@ -136,6 +154,8 @@ export class ToolsService {
         ...createToolDto,
         organizationId,
         createdBy: userId,
+        visibility: scope.visibility,
+        teamId: scope.teamId,
         status: isCustomTool ? ToolStatus.ACTIVE : ToolStatus.DRAFT,
         version: '1.0.0',
         categories,
@@ -170,9 +190,7 @@ export class ToolsService {
       // renderer has a single answer. Report the collision instead
       // of letting the driver error out as a 500.
       if (isUniqueViolation(error)) {
-        throw new ConflictException(
-          `A tool named '${createToolDto.name}' already exists in this organization`,
-        );
+        throw nameTaken('tool', createToolDto.name);
       }
       this.logger.error(`Failed to create tool: ${error.message}`);
       throw error;
@@ -194,6 +212,8 @@ export class ToolsService {
       if (!tool) {
         throw new NotFoundException('Tool not found');
       }
+      // Another member's private tool does not exist as far as this caller is concerned.
+      await assertNotOthersPrivate(this.accessPolicy, { id: userId }, tool, 'Tool');
 
       // Authorization: tool creator can always edit; otherwise org admin/owner or team lead
       if (tool.createdBy !== userId) {
@@ -300,12 +320,35 @@ export class ToolsService {
 
       // Team-scoping fields (visibility + teamId) from the dashboard
       // VisibilityField. Drop a stray teamId if visibility flips back
-      // to 'org' so we don't leave a dangling team reference.
-      if (updateToolDto.visibility !== undefined) {
-        tool.visibility = updateToolDto.visibility;
-        tool.teamId = updateToolDto.visibility === 'team' ? (updateToolDto.teamId ?? null) : null;
-      } else if (updateToolDto.teamId !== undefined && tool.visibility === 'team') {
-        tool.teamId = updateToolDto.teamId;
+      // to 'org' so we don't leave a dangling team reference. Only the
+      // tool's owner may make it private.
+      if (updateToolDto.visibility !== undefined || updateToolDto.teamId !== undefined) {
+        const scope = resolveVisibilityWrite({
+          requestedVisibility: updateToolDto.visibility,
+          requestedTeamId: updateToolDto.visibility === undefined && tool.visibility !== 'team'
+            ? undefined
+            : updateToolDto.teamId,
+          current: { visibility: tool.visibility, teamId: tool.teamId, ownerId: tool.createdBy ?? null },
+          callerId: userId,
+          noun: 'tool',
+        });
+        if (tool.apiId && scope.visibility !== 'private') {
+          const api = await this.apiRepository.findOne({ where: { id: tool.apiId, organizationId } });
+          if (api) assertAttachable({ visibility: scope.visibility, ownerId: scope.ownerId, noun: 'tool' }, [api], 'API');
+        }
+        // Going private would detach it from shared agents and gateways
+        // that use it (they would fail at run time). Refuse and say which.
+        if (scope.visibility === 'private' && tool.visibility !== 'private') {
+          await assertNoSharedDependents(
+            this.toolRepository.manager,
+            this.accessPolicy,
+            { noun: 'tool', organizationId, targets: [{ kind: 'tool', id: tool.id }] },
+            userId,
+          );
+        }
+        tool.visibility = scope.visibility;
+        tool.teamId = scope.teamId;
+        if (scope.ownerId) tool.createdBy = scope.ownerId;
       }
 
       // Increment version
@@ -329,6 +372,11 @@ export class ToolsService {
       return updatedTool;
 
     } catch (error) {
+      // A rename onto a taken name trips `tools_org_name_uq`; answer it as
+      // create does rather than as a 500 carrying the driver's text.
+      if (isUniqueViolation(error)) {
+        throw nameTaken('tool', updateToolDto.name ?? '');
+      }
       this.logger.error(`Failed to update tool: ${error.message}`);
       throw error;
     }
@@ -337,7 +385,8 @@ export class ToolsService {
   async getTool(
     toolId: string,
     organizationId: string,
-    includeRelations = true
+    includeRelations = true,
+    caller?: { id: string },
   ): Promise<Tool> {
     const relations = includeRelations ? {
       categories: true,
@@ -357,6 +406,9 @@ export class ToolsService {
       throw new NotFoundException('Tool not found');
     }
 
+    // With a caller, another member's private tool is "not found" -- a 403
+    // would confirm it exists.
+    if (caller) await assertNotOthersPrivate(this.accessPolicy, caller, tool, 'Tool');
     return tool;
   }
 
@@ -387,8 +439,13 @@ export class ToolsService {
       // by gateway membership, so the team-scope filter would
       // double-filter and hide legitimately-shared tools.
       queryBuilder.where('tool.organizationId = :_orgId', { _orgId: filters.organizationId });
+      // Gateway membership does not reach a private tool: it stays its
+      // owner's (filters.caller, when the gateway call has one) alone.
+      queryBuilder.andWhere(`(tool.visibility IS DISTINCT FROM 'private' OR tool."createdBy" = :_privateMe)`, {
+        _privateMe: filters.caller?.id ?? null,
+      });
     } else if (filters.caller) {
-      await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'tool');
+      await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'tool', { ownerColumn: 'createdBy' });
     } else {
       throw new Error('getTools requires either caller or bypassTeamFilter');
     }
@@ -467,7 +524,7 @@ export class ToolsService {
     organizationId: string,
     userId: string
   ): Promise<Tool> {
-    const tool = await this.getTool(toolId, organizationId, false);
+    const tool = await this.getTool(toolId, organizationId, false, { id: userId });
 
     // Authorization: org owner/admin always, team-scoped requires team lead
     const decision = await this.accessPolicy.canAccess({ id: userId }, tool, 'manage');
@@ -499,7 +556,7 @@ export class ToolsService {
     organizationId: string,
     userId: string
   ): Promise<Tool> {
-    const tool = await this.getTool(toolId, organizationId, false);
+    const tool = await this.getTool(toolId, organizationId, false, { id: userId });
 
     // Authorization: org owner/admin always, team-scoped requires team lead
     const decision2 = await this.accessPolicy.canAccess({ id: userId }, tool, 'manage');
@@ -531,7 +588,7 @@ export class ToolsService {
     organizationId: string,
     userId: string
   ): Promise<void> {
-    const tool = await this.getTool(toolId, organizationId, false);
+    const tool = await this.getTool(toolId, organizationId, false, { id: userId });
 
     // Authorization: tool creator can always delete; otherwise org admin/owner or team lead
     if (tool.createdBy !== userId) {

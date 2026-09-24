@@ -1,14 +1,12 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
 import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { User } from '../../entities/user.entity';
 import { ApiKey } from '../../entities/api-key.entity';
-import { compileSafeRegex, boundRegexInput } from '../../common/security/regex-safety';
 
 import { GatewayAuthValidators } from './gateway-auth-validators.helper';
 export interface CreateGatewayAuthDto {
@@ -300,7 +298,6 @@ export class GatewayAuthService {
 
       // Separate required and optional auth configs
       const requiredConfigs = authConfigs.filter(c => c.isRequired);
-      const optionalConfigs = authConfigs.filter(c => !c.isRequired);
 
       // If all configs are optional (type=none or isRequired=false), check if any is type NONE
       if (requiredConfigs.length === 0) {

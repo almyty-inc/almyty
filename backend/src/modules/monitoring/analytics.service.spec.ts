@@ -106,19 +106,26 @@ describe('AnalyticsService.getOverview — protocol undercount', () => {
     const requestLogRepository = {
       createQueryBuilder: jest.fn(() => new FakeRequestLogQueryBuilder(rows)),
     };
+    // Tool executions and sessions are counted through a query builder
+    // (so the private-row filter can ride along); these tests only look at
+    // request logs, so both answer zero.
+    const zeroQb = () => {
+      const qb: any = {
+        select: () => qb,
+        where: () => qb,
+        andWhere: () => qb,
+        getCount: async () => 0,
+        getRawOne: async () => ({ total: '0' }),
+      };
+      return qb;
+    };
     const toolExecutionRepository = {
       count: jest.fn().mockResolvedValue(0),
-      createQueryBuilder: jest.fn(),
+      createQueryBuilder: jest.fn(zeroQb),
     };
     const conversationRepository = {
       count: jest.fn().mockResolvedValue(0),
-      createQueryBuilder: jest.fn(() => ({
-        select: () => ({
-          where: () => ({
-            andWhere: () => ({ getRawOne: async () => ({ total: '0' }) }),
-          }),
-        }),
-      })),
+      createQueryBuilder: jest.fn(zeroQb),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -144,7 +151,7 @@ describe('AnalyticsService.getOverview — protocol undercount', () => {
       { orgId: 'org-1', protocol: 'mcp', timestamp: recent, statusCode: 200, responseTime: 40 },
     ]);
 
-    const overview = await service.getOverview('org-1');
+    const overview = await service.getOverview('org-1', 'user-1');
 
     expect(overview.last24h.requests).toBe(1);
     expect(overview.last7d.requests).toBe(1);
@@ -158,7 +165,7 @@ describe('AnalyticsService.getOverview — protocol undercount', () => {
       { orgId: 'org-1', protocol: null, timestamp: recent, statusCode: 200, responseTime: 12 },
     ]);
 
-    const overview = await service.getOverview('org-1');
+    const overview = await service.getOverview('org-1', 'user-1');
 
     expect(overview.last24h.requests).toBe(1);
     expect(overview.last7d.requests).toBe(1);
@@ -170,7 +177,7 @@ describe('AnalyticsService.getOverview — protocol undercount', () => {
       { orgId: 'org-1', protocol: 'utcp', timestamp: recent, statusCode: 200, responseTime: 8 },
     ]);
 
-    const overview = await service.getOverview('org-1');
+    const overview = await service.getOverview('org-1', 'user-1');
 
     expect(overview.last24h.requests).toBe(2);
   });
@@ -182,7 +189,7 @@ describe('AnalyticsService.getOverview — protocol undercount', () => {
       { orgId: 'org-2', protocol: null, timestamp: recent, statusCode: 200, responseTime: 10 },
     ]);
 
-    const overview = await service.getOverview('org-1');
+    const overview = await service.getOverview('org-1', 'user-1');
 
     expect(overview.last24h.requests).toBe(1);
   });
@@ -194,7 +201,7 @@ describe('AnalyticsService.getOverview — protocol undercount', () => {
       { orgId: 'org-1', protocol: 'mcp', timestamp: recent, statusCode: 200, responseTime: 10 },
     ]);
 
-    const overview = await service.getOverview('org-1');
+    const overview = await service.getOverview('org-1', 'user-1');
 
     expect(overview.last24h.errors).toBe(2);
     expect(overview.last24h.requests).toBe(3);
@@ -285,11 +292,11 @@ describe('AnalyticsService — request_logs org scope is index-shaped', () => {
   it('getOverview scopes all four request_logs tiles on log.organizationId', async () => {
     const { service, recorded } = await buildRecording();
 
-    await service.getOverview('org-1');
+    await service.getOverview('org-1', 'user-1');
 
     const orgScopes = recorded.wheres.filter((c) => c.includes('organizationId'));
     expect(orgScopes.length).toBeGreaterThanOrEqual(4);
-    expect(orgScopes.every((c) => c === 'log.organizationId = :orgId' || c.startsWith('session.'))).toBe(
+    expect(orgScopes.every((c) => c === 'log.organizationId = :orgId' || c.startsWith('session.') || c.startsWith('exec.'))).toBe(
       true,
     );
     expect(recorded.wheres.some(unindexable)).toBe(false);
@@ -300,7 +307,7 @@ describe('AnalyticsService — request_logs org scope is index-shaped', () => {
   it('getTimeline scopes on log.organizationId with no gateway join', async () => {
     const { service, recorded } = await buildRecording();
 
-    await service.getTimeline('org-1', 'day', 'hour');
+    await service.getTimeline('org-1', 'day', 'hour', 'user-1');
 
     expect(recorded.wheres).toContain('log.organizationId = :orgId');
     expect(recorded.wheres.some(unindexable)).toBe(false);
@@ -310,7 +317,7 @@ describe('AnalyticsService — request_logs org scope is index-shaped', () => {
   it('getRequestLogs scopes on log.organizationId with no gateway join', async () => {
     const { service, recorded } = await buildRecording();
 
-    await service.getRequestLogs({ organizationId: 'org-1', page: 1, limit: 50 });
+    await service.getRequestLogs({ organizationId: 'org-1', page: 1, limit: 50, callerId: 'user-1' });
 
     expect(recorded.wheres).toContain('log.organizationId = :orgId');
     expect(recorded.wheres.some(unindexable)).toBe(false);
@@ -320,7 +327,7 @@ describe('AnalyticsService — request_logs org scope is index-shaped', () => {
   it('getRequestLogs projects only the columns its mapper emits', async () => {
     const { service, recorded } = await buildRecording();
 
-    await service.getRequestLogs({ organizationId: 'org-1', page: 1, limit: 50 });
+    await service.getRequestLogs({ organizationId: 'org-1', page: 1, limit: 50, callerId: 'user-1' });
 
     expect(recorded.selects).toHaveLength(1);
     const projected = recorded.selects[0];

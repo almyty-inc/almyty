@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
 
@@ -13,6 +13,7 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { GatewayToolTransferHelper } from './gateway-tool-transfer.helper';
 import { GatewayToolStatsHelper } from './gateway-tool-stats.helper';
 import { GatewayToolQueriesHelper } from './gateway-tool-queries.helper';
+import { assertToolAttachable, gatewayServableTo } from './private-gateway';
 
 export interface CreateGatewayToolDto {
   toolId: string;
@@ -177,7 +178,7 @@ export class GatewayToolService {
         where: { id: gatewayId, organizationId },
       });
 
-      if (!gateway) {
+      if (!gateway || !gatewayServableTo(gateway, userId)) {
         throw new NotFoundException('Gateway not found');
       }
 
@@ -197,6 +198,7 @@ export class GatewayToolService {
       if (!tool) {
         throw new NotFoundException('Tool not found');
       }
+      assertToolAttachable(gateway, tool, userId);
 
       // Name the actual problem. 'Can only associate active tools' did not
       // say which state the tool was in, that every tool generated from a

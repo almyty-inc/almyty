@@ -1,3 +1,4 @@
+import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -8,23 +9,26 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { runnersApi, workspacesApi, toolsApi } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
+import { useAuthStore } from '@/store/auth'
 import type { Tool } from '@/types'
-import { runnerStateVariant, workspaceStatusVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
+import {
+  RUNNER_HEARTBEAT_POLL_MS,
+  RUNNER_INSTALL_COMMAND,
+  RUNNER_LOGIN_COMMAND,
+  isPendingRunner,
+  runnerStartCommand,
+  runnerStateLabel,
+  runnerStateVariant,
+  workspaceStatusVariant,
+} from './runners-shared'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
+import { VisibilityBadge, useTeamLookup } from '@/components/ui/team-filter'
 
 interface CodingAgent {
   id: string
@@ -40,6 +44,9 @@ interface Runner {
   name: string
   state: 'registered' | 'online' | 'busy' | 'stale' | 'draining' | 'offline'
   labels: Record<string, string>
+  ownerUserId?: string
+  visibility?: 'private' | 'team' | 'org'
+  teamId?: string | null
   runtimeInfo: {
     os: string
     arch: string
@@ -71,7 +78,7 @@ export function RunnerDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { success, error: errNotif } = useNotifications()
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
   const runnerQuery = useQuery<Runner>({
     queryKey: ['runner', id],
@@ -117,12 +124,30 @@ export function RunnerDetailPage() {
   const unregisterMutation = useMutation({
     mutationFn: () => runnersApi.unregister(id),
     onSuccess: () => {
-      success('Runner deregistered')
+      success('Runner deleted')
       queryClient.invalidateQueries({ queryKey: ['runners'] })
       navigate('/runners')
     },
-    onError: (err: any) => errNotif('Deregister failed', getApiErrorMessage(err)),
+    onError: (err: any) => errNotif('Delete failed', getApiErrorMessage(err)),
   })
+
+  // Visibility is edited in place on this page (no dialog). The draft is
+  // null until the owner picks something different.
+  const { user } = useAuthStore()
+  const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
+  const [visibilityDraft, setVisibilityDraft] = useState<VisibilityValue | null>(null)
+  const visibilityMutation = useMutation({
+    mutationFn: (next: VisibilityValue) =>
+      runnersApi.update(id, { visibility: next.visibility, teamId: next.visibility === 'team' ? next.teamId : null }),
+    onSuccess: () => {
+      success('Visibility saved')
+      setVisibilityDraft(null)
+      queryClient.invalidateQueries({ queryKey: ['runner', id] })
+      queryClient.invalidateQueries({ queryKey: ['runners'] })
+    },
+    onError: (err: any) => errNotif('Could not save visibility', getApiErrorMessage(err)),
+  })
+  const isOwner = !!user?.id && runnerQuery.data?.ownerUserId === user.id
 
   if (runnerQuery.isLoading) {
     return (
@@ -155,13 +180,16 @@ export function RunnerDetailPage() {
     <div className="space-y-6">
       <BackHeader />
 
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <Cpu className="h-7 w-7 text-muted-foreground" />
-          <div>
-            <h1 className="text-4xl font-heading font-extrabold tracking-tight">{runner.name}</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <Badge variant={runnerStateVariant[runner.state]}>{runner.state}</Badge>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <Cpu className="h-7 w-7 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <h1 className={DETAIL_TITLE_CLASSES}>{runner.name}</h1>
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <Badge variant={isPendingRunner(runner) ? 'outline' : runnerStateVariant[runner.state]}>
+                {runnerStateLabel(runner)}
+              </Badge>
+              <VisibilityBadge visibility={runner.visibility} teamId={runner.teamId} teamLookup={teamLookup} />
               <span className="text-sm text-muted-foreground" title={runner.lastHeartbeatAt ?? ''}>
                 {runner.lastHeartbeatAt
                   ? `Last heartbeat ${formatRelativeTime(runner.lastHeartbeatAt)}`
@@ -170,16 +198,64 @@ export function RunnerDetailPage() {
             </div>
           </div>
         </div>
-        {runner.state === 'offline' && (
+        {/* An offline runner, or one whose daemon never connected, can go. */}
+        {(runner.state === 'offline' || isPendingRunner(runner)) && (
           <Button
             variant="destructive"
-            onClick={() => setConfirmDelete(true)}
+            disabled={unregisterMutation.isPending}
+            onClick={async () => {
+              const ok = await confirm({
+                title: <>Delete runner {runner.name}?</>,
+                confirmLabel: 'Delete runner',
+                cancelLabel: 'Keep it',
+                destructive: true,
+              })
+              if (ok) unregisterMutation.mutate()
+            }}
           >
             <Trash2 className="mr-2 h-4 w-4" />
-            Deregister
+            Delete runner
           </Button>
         )}
       </div>
+
+      {isPendingRunner(runner) && (
+        <Card>
+          <CardContent className="pt-6 text-sm text-muted-foreground">
+            This runner has never connected. Start it on its machine with{' '}
+            <code className="text-foreground">{runnerStartCommand(runner.name, currentOrganization?.id)}</code>
+            {' '}after <code className="text-foreground">{RUNNER_INSTALL_COMMAND}</code> and{' '}
+            <code className="text-foreground">{RUNNER_LOGIN_COMMAND}</code>, or delete it.
+          </CardContent>
+        </Card>
+      )}
+
+      {isOwner && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Who can see and use it</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <VisibilityField
+              organizationId={currentOrganization?.id ?? ''}
+              value={visibilityDraft ?? { visibility: runner.visibility ?? 'org', teamId: runner.teamId ?? null }}
+              onChange={setVisibilityDraft}
+              noun="this runner"
+              disabled={visibilityMutation.isPending}
+            />
+            {visibilityDraft && (
+              <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                <Button onClick={() => visibilityMutation.mutate(visibilityDraft)} disabled={visibilityMutation.isPending}>
+                  Save visibility
+                </Button>
+                <Button variant="ghost" onClick={() => setVisibilityDraft(null)} disabled={visibilityMutation.isPending}>
+                  Discard
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
@@ -306,25 +382,7 @@ export function RunnerDetailPage() {
         </CardContent>
       </Card>
 
-
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Deregister this runner?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The runner row will be removed from your account. Any historical
-              workspace records remain. The runner daemon (if it's still running
-              somewhere) will fail its next heartbeat and exit.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => unregisterMutation.mutate()}>
-              Deregister
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {confirmDialog}
     </div>
   )
 }

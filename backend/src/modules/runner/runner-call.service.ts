@@ -49,6 +49,13 @@ export class RunnerCallError extends Error {
 export interface DispatchOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
+  /**
+   * The user on whose behalf this dispatch runs. RunnerService.
+   * resolveForDispatch checks it against the runner's visibility: a
+   * private runner takes work only from its owner, a team runner only
+   * from its team, and neither takes work from an unknown caller.
+   */
+  callerUserId?: string | null;
 }
 
 interface PendingCall {
@@ -78,6 +85,8 @@ interface PendingCall {
 interface EnvelopeSession {
   id: string;
   organizationId: string;
+  /** The user the session's bearer token proved. */
+  userId?: string;
 }
 
 
@@ -152,7 +161,7 @@ export class RunnerCallService implements OnModuleDestroy {
     workspaceId?: string,
     options: DispatchOptions = {},
   ): Promise<RunnerResponsePayload> {
-    const runner = await this.runners.resolveForDispatch(runnerId).catch((err) => {
+    const runner = await this.runners.resolveForDispatch(runnerId, options.callerUserId).catch((err) => {
       if (err?.status === 404) {
         throw new RunnerCallError(RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND, err.message);
       }
@@ -251,20 +260,23 @@ export class RunnerCallService implements OnModuleDestroy {
       const payload = env.payload as { kind?: string; runnerId?: string } | undefined;
       if (payload?.kind === 'runner.hello' && payload.runnerId) {
         // The runner id is whatever the daemon put in its own hello;
-        // the organization is what the bearer token on the POST
-        // proved. Binding one to the other without comparing them let
-        // any authenticated session claim another tenant's runner --
-        // and getActiveSession takes the newest connected session, so
-        // the claim became the route every dispatch for that runner
-        // took: agent.spawn, coding.start, shell commands, all
-        // delivered to the claimant instead of the machine.
-        const owned = await this.runners.belongsToOrganization(
+        // the organization and user are what the bearer token on the
+        // POST proved. Binding one to the other without comparing them
+        // let any authenticated session claim another tenant's runner --
+        // and, while only the organization was compared, another
+        // member's runner in the same org. getActiveSession takes the
+        // newest connected session, so the claim became the route every
+        // dispatch for that runner took: agent.spawn, coding.start,
+        // shell commands, all delivered to the claimant instead of the
+        // machine. Only the runner's owner may attach a session to it.
+        const owned = await this.runners.isOwnedBy(
           payload.runnerId,
           session.organizationId,
+          session.userId,
         );
         if (!owned) {
           this.logger.warn(
-            `runner.hello claiming runner ${payload.runnerId} refused: not in session's organization`,
+            `runner.hello claiming runner ${payload.runnerId} refused: not owned by the session's user`,
           );
           return;
         }

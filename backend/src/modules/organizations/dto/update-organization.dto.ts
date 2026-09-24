@@ -1,5 +1,4 @@
 import { IntersectionType, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,

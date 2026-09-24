@@ -1,4 +1,4 @@
-import { DataSource, Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
 
 import { Runner, RunnerState, RunnerIsolationTier } from '../../entities/runner.entity';
 import { RunnerSession } from '../../entities/runner-session.entity';
@@ -223,7 +223,7 @@ describeIfDb('Runner + Workspace (real Postgres)', () => {
     await runners.heartbeat(reg.runner.id);
     await ds.getRepository(Runner).update(reg.runner.id, { state: RunnerState.STALE });
 
-    await expect(runners.resolveForDispatch(reg.runner.id)).rejects.toThrow(/cannot accept dispatch/);
+    await expect(runners.resolveForDispatch(reg.runner.id, userId)).rejects.toThrow(/cannot accept dispatch/);
   });
 
   // ── Session lifecycle ──────────────────────────────────────────────

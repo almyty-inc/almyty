@@ -2,8 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Patch,
-  Delete,
   Body,
   Param,
   Query,
@@ -11,14 +9,11 @@ import {
   Request,
   Res,
   ParseUUIDPipe,
-  ValidationPipe,
   HttpStatus,
   HttpException,
   Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
-import { IsEnum, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
-import { Type } from 'class-transformer';
 import { Response } from 'express';
 
 import { AgentsService } from './agents.service';
@@ -26,12 +21,13 @@ import { AgentTechDocHelper } from './agent-tech-doc.helper';
 import { AgentAuditService } from './agent-audit.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PrivateAgentGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('agents')
 @ApiTags('Agents')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateAgentGuard)
 export class AgentManagementController {
   private readonly logger = new Logger(AgentManagementController.name);
 
@@ -322,7 +318,7 @@ export class AgentManagementController {
         );
       }
 
-      const doc = await this.techDocHelper.build(id, organizationId);
+      const doc = await this.techDocHelper.build(id, organizationId, req.user?.sub || req.user?.id || null);
 
       if (format === 'markdown') {
         res.setHeader('Content-Type', 'text/markdown; charset=utf-8');

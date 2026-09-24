@@ -63,31 +63,6 @@ class RefCeilingAdapter implements ModelProviderAdapter {
 
 const ORG = 'org-ref-ceiling';
 const VERSION = { id: 'v-1', organizationId: ORG, name: 'qwen3-0.6b', base: 'qwen3-0.6b', registryUri: 's3://registry/models/qwen3-0.6b@1', quantizations: [], manifestSha: 'sha' };
-/**
- * `fakeRepo` hands out the stored object itself, so an adapter that
- * mutates `d.externalRef` mutates the row whether or not anything
- * persisted it — which is precisely why the suite could not see this bug.
- * A real repository materialises a fresh object per read. This wrapper
- * detaches the JSON columns on the way out, so a mutation the processor
- * does not write back is lost, the way it is against Postgres.
- */
-function detachingRepo(inner: ReturnType<typeof fakeRepo<ModelDeployment>>) {
-  const JSON_COLUMNS = ['externalRef', 'actual', 'desired', 'providerConfig'] as const;
-  const detach = (row: any) => {
-    if (!row) return row;
-    const copy = Object.create(Object.getPrototypeOf(row));
-    Object.assign(copy, row);
-    for (const col of JSON_COLUMNS) {
-      if (row[col] && typeof row[col] === 'object') copy[col] = JSON.parse(JSON.stringify(row[col]));
-    }
-    return copy;
-  };
-  return {
-    ...inner,
-    find: jest.fn(async (opts?: any) => (await inner.find(opts)).map(detach)),
-    findOne: jest.fn(async (opts?: any) => detach(await inner.findOne(opts))),
-  };
-}
 
 describe('a scale that the adapter records on the endpoint ref is persisted', () => {
   let adapter: RefCeilingAdapter;
@@ -106,7 +81,9 @@ describe('a scale that the adapter records on the endpoint ref is persisted', ()
     const registry = new AdapterRegistry();
     registry.register(adapter);
     store = fakeRepo<ModelDeployment>(newDeployment);
-    deployments = detachingRepo(store) as any;
+    // The shared repository hands every read its own copy, as Postgres
+    // does, so a mutation the processor does not write back is lost.
+    deployments = store;
     models = fakeRepo<Model>(() => new Model(), [
       Object.assign(new Model(), { id: 'm-1', organizationId: ORG, pricingOverride: null, status: 'draft', endpointRef: null, metadata: null }),
     ]);
@@ -153,7 +130,7 @@ describe('a scale that the adapter records on the endpoint ref is persisted', ()
   it('keeps the budget cap honest: the stop it audits actually stops the endpoint', async () => {
     // limitCents is 1 and the fake charges nothing, so drive the cap by
     // hand through the same path the processor uses.
-    budgets.get('b-1').limitCents = 0;
+    await budgets.update('b-1', { limitCents: 0 });
     await processor.reconcile(id);
     expect(audit.rows.some((r) => r.action === AuditAction.MODEL_DEPLOYMENT_BUDGET_STOP)).toBe(true);
     expect(store.get(id).desired.replicas).toBe(0);

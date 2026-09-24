@@ -11,7 +11,6 @@ import {
   Page,
   Provenance,
   RankedItem,
-  ScopeRef,
   SearchQuery,
 } from '../canonical.types';
 import { BackendCredentials, BackendHealth, MemoryBackend } from './memory-backend.interface';

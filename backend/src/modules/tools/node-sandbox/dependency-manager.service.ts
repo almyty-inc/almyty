@@ -1,6 +1,8 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import * as crypto from 'crypto';
+import * as dns from 'dns';
 import * as fs from 'fs';
+import * as net from 'net';
 import * as os from 'os';
 import * as path from 'path';
 import { spawn } from 'child_process';
@@ -8,6 +10,12 @@ import {
   DependencyInstallResult,
   NpmRegistryConfig,
 } from './types';
+import {
+  validateUrl,
+  validateUrlAllowingPrivate,
+} from '../../../common/security/url-validator';
+import { isAddressBanned } from '../../../common/security/ssrf-safe-agent';
+import { isBannedAddress } from './sandbox-net-guard';
 
 // Absolute path under the OS tmpdir. Containers often have a read-only
 // rootfs with /tmp mounted writable — a relative path would fail mkdir.
@@ -48,7 +56,7 @@ export class DependencyManagerService {
     registry?: NpmRegistryConfig,
   ): Promise<DependencyInstallResult> {
     this.validateDependencies(dependencies);
-    if (registry) this.validateRegistry(registry);
+    if (registry) await this.validateRegistry(registry);
     const hash = this.hashDeps(dependencies);
     const installDir = path.join(this.basePath(), hash);
 
@@ -156,25 +164,77 @@ export class DependencyManagerService {
   }
 
   /**
-   * Validate a private-registry config. Reject CR/LF in any field (which
-   * would inject arbitrary directives into the generated .npmrc) and
-   * require an http(s) registry URL.
+   * Validate a private-registry config before the backend talks to it.
+   *
+   * `npm install` runs in the HOST process, so the registry URL decides
+   * where the backend itself sends requests -- and, with an authToken,
+   * where it sends a bearer header. It is held to the same SSRF floor as
+   * every other server-side request:
+   *
+   *   - CR/LF in any field is refused (it would inject .npmrc directives);
+   *   - `validateUrl`: http(s) only, no embedded credentials, no private /
+   *     loopback / link-local / metadata host or literal;
+   *   - the sandbox net-guard's range matcher on any literal IP as well,
+   *     because it parses addresses rather than matching their spelling
+   *     and so also catches the IPv4-mapped IPv6 forms the WHATWG URL
+   *     parser normalises to hex (`[::ffff:a9fe:a9fe]`);
+   *   - the hostname is resolved and EVERY returned address is checked,
+   *     so a public name pointed at an internal address is refused too.
+   *
+   * A name that does not resolve at all is let through: npm cannot reach
+   * it either. This is a check at configuration time; npm resolves the
+   * name again when it connects, so a rebinding DNS server can still
+   * change the answer in between.
+   *
+   * Self-hosted installs with a registry on their own network (Verdaccio,
+   * Nexus on the LAN) set NPM_REGISTRY_ALLOW_PRIVATE_URLS=true, which keeps
+   * the scheme and credential rules and drops only the address bans --
+   * the same shape as OLLAMA_ALLOW_PRIVATE_URLS / LLM_ALLOW_PRIVATE_URLS.
    */
-  private validateRegistry(registry: NpmRegistryConfig): void {
+  private async validateRegistry(registry: NpmRegistryConfig): Promise<void> {
     const fields = [registry.url, registry.scope, registry.authToken];
     for (const f of fields) {
       if (typeof f === 'string' && /[\r\n]/.test(f)) {
         throw new BadRequestException('Registry config must not contain newlines');
       }
     }
-    let parsed: URL;
-    try {
-      parsed = new URL(registry.url);
-    } catch {
-      throw new BadRequestException(`Invalid registry URL: ${registry.url}`);
+    if (typeof registry.url !== 'string' || registry.url.length === 0) {
+      throw new BadRequestException('Registry URL is required');
     }
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      throw new BadRequestException(`Registry URL must be http(s): ${registry.url}`);
+
+    const allowPrivate = process.env.NPM_REGISTRY_ALLOW_PRIVATE_URLS === 'true';
+    const check = allowPrivate
+      ? validateUrlAllowingPrivate(registry.url)
+      : validateUrl(registry.url);
+    if (!check.valid) {
+      throw new BadRequestException(`Registry URL refused: ${check.error}`);
+    }
+    if (allowPrivate) return;
+
+    const raw = new URL(registry.url).hostname;
+    const host = raw.startsWith('[') && raw.endsWith(']') ? raw.slice(1, -1) : raw;
+
+    if (net.isIP(host)) {
+      if (isBannedAddress(host)) {
+        throw new BadRequestException(
+          `Registry URL refused: ${host} is a private or reserved address`,
+        );
+      }
+      return;
+    }
+
+    let addresses: Array<{ address: string; family: number }>;
+    try {
+      addresses = await dns.promises.lookup(host, { all: true });
+    } catch {
+      return;
+    }
+    for (const { address, family } of addresses) {
+      if (isBannedAddress(address) || isAddressBanned(address, family)) {
+        throw new BadRequestException(
+          `Registry URL refused: ${host} resolves to a private or reserved address`,
+        );
+      }
     }
   }
 

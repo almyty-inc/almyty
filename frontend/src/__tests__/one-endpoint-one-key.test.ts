@@ -25,7 +25,7 @@ describe('tool lists share one key prefix', () => {
   it('no page keeps a tool-list key of its own outside the tools prefix', () => {
     const files = [
       'pages/tools.tsx',
-      'pages/gateways.tsx',
+      'pages/gateway-detail.tsx',
       'pages/agent-builder.tsx',
       'pages/api-detail.tsx',
       'pages/tool-detail.tsx',
@@ -38,10 +38,11 @@ describe('tool lists share one key prefix', () => {
     }
   })
 
-  it('the builder picker and the gateway assigner read the same key', () => {
-    const key = "queryKey: ['tools', currentOrganization?.id, 'all']"
-    expect(read('pages/agent-builder.tsx')).toContain(key)
-    expect(read('pages/gateways.tsx')).toContain(key)
+  it('the builder picker and the gateway assigner read under the same prefix', () => {
+    expect(read('pages/agent-builder.tsx')).toContain("queryKey: ['tools', currentOrganization?.id, 'all']")
+    // The assigner lives on the gateway's own page now (the list page's
+    // sheet is gone); its key sits under the ['tools'] prefix too.
+    expect(read('pages/gateway-detail.tsx')).toContain("queryKey: ['tools', currentOrganization?.id]")
   })
 
   it('the tools page invalidates the prefix that covers all of them', () => {

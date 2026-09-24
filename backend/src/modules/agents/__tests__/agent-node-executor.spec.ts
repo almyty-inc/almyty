@@ -31,7 +31,6 @@ describe('AgentNodeExecutor', () => {
   let agentRepo: { findOne: jest.Mock };
   let orgRepo: { findOne: jest.Mock };
   let executionEngine: jest.Mocked<AgentExecutionEngine>;
-  let templateResolver: AgentTemplateResolver;
   let a2aClientService: jest.Mocked<A2AClientService>;
   let externalAgentsService: jest.Mocked<ExternalAgentsService>;
 
@@ -94,7 +93,6 @@ describe('AgentNodeExecutor', () => {
     }).compile();
 
     executor = module.get<AgentNodeExecutor>(AgentNodeExecutor);
-    templateResolver = module.get<AgentTemplateResolver>(AgentTemplateResolver);
   });
 
   // ==========================================================================

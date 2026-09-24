@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { WebSocket } from 'ws';
 import { GatewayProtocolService, ProtocolRequest, MCPRequest, UTCPRequest } from './gateway-protocol.service';
 import { Gateway, GatewayType } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';

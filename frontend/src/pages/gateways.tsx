@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { Router, Plus, Search, Zap, Building2 } from 'lucide-react'
 
@@ -11,34 +9,22 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
+import { PageIntro } from '@/components/onboarding/page-intro'
 import { QueryError } from '@/components/ui/query-error'
-import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { DataTable, createSelectColumn, createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
+import { DataTable, createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
 import type { ColumnDef } from '@tanstack/react-table'
 
-import { gatewaysApi, toolsApi } from '@/lib/api'
+import { gatewaysApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
-import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
-import { CreateGatewayDialog } from '@/components/gateways/create-gateway-dialog'
-import { GatewayDetailsSheet } from '@/components/gateways/gateway-details-sheet'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import type { Gateway } from '@/types'
-
-// Form Schema
-import { createGatewaySchema, type CreateGatewayForm } from '@/components/gateways/schema'
 
 /**
  * Gateway types that are really messaging distributions of an app.
@@ -57,18 +43,12 @@ export function GatewaysPage() {
   }, [])
 
   const navigate = useNavigate()
-  const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  // Honour ?new=1 from the command palette Create Gateway action.
-  useCreateDeepLink(setCreateDialogOpen)
-  const [deleteGatewayDialogOpen, setDeleteGatewayDialogOpen] = useState(false)
-  const [gatewayToDelete, setGatewayToDelete] = useState<Gateway | null>(null)
-  const [selectedGateway, setSelectedGateway] = useState<Gateway | null>(null)
-  const [gatewayDetailsOpen, setGatewayDetailsOpen] = useState(false)
+  // Old ?new=1 links (the command palette, bookmarks) land on the create page.
+  useNewParamRedirect('/gateways/new')
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [toolSearch, setToolSearch] = useState('')
-  const [toolFilter, setToolFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
 
   const { currentOrganization } = useOrganizationStore()
@@ -84,54 +64,6 @@ export function GatewaysPage() {
 
   const gatewaysExtracted = gatewaysData?.gateways || []
   const gateways = Array.isArray(gatewaysExtracted) ? gatewaysExtracted : []
-
-  // Tool scoping queries
-  const { data: gatewayToolsData } = useQuery({
-    queryKey: ['gateway-tools', selectedGateway?.id],
-    queryFn: () => gatewaysApi.getTools(selectedGateway!.id),
-    enabled: !!selectedGateway && gatewayDetailsOpen,
-  })
-
-  // Same key as the agent builder's tool picker, and under the
-  // ['tools'] prefix the tools page invalidates. It used to be
-  // ['all-tools', orgId], which no mutation anywhere touched.
-  const { data: allToolsData } = useQuery({
-    queryKey: ['tools', currentOrganization?.id, 'all'],
-    queryFn: () => toolsApi.getAll(currentOrganization?.id),
-    enabled: !!currentOrganization && gatewayDetailsOpen,
-  })
-
-  const gatewayTools = (() => {
-    const raw = gatewayToolsData?.gatewayTools || gatewayToolsData?.tools || []
-    return Array.isArray(raw) ? raw : []
-  })()
-  const allTools = (() => {
-    const raw = allToolsData?.tools || []
-    return Array.isArray(raw) ? raw : []
-  })()
-
-  // Determine which tools are assigned (map gatewayTool.toolId to tool data)
-  const assignedToolIds = new Set(gatewayTools.map((gt: any) => gt.toolId || gt.id))
-
-  const assignToolMutation = useMutation({
-    mutationFn: (toolId: string) => gatewaysApi.assignTool(selectedGateway!.id, toolId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['gateway-tools', selectedGateway?.id] })
-      queryClient.invalidateQueries({ queryKey: ['gateways'] })
-    },
-    onError: (err: unknown) =>
-      errorNotif('Could not assign the tool', getApiErrorMessage(err, 'The gateway is unchanged.')),
-  })
-
-  const removeToolMutation = useMutation({
-    mutationFn: (toolId: string) => gatewaysApi.removeTool(selectedGateway!.id, toolId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['gateway-tools', selectedGateway?.id] })
-      queryClient.invalidateQueries({ queryKey: ['gateways'] })
-    },
-    onError: (err: unknown) =>
-      errorNotif('Could not remove the tool', getApiErrorMessage(err, 'The gateway is unchanged.')),
-  })
 
   // Gateways is the protocol page: MCP, A2A, ACP, UTCP, Skills and the
   // OpenAI-compatible endpoint. Messaging platforms are reached through
@@ -156,78 +88,6 @@ export function GatewaysPage() {
   })
 
 
-  // Form setup
-  const createForm = useForm<CreateGatewayForm>({
-    resolver: zodResolver(createGatewaySchema),
-    defaultValues: {
-      name: '',
-      type: '',
-      endpoint: '',
-      description: '',
-    }
-  })
-
-  // Handler function for gateway creation (extracted for clean state management)
-  const handleCreateGateway = (data: CreateGatewayForm & { kind?: string; agentId?: string }) => {
-    // Ensure endpoint starts with /
-    const endpoint = data.endpoint.startsWith('/') ? data.endpoint : '/' + data.endpoint
-
-    // Set default configuration based on gateway type
-    let configuration: Record<string, any> = {}
-    if (data.type === 'mcp') {
-      configuration = { transport: 'http' }
-    } else if (data.type === 'a2a') {
-      configuration = { agentCapabilities: {} }
-    } else if (data.type === 'acp') {
-      configuration = { agentCapabilities: {} }
-    } else if (data.type === 'utcp') {
-      configuration = { protocol: 'http' }
-    } else if (data.type === 'skills') {
-      configuration = { format: 'skill-md' }
-    }
-
-    const payload: Record<string, any> = {
-      ...data,
-      endpoint,
-      configuration,
-    }
-
-    // Pass kind (defaults to 'tool' for backwards compat)
-    if (data.kind) {
-      payload.kind = data.kind
-    }
-    if (data.agentId) {
-      payload.agentId = data.agentId
-    }
-
-    createGatewayMutation.mutate(payload)
-  }
-
-  // Create gateway mutation
-  const createGatewayMutation = useMutation({
-    mutationFn: async (payload: Record<string, any>) => {
-      return await gatewaysApi.create(payload)
-    },
-    onSuccess: async (result) => {
-      captureEvent('gateway_deployed')
-      // Show success message first
-      success('Gateway created', result?.message || 'It is now serving on its protocol endpoint.')
-
-      // Invalidate and refetch gateway queries - wait for completion
-      await queryClient.invalidateQueries({ queryKey: ['gateways'] })
-
-      // Wait a moment for the refetch to complete and UI to update
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      // CRITICAL: Reset form BEFORE closing to clear all state
-      createForm.reset()
-      setCreateDialogOpen(false)
-    },
-    onError: (err: unknown) => {
-      errorNotif('Error', getApiErrorMessage(err, 'Failed to create gateway'))
-    }
-  })
-
   // Delete gateway mutation
   const deleteGatewayMutation = useMutation({
     mutationFn: async (gatewayId: string) => {
@@ -236,8 +96,6 @@ export function GatewaysPage() {
     onSuccess: async () => {
       success('Gateway deleted', 'Gateway has been deleted successfully.')
       await queryClient.invalidateQueries({ queryKey: ['gateways'] })
-      setDeleteGatewayDialogOpen(false)
-      setGatewayToDelete(null)
     },
     onError: (err: unknown) => {
       errorNotif('Failed to delete gateway', getApiErrorMessage(err, 'Please try again.'))
@@ -349,22 +207,25 @@ export function GatewaysPage() {
       },
     },
     createActionsColumn<Gateway>(
-      (gateway) => {
-        setSelectedGateway(gateway)
-        setGatewayDetailsOpen(true)
-      },
-      (gateway) => {
+      // Editing happens on the gateway's own page, inline.
+      (gateway) => navigate(`/gateways/${gateway.id}/edit`),
+      async (gateway) => {
         if (gateway.isSystem) return
-        setGatewayToDelete(gateway)
-        setDeleteGatewayDialogOpen(true)
+        const ok = await confirm({
+          title: 'Delete this gateway?',
+          description: <>This will permanently delete "{gateway.name}". This action cannot be undone.</>,
+          confirmLabel: 'Delete gateway',
+          destructive: true,
+        })
+        if (ok) deleteGatewayMutation.mutate(gateway.id)
       },
       [
         {
-          label: 'View Details',
+          label: 'View details',
           onClick: (gateway) => navigate(`/gateways/${gateway.id}`),
         },
         {
-          label: 'Copy Full URL',
+          label: 'Copy full URL',
           onClick: async (gateway) => {
             const backendUrl = import.meta.env.ALMYTY_API_BASE_URL || window.location.origin
             const simpleSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
@@ -373,7 +234,7 @@ export function GatewaysPage() {
             try {
               await navigator.clipboard.writeText(fullEndpoint)
               success('Copied!', 'Full endpoint URL copied to clipboard')
-            } catch (err) {
+            } catch {
               errorNotif('Failed to copy', 'Could not copy endpoint to clipboard')
             }
           },
@@ -394,12 +255,13 @@ export function GatewaysPage() {
           )
         }
         actions={
-          <Button onClick={() => setCreateDialogOpen(true)} disabled={!currentOrganization}>
+          <Button onClick={() => navigate('/gateways/new')} disabled={!currentOrganization}>
             <Plus className="h-4 w-4 mr-2" />
             Create gateway
           </Button>
         }
       />
+      <PageIntro topic="gateways" />
 
       {!currentOrganization ? (
         <EmptyState
@@ -421,7 +283,7 @@ export function GatewaysPage() {
           title="No gateways yet"
           description="A gateway serves a set of tools over MCP, A2A, UTCP, and Agent Skills — one endpoint, every protocol."
           action={
-            <Button onClick={() => setCreateDialogOpen(true)}>
+            <Button onClick={() => navigate('/gateways/new')}>
               <Plus className="h-4 w-4 mr-2" />
               Create gateway
             </Button>
@@ -497,61 +359,8 @@ export function GatewaysPage() {
       </>
       )}
 
-      {/* Create Gateway Dialog */}
-      <CreateGatewayDialog
-        open={createDialogOpen}
-        onOpenChange={(open) => {
-          setCreateDialogOpen(open)
-          if (!open) {
-            createForm.reset()
-            createGatewayMutation.reset()
-          }
-        }}
-        createForm={createForm}
-        onSubmit={handleCreateGateway}
-        createGatewayMutation={createGatewayMutation}
-      />
+      {confirmDialog}
 
-
-      {/* Delete Gateway Confirmation Dialog */}
-      <AlertDialog open={deleteGatewayDialogOpen} onOpenChange={setDeleteGatewayDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete gateway?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete "{gatewayToDelete?.name}". This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (gatewayToDelete) {
-                  deleteGatewayMutation.mutate(gatewayToDelete.id)
-                }
-              }}
-              variant="destructive"
-            >
-              Delete gateway
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Gateway Details Sheet */}
-      <GatewayDetailsSheet
-        open={gatewayDetailsOpen}
-        onOpenChange={setGatewayDetailsOpen}
-        selectedGateway={selectedGateway}
-        allTools={allTools}
-        assignedToolIds={assignedToolIds}
-        assignToolMutation={assignToolMutation}
-        removeToolMutation={removeToolMutation}
-        toolSearch={toolSearch}
-        onToolSearchChange={setToolSearch}
-        toolFilter={toolFilter}
-        onToolFilterChange={setToolFilter}
-      />
     </div>
   )
 }

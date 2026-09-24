@@ -232,7 +232,8 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
     await handle(mcpGateway(), req, res, body);
 
     expect(gatewayResolver.resolveAndAuthenticate).toHaveBeenCalledTimes(1);
-    expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(body, 'org-1', null, 'gw-mcp-1');
+    // The caller the gateway auth identified reaches the MCP server.
+    expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(body, 'org-1', 'u-1', 'gw-mcp-1');
     expect(channelGatewayService.getAdapter).not.toHaveBeenCalled();
     expect(channelGatewayService.handleInboundMessage).not.toHaveBeenCalled();
   });

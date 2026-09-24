@@ -1,3 +1,4 @@
+import { Not } from 'typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -16,8 +17,6 @@ import { AccessPolicyService } from '../../common/authorization/access-policy.se
 describe('GatewaysService', () => {
   let service: GatewaysService;
   let gatewayRepository: any;
-  let gatewayToolRepository: any;
-  let gatewayAuthRepository: any;
   let userRepository: any;
   let organizationRepository: any;
   let usageMetricRepository: any;
@@ -105,8 +104,6 @@ describe('GatewaysService', () => {
 
     service = module.get<GatewaysService>(GatewaysService);
     gatewayRepository = module.get(getRepositoryToken(Gateway));
-    gatewayToolRepository = module.get(getRepositoryToken(GatewayTool));
-    gatewayAuthRepository = module.get(getRepositoryToken(GatewayAuth));
     userRepository = module.get(getRepositoryToken(User));
     organizationRepository = module.get(getRepositoryToken(Organization));
     usageMetricRepository = module.get(getRepositoryToken(UsageMetric));
@@ -801,15 +798,11 @@ describe('GatewaysService', () => {
         },
       ];
 
-      const mockMetrics = [
-        { type: 'response_time', value: 250, organizationId: 'org-1' },
-        { type: 'response_time', value: 150, organizationId: 'org-1' },
-      ];
-
       const mockQueryBuilder = {
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue([
           { gateway_status: 'active', count: '2' },
@@ -829,7 +822,7 @@ describe('GatewaysService', () => {
         getRawOne: jest.fn().mockResolvedValue({ avg: '120' }),
       });
 
-      const result = await service.getOrganizationGatewayStats('org-1');
+      const result = await service.getOrganizationGatewayStats('org-1', 'user-1');
       expect(result.averageResponseTime).toBe(120);
       expect(usageMetricRepository.find).not.toHaveBeenCalled();
 
@@ -1398,7 +1391,7 @@ describe('GatewaysService', () => {
       organizationRepository.findOne.mockResolvedValue(org);
       useRows([row({})]);
 
-      const results = await service.searchSkillsAcrossGateways('org-1', 'users');
+      const results = await service.searchSkillsAcrossGateways('org-1', 'users', 'user-1');
 
       expect(results).toHaveLength(1);
       expect(results[0]).toEqual({
@@ -1420,7 +1413,7 @@ describe('GatewaysService', () => {
         row({ toolId: 'tool-2', toolName: 'List Orders', toolDescription: 'Lists all orders' }),
       ]);
 
-      const results = await service.searchSkillsAcrossGateways('org-1', 'INVOICE');
+      const results = await service.searchSkillsAcrossGateways('org-1', 'INVOICE', 'user-1');
 
       expect(results).toHaveLength(1);
       expect(results[0].toolName).toBe('Create Invoice');
@@ -1432,7 +1425,7 @@ describe('GatewaysService', () => {
         row({ toolName: 'Send Email', toolDescription: 'Sends a notification email to the user' }),
       ]);
 
-      const results = await service.searchSkillsAcrossGateways('org-1', 'notification');
+      const results = await service.searchSkillsAcrossGateways('org-1', 'notification', 'user-1');
 
       expect(results).toHaveLength(1);
       expect(results[0].toolName).toBe('Send Email');
@@ -1442,7 +1435,7 @@ describe('GatewaysService', () => {
       organizationRepository.findOne.mockResolvedValue(org);
       useRows([row({ toolName: 'Get Users', toolDescription: 'Fetches users' })]);
 
-      const results = await service.searchSkillsAcrossGateways('org-1', 'nonexistent');
+      const results = await service.searchSkillsAcrossGateways('org-1', 'nonexistent', 'user-1');
 
       expect(results).toEqual([]);
     });
@@ -1454,7 +1447,7 @@ describe('GatewaysService', () => {
         row({ toolId: 'tool-2', toolName: 'Dead Tool', gatewayStatus: 'inactive' }),
       ]);
 
-      const results = await service.searchSkillsAcrossGateways('org-1', 'tool');
+      const results = await service.searchSkillsAcrossGateways('org-1', 'tool', 'user-1');
 
       expect(results.map((r) => r.toolName)).toEqual(['Live Tool']);
       expect(qbCalls.wheres).toContain('gateway.organizationId = :organizationId');
@@ -1475,7 +1468,7 @@ describe('GatewaysService', () => {
         }),
       ]);
 
-      const results = await service.searchSkillsAcrossGateways('org-1', 'tool');
+      const results = await service.searchSkillsAcrossGateways('org-1', 'tool', 'user-1');
 
       expect(results).toHaveLength(1);
       expect(results[0].toolName).toBe('Active Tool');
@@ -1486,7 +1479,7 @@ describe('GatewaysService', () => {
       organizationRepository.findOne.mockResolvedValue(org);
       useRows([row({})]);
 
-      await service.searchSkillsAcrossGateways('org-1', 'users');
+      await service.searchSkillsAcrossGateways('org-1', 'users', 'user-1');
 
       expect(qbCalls.joins).toEqual(['gateway.tools', 'gatewayTool.tool']);
       expect(qbCalls.wheres).toContain('(tool.name ILIKE :q OR tool.description ILIKE :q)');
@@ -1497,7 +1490,7 @@ describe('GatewaysService', () => {
       organizationRepository.findOne.mockResolvedValue(org);
       useRows([row({})]);
 
-      await service.searchSkillsAcrossGateways('org-1', '100%');
+      await service.searchSkillsAcrossGateways('org-1', '100%', 'user-1');
 
       // `%` typed by a user is a character to find, not "match anything".
       expect(qbCalls.wheres).toContain('(tool.name ILIKE :q OR tool.description ILIKE :q)');
@@ -1532,12 +1525,16 @@ describe('GatewaysService', () => {
 
       gatewayRepository.find.mockResolvedValue(mockGateways);
 
-      const result = await service.getAllUserGateways('org-1');
+      const result = await service.getAllUserGateways('org-1', 'user-1');
 
       expect(result).toEqual(mockGateways);
       expect(result).toHaveLength(2);
       expect(gatewayRepository.find).toHaveBeenCalledWith({
-        where: { organizationId: 'org-1', status: 'active' },
+        // Other users' private gateways are not listed.
+        where: [
+          { organizationId: 'org-1', status: 'active', visibility: Not('private') },
+          { organizationId: 'org-1', status: 'active', visibility: 'private', ownerUserId: 'user-1' },
+        ],
         relations: { organization: true },
       });
       const [args] = gatewayRepository.find.mock.calls[0];
@@ -1547,11 +1544,14 @@ describe('GatewaysService', () => {
     it('should return empty array when no gateways', async () => {
       gatewayRepository.find.mockResolvedValue([]);
 
-      const result = await service.getAllUserGateways('org-1');
+      const result = await service.getAllUserGateways('org-1', 'user-1');
 
       expect(result).toEqual([]);
       expect(gatewayRepository.find).toHaveBeenCalledWith({
-        where: { organizationId: 'org-1', status: 'active' },
+        where: [
+          { organizationId: 'org-1', status: 'active', visibility: Not('private') },
+          { organizationId: 'org-1', status: 'active', visibility: 'private', ownerUserId: 'user-1' },
+        ],
         relations: { organization: true },
       });
     });

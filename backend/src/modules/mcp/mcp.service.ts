@@ -12,13 +12,11 @@ import {
   McpInitializeResult,
   McpCapabilities,
   McpSession,
-  McpTool,
   McpCallToolRequest,
   McpReadResourceRequest,
   McpGetPromptRequest,
 } from './types/mcp.types';
 
-import { Tool } from '../../entities/tool.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Organization } from '../../entities/organization.entity';
 import { ToolsService } from '../tools/tools.service';
@@ -145,7 +143,7 @@ export class McpService {
           break;
 
         case 'tools/get':
-          result = await this.toolHandler.handleToolGet(request.params, organizationId);
+          result = await this.toolHandler.handleToolGet(request.params, organizationId, userId);
           break;
 
         case 'tools/call':
@@ -158,11 +156,11 @@ export class McpService {
 
         // Resource methods
         case 'resources/list':
-          result = await this.contentHandler.handleResourcesList(request.params, organizationId, gatewayId);
+          result = await this.contentHandler.handleResourcesList(request.params, organizationId, gatewayId, caller);
           break;
 
         case 'resources/read':
-          result = await this.contentHandler.handleResourceRead(request.params as McpReadResourceRequest, organizationId);
+          result = await this.contentHandler.handleResourceRead(request.params as McpReadResourceRequest, organizationId, caller);
           break;
 
         case 'resources/templates/list':
@@ -189,7 +187,7 @@ export class McpService {
           break;
 
         case 'skills/get':
-          result = await this.contentHandler.handleSkillGet(request.params, organizationId);
+          result = await this.contentHandler.handleSkillGet(request.params, organizationId, caller, gatewayId);
           break;
 
         // Logging
@@ -417,7 +415,7 @@ export class McpService {
   async broadcastNotification(
     organizationId: string,
     method: string,
-    params?: any,
+    _params?: any,
   ): Promise<void> {
     const sessions = await this.getActiveSessions(organizationId);
     for (const session of sessions) {

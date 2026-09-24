@@ -47,7 +47,7 @@ describe('AnalyticsService.getLlmUsage — cost units', () => {
   });
 
   it('converts the dollar sum into whole cents', async () => {
-    const [usage] = await serviceFor([row()]).getLlmUsage('org-1', '7d');
+    const [usage] = await serviceFor([row()]).getLlmUsage('org-1', '7d', 'user-1');
 
     expect(usage.totalCostCents).toBe(1234);
   });
@@ -56,6 +56,7 @@ describe('AnalyticsService.getLlmUsage — cost units', () => {
     const [usage] = await serviceFor([row({ totalCostDollars: '0.004' })]).getLlmUsage(
       'org-1',
       '7d',
+      'user-1',
     );
 
     expect(usage.totalCostCents).toBe(0);
@@ -63,6 +64,7 @@ describe('AnalyticsService.getLlmUsage — cost units', () => {
     const [cheap] = await serviceFor([row({ totalCostDollars: '0.006' })]).getLlmUsage(
       'org-1',
       '7d',
+      'user-1',
     );
     expect(cheap.totalCostCents).toBe(1);
   });
@@ -72,6 +74,7 @@ describe('AnalyticsService.getLlmUsage — cost units', () => {
     const [usage] = await serviceFor([row({ totalCostDollars: null })]).getLlmUsage(
       'org-1',
       '7d',
+      'user-1',
     );
 
     expect(usage.totalCostCents).toBe(0);

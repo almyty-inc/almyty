@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import React, { useEffect } from 'react'
+import { useParams, useNavigate, Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Info, Router, Settings, Shield, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Info, KeyRound, Router, Settings, ChevronRight } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,26 +11,19 @@ import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { CopyField } from '@/components/ui/copy-field'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 import { gatewaysApi, toolsApi } from '@/lib/api'
 import { useEntitlements } from '@/hooks/use-entitlement'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
-
-import {
-  EditGatewayDialog,
-  type EditGatewayForm,
-} from '@/components/gateways/detail/edit-gateway-dialog'
 import { GatewayAuthSection } from '@/components/gateways/detail/gateway-auth-section'
 import { GatewayConfigurationCard } from '@/components/gateways/detail/gateway-configuration-card'
 import { IntegrationsSection } from '@/components/gateways/detail/integrations-section'
-import { SecurityPolicyForm } from '@/components/gateways/detail/security-policy-form'
 import {
   GatewayToolsTab,
   type ScopingPreset,
-  type SecurityTarget,
 } from '@/components/gateways/detail/tools-tab'
 import { GatewayEventsTab } from '@/components/gateways/detail/events-tab'
 import {
@@ -41,18 +34,38 @@ import { WidgetBuilder } from '@/components/gateways/widget-builder'
 import { HostedChatBuilder } from '@/components/gateways/hosted-chat-builder'
 import { getApiErrorMessage } from '@/lib/api-error'
 
+/** The tabs `?tab=` may open. */
+export const GATEWAY_TABS = ['tools', 'metrics', 'integrations', 'events'] as const
+
+/** The tab to open: the requested one if it exists here, else the default. */
+export function initialGatewayTab(requested: string | null, isSystem: boolean): string {
+  const fallback = isSystem ? 'metrics' : 'tools'
+  if (!requested || !(GATEWAY_TABS as readonly string[]).includes(requested)) return fallback
+  // A system gateway has no tool-scoping tab to open.
+  if (isSystem && requested === 'tools') return fallback
+  return requested
+}
 export function GatewayDetailPage() {
   const entitlements = useEntitlements()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab')
   const { currentOrganization } = useOrganizationStore()
   const { success, error: errorNotif, warning } = useNotifications()
   const queryClient = useQueryClient()
 
-  const [removeAllToolsDialogOpen, setRemoveAllToolsDialogOpen] = useState(false)
-  const [editDialogOpen, setEditDialogOpen] = useState(false)
-  const [securityDialogOpen, setSecurityDialogOpen] = useState(false)
-  const [securityTarget, setSecurityTarget] = useState<SecurityTarget | null>(null)
+  const { confirm, dialog: confirmDialog } = useConfirm()
+  // Editing is its own page (/gateways/:id/edit), with the visibility
+  // picker. ?edit=1 from older links goes there.
+  const wantsEdit = searchParams.get('edit') === '1'
+  useEffect(() => {
+    if (wantsEdit) navigate(`/gateways/${id}/edit`, { replace: true })
+  }, [wantsEdit, id, navigate])
+  // The first API key the backend minted with this gateway, handed over
+  // by the create page. It is shown once and never fetched again.
+  const location = useLocation()
+  const initialApiKey = (location.state as { initialApiKey?: string } | null)?.initialApiKey
 
   const { data: gatewayData, isLoading, isError, error: gatewayError, refetch: refetchGateway } = useQuery({
     queryKey: ['gateway', id],
@@ -170,19 +183,6 @@ export function GatewayDetailPage() {
 
   const gateway = gatewayData
 
-  // Edit gateway mutation
-  const editGatewayMutation = useMutation({
-    mutationFn: (data: EditGatewayForm) => gatewaysApi.update(id!, data),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['gateway', id] })
-      await queryClient.invalidateQueries({ queryKey: ['gateways'] })
-      success('Gateway updated', 'Gateway has been updated successfully.')
-      setEditDialogOpen(false)
-    },
-    onError: (err: any) => {
-      errorNotif('Failed to update gateway', getApiErrorMessage(err, 'Please try again.'))
-    },
-  })
 
   // Channel-config mutation: PATCHes only the configuration object.
   // Used by the per-channel-type credential form.
@@ -204,8 +204,6 @@ export function GatewayDetailPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['gateway-tools', id] })
       success('Security policy updated', 'Tool security policy has been saved.')
-      setSecurityDialogOpen(false)
-      setSecurityTarget(null)
     },
     onError: (err: any) => {
       errorNotif('Failed to update security policy', getApiErrorMessage(err, 'Please try again.'))
@@ -319,7 +317,7 @@ export function GatewayDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => navigate(`/gateways/${id}/edit`)}>
             <Settings className="h-4 w-4 mr-2" />
             Edit gateway
           </Button>
@@ -332,6 +330,22 @@ export function GatewayDetailPage() {
           )}
         </div>
       </div>
+
+      {initialApiKey && (
+        <div
+          data-testid="initial-api-key"
+          className="space-y-3 rounded-lg border border-amber-400/60 bg-amber-50 p-4 dark:bg-amber-950/30"
+        >
+          <p className="flex items-center gap-2 font-medium">
+            <KeyRound className="h-4 w-4" aria-hidden="true" />
+            Your gateway's first API key
+          </p>
+          <CopyField value={initialApiKey} label="API key" />
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            Copy it now. You won't see it again: once you leave this page, only its first characters are shown.
+          </p>
+        </div>
+      )}
 
       {/*
         Webhook registration failed and nothing said so.
@@ -440,8 +454,9 @@ export function GatewayDetailPage() {
         <GatewayAuthSection gatewayId={gateway.id} gatewayName={gateway.name} />
       )}
 
-      {/* Main Content */}
-      <Tabs defaultValue={gateway.isSystem ? 'metrics' : 'tools'} className="space-y-4">
+      {/* Main Content. `?tab=` opens a tab directly: the guide's "connect a
+          client" step lands on Integrations, where the command is. */}
+      <Tabs defaultValue={initialGatewayTab(requestedTab, !!gateway.isSystem)} className="space-y-4">
         <TabsList>
           {!gateway.isSystem && (
             <TabsTrigger value="tools">Tool scoping ({gatewayTools.length}/{allTools.length})</TabsTrigger>
@@ -462,13 +477,24 @@ export function GatewayDetailPage() {
             assignPending={assignToolMutation.isPending}
             removePending={removeToolMutation.isPending}
             onApplyPreset={applyScopingPreset}
-            onRequestRemoveAll={() => setRemoveAllToolsDialogOpen(true)}
+            onRequestRemoveAll={async () => {
+              const ok = await confirm({
+                title: 'Remove all tools from this gateway?',
+                description: 'This will remove all tools from the gateway. The gateway will not be able to serve any requests until tools are assigned again.',
+                confirmLabel: 'Remove all tools',
+                destructive: true,
+              })
+              if (ok) applyScopingPreset('none')
+            }}
             onAssign={(toolId) => assignToolMutation.mutate({ toolId })}
             onRemove={(toolId) => removeToolMutation.mutate({ toolId })}
-            onOpenSecurity={(target) => {
-              setSecurityTarget(target)
-              setSecurityDialogOpen(true)
-            }}
+            securitySaving={updateToolConfigMutation.isPending}
+            onSaveSecurity={(target) =>
+              updateToolConfigMutation.mutateAsync({
+                gatewayToolId: target.gatewayToolId,
+                data: { securityPolicy: target.policy },
+              })
+            }
           />
         </TabsContent>
         )}
@@ -516,66 +542,8 @@ export function GatewayDetailPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Edit Gateway Dialog */}
-      <EditGatewayDialog
-        open={editDialogOpen}
-        onOpenChange={setEditDialogOpen}
-        gateway={gateway}
-        isSaving={editGatewayMutation.isPending}
-        onSubmit={(data) => editGatewayMutation.mutate(data)}
-        isSystem={gateway.isSystem}
-      />
+      {confirmDialog}
 
-      {/* Remove All Tools Confirmation */}
-      <AlertDialog open={removeAllToolsDialogOpen} onOpenChange={setRemoveAllToolsDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove all tools?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will remove all tools from the gateway. The gateway will not be able to serve any requests until tools are assigned again.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                applyScopingPreset('none')
-                setRemoveAllToolsDialogOpen(false)
-              }}
-            >
-              Remove all tools
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Security Policy Dialog */}
-      <Dialog open={securityDialogOpen} onOpenChange={(open) => { setSecurityDialogOpen(open); if (!open) setSecurityTarget(null) }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Security policy: {securityTarget?.toolName}
-            </DialogTitle>
-            <DialogDescription>
-              Configure security constraints for this tool in the gateway.
-            </DialogDescription>
-          </DialogHeader>
-          {securityTarget && (
-            <SecurityPolicyForm
-              initialPolicy={securityTarget.policy}
-              onSave={(policy) => {
-                updateToolConfigMutation.mutate({
-                  gatewayToolId: securityTarget.gatewayToolId,
-                  data: { securityPolicy: policy },
-                })
-              }}
-              isSaving={updateToolConfigMutation.isPending}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

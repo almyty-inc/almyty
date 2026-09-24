@@ -14,12 +14,12 @@ import {
   HttpStatus,
   HttpException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum, IsObject, IsNumber, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { IsString, IsOptional, IsEnum, IsObject } from 'class-validator';
 
 import { LlmProvidersService } from './llm-providers.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PrivateProviderGuard } from './private-provider.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ConversationStatus } from '../../entities/conversation.entity';
@@ -71,7 +71,7 @@ class UpdateSessionDto {
 @Controller('llm-providers')
 @ApiTags('Providers')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateProviderGuard)
 export class LlmSessionsController {
   constructor(private readonly llmProvidersService: LlmProvidersService) {}
 

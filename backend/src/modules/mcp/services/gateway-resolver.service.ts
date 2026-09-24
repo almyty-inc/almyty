@@ -5,6 +5,7 @@ import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
 import { GatewayAuth, GatewayAuthType } from '../../../entities/gateway-auth.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { GatewayAuthService, AuthenticationResult } from '../../gateways/gateway-auth.service';
+import { gatewayServableTo, isPrivateGateway } from '../../gateways/private-gateway';
 
 export interface ResolvedGateway {
   organization: Organization;
@@ -184,6 +185,35 @@ export class GatewayResolverService {
   }
 
   /**
+   * For a private gateway: the auth result when the request authenticates
+   * through the gateway's own auth configs AS ITS OWNER, else null.
+   *
+   * Never throws for an auth failure -- the caller turns null into the
+   * not-found answer. A gateway with no auth configs, or one whose accepted
+   * credential names no user (custom tokens, OAuth tokens without a
+   * subject), serves nobody: there is no way to know the caller is the
+   * owner, and "just me" fails closed.
+   */
+  async authenticatePrivateOwner(gateway: Gateway, req: any): Promise<AuthenticationResult | null> {
+    if (!isPrivateGateway(gateway)) return null;
+    let auth: AuthenticationResult;
+    try {
+      auth = await this.gatewayAuthService.authenticateRequest(
+        gateway.id,
+        req?.headers || {},
+        req?.query || {},
+        req?.body,
+        req?.ip || req?.connection?.remoteAddress,
+        this.activeAuthConfigs(gateway),
+      );
+    } catch {
+      return null;
+    }
+    if (!auth?.isValid || !gatewayServableTo(gateway, auth.userId)) return null;
+    return auth;
+  }
+
+  /**
    * Full resolution pipeline: org → gateway → auth check.
    * Returns the resolved org, gateway, and auth result.
    * Throws HttpException on any failure.
@@ -205,6 +235,19 @@ export class GatewayResolverService {
     const gateway =
       preResolved?.gateway ?? (await this.resolveGateway(organization.id, gatewayEndpoint));
 
+    // A private gateway answers its owner and nobody else. Anyone else --
+    // anonymous, a key or token of another member, an admin -- gets the
+    // answer a gateway that does not exist gets: the same 404, and no
+    // WWW-Authenticate challenge that would confirm there is something
+    // here to authenticate against.
+    if (isPrivateGateway(gateway)) {
+      const ownerAuth = await this.authenticatePrivateOwner(gateway, req);
+      if (!ownerAuth) {
+        throw new HttpException(`Gateway not found: ${gatewayEndpoint}`, HttpStatus.NOT_FOUND);
+      }
+      return { organization, gateway, auth: ownerAuth };
+    }
+
     // Enforce gateway auth
     const headers = req.headers || {};
     const query = req.query || {};
@@ -218,7 +261,6 @@ export class GatewayResolverService {
       clientIp,
       this.activeAuthConfigs(gateway),
     );
-
     if (!auth.isValid) {
       const statusCode = auth.errorCode?.includes('MISSING') ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
 

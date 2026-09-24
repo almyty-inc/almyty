@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { PageHeader } from '@/components/layout/page-header'
+import { pluralized } from '@/lib/utils'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Cpu, Plus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
   DataTable,
   createActionsColumn,
@@ -15,8 +18,11 @@ import {
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { runnersApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
+import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
-import { runnerStateVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
+import { PageIntro } from '@/components/onboarding/page-intro'
+import { isPendingRunner, runnerStateLabel, runnerStateVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
 import { formatRelativeTime } from '@/lib/utils'
 import {
   TeamFilter,
@@ -24,7 +30,6 @@ import {
   VisibilityBadge,
   filterByTeamVisibility,
   type TeamFilterValue,
-  type Team,
 } from '@/components/ui/team-filter'
 
 interface Runner {
@@ -32,7 +37,8 @@ interface Runner {
   name: string
   state: 'registered' | 'online' | 'busy' | 'stale' | 'draining' | 'offline'
   labels: Record<string, string>
-  visibility?: 'org' | 'team' | null
+  ownerUserId?: string
+  visibility?: 'private' | 'org' | 'team' | null
   teamId?: string | null
   runtimeInfo: {
     os: string
@@ -52,6 +58,8 @@ interface Runner {
 
 export function RunnersPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { success, error: notifyError } = useNotifications()
   const { currentOrganization } = useOrganizationStore()
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
@@ -67,6 +75,28 @@ export function RunnersPage() {
     enabled: !!currentOrganization,
     refetchInterval: RUNNER_HEARTBEAT_POLL_MS,
   })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => runnersApi.unregister(id),
+    onSuccess: () => {
+      success('Runner deleted')
+      queryClient.invalidateQueries({ queryKey: ['runners'] })
+    },
+    onError: (err) => {
+      notifyError('Could not delete the runner', getApiErrorMessage(err))
+    },
+  })
+  const { mutate: deleteRunner } = deleteMutation
+  const { confirm, dialog: confirmDialog } = useConfirm()
+  const confirmDelete = useCallback(async (r: Runner) => {
+    const ok = await confirm({
+      title: <>Delete runner {r.name}?</>,
+      confirmLabel: 'Delete runner',
+      cancelLabel: 'Keep it',
+      destructive: true,
+    })
+    if (ok) deleteRunner(r.id)
+  }, [confirm, deleteRunner])
 
   const visibleRunners = filterByTeamVisibility(runners, teamFilter)
   const onlineCount = runners.filter((r) => r.state === 'online' || r.state === 'busy').length
@@ -101,7 +131,9 @@ export function RunnersPage() {
     {
       ...createSortableColumn<Runner>('state', 'State'),
       cell: ({ row }) => (
-        <Badge variant={runnerStateVariant[row.original.state]}>{row.original.state}</Badge>
+        <Badge variant={isPendingRunner(row.original) ? 'outline' : runnerStateVariant[row.original.state]}>
+          {runnerStateLabel(row.original)}
+        </Badge>
       ),
     },
     {
@@ -163,13 +195,13 @@ export function RunnersPage() {
       },
     },
     createActionsColumn<Runner>(
-      () => {},
-      () => {},
+      (r) => navigate(`/runners/${r.id}`),
+      (r) => confirmDelete(r),
       [
         { label: 'View details', onClick: (r) => navigate(`/runners/${r.id}`) },
       ],
     ),
-  ], [navigate, teamLookup])
+  ], [navigate, teamLookup, confirmDelete])
 
   if (isError) {
     return (
@@ -183,24 +215,21 @@ export function RunnersPage() {
   return (
     <div className="space-y-6">
       <RunnersHeader runners={runners} onlineCount={onlineCount} onCreate={() => navigate('/runners/new')} />
+      <PageIntro topic="runners" />
 
       {!isLoading && runners.length === 0 ? (
-        <Card>
-          <CardContent className="p-0">
-            <EmptyState
-              icon={Cpu}
-              title="No runners registered"
-              description="A runner connects one of your machines and publishes its capabilities as tools. Code and credentials stay local."
-              action={
-                <Button onClick={() => navigate('/runners/new')}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Set up runner
-                </Button>
-              }
-              className="py-16"
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          variant="panel"
+          icon={Cpu}
+          title="No runners yet"
+          description="A runner connects one of your machines and publishes its capabilities as tools. Code and credentials stay local."
+          action={
+            <Button onClick={() => navigate('/runners/new')}>
+              <Plus className="mr-2 h-4 w-4" />
+              Start a runner
+            </Button>
+          }
+        />
       ) : (
         <Card>
           <CardContent className="pt-6 space-y-4">
@@ -232,6 +261,8 @@ export function RunnersPage() {
           </CardContent>
         </Card>
       )}
+
+      {confirmDialog}
     </div>
   )
 }
@@ -246,19 +277,15 @@ function RunnersHeader({
   onCreate: () => void
 }) {
   return (
-    <div className="flex items-center justify-between">
-      <div>
-        <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">
-          Runners
-        </h1>
-        <p className="text-muted-foreground">
-          {runners.length} runner{runners.length !== 1 ? 's' : ''} &middot; {onlineCount} online
-        </p>
-      </div>
-      <Button onClick={onCreate}>
-        <Plus className="mr-2 h-4 w-4" />
-        Start a runner
-      </Button>
-    </div>
+    <PageHeader
+      title="Runners"
+      description={`${pluralized(runners.length, 'runner')} · ${onlineCount} online`}
+      actions={
+        <Button onClick={onCreate}>
+          <Plus className="mr-2 h-4 w-4" />
+          Start a runner
+        </Button>
+      }
+    />
   )
 }

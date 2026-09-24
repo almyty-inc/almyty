@@ -334,7 +334,7 @@ export class ProtobufParserService implements SchemaParser {
     try {
       const messageType = root.lookupType(messageTypeName);
       return this.extractMessageProperties(messageType, budget);
-    } catch (error) {
+    } catch {
       this.logger.warn(`Could not find message type: ${messageTypeName}`);
       return {};
     }

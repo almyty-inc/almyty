@@ -22,16 +22,16 @@
  * path. Types are re-exported below so no caller needs to update
  * its import path.
  */
-import { Injectable, Logger, BadRequestException, Optional, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Optional, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PluginManagerService } from '../plugins/plugin-manager.service';
 import { PluginHookType } from '../plugins/types/plugin.types';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThanOrEqual } from 'typeorm';
+import { Repository } from 'typeorm';
 import * as Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 
 import { Tool, ToolStatus } from '../../entities/tool.entity';
-import { Api, ApiType } from '../../entities/api.entity';
+import { ApiType } from '../../entities/api.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
@@ -46,13 +46,13 @@ import {
   GraphQLRequest,
   SOAPRequest,
 } from './tool-execution.types';
-import { hashCacheObject, sleep } from './tool-execution-utils';
+import { sleep } from './tool-execution-utils';
 import { ToolHttpExecutor } from './executors/tool-http.executor';
 import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
 import { ToolScriptExecutor } from './executors/tool-script.executor';
 import { ToolCacheRateLimitHelper } from './tool-cache-rate-limit.helper';
 import { ToolStatsHelper } from './tool-stats.helper';
-import { RunnerCallService, RUNNER_CALL_ERRORS, RunnerCallError } from '../runner/runner-call.service';
+import { RunnerCallService, RunnerCallError } from '../runner/runner-call.service';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
 import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
 import { McpClientError } from '../mcp-sources/mcp-client.service';
@@ -64,6 +64,20 @@ export {
   GraphQLRequest,
   SOAPRequest,
 };
+
+/**
+ * May a call made on behalf of `userId` execute `tool`? Only private
+ * tools are decided here: they run for their owner (`createdBy`) alone,
+ * and a call with no known user is refused. Org and team tools are
+ * gated by the listing and gateway layers in front of the executor.
+ */
+export function isPrivateToolCallAllowed(
+  tool: Pick<Tool, 'visibility' | 'createdBy'>,
+  userId: string | null | undefined,
+): boolean {
+  if (tool.visibility !== 'private') return true;
+  return !!userId && !!tool.createdBy && tool.createdBy === userId;
+}
 
 @Injectable()
 export class ToolExecutorService {
@@ -165,6 +179,12 @@ export class ToolExecutorService {
       // (including explicit `null`) to skip re-reading that field, but the
       // access list is always read here: an access control a caller can opt
       // out of by passing one unrelated argument is not an access control.
+      //
+      // A nested `tools.invoke` call carries the gatewayId (and scopes) of
+      // the call that made it, so the nested tool's own row on that gateway
+      // -- access list and policy -- is read here like any other. Where
+      // that row has no policy, the calling tool's policy
+      // (`inheritedSecurityPolicy`) still applies.
       let gatewayTool: GatewayTool | null = null;
       if (options.gatewayId) {
         gatewayTool = await this.gatewayToolRepository.findOne({
@@ -172,8 +192,13 @@ export class ToolExecutorService {
           select: { id: true, securityPolicy: true, permissions: true, transformations: true },
         });
         if (options.securityPolicy === undefined) {
-          options = { ...options, securityPolicy: gatewayTool?.securityPolicy ?? null };
+          options = {
+            ...options,
+            securityPolicy: gatewayTool?.securityPolicy ?? options.inheritedSecurityPolicy ?? null,
+          };
         }
+      } else if (options.securityPolicy === undefined && options.inheritedSecurityPolicy) {
+        options = { ...options, securityPolicy: options.inheritedSecurityPolicy };
       }
 
       // User permission check (skipped for MCP unauthenticated sessions,
@@ -208,6 +233,14 @@ export class ToolExecutorService {
       });
       if (!access.allowed) {
         throw new Error(`Refused by this gateway tool's permissions: ${access.reason}`);
+      }
+
+      // A private tool runs for its owner and nobody else, whichever
+      // surface the call came through (REST, an agent run, a gateway, MCP).
+      // A call with no known user cannot be the owner's. Answered as a
+      // missing tool so the refusal does not confirm it exists.
+      if (!isPrivateToolCallAllowed(tool, options.userId)) {
+        throw new NotFoundException('Tool not found');
       }
 
       // Apply this gateway tool's input mapping before anything reads the
@@ -617,7 +650,9 @@ export class ToolExecutorService {
         cfg.method,
         callParams,
         workspaceId,
-        { signal: options.signal, timeoutMs: tool.configuration?.timeout },
+        // The caller rides along so the runner's own visibility is checked
+        // at dispatch too, not only the tool row's.
+        { signal: options.signal, timeoutMs: tool.configuration?.timeout, callerUserId: options.userId ?? null },
       );
       if (!response.ok) {
         return {

@@ -7,15 +7,11 @@ import {
   Delete,
   Body,
   Param,
-  Query,
   UseGuards,
   UsePipes,
   ValidationPipe,
   Request,
   ParseUUIDPipe,
-  BadRequestException,
-  NotFoundException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -70,7 +66,7 @@ export class OrganizationsController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get organization by ID' })
   @ApiResponse({ status: 200, description: 'Organization retrieved successfully' })
-  async getOrganization(@Param('organizationId', ParseUUIDPipe) organizationId: string, @Request() req: any) {
+  async getOrganization(@Param('organizationId', ParseUUIDPipe) organizationId: string, @Request() _req: any) {
     const data = await this.organizationsService.findOne(organizationId);
     return { success: true, data, message: 'Organization retrieved successfully' };
   }
@@ -83,7 +79,7 @@ export class OrganizationsController {
   async updateOrganization(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Body() updateOrgDto: UpdateOrganizationDto,
-    @Request() req: any,
+    @Request() _req: any,
   ) {
     const data = await this.organizationsService.update(organizationId, updateOrgDto as any);
     return { success: true, data, message: 'Organization updated successfully' };
@@ -93,7 +89,7 @@ export class OrganizationsController {
   @Roles('owner')
   @ApiOperation({ summary: 'Delete organization' })
   @ApiResponse({ status: 200, description: 'Organization deleted successfully' })
-  async deleteOrganization(@Param('organizationId', ParseUUIDPipe) organizationId: string, @Request() req: any) {
+  async deleteOrganization(@Param('organizationId', ParseUUIDPipe) organizationId: string, @Request() _req: any) {
     const data = await this.organizationsService.delete(organizationId);
     return { success: true, data, message: 'Organization deleted successfully' };
   }
@@ -169,7 +165,7 @@ export class OrganizationsController {
   @Get(':organizationId/teams')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get organization teams' })
-  async getOrganizationTeams(@Param('organizationId', ParseUUIDPipe) organizationId: string, @Request() req: any) {
+  async getOrganizationTeams(@Param('organizationId', ParseUUIDPipe) organizationId: string, @Request() _req: any) {
     const data = await this.organizationsService.getTeams(organizationId);
     return { success: true, data, message: 'Teams retrieved successfully' };
   }
@@ -180,7 +176,7 @@ export class OrganizationsController {
   async createTeam(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Body() teamData: CreateTeamDto,
-    @Request() req: any
+    @Request() _req: any
   ) {
     const data = await this.organizationsService.createTeam(organizationId, teamData);
     return { success: true, data, message: 'Team created successfully' };
@@ -227,7 +223,7 @@ export class OrganizationsController {
   async getTeamMembers(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('teamId', ParseUUIDPipe) teamId: string,
-    @Request() req: any,
+    @Request() _req: any,
   ) {
     const data = await this.organizationsService.getTeamMembers(organizationId, teamId);
     return { success: true, data, message: 'Team members retrieved successfully' };

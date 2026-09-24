@@ -4,7 +4,16 @@
  * write or delete files outside the target skills directory.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync, readdirSync } from 'fs';
+import {
+  mkdtempSync,
+  rmSync,
+  existsSync,
+  writeFileSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  symlinkSync,
+} from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -110,5 +119,43 @@ describe('installSkills path-traversal protection', () => {
     expect(res.installed).toBe(0);
     expect(res.skipped).toBe(1);
     expect(existsSync(skillsDir)).toBe(false);
+  });
+});
+
+describe('installSkills does not follow links out of skillsDir', () => {
+  it('refuses a skill directory that is a symlink to somewhere else', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const outside = join(root, 'outside');
+    mkdirSync(outside, { recursive: true });
+    mkdirSync(skillsDir, { recursive: true });
+    symlinkSync(outside, join(skillsDir, 'weather'));
+
+    const res = installSkills([{ name: 'weather', content: 'author: almyty\n' } as any], target());
+
+    expect(res.installed).toBe(0);
+    expect(existsSync(join(outside, 'SKILL.md'))).toBe(false);
+  });
+
+  it('refuses a SKILL.md that is a symlink to another file', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const victim = join(root, 'victim.txt');
+    writeFileSync(victim, 'precious', 'utf-8');
+    mkdirSync(join(skillsDir, 'weather'), { recursive: true });
+    symlinkSync(victim, join(skillsDir, 'weather', 'SKILL.md'));
+
+    const res = installSkills([{ name: 'weather', content: 'author: almyty\n' } as any], target());
+
+    expect(res.installed).toBe(0);
+    expect(readFileSync(victim, 'utf-8')).toBe('precious');
+  });
+
+  it('refuses oversized skill content', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const res = installSkills(
+      [{ name: 'huge', content: 'author: almyty\n' + 'x'.repeat(2 * 1024 * 1024) } as any],
+      target(),
+    );
+    expect(res.installed).toBe(0);
+    expect(existsSync(join(skillsDir, 'huge'))).toBe(false);
   });
 });

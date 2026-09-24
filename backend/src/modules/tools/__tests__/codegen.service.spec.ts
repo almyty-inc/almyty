@@ -96,7 +96,7 @@ describe('CodegenService', () => {
       expect(content).toContain('petId: number');
       expect(content).toContain('format?: string');
       expect(content).toContain('async function getPetById');
-      expect(content).toContain("client.callTool('getpetbyid'");
+      expect(content).toContain('client.callTool("getpetbyid"');
     });
 
     it('should throw NotFoundException for missing tool', async () => {
@@ -111,7 +111,7 @@ describe('CodegenService', () => {
       const result = await service.generateToolSdk('tool-2', 'org-1');
       const content = result.files[0].content;
 
-      expect(content).toContain("'available' | 'pending' | 'sold'");
+      expect(content).toContain('"available" | "pending" | "sold"');
     });
 
     it('should handle array types', async () => {

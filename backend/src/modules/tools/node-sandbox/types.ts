@@ -12,7 +12,10 @@ export interface SandboxExecutionRequest {
   credentials?: Record<string, string>;
   /** npm dependencies required (name -> version) */
   dependencies?: Record<string, string>;
-  /** Maximum execution time in ms (default 10 000) */
+  /**
+   * Maximum execution time in ms (default 10 000). Clamped to
+   * SANDBOX_MAX_TIMEOUT_MS (default 300 000) whatever is asked for.
+   */
   timeoutMs?: number;
   /** Maximum heap memory in MB (default 128) */
   memoryLimitMb?: number;
@@ -53,6 +56,23 @@ export interface SandboxExecutionRequest {
    * Production callers never set this.
    */
   testNetAllow?: string;
+  /**
+   * The organization this execution is for. The pool caps how many
+   * workers (SANDBOX_MAX_WORKERS_PER_ORG) and queue entries
+   * (SANDBOX_MAX_QUEUE_PER_ORG) one organization may hold, so a burst
+   * from one tenant cannot take the whole process-wide pool. Executions
+   * without one share a single bucket.
+   */
+  organizationId?: string;
+  /**
+   * True for a nested `tools.invoke` execution. It does not queue for a
+   * pool slot: its caller holds one and is blocked waiting for it, so
+   * queueing it behind the caller is a deadlock the moment the pool is
+   * full. Nested executions are bounded instead by the invocation budget
+   * (depth, total, in flight) and a process-wide ceiling
+   * (SANDBOX_MAX_NESTED_WORKERS) beyond which they are refused.
+   */
+  nested?: boolean;
 }
 
 /** Result returned after sandbox execution */
