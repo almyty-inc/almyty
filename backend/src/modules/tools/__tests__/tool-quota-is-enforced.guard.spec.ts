@@ -8,7 +8,7 @@ import { join, relative, sep } from 'path';
  * Tool Hub install, runner and memory capability publishing) never checked
  * at all. The behavioural tests in tool-quota-enforced.spec.ts prove each
  * known path refuses; this one reads the tree so that a NEW path cannot
- * insert Tool rows without going through `assertToolQuota`.
+ * insert Tool rows without going through `withToolQuota` / `assertToolQuota`.
  *
  * Source-reading on purpose: the defect is the absence of a call, which no
  * test of the helper itself can see.
@@ -75,22 +75,38 @@ describe('every Tool insert is behind the tool quota', () => {
     expect(seen).toEqual(KNOWN_CREATION_SITES);
   });
 
-  it.each(KNOWN_CREATION_SITES)('%s calls assertToolQuota', (rel) => {
+  // The enforcing forms: `withToolQuota` (opens or joins a transaction,
+  // locks, counts, runs the insert) or `assertToolQuota` on a transaction
+  // the caller already owns. `precheckToolQuota` is unlocked and does not
+  // count as enforcement.
+  const ENFORCES = /\b(withToolQuota|assertToolQuota)\(/;
+
+  it.each(KNOWN_CREATION_SITES)('%s enforces the quota with its insert', (rel) => {
     const src = files.find((f) => f.rel === rel)!.src;
-    expect(src).toMatch(/\bassertToolQuota\(/);
+    expect(src).toMatch(ENFORCES);
   });
 
-  it('no file inserts Tool rows without calling assertToolQuota', () => {
+  it('no file inserts Tool rows without the locked quota check', () => {
     const unguarded = creators.filter((f) => !(f in EXEMPT)).filter((rel) => {
       const src = files.find((f) => f.rel === rel)!.src;
-      return !/\bassertToolQuota\(/.test(src);
+      return !ENFORCES.test(src);
     });
     expect(unguarded).toEqual([]);
   });
 
+  it('assertToolQuota is only called on a transaction the caller owns', () => {
+    // Outside a transaction the lock would serialise nothing; the helper
+    // refuses at runtime, and this keeps a caller from trying.
+    const bare = files
+      .filter((f) => !f.rel.endsWith(join('tools', 'tool-quota.ts')))
+      .filter((f) => /\bassertToolQuota\(/.test(f.src) && !/\.transaction\(/.test(f.src))
+      .map((f) => f.rel);
+    expect(bare).toEqual([]);
+  });
+
   it('the schema import path (which inserts through ToolsService) checks the batch', () => {
     const src = files.find((f) => f.rel === join('modules', 'apis', 'apis-tool-generator.helper.ts'))!.src;
-    expect(src).toMatch(/\bassertToolQuota\(/);
+    expect(src).toMatch(/\bprecheckToolQuota\(/);
     expect(src).toMatch(/\bassertWithinPerSchemaCap\(/);
     expect(src).toMatch(/\bcapGeneratedDescription\(/);
   });

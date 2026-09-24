@@ -68,7 +68,7 @@ class FakeRepo<T extends Record<string, any>> {
 function makeService() {
   const templateRepository = new FakeRepo<any>('tpl');
   const toolRepository = new FakeRepo<any>('tool');
-  (toolRepository as any).manager = unlimitedToolQuotaManager();
+  (toolRepository as any).manager = unlimitedToolQuotaManager(toolRepository);
   const apiRepository = new FakeRepo<any>('api');
   const auditLogService = { logCreate: jest.fn(), logUpdate: jest.fn(), logDelete: jest.fn() };
 

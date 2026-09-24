@@ -10,7 +10,13 @@ import { Api, ApiType } from '../../entities/api.entity';
 
 import { JsonSchemaTranslatorService } from '../json-schema-translator/json-schema-translator.service';
 import { computeToolHash } from '../../common/security/tool-integrity';
-import { assertToolQuota, assertWithinPerSchemaCap, capGeneratedDescription } from './tool-quota';
+import {
+  ToolQuotaExceededException,
+  assertWithinPerSchemaCap,
+  capGeneratedDescription,
+  precheckToolQuota,
+  withToolQuota,
+} from './tool-quota';
 
 export interface ToolGenerationOptions {
   includeOperations?: string[]; // Specific operation IDs to include
@@ -100,7 +106,7 @@ export class ToolGeneratorService {
             },
           })
         : 0;
-      await assertToolQuota(
+      await precheckToolQuota(
         this.toolRepository.manager,
         api.organizationId,
         operations.length - alreadyGenerated,
@@ -189,8 +195,10 @@ export class ToolGeneratorService {
     options: ToolGenerationOptions = {}
   ): Promise<Tool | null> {
     // Outside the try: a quota refusal is not a "skipped" operation, it
-    // must surface. generateToolsFromApi has already checked the batch.
-    await assertToolQuota(this.toolRepository.manager, api.organizationId);
+    // must surface. generateToolsFromApi has already checked the batch;
+    // this fails fast before schema generation, and the insert below
+    // is the enforcing check.
+    await precheckToolQuota(this.toolRepository.manager, api.organizationId);
 
     try {
       // Generate input schema
@@ -255,7 +263,13 @@ export class ToolGeneratorService {
         },
       });
 
-      const savedTool = await this.toolRepository.save(tool);
+      // Enforced with the insert, under the organization's tool-quota lock.
+      const savedTool = await withToolQuota(
+        this.toolRepository.manager,
+        api.organizationId,
+        1,
+        (tx) => tx.getRepository(Tool).save(tool),
+      );
 
       // Compute and store integrity hash
       const { hash } = computeToolHash(savedTool);
@@ -270,6 +284,9 @@ export class ToolGeneratorService {
       return savedTool;
 
     } catch (error) {
+      // A quota refusal (a concurrent writer took the last slot after
+      // the precheck) is not a "skipped" operation: it must surface.
+      if (error instanceof ToolQuotaExceededException) throw error;
       this.logger.error(`Failed to generate tool from operation: ${error.message}`);
       return null;
     }
