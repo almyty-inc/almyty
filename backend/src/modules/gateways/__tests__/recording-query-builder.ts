@@ -125,6 +125,7 @@ export class RecordingQueryBuilder extends ClauseRecorder {
   addSelect(...args: any[]) { return this.note('addSelect', args); }
   leftJoinAndSelect(...args: any[]) { return this.note('leftJoinAndSelect', args); }
   innerJoin(...args: any[]) { return this.note('innerJoin', args); }
+  innerJoinAndSelect(...args: any[]) { return this.note('innerJoinAndSelect', args); }
   groupBy(...args: any[]) { return this.note('groupBy', args); }
   orderBy(...args: any[]) { return this.note('orderBy', args); }
   addOrderBy(...args: any[]) { return this.note('addOrderBy', args); }
@@ -147,6 +148,7 @@ export class RecordingQueryBuilder extends ClauseRecorder {
   }
 
   getMany() { return this.run('getMany'); }
+  getManyAndCount() { return this.run('getManyAndCount'); }
   getCount() { return this.run('getCount'); }
   getRawMany() { return this.run('getRawMany'); }
   getRawOne() { return this.run('getRawOne'); }
