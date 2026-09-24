@@ -177,6 +177,40 @@ describe('ModelPicker', () => {
     await waitFor(() => expect(llmProvidersApi.getModels).toHaveBeenCalledTimes(2))
   })
 
+  it('says the key was rejected, links to the provider, and keeps the raw detail', async () => {
+    // What the backend actually sends for a vendor 401: a 502 carrying the
+    // vendor call's own message.
+    vi.mocked(llmProvidersApi.getModels).mockRejectedValue({
+      response: { status: 502, data: { success: false, message: 'Request failed with status code 401', error: 'MODELS_RETRIEVAL_FAILED' } },
+    })
+    renderPicker({ providerId: OPENAI.id })
+    const error = await screen.findByTestId('t-model-error')
+    expect(error).toHaveTextContent("This provider's key was rejected — check it on the provider's page")
+    expect(within(error).getByRole('link', { name: /provider's page/ })).toHaveAttribute('href', '/llm-providers/prov-openai')
+    // The raw text is still there, one click away.
+    expect(screen.getByTestId('t-model-error-detail')).toHaveTextContent('Request failed with status code 401')
+    expect(screen.getByTestId('t-model-input')).toBeInTheDocument()
+  })
+
+  it.each([
+    'Request failed with status code 403',
+    '401 Incorrect API key provided: sk-...',
+    '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
+  ])('treats %s as a rejected key', async (message) => {
+    vi.mocked(llmProvidersApi.getModels).mockRejectedValue({ response: { status: 502, data: { message } } })
+    renderPicker({ providerId: OPENAI.id })
+    expect(await screen.findByTestId('t-model-error')).toHaveTextContent("key was rejected")
+  })
+
+  it('does not blame the key for almyty refusing the request itself', async () => {
+    // A 403 from our own API is a permission problem; the key may be fine.
+    vi.mocked(llmProvidersApi.getModels).mockRejectedValue({ response: { status: 403, data: { message: 'Forbidden resource' } } })
+    renderPicker({ providerId: OPENAI.id })
+    const error = await screen.findByTestId('t-model-error')
+    expect(error).not.toHaveTextContent('key was rejected')
+    expect(error).toHaveTextContent('Forbidden resource')
+  })
+
   it('says so when the provider lists nothing', async () => {
     renderPicker({ providerId: OPENAI.id })
     expect(await screen.findByTestId('t-model-empty')).toHaveTextContent('This provider lists no models.')

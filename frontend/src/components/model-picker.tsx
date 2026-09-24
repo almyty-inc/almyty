@@ -100,6 +100,21 @@ export function asProviderList(raw: unknown): ProviderOption[] {
   return Array.isArray(list) ? list : []
 }
 
+/**
+ * Whether listing a provider's models failed because the vendor refused
+ * the key. The backend passes the vendor's message through as a 502
+ * (axios's "Request failed with status code 401", an SDK's "401 Incorrect
+ * API key provided", Anthropic's authentication_error), so this reads the
+ * text. A 401 or 403 from almyty itself is a session or permission
+ * problem, not the provider's key, and is left alone.
+ */
+export function keyRejected(error: unknown): boolean {
+  const ownStatus = (error as { response?: { status?: number } } | undefined)?.response?.status
+  if (ownStatus === 401 || ownStatus === 403) return false
+  const raw = getApiErrorMessage(error, '')
+  return /\b40[13]\b|unauthori[sz]ed|forbidden|authentication[_ ]error|invalid[_ ]?(api[_ ]?)?key|incorrect api key|api key not valid/i.test(raw)
+}
+
 function isActive(p: ProviderOption): boolean {
   if (p.status) return p.status === 'active'
   return p.isActive !== false
@@ -355,8 +370,27 @@ export function ModelPicker({
         <p className={cn('text-muted-foreground', hint)}>This provider is self-hosted, so type the model id it serves.</p>
       )}
       {listError && (
-        <p className={cn('text-amber-700 dark:text-amber-400', hint)} data-testid={`${idPrefix}-model-error`}>
-          Could not load this provider&apos;s models ({getApiErrorMessage(listError, 'request failed')}). Type the model id, or{' '}
+        <div className={cn('text-amber-700 dark:text-amber-400', hint)} data-testid={`${idPrefix}-model-error`}>
+          {keyRejected(listError) ? (
+            // The vendor's own words ("Request failed with status code
+            // 401") say what happened on the wire, not what to do. The
+            // fix is always the same place, so say that and link to it.
+            <>
+              This provider&apos;s key was rejected — check it on the{' '}
+              <a
+                href={`/llm-providers/${providerId}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-0.5 underline underline-offset-2"
+              >
+                provider&apos;s page
+                <ExternalLink className="h-3 w-3" aria-hidden />
+              </a>
+              . Type the model id, or{' '}
+            </>
+          ) : (
+            <>Could not load this provider&apos;s models ({getApiErrorMessage(listError, 'request failed')}). Type the model id, or </>
+          )}
           <button
             type="button"
             className="inline-flex items-center gap-0.5 underline underline-offset-2"
@@ -369,7 +403,13 @@ export function ModelPicker({
             try again
           </button>
           .
-        </p>
+          {keyRejected(listError) && (
+            <details className="mt-1 text-muted-foreground">
+              <summary className="cursor-pointer">Details</summary>
+              <span data-testid={`${idPrefix}-model-error-detail`}>{getApiErrorMessage(listError, 'request failed')}</span>
+            </details>
+          )}
+        </div>
       )}
       {listedNothing && (
         <p className={cn('text-muted-foreground', hint)} data-testid={`${idPrefix}-model-empty`}>
