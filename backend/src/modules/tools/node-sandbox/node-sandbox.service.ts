@@ -29,6 +29,21 @@ const DEFAULT_MAX_QUEUE_SIZE = 100;
 const DEFAULT_MAX_TIMEOUT_MS = 300_000;
 
 /**
+ * Compiled files outside the worker's directory that the worker's net
+ * guard requires, resolved relative to the compiled worker script the
+ * same way the guard's own relative imports are (worker in
+ * modules/tools/node-sandbox, these in common/security). Each must stay
+ * free of imports beyond Node built-ins; `sandbox-guard-imports.spec.ts`
+ * holds them to that.
+ */
+export const SANDBOX_GUARD_SHARED_MODULES = ['ip-classification', 'gateway-tool-policy'] as const;
+
+export function sandboxGuardDependencyPaths(workerPath: string): string[] {
+  return SANDBOX_GUARD_SHARED_MODULES.map((name) =>
+    path.resolve(path.dirname(workerPath), '..', '..', '..', 'common', 'security', `${name}.js`),
+  );
+}
+/**
  * Tool-invocation message types used by the worker's `tools.invoke`
  * shim. Kept deliberately tiny — the host and worker both only need
  * `id` to correlate request/response.
@@ -192,6 +207,7 @@ export class NodeSandboxService {
         modulePaths,
         toolInvokeEnabled: typeof request.invokeTool === 'function',
         testNetAllow: request.testNetAllow,
+        hostPolicy: request.hostPolicy ?? null,
       };
 
       // Resolve the worker script — prefer compiled .js, fall back to .ts for tests
@@ -457,6 +473,13 @@ export class NodeSandboxService {
       // and any installed-dependency directories. Nothing else on
       // the filesystem is readable.
       argv.push(`--allow-fs-read=${path.dirname(workerPath)}`);
+      // The net guard classifies addresses and matches gateway domain
+      // policy with the same code the host-side gates use, so the two
+      // cannot drift. Those modules live outside the worker's directory:
+      // grant each file, not its directory.
+      for (const shared of sandboxGuardDependencyPaths(workerPath)) {
+        argv.push(`--allow-fs-read=${shared}`);
+      }
       for (const mp of modulePaths) {
         argv.push(`--allow-fs-read=${mp}`);
       }

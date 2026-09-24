@@ -57,6 +57,13 @@ export interface SandboxExecutionRequest {
    */
   testNetAllow?: string;
   /**
+   * Host restrictions of the gateway tool this execution runs for
+   * (`gateway_tools.securityPolicy.allowedDomains` / `blockedDomains`).
+   * The worker's net guard refuses any other destination. Null or absent
+   * when the call did not come through a gateway or the policy sets none.
+   */
+  hostPolicy?: { allowedDomains?: string[]; blockedDomains?: string[] } | null;
+  /**
    * The organization this execution is for. The pool caps how many
    * workers (SANDBOX_MAX_WORKERS_PER_ORG) and queue entries
    * (SANDBOX_MAX_QUEUE_PER_ORG) one organization may hold, so a burst
@@ -109,6 +116,11 @@ export interface WorkerInput {
    * Production callers never set this.
    */
   testNetAllow?: string;
+  /**
+   * Allowed / blocked domains from the gateway tool's securityPolicy,
+   * enforced by the net guard on every outbound connection.
+   */
+  hostPolicy?: { allowedDomains?: string[]; blockedDomains?: string[] } | null;
 }
 
 /** Message sent from the worker back to the parent */
