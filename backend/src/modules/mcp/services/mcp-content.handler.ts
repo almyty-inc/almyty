@@ -13,7 +13,7 @@ import {
   McpTextContent,
 } from '../types/mcp.types';
 
-import { Tool, ToolStatus } from '../../../entities/tool.entity';
+import { Tool } from '../../../entities/tool.entity';
 import { isOthersPrivate } from '../../../common/authorization/private-visibility';
 import { Resource } from '../../../entities/resource.entity';
 import { GatewayTool } from '../../../entities/gateway-tool.entity';
