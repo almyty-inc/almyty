@@ -43,6 +43,11 @@ describeIfDb('version snapshots keep no secrets (real Postgres)', () => {
     const bootstrap = new DataSource(connection);
     await bootstrap.initialize();
     await bootstrap.query(`CREATE SCHEMA IF NOT EXISTS ${SCHEMA}`);
+    // In public, as CI provisions them: created from inside the spec schema
+    // they would be dropped with it and vanish for the next spec.
+    await bootstrap.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+    await bootstrap.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+    await bootstrap.query(`CREATE EXTENSION IF NOT EXISTS vector`);
     await bootstrap.destroy();
 
     ds = new DataSource({
