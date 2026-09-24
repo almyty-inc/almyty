@@ -167,6 +167,15 @@ describe('api key organization scoping', () => {
       ).rejects.toThrow(ForbiddenException);
       expect(apiKeys.rows()).toHaveLength(0);
     });
+
+    it('refuses an org whose invite has not been accepted', async () => {
+      await build({ memberships: [pendingInvite()] });
+
+      await expect(
+        service.createApiKey(OWNER, { name: 'ci', organizationId: ORG } as any),
+      ).rejects.toThrow(ForbiddenException);
+      expect(apiKeys.rows()).toHaveLength(0);
+    });
   });
 
   describe('createApiKey with no organization asked for', () => {
@@ -178,6 +187,22 @@ describe('api key organization scoping', () => {
       expect(keyData.organizationId).toBe(ORG);
     });
 
+    it('leaves the key unscoped when the only row is a pending invite', async () => {
+      await build({ memberships: [pendingInvite()] });
+
+      const { keyData } = await service.createApiKey(OWNER, { name: 'cli' } as any);
+
+      expect(keyData.organizationId).toBeUndefined();
+    });
+
+    it('leaves the key unscoped when the only row is a revoked invite', async () => {
+      await build({ memberships: [revokedInvite()] });
+
+      const { keyData } = await service.createApiKey(OWNER, { name: 'cli' } as any);
+
+      expect(keyData.organizationId).toBeUndefined();
+    });
+
     it('does not default when the caller belongs to two orgs', async () => {
       await build({
         memberships: [realMembership(), realMembership({ id: 'm-real-2', organizationId: OTHER_ORG })],
@@ -186,6 +211,19 @@ describe('api key organization scoping', () => {
       const { keyData } = await service.createApiKey(OWNER, { name: 'cli' } as any);
 
       expect(keyData.organizationId).toBeUndefined();
+    });
+
+    it('defaults to the real org when a pending invite sits beside it', async () => {
+      await build({
+        memberships: [
+          realMembership(),
+          pendingInvite({ id: 'm-pending-2', organizationId: OTHER_ORG }),
+        ],
+      });
+
+      const { keyData } = await service.createApiKey(OWNER, { name: 'cli' } as any);
+
+      expect(keyData.organizationId).toBe(ORG);
     });
   });
 });

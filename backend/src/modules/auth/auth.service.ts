@@ -28,7 +28,7 @@ import {
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { CaptchaService } from './captcha.service';
 import { normalizeEmail, isDisposableEmail } from './email-normalization';
-import { effectiveMemberships } from '../../common/authorization/membership';
+import { effectiveMemberships, isEffectiveMembership } from '../../common/authorization/membership';
 
 export interface JwtPayload {
   sub: string;
@@ -510,22 +510,29 @@ export class AuthService {
     // org id and authenticate as that org on every JwtAuthGuard route.
     // That walks straight through per-request scope checks, because the
     // thing those checks compare against is exactly this value.
+    //
+    // "Belongs to" is `isEffectiveMembership`, the predicate JwtStrategy
+    // and ApiKeyStrategy use. `isActive: true` alone also accepts a
+    // pending invite, whose row is active until the invitee accepts.
     if (orgId) {
       const membership = await this.userOrganizationRepository.findOne({
         where: { userId, organizationId: orgId, isActive: true },
       });
-      if (!membership) {
+      if (!isEffectiveMembership(membership)) {
         throw new ForbiddenException('You are not a member of that organization');
       }
     }
 
+    // The same predicate for the default: pending and revoked invite rows
+    // are in the relation load and are not an org to fall back to.
     if (!orgId) {
       const user = await this.userRepository.findOne({
         where: { id: userId },
         relations: { organizationMemberships: true },
       });
-      if (user?.organizationMemberships?.length === 1) {
-        orgId = user.organizationMemberships[0].organizationId;
+      const memberships = effectiveMemberships(user?.organizationMemberships);
+      if (memberships.length === 1) {
+        orgId = memberships[0].organizationId;
       }
     }
 
