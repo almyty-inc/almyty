@@ -10,7 +10,7 @@
  * already present in every SKILL.md we generate.
  */
 
-import { writeFileSync, mkdirSync, existsSync, readdirSync, rmSync, readFileSync } from 'fs';
+import { writeFileSync, mkdirSync, existsSync, readdirSync, rmSync, readFileSync, lstatSync } from 'fs';
 import { join, resolve, sep } from 'path';
 import type { SkillFile } from './client.js';
 import type { AgentTarget } from './agents.js';
@@ -49,6 +49,27 @@ function isInside(baseDir: string, candidate: string): boolean {
   const base = resolve(baseDir);
   const target = resolve(candidate);
   return target === base || target.startsWith(base + sep);
+}
+
+/**
+ * A SKILL.md is a page of markdown; anything bigger than this is not a
+ * skill the backend generated and is refused rather than written into an
+ * editor's config.
+ */
+export const MAX_SKILL_BYTES = 1024 * 1024;
+
+/**
+ * True when the path exists and is a symbolic link. The name check and
+ * `isInside` work on the path string; a link already sitting at
+ * `<skillsDir>/<name>` (or at its SKILL.md) would still send the write
+ * somewhere else, so links are refused rather than followed.
+ */
+function isSymlink(path: string): boolean {
+  try {
+    return lstatSync(path).isSymbolicLink();
+  } catch {
+    return false;
+  }
 }
 
 export interface InstallResult {
@@ -143,6 +164,14 @@ export function installSkills(
     // Containment guard (defence in depth) before any write/delete.
     if (!isInside(target.skillsDir, skillDir) || !isInside(target.skillsDir, legacyDir)) {
       console.warn(`Skipping skill whose path escapes the skills directory: ${skill.name}`);
+      continue;
+    }
+    if (isSymlink(skillDir) || isSymlink(skillFile)) {
+      console.warn(`Skipping skill whose path is a symbolic link: ${skill.name}`);
+      continue;
+    }
+    if (typeof skill.content !== 'string' || Buffer.byteLength(skill.content, 'utf-8') > MAX_SKILL_BYTES) {
+      console.warn(`Skipping skill with missing or oversized content: ${skill.name}`);
       continue;
     }
 
