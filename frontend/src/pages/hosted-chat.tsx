@@ -486,6 +486,16 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         )
       })
 
+      // The server took back what it streamed for this reply: the step
+      // it came from turned out not to be the answer. Clear it so none of
+      // it stays on screen; the answer, if there is one, streams in after.
+      source.addEventListener('reset', () => {
+        if (activeThreadRef.current !== threadId) return
+        setMessages((current) =>
+          current.map((m) => (m.id === `run-${runId}` ? { ...m, content: '' } : m)),
+        )
+      })
+
       // Both the done event and onerror route here, and a closed
       // EventSource can still fire onerror after done; reconcile once.
       let finished = false

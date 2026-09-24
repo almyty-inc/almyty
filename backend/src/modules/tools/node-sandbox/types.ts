@@ -2,6 +2,20 @@
  * Node.js Worker Thread Sandbox — shared type definitions
  */
 
+/**
+ * The part of a gateway tool's `securityPolicy` the sandbox's net guard
+ * enforces on the tool's own outbound traffic. Built by
+ * `sandboxHostPolicy` in common/security/gateway-tool-policy.ts.
+ */
+export interface SandboxNetPolicy {
+  allowedDomains?: string[];
+  blockedDomains?: string[];
+  /** Refuse every connection that is not TLS, and every http: request. */
+  requireHttps?: boolean;
+  /** Only these HTTP methods may be sent. Empty/absent means no restriction. */
+  allowedHttpMethods?: string[];
+}
+
 /** Request to execute code in the sandbox */
 export interface SandboxExecutionRequest {
   /** JavaScript/TypeScript code to execute (function body) */
@@ -57,12 +71,13 @@ export interface SandboxExecutionRequest {
    */
   testNetAllow?: string;
   /**
-   * Host restrictions of the gateway tool this execution runs for
-   * (`gateway_tools.securityPolicy.allowedDomains` / `blockedDomains`).
-   * The worker's net guard refuses any other destination. Null or absent
-   * when the call did not come through a gateway or the policy sets none.
+   * Network rules of the gateway tool this execution runs for
+   * (`gateway_tools.securityPolicy`: allowed / blocked domains,
+   * requireHttps, allowedHttpMethods). The worker's net guard enforces
+   * them. Null or absent when the call did not come through a gateway or
+   * the policy sets none.
    */
-  hostPolicy?: { allowedDomains?: string[]; blockedDomains?: string[] } | null;
+  hostPolicy?: SandboxNetPolicy | null;
   /**
    * The organization this execution is for. The pool caps how many
    * workers (SANDBOX_MAX_WORKERS_PER_ORG) and queue entries
@@ -117,10 +132,12 @@ export interface WorkerInput {
    */
   testNetAllow?: string;
   /**
-   * Allowed / blocked domains from the gateway tool's securityPolicy,
-   * enforced by the net guard on every outbound connection.
+   * The gateway tool's securityPolicy as the net guard enforces it:
+   * allowed / blocked domains on every outbound connection, plaintext
+   * refused under requireHttps, and the HTTP method allow-list on every
+   * request made through fetch, http, https or http2.
    */
-  hostPolicy?: { allowedDomains?: string[]; blockedDomains?: string[] } | null;
+  hostPolicy?: SandboxNetPolicy | null;
 }
 
 /** Message sent from the worker back to the parent */

@@ -469,6 +469,123 @@ describe('HostedChatController', () => {
       expect(written()).toContain('run.completed');
     });
 
+    const tokens = () =>
+      res.write.mock.calls
+        .map(([frame]: [string]) => frame)
+        .filter((frame: string) => frame.startsWith('event: token'))
+        .map((frame: string) => JSON.parse(frame.split('data: ')[1]).content);
+
+    it('streams a text step token by token once the provider says it is one, ending on the exact answer', async () => {
+      agentRuntimeService.subscribeRunEvents.mockImplementationOnce(async (_runId, handler) => {
+        handler({ type: 'llm.started', data: { step: 0 } });
+        handler({ type: 'llm.chunk', data: { step: 0, content: 'Your ' } });
+        handler({ type: 'llm.chunk', data: { step: 0, content: 'order ' } });
+        handler({ type: 'llm.step_kind', data: { step: 0, kind: 'text' } });
+        handler({ type: 'llm.chunk', data: { step: 0, content: 'ships ' } });
+        handler({ type: 'llm.chunk', data: { step: 0, content: 'Monday.' } });
+        handler({ type: 'llm.response', data: { step: 0, content: 'Your order ships Monday.' } });
+        handler({ type: 'run.completed', data: { output: 'Your order ships Monday.' } });
+      });
+
+      await controller.stream('acme', 'run-1', req(), res);
+
+      expect(tokens()).toEqual(['Your ', 'order ', 'ships ', 'Monday.']);
+      expect(tokens().join('')).toBe('Your order ships Monday.');
+      expect(written()).not.toContain('event: reset');
+    });
+
+    it('holds a step until its kind is known, so nothing streams before the verdict', async () => {
+      agentRuntimeService.subscribeRunEvents.mockImplementationOnce(async (_runId, handler) => {
+        handler({ type: 'llm.chunk', data: { step: 0, content: 'Checking the CRM' } });
+        // Nothing may have gone out yet: the step could still call a tool.
+        expect(res.write).not.toHaveBeenCalledWith(expect.stringContaining('Checking'));
+        handler({ type: 'llm.step_kind', data: { step: 0, kind: 'tool' } });
+        handler({ type: 'run.completed', data: {} });
+      });
+
+      await controller.stream('acme', 'run-1', req(), res);
+      expect(written()).not.toContain('Checking');
+    });
+
+    /**
+     * A Claude message can open with a text block and then a tool_use
+     * block; the text is narration, streamed before the tool call is
+     * visible. The provider only says `tool` once the tool_use block
+     * opens, after that text.
+     */
+    it('drops the narration of a step that turns out to call tools, text first and tool_use after', async () => {
+      agentRuntimeService.subscribeRunEvents.mockImplementationOnce(async (_runId, handler) => {
+        handler({ type: 'llm.started', data: { step: 0 } });
+        handler({ type: 'llm.chunk', data: { step: 0, content: 'Looking up account 4411' } });
+        handler({ type: 'llm.chunk', data: { step: 0, content: ' for jane@corp.test' } });
+        handler({ type: 'llm.step_kind', data: { step: 0, kind: 'tool' } });
+        handler({
+          type: 'llm.response',
+          data: { step: 0, content: 'Looking up account 4411 for jane@corp.test', toolCalls: [{ id: 't1', name: 'crm_lookup' }] },
+        });
+        handler({ type: 'tool.started', data: { step: 0, toolCallId: 't1', tool: 'crm_lookup' } });
+        handler({ type: 'llm.started', data: { step: 1 } });
+        handler({ type: 'llm.chunk', data: { step: 1, content: 'Your order ' } });
+        handler({ type: 'llm.chunk', data: { step: 1, content: 'ships Monday.' } });
+        handler({ type: 'llm.step_kind', data: { step: 1, kind: 'text' } });
+        handler({ type: 'llm.response', data: { step: 1, content: 'Your order ships Monday.' } });
+        handler({ type: 'run.completed', data: { output: 'Your order ships Monday.' } });
+      });
+
+      await controller.stream('acme', 'run-1', req(), res);
+
+      expect(written()).not.toContain('4411');
+      expect(written()).not.toContain('jane@corp.test');
+      expect(written()).not.toContain('crm_lookup');
+      expect(tokens()).toEqual(['Your order ', 'ships Monday.']);
+    });
+
+    it('retracts what it streamed if the response contradicts the verdict', async () => {
+      agentRuntimeService.subscribeRunEvents.mockImplementationOnce(async (_runId, handler) => {
+        handler({ type: 'llm.step_kind', data: { step: 0, kind: 'text' } });
+        handler({ type: 'llm.chunk', data: { step: 0, content: 'Draft' } });
+        handler({ type: 'llm.response', data: { step: 0, content: 'Draft', toolCalls: [{ id: 't1', name: 'x' }] } });
+        handler({ type: 'run.completed', data: {} });
+      });
+
+      await controller.stream('acme', 'run-1', req(), res);
+
+      const frames = res.write.mock.calls.map(([frame]: [string]) => frame);
+      expect(frames.indexOf('event: reset\ndata: {}\n\n')).toBeGreaterThan(
+        frames.findIndex((f: string) => f.includes('Draft')),
+      );
+    });
+
+    it('retracts a step an earlier attempt streamed when the step starts over', async () => {
+      agentRuntimeService.subscribeRunEvents.mockImplementationOnce(async (_runId, handler) => {
+        handler({ type: 'llm.started', data: { step: 2 } });
+        handler({ type: 'llm.step_kind', data: { step: 2, kind: 'text' } });
+        handler({ type: 'llm.chunk', data: { step: 2, content: 'first try' } });
+        handler({ type: 'llm.started', data: { step: 2 } });
+        handler({ type: 'llm.chunk', data: { step: 2, content: 'Calling a tool now' } });
+        handler({ type: 'llm.step_kind', data: { step: 2, kind: 'tool' } });
+        handler({ type: 'run.completed', data: {} });
+      });
+
+      await controller.stream('acme', 'run-1', req(), res);
+
+      expect(written()).toContain('event: reset');
+      expect(written()).not.toContain('Calling a tool now');
+    });
+
+    it('sends what the stream did not carry when the response has more', async () => {
+      agentRuntimeService.subscribeRunEvents.mockImplementationOnce(async (_runId, handler) => {
+        handler({ type: 'llm.step_kind', data: { step: 0, kind: 'text' } });
+        handler({ type: 'llm.chunk', data: { step: 0, content: 'Ships ' } });
+        handler({ type: 'llm.response', data: { step: 0, content: 'Ships Monday.' } });
+        handler({ type: 'run.completed', data: {} });
+      });
+
+      await controller.stream('acme', 'run-1', req(), res);
+
+      expect(tokens()).toEqual(['Ships ', 'Monday.']);
+    });
+
     it('does not stream an unverified candidate answer to a public visitor', async () => {
       agentRuntimeService.getRun.mockResolvedValueOnce({
         id: 'run-1',
@@ -480,14 +597,20 @@ describe('HostedChatController', () => {
         },
       });
       agentRuntimeService.subscribeRunEvents.mockImplementationOnce(async (_runId, handler) => {
-        handler({ type: 'llm.chunk', data: { content: 'rejected draft' } });
-        handler({ type: 'llm.response', data: { content: 'rejected draft' } });
+        handler({ type: 'llm.started', data: { step: 0 } });
+        handler({ type: 'llm.chunk', data: { step: 0, content: 'rejected ' } });
+        handler({ type: 'llm.step_kind', data: { step: 0, kind: 'text' } });
+        handler({ type: 'llm.chunk', data: { step: 0, content: 'draft' } });
+        handler({ type: 'llm.response', data: { step: 0, content: 'rejected draft' } });
         handler({ type: 'run.completed', data: { output: 'verified answer' } });
       });
 
       await controller.stream('acme', 'run-1', req(), res);
 
-      expect(res.write).not.toHaveBeenCalledWith(expect.stringContaining('rejected draft'));
+      // Not even once the provider has called the step a text step.
+      expect(written()).not.toContain('rejected');
+      expect(written()).not.toContain('draft');
+      expect(written()).not.toContain('event: token');
       expect(res.write).toHaveBeenCalledWith(expect.stringContaining('run.completed'));
     });
   });

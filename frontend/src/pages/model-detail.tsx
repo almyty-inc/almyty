@@ -30,6 +30,7 @@ import { deploymentForCard, lineageFacts, runsOn } from '@/lib/model-hosting'
 import { formatModelPrice, modelsApi, PRICING_SOURCE_LABELS } from '@/lib/models-api'
 import { formatRelativeTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
+import { LEAVE_WITHOUT_ASKING } from '@/hooks/use-leave-guard'
 import type { ModelDeployment } from '@/types/deployments'
 import type { ModelCard, UpdateModelBody } from '@/types/models'
 
@@ -99,7 +100,9 @@ export function ModelDetailPage() {
     onSuccess: () => {
       invalidate()
       notifications.success('Model removed', 'The model is no longer in the list')
-      navigate('/models')
+      // The Remove confirm was the one question; unsaved settings edits
+      // went with the model, so the leave guard is not asked again.
+      navigate('/models', { state: LEAVE_WITHOUT_ASKING })
     },
     onError: (error: any) => notifications.error('Could not remove model', errorMessage(error, 'The model was not removed')),
   })

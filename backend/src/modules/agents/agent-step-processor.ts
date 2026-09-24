@@ -15,6 +15,7 @@ import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 import { decideEscalation, nextRoutingPolicy, planPosition } from '../model-catalog/routing/verify-escalation';
 import { shouldAutoSaveMemory } from './memory-autosave.policy';
+import { emitStreamChunk } from './llm-stream-events';
 
 
 /**
@@ -334,11 +335,7 @@ export class AgentStepProcessor {
         chatRequest,
         run.organizationId,
         run.userId,
-        (chunk) => {
-          if (chunk.content) {
-            this.s.emitEvent(runId, 'llm.chunk', { step: run.currentStep, content: chunk.content });
-          }
-        },
+        (chunk) => emitStreamChunk((type, data) => this.s.emitEvent(runId, type, data), run.currentStep, chunk),
       );
 
       // Track cost and tokens

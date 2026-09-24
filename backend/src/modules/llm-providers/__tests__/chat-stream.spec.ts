@@ -4,6 +4,7 @@ import { callAnthropicStream } from '../providers/anthropic.provider';
 import { LlmProvider } from '../../../entities/llm-provider.entity';
 import { Conversation } from '../../../entities/conversation.entity';
 import { MessageRole } from '../../../entities/message.entity';
+import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, StreamChunk } from '../llm-providers.service';
 
 // Mock safe-request to avoid real HTTP calls (keep the real
@@ -66,6 +67,11 @@ function mockRequest(overrides: Partial<ChatRequest> = {}): ChatRequest {
   };
 }
 
+/** A tool definition as the stream call receives it. */
+function tool(name: string): Tool {
+  return { name, description: name, parameters: { type: 'object', properties: {} } } as unknown as Tool;
+}
+
 describe('callOpenAIStream', () => {
   const costFn = jest.fn().mockReturnValue(0.001);
 
@@ -99,10 +105,8 @@ describe('callOpenAIStream', () => {
       onChunk,
     );
 
-    // Content chunks should have been emitted
-    expect(chunks).toHaveLength(2);
-    expect(chunks[0].content).toBe('Hello');
-    expect(chunks[1].content).toBe(' world');
+    // No tools were offered, so it is a text step from the first byte.
+    expect(chunks).toEqual([{ stepKind: 'text' }, { content: 'Hello' }, { content: ' world' }]);
 
     // Accumulated response should have full content
     expect(result.message.content).toBe('Hello world');
@@ -138,14 +142,14 @@ describe('callOpenAIStream', () => {
       mockProvider(),
       mockRequest(),
       mockConversation(),
-      [],
+      [tool('web_search')],
       Date.now(),
       costFn,
       (chunk) => chunks.push(chunk),
     );
 
-    // No content chunks (tool call only)
-    expect(chunks).toHaveLength(0);
+    // No content chunks, and a tool verdict as soon as the call began.
+    expect(chunks).toEqual([{ stepKind: 'tool' }]);
 
     // Tool calls should be accumulated and parsed
     expect(result.message.toolCalls).toHaveLength(1);
@@ -197,7 +201,7 @@ describe('callOpenAIStream', () => {
       (chunk) => chunks.push(chunk),
     );
 
-    expect(chunks).toHaveLength(0);
+    expect(chunks).toEqual([{ stepKind: 'text' }]);
     expect(result.message.content).toBeUndefined();
     expect(result.message.finishReason).toBe('stop');
   });
@@ -251,10 +255,8 @@ describe('callAnthropicStream', () => {
       (chunk) => chunks.push(chunk),
     );
 
-    // Content chunks
-    expect(chunks).toHaveLength(2);
-    expect(chunks[0].content).toBe('Hello');
-    expect(chunks[1].content).toBe(' from Claude');
+    // No tools were offered, so it is a text step from the first byte.
+    expect(chunks).toEqual([{ stepKind: 'text' }, { content: 'Hello' }, { content: ' from Claude' }]);
 
     // Full response
     expect(result.message.content).toBe('Hello from Claude');
@@ -297,14 +299,14 @@ describe('callAnthropicStream', () => {
       provider,
       mockRequest(),
       mockConversation(),
-      [],
+      [tool('calculator')],
       Date.now(),
       costFn,
       (chunk) => chunks.push(chunk),
     );
 
-    // No content chunks (tool use)
-    expect(chunks).toHaveLength(0);
+    // A tool step, and said so the moment the tool_use block opened.
+    expect(chunks).toEqual([{ stepKind: 'tool' }]);
 
     // Tool call should be accumulated
     expect(result.message.toolCalls).toHaveLength(1);
@@ -340,5 +342,104 @@ describe('callAnthropicStream', () => {
         () => {},
       ),
     ).rejects.toThrow('Anthropic connection lost');
+  });
+});
+
+/**
+ * The step-kind verdict the hosted chat page streams on.
+ *
+ * A consumer holds a step's text until the stream says what the step is,
+ * so the verdict must never say `text` for a reply that goes on to call
+ * tools, and must come after every content chunk it vouches for.
+ */
+describe('stream step kind', () => {
+  const costFn = jest.fn().mockReturnValue(0);
+  const anthropic = () =>
+    mockProvider({
+      type: 'anthropic' as any,
+      getApiUrl: () => 'https://api.anthropic.com/v1',
+      getAuthHeaders: () => ({ 'x-api-key': 'test', 'anthropic-version': '2023-06-01' }),
+    } as any);
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    costFn.mockReturnValue(0);
+  });
+
+  const run = async (call: typeof callOpenAIStream | typeof callAnthropicStream, provider: LlmProvider, sse: string[], tools: Tool[]) => {
+    (callLlmProviderHttpStream as jest.Mock).mockResolvedValue({ data: createSSEStream(sse) });
+    const chunks: StreamChunk[] = [];
+    const result = await call(provider, mockRequest(), mockConversation(), tools, Date.now(), costFn, (c) => chunks.push(c));
+    return { chunks, result };
+  };
+
+  it('Anthropic: text then tool_use in one message is a tool step, never a text one', async () => {
+    const { chunks, result } = await run(callAnthropicStream, anthropic(), [
+      'event: message_start\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":9}}}\n\n',
+      'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Looking up account 4411"}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" for jane@corp.test"}}\n\n',
+      'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+      'event: content_block_start\ndata: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_1","name":"crm_lookup"}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{}"}}\n\n',
+      'event: content_block_stop\ndata: {"type":"content_block_stop","index":1}\n\n',
+      'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":7}}\n\n',
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ], [tool('crm_lookup')]);
+
+    expect(chunks).toEqual([
+      { content: 'Looking up account 4411' },
+      { content: ' for jane@corp.test' },
+      { stepKind: 'tool' },
+    ]);
+    expect(result.message.toolCalls?.map((t) => t.name)).toEqual(['crm_lookup']);
+  });
+
+  it('Anthropic: a text-only reply with tools offered is only called text at message_delta, after all its text', async () => {
+    const { chunks, result } = await run(callAnthropicStream, anthropic(), [
+      'event: message_start\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":9}}}\n\n',
+      'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Your order"}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" ships Monday."}}\n\n',
+      'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+      'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}\n\n',
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ], [tool('crm_lookup')]);
+
+    expect(chunks).toEqual([{ content: 'Your order' }, { content: ' ships Monday.' }, { stepKind: 'text' }]);
+    expect(result.message.content).toBe('Your order ships Monday.');
+  });
+
+  it('chat completions: content then tool_calls in one message is a tool step', async () => {
+    const { chunks } = await run(callOpenAIStream, mockProvider(), [
+      'data: {"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"Let me check "},"finish_reason":null}]}\n\n',
+      'data: {"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"the CRM."},"finish_reason":null}]}\n\n',
+      'data: {"model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"tc-1","type":"function","function":{"name":"crm_lookup","arguments":"{}"}}]},"finish_reason":null}]}\n\n',
+      'data: {"model":"gpt-4o","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+      'data: [DONE]\n\n',
+    ], [tool('crm_lookup')]);
+
+    expect(chunks).toEqual([{ content: 'Let me check ' }, { content: 'the CRM.' }, { stepKind: 'tool' }]);
+  });
+
+  it('chat completions: a server that says finish_reason "stop" on a tool call still gets a tool verdict', async () => {
+    const { chunks } = await run(callOpenAIStream, mockProvider(), [
+      'data: {"model":"llama3","choices":[{"index":0,"delta":{"content":"Checking."},"finish_reason":null}]}\n\n',
+      'data: {"model":"llama3","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"tc-1","function":{"name":"crm_lookup","arguments":"{}"}}]},"finish_reason":"stop"}]}\n\n',
+      'data: [DONE]\n\n',
+    ], [tool('crm_lookup')]);
+
+    expect(chunks.filter((c) => c.stepKind)).toEqual([{ stepKind: 'tool' }]);
+  });
+
+  it('chat completions: a text-only reply with tools offered is called text only once the stream has ended', async () => {
+    const { chunks } = await run(callOpenAIStream, mockProvider(), [
+      'data: {"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"Your order"},"finish_reason":null}]}\n\n',
+      'data: {"model":"gpt-4o","choices":[{"index":0,"delta":{"content":" ships Monday."},"finish_reason":"stop"}]}\n\n',
+      'data: {"model":"gpt-4o","choices":[],"usage":{"prompt_tokens":3,"completion_tokens":4,"total_tokens":7}}\n\n',
+      'data: [DONE]\n\n',
+    ], [tool('crm_lookup')]);
+
+    expect(chunks).toEqual([{ content: 'Your order' }, { content: ' ships Monday.' }, { stepKind: 'text' }]);
   });
 });

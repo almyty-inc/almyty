@@ -76,7 +76,7 @@ describe('org admin /users routes stay inside the organization', () => {
       count: jest.fn(async () => 0),
       find: jest.fn(async () => []),
     };
-    service = new UsersService(userRepo, membershipRepo, apiKeyRepo);
+    service = new UsersService(userRepo, membershipRepo, apiKeyRepo, { offboard: jest.fn(async () => undefined) } as any);
     // No other account holds the new address.
     jest.spyOn(service, 'findByEmail').mockResolvedValue(null as any);
   });
