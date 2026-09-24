@@ -60,6 +60,13 @@ export interface RequestPayload {
    * is the exception (returns global metadata, not workspace-scoped).
    */
   workspaceId?: string;
+  /**
+   * The workspace's root directory, as the backend recorded it when the
+   * workspace was created. Sent alongside workspaceId once the backend
+   * has checked the workspace is live on this runner; shell.exec runs
+   * there and resolves a relative `cwd` against it.
+   */
+  workspaceCwd?: string;
 }
 
 export interface ResponsePayload {

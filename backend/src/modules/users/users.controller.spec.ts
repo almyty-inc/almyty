@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
+import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { User } from '../../entities/user.entity';
@@ -38,6 +39,16 @@ describe('UsersController', () => {
         {
           provide: UsersService,
           useValue: mockUsersService,
+        },
+        // Email changes are exercised in auth/__tests__/email-change-requires-reauth.spec.ts;
+        // nothing in this suite changes an address, so any call is a failure.
+        {
+          provide: AuthService,
+          useValue: {
+            changeEmail: jest.fn(async () => {
+              throw new Error('unexpected email change');
+            }),
+          },
         },
       ],
     })

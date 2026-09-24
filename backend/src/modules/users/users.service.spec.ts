@@ -11,9 +11,6 @@ import { UsageMetric } from '../../entities/usage-metric.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ConnectionOffboardingService } from '../connections/connection-offboarding.service';
 
-// Unmock bcrypt from global setup to test actual hashing
-jest.unmock('bcryptjs');
-
 /**
  * bcrypt at cost 12 is deliberate work: roughly a quarter second idle,
  * and several seconds when eight jest workers are competing for the
@@ -495,7 +492,7 @@ describe('UsersService', () => {
   describe('findAll', () => {
     function makeQB() {
       return {
-        innerJoin: jest.fn().mockReturnThis(),
+        innerJoinAndSelect: jest.fn().mockReturnThis(),
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
@@ -526,7 +523,7 @@ describe('UsersService', () => {
       expect(result.total).toBe(2);
       // The org filter must run as an inner join — without that the previous
       // shape returned every user in the database to any caller.
-      expect(mockQueryBuilder.innerJoin).toHaveBeenCalledWith(
+      expect(mockQueryBuilder.innerJoinAndSelect).toHaveBeenCalledWith(
         'user.organizationMemberships',
         'membership',
         'membership.organizationId = :organizationId',
@@ -595,7 +592,9 @@ describe('UsersService', () => {
       expect(savedUser.lastName).toBe('Smith');
     });
 
-    it('should update email when not taken by another user', async () => {
+    // A new address goes through AuthService.changeEmail (password,
+    // verification reset, both mailboxes told); this path refuses it.
+    it('refuses to change the email directly', async () => {
       const mockUser = {
         id: 'user-1',
         firstName: 'John',
@@ -603,17 +602,10 @@ describe('UsersService', () => {
         email: 'old@test.com',
       } as User;
 
-      userRepository.findOne
-        .mockResolvedValueOnce(mockUser)
-        .mockResolvedValueOnce(null);
+      userRepository.findOne.mockResolvedValueOnce(mockUser);
 
-      userRepository.save.mockImplementation(user => Promise.resolve(user));
-
-      await service.update('user-1', { email: 'new@test.com' });
-
-      expect(userRepository.save).toHaveBeenCalled();
-      const savedUser = userRepository.save.mock.calls[0][0];
-      expect(savedUser.email).toBe('new@test.com');
+      await expect(service.update('user-1', { email: 'new@test.com' })).rejects.toThrow(BadRequestException);
+      expect(userRepository.save).not.toHaveBeenCalled();
     });
 
     it('should allow user to update to their own email', async () => {

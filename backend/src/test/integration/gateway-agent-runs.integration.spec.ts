@@ -13,7 +13,6 @@
  */
 
 jest.unmock('jsonwebtoken');
-jest.unmock('bcryptjs');
 
 const SKIP = !process.env.RUN_DB_INTEGRATION;
 

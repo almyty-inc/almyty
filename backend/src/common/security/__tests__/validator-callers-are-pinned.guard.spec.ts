@@ -100,11 +100,6 @@ const ALLOWED: Array<[string, RegExp, string]> = [
     /gatedConfig\(config, opts\)/,
     'gatedConfig() builds the transport from LLM_HTTP_DEFAULTS (maxRedirects: 0 + pinned agents, or agentsExempting for the one approved host) and re-applies it over the caller config; ollama-ssrf.spec and egress-approved-host.spec prove it behaviourally',
   ],
-  [
-    'modules/model-registry/model-registry.service.ts',
-    /^\(url, \{ headers: process\.env\.HF_TOKEN/,
-    'hf:// reads: the origin is the literal https://huggingface.co (built on the line above), and /resolve/ answers with a redirect to the hub CDN that has to be followed',
-  ],
 ];
 
 /** The text between the call's parentheses, skipping string contents. */

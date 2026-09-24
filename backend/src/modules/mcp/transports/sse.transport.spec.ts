@@ -145,6 +145,7 @@ describe('SseTransport', () => {
         connectionId,
         { jsonrpc: '2.0', id: 1, method: 'ping' } as any,
         'org-1',
+        'user-1',
       );
       expect((res as any).error).toBeUndefined();
     });
@@ -319,7 +320,7 @@ describe('SseTransport', () => {
         id: 1,
       };
 
-      const response = await transport.handleSseMessage(connectionId, request);
+      const response = await transport.handleSseMessage(connectionId, request, 'org-1', 'user-1');
 
       expect(response).toEqual(mockJsonRpcResponse);
       expect(mcpService.handleJsonRpc).toHaveBeenCalled();
@@ -346,7 +347,7 @@ describe('SseTransport', () => {
         id: 1,
       };
 
-      await transport.handleSseMessage(connectionId, request);
+      await transport.handleSseMessage(connectionId, request, 'org-1', 'user-1');
 
       // Verify connection is still active
       const stats = transport.getConnectionStats();
@@ -362,7 +363,7 @@ describe('SseTransport', () => {
         id: 1,
       };
 
-      const response = await transport.handleSseMessage(connectionId, request);
+      const response = await transport.handleSseMessage(connectionId, request, 'org-1', 'user-1');
 
       expect(response.error).toBeDefined();
       expect(response.error.code).toBe(-32603);
@@ -429,7 +430,7 @@ describe('SseTransport', () => {
             jsonrpc: '2.0',
             method: 'tools/list',
             id: i,
-          } as any);
+          } as any, 'org-1', 'user-1');
           jest.advanceTimersByTime(60000);
         }
 
@@ -450,7 +451,7 @@ describe('SseTransport', () => {
         method: 'tools/list',
         id: 1,
       };
-      await transport.handleSseMessage(connectionId, request);
+      await transport.handleSseMessage(connectionId, request, 'org-1', 'user-1');
 
       jest.advanceTimersByTime(31000);
 

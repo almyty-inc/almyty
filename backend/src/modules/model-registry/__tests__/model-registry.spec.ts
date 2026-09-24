@@ -1,10 +1,11 @@
+import { createHash } from 'crypto';
 import { mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
 import { InvalidRegistryUriError, parseRegistryUri } from '../registry-uri';
 import { InvalidManifestError, manifestSha, validateManifest } from '../manifest';
-import { MANIFEST_FILE, ModelRegistryService, RegistryObjectStore } from '../model-registry.service';
+import { MANIFEST_FILE, ModelRegistryService, RegistryObjectStore, RegistryPinMismatchError } from '../model-registry.service';
 import { Credential } from '../../../entities/credential.entity';
 
 const manifest = () => ({
@@ -73,28 +74,51 @@ describe('validateManifest', () => {
   });
 });
 
-describe('ModelRegistryService', () => {
-  const memory = new Map<string, Buffer>();
+/**
+ * An in-memory object store that behaves like S3 where the registry relies
+ * on it: an object's etag is the md5 of its bytes and changes when the
+ * bytes do, and a read with `ifMatch` is refused with S3's own 412
+ * PreconditionFailed shape when the object is not that one.
+ */
+function s3Like() {
+  const objects = new Map<string, Buffer>();
+  const etagOf = (body: Buffer) => createHash('md5').update(body).digest('hex');
   const store: RegistryObjectStore = {
-    async getObject(bucket, key) {
-      const v = memory.get(`${bucket}/${key}`);
-      if (!v) throw Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey' });
-      return v;
+    async getObject(bucket, key, options = {}) {
+      const body = objects.get(`${bucket}/${key}`);
+      if (!body) throw Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } });
+      if (options.ifMatch && options.ifMatch.replace(/"/g, '') !== etagOf(body)) {
+        throw Object.assign(new Error('At least one of the pre-conditions you specified did not hold'), {
+          name: 'PreconditionFailed',
+          $metadata: { httpStatusCode: 412 },
+        });
+      }
+      return { body, etag: `"${etagOf(body)}"` };
     },
     async putObject(bucket, key, body) {
-      memory.set(`${bucket}/${key}`, body);
-      return { etag: 'etag-1' };
+      objects.set(`${bucket}/${key}`, body);
+      return { etag: etagOf(body) };
     },
     async headObject(bucket, key) {
-      const v = memory.get(`${bucket}/${key}`);
-      return v ? { etag: 'etag-1', sizeBytes: v.length } : null;
+      const body = objects.get(`${bucket}/${key}`);
+      return body ? { etag: etagOf(body), sizeBytes: body.length } : null;
     },
   };
+  const put = (path: string, body: string) => {
+    const buf = Buffer.from(body);
+    objects.set(path, buf);
+    return etagOf(buf);
+  };
+  return { store, put };
+}
+
+describe('ModelRegistryService', () => {
+  const { store, put } = s3Like();
 
   it('publishes a manifest into the organization bucket and returns a pinned s3 URI it can read back', async () => {
     const service = new ModelRegistryService(undefined, store);
     const published = await service.publishManifest('org-1', 'models/qwen3/', manifest());
-    expect(published.registryUri).toBe('s3://registry/models/qwen3@etag-1');
+    expect(published.registryUri).toMatch(/^s3:\/\/registry\/models\/qwen3@[0-9a-f]{32}$/);
     expect(published.sizeBytes).toBe(1234);
     const described = await service.describeVersion(published.registryUri, 'org-1');
     expect(described.manifest.base).toBe('qwen3-0.6b');
@@ -111,11 +135,11 @@ describe('ModelRegistryService', () => {
   });
 
   it('refuses a manifest that is not valid JSON or not a manifest', async () => {
-    memory.set('registry/broken/' + MANIFEST_FILE, Buffer.from('{not json'));
-    memory.set('registry/thin/' + MANIFEST_FILE, Buffer.from('{"schemaVersion":1}'));
+    const broken = put('registry/broken/' + MANIFEST_FILE, '{not json');
+    const thin = put('registry/thin/' + MANIFEST_FILE, '{"schemaVersion":1}');
     const service = new ModelRegistryService(undefined, store);
-    await expect(service.readManifest('s3://registry/broken@x', 'org-1')).rejects.toMatchObject({ code: 'REGISTRY_MANIFEST_INVALID' });
-    await expect(service.readManifest('s3://registry/thin@x', 'org-1')).rejects.toBeInstanceOf(InvalidManifestError);
+    await expect(service.readManifest(`s3://registry/broken@${broken}`, 'org-1')).rejects.toMatchObject({ code: 'REGISTRY_MANIFEST_INVALID' });
+    await expect(service.readManifest(`s3://registry/thin@${thin}`, 'org-1')).rejects.toBeInstanceOf(InvalidManifestError);
   });
 
   it('resolves the store per organization: another org with no connection is refused, never served from a shared bucket', async () => {
@@ -123,6 +147,49 @@ describe('ModelRegistryService', () => {
     await expect(service.readManifest('s3://registry/models/qwen3@etag-1', 'org-2')).rejects.toMatchObject({ code: 'REGISTRY_NOT_CONNECTED' });
     expect(await service.isConnected('org-1')).toBe(true);
     expect(await service.isConnected('org-2')).toBe(false);
+  });
+
+  describe('s3:// pins', () => {
+    // A pinned URI is the version's identity. The pin used to be parsed and
+    // then ignored, so replacing the manifest in the bucket silently
+    // changed what an already-registered "pinned" version pointed at.
+    it('reads the object the etag pin names', async () => {
+      const service = new ModelRegistryService(undefined, store);
+      const etag = put('registry/pinned/ok/' + MANIFEST_FILE, JSON.stringify(manifest()));
+      await expect(service.readManifest(`s3://registry/pinned/ok@${etag}`, 'org-1')).resolves.toMatchObject({ base: 'qwen3-0.6b' });
+    });
+
+    it('refuses the manifest once the object at the key has been replaced', async () => {
+      const service = new ModelRegistryService(undefined, store);
+      const published = await service.publishManifest('org-1', 'models/swapped', manifest());
+      put('registry/models/swapped/' + MANIFEST_FILE, JSON.stringify({ ...manifest(), base: 'something-else' }));
+
+      await expect(service.readManifest(published.registryUri, 'org-1')).rejects.toBeInstanceOf(RegistryPinMismatchError);
+      await expect(service.describeVersion(published.registryUri, 'org-1')).rejects.toMatchObject({ code: 'REGISTRY_PIN_MISMATCH' });
+    });
+
+    it('refuses a store that ignores If-Match and hands back another object', async () => {
+      const lax: RegistryObjectStore = {
+        ...store,
+        async getObject(bucket, key) {
+          return store.getObject(bucket, key);
+        },
+      };
+      const service = new ModelRegistryService(undefined, lax);
+      put('registry/lax/' + MANIFEST_FILE, JSON.stringify(manifest()));
+      await expect(service.readManifest(`s3://registry/lax@${'0'.repeat(32)}`, 'org-1')).rejects.toMatchObject({ code: 'REGISTRY_PIN_MISMATCH' });
+    });
+
+    it('checks a sha256 pin against the manifest digest', async () => {
+      const service = new ModelRegistryService(undefined, store);
+      put('registry/bysha/' + MANIFEST_FILE, JSON.stringify(manifest()));
+      const sha = manifestSha(validateManifest(manifest()));
+
+      await expect(service.readManifest(`s3://registry/bysha@${sha}`, 'org-1')).resolves.toMatchObject({ base: 'qwen3-0.6b' });
+      await expect(service.readManifest(`s3://registry/bysha@${'a'.repeat(64)}`, 'org-1')).rejects.toMatchObject({
+        code: 'REGISTRY_PIN_MISMATCH',
+      });
+    });
   });
 });
 

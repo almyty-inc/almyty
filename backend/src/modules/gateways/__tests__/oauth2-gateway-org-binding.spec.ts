@@ -3,6 +3,7 @@ import * as crypto from 'crypto';
 import { GatewayAuthValidators } from '../gateway-auth-validators.helper';
 import { GatewayAuth, GatewayAuthType } from '../../../entities/gateway-auth.entity';
 import { GatewayAuthService } from '../gateway-auth.service';
+import { fakeRepository } from '../../../test/fake-repository';
 
 /**
  * The org-binding half of the OAuth2 gateway check has to actually run.
@@ -28,9 +29,15 @@ describe('validateOAuth2 gateway/org binding', () => {
   function build(oauthToken: any) {
     const oauthRepo = { findOne: jest.fn().mockResolvedValue(oauthToken) };
     const apiKeyRepo = { findOne: jest.fn().mockResolvedValue(null) };
+    // The holder is a current member of org-a: this suite is about the
+    // gateway/org binding (oauth-token-holder-membership.spec.ts covers
+    // the holder).
+    const users = fakeRepository<any>([
+      { id: 'user-1', isActive: true, organizationMemberships: [{ organizationId: 'org-a', isActive: true }] },
+    ]);
     const validators = new GatewayAuthValidators(
       {} as any,
-      {} as any,
+      users as any,
       apiKeyRepo as any,
       oauthRepo as any,
       {} as any,

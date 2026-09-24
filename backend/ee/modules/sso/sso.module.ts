@@ -11,6 +11,7 @@ import { AuthModule } from '../../../src/modules/auth/auth.module';
 import { SsoConfigService } from './sso-config.service';
 import { SsoService } from './sso.service';
 import { OidcLoginStateStoreFactory } from './oidc-login-state.store';
+import { SamlReplayCache } from './saml-replay-cache';
 import { ScimService } from './scim.service';
 import { ScimAuthGuard } from './guards/scim-auth.guard';
 import { SsoController } from './sso.controller';
@@ -36,7 +37,7 @@ import { ConnectionsModule } from '../../../src/modules/connections/connections.
     ConnectionsModule,
   ],
 
-  providers: [SsoConfigService, SsoService, OidcLoginStateStoreFactory, ScimService, ScimAuthGuard],
+  providers: [SsoConfigService, SsoService, SamlReplayCache, OidcLoginStateStoreFactory, ScimService, ScimAuthGuard],
   controllers: [SsoConfigController, SsoController, ScimController, HostedChatSsoController],
   exports: [SsoConfigService, ScimService],
 })

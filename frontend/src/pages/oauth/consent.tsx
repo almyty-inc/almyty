@@ -110,6 +110,14 @@ export function OAuthConsentPage() {
       setSubmitting(false)
       return false
     }
+    // Only http(s) is a place to send the browser. Anything else --
+    // `javascript://localhost/...` parses fine and has host localhost --
+    // would run as script in this origin when assigned to location.href.
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      setSubmitError('The client supplied an invalid redirect URI.')
+      setSubmitting(false)
+      return false
+    }
     for (const [k, v] of Object.entries(extra)) url.searchParams.set(k, v)
     if (state) url.searchParams.set('state', state)
     window.location.href = url.toString()

@@ -36,6 +36,7 @@ function makeApiKey(overrides: any = {}): any {
     keyHash: crypto.createHash('sha256').update('test-key-123').digest('hex'),
     organizationId: 'org-1',
     userId: 'user-1',
+    user: { id: 'user-1', isActive: true, organizationMemberships: [{ organizationId: 'org-1', isActive: true }] },
     isActive: true,
     lastUsedAt: null,
     isExpired: jest.fn().mockReturnValue(false),
@@ -81,7 +82,7 @@ describe('AgentOpenAICompatController', () => {
     it('should reject body larger than 1MB', async () => {
       const res = makeRes();
       const req = makeReq();
-      const bigBody = { model: 'agent:1', messages: [{ role: 'user', content: 'x'.repeat(1.1 * 1024 * 1024) }] };
+      const bigBody = { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001', messages: [{ role: 'user', content: 'x'.repeat(1.1 * 1024 * 1024) }] };
 
       apiKeyRepo.findOne.mockResolvedValue(makeApiKey());
 
@@ -106,7 +107,7 @@ describe('AgentOpenAICompatController', () => {
       apiKeyRepo.findOne.mockResolvedValue(makeApiKey());
 
       await controller.chatCompletions(
-        { model: 'agent:1' },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001' },
         'Bearer test-key-123',
         req,
         res,
@@ -131,7 +132,7 @@ describe('AgentOpenAICompatController', () => {
       apiKeyRepo.findOne.mockResolvedValue(makeApiKey());
 
       await controller.chatCompletions(
-        { model: 'agent:1', messages },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001', messages },
         'Bearer test-key-123',
         req,
         res,
@@ -153,7 +154,7 @@ describe('AgentOpenAICompatController', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:1',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000001',
           messages: [{ role: 'user', content: 'x'.repeat(101 * 1024) }],
         },
         'Bearer test-key-123',
@@ -177,7 +178,7 @@ describe('AgentOpenAICompatController', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:1',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000001',
           messages: [{ content: 'hello' }],
         },
         'Bearer test-key-123',
@@ -202,7 +203,7 @@ describe('AgentOpenAICompatController', () => {
       const req = makeReq();
 
       await controller.chatCompletions(
-        { model: 'agent:1', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001', messages: [{ role: 'user', content: 'hi' }] },
         undefined as any,
         req,
         res,
@@ -218,7 +219,7 @@ describe('AgentOpenAICompatController', () => {
       apiKeyRepo.findOne.mockResolvedValue(null);
 
       await controller.chatCompletions(
-        { model: 'agent:1', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001', messages: [{ role: 'user', content: 'hi' }] },
         'Bearer invalid-key',
         req,
         res,
@@ -234,7 +235,7 @@ describe('AgentOpenAICompatController', () => {
       apiKeyRepo.findOne.mockResolvedValue(makeApiKey({ isExpired: jest.fn().mockReturnValue(true) }));
 
       await controller.chatCompletions(
-        { model: 'agent:1', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001', messages: [{ role: 'user', content: 'hi' }] },
         'Bearer test-key-123',
         req,
         res,
@@ -253,7 +254,7 @@ describe('AgentOpenAICompatController', () => {
 
       apiKeyRepo.findOne.mockResolvedValue(makeApiKey());
       agentsService.getAgent.mockResolvedValue({
-        id: 'agent-1',
+        id: '0a9e2b7c-0000-4000-8000-000000000001',
         name: 'Test',
         status: 'active',
       });
@@ -265,7 +266,7 @@ describe('AgentOpenAICompatController', () => {
       });
 
       await controller.chatCompletions(
-        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001', messages: [{ role: 'user', content: 'hi' }] },
         'Bearer test-key-123',
         req,
         res,
@@ -280,7 +281,7 @@ describe('AgentOpenAICompatController', () => {
   describe('rate limit (Redis-backed)', () => {
     const makeRedisController = (redis: any) =>
       new AgentOpenAICompatController(
-        { getAgent: jest.fn().mockResolvedValue({ id: 'agent-1', name: 'T', status: 'active' }), findByName: jest.fn(), findAllActive: jest.fn() } as any,
+        { getAgent: jest.fn().mockResolvedValue({ id: '0a9e2b7c-0000-4000-8000-000000000001', name: 'T', status: 'active' }), findByName: jest.fn(), findAllActive: jest.fn() } as any,
         { execute: jest.fn().mockResolvedValue({ id: 'exec-1', output: 'hi', status: 'completed', totalTokens: 1 }) } as any,
         { findOne: jest.fn().mockResolvedValue(makeApiKey()), update: jest.fn().mockResolvedValue({ affected: 1 }) } as any,
         { handleSync: jest.fn(), handleStreaming: jest.fn() } as any,
@@ -291,7 +292,7 @@ describe('AgentOpenAICompatController', () => {
       const redis = { incr: jest.fn().mockResolvedValue(1), expire: jest.fn().mockResolvedValue(1) };
       const res = makeRes();
       await makeRedisController(redis).chatCompletions(
-        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001', messages: [{ role: 'user', content: 'hi' }] },
         'Bearer test-key-123',
         makeReq(),
         res,
@@ -305,7 +306,7 @@ describe('AgentOpenAICompatController', () => {
       const redis = { incr: jest.fn().mockResolvedValue(61), expire: jest.fn().mockResolvedValue(1) };
       const res = makeRes();
       await makeRedisController(redis).chatCompletions(
-        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001', messages: [{ role: 'user', content: 'hi' }] },
         'Bearer test-key-123',
         makeReq(),
         res,
@@ -317,7 +318,7 @@ describe('AgentOpenAICompatController', () => {
       const redis = { incr: jest.fn().mockRejectedValue(new Error('conn refused')), expire: jest.fn() };
       const res = makeRes();
       await makeRedisController(redis).chatCompletions(
-        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001', messages: [{ role: 'user', content: 'hi' }] },
         'Bearer test-key-123',
         makeReq(),
         res,
@@ -370,7 +371,7 @@ describe('AgentOpenAICompatController', () => {
 
   describe('lastUsedAt throttling', () => {
     function setupHappyPath() {
-      agentsService.getAgent.mockResolvedValue({ id: 'agent-1', name: 'Test', status: 'active' });
+      agentsService.getAgent.mockResolvedValue({ id: '0a9e2b7c-0000-4000-8000-000000000001', name: 'Test', status: 'active' });
       executionEngine.execute.mockResolvedValue({
         id: 'exec-1',
         output: 'Hello!',
@@ -384,7 +385,7 @@ describe('AgentOpenAICompatController', () => {
       apiKeyRepo.findOne.mockResolvedValue(makeApiKey({ lastUsedAt: null }));
 
       await controller.chatCompletions(
-        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001', messages: [{ role: 'user', content: 'hi' }] },
         'Bearer test-key-123',
         makeReq(),
         makeRes(),
@@ -403,7 +404,7 @@ describe('AgentOpenAICompatController', () => {
       apiKeyRepo.findOne.mockResolvedValue(makeApiKey({ lastUsedAt: recent }));
 
       await controller.chatCompletions(
-        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001', messages: [{ role: 'user', content: 'hi' }] },
         'Bearer test-key-123',
         makeReq(),
         makeRes(),
@@ -418,7 +419,7 @@ describe('AgentOpenAICompatController', () => {
       apiKeyRepo.findOne.mockResolvedValue(makeApiKey({ lastUsedAt: old }));
 
       await controller.chatCompletions(
-        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001', messages: [{ role: 'user', content: 'hi' }] },
         'Bearer test-key-123',
         makeReq(),
         makeRes(),
@@ -438,7 +439,7 @@ describe('AgentOpenAICompatController', () => {
 
       const res = makeRes();
       await controller.chatCompletions(
-        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001', messages: [{ role: 'user', content: 'hi' }] },
         'Bearer test-key-123',
         makeReq(),
         res,
@@ -467,13 +468,13 @@ describe('AgentOpenAICompatController', () => {
       expect(map.size).toBe(10_001);
 
       apiKeyRepo.findOne.mockResolvedValue(makeApiKey({ id: 'fresh-key' }));
-      agentsService.getAgent.mockResolvedValue({ id: 'agent-1', name: 'Test', status: 'active' });
+      agentsService.getAgent.mockResolvedValue({ id: '0a9e2b7c-0000-4000-8000-000000000001', name: 'Test', status: 'active' });
       executionEngine.execute.mockResolvedValue({
         id: 'exec-1', output: 'hi', status: 'completed', totalTokens: 1,
       });
 
       await controller.chatCompletions(
-        { model: 'agent:agent-1', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000001', messages: [{ role: 'user', content: 'hi' }] },
         'Bearer test-key-123',
         makeReq(),
         makeRes(),

@@ -16,8 +16,22 @@ export function shouldAutoSaveMemory(
   run: Pick<AgentRun, 'endUserId'> & { metadata?: Record<string, any> | null },
 ): boolean {
   if (!agent.memoryConfig?.autoSave) return false;
-  // A product may opt its visitors in (app privacy setting, carried on the
-  // run when the surface starts it). The default stays out.
+  return runMayWriteSharedMemory(run);
+}
+
+/**
+ * Whether a run may write the organization's shared (workspace-scoped)
+ * memory at all -- by auto-save or by the `store_memory` tool.
+ *
+ * Not a visitor's run: a product may opt its visitors in (app privacy
+ * setting, carried on the run when the surface starts it), and the
+ * default stays out. The tool used to skip this, so a visitor could ask
+ * the agent to remember something and plant it in every later run's
+ * recall.
+ */
+export function runMayWriteSharedMemory(
+  run: Pick<AgentRun, 'endUserId'> & { metadata?: Record<string, any> | null },
+): boolean {
   if (run.endUserId) return run.metadata?.visitorMemory === true;
   return true;
 }

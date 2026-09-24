@@ -17,6 +17,7 @@ import { User } from '../../../src/entities/user.entity';
 import { UserOrganization } from '../../../src/entities/user-organization.entity';
 import { isEffectiveMembership } from '../../../src/common/authorization/membership';
 import { DecryptedSsoConfig, SsoConfigService, provisioningRole } from './sso-config.service';
+import { SamlReplayCache, assertionReplayFacts } from './saml-replay-cache';
 import {
   MemoryOidcLoginStateStore,
   OIDC_LOGIN_TTL_SECONDS,
@@ -53,6 +54,7 @@ export class SsoService {
     @InjectRepository(UserOrganization)
     private readonly membershipRepo: Repository<UserOrganization>,
     private readonly configService: SsoConfigService,
+    private readonly samlReplay: SamlReplayCache,
     // Optional so specs that never start an OIDC sign-in can construct
     // the service bare; they get a per-instance memory store.
     @Optional() loginStateFactory?: OidcLoginStateStoreFactory,
@@ -109,6 +111,14 @@ export class SsoService {
 
     if (!profile) {
       throw new UnauthorizedException('SAML response contained no assertion');
+    }
+
+    // Claimed before the user is resolved, so of two concurrent posts of
+    // one captured response only the first ever reaches a session.
+    const facts = assertionReplayFacts(profile);
+    if (!(await this.samlReplay.consume(facts))) {
+      this.logger.warn(`Replayed SAML assertion refused for org ${orgId}`);
+      throw new UnauthorizedException('This sign-in response has already been used. Start again.');
     }
 
     return this.resolveUser(orgId, this.profileFromSaml(profile), config);

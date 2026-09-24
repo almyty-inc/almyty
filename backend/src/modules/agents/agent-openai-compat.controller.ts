@@ -18,10 +18,8 @@ import { Repository } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
 import { Response, Request } from 'express';
-import * as crypto from 'crypto';
 
 import { ApiKey } from '../../entities/api-key.entity';
-import { Agent } from '../../entities/agent.entity';
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
 import { AgentOpenAIStreamHelper } from './agent-openai-stream.helper';
@@ -34,6 +32,7 @@ import {
   unsupportedOpenAIField,
   withSamplingOverrides,
 } from './compat-conversation.helper';
+import { agentsForKey, authenticateCompatKey, resolveCompatAgent } from './compat-auth.helper';
 
 /** Maximum request body size in bytes (1 MB). */
 const MAX_BODY_SIZE_BYTES = 1 * 1024 * 1024;
@@ -136,7 +135,7 @@ export class AgentOpenAICompatController {
         );
       }
 
-      const resolved = await this.resolveAgent(body.model, apiKey.organizationId, apiKey.userId);
+      const resolved = await resolveCompatAgent(this.agentsService, body.model, apiKey);
       agentId = resolved.id;
 
       // 4. Map OpenAI messages to agent input
@@ -202,7 +201,7 @@ export class AgentOpenAICompatController {
       // Touch lastUsedAt (throttled partial update)
       await this.touchApiKeyLastUsed(apiKey);
 
-      const agents = await this.agentsService.findAllActive(apiKey.organizationId, apiKey.userId);
+      const agents = agentsForKey(await this.agentsService.findAllActive(apiKey.organizationId, apiKey.userId), apiKey);
 
       const response = {
         object: 'list',
@@ -331,66 +330,12 @@ export class AgentOpenAICompatController {
 
   // ─── Authentication ──────────────────────────────────────────────────
 
+  /** See compat-auth.helper: the same key policy as the Anthropic route. */
   private async authenticateApiKey(authHeader: string): Promise<ApiKey> {
     if (!authHeader?.startsWith('Bearer ')) {
       throw new UnauthorizedException('Missing or invalid Authorization header');
     }
-
-    const token = authHeader.replace('Bearer ', '');
-    if (!token) {
-      throw new UnauthorizedException('Missing API key token');
-    }
-
-    // API keys are stored as SHA-256 hashes — hash the incoming token before lookup
-    const keyHash = crypto.createHash('sha256').update(token).digest('hex');
-
-    const apiKey = await this.apiKeyRepository.findOne({
-      where: { keyHash, isActive: true },
-      relations: { organization: true },
-    });
-
-    if (!apiKey) {
-      throw new UnauthorizedException('Invalid API key');
-    }
-
-    if (apiKey.isExpired()) {
-      throw new UnauthorizedException('API key has expired');
-    }
-
-    return apiKey;
-  }
-
-  // ─── Agent Resolution ────────────────────────────────────────────────
-
-  // A private agent answers only to its owner's own API key: the key's
-  // user is the caller for the visibility check.
-  private async resolveAgent(model: string, organizationId: string, callerId: string | null): Promise<Agent> {
-    // model format: "agent:uuid" or "agent:agent-name" or plain "uuid"/"name"
-    const agentRef = model.replace(/^agent:/, '');
-
-    // Try by ID first, then by name. Only swallow NotFoundException — a real
-    // DB error must propagate, otherwise outages look like "agent not found"
-    // to the caller and we lose the actual signal.
-    let agent: Agent | null = null;
-    try {
-      agent = await this.agentsService.getAgent(agentRef, organizationId, callerId ? { id: callerId } : null);
-    } catch (err) {
-      if (!(err instanceof NotFoundException)) throw err;
-    }
-
-    if (!agent) {
-      agent = await this.agentsService.findByName(agentRef, organizationId, callerId);
-    }
-
-    if (!agent) {
-      throw new NotFoundException(`Agent not found: ${model}`);
-    }
-
-    if (agent.status !== 'active') {
-      throw new BadRequestException(`Agent is not active: ${agent.name} (status: ${agent.status})`);
-    }
-
-    return agent;
+    return authenticateCompatKey(this.apiKeyRepository, authHeader.slice('Bearer '.length).trim());
   }
 
   /**

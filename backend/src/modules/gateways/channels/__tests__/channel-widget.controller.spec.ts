@@ -64,6 +64,9 @@ describe('ChannelWidgetController', () => {
         'application/javascript; charset=utf-8',
       );
       expect(scriptRes.setHeader).toHaveBeenCalledWith('Cache-Control', 'public, max-age=300');
+      // Without this, helmet's same-origin CORP makes browsers refuse the
+      // script on the third-party pages it exists to be embedded in.
+      expect(scriptRes.setHeader).toHaveBeenCalledWith('Cross-Origin-Resource-Policy', 'cross-origin');
       const script = scriptRes.send.mock.calls[0][0];
       expect(script).toContain(GATEWAY_UUID);
       expect(script).toContain('almyty-widget-bubble');

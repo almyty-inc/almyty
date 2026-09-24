@@ -43,6 +43,17 @@ export function stripUserSecrets<T extends Record<string, any>>(user: T): T {
   return user;
 }
 
+/**
+ * Keep only a user's membership in `organizationId`. A user row read on
+ * behalf of an organization says nothing about the person's other ones.
+ */
+export function scopeMemberships<T extends { organizationMemberships?: any[] }>(user: T, organizationId: string): T {
+  if (Array.isArray(user.organizationMemberships)) {
+    user.organizationMemberships = user.organizationMemberships.filter((m) => m?.organizationId === organizationId);
+  }
+  return user;
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -74,11 +85,14 @@ export class UsersService {
 
     const skip = (page - 1) * limit;
 
+    // Only the membership in this organization is selected. The list used
+    // to join every membership each user holds, with its organization, so
+    // an admin here read which other organizations their people belong to
+    // and in what role.
     let queryBuilder = this.userRepository
       .createQueryBuilder('user')
-      .innerJoin('user.organizationMemberships', 'membership', 'membership.organizationId = :organizationId', { organizationId })
-      .leftJoinAndSelect('user.organizationMemberships', 'allMemberships')
-      .leftJoinAndSelect('allMemberships.organization', 'allOrganization');
+      .innerJoinAndSelect('user.organizationMemberships', 'membership', 'membership.organizationId = :organizationId', { organizationId })
+      .leftJoinAndSelect('membership.organization', 'organization');
 
     // Apply search filter
     if (search) {
@@ -120,7 +134,7 @@ export class UsersService {
     }
 
     await this.assertUserInOrg(id, organizationId);
-    return this.findOne(id);
+    return scopeMemberships(await this.findOne(id), organizationId);
   }
 
   /**
@@ -186,13 +200,12 @@ export class UsersService {
       user.lastName = updateUserDto.lastName;
     }
 
-    if (updateUserDto.email) {
-      // Check if email is already taken
-      const existingUser = await this.findByEmail(updateUserDto.email);
-      if (existingUser && existingUser.id !== id) {
-        throw new BadRequestException('Email is already in use');
-      }
-      user.email = updateUserDto.email;
+    // The login address never changes here. This used to assign it
+    // directly: no password, verification left set on an address nobody
+    // had proved, and no word to the old mailbox. AuthService.changeEmail
+    // is the one path that may move it; the controllers route there first.
+    if (updateUserDto.email !== undefined && updateUserDto.email !== user.email) {
+      throw new BadRequestException('Change the email address through the email change flow.');
     }
 
     if (updateUserDto.preferences) {
@@ -413,7 +426,10 @@ export class UsersService {
     lastLoginAt: Date | null;
   }> {
     await this.assertUserInOrg(id, organizationId);
-    return this.getUserStats(id);
+    const stats = await this.getUserStats(id);
+    // Counted inside this organization only: the number of other
+    // organizations a person belongs to is not this org's to read.
+    return { ...stats, organizationsCount: 1 };
   }
 
   async getUserActivity(id: string, _days: number = 30): Promise<any[]> {

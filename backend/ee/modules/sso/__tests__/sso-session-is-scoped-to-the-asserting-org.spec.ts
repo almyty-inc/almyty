@@ -119,21 +119,25 @@ describe('an SSO session is scoped to the organization whose IdP asserted it', (
 
   it('an SSO session cannot change the login email through /users/me', async () => {
     const usersService = { update: jest.fn(async () => user) };
-    const controller = new UsersController(usersService as any);
+    const authService = { changeEmail: jest.fn(async () => user) };
+    const controller = new UsersController(usersService as any, authService as any);
     await expect(
       controller.updateCurrentUser({ ...user, ssoOrganizationId: ORG_A } as any, { email: 'attacker@evil.test' } as any),
     ).rejects.toThrow(ForbiddenException);
     expect(usersService.update).not.toHaveBeenCalled();
+    expect(authService.changeEmail).not.toHaveBeenCalled();
   });
 
   it('an SSO session cannot change the login email through /users/:id on itself', async () => {
     const usersService = { updateInOrg: jest.fn(async () => user) };
-    const controller = new UsersController(usersService as any);
+    const authService = { changeEmail: jest.fn(async () => user) };
+    const controller = new UsersController(usersService as any, authService as any);
     const req: any = { user: { ...user, ssoOrganizationId: ORG_A, currentOrganizationId: ORG_A } };
     await expect(
       controller.update(user.id, { email: 'attacker@evil.test' } as any, req),
     ).rejects.toThrow(ForbiddenException);
     expect(usersService.updateInOrg).not.toHaveBeenCalled();
+    expect(authService.changeEmail).not.toHaveBeenCalled();
   });
 
   it('an SSO session can still edit its name', async () => {

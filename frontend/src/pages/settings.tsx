@@ -380,14 +380,17 @@ function OrganizationTab({ organization }: { organization: any }) {
   )
 }
 
-function ProfileTab() {
+type ProfileErrors = { firstName?: string; lastName?: string; email?: string; currentPassword?: string }
+
+export function ProfileTab() {
   const { success, error } = useNotifications()
   const queryClient = useQueryClient()
   const [isEditing, setIsEditing] = useState(false)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
-  const [validationErrors, setValidationErrors] = useState<{ firstName?: string; lastName?: string; email?: string }>({})
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [validationErrors, setValidationErrors] = useState<ProfileErrors>({})
 
   const { data: userProfile, isLoading } = useQuery({
     queryKey: ['user-profile'],
@@ -404,10 +407,17 @@ function ProfileTab() {
   }, [userProfile, isEditing])
 
   const updateProfileMutation = useMutation({
-    mutationFn: (data: { name: string; email: string }) =>
+    mutationFn: (data: { name: string; email: string; currentPassword?: string }) =>
       authApi.updateProfile(data),
-    onSuccess: async () => {
-      success('Profile updated', 'Your profile has been updated successfully.')
+    onSuccess: async (_data, variables) => {
+      const moved = !!variables.currentPassword
+      success(
+        'Profile updated',
+        moved
+          ? 'Check your new inbox for a verification link. Your previous address has been notified.'
+          : 'Your profile has been updated successfully.',
+      )
+      setCurrentPassword('')
       setIsEditing(false)
       await queryClient.invalidateQueries({ queryKey: ['user-profile'] })
     },
@@ -434,8 +444,11 @@ function ProfileTab() {
     )
   }
 
+  // A new email needs the current password (the server refuses without it).
+  const emailChanged = isEditing && email.trim() !== (userProfile.email || '')
+
   const handleSave = () => {
-    const errors: { firstName?: string; lastName?: string; email?: string } = {}
+    const errors: ProfileErrors = {}
 
     if (!firstName.trim()) {
       errors.firstName = 'First name is required'
@@ -445,6 +458,9 @@ function ProfileTab() {
     }
     if (!email.trim()) {
       errors.email = 'Email is required'
+    }
+    if (emailChanged && !currentPassword) {
+      errors.currentPassword = 'Enter your current password to change your email'
     }
 
     if (Object.keys(errors).length > 0) {
@@ -457,6 +473,7 @@ function ProfileTab() {
     updateProfileMutation.mutate({
       name: `${firstName.trim()} ${lastName.trim()}`,
       email: email.trim(),
+      ...(emailChanged ? { currentPassword } : {}),
     })
   }
 
@@ -464,6 +481,7 @@ function ProfileTab() {
     setFirstName(userProfile.firstName || '')
     setLastName(userProfile.lastName || '')
     setEmail(userProfile.email || '')
+    setCurrentPassword('')
     setValidationErrors({})
     setIsEditing(false)
   }
@@ -556,6 +574,33 @@ function ProfileTab() {
               />
               {validationErrors.email && (
                 <p className="text-sm text-destructive mt-1">{validationErrors.email}</p>
+              )}
+              {emailChanged && (
+                <div className="mt-3">
+                  <label htmlFor="current-password" className="text-sm font-medium text-muted-foreground">
+                    Current password
+                  </label>
+                  <Input
+                    id="current-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(e) => {
+                      setCurrentPassword(e.target.value)
+                      if (validationErrors.currentPassword) {
+                        setValidationErrors({ ...validationErrors, currentPassword: undefined })
+                      }
+                    }}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Needed to change your email. We will send a verification link to the new address and let the
+                    current one know.
+                  </p>
+                  {validationErrors.currentPassword && (
+                    <p className="text-sm text-destructive mt-1">{validationErrors.currentPassword}</p>
+                  )}
+                </div>
               )}
             </>
           ) : (

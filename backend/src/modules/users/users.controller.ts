@@ -30,13 +30,17 @@ import { RequirePermissions } from '../../common/decorators/permissions.decorato
 import { User } from '../../entities/user.entity';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 import { assertMayChangeLoginEmail } from '../auth/sso-session';
+import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Users')
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly authService: AuthService,
+  ) {}
 
   /**
    * Pull the caller's resolved current org out of the JWT strategy. This is
@@ -185,15 +189,29 @@ export class UsersController {
     @CurrentUser() user: User,
     @Body() updateUserDto: UpdateUserDto,
   ) {
-    assertMayChangeLoginEmail(user, updateUserDto.email);
-    const updatedUser = await this.usersService.update(user.id, updateUserDto);
-    
+    const updatedUser = await this.updateSelf(user, updateUserDto);
+
     const { passwordHash, resetPasswordToken, verificationToken, ...profile } = updatedUser;
-    
+
     return {
       message: 'Profile updated successfully',
       user: profile,
     };
+  }
+
+  /**
+   * A person editing their own row. A new email goes through
+   * AuthService.changeEmail (current password, verification reset, both
+   * mailboxes told); only the remaining fields reach UsersService, which
+   * refuses an email change outright.
+   */
+  private async updateSelf(user: User, dto: UpdateUserDto): Promise<User> {
+    const { email, currentPassword, ...rest } = dto;
+    if (email !== undefined && email !== user.email) {
+      assertMayChangeLoginEmail(user, email);
+      await this.authService.changeEmail(user.id, email, currentPassword);
+    }
+    return this.usersService.update(user.id, rest);
   }
 
   @Patch(':id')
@@ -208,8 +226,18 @@ export class UsersController {
     @Req() req: any,
   ) {
     const organizationId = this.requireOrg(req);
-    if (req.user?.id === id) assertMayChangeLoginEmail(req.user, updateUserDto.email);
-    const updatedUser = await this.usersService.updateInOrg(id, organizationId, updateUserDto, req.user?.id);
+    let dto: UpdateUserDto = updateUserDto;
+    if (req.user?.id === id) {
+      // Editing yourself through the admin route is still the self-service
+      // edit: a new email goes through changeEmail first.
+      const { email, currentPassword, ...rest } = updateUserDto;
+      if (email !== undefined && email !== req.user.email) {
+        assertMayChangeLoginEmail(req.user, email);
+        await this.authService.changeEmail(id, email, currentPassword);
+      }
+      dto = rest;
+    }
+    const updatedUser = await this.usersService.updateInOrg(id, organizationId, dto, req.user?.id);
 
     const { passwordHash, resetPasswordToken, verificationToken, ...profile } = updatedUser;
 

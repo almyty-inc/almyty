@@ -248,6 +248,27 @@ describe('SpendService', () => {
         }
       }
     });
+
+    /**
+     * Team agents outside the viewer's teams are resolved by the caller
+     * (BudgetsService.hiddenAgentIds) and left out of the per-agent
+     * breakdown, on both execution shapes; rows with no agent stay.
+     */
+    it('drops the hidden agents from the per-agent breakdown only', async () => {
+      const runs = recordingRepo();
+      const execs = recordingRepo();
+      const service = new SpendService(runs.repo, execs.repo);
+      await service.getSummary('org-1', { from: new Date(), viewerId: 'user-1', hiddenAgentIds: ['agent-team'] });
+
+      for (const { queries } of [runs, execs]) {
+        const hiddenClauses = queries.map((q) => q.clauses.filter(([sql]) => sql.includes(':...hiddenAgentIds')));
+        expect(hiddenClauses[0]).toEqual([]);
+        expect(hiddenClauses[1]).toEqual([]);
+        expect(hiddenClauses[2]).toEqual([
+          ['(run."agentId" IS NULL OR run."agentId" NOT IN (:...hiddenAgentIds))', { hiddenAgentIds: ['agent-team'] }],
+        ]);
+      }
+    });
   });
 
   describe('forecast', () => {
