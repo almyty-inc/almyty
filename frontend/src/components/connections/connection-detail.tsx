@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { connectionsApi, connectorsApi, errorMessage } from '@/lib/connections-api'
 import { useNotifications } from '@/store/app'
-import { CONNECT_METHOD_LABELS, type Connection, type Connector } from '@/types/connections'
+import { CONNECT_METHOD_LABELS, CONNECTION_OWNER_LABELS, type Connection, type Connector } from '@/types/connections'
 import { ConnectFlow, CONNECTORS_QUERY_KEY } from './connect-sheet'
 import { ConnectionHealthBadge } from './health-badge'
 import { GrantsEditor } from './grants-editor'
@@ -91,7 +91,7 @@ export function ConnectionDetail({ connection, connector, onDisconnected }: Conn
           <span className="text-sm text-muted-foreground">
             {connector?.displayName ?? connection.connectorDisplayName ?? connection.connectorKey}
             {connection.accountLabel ? ` as ${connection.accountLabel}` : ''}{' '}
-            ({connection.owner === 'org' ? 'organization' : 'personal'})
+            ({CONNECTION_OWNER_LABELS[connection.owner] ?? 'organization'})
           </span>
         </div>
         <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
@@ -168,7 +168,13 @@ export function ConnectionDetail({ connection, connector, onDisconnected }: Conn
       </FormSection>
 
       <FormSection>
-        <GrantsEditor connectionId={connection.id} />
+        {connection.owner === 'private' ? (
+          <p className="text-sm text-muted-foreground" data-testid="private-connection-note">
+            Private connections can't be shared. Only you can see and use this one.
+          </p>
+        ) : (
+          <GrantsEditor connectionId={connection.id} />
+        )}
       </FormSection>
 
       <AlertDialog open={confirmDisconnect} onOpenChange={setConfirmDisconnect}>

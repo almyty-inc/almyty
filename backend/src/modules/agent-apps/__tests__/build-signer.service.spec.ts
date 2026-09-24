@@ -346,6 +346,37 @@ describe('BuildSignerService', () => {
     expect(await fs.readFile(artifactPath, 'utf8')).toBe('signed bytes');
   });
 
+  it('never puts the Windows certificate password on the command line', async () => {
+    // An argument list is readable by every process on the host through
+    // `ps` and /proc, and a build host runs other tenants' builds. The
+    // macOS path already reads the password from a 0600 file; the
+    // Windows one passed it as `-pass <password>`.
+    const password = 'windows-cert-password-7f3a';
+    const { service } = makeService({
+      credential: makeCredential({ certificate: APPLE_CONFIG.certificate, certificatePassword: password }),
+    });
+    let argv: string[] = [];
+    let passwordFileAtRunTime: string | null = null;
+    const runner = {
+      available: jest.fn().mockResolvedValue(true),
+      run: jest.fn().mockImplementation(async (_tool: string, args: string[]) => {
+        argv = args;
+        const passFile = args[args.indexOf('-readpass') + 1];
+        passwordFileAtRunTime = passFile ? await fs.readFile(passFile, 'utf8').catch(() => null) : null;
+        await fs.writeFile(`${artifactPath}.signed`, 'signed bytes');
+        return { ok: true, output: '', error: null };
+      }),
+    };
+
+    const outcome = await service.sign({ ...params(runner), platform: 'windows-x64' });
+
+    expect(outcome.signed).toBe(true);
+    expect(argv.some((arg) => arg.includes(password))).toBe(false);
+    expect(argv).not.toContain('-pass');
+    // The tool still gets the password, from the file written for it.
+    expect(passwordFileAtRunTime).toBe(password);
+  });
+
   it('leaves the unsigned binary in place when Windows signing fails', async () => {
     const { service } = makeService({
       credential: makeCredential({

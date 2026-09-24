@@ -26,6 +26,7 @@ import { Throttle } from '@nestjs/throttler';
 import { Request as ExpressRequest, Response } from 'express';
 
 import { AuthService } from './auth.service';
+import { assertMayChangeLoginEmail } from './sso-session';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -309,6 +310,7 @@ export class AuthController {
     @CurrentUser() user: User,
     @Body() updateProfileDto: UpdateProfileDto,
   ) {
+    assertMayChangeLoginEmail(user, updateProfileDto.email);
     const updatedUser = await this.authService.updateProfile(user.id, updateProfileDto);
 
     // Remove sensitive data

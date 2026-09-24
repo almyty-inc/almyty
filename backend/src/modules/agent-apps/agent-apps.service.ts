@@ -42,6 +42,7 @@ import {
   rateLimitFor,
 } from './distribution-publish';
 import { GatewaysService } from '../gateways/gateways.service';
+import { restoreMaskedChannelSecrets } from '../gateways/channels/channel-config.helper';
 import { OrgLicenseResolver } from '../licensing/org-license.resolver';
 import { EE_ENTITLEMENTS } from '../licensing/license.constants';
 
@@ -424,6 +425,14 @@ export class AgentAppsService {
     const existing = await this.distributionRepository.findOne({
       where: { appId: app.id, target },
     });
+
+    // Responses mask the platform credentials in a configuration, so a
+    // client that sends one back unchanged sends the placeholder. Swap it
+    // for the stored value (or drop it, when nothing is stored) rather
+    // than overwriting a real token with asterisks.
+    configuration = { ...(configuration ?? {}) };
+    restoreMaskedChannelSecrets(configuration, existing?.configuration);
+
     if (existing) {
       // Merged rather than replaced, so a caller that sends one field
       // does not silently drop the others. Clearing a field is done by

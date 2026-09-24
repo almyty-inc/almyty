@@ -178,7 +178,7 @@ export class McpService {
           break;
 
         case 'prompts/get':
-          result = await this.contentHandler.handlePromptGet(request.params as McpGetPromptRequest, organizationId);
+          result = await this.contentHandler.handlePromptGet(request.params as McpGetPromptRequest, organizationId, gatewayId, caller);
           break;
 
         // Skills methods

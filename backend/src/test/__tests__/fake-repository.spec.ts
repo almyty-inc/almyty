@@ -169,12 +169,12 @@ describe('fakeRepository', () => {
       expect(await ids(skills, 'someone-else')).toEqual(['s-gone', 's-none', 's-org']);
     });
 
-    it('follows Postgres null semantics: a null viewer is not distinct from a null owner', async () => {
-      // `NULL IS DISTINCT FROM NULL` is false, so the SQL keeps a private
-      // resource with no recorded owner for a caller with no known user.
-      // The fake says what Postgres says, not what the code meant.
+    it('follows Postgres null semantics: a null viewer never owns a row, not even an ownerless one', async () => {
+      // `(NULL = NULL) IS NOT TRUE` is true, so the SQL drops a private
+      // resource with no recorded owner for a caller with no known user
+      // (fail closed), as it drops everyone else's private resources.
       const { skills } = setup();
-      expect(await ids(skills, null)).toEqual(['s-gone', 's-none', 's-org', 's-ownerless']);
+      expect(await ids(skills, null)).toEqual(['s-gone', 's-none', 's-org']);
     });
 
     it('reads the other table at query time', async () => {
@@ -203,7 +203,7 @@ describe('fakeRepository', () => {
       // A near miss of the modelled fragment: dropping the NOT, or flipping the owner test.
       await refused(Raw((c) => notOthersPrivateAgent(c).replace('NOT EXISTS', 'EXISTS'), { privateViewerId: 'owner' }));
       await refused(
-        Raw((c) => notOthersPrivateAgent(c).replace('IS DISTINCT FROM', 'IS NOT DISTINCT FROM'), { privateViewerId: 'owner' }),
+        Raw((c) => notOthersPrivateAgent(c).replace('IS NOT TRUE', 'IS TRUE'), { privateViewerId: 'owner' }),
       );
       // A fragment with a join is not modelled.
       await refused(Raw((c) => notOthersPrivateAgentRun(c), { privateViewerId: 'owner' }));

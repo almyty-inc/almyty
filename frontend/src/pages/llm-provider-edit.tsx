@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 
@@ -11,6 +11,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { EditProviderForm } from '@/components/llm-providers/edit-provider-form'
 import { buildProviderUpdateBody } from '@/components/llm-providers/schema'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 /**
  * Edit a model provider -- its model settings, keys and who can see it --
@@ -19,7 +20,6 @@ import { buildProviderUpdateBody } from '@/components/llm-providers/schema'
  */
 export function LlmProviderEditPage() {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const notifications = useNotifications()
 
@@ -70,18 +70,23 @@ export function LlmProviderEditPage() {
       queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
       queryClient.invalidateQueries({ queryKey: ['llm-provider', providerId] })
       notifications.success('Updated', 'Provider configuration updated successfully')
-      navigate(`/llm-providers/${providerId}`)
+      guard.leave(`/llm-providers/${providerId}`)
     },
     onError: (err: any) => {
       notifications.error('Error', getApiErrorMessage(err, 'Failed to update provider'))
     },
   })
 
+  // Unsaved edits ask before a navigation throws them away; a save that
+  // lands leaves for the detail page without asking.
+  const guard = useLeaveGuard(editForm.formState.isDirty)
+
   return (
     <FormPage
       title="Edit provider"
       description="Update provider configuration, model settings and who can use it."
       back={{ to: `/llm-providers/${id}`, label: provider?.name ?? 'Provider' }}
+      guard={guard}
     >
       {isLoading ? (
         <div className="flex justify-center py-16">
@@ -95,7 +100,7 @@ export function LlmProviderEditPage() {
             editForm={editForm}
             providerToEdit={provider}
             updateProviderMutation={updateProviderMutation}
-            onCancel={() => navigate(`/llm-providers/${id}`)}
+            onCancel={() => guard.navigate(`/llm-providers/${id}`)}
           />
         </FormSection>
       )}

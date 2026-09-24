@@ -12,6 +12,7 @@ import { Gateway, GatewayKind, GatewayStatus, GatewayType } from '../../entities
 import { LlmProvider, LlmProviderStatus } from '../../entities/llm-provider.entity';
 import { LlmProviderType } from '../../entities/llm-provider-type';
 import { Credential, CredentialType } from '../../entities/credential.entity';
+import { ConnectionGrant } from '../../entities/connection-grant.entity';
 import { Runner, RunnerIsolationTier } from '../../entities/runner.entity';
 import { RunnerSession } from '../../entities/runner-session.entity';
 import { Workspace } from '../../entities/workspace.entity';
@@ -310,6 +311,99 @@ describeIfDb('Resource handover on member removal and team deletion (real Postgr
       const entries = await repo(AuditLog).createQueryBuilder('a')
         .where('a."resourceId" IN (:...ids)', { ids: Object.values(own) }).getMany();
       expect(entries).toEqual([]);
+    });
+  });
+
+  describe('member removal: runners, connections and grants', () => {
+    let remover: string;
+    let peer: string;
+    let leaver: string;
+    let runnerId: string;
+    let personalConn: string;
+    let privateConn: string;
+    let managedConn: string;
+    let orgConn: string;
+    let otherOrgConn: string;
+
+    const connectionRow = (orgId: string, extra: Record<string, unknown>) => save(Credential, {
+      organizationId: orgId, name: `conn ${++seq}`, type: CredentialType.API_KEY, connectorKey: 'openai',
+      config: { apiKey: 'encrypted:gcm:aa:bb:cc' }, isActive: true, healthStatus: 'valid', visibility: 'org', teamId: null, ...extra,
+    });
+    const grant = (connectionId: string, orgId: string, principalType: string, principalId: string) =>
+      save(ConnectionGrant, { organizationId: orgId, connectionId, principalType, principalId, permission: 'use' });
+
+    beforeAll(async () => {
+      remover = await makeUser('conn-remover', organizationId, OrganizationRole.ADMIN, new Date('2024-01-05'));
+      peer = await makeUser('conn-peer', organizationId, OrganizationRole.MEMBER, new Date('2024-01-06'));
+      leaver = await makeUser('conn-leaver', organizationId, OrganizationRole.MEMBER, new Date('2024-01-07'));
+      await save(UserOrganization, { userId: leaver, organizationId: otherOrgId, role: OrganizationRole.MEMBER, isActive: true, inviteAccepted: true });
+
+      // An org-visible runner on the leaver's machine.
+      runnerId = (await runners.register(runnerInput('leaver-shared-box', 'org'), leaver, organizationId)).runner.id;
+
+      personalConn = (await connectionRow(organizationId, { ownerUserId: leaver }) as any).id;
+      privateConn = (await connectionRow(organizationId, { ownerUserId: leaver, visibility: 'private' }) as any).id;
+      managedConn = (await connectionRow(organizationId, {
+        ownerUserId: leaver, visibility: 'private', metadata: { managedBy: { kind: 'llm_provider', id: 'p-1' } },
+      }) as any).id;
+      orgConn = (await connectionRow(organizationId, { ownerUserId: null }) as any).id;
+      otherOrgConn = (await connectionRow(otherOrgId, { ownerUserId: leaver }) as any).id;
+
+      await grant(personalConn, organizationId, 'role', 'member');
+      await grant(orgConn, organizationId, 'user', leaver);
+      await grant(orgConn, organizationId, 'user', peer);
+      await grant(otherOrgConn, otherOrgId, 'user', leaver);
+    });
+
+    it('deregisters the leaver\'s org-visible runner with its tools', async () => {
+      const toolsBefore = await repo(Tool).createQueryBuilder('t')
+        .where(`t."runnerConfig"->>'runnerId' = :runnerId`, { runnerId }).getMany();
+      expect(toolsBefore.length).toBeGreaterThan(0);
+
+      await orgs.removeMember(organizationId, leaver, remover);
+
+      expect(await repo(Runner).findOne({ where: { id: runnerId } })).toBeNull();
+      const toolsAfter = await repo(Tool).createQueryBuilder('t')
+        .where(`t."runnerConfig"->>'runnerId' = :runnerId`, { runnerId }).getMany();
+      expect(toolsAfter).toEqual([]);
+      const [deleted] = await auditRows({ action: AuditAction.DELETE, resourceType: AuditResource.RUNNER, resourceId: runnerId });
+      expect(deleted.details).toMatchObject({ reason: 'member_removed', ownerUserId: leaver, visibility: 'org' });
+    });
+
+    it('revokes the leaver\'s Personal and Private connections: secret wiped, inactive, grants gone, audited', async () => {
+      for (const id of [personalConn, privateConn]) {
+        const row = await repo(Credential).findOne({ where: { id } });
+        expect(row).toMatchObject({ isActive: false, healthStatus: 'revoked', ownerUserId: leaver });
+        expect(row!.config).toEqual({});
+        const [entry] = await auditRows({ action: AuditAction.CONNECTION_DISCONNECT, resourceId: id });
+        expect(entry).toMatchObject({ userId: remover, resourceType: AuditResource.CONNECTION });
+        expect(entry.details).toMatchObject({ reason: 'member_removed', ownerUserId: leaver, secretWiped: true, providerRevoked: false });
+      }
+      // Not handed to the remover: the account is the leaver's.
+      expect((await repo(Credential).findOne({ where: { id: privateConn } }))!.visibility).toBe('private');
+      expect(await repo(ConnectionGrant).find({ where: { connectionId: personalConn } })).toEqual([]);
+      const [personalEntry] = await auditRows({ action: AuditAction.CONNECTION_DISCONNECT, resourceId: personalConn });
+      expect(personalEntry.details).toMatchObject({ owner: 'user', grantsRemoved: 1 });
+    });
+
+    it('leaves a key an LLM provider manages to the provider handover, and org connections alone', async () => {
+      const managed = await repo(Credential).findOne({ where: { id: managedConn } });
+      expect(managed).toMatchObject({ isActive: true, ownerUserId: remover, visibility: 'private' });
+      expect(managed!.config).toEqual({ apiKey: 'encrypted:gcm:aa:bb:cc' });
+
+      const org = await repo(Credential).findOne({ where: { id: orgConn } });
+      expect(org).toMatchObject({ isActive: true, healthStatus: 'valid' });
+    });
+
+    it('removes grants naming the leaver in this organization only, and audits them', async () => {
+      const remaining = await repo(ConnectionGrant).find({ where: { connectionId: orgConn } });
+      expect(remaining.map((g) => g.principalId)).toEqual([peer]);
+      const [entry] = await auditRows({ action: AuditAction.CONNECTION_REVOKE_GRANT, resourceId: orgConn });
+      expect(entry.details).toMatchObject({ reason: 'member_removed', principalType: 'user', principalId: leaver });
+
+      // Another organization's connection and grant are untouched.
+      expect(await repo(Credential).findOne({ where: { id: otherOrgConn } })).toMatchObject({ isActive: true, healthStatus: 'valid' });
+      expect(await repo(ConnectionGrant).find({ where: { connectionId: otherOrgConn } })).toHaveLength(1);
     });
   });
 

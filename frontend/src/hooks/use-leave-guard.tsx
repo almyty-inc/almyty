@@ -14,6 +14,15 @@
  * <MemoryRouter> -- most unit tests -- the blocker is not mounted, and
  * Cancel asks through the guarded `navigate` below instead.
  *
+ * A router honours only its most recently mounted blocker, so the blocker
+ * is mounted only while the form is dirty. A page can then carry several
+ * inline forms (a detail page with an add-role form and a run panel) and a
+ * clean one mounted later never masks a dirty one mounted earlier.
+ *
+ * Inline forms that close in place (Cancel collapses the form rather than
+ * navigating) just pass their dirty state and render `guard.element`; a
+ * cancelled or saved form is clean again, so leaving never asks.
+ *
  * `allowPrefix` lets a multi-step flow move between its own step routes
  * (`/apis/new/schema` -> `/apis/new/review`) without asking.
  */
@@ -140,7 +149,7 @@ export function useLeaveGuard(dirty: boolean, options: LeaveGuardOptions = {}): 
 
   const element = (
     <>
-      {inDataRouter && <Blocker shouldBlock={shouldBlock} onBlocked={onBlocked} />}
+      {inDataRouter && dirty && <Blocker shouldBlock={shouldBlock} onBlocked={onBlocked} />}
       {dialog}
     </>
   )

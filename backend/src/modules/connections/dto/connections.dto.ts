@@ -1,9 +1,9 @@
 import { ArrayMinSize, IsArray, IsIn, IsObject, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
-import { CONNECT_METHOD_TYPES, CONNECTOR_KINDS, ConnectMethodType, ConnectorKind } from '../connector.types';
+import { CONNECT_METHOD_TYPES, CONNECTION_OWNERS, CONNECTOR_KINDS, ConnectMethodType, ConnectionOwner, ConnectorKind } from '../connector.types';
 
 export class ConnectBodyDto {
   @IsOptional() @IsIn(CONNECT_METHOD_TYPES as readonly string[]) method?: ConnectMethodType;
-  @IsOptional() @IsIn(['org', 'user']) owner?: 'org' | 'user';
+  @IsOptional() @IsIn(CONNECTION_OWNERS as readonly string[]) owner?: ConnectionOwner;
   @IsOptional() @IsIn(['browser', 'headless']) mode?: 'browser' | 'headless';
   @IsOptional() @IsObject() input?: Record<string, unknown>;
   @IsOptional() @IsString() @MinLength(1) @MaxLength(120) name?: string;

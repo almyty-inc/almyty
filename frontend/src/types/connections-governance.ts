@@ -54,10 +54,13 @@ export const SCOPE_PRINCIPAL_KIND_LABELS: Record<ScopePrincipalKind, string> = {
   role: 'Roles',
 }
 
-/** `connector_allowlist` and `connector_denylist`. `owners` absent means both org and user connects. */
+/**
+ * `connector_allowlist` and `connector_denylist`. `owners` absent means both org and user connects.
+ * Policies speak of who holds the key, so a private connection counts as 'user'.
+ */
 export interface ConnectorListRule {
   connectorKeys: string[]
-  owners?: ConnectionOwner[]
+  owners?: Array<Exclude<ConnectionOwner, 'private'>>
 }
 
 /** `scope_rule`. `requireOwner` is always `org`; `environments` absent means everywhere. */

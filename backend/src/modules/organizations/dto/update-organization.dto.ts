@@ -1,36 +1,23 @@
 import { IntersectionType, PartialType } from '@nestjs/swagger';
-import {
-  IsBoolean,
-  IsDateString,
-  IsEnum,
-  IsObject,
-  IsOptional,
-} from 'class-validator';
+import { IsBoolean, IsOptional } from 'class-validator';
 
 import { CreateOrganizationDto } from './create-organization.dto';
 
 /**
- * Admin-only org fields that are NOT on CreateOrganizationDto. Adding
- * `plan` or `billingInfo` on create would let any authenticated user
- * self-assign their own org to enterprise tier; here they're only
- * reachable on update, which the org controller gates to owner/admin.
+ * Org fields only an org admin/owner may change (the org controller gates
+ * PATCH to those roles), kept off CreateOrganizationDto.
+ *
+ * `plan`, `billingInfo` and `planExpiresAt` are deliberately NOT here: they
+ * are what an org pays for, written only by the Stripe webhook and the
+ * referral rewards. `billingInfo` carries the signed entitlement token and
+ * the Stripe customer id, so accepting it from the org's own admins let
+ * them paste in another org's token (its token is not bound to an org) or
+ * point billing at someone else's Stripe customer and open their portal.
  */
 class OrganizationAdminFieldsDto {
   @IsOptional()
-  @IsEnum(['free', 'pro', 'enterprise'])
-  plan?: 'free' | 'pro' | 'enterprise';
-
-  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
-
-  @IsOptional()
-  @IsObject()
-  billingInfo?: Record<string, any>;
-
-  @IsOptional()
-  @IsDateString()
-  planExpiresAt?: string;
 }
 
 export class UpdateOrganizationDto extends IntersectionType(

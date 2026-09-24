@@ -136,6 +136,33 @@ export function resourceNameFor(hostname: string): string {
   return `chat-${readable}-${digest}`;
 }
 
+/**
+ * Keep the `customDomain` block out of the caller's hands.
+ *
+ * It sits inside the same configuration json a tenant writes through the
+ * gateway API, and findByCustomDomain serves whatever says
+ * `status: 'active'`. Taking it from a request body would let a tenant
+ * skip the TXT check altogether: name any hostname, call it active, and
+ * be served under it -- or collide with a hostname another tenant did
+ * verify, which the fail-closed ambiguity rule then takes offline.
+ *
+ * Mutates `incoming` in place: whatever it carries is replaced by what
+ * is already stored (or removed when nothing is), so only the server's
+ * own verification path can ever change it.
+ */
+export function keepServerOwnedCustomDomain(
+  incoming: Record<string, any> | null | undefined,
+  stored: Record<string, any> | null | undefined,
+): void {
+  if (!incoming || typeof incoming !== 'object') return;
+  const previous = stored && typeof stored === 'object' ? stored.customDomain : undefined;
+  if (previous === undefined) {
+    delete incoming.customDomain;
+  } else {
+    incoming.customDomain = previous;
+  }
+}
+
 export function newCustomDomain(hostname: string): CustomDomainConfig {
   return {
     hostname: hostname.trim().toLowerCase(),

@@ -11,6 +11,8 @@ export interface PendingConnect {
   organizationId: string;
   userId: string;
   ownerUserId: string | null;
+  /** 'private' when the connection being made is its owner's alone. */
+  visibility?: 'org' | 'private';
   connectorKey: string;
   methodType: string;
   codeVerifier: string | null;

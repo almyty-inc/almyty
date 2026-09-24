@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { FormPage } from '@/components/layout/form-page'
@@ -9,6 +9,7 @@ import { gatewaysApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { GatewayEditForm } from '@/components/gateways/detail/gateway-edit-form'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 /**
  * Edit a gateway's settings and who can see it: a page of its own
@@ -16,9 +17,12 @@ import { GatewayEditForm } from '@/components/gateways/detail/gateway-edit-form'
  */
 export function GatewayEditPage() {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
+  // Unsaved edits ask before a navigation throws them away; a save that
+  // lands leaves for the detail page without asking.
+  const [dirty, setDirty] = useState(false)
+  const guard = useLeaveGuard(dirty)
 
   const { data: gateway, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ['gateway', id],
@@ -37,7 +41,7 @@ export function GatewayEditPage() {
       await queryClient.invalidateQueries({ queryKey: ['gateway', id] })
       await queryClient.invalidateQueries({ queryKey: ['gateways'] })
       success('Gateway updated', 'Gateway has been updated successfully.')
-      navigate(`/gateways/${id}`)
+      guard.leave(`/gateways/${id}`)
     },
     onError: (err: any) => {
       errorNotif('Failed to update gateway', getApiErrorMessage(err, 'Please try again.'))
@@ -49,6 +53,7 @@ export function GatewayEditPage() {
       title="Edit gateway"
       description="The protocol cannot be changed after creation."
       back={{ to: `/gateways/${id}`, label: gateway?.name ?? 'Gateway' }}
+      guard={guard}
     >
       {isLoading ? (
         <div className="flex justify-center py-16">
@@ -61,7 +66,8 @@ export function GatewayEditPage() {
           gateway={gateway}
           isSaving={editGatewayMutation.isPending}
           onSubmit={(data) => editGatewayMutation.mutate(data)}
-          onCancel={() => navigate(`/gateways/${id}`)}
+          onCancel={() => guard.navigate(`/gateways/${id}`)}
+          onDirtyChange={setDirty}
           isSystem={gateway?.isSystem}
         />
       )}
