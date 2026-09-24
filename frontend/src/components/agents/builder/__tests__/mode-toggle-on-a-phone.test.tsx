@@ -47,10 +47,10 @@ describe('the builder mode toggle on a phone', () => {
     }
   })
 
-  it('takes a full-width row of its own below sm', () => {
+  it('goes last and grows to fill its row below sm', () => {
     renderToolbar()
     const classes = screen.getByTestId('agent-mode-toggle').className.split(/\s+/)
-    expect(classes).toEqual(expect.arrayContaining(['w-full', 'order-last', 'sm:w-auto']))
+    expect(classes).toEqual(expect.arrayContaining(['order-last', 'flex-1', 'sm:flex-none']))
     expect(screen.getByTestId('agent-mode-toggle').parentElement!.className).toMatch(/\bflex-wrap\b/)
   })
 

@@ -144,7 +144,7 @@ describe('agent execution settings', () => {
   it('refuses a strategy on an autonomous agent, which would ignore it', async () => {
     agent.mode = 'autonomous' as any;
     const { body } = await put({ strategyKey: 'cascade' }).expect(400);
-    expect(body.error).toBe('STRATEGY_WORKFLOW_ONLY');
+    expect(body.code).toBe('STRATEGY_WORKFLOW_ONLY');
     expect(agent.settings).toBeUndefined();
   });
 
@@ -153,7 +153,7 @@ describe('agent execution settings', () => {
     const { body } = await put({
       orchestrator: { enabled: true, roleKey: 'orchestrator', timeoutMs: 2000, fallbackStrategyKey: 'single' },
     }).expect(400);
-    expect(body.error).toBe('STRATEGY_WORKFLOW_ONLY');
+    expect(body.code).toBe('STRATEGY_WORKFLOW_ONLY');
   });
 
   it('still lets an autonomous agent shed a leftover strategy', async () => {

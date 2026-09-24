@@ -112,14 +112,14 @@ export function BuilderToolbar({
       {/*
         The mode toggle is the only way to make an autonomous agent, so it
         is never hidden. It sits beside the name from sm up; on a phone the
-        first row has no room left, so it takes a full-width row of its own
-        under the name and the actions.
+        row wraps and it goes last, growing to fill the space beside the
+        undo/redo/save buttons (or a row of its own when they fit above).
       */}
       <div
         role="group"
         aria-label="Agent mode"
         data-testid="agent-mode-toggle"
-        className="order-last flex w-full items-center gap-1 bg-muted rounded-md p-0.5 sm:order-none sm:ml-3 sm:mr-auto sm:w-auto"
+        className="order-last flex min-w-[10rem] flex-1 items-center gap-1 bg-muted rounded-md p-0.5 sm:order-none sm:ml-3 sm:mr-auto sm:min-w-0 sm:flex-none"
       >
         <button
           type="button"

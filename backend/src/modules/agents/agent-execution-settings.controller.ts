@@ -109,7 +109,9 @@ export class AgentExecutionSettingsController {
         {
           success: false,
           message: 'Strategies apply to workflow agents. An autonomous agent runs its own loop and would ignore this choice.',
-          error: 'STRATEGY_WORKFLOW_ONLY',
+          // `code`, not `error`: the global filter keeps a payload's code
+          // and replaces its `error`, so only this reaches the client.
+          code: 'STRATEGY_WORKFLOW_ONLY',
         },
         HttpStatus.BAD_REQUEST,
       );
