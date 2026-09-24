@@ -3,6 +3,7 @@ import { RESOURCE_VISIBILITIES, ResourceVisibility } from '../../../common/autho
 import { Transform } from 'class-transformer';
 import { AgentStatus } from '../../../entities/agent.entity';
 import type { AgentCollaboration } from '../collaboration-participants';
+import type { AgentModels } from '../autonomous-models';
 
 const stripHtml = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
@@ -100,6 +101,12 @@ export class UpdateAgentDto {
   @IsOptional()
   @IsObject()
   collaboration?: AgentCollaboration | null;
+
+  // An autonomous agent's roles and strategy. Shape checked in
+  // AgentsService (agentModelsProblems), which names each problem.
+  @IsOptional()
+  @IsObject()
+  models?: AgentModels | null;
 
   @IsOptional()
   @IsObject()
