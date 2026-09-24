@@ -367,3 +367,31 @@ export function fakeRepository<T extends { id?: any } = any>(
     }),
   };
 }
+
+/**
+ * An EntityManager over fake repositories, for code that reaches through
+ * `repository.manager` (a transaction, or `getRepository(Entity)`).
+ *
+ * `transaction` runs the callback against this same manager and does NOT
+ * model rollback: a spec that needs "neither happens alone" must assert it
+ * some other way. Asking for an entity with no repository registered
+ * throws, rather than handing back something that answers everything.
+ */
+export function fakeManager(
+  repositories: Array<[Function, FakeRepository<any>]>,
+): { getRepository: jest.Mock; transaction: jest.Mock } {
+  const byEntity = new Map<Function, FakeRepository<any>>(repositories);
+  const manager = {
+    getRepository: jest.fn((entity: Function) => {
+      const repo = byEntity.get(entity);
+      if (!repo) throw new UnmodelledQueryError(`no fake repository for ${entity?.name ?? entity}`);
+      return repo;
+    }),
+    transaction: jest.fn(async (...args: any[]) => {
+      const work = args[args.length - 1];
+      return work(manager);
+    }),
+  };
+  for (const repo of byEntity.values()) (repo as any).manager = manager;
+  return manager;
+}

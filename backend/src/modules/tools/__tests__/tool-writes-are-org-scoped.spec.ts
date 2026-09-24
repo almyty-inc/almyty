@@ -3,7 +3,8 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ToolsService } from '../tools.service';
 import { Organization } from '../../../entities/organization.entity';
 import { User } from '../../../entities/user.entity';
-import { fakeRepository, FakeRepository } from '../../../test/fake-repository';
+import { Tool } from '../../../entities/tool.entity';
+import { fakeManager, fakeRepository, FakeRepository } from '../../../test/fake-repository';
 
 /**
  * Writes to a tool are scoped to the caller's organization. In
@@ -32,6 +33,11 @@ describe('ToolsService writes are organization-scoped', () => {
       { id: 'api-mine', organizationId: ORG, visibility: 'org' },
     ]);
     const organizations = fakeRepository<any>({ make: () => new Organization(), seed: [{ id: ORG, settings: {} }] });
+    // The tool quota counts through `toolRepository.manager`.
+    fakeManager([
+      [Tool, tools],
+      [Organization, organizations],
+    ]);
     const users = fakeRepository<any>({
       make: () => new User(),
       seed: [

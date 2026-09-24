@@ -1,6 +1,6 @@
 import { In, IsNull, LessThan, MoreThanOrEqual, Not, Raw } from 'typeorm';
 
-import { fakeRepository, UnmodelledQueryError } from '../fake-repository';
+import { fakeManager, fakeRepository, UnmodelledQueryError } from '../fake-repository';
 
 /**
  * The fake is only worth using if it can say no, so these pin the ways
@@ -133,5 +133,24 @@ describe('fakeRepository', () => {
     const r = repo();
     const rows = await r.find({ order: { id: 'DESC' }, skip: 0, take: 1 });
     expect(rows.map((w: Widget) => w.id)).toEqual(['w2']);
+  });
+});
+
+describe('fakeManager', () => {
+  class A {}
+  class B {}
+
+  it('hands out the registered repositories, in and out of a transaction', async () => {
+    const a = fakeRepository<any>([{ id: 'a1' }]);
+    const manager = fakeManager([[A, a]]);
+
+    expect((a as any).manager).toBe(manager);
+    await manager.transaction(async (m: any) => m.getRepository(A).delete({ id: 'a1' }));
+    expect(a.rows()).toHaveLength(0);
+  });
+
+  it('refuses an entity it has no repository for', () => {
+    const manager = fakeManager([[A, fakeRepository<any>()]]);
+    expect(() => manager.getRepository(B)).toThrow(UnmodelledQueryError);
   });
 });

@@ -2,7 +2,7 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 
 import { OrganizationsService } from '../organizations.service';
 import { OrganizationRole, UserOrganization } from '../../../entities/user-organization.entity';
-import { fakeRepository } from '../../../test/fake-repository';
+import { fakeManager, fakeRepository } from '../../../test/fake-repository';
 
 /**
  * Every membership lookup in OrganizationsService names the organization,
@@ -47,7 +47,15 @@ describe('OrganizationsService membership lookups are organization-scoped', () =
       {} as any,
       {} as any,
       { joinDefaultTeam: jest.fn() } as any,
+      undefined,
+      undefined,
+      undefined,
+      // Removal hands the member's private resources over in the same
+      // transaction; that is covered by its own spec.
+      { handOverPrivateResources: jest.fn().mockResolvedValue([]) } as any,
+      { publishCommitted: jest.fn() } as any,
     );
+    fakeManager([[UserOrganization, userOrganizations]]);
 
     return { service, userOrganizations, teams };
   }
