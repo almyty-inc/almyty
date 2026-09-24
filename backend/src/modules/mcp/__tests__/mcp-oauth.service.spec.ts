@@ -961,6 +961,20 @@ describe('McpOAuthService', () => {
       expect(result.expires_in).toBe(3600);
     });
 
+    // The rotation twin of "rejects a second concurrent exchange that lost
+    // the race". The default `update` double answers `{ affected: 1 }`, so
+    // without this the refusal was pinned nowhere in this file;
+    // `mcp-oauth-single-use.spec.ts` proves it against a table.
+    it('rejects a second concurrent rotation that lost the race', async () => {
+      jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue({ ...mockRefreshToken } as any);
+      (oauthTokenRepository.update as jest.Mock).mockResolvedValueOnce({ affected: 0 });
+
+      await expect(
+        service.refreshToken(rawRefreshToken, 'mcp_client_abc123', 'gateway-1'),
+      ).rejects.toThrow('has been revoked');
+      expect(oauthTokenRepository.save).not.toHaveBeenCalled();
+    });
+
     it('should reject revoked refresh tokens', async () => {
       const revokedToken = { ...mockRefreshToken, isRevoked: true };
       jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue(revokedToken as any);
