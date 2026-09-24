@@ -17,7 +17,6 @@ describe('ReferralQualificationService', () => {
 
   // Reads of the table as it stands, never of an object the service held.
   const referrerOrg = () => orgRepo.row('org-referrer');
-  const referredOrg = () => orgRepo.row('org-referred');
   const stored = (id: string) => referralRepo.row(id);
 
   beforeEach(async () => {
