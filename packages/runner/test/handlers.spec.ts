@@ -151,7 +151,7 @@ describe('dispatchHandler', () => {
     const resp = await dispatchHandler(blockedCtx, {
       method: 'shell.exec',
       workspaceId: 'ws-1',
-      params: { cmd: 'npm install left-pad' },
+      params: { command: 'npm install left-pad' },
     });
     expect(resp.ok).toBe(false);
     expect(resp.error?.data).toMatchObject({ code: RUNNER_ERROR_CODES.COMMAND_DENIED });
@@ -165,7 +165,7 @@ describe('dispatchHandler', () => {
     const resp = await dispatchHandler(containerCtx, {
       method: 'shell.exec',
       workspaceId: 'ws-1',
-      params: { cmd: 'ls' },
+      params: { command: 'ls' },
     });
     expect(resp.ok).toBe(false);
     expect(resp.error?.data).toMatchObject({ code: RUNNER_ERROR_CODES.COMMAND_DENIED });
