@@ -22,6 +22,7 @@ import { UserOrganization } from '../../entities/user-organization.entity';
 import { ReferralsModule } from '../referrals/referrals.module';
 import { BullModule } from '@nestjs/bull';
 import { LIFECYCLE_EMAIL_QUEUE } from '../lifecycle/lifecycle-email.processor';
+import { DEV_ONLY_JWT_SECRET } from './dev-jwt-secret';
 
 @Module({
   imports: [
@@ -65,7 +66,7 @@ import { LIFECYCLE_EMAIL_QUEUE } from '../lifecycle/lifecycle-email.processor';
         // type declaration.
         const expiresIn = configService.get<string>('JWT_EXPIRES_IN', '24h') as any;
         return {
-          secret: secret || 'dev-only-jwt-secret-change-me-in-production',
+          secret: secret || DEV_ONLY_JWT_SECRET,
           signOptions: {
             expiresIn,
             // issuer + audience bind every signed token to THIS

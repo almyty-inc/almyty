@@ -39,6 +39,7 @@ import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 // Import related modules
 import { ToolsModule } from '../tools/tools.module';
 import { GatewaysModule } from '../gateways/gateways.module';
+import { DEV_ONLY_JWT_SECRET } from '../auth/dev-jwt-secret';
 
 @Module({
   imports: [
@@ -71,7 +72,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
           );
         }
         return {
-          secret: secret || 'dev-jwt-secret',
+          secret: secret || DEV_ONLY_JWT_SECRET,
           signOptions: { issuer: 'almyty', audience: 'almyty-api' },
           verifyOptions: { issuer: 'almyty', audience: 'almyty-api' },
         };

@@ -122,6 +122,7 @@ import { ApisService } from '../modules/apis/apis.service';
 import { ToolsService } from '../modules/tools/tools.service';
 import { AgentsService } from '../modules/agents/agents.service';
 import { LlmProvidersService } from '../modules/llm-providers/llm-providers.service';
+import { DEV_ONLY_JWT_SECRET } from '../modules/auth/dev-jwt-secret';
 
 // Mock Redis
 const mockRedis = {
@@ -212,7 +213,7 @@ const mockRedis = {
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get('JWT_SECRET', 'test-jwt-secret'),
+        secret: config.get('JWT_SECRET', DEV_ONLY_JWT_SECRET),
         signOptions: { expiresIn: '1h', issuer: 'almyty', audience: 'almyty-api' },
         verifyOptions: { issuer: 'almyty', audience: 'almyty-api' },
       }),
