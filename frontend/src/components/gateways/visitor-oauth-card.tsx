@@ -272,7 +272,7 @@ export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; a
                     <Label htmlFor={id('discovery')}>Issuer or discovery URL</Label>
                     <Input id={id('discovery')} value={draft.discoveryUrl} onChange={(e) => set({ discoveryUrl: e.target.value })} placeholder="https://login.example.com" />
                     <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={() => setManual(true)}>
-                      No discovery document? Enter the endpoints instead
+                      Enter the endpoints by hand instead
                     </Button>
                   </div>
                 )}

@@ -244,6 +244,7 @@ next call.
 | Deployment | `providerConfig.credentialId` | the connection made in the form first. A request that names a `credentialId` and also pastes an `x-secret` value is refused (`PROVIDER_CONFIG_INLINE_SECRET`) |
 | Memory backend | `memory_workspace_config.overrides.routing.credentials` | a `memory_backend` row |
 | Chat channel (single workspace) | `gateways.configuration.credentialId` (plus `credentialKeys`, the secret names the row holds) | a `custom` row tagged `channel-<adapter>` with the bot token, signing secret, app secret, Twilio auth token, ... the adapter reads; rotated in place on the next paste, deleted with the gateway. The read seam is `ChannelCredentialService` in the gateways module |
+| Hosted chat visitor sign-in | `gateways.visitorOAuth.credentialId` | a `custom` row managed by the surface (`hosted_chat_oauth`) holding the OAuth client secret; rotated in place on the next paste, released when the provider is removed. Only `VisitorOAuthService` resolves it, for the code exchange |
 
 Instead of pasting, every form can name an existing connection
 (`credentialId`); null clears it, and a vendor that needs a key refuses

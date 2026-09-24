@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
-import { SAML, Profile } from '@node-saml/passport-saml';
+import { SAML, Profile, ValidateInResponseTo } from '@node-saml/passport-saml';
 import * as oidc from 'openid-client';
 
 import { User } from '../../../src/entities/user.entity';
@@ -48,7 +48,11 @@ export class SsoService {
   // ── SAML ────────────────────────────────────────────────────────────
 
   /** Overridable factory so unit tests can inject a fake SAML provider. */
-  buildSaml(config: DecryptedSsoConfig, callbackUrl: string): SAML {
+  buildSaml(
+    config: DecryptedSsoConfig,
+    callbackUrl: string,
+    extra: Partial<ConstructorParameters<typeof SAML>[0]> = {},
+  ): SAML {
     if (!config.samlEntryPoint || !config.samlIssuer || !config.samlCert) {
       throw new BadRequestException('SAML is not fully configured');
     }
@@ -59,6 +63,7 @@ export class SsoService {
       callbackUrl,
       wantAssertionsSigned: true,
       wantAuthnResponseSigned: false,
+      ...extra,
     });
   }
 
@@ -127,6 +132,109 @@ export class SsoService {
         (profile.surname as string) ||
         (profile['urn:oid:2.5.4.4'] as string),
     };
+  }
+
+  // ── Hosted chat visitors ────────────────────────────────────────────
+
+  /** Which protocol the organization signs people in with, or null when SSO is off. */
+  async protocolFor(orgId: string): Promise<'saml' | 'oidc' | null> {
+    const config = await this.configService.getDecrypted(orgId);
+    if (!config || !config.enabled) return null;
+    return config.protocol === 'saml' || config.protocol === 'oidc' ? config.protocol : null;
+  }
+
+  /**
+   * An SP-initiated SAML request for a hosted chat visitor, against the
+   * organization's own SAML configuration. Returns the IdP URL and the
+   * AuthnRequest ID, which the caller keeps: the response is accepted
+   * only if it answers exactly this request (InResponseTo), so an
+   * unsolicited or someone-else's response cannot sign a visitor in.
+   */
+  async hostedChatSamlLogin(orgId: string, acsUrl: string, relayState: string): Promise<{ url: string; requestId: string }> {
+    const config = await this.loadEnabledConfig(orgId, 'saml');
+    let requestId: string | null = null;
+    const saml = this.buildSaml(config, acsUrl, {
+      // node-saml hands the request ID to the cache only when it will
+      // later validate InResponseTo; that is how it is captured here.
+      validateInResponseTo: ValidateInResponseTo.always,
+      cacheProvider: {
+        async saveAsync(key: string, value: string) {
+          requestId = key;
+          return { value, createdAt: Date.now() };
+        },
+        async getAsync() {
+          return null;
+        },
+        async removeAsync() {
+          return null;
+        },
+      },
+    });
+    const url = await saml.getAuthorizeUrlAsync(relayState, undefined, {});
+    if (!requestId) throw new BadRequestException('SAML request could not be prepared');
+    return { url, requestId };
+  }
+
+  /**
+   * Validate a hosted chat visitor's SAML response with the same checks as
+   * the dashboard login (signature, timestamps, audience via node-saml),
+   * plus: it must answer `expectedRequestId`, and its assertion is claimed
+   * in the replay cache before anything else happens. Returns the identity
+   * only; binding it to a visitor is the caller's job.
+   */
+  async resolveHostedChatSamlVisitor(
+    orgId: string,
+    samlResponse: string,
+    acsUrl: string,
+    expectedRequestId: string,
+  ): Promise<{ externalId: string; email: string | null; displayName: string | null }> {
+    const config = await this.loadEnabledConfig(orgId, 'saml');
+    const saml = this.buildSaml(config, acsUrl, {
+      validateInResponseTo: ValidateInResponseTo.always,
+      // Knows exactly one outstanding request: the one this browser started.
+      cacheProvider: {
+        async saveAsync() {
+          return null;
+        },
+        async getAsync(key: string) {
+          return key === expectedRequestId ? new Date().toISOString() : null;
+        },
+        async removeAsync() {
+          return null;
+        },
+      },
+    });
+
+    let profile: Profile | null;
+    try {
+      profile = (await saml.validatePostResponseAsync({ SAMLResponse: samlResponse })).profile;
+    } catch (err) {
+      this.logger.warn(`Hosted chat SAML assertion rejected for org ${orgId}: ${err}`);
+      throw new UnauthorizedException('Invalid SAML assertion');
+    }
+    if (!profile) throw new UnauthorizedException('SAML response contained no assertion');
+    if (profile.inResponseTo !== expectedRequestId) {
+      throw new UnauthorizedException('SAML response does not answer this sign-in');
+    }
+
+    const facts = assertionReplayFacts(profile);
+    if (!(await this.samlReplay.consume(facts))) {
+      this.logger.warn(`Replayed hosted chat SAML assertion refused for org ${orgId}`);
+      throw new UnauthorizedException('This sign-in response has already been used. Start again.');
+    }
+
+    const nameId = typeof profile.nameID === 'string' ? profile.nameID : '';
+    if (!nameId) throw new UnauthorizedException('SAML assertion did not include a subject');
+    let email: string | null = null;
+    let displayName: string | null = null;
+    try {
+      const p = this.profileFromSaml(profile);
+      email = p.email;
+      displayName = [p.firstName, p.lastName].filter(Boolean).join(' ') || null;
+    } catch {
+      // A visitor needs a stable subject, not an address.
+    }
+    return { externalId: `saml|${facts.issuer}|${nameId}`, email, displayName };
   }
 
   // ── OIDC ────────────────────────────────────────────────────────────
