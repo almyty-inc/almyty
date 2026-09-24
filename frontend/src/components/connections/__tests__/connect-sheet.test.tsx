@@ -252,4 +252,24 @@ describe('ConnectAccountButton', () => {
     expect(screen.queryByLabelText('API key')).not.toBeInTheDocument()
     expect(connectionsApi.connect).not.toHaveBeenCalled()
   })
+
+  it('calls a user-owned connection Personal, not Private: admins can still see it', async () => {
+    vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connection({ owner: 'user' }) })
+    render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
+    await screen.findByLabelText('API key')
+
+    const owner = await screen.findByRole('radiogroup', { name: 'Owner' })
+    expect(owner).toHaveTextContent('Whole organization')
+    expect(owner).toHaveTextContent('Personal')
+    // 'Only me' promised what Private promises ('Only you ... Not even org
+    // admins'); a user-owned connection is visible to connection managers.
+    expect(owner).not.toHaveTextContent(/only me/i)
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Personal' }))
+    expect(screen.getByText(/Only you can use it\. Unlike Private, admins who manage connections can still see and revoke it\./)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-test-123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('openai', expect.objectContaining({ owner: 'user' })))
+  })
 })

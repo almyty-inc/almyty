@@ -377,11 +377,15 @@ export function ConnectFlow({
                       owner === o ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
                     )}
                   >
-                    {o === 'org' ? 'Whole organization' : 'Only me'}
+                    {o === 'org' ? 'Whole organization' : 'Personal'}
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground">{owner === 'org' ? 'Anyone you grant access can use it.' : 'A personal connection only you can use.'}</p>
+              <p className="text-xs text-muted-foreground">
+                {owner === 'org'
+                  ? 'Anyone you grant access can use it.'
+                  : 'Only you can use it. Unlike Private, admins who manage connections can still see and revoke it.'}
+              </p>
             </div>
           )}
 
