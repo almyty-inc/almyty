@@ -199,39 +199,33 @@ describe('hosted-chat address claims', () => {
         expect(saved.configuration.customDomain).toBeUndefined();
       });
 
-      it('keeps the stored domain, whatever the body says about it', async () => {
-        const stored = { ...forged, hostname: 'chat.acme.com', status: 'pending_verification' };
+      it('never copies a top-level claim or visitor OAuth block from the body onto the entity', async () => {
         gatewayRepository.findOne.mockResolvedValue({
           id: 'gw-1',
           organizationId: 'org-1',
           type: GatewayType.HOSTED_CHAT,
-          configuration: { hostedChat: { slug: 'acme', appName: 'Acme' }, customDomain: stored },
+          configuration: { hostedChat: { slug: 'acme', appName: 'Acme' } },
+          customDomain: null,
+          visitorOAuth: null,
         });
 
         await service.updateGateway(
           'gw-1',
-          { configuration: { ...hostedChatConfig, customDomain: { ...stored, status: 'active' } } } as any,
+          {
+            configuration: hostedChatConfig,
+            customDomain: forged,
+            visitorOAuth: { clientId: 'x', authorizationEndpoint: 'https://evil.example/authorize' },
+          } as any,
           'org-1',
           'user-1',
         );
 
+        // The columns are update: false, so a save could not write them
+        // anyway; the entity the caller gets back must not claim otherwise.
         const saved = gatewayRepository.save.mock.calls[0][0];
-        expect(saved.configuration.customDomain).toEqual(stored);
-      });
-
-      it('keeps the stored domain when an edit round-trips the config without it', async () => {
-        const stored = { ...forged, hostname: 'chat.acme.com' };
-        gatewayRepository.findOne.mockResolvedValue({
-          id: 'gw-1',
-          organizationId: 'org-1',
-          type: GatewayType.HOSTED_CHAT,
-          configuration: { hostedChat: { slug: 'acme', appName: 'Acme' }, customDomain: stored },
-        });
-
-        await service.updateGateway('gw-1', { configuration: hostedChatConfig } as any, 'org-1', 'user-1');
-
-        const saved = gatewayRepository.save.mock.calls[0][0];
-        expect(saved.configuration.customDomain).toEqual(stored);
+        expect(saved.customDomain).toBeNull();
+        expect(saved.visitorOAuth).toBeNull();
+        expect(saved.configuration.customDomain).toBeUndefined();
       });
     });
   });
@@ -242,7 +236,7 @@ describe('hosted-chat address claims', () => {
         id: 'gw-1',
         type: GatewayType.HOSTED_CHAT,
         status: GatewayStatus.ACTIVE,
-        configuration: { customDomain: { hostname: 'chat.acme.com', status: 'active' } },
+        customDomain: { hostname: 'chat.acme.com', status: 'active' },
         isActive: () => true,
         ...over,
       } as unknown as Gateway);
@@ -257,10 +251,10 @@ describe('hosted-chat address claims', () => {
      */
     const CLAUSES: Record<string, (row: any, params: any) => boolean> = {
       'gateway.type = :type': (row, p) => row.type === p.type,
-      "gateway.configuration -> 'customDomain' ->> 'hostname' = :hostname": (row, p) =>
-        row.configuration?.customDomain?.hostname === p.hostname,
-      "gateway.configuration -> 'customDomain' ->> 'status' = :status": (row, p) =>
-        row.configuration?.customDomain?.status === p.status,
+      "gateway.customDomain ->> 'hostname' = :hostname": (row, p) =>
+        row.customDomain?.hostname === p.hostname,
+      "gateway.customDomain ->> 'status' = :status": (row, p) =>
+        row.customDomain?.status === p.status,
     };
 
     const serviceFor = (rows: Gateway[]) => {
@@ -300,7 +294,7 @@ describe('hosted-chat address claims', () => {
     // the platform and take delivery before proving they own it.
     it('does not serve a claim that has not finished verification', async () => {
       const pending = gateway({
-        configuration: { customDomain: { hostname: 'chat.acme.com', status: 'pending' } },
+        customDomain: { hostname: 'chat.acme.com', status: 'pending' },
       } as any);
 
       await expect(serviceFor([pending]).findByCustomDomain('chat.acme.com')).resolves.toBeNull();

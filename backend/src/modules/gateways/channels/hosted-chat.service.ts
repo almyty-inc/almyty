@@ -498,10 +498,10 @@ export class HostedChatService {
     const gateways = await this.gatewayRepository
       .createQueryBuilder('gateway')
       .where('gateway.type = :type', { type: GatewayType.HOSTED_CHAT })
-      .andWhere("gateway.configuration -> 'customDomain' ->> 'hostname' = :hostname", {
+      .andWhere("gateway.customDomain ->> 'hostname' = :hostname", {
         hostname: normalized,
       })
-      .andWhere("gateway.configuration -> 'customDomain' ->> 'status' = :status", {
+      .andWhere("gateway.customDomain ->> 'status' = :status", {
         status: 'active',
       })
       .getMany();
