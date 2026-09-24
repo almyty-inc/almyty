@@ -13,6 +13,7 @@ import { A2AAgentCardService } from './a2a-agent-card.service';
 import { agentRunToTask } from './a2a-task.mapper';
 import { A2AMessageHandler } from './a2a-message.handler';
 import { A2ATaskHandler } from './a2a-task.handler';
+import { findGatewayRun } from '../gateways/gateway-servable';
 import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
 import { MetricType } from '../../entities/usage-metric.entity';
 import type {
@@ -265,14 +266,12 @@ export class A2AServerService {
     return agentRunToTask(run, messages);
   }
 
+  /** The latest run of `gateway`'s own agent in this conversation, or null. */
   private async findActiveRunByConversationId(
     conversationId: string,
-    organizationId: string,
+    gateway: Gateway,
   ): Promise<AgentRun | null> {
-    return this.runRepository.findOne({
-      where: { conversationId, organizationId },
-      order: { createdAt: 'DESC' },
-    });
+    return findGatewayRun(this.runRepository, gateway, { conversationId });
   }
 
   private async getRunMessages(run: AgentRun): Promise<Message[]> {

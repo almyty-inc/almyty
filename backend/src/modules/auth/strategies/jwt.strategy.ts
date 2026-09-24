@@ -12,6 +12,7 @@ import {
   hasEffectiveMembership,
   membershipOrgId,
 } from '../../../common/authorization/membership';
+import { DEV_ONLY_JWT_SECRET } from '../dev-jwt-secret';
 
 /**
  * Extract JWT from httpOnly cookie first, then fall back to Authorization header.
@@ -40,7 +41,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       ignoreExpiration: false,
       secretOrKey:
         configService.get<string>('JWT_SECRET') ||
-        'dev-only-jwt-secret-change-me-in-production',
+        DEV_ONLY_JWT_SECRET,
       // Enforce the iss + aud claims set by JwtModule.signOptions
       // (see auth.module.ts). passport-jwt configures these as
       // strings, not verifyOptions — if they're missing or wrong,

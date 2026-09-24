@@ -1,3 +1,4 @@
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { AgentRuntimeProcessor } from '../agent-runtime.processor';
 import { AgentBuiltInToolsHelper } from '../agent-builtin-tools.helper';
 import { AgentRunStatus } from '../../../entities/agent-run.entity';
@@ -23,7 +24,11 @@ describe('heartbeat runs', () => {
   function build(agent: Record<string, any>) {
     const startRun = jest.fn(async () => ({ id: 'run-1' }));
     const agents = fakeRepository<any>([agent]);
-    const processor = new AgentRuntimeProcessor({ startRun } as any, {} as any, agents as any, fakeRepository() as any);
+    // The real execution gate, with the owner a member of the agent's org.
+    const m = membershipFixture();
+    m.member('org-1', OWNER);
+    const runtime = { startRun, executionAccess: m.executionAccess, disableHeartbeat: jest.fn() };
+    const processor = new AgentRuntimeProcessor(runtime as any, {} as any, agents as any, fakeRepository() as any);
     const job: any = { data: { agentId: agent.id, organizationId: 'org-1' } };
     return { processor, startRun, job };
   }
@@ -53,11 +58,17 @@ describe('heartbeat runs', () => {
 });
 
 describe('invoke_agent from a visitor run', () => {
+  // invoke_agent needs a parent allowed to create agents and a target it
+  // may start: here, the temporary agent the run itself created.
+  const parent: any = { id: 'parent', agentConfig: { canCreateAgents: true } };
+  const childOf = (runId: string) =>
+    fakeRepository<any>([{ id: 'child-agent', organizationId: 'org-1', isTemporary: true, parentRunId: runId, status: 'active' }]);
+
   it('starts the child as nobody, not as the string "system"', async () => {
     const startRun = jest.fn(async () => ({ id: 'child-1' }));
     const waitForRun = jest.fn(async () => ({ status: AgentRunStatus.COMPLETED, output: 'ok' }));
     const helper = new AgentBuiltInToolsHelper(
-      fakeRepository() as any,
+      childOf('run-v') as any,
       {} as any,
       {} as any,
       { startRun, waitForRun } as any,
@@ -65,7 +76,7 @@ describe('invoke_agent from a visitor run', () => {
     );
     const visitorRun: any = { id: 'run-v', organizationId: 'org-1', userId: null, endUserId: 'visitor-7' };
 
-    await helper.executeBuiltInTool('invoke_agent', { agentId: 'child-agent', input: 'hi' }, visitorRun, {} as any);
+    await helper.executeBuiltInTool('invoke_agent', { agentId: 'child-agent', input: 'hi' }, visitorRun, parent);
 
     expect(startRun).toHaveBeenCalledTimes(1);
     const [, , userId, , options] = startRun.mock.calls[0] as any[];
@@ -77,10 +88,10 @@ describe('invoke_agent from a visitor run', () => {
   it('keeps a member run\'s user', async () => {
     const startRun = jest.fn(async () => ({ id: 'child-2' }));
     const waitForRun = jest.fn(async () => ({ status: AgentRunStatus.COMPLETED, output: 'ok' }));
-    const helper = new AgentBuiltInToolsHelper(fakeRepository() as any, {} as any, {} as any, { startRun, waitForRun } as any, {} as any);
+    const helper = new AgentBuiltInToolsHelper(childOf('run-m') as any, {} as any, {} as any, { startRun, waitForRun } as any, {} as any);
     const memberRun: any = { id: 'run-m', organizationId: 'org-1', userId: OWNER, endUserId: null };
 
-    await helper.executeBuiltInTool('invoke_agent', { agentId: 'child-agent', input: 'hi' }, memberRun, {} as any);
+    await helper.executeBuiltInTool('invoke_agent', { agentId: 'child-agent', input: 'hi' }, memberRun, parent);
 
     expect((startRun.mock.calls[0] as any[])[2]).toBe(OWNER);
   });

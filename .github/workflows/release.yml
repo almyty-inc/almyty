@@ -405,8 +405,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
+          # A release created by hand before the tag's workflow ran keeps its
+          # written notes; `gh release edit` has no --generate-notes (only
+          # `create` does), so it only marks the release as latest.
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --generate-notes --latest
+            gh release edit "$TAG" --latest
           else
             gh release create "$TAG" --title "$TAG" --generate-notes --latest --verify-tag
           fi

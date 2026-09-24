@@ -13,6 +13,7 @@ import {
   ValidationPipe,
   HttpStatus,
   HttpException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 
@@ -34,6 +35,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateToolGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { userPrincipal } from '../../common/authorization/execution-access.service';
 
 
 @Controller('organizations/:organizationId/tools')
@@ -289,6 +291,9 @@ export class ToolsController {
     try {
       const options: ToolExecutionOptions = {
         userId: req.user.id,
+        // The caller's own scope: a team tool runs only for its team (and
+        // org owners/admins), a private one only for its owner.
+        principal: userPrincipal(req.user.id),
         organizationId,
         timeout: executeDto.timeout,
         retries: executeDto.retries,
@@ -301,6 +306,11 @@ export class ToolsController {
         executeDto.parameters,
         options
       );
+      // A tool outside the caller's scope answers exactly like one that
+      // does not exist.
+      if (result.notFound) {
+        throw new NotFoundException('Tool not found');
+      }
 
       return {
         success: result.success,

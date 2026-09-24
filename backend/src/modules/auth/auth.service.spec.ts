@@ -17,9 +17,7 @@ import { AuditAction } from '../../entities/audit-log.entity';
 import { MailService } from '../mail/mail.service';
 import { ReferralsService } from '../referrals/referrals.service';
 import { CaptchaService } from './captcha.service';
-
-// Unmock bcrypt from global setup to test actual hashing
-jest.unmock('bcryptjs');
+import { realJwtService, signExpiredTestJwt, signTestJwt } from '../../test/jwt';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -862,62 +860,84 @@ describe('AuthService', () => {
   });
 
   describe('refreshToken', () => {
+    // Real signing and verification: the tokens below are minted with the
+    // test secret and the service verifies them with a real JwtService, so a
+    // forged, expired or wrong-type token is rejected by the library rather
+    // than by a stubbed verify.
+    beforeEach(() => {
+      (service as any).jwtService = realJwtService();
+    });
+
     it('should refresh token successfully', async () => {
-      const mockPayload = { sub: 'user-1', type: 'refresh' };
       const mockUser = {
         id: 'user-1',
         email: 'test@example.com',
         isActive: true,
         organizationMemberships: [],
       } as any;
-
-      jwtService.verify.mockReturnValue(mockPayload);
       userRepository.findOne.mockResolvedValue(mockUser);
-      jwtService.sign.mockReturnValueOnce('new-access-token').mockReturnValueOnce('new-refresh-token');
 
-      const result = await service.refreshToken('valid-refresh-token');
+      const result = await service.refreshToken(signTestJwt({ sub: 'user-1', type: 'refresh' }));
 
-      expect(result.accessToken).toBe('new-access-token');
-      expect(result.refreshToken).toBe('new-refresh-token');
+      const jwt = realJwtService();
+      expect(jwt.verify(result.accessToken)).toEqual(expect.objectContaining({ sub: 'user-1' }));
+      expect(jwt.verify(result.refreshToken)).toEqual(
+        expect.objectContaining({ sub: 'user-1', type: 'refresh', tv: 0 }),
+      );
     });
 
     it('should throw error for invalid token type', async () => {
-      const mockPayload = { sub: 'user-1', type: 'access' };
-      jwtService.verify.mockReturnValue(mockPayload);
+      await expect(
+        service.refreshToken(signTestJwt({ sub: 'user-1', type: 'access' })),
+      ).rejects.toThrow(UnauthorizedException);
+    });
 
-      await expect(service.refreshToken('invalid-token')).rejects.toThrow(UnauthorizedException);
+    it('rejects a refresh token signed with another secret', async () => {
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', isActive: true, organizationMemberships: [] } as any);
+
+      await expect(
+        service.refreshToken(signTestJwt({ sub: 'user-1', type: 'refresh' }, { secret: 'forged' })),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(userRepository.findOne).not.toHaveBeenCalled();
+    });
+
+    it('rejects an expired refresh token', async () => {
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', isActive: true, organizationMemberships: [] } as any);
+
+      await expect(
+        service.refreshToken(signExpiredTestJwt({ sub: 'user-1', type: 'refresh' })),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(userRepository.findOne).not.toHaveBeenCalled();
     });
 
     it('should throw error for inactive user', async () => {
-      const mockPayload = { sub: 'user-1', type: 'refresh' };
-      const mockUser = { id: 'user-1', isActive: false } as any;
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', isActive: false } as any);
 
-      jwtService.verify.mockReturnValue(mockPayload);
-      userRepository.findOne.mockResolvedValue(mockUser);
-
-      await expect(service.refreshToken('token')).rejects.toThrow(UnauthorizedException);
+      await expect(
+        service.refreshToken(signTestJwt({ sub: 'user-1', type: 'refresh' })),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should throw error if user not found', async () => {
-      const mockPayload = { sub: 'user-1', type: 'refresh' };
-      jwtService.verify.mockReturnValue(mockPayload);
       userRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.refreshToken('token')).rejects.toThrow(UnauthorizedException);
+      await expect(
+        service.refreshToken(signTestJwt({ sub: 'user-1', type: 'refresh' })),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should reject a refresh token whose tv is stale (revoked)', async () => {
-      const mockPayload = { sub: 'user-1', type: 'refresh', tv: 0 };
       const mockUser = {
         id: 'user-1',
         isActive: true,
         tokenVersion: 1, // bumped after the token was issued
         organizationMemberships: [],
       } as any;
-      jwtService.verify.mockReturnValue(mockPayload);
       userRepository.findOne.mockResolvedValue(mockUser);
 
-      await expect(service.refreshToken('token')).rejects.toThrow(UnauthorizedException);
+      await expect(
+        service.refreshToken(signTestJwt({ sub: 'user-1', type: 'refresh', tv: 0 })),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 

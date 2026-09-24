@@ -27,12 +27,14 @@ export const PRIVATE_CAPABLE_GATEWAY_TYPES: ReadonlySet<GatewayType> = new Set([
 interface GatewayVisibilityLike {
   visibility?: ResourceVisibility | null;
   ownerUserId?: string | null;
+  teamId?: string | null;
 }
 
 interface ServableResourceLike {
   visibility?: ResourceVisibility | null;
   ownerUserId?: string | null;
   createdBy?: string | null;
+  teamId?: string | null;
 }
 
 export function isPrivateGateway(gateway: GatewayVisibilityLike | null | undefined): boolean {
@@ -57,25 +59,36 @@ export function gatewayServableTo(
 /**
  * May `resource` (a tool, an agent) be exposed through `gateway`?
  *
- * A private resource is its owner's alone, so it can only go out through
- * a gateway that is itself private to the same owner. Anything else
- * would hand it to whoever the gateway answers.
+ * The part of the gateway rule (ExecutionAccessService.canExecute with a
+ * gateway principal) that needs no membership lookup, for listings built
+ * in memory:
+ * - a private resource only through a gateway private to the same owner;
+ * - a team resource only through a gateway scoped to that team, or a
+ *   private gateway (whose owner's membership is checked on every call).
+ * Anything wider would hand the resource to whoever the gateway answers.
  */
 export function resourceServableThroughGateway(
   gateway: GatewayVisibilityLike,
   resource: ServableResourceLike | null | undefined,
 ): boolean {
   if (!resource) return false;
+  if (resource.visibility === 'team') {
+    if (isPrivateGateway(gateway)) return true;
+    return gateway.visibility === 'team' && !!resource.teamId && gateway.teamId === resource.teamId;
+  }
   if (resource.visibility !== 'private') return true;
   const owner = resourceOwnerId(resource);
   return !!owner && isPrivateGateway(gateway) && gateway.ownerUserId === owner;
 }
 
 /**
- * Refuse attaching `tool` to `gateway` when that would expose a private
- * tool. Another user's private tool is reported as not found (it does not
- * exist for this caller); the caller's own private tool is refused unless
- * the gateway is private to them too.
+ * Refuse attaching `tool` to `gateway` when that would expose it beyond
+ * its scope. Another user's private tool is reported as not found (it does
+ * not exist for this caller); the caller's own private tool is refused
+ * unless the gateway is private to them too, and a team tool unless the
+ * gateway is scoped to its team. Whether the caller may run a team tool at
+ * all needs a membership lookup, which the caller does with
+ * ExecutionAccessService.assertGatewayMayServe.
  */
 export function assertToolAttachable(
   gateway: GatewayVisibilityLike,
@@ -87,7 +100,9 @@ export function assertToolAttachable(
   }
   if (!resourceServableThroughGateway(gateway, tool)) {
     throw new BadRequestException(
-      `Tool '${tool.name ?? ''}' is private; it can only be served through a gateway that is private to you`,
+      tool.visibility === 'team'
+        ? `Tool '${tool.name ?? ''}' is visible to its team only; it can only be served through a gateway scoped to that team`
+        : `Tool '${tool.name ?? ''}' is private; it can only be served through a gateway that is private to you`,
     );
   }
 }

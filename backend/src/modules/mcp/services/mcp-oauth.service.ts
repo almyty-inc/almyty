@@ -9,32 +9,13 @@ import * as crypto from 'crypto';
 
 import { OAuthClient } from '../../../entities/oauth-client.entity';
 import { OAuthAuthorizationCode } from '../../../entities/oauth-authorization-code.entity';
-import { Gateway } from '../../../entities/gateway.entity';
 import {
   hashValue,
   validateRedirectUri,
 } from './mcp-oauth-helpers.helper';
 import { McpOAuthTokensHelper } from './mcp-oauth-tokens.helper';
+
 // --- Interfaces ---
-
-export interface AuthorizationServerMetadata {
-  issuer: string;
-  authorization_endpoint: string;
-  token_endpoint: string;
-  registration_endpoint: string;
-  revocation_endpoint: string;
-  response_types_supported: string[];
-  grant_types_supported: string[];
-  code_challenge_methods_supported: string[];
-  token_endpoint_auth_methods_supported: string[];
-  scopes_supported: string[];
-}
-
-export interface ProtectedResourceMetadata {
-  resource: string;
-  authorization_servers: string[];
-  scopes_supported: string[];
-}
 
 export interface RegisterClientDto {
   client_name: string;
@@ -78,7 +59,37 @@ export interface TokenValidationResult {
 
 const AUTHORIZATION_CODE_LIFETIME_SECONDS = 600; // 10 minutes
 
-const DEFAULT_SCOPES = ['tools:read', 'tools:execute'];
+/**
+ * The scopes an MCP OAuth client can register and be granted: exactly the
+ * `scopes_supported` both metadata documents advertise. Registration
+ * refuses anything else, and a grant is a subset of what the client
+ * registered, so a token never carries a scope string its caller made up
+ * (such as one a gateway tool's `requiredScopes` names -- those are for
+ * admin-minted gateway keys).
+ */
+export const MCP_OAUTH_SCOPES = ['mcp:tools', 'mcp:resources', 'mcp:prompts', 'mcp:*'];
+
+/**
+ * The scope a grant carries: what was asked for, provided every part of
+ * it is in the client's registered scope, or the registered scope when
+ * nothing was asked for. Anything outside it is `invalid_scope`, not
+ * silently widened or narrowed, so the consent screen shows exactly what
+ * the token will hold.
+ */
+export function grantedScope(client: Pick<OAuthClient, 'scope'>, requested?: string | null): string {
+  const registered = (client.scope ?? '').split(/\s+/).filter(Boolean);
+  const asked = (requested ?? '').split(/\s+/).filter(Boolean);
+  if (asked.length === 0) {
+    if (registered.length === 0) throw new BadRequestException('invalid_scope: the client registered no scope');
+    return registered.join(' ');
+  }
+  const outside = asked.filter((s) => !registered.includes(s));
+  if (outside.length > 0) {
+    throw new BadRequestException(`invalid_scope: not registered for this client: ${outside.join(' ')}`);
+  }
+  return [...new Set(asked)].join(' ');
+}
+
 const ALLOWED_GRANT_TYPES = ['authorization_code', 'refresh_token'];
 const ALLOWED_RESPONSE_TYPES = ['code'];
 const ALLOWED_AUTH_METHODS = ['none', 'client_secret_post'];
@@ -101,6 +112,12 @@ const MAX_REDIRECT_URI_LENGTH = 2048;
 const MAX_REDIRECT_URIS_PER_CLIENT = 20;
 const MAX_CLIENTS_PER_GATEWAY = 500;
 
+/**
+ * Authorization-server half of MCP OAuth 2.1: dynamic client
+ * registration, consent validation and authorization-code issuance. The
+ * two discovery documents are served by McpOAuthController and
+ * McpOAuthDiscoveryController, from MCP_OAUTH_SCOPES.
+ */
 @Injectable()
 export class McpOAuthService {
   private readonly logger = new Logger(McpOAuthService.name);
@@ -114,54 +131,8 @@ export class McpOAuthService {
   ) {}
 
   // -----------------------------------------------------------------------
-  // 1. Authorization Server Metadata (RFC 8414)
+  // 3. Dynamic Client Registration (RFC 7591)
   // -----------------------------------------------------------------------
-
-  getAuthorizationServerMetadata(
-    gateway: Gateway,
-    baseUrl: string,
-  ): AuthorizationServerMetadata {
-    const gatewayBase = `${baseUrl}/${gateway.organizationId}/${gateway.id}`;
-    const scopes =
-      (gateway.configuration?.oauth?.scopes as string[] | undefined) ??
-      DEFAULT_SCOPES;
-
-    return {
-      issuer: baseUrl,
-      authorization_endpoint: `${gatewayBase}/oauth/authorize`,
-      token_endpoint: `${gatewayBase}/oauth/token`,
-      registration_endpoint: `${gatewayBase}/oauth/register`,
-      revocation_endpoint: `${gatewayBase}/oauth/revoke`,
-      response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token'],
-      code_challenge_methods_supported: ['S256'],
-      token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
-      scopes_supported: scopes,
-    };
-  }
-
-  // -----------------------------------------------------------------------
-  // 2. Protected Resource Metadata (RFC 9728)
-  // -----------------------------------------------------------------------
-
-  getProtectedResourceMetadata(
-    gateway: Gateway,
-    baseUrl: string,
-  ): ProtectedResourceMetadata {
-    const gatewayBase = `${baseUrl}/${gateway.organizationId}/${gateway.id}`;
-    const scopes =
-      (gateway.configuration?.oauth?.scopes as string[] | undefined) ??
-      DEFAULT_SCOPES;
-
-    return {
-      resource: `${gatewayBase}/mcp`,
-      authorization_servers: [
-        `${gatewayBase}/.well-known/oauth-authorization-server`,
-      ],
-      scopes_supported: scopes,
-    };
-  }
-
   // -----------------------------------------------------------------------
   // 3. Dynamic Client Registration (RFC 7591)
   // -----------------------------------------------------------------------
@@ -252,7 +223,14 @@ export class McpOAuthService {
       clientSecretHash = hashValue(clientSecret);
     }
 
-    const scope = dto.scope ?? DEFAULT_SCOPES.join(' ');
+    // A client registers from the vocabulary the metadata advertises and
+    // nothing else; every later grant is bounded by what it registered.
+    const requestedScopes = dto.scope?.split(/\s+/).filter(Boolean) ?? [];
+    const unknownScopes = requestedScopes.filter((s) => !MCP_OAUTH_SCOPES.includes(s));
+    if (unknownScopes.length > 0) {
+      throw new BadRequestException(`Unsupported scope: ${unknownScopes.join(' ')}`);
+    }
+    const scope = (requestedScopes.length ? requestedScopes : MCP_OAUTH_SCOPES).join(' ');
 
     const client = this.oauthClientRepository.create({
       clientId,
@@ -316,7 +294,7 @@ export class McpOAuthService {
     if (!client.redirectUris.includes(redirectUri)) {
       throw new BadRequestException('redirect_uri does not match any registered URI');
     }
-    const scopes = (scope || 'mcp:*').split(/\s+/).filter(Boolean);
+    const scopes = grantedScope(client, scope).split(' ');
     return { clientName: client.clientName, scopes };
   }
   // -----------------------------------------------------------------------
@@ -334,6 +312,8 @@ export class McpOAuthService {
       codeChallenge: string;
       codeChallengeMethod: string;
       state?: string;
+      /** RFC 8707 resource indicator the client asked for, already checked by the caller. */
+      resource?: string;
     },
   ): Promise<string> {
     // Validate client
@@ -374,9 +354,10 @@ export class McpOAuthService {
       gatewayId,
       organizationId,
       redirectUri: params.redirectUri,
-      scope: params.scope ?? client.scope,
+      scope: grantedScope(client, params.scope),
       codeChallenge: params.codeChallenge,
       codeChallengeMethod: params.codeChallengeMethod,
+      resource: params.resource ?? null,
       expiresAt,
       isUsed: false,
     });

@@ -1,3 +1,8 @@
+import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
+
+/** The real execution gate over an in-memory membership table the specs seed. */
+const access = membershipFixture();
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
@@ -176,6 +181,7 @@ describe('AgentRuntimeService (integration)', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        { provide: ExecutionAccessService, useValue: access.executionAccess },
         AgentRuntimeService,
         AgentRuntimeBuilders,
         AgentCollaborationHelper,
@@ -359,11 +365,15 @@ describe('AgentRuntimeService (integration)', () => {
     });
 
     it('refuses another member\'s private agent, and a run with no user, as not found', async () => {
-      agentStore.push(makeAgent({ id: 'private-agent', visibility: 'private', createdBy: 'owner-1' } as any));
+      const OWNER = '0c000000-0000-4000-8000-0000000000aa';
+      const MEMBER = '0c000000-0000-4000-8000-0000000000bb';
+      access.member('org-1', OWNER);
+      access.member('org-1', MEMBER);
+      agentStore.push(makeAgent({ id: 'private-agent', visibility: 'private', createdBy: OWNER } as any));
 
-      await expect(service.startRun('private-agent', 'org-1', 'user-1', 'test')).rejects.toThrow(NotFoundException);
+      await expect(service.startRun('private-agent', 'org-1', MEMBER, 'test')).rejects.toThrow(NotFoundException);
       await expect(service.startRun('private-agent', 'org-1', null, 'test')).rejects.toThrow(NotFoundException);
-      const own = await service.startRun('private-agent', 'org-1', 'owner-1', 'test');
+      const own = await service.startRun('private-agent', 'org-1', OWNER, 'test');
       expect(own.agentId).toBe('private-agent');
     });
 

@@ -35,6 +35,7 @@ import {
 import { DEFAULT_SCORING_MODE, scoreOptions } from '../model-catalog/decide/option-scoring';
 import { InputSchemaViolation, schemaConstrainsAnything, schemaProblems } from './input-schema';
 import { describeLimitTrip } from './run-limits';
+import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 
 export interface NodeExecutionResult {
   output: any;
@@ -83,6 +84,11 @@ export interface NodeExecutionResult {
 export interface NodeExecutionOptions {
   organizationId: string;
   userId?: string;
+  /**
+   * The run's principal (ExecuteAgentOptions.principal), handed to every
+   * tool call and sub-agent run this node makes. Never re-derived here.
+   */
+  principal?: ExecutionPrincipal;
   nestingDepth?: number;
   maxNestingDepth?: number;
   edges?: AgentPipelineEdge[];
@@ -672,6 +678,9 @@ export class AgentNodeExecutor {
     const result = await this.toolExecutorService.executeTool(toolId, resolvedParams, {
       organizationId: options.organizationId,
       userId: options.userId,
+      // The run's principal, inherited: a tool_call node cannot run a team
+      // or private tool the run's starter could not have run directly.
+      principal: options.principal,
       // Propagate the agent-level cancellation context into the
       // tool executor so its axios call honours a disconnected
       // client or parent-cancelled run.

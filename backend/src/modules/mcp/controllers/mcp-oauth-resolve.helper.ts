@@ -1,6 +1,6 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { ExecutionContext, HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
+import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -8,10 +8,11 @@ import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { gatewayServableTo } from '../../gateways/private-gateway';
 import { getBaseUrl, getFrontendUrl } from '../../../common/config/base-url';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 /**
  * Resolution helpers extracted from McpOAuthController:
- * URL-slug to org/gateway lookups, JWT cookie extraction, and the
+ * URL-slug to org/gateway lookups, session extraction, and the
  * base/frontend URL accessors.
  *
  * Lives in its own class so the controller can stay focused on
@@ -19,30 +20,45 @@ import { getBaseUrl, getFrontendUrl } from '../../../common/config/base-url';
  */
 @Injectable()
 export class McpOAuthResolveHelper {
+  /**
+   * The guard every dashboard route uses, run by hand so a missing or
+   * refused session can become a login redirect instead of a 401.
+   */
+  private readonly sessionGuard = new JwtAuthGuard(new Reflector());
+
   constructor(
     @InjectRepository(Gateway)
     private readonly gatewayRepository: Repository<Gateway>,
     @InjectRepository(Organization)
     private readonly organizationRepository: Repository<Organization>,
     private readonly configService: ConfigService,
-    private readonly jwtService: JwtService,
   ) {}
 
   /**
-   * Try to extract and verify the user from the JWT cookie or
-   * Authorization header. Returns the JWT payload if valid, null
-   * otherwise. Never throws.
+   * The signed-in user, validated exactly as JwtAuthGuard validates one,
+   * or null. Never throws.
+   *
+   * This used to `jwtService.verify` the cookie and hand back the raw
+   * payload. That skipped everything JwtStrategy checks after the
+   * signature: the account being active, the tokenVersion a password
+   * change bumps, the SSO confinement to one organization, and current
+   * membership -- the `organizations` claim it returned was whatever the
+   * token said when it was minted, so a removed member still passed the
+   * authorize step's membership check.
    */
-  async tryExtractUser(req: any): Promise<any | null> {
+  async tryExtractUser(req: any, res: any = {}): Promise<any | null> {
     if (req.user) return req.user;
-    const token =
-      req.cookies?.access_token ||
-      (req.headers?.authorization?.startsWith('Bearer ')
-        ? req.headers.authorization.slice(7)
-        : null);
-    if (!token) return null;
+    const context = {
+      switchToHttp: () => ({ getRequest: () => req, getResponse: () => res, getNext: () => undefined }),
+      getHandler: () => this.tryExtractUser,
+      getClass: () => McpOAuthResolveHelper,
+      getType: () => 'http',
+      getArgs: () => [req, res],
+      getArgByIndex: (i: number) => [req, res][i],
+    } as unknown as ExecutionContext;
     try {
-      return this.jwtService.verify(token);
+      const allowed = await this.sessionGuard.canActivate(context);
+      return allowed ? req.user ?? null : null;
     } catch {
       return null;
     }

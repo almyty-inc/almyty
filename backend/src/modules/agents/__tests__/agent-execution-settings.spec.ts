@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { INestApplication } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import request from 'supertest';
 
 import { Agent } from '../../../entities/agent.entity';
@@ -10,6 +11,7 @@ import { AgentExecutionSettingsController } from '../agent-execution-settings.co
 import { StrategyPipelineResolver } from '../strategies/strategy-pipeline.resolver';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
+import { fakeRepository, FakeRepository } from '../../../test/fake-repository';
 
 /**
  * The Execution tab's choices, over the wire.
@@ -19,30 +21,45 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
  * forgotten on leaving the tab, while the UI read as configured. Every
  * test at the time passed, because they rendered the components with
  * props. Only a round trip shows whether a choice survives.
+ *
+ * Why it is built the way it is (it used to flake):
+ *
+ *  - Every test gets its own organization and agent id. The repository
+ *    double used to hand back one module-level `agent` object, read at
+ *    call time, and supertest was given the unlistened server, so each
+ *    request listened on a fresh port and closed the server behind it.
+ *    When one test ran past jest's 5s budget on a loaded machine, jest
+ *    moved on while its request was still in flight: the late request
+ *    then read and wrote the NEXT test's agent (a refusal answered 200)
+ *    or closed the server under the next test's request (ECONNRESET).
+ *    A stale request now names an agent and an organization no later
+ *    test uses, so it cannot touch anything another test looks at.
+ *  - The app listens once, on 127.0.0.1, for the whole file. No request
+ *    opens or closes the server, and binding the loopback address (not
+ *    the wildcard) means no other process on the host can hold the same
+ *    127.0.0.1 port and answer requests meant for this app.
+ *  - Booting the Nest app gets its own budget: under a full parallel run
+ *    it can take longer than a unit test's 5s.
  */
 describe('agent execution settings', () => {
   let app: INestApplication;
-  let agent: Partial<Agent>;
-  const strategyRows = { count: jest.fn().mockResolvedValue(0), find: jest.fn().mockResolvedValue([]) };
-  const roleRows = { find: jest.fn().mockResolvedValue([]) };
+  let baseUrl: string;
+
+  const agents: FakeRepository<Agent> = fakeRepository<Agent>({ make: () => new Agent() });
+  const strategies: FakeRepository<Strategy> = fakeRepository<Strategy>({ idPrefix: 'strategy' });
+  const roles: FakeRepository<AgentRole> = fakeRepository<AgentRole>({ idPrefix: 'role' });
+
+  // The caller's organization, per test (see above).
+  let orgId: string;
+  let id: string;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [AgentExecutionSettingsController],
       providers: [
-        {
-          provide: getRepositoryToken(Agent),
-          useValue: {
-            // Honours organizationId, so the cross-tenant case proves the
-            // controller scopes the query rather than proving the mock does.
-            findOne: jest.fn(async ({ where }: any) =>
-              where.id === agent.id && where.organizationId === agent.organizationId ? agent : null,
-            ),
-            save: jest.fn(async (row: any) => Object.assign(agent, row)),
-          },
-        },
-        { provide: getRepositoryToken(Strategy), useValue: strategyRows },
-        { provide: getRepositoryToken(AgentRole), useValue: roleRows },
+        { provide: getRepositoryToken(Agent), useValue: agents },
+        { provide: getRepositoryToken(Strategy), useValue: strategies },
+        { provide: getRepositoryToken(AgentRole), useValue: roles },
         // The real resolver, so ejecting exercises the actual compiler
         // rather than a stub that always returns a graph.
         StrategyPipelineResolver,
@@ -51,7 +68,7 @@ describe('agent execution settings', () => {
       .overrideGuard(JwtAuthGuard)
       .useValue({
         canActivate: (ctx: any) => {
-          ctx.switchToHttp().getRequest().user = { currentOrganizationId: 'org-1' };
+          ctx.switchToHttp().getRequest().user = { currentOrganizationId: orgId };
           return true;
         },
       })
@@ -60,23 +77,40 @@ describe('agent execution settings', () => {
       .compile();
 
     app = moduleRef.createNestApplication();
-    await app.init();
-  });
+    await app.listen(0, '127.0.0.1');
+    baseUrl = `http://127.0.0.1:${app.getHttpServer().address().port}`;
+
+    // Warm the request path once, inside this hook's budget. The first
+    // GET and the first validated PUT pay one-time costs (route and
+    // validation setup, first-use module loading); under a loaded full run
+    // those alone took the first two tests past jest's 5s. Charged here,
+    // no test's outcome depends on being first.
+    orgId = 'org-warmup';
+    id = randomUUID();
+    agents.seed({ id, organizationId: orgId });
+    await request(baseUrl).get(`/agents/${id}/execution`).expect(200);
+    await request(baseUrl).put(`/agents/${id}/execution`).send({ strategyKey: 'single' }).expect(200);
+    await request(baseUrl).post(`/agents/${id}/execution/eject`).send({});
+  }, 60_000);
 
   afterAll(async () => {
     await app?.close();
   });
 
-  const id = '3f1b6a24-6c1e-4f77-9a1a-0f2f0a1d9c11';
+  /** A fresh agent in a fresh organization, as the table holds it. */
+  const seedAgent = (overrides: Partial<Agent> = {}) =>
+    agents.seed({ id, organizationId: orgId, settings: undefined as any, ...overrides });
+  /** The agent as the table holds it now. */
+  const stored = () => agents.row(id)!;
+
   beforeEach(() => {
-    agent = { id, organizationId: 'org-1', settings: undefined as any };
-    strategyRows.count.mockResolvedValue(0);
-    strategyRows.find.mockResolvedValue([]);
-    roleRows.find.mockResolvedValue([]);
+    orgId = `org-${randomUUID()}`;
+    id = randomUUID();
+    seedAgent();
   });
 
-  const put = (body: unknown) => request(app.getHttpServer()).put(`/agents/${id}/execution`).send(body as object);
-  const get = () => request(app.getHttpServer()).get(`/agents/${id}/execution`);
+  const put = (body: unknown) => request(baseUrl).put(`/agents/${id}/execution`).send(body as object);
+  const get = () => request(baseUrl).get(`/agents/${id}/execution`);
 
   it('has nothing to say about an agent that has chosen nothing', async () => {
     await get().expect(200).expect({ success: true, data: {} });
@@ -110,8 +144,13 @@ describe('agent execution settings', () => {
   });
 
   it("accepts an organization's own strategy, not only the built-ins", async () => {
-    strategyRows.count.mockResolvedValue(1);
+    strategies.seed({ key: 'house_style', organizationId: orgId } as Partial<Strategy>);
     await put({ strategyKey: 'house_style' }).expect(200);
+  });
+
+  it("does not accept another organization's own strategy", async () => {
+    strategies.seed({ key: 'their_style', organizationId: `org-${randomUUID()}` } as Partial<Strategy>);
+    await put({ strategyKey: 'their_style' }).expect(400);
   });
 
   it('clears the strategy when asked, back to a plain pipeline', async () => {
@@ -126,13 +165,13 @@ describe('agent execution settings', () => {
   });
 
   it('leaves the rest of the agent settings alone', async () => {
-    agent.settings = { somethingElse: 'kept' } as any;
+    seedAgent({ settings: { somethingElse: 'kept' } as any });
     await put({ strategyKey: 'single' }).expect(200);
-    expect((agent.settings as any).somethingElse).toBe('kept');
+    expect((stored().settings as any).somethingElse).toBe('kept');
   });
 
   it('does not serve another organization an agent', async () => {
-    agent.organizationId = 'someone-else';
+    seedAgent({ organizationId: 'someone-else' });
     await get().expect(404);
   });
 
@@ -142,14 +181,14 @@ describe('agent execution settings', () => {
    * looked configured and did nothing, so it is refused at the door.
    */
   it('refuses a strategy on an autonomous agent, which would ignore it', async () => {
-    agent.mode = 'autonomous' as any;
+    seedAgent({ mode: 'autonomous' });
     const { body } = await put({ strategyKey: 'cascade' }).expect(400);
     expect(body.code).toBe('STRATEGY_WORKFLOW_ONLY');
-    expect(agent.settings).toBeUndefined();
+    expect(stored().settings).toBeUndefined();
   });
 
   it('refuses turning the orchestrator on for an autonomous agent', async () => {
-    agent.mode = 'autonomous' as any;
+    seedAgent({ mode: 'autonomous' });
     const { body } = await put({
       orchestrator: { enabled: true, roleKey: 'orchestrator', timeoutMs: 2000, fallbackStrategyKey: 'single' },
     }).expect(400);
@@ -157,10 +196,9 @@ describe('agent execution settings', () => {
   });
 
   it('still lets an autonomous agent shed a leftover strategy', async () => {
-    agent.mode = 'autonomous' as any;
-    agent.settings = { execution: { strategyKey: 'cascade' } } as any;
+    seedAgent({ mode: 'autonomous', settings: { execution: { strategyKey: 'cascade' } } as any });
     await put({ strategyKey: null }).expect(200);
-    expect((agent.settings as any).execution.strategyKey).toBeNull();
+    expect((stored().settings as any).execution.strategyKey).toBeNull();
   });
   /**
    * Ejecting: the strategy becomes the agent's own graph, and stops being
@@ -171,22 +209,23 @@ describe('agent execution settings', () => {
    * compiler that produces the graph had no caller outside its own tests.
    */
   describe('eject', () => {
-    const eject = () => request(app.getHttpServer()).post(`/agents/${id}/execution/eject`).send({});
+    const eject = () => request(baseUrl).post(`/agents/${id}/execution/eject`).send({});
+    const bindRole = (key: string) => roles.seed({ key, organizationId: orgId, agentId: id } as Partial<AgentRole>);
 
     it('compiles the chosen strategy onto the agent and clears the strategy', async () => {
-      agent.settings = { execution: { strategyKey: 'single' } } as any;
-      roleRows.find.mockResolvedValue([{ key: 'principal' }]);
+      seedAgent({ settings: { execution: { strategyKey: 'single' } } as any });
+      bindRole('principal');
 
       const { body } = await eject().expect(201);
 
       expect(body.data.pipeline.nodes.length).toBeGreaterThan(0);
       expect(body.data.execution.strategyKey).toBeNull();
-      expect(agent.pipeline?.nodes?.length).toBeGreaterThan(0);
+      expect(stored().pipeline?.nodes?.length).toBeGreaterThan(0);
     });
 
     it('names a role on each compiled node, never a model', async () => {
-      agent.settings = { execution: { strategyKey: 'single' } } as any;
-      roleRows.find.mockResolvedValue([{ key: 'principal' }]);
+      seedAgent({ settings: { execution: { strategyKey: 'single' } } as any });
+      bindRole('principal');
 
       const { body } = await eject().expect(201);
 
@@ -198,8 +237,10 @@ describe('agent execution settings', () => {
     });
 
     it('refuses to overwrite a graph somebody drew by hand', async () => {
-      agent.settings = { execution: { strategyKey: 'single' } } as any;
-      agent.pipeline = { nodes: [{ id: 'mine', type: 'input' }], edges: [] } as any;
+      seedAgent({
+        settings: { execution: { strategyKey: 'single' } } as any,
+        pipeline: { nodes: [{ id: 'mine', type: 'input' }], edges: [] } as any,
+      });
 
       const { body } = await eject().expect(409);
 
@@ -213,8 +254,7 @@ describe('agent execution settings', () => {
     });
 
     it('says which roles are missing rather than compiling a broken graph', async () => {
-      agent.settings = { execution: { strategyKey: 'cascade' } } as any;
-      roleRows.find.mockResolvedValue([]);
+      seedAgent({ settings: { execution: { strategyKey: 'cascade' } } as any });
 
       const { body } = await eject().expect(400);
 
@@ -223,7 +263,7 @@ describe('agent execution settings', () => {
     });
 
     it('does not eject another organization\'s agent', async () => {
-      agent.organizationId = 'someone-else';
+      seedAgent({ organizationId: 'someone-else' });
       await eject().expect(404);
     });
   });

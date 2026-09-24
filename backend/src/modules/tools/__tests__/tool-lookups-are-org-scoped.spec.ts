@@ -1,3 +1,4 @@
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { HttpException } from '@nestjs/common';
 
 import { ToolExecutorService } from '../tool-executor.service';
@@ -45,6 +46,8 @@ describe('ToolExecutorService error path records only against the caller org', (
       {} as any,
       {} as any,
       fakeRepository<any>() as any,
+      undefined,
+      membershipFixture().executionAccess,
     );
   });
 

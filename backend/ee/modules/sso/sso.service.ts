@@ -3,12 +3,14 @@ import {
   BadRequestException,
   UnauthorizedException,
   Logger,
+  Optional,
+  Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import * as bcrypt from 'bcryptjs';
-import { SAML, Profile } from '@node-saml/passport-saml';
+import { SAML, Profile, ValidateInResponseTo } from '@node-saml/passport-saml';
 import * as oidc from 'openid-client';
 
 import { User } from '../../../src/entities/user.entity';
@@ -16,6 +18,15 @@ import { UserOrganization } from '../../../src/entities/user-organization.entity
 import { isEffectiveMembership } from '../../../src/common/authorization/membership';
 import { DecryptedSsoConfig, SsoConfigService, provisioningRole } from './sso-config.service';
 import { SamlReplayCache, assertionReplayFacts } from './saml-replay-cache';
+import {
+  MemoryOidcLoginStateStore,
+  OIDC_LOGIN_TTL_SECONDS,
+  OidcLoginStateStore,
+  OidcLoginStateStoreFactory,
+} from './oidc-login-state.store';
+
+/** Inject a specific store (specs); otherwise the factory picks Redis or memory. */
+export const OIDC_LOGIN_STATE_STORE = Symbol('OIDC_LOGIN_STATE_STORE');
 
 export interface SsoUserProfile {
   email: string;
@@ -35,6 +46,7 @@ export interface SsoUserProfile {
 @Injectable()
 export class SsoService {
   private readonly logger = new Logger(SsoService.name);
+  private readonly loginStates: OidcLoginStateStore;
 
   constructor(
     @InjectRepository(User)
@@ -43,12 +55,22 @@ export class SsoService {
     private readonly membershipRepo: Repository<UserOrganization>,
     private readonly configService: SsoConfigService,
     private readonly samlReplay: SamlReplayCache,
-  ) {}
+    // Optional so specs that never start an OIDC sign-in can construct
+    // the service bare; they get a per-instance memory store.
+    @Optional() loginStateFactory?: OidcLoginStateStoreFactory,
+    @Optional() @Inject(OIDC_LOGIN_STATE_STORE) loginStates?: OidcLoginStateStore,
+  ) {
+    this.loginStates = loginStates ?? loginStateFactory?.create() ?? new MemoryOidcLoginStateStore();
+  }
 
   // ── SAML ────────────────────────────────────────────────────────────
 
   /** Overridable factory so unit tests can inject a fake SAML provider. */
-  buildSaml(config: DecryptedSsoConfig, callbackUrl: string): SAML {
+  buildSaml(
+    config: DecryptedSsoConfig,
+    callbackUrl: string,
+    extra: Partial<ConstructorParameters<typeof SAML>[0]> = {},
+  ): SAML {
     if (!config.samlEntryPoint || !config.samlIssuer || !config.samlCert) {
       throw new BadRequestException('SAML is not fully configured');
     }
@@ -59,6 +81,7 @@ export class SsoService {
       callbackUrl,
       wantAssertionsSigned: true,
       wantAuthnResponseSigned: false,
+      ...extra,
     });
   }
 
@@ -129,6 +152,109 @@ export class SsoService {
     };
   }
 
+  // ── Hosted chat visitors ────────────────────────────────────────────
+
+  /** Which protocol the organization signs people in with, or null when SSO is off. */
+  async protocolFor(orgId: string): Promise<'saml' | 'oidc' | null> {
+    const config = await this.configService.getDecrypted(orgId);
+    if (!config || !config.enabled) return null;
+    return config.protocol === 'saml' || config.protocol === 'oidc' ? config.protocol : null;
+  }
+
+  /**
+   * An SP-initiated SAML request for a hosted chat visitor, against the
+   * organization's own SAML configuration. Returns the IdP URL and the
+   * AuthnRequest ID, which the caller keeps: the response is accepted
+   * only if it answers exactly this request (InResponseTo), so an
+   * unsolicited or someone-else's response cannot sign a visitor in.
+   */
+  async hostedChatSamlLogin(orgId: string, acsUrl: string, relayState: string): Promise<{ url: string; requestId: string }> {
+    const config = await this.loadEnabledConfig(orgId, 'saml');
+    let requestId: string | null = null;
+    const saml = this.buildSaml(config, acsUrl, {
+      // node-saml hands the request ID to the cache only when it will
+      // later validate InResponseTo; that is how it is captured here.
+      validateInResponseTo: ValidateInResponseTo.always,
+      cacheProvider: {
+        async saveAsync(key: string, value: string) {
+          requestId = key;
+          return { value, createdAt: Date.now() };
+        },
+        async getAsync() {
+          return null;
+        },
+        async removeAsync() {
+          return null;
+        },
+      },
+    });
+    const url = await saml.getAuthorizeUrlAsync(relayState, undefined, {});
+    if (!requestId) throw new BadRequestException('SAML request could not be prepared');
+    return { url, requestId };
+  }
+
+  /**
+   * Validate a hosted chat visitor's SAML response with the same checks as
+   * the dashboard login (signature, timestamps, audience via node-saml),
+   * plus: it must answer `expectedRequestId`, and its assertion is claimed
+   * in the replay cache before anything else happens. Returns the identity
+   * only; binding it to a visitor is the caller's job.
+   */
+  async resolveHostedChatSamlVisitor(
+    orgId: string,
+    samlResponse: string,
+    acsUrl: string,
+    expectedRequestId: string,
+  ): Promise<{ externalId: string; email: string | null; displayName: string | null }> {
+    const config = await this.loadEnabledConfig(orgId, 'saml');
+    const saml = this.buildSaml(config, acsUrl, {
+      validateInResponseTo: ValidateInResponseTo.always,
+      // Knows exactly one outstanding request: the one this browser started.
+      cacheProvider: {
+        async saveAsync() {
+          return null;
+        },
+        async getAsync(key: string) {
+          return key === expectedRequestId ? new Date().toISOString() : null;
+        },
+        async removeAsync() {
+          return null;
+        },
+      },
+    });
+
+    let profile: Profile | null;
+    try {
+      profile = (await saml.validatePostResponseAsync({ SAMLResponse: samlResponse })).profile;
+    } catch (err) {
+      this.logger.warn(`Hosted chat SAML assertion rejected for org ${orgId}: ${err}`);
+      throw new UnauthorizedException('Invalid SAML assertion');
+    }
+    if (!profile) throw new UnauthorizedException('SAML response contained no assertion');
+    if (profile.inResponseTo !== expectedRequestId) {
+      throw new UnauthorizedException('SAML response does not answer this sign-in');
+    }
+
+    const facts = assertionReplayFacts(profile);
+    if (!(await this.samlReplay.consume(facts))) {
+      this.logger.warn(`Replayed hosted chat SAML assertion refused for org ${orgId}`);
+      throw new UnauthorizedException('This sign-in response has already been used. Start again.');
+    }
+
+    const nameId = typeof profile.nameID === 'string' ? profile.nameID : '';
+    if (!nameId) throw new UnauthorizedException('SAML assertion did not include a subject');
+    let email: string | null = null;
+    let displayName: string | null = null;
+    try {
+      const p = this.profileFromSaml(profile);
+      email = p.email;
+      displayName = [p.firstName, p.lastName].filter(Boolean).join(' ') || null;
+    } catch {
+      // A visitor needs a stable subject, not an address.
+    }
+    return { externalId: `saml|${facts.issuer}|${nameId}`, email, displayName };
+  }
+
   // ── OIDC ────────────────────────────────────────────────────────────
 
   /**
@@ -180,7 +306,7 @@ export class SsoService {
       async callback(
         _redirectUri: string,
         params: Record<string, any>,
-        checks: { state?: string } = {},
+        checks: OidcCallbackChecks,
       ): Promise<{ claims: () => Record<string, any> }> {
         const currentUrl = new URL(redirectUri);
         for (const [key, value] of Object.entries(params)) {
@@ -188,16 +314,27 @@ export class SsoService {
             currentUrl.searchParams.set(key, String(value));
           }
         }
-        const tokens = await oidc.authorizationCodeGrant(
-          configuration,
-          currentUrl,
-          { expectedState: checks.state },
-        );
+        // openid-client sends the verifier with the code and checks the
+        // ID token's nonce itself; resolveOidcClaims checks the nonce
+        // again so the rule does not rest on this adapter alone.
+        const tokens = await oidc.authorizationCodeGrant(configuration, currentUrl, {
+          expectedState: checks.state,
+          pkceCodeVerifier: checks.codeVerifier,
+          expectedNonce: checks.nonce,
+        });
         return { claims: () => tokens.claims() ?? {} };
       },
     };
   }
 
+  /**
+   * Start an OIDC sign-in. Besides `state` (login CSRF), every request
+   * carries an S256 PKCE challenge, so a code intercepted on its way back
+   * cannot be redeemed without the verifier this server keeps, and a
+   * `nonce` the ID token must echo, so an ID token minted for another
+   * sign-in cannot be replayed into this one. The verifier and nonce are
+   * stored server-side under the state, for one callback only.
+   */
   async getOidcLoginUrl(
     orgId: string,
     options: { redirectUri?: string } = {},
@@ -206,9 +343,25 @@ export class SsoService {
     const client = await this.buildOidcClient(config, options.redirectUri);
 
     const state = randomBytes(16).toString('hex');
+    const codeVerifier = randomBytes(32).toString('base64url');
+    const nonce = randomBytes(16).toString('base64url');
+    await this.loginStates.put(
+      state,
+      {
+        organizationId: orgId,
+        codeVerifier,
+        nonce,
+        redirectUri: options.redirectUri ?? null,
+        createdAt: Date.now(),
+      },
+      OIDC_LOGIN_TTL_SECONDS,
+    );
     const url = client.authorizationUrl({
       scope: 'openid email profile',
       state,
+      nonce,
+      code_challenge: pkceChallenge(codeVerifier),
+      code_challenge_method: 'S256',
     });
     return { url, state };
   }
@@ -250,6 +403,19 @@ export class SsoService {
       throw new UnauthorizedException('Sign-in session expired or did not match. Start again.');
     }
 
+    // The verifier and nonce this sign-in started with. Taken, not read:
+    // a second callback with the same state finds nothing. A state this
+    // server never issued, one that expired, or one issued for another
+    // organization or redirect is the same refusal.
+    const pending = await this.loginStates.take(expectedState);
+    if (
+      !pending ||
+      pending.organizationId !== orgId ||
+      pending.redirectUri !== (redirectUri ?? null)
+    ) {
+      throw new UnauthorizedException('Sign-in session expired or did not match. Start again.');
+    }
+
     const config = await this.loadEnabledConfig(orgId, 'oidc');
     const client = await this.buildOidcClient(config, redirectUri);
 
@@ -258,11 +424,18 @@ export class SsoService {
       const tokenSet = await client.callback(
         redirectUri ?? config.oidcRedirectUri,
         params,
-        { state: expectedState },
+        { state: expectedState, codeVerifier: pending.codeVerifier, nonce: pending.nonce },
       );
       claims = tokenSet.claims();
     } catch (err) {
       this.logger.warn(`OIDC callback rejected for org ${orgId}: ${err}`);
+      throw new UnauthorizedException('OIDC token exchange failed');
+    }
+
+    // The ID token must answer this sign-in: a missing nonce is refused
+    // as firmly as a wrong one.
+    if (typeof claims.nonce !== 'string' || !timingSafeEqualText(claims.nonce, pending.nonce)) {
+      this.logger.warn(`OIDC ID token nonce missing or mismatched for org ${orgId}`);
       throw new UnauthorizedException('OIDC token exchange failed');
     }
 
@@ -406,4 +579,22 @@ export class SsoService {
 
 function isEmail(value: unknown): value is string {
   return typeof value === 'string' && /.+@.+\..+/.test(value);
+}
+
+/** What the OIDC client adapter checks on the callback. */
+export interface OidcCallbackChecks {
+  state: string;
+  codeVerifier: string;
+  nonce: string;
+}
+
+/** RFC 7636 S256: BASE64URL(SHA256(ASCII(code_verifier))). */
+export function pkceChallenge(codeVerifier: string): string {
+  return createHash('sha256').update(codeVerifier, 'ascii').digest('base64url');
+}
+
+function timingSafeEqualText(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
 }

@@ -1,4 +1,5 @@
 import { ToolExecutorService } from '../tool-executor.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { ToolHttpExecutor } from '../executors/tool-http.executor';
 import { ToolScriptExecutor } from '../executors/tool-script.executor';
 import { NodeSandboxService } from '../node-sandbox/node-sandbox.service';
@@ -99,9 +100,16 @@ export function buildHarness(
     {} as any,
     {
       findOne: jest.fn(async ({ where }: any) => {
-        return gatewayTools[`${where.gatewayId}/${where.toolId}`] ?? null;
+        // A listed row is an attachment: switched on, on an org-wide
+        // gateway, unless the row says otherwise.
+        const row = gatewayTools[`${where.gatewayId}/${where.toolId}`];
+        return row ? { isActive: true, gateway: { id: where.gatewayId, visibility: 'org' }, ...row } : null;
       }),
     } as any,
+    undefined,
+    // The real execution gate. 'u1' is not a user id, so only org tools run
+    // -- every tool the harness serves.
+    membershipFixture().executionAccess,
   );
   moduleRef.get.mockReturnValue(service);
 

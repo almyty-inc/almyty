@@ -24,6 +24,8 @@ import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { hostedChatConfigFrom, slugFromHost } from './hosted-chat.config';
 import { trustedClientIp } from '../../../common/security/client-ip';
+import { verifiesFinalOutput } from '../../agents/final-answer';
+import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
 
 /**
  * The public API behind {slug}.almyty.app.
@@ -336,9 +338,18 @@ export class HostedChatController {
       {
         conversationId: conversation.id,
         endUserId: endUser.id,
-        // Whether this product lets visitor conversations feed shared
-        // memory; the runtime's auto-save policy reads it off the run.
-        metadata: { visitorMemory: hostedChatConfigFrom(gateway.configuration).visitorMemory },
+        metadata: {
+          // Whether this product lets visitor conversations feed shared
+          // memory; the runtime's auto-save policy reads it off the run.
+          visitorMemory: hostedChatConfigFrom(gateway.configuration).visitorMemory,
+          // The visitor watches the reply arrive, so the answer is written
+          // by a call without tools and streams word by word; see
+          // agents/final-answer.ts and stream() below.
+          composeFinalAnswer: true,
+        },
+        // Runs in the gateway's scope: the surface serves its agent only
+        // while the gateway's own visibility covers it, on every message.
+        principal: gatewayPrincipal(gateway),
       },
 
     );
@@ -380,13 +391,7 @@ export class HostedChatController {
       gateway.organizationId,
       gateway.agentId,
     );
-    const verify = run.agent?.agentConfig?.verify;
-    const withholdCandidateChunks = !!(
-      verify?.enabled &&
-      Array.isArray(verify.checkers) &&
-      verify.checkers.length > 0 &&
-      (verify.triggers ?? ['on_final_output']).includes('on_final_output')
-    );
+    const withholdCandidateChunks = verifiesFinalOutput(run.agent?.agentConfig);
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -412,25 +417,123 @@ export class HostedChatController {
     // autonomous run streams its model output as `llm.chunk`, and a step
     // that goes on to call tools streams its narration too: what it is
     // about to look up, what the last tool returned, instructions echoed
-    // from the system prompt. Whether a step is the answer is only known
-    // when its `llm.response` arrives (no tool calls = final answer), so
-    // chunks are never forwarded; the final step's text is sent as one
-    // token event when its response lands. With a verify panel on the
-    // final output even that waits for the transcript, as before.
+    // from the system prompt.
+    //
+    // Runs started here compose their answer (agents/final-answer.ts):
+    // every call that offers tools is announced as working (`llm.started`
+    // with `answer: false`) and nothing of it is sent, and the answer is
+    // written by a call that offers none (`answer: true`), which streams
+    // token by token as it arrives. Should that call fail, its
+    // `llm.response` carries the draft, which then goes out whole.
+    //
+    // A step not announced either way is held until the provider's stream
+    // has said, with certainty, what the step is (`llm.step_kind`, see
+    // StreamChunk.stepKind):
+    //
+    //   text -> the held chunks go out, and the rest stream live
+    //   tool -> the held chunks are dropped, and nothing more is sent
+    //
+    // A step whose provider never says (Gemini, custom endpoints, any
+    // type on the non-streaming fallback) streams nothing, and its answer
+    // goes out as one token event when its `llm.response` lands with no
+    // tool calls. That is also where anything the stream did not carry
+    // is made up. The response is the last word: if it contradicts what
+    // was streamed, the page is told to `reset` the reply. With a verify
+    // panel on the final output nothing is sent before the verdict; the
+    // page reconciles from the transcript on `done`.
+    type StepStream = { kind: 'text' | 'tool' | null; held: string[]; sent: string; working?: boolean };
+    const steps = new Map<number, StepStream>();
+    const stepOf = (data: any): number | null => (typeof data?.step === 'number' ? data.step : null);
+    const stateOf = (step: number): StepStream => {
+      let state = steps.get(step);
+      if (!state) {
+        state = { kind: null, held: [], sent: '' };
+        steps.set(step, state);
+      }
+      return state;
+    };
+    const sendToken = (state: StepStream | null, content: string) => {
+      res.write(`event: token\ndata: ${JSON.stringify({ content })}\n\n`);
+      if (state) state.sent += content;
+    };
+    const retract = (state: StepStream | undefined) => {
+      if (!state?.sent) return;
+      res.write(`event: reset\ndata: {}\n\n`);
+      state.sent = '';
+    };
+
     const onEvent = (event: any) => {
       if (closed) return;
-      if (event?.type === 'llm.chunk' || event?.type === 'token') return;
-      if (event?.type === 'llm.response') {
-        const calledTools = Array.isArray(event.data?.toolCalls) && event.data.toolCalls.length > 0;
-        const content = event.data?.content;
-        if (!withholdCandidateChunks && !calledTools && typeof content === 'string' && content) {
-          res.write(`event: token\ndata: ${JSON.stringify({ content })}\n\n`);
+      const type = event?.type;
+      const data = event?.data;
+      if (['run.completed', 'run.failed', 'run.cancelled'].includes(type)) {
+        res.write(`event: done\ndata: ${JSON.stringify({ reason: type })}\n\n`);
+        close();
+        return;
+      }
+      if (withholdCandidateChunks) return;
+      const step = stepOf(data);
+
+      if (type === 'llm.started') {
+        // A fresh attempt at this step. Whatever an earlier attempt held
+        // or showed is not this attempt's answer.
+        if (step === null) return;
+        retract(steps.get(step));
+        steps.delete(step);
+        // Announced: a working call is never shown, and the answer call
+        // offers no tools, so it cannot turn out to be anything but text.
+        if (data?.answer === false) steps.set(step, { kind: 'tool', held: [], sent: '', working: true });
+        else if (data?.answer === true) steps.set(step, { kind: 'text', held: [], sent: '' });
+        return;
+      }
+
+      if (type === 'llm.chunk') {
+        const content = data?.content;
+        if (step === null || typeof content !== 'string' || !content) return;
+        const state = stateOf(step);
+        if (state.kind === 'tool') return;
+        if (state.kind === 'text') sendToken(state, content);
+        else state.held.push(content);
+        return;
+      }
+
+      if (type === 'llm.step_kind') {
+        if (step === null) return;
+        const state = stateOf(step);
+        if (state.kind) return; // the first verdict is the one the provider was certain of
+        if (data?.kind === 'tool') {
+          state.kind = 'tool';
+          state.held = [];
+          retract(state);
+        } else if (data?.kind === 'text') {
+          state.kind = 'text';
+          for (const content of state.held) sendToken(state, content);
+          state.held = [];
         }
         return;
       }
-      if (['run.completed', 'run.failed', 'run.cancelled'].includes(event?.type)) {
-        res.write(`event: done\ndata: ${JSON.stringify({ reason: event.type })}\n\n`);
-        close();
+
+      if (type === 'llm.response') {
+        const state = step === null ? undefined : steps.get(step);
+        if (step !== null) steps.delete(step);
+        // A working step's reply is never the visitor's, unless the runtime
+        // says it now is: the answer call failed and its draft stands in.
+        if (state?.working && data?.answer !== true) return;
+        const calledTools = Array.isArray(data?.toolCalls) && data.toolCalls.length > 0;
+        if (calledTools) {
+          retract(state);
+          return;
+        }
+        const content = data?.content;
+        if (typeof content !== 'string' || !content) return;
+        const sent = state?.sent ?? '';
+        if (content.startsWith(sent)) {
+          const rest = content.slice(sent.length);
+          if (rest) sendToken(null, rest);
+        } else {
+          retract(state);
+          sendToken(null, content);
+        }
       }
     };
 

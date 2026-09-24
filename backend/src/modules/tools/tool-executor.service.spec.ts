@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ModuleRef } from '@nestjs/core';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ToolExecutorService } from './tool-executor.service';
+import { ExecutionAccessService } from '../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../test/execution-access.fixture';
 import { ToolCacheRateLimitHelper } from './tool-cache-rate-limit.helper';
 import { ToolStatsHelper } from './tool-stats.helper';
 import { ToolHttpExecutor } from './executors/tool-http.executor';
@@ -90,6 +92,9 @@ describe('ToolExecutorService', () => {
         ToolGrpcExecutor,
         ToolScriptExecutor,
         ToolAuthService,
+        // The real execution gate. These calls name no real user, so only
+        // org tools run -- which is every tool this file executes.
+        { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         { provide: EnvelopeCryptoService, useValue: makeEnvelopeCryptoMock() },
         {
           provide: getRepositoryToken(Tool),

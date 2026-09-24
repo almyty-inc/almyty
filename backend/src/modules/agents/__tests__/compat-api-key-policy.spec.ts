@@ -6,6 +6,7 @@ import { AgentOpenAICompatController } from '../agent-openai-compat.controller';
 import { AgentAnthropicCompatController } from '../agent-anthropic-compat.controller';
 import { ApiKey } from '../../../entities/api-key.entity';
 import { fakeRepository } from '../../../test/fake-repository';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 
 /**
  * Which API keys the /v1 compat endpoints accept, and what they may run.
@@ -99,6 +100,8 @@ function openai() {
     {} as any,
     fakeRepository<ApiKey>({ seed: KEYS, make: () => new ApiKey() }) as any,
     stream as any,
+    undefined, // redis
+    membershipFixture().executionAccess, // the real execution gate
   );
   const chat = async (token: string, model: string) => {
     const r = res();
@@ -130,6 +133,8 @@ function anthropic() {
     agentsService as any,
     engine as any,
     fakeRepository<ApiKey>({ seed: KEYS, make: () => new ApiKey() }) as any,
+    undefined, // redis
+    membershipFixture().executionAccess, // the real execution gate
   );
   const messages = async (token: string, model: string) => {
     const r = res();

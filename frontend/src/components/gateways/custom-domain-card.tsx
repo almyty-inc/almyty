@@ -138,6 +138,12 @@ export function CustomDomainCard({ gatewayId }: { gatewayId: string }) {
                     <Check className="h-4 w-4" /> Verified. Visitors can reach this chat at https://{domain.hostname}
                   </p>
                 )}
+                {domain.status === 'active' && (
+                  <p className="text-xs text-muted-foreground">
+                    Keep the TXT record in place. It is checked daily, and a domain whose record is gone for three
+                    checks in a row stops being served.
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" onClick={() => verify.mutate()} disabled={verify.isPending}>
                     {verify.isPending ? 'Checking...' : domain.status === 'active' ? 'Check again' : 'Check DNS'}

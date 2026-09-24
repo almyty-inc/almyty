@@ -1,3 +1,5 @@
+import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { INestApplication, NotFoundException } from '@nestjs/common';
@@ -47,6 +49,7 @@ describe('POST /v1/messages', () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [AgentAnthropicCompatController],
       providers: [
+        { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         { provide: AgentsService, useValue: agents },
         { provide: AgentExecutionEngine, useValue: engine },
         {

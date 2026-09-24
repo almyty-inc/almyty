@@ -1,3 +1,5 @@
+import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
@@ -62,6 +64,7 @@ describe('AgentOpenAICompatController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AgentOpenAICompatController],
       providers: [
+        { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         { provide: AgentsService, useValue: { getAgent: jest.fn(), findByName: jest.fn(), findAllActive: jest.fn() } },
         { provide: AgentExecutionEngine, useValue: { execute: jest.fn() } },
         { provide: getRepositoryToken(ApiKey), useValue: apiKeyRepo },

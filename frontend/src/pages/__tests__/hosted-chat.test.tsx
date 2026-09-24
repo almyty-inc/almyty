@@ -25,6 +25,7 @@ vi.mock('@/lib/hosted-chat', async () => {
       streamUrl: vi.fn(() => 'http://localhost/stream'),
       me: vi.fn(),
       ssoLoginUrl: vi.fn((slug: string) => '/api/public/chat/' + slug + '/auth/sso/login'),
+      oauthLoginUrl: vi.fn((slug: string) => '/api/public/chat/' + slug + '/auth/oauth/login'),
       startEmailSignIn: vi.fn(),
       verifyEmailSignIn: vi.fn(),
     },
@@ -337,6 +338,38 @@ describe('HostedChatPage', { retry: 2 }, () => {
     expect(await screen.findByText('hi there')).toBeInTheDocument()
   })
 
+  it('renders a streamed reply token by token, before the run finishes', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
+
+    render(<HostedChatPage slug="acme" />)
+    await sendMessage('hello')
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
+
+    await emitAndSettle('token', { content: 'Your order' })
+    expect(await screen.findByText('Your order')).toBeInTheDocument()
+    await emitAndSettle('token', { content: ' ships Monday.' })
+    expect(await screen.findByText('Your order ships Monday.')).toBeInTheDocument()
+  })
+
+  it('clears text the server took back, leaving none of it on screen', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
+
+    render(<HostedChatPage slug="acme" />)
+    await sendMessage('hello')
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
+
+    await emitAndSettle('token', { content: 'Looking up account 4411' })
+    expect(await screen.findByText('Looking up account 4411')).toBeInTheDocument()
+    await emitAndSettle('reset', {})
+    expect(screen.queryByText(/4411/)).not.toBeInTheDocument()
+
+    await emitAndSettle('token', { content: 'Your order ships Monday.' })
+    expect(await screen.findByText('Your order ships Monday.')).toBeInTheDocument()
+    expect(screen.queryByText(/4411/)).not.toBeInTheDocument()
+  })
+
   it('tells the visitor when the run failed instead of going quiet', async () => {
     ;(hostedChatApi.branding as any).mockResolvedValue(branding())
     ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
@@ -581,13 +614,37 @@ describe('HostedChatPage', { retry: 2 }, () => {
       expect(screen.queryByRole('link', { name: /single sign-on/ })).toBeNull()
     })
 
-    it('is honest about a sign-in method that is not built yet', async () => {
-      ;(hostedChatApi.branding as any).mockResolvedValue(branding({ authMode: 'oauth' }))
+    it('offers the surface OAuth provider by name and links to its sign-in route', async () => {
+      ;(hostedChatApi.branding as any).mockResolvedValue(branding({ authMode: 'oauth', signInProvider: 'Google' }))
       ;(hostedChatApi.me as any).mockResolvedValue({ authMode: 'oauth', available: true, authenticated: false, email: null, displayName: null })
 
       render(<HostedChatPage slug="acme" />)
 
-      expect(await screen.findByText(/not set up yet/)).toBeInTheDocument()
+      expect(await screen.findByRole('link', { name: 'Continue with Google' })).toHaveAttribute('href', '/api/public/chat/acme/auth/oauth/login')
+      expect(screen.queryByText(/not set up yet/)).toBeNull()
+      expect(screen.queryByLabelText('Message')).toBeNull()
+    })
+
+    it('says why a sign-in that came back failed', async () => {
+      ;(hostedChatApi.branding as any).mockResolvedValue(branding({ authMode: 'oauth', signInProvider: 'Google' }))
+      ;(hostedChatApi.me as any).mockResolvedValue({ authMode: 'oauth', available: true, authenticated: false, email: null, displayName: null })
+      window.history.pushState({}, '', '/?signin_error=EMAIL_NOT_ALLOWED')
+      try {
+        render(<HostedChatPage slug="acme" />)
+        expect(await screen.findByRole('alert')).toHaveTextContent(/particular email domains/)
+      } finally {
+        window.history.pushState({}, '', '/')
+      }
+    })
+
+    it('an OAuth surface with no provider set is closed, not a dead button', async () => {
+      ;(hostedChatApi.branding as any).mockResolvedValue(branding({ authMode: 'oauth', signInProvider: null }))
+      ;(hostedChatApi.me as any).mockResolvedValue({ authMode: 'oauth', available: false, authenticated: false, email: null, displayName: null })
+
+      render(<HostedChatPage slug="acme" />)
+
+      expect(await screen.findByText(/not accepting sign-ins right now/)).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: /Continue with/ })).toBeNull()
     })
 
     it('signs a visitor in with an emailed code, then opens the chat', async () => {
