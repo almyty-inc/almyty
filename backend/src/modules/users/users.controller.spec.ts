@@ -309,10 +309,11 @@ describe('UsersController', () => {
     it('should delete user successfully via the org-scoped path', async () => {
       usersService.deleteInOrg.mockResolvedValue();
 
-      const result = await controller.remove('user-1', reqWithOrg('org-1'));
+      const result = await controller.remove('user-1', { user: { currentOrganizationId: 'org-1', id: 'owner-1' } } as any);
 
       expect(result.message).toBe('User deleted successfully');
-      expect(usersService.deleteInOrg).toHaveBeenCalledWith('user-1', 'org-1');
+      // The actor is carried through, so the offboarding audit names who deleted.
+      expect(usersService.deleteInOrg).toHaveBeenCalledWith('user-1', 'org-1', 'owner-1');
     });
   });
 

@@ -33,14 +33,17 @@ function makeService() {
   const configService = {
     get: jest.fn().mockResolvedValue({ defaultRole: 'member' }),
   } as any;
+  const offboarding = { offboard: jest.fn(async () => undefined) };
   const service = new ScimService(
     userRepo as any,
     membershipRepo as any,
     teamRepo as any,
     userTeamRepo as any,
     configService,
+    undefined,
+    offboarding as any,
   );
-  return { service, userRepo, membershipRepo, teamRepo, userTeamRepo };
+  return { service, userRepo, membershipRepo, teamRepo, userTeamRepo, offboarding };
 }
 
 describe('ScimService — Users', () => {
@@ -107,6 +110,64 @@ describe('ScimService — Users', () => {
 
     await service.deleteUser('org-1', 'u-1');
     expect(membership.isActive).toBe(false);
+  });
+
+  /**
+   * Deprovisioning is the organization saying the person left. Their own
+   * connections are wiped and revoked at the provider, as a removed
+   * member's are -- and before the membership is saved inactive, so a
+   * failure leaves them active for the IdP's retry rather than inactive
+   * with live connections.
+   */
+  describe('offboards the member\'s own connections', () => {
+    const deprovisions: Array<[string, (s: ScimService) => Promise<unknown>]> = [
+      ['PATCH active:false', (s) => s.patchUser('org-1', 'u-1', { Operations: [{ op: 'replace', path: 'active', value: false }] })],
+      ['Entra-style PATCH', (s) => s.patchUser('org-1', 'u-1', { Operations: [{ op: 'Replace', value: { active: false } }] })],
+      ['PUT active:false', (s) => s.replaceUser('org-1', 'u-1', { userName: 'carol@corp.com', active: false })],
+      ['DELETE', (s) => s.deleteUser('org-1', 'u-1')],
+    ];
+
+    it.each(deprovisions)('on %s, before the membership goes inactive', async (_name, deprovision) => {
+      const { service, userRepo, membershipRepo, offboarding } = makeService();
+      const membership = { id: 'm-1', userId: 'u-1', organizationId: 'org-1', isActive: true };
+      membershipRepo.findOne.mockResolvedValue(membership);
+      userRepo.findOne.mockResolvedValue({ id: 'u-1', email: 'carol@corp.com', firstName: 'Carol', lastName: 'D' });
+      const order: string[] = [];
+      offboarding.offboard.mockImplementation(async () => { order.push('offboard'); });
+      membershipRepo.save.mockImplementation(async (x: any) => { order.push(`save active=${x.isActive}`); return x; });
+
+      await deprovision(service);
+
+      expect(offboarding.offboard).toHaveBeenCalledWith({
+        organizationId: 'org-1',
+        userId: 'u-1',
+        actorUserId: null,
+        reason: 'scim_deprovisioned',
+      });
+      expect(order).toEqual(['offboard', 'save active=false']);
+    });
+
+    it('leaves the member active when the wipe fails, for the IdP to retry', async () => {
+      const { service, userRepo, membershipRepo, offboarding } = makeService();
+      membershipRepo.findOne.mockResolvedValue({ id: 'm-1', userId: 'u-1', organizationId: 'org-1', isActive: true });
+      userRepo.findOne.mockResolvedValue({ id: 'u-1', email: 'carol@corp.com' });
+      offboarding.offboard.mockRejectedValue(new Error('db down'));
+
+      await expect(service.deleteUser('org-1', 'u-1')).rejects.toThrow('db down');
+      expect(membershipRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('does nothing to connections on reactivation, or for a member already inactive', async () => {
+      const { service, userRepo, membershipRepo, offboarding } = makeService();
+      userRepo.findOne.mockResolvedValue({ id: 'u-1', email: 'carol@corp.com' });
+
+      membershipRepo.findOne.mockResolvedValue({ id: 'm-1', userId: 'u-1', organizationId: 'org-1', isActive: false });
+      await service.patchUser('org-1', 'u-1', { Operations: [{ op: 'replace', path: 'active', value: true }] });
+      membershipRepo.findOne.mockResolvedValue({ id: 'm-1', userId: 'u-1', organizationId: 'org-1', isActive: false });
+      await service.deleteUser('org-1', 'u-1');
+
+      expect(offboarding.offboard).not.toHaveBeenCalled();
+    });
   });
 
   it('404s when patching a user that is not a member', async () => {
@@ -189,6 +250,7 @@ describe('ScimService — deprovision notifications', () => {
       {} as any,
       { get: jest.fn().mockResolvedValue({ defaultRole: 'member' }) } as any,
       notifications as any,
+      { offboard: jest.fn(async () => undefined) } as any,
     );
     return { service, userRepo, membershipRepo, notifications };
   }

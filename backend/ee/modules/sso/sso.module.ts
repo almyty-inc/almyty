@@ -18,6 +18,7 @@ import { SsoConfigController } from './sso-config.controller';
 import { ScimController } from './scim.controller';
 import { HostedChatSsoController } from './hosted-chat-sso.controller';
 import { GatewaysModule } from '../../../src/modules/gateways/gateways.module';
+import { ConnectionsModule } from '../../../src/modules/connections/connections.module';
 
 
 /**
@@ -31,6 +32,8 @@ import { GatewaysModule } from '../../../src/modules/gateways/gateways.module';
     TypeOrmModule.forFeature([OrgSsoConfig, User, UserOrganization, Team, UserTeam]),
     AuthModule,
     GatewaysModule,
+    // SCIM deprovisioning wipes and provider-revokes the member's own connections.
+    ConnectionsModule,
   ],
 
   providers: [SsoConfigService, SsoService, OidcLoginStateStoreFactory, ScimService, ScimAuthGuard],

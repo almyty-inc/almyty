@@ -3,6 +3,8 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -14,6 +16,7 @@ import { ApiKey } from '../../entities/api-key.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { effectiveMemberships, isEffectiveMembership } from '../../common/authorization/membership';
 import { ORGANIZATION_ROLE_RANK } from '../organizations/organization-role-rank';
+import { ConnectionOffboardingService } from '../connections/connection-offboarding.service';
 
 export interface PaginatedUsers {
   users: User[];
@@ -49,6 +52,10 @@ export class UsersService {
     private userOrganizationRepository: Repository<UserOrganization>,
     @InjectRepository(ApiKey)
     private apiKeyRepository: Repository<ApiKey>,
+    // Not @Optional(): Nest must inject it. Typed optional only so specs
+    // that build this service positionally and never delete still compile.
+    @Inject(forwardRef(() => ConnectionOffboardingService))
+    private readonly connectionOffboarding?: ConnectionOffboardingService,
   ) {}
 
   async findAll(options: {
@@ -327,17 +334,17 @@ export class UsersService {
    * Anyone who also belongs elsewhere is not this organization's to
    * erase: removing them from here is the member-removal route.
    */
-  async deleteInOrg(id: string, organizationId: string): Promise<void> {
+  async deleteInOrg(id: string, organizationId: string, actorUserId?: string): Promise<void> {
     await this.assertUserInOrg(id, organizationId);
     if (await this.belongsElsewhere(id, organizationId)) {
       throw new ForbiddenException(
         'This person belongs to other organizations. Remove them from this organization instead of deleting their account.',
       );
     }
-    return this.delete(id);
+    return this.delete(id, actorUserId);
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, actorUserId?: string): Promise<void> {
     const user = await this.findOne(id);
     
     // Check if user is the sole owner of any organizations
@@ -361,7 +368,25 @@ export class UsersService {
       }
     }
 
+    // The person's own connections do not die with the users row:
+    // credentials.ownerUserId has no foreign key, so they would stay
+    // stored, and valid at the provider, owned by nobody. Wipe and
+    // provider-revoke them first (ConnectionOffboardingService); if the
+    // wipe fails the account is not deleted and the delete can be retried.
+    await this.requireOffboarding().offboard({
+      organizationId: null,
+      userId: id,
+      actorUserId: actorUserId ?? null,
+      reason: 'user_deleted',
+    });
     await this.userRepository.remove(user);
+  }
+
+  private requireOffboarding(): ConnectionOffboardingService {
+    // Nest always injects it; only a hand-built instance can lack it, and
+    // deleting an account without it would strand live third-party grants.
+    if (!this.connectionOffboarding) throw new Error('ConnectionOffboardingService is not wired into UsersService');
+    return this.connectionOffboarding;
   }
 
   async getUserStats(id: string): Promise<{

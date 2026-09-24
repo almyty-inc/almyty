@@ -30,6 +30,7 @@ import { MailService } from '../mail/mail.service';
 import { GatewaysService } from '../gateways/gateways.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { ResourceHandoverHelper } from './resource-handover.helper';
+import type { WipedConnection } from '../connections/member-connection-offboarding';
 
 import { ORGANIZATION_ROLE_RANK } from './organization-role-rank';
 
@@ -441,6 +442,7 @@ export class OrganizationsService {
     // them removed (ResourceHandoverHelper says why). Same transaction as
     // the membership removal, so neither happens alone.
     const reason = userId === actorUserId ? 'member_left' : 'member_removed';
+    const wipedConnections: WipedConnection[] = [];
     const audit = await this.userOrganizationRepository.manager.transaction(async (manager) => {
       const toUserId =
         reason === 'member_removed'
@@ -452,11 +454,20 @@ export class OrganizationsService {
         toUserId,
         actorUserId,
         reason,
+        wipedConnections,
       });
       await manager.getRepository(UserOrganization).remove(membership);
       return entries;
     });
     this.auditLogService?.publishCommitted(audit);
+    // Their connections are already useless here; now end the grants at
+    // the providers too. After commit, best-effort: a provider that is
+    // down or refuses cannot undo the removal.
+    await this.requireHandover().revokeWipedConnectionsAtProviders(wipedConnections, {
+      userId,
+      actorUserId,
+      reason,
+    });
   }
 
   /**

@@ -6,6 +6,7 @@ import {
 } from '../resource-handover.helper';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { Runner } from '../../../entities/runner.entity';
+import { ConnectionOffboardingService } from '../../connections/connection-offboarding.service';
 
 describe('ResourceHandoverHelper', () => {
   function build(
@@ -44,7 +45,7 @@ describe('ResourceHandoverHelper', () => {
     const runners = {
       deleteForDepartedOwner: jest.fn(async (runner: any) => { order.push(`delete runner ${runner.id}`); }),
     };
-    const helper = new ResourceHandoverHelper(audit as any, runners as any);
+    const helper = new ResourceHandoverHelper(audit as any, runners as any, new ConnectionOffboardingService({} as any, {} as any, audit as any));
     return { helper, manager, audit, runners, order };
   }
 
@@ -127,20 +128,27 @@ describe('ResourceHandoverHelper', () => {
     it('revokes the leaver\'s own connections, drops their grants and grants naming the leaver, and audits each', async () => {
       const t = build({}, [], {
         connections: [
-          { id: 'conn-p', name: 'my github', visibility: 'private', connectorKey: 'github' },
-          { id: 'conn-u', name: 'my openai', visibility: 'org', connectorKey: 'openai' },
+          { id: 'conn-p', organizationId: 'org-1', name: 'my github', visibility: 'private', connectorKey: 'github', previousConfig: { accessToken: 'encrypted:p' } },
+          { id: 'conn-u', organizationId: 'org-1', name: 'my openai', visibility: 'org', connectorKey: 'openai', previousConfig: { apiKey: 'encrypted:u' } },
         ],
         connectionGrants: [{ id: 'g-1', connectionId: 'conn-u' }, { id: 'g-2', connectionId: 'conn-u' }],
         userGrants: [{ id: 'g-9', connectionId: 'conn-org', permission: 'use' }],
       });
+      const wipedConnections: any[] = [];
 
-      const rows = await t.helper.handOverPrivateResources(t.manager, args);
+      const rows = await t.helper.handOverPrivateResources(t.manager, { ...args, wipedConnections });
 
       const [revokeSql, revokeParams] = t.manager.query.mock.calls.find(([sql]: [string]) => /"healthStatus" = 'revoked'/.test(sql));
       expect(revokeSql).toContain(`config = '{}'::json`);
       expect(revokeSql).toContain('"isActive" = false');
       expect(revokeSql).toContain(memberConnectionSql());
-      expect(revokeParams).toEqual(['org-1', 'leaver']);
+      // The secret as it was comes back for the provider revoke after commit.
+      expect(revokeSql).toContain('target."previousConfig"');
+      expect(revokeParams).toEqual(['org-1', 'leaver', 'the owner left the organization']);
+      expect(wipedConnections.map((c) => [c.id, c.previousConfig, c.grantsRemoved])).toEqual([
+        ['conn-p', { accessToken: 'encrypted:p' }, 0],
+        ['conn-u', { apiKey: 'encrypted:u' }, 2],
+      ]);
       const [grantSql, grantParams] = t.manager.query.mock.calls.find(([sql]: [string]) => /DELETE FROM connection_grants WHERE "connectionId"/.test(sql));
       expect(grantSql).toContain('ANY($1::uuid[])');
       expect(grantParams).toEqual([['conn-p', 'conn-u']]);
@@ -153,7 +161,7 @@ describe('ResourceHandoverHelper', () => {
         [AuditAction.CONNECTION_DISCONNECT, 'conn-u'],
         [AuditAction.CONNECTION_REVOKE_GRANT, 'conn-org'],
       ]);
-      expect(rows[0]).toMatchObject({ details: { owner: 'private', secretWiped: true, providerRevoked: false, grantsRemoved: 0, reason: 'member_removed' } });
+      expect(rows[0]).toMatchObject({ details: { owner: 'private', secretWiped: true, providerRevoke: 'after_commit', grantsRemoved: 0, reason: 'member_removed' } });
       expect(rows[1]).toMatchObject({ details: { owner: 'user', grantsRemoved: 2 } });
       expect(rows[2]).toMatchObject({ details: { principalType: 'user', principalId: 'leaver', grantId: 'g-9' } });
     });
