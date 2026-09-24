@@ -149,7 +149,7 @@ export class RunnerController {
   // scope is the runner's VISIBILITY, not ownership: any org member the
   // access policy lets use the runner may drive coding sessions on it
   // (an org-wide runner: every member; a team runner: its team; a private
-  // runner: its owner only). 404 unknown or unusable runner, 403 cross-org.
+  // runner: its owner only). 404 for an unknown, unusable or cross-org runner.
   // Output streams back over the per-session SSE endpoint, relayed from
   // the runner's event envelopes by CodingRelayService.
 
@@ -280,7 +280,7 @@ export class RunnerController {
   /**
    * Gate for the coding bridge: 404 unknown runner or one the caller may
    * not use (someone else's private runner, a team runner of a team they
-   * are not on), 403 when the runner belongs to a different organization.
+   * are not on) or that belongs to a different organization -- one answer.
    */
   private async requireOrgRunner(req: any, id: string): Promise<void> {
     const { userId, organizationId } = this.context(req);
@@ -315,9 +315,14 @@ export class RunnerController {
       return { success: true, data: resp.result };
     } catch (e) {
       if (e instanceof RunnerCallError) {
-        // Offline / no-session / timeout → 503; a runner-side error → 502.
+        // Offline / no-session / timeout → 503; a runner-side error → 502;
+        // a workspace that is not the caller's live one on this runner → 404.
         const status =
-          e.code === 'runner_error' ? HttpStatus.BAD_GATEWAY : HttpStatus.SERVICE_UNAVAILABLE;
+          e.code === 'runner_error'
+            ? HttpStatus.BAD_GATEWAY
+            : e.code === 'workspace_not_found'
+              ? HttpStatus.NOT_FOUND
+              : HttpStatus.SERVICE_UNAVAILABLE;
         throw new HttpException({ success: false, error: { code: e.code, message: e.message } }, status);
       }
       throw e;
