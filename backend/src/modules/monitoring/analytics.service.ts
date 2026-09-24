@@ -214,8 +214,13 @@ export class AnalyticsService {
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
 
-    // Another member's private gateway: its traffic is not listed.
-    qb.andWhere(`(log.gatewayId IS NULL OR ${notOthersPrivateGateway('log."gatewayId"')})`, { privateViewerId: query.callerId });
+    // Another member's private gateway or private tool: its traffic is not
+    // listed, an org admin asking included. `?toolId=` naming one comes
+    // back empty, the same as a tool that does not exist. No known caller
+    // binds null, which leaves every private resource's rows out.
+    const privateViewerId = query.callerId ?? null;
+    qb.andWhere(`(log.gatewayId IS NULL OR ${notOthersPrivateGateway('log."gatewayId"')})`, { privateViewerId });
+    qb.andWhere(`(log.toolId IS NULL OR ${notOthersPrivateTool('log."toolId"')})`, { privateViewerId });
     if (query.gatewayId) {
       qb.andWhere('log.gatewayId = :gatewayId', { gatewayId: query.gatewayId });
     }
