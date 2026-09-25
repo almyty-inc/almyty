@@ -34,7 +34,7 @@ test.describe('Organizations - Settings', () => {
   })
 
   test('should display organization members', async ({ authenticatedPage: page }) => {
-    // Click the "Members & Teams" outer tab (not the inner "Members" sub-tab)
+    // Members and teams share one page: members first, teams below
     await page.goto('/settings/members')
     await page.waitForTimeout(1000)
 

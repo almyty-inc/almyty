@@ -47,7 +47,6 @@ beforeEach(() => {
 
 async function openTeams(user: ReturnType<typeof userEvent.setup>) {
   render(<MembersAndTeamsTab organizationId="org1" />)
-  await user.click(screen.getByRole('tab', { name: 'Teams' }))
   await screen.findByText('Platform')
 }
 

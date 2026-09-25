@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -297,13 +296,10 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
 
   return (
     <>
-    <Tabs defaultValue="members" className="space-y-4">
-      <TabsList>
-        <TabsTrigger value="members">Members</TabsTrigger>
-        <TabsTrigger value="teams">Teams</TabsTrigger>
-      </TabsList>
-
-      <TabsContent value="members" className="space-y-4">
+    {/* Members and teams on one page, members first: two short lists do
+        not need a third row of tabs under the settings sections. */}
+    <div className="space-y-6">
+      <section aria-label="Members" className="space-y-4" data-testid="members-section">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
@@ -455,9 +451,9 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
             </CardContent>
           </Card>
         )}
-      </TabsContent>
+      </section>
 
-      <TabsContent value="teams" className="space-y-4">
+      <section aria-label="Teams" className="space-y-4" data-testid="teams-section">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
@@ -716,8 +712,8 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
             )}
           </CardContent>
         </Card>
-      </TabsContent>
-    </Tabs>
+      </section>
+    </div>
       {confirmDialog}
     </>
   )
