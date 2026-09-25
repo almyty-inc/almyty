@@ -14,7 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CopyField } from '@/components/ui/copy-field'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 
-import { gatewaysApi, toolsApi } from '@/lib/api'
+import { gatewaysApi } from '@/lib/api'
+import { toolsQuery } from '@/lib/list-queries'
 import { useEntitlements } from '@/hooks/use-entitlement'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
@@ -88,9 +89,8 @@ export function GatewayDetailPage() {
     enabled: !!id,
   })
 
-  const { data: allToolsData, isLoading: isLoadingAllTools } = useQuery({
-    queryKey: ['tools', currentOrganization?.id],
-    queryFn: () => toolsApi.getAll(currentOrganization?.id),
+  const { data: allToolsPage, isLoading: isLoadingAllTools } = useQuery({
+    ...toolsQuery(currentOrganization?.id),
     enabled: !!currentOrganization,
   })
 
@@ -216,8 +216,7 @@ export function GatewayDetailPage() {
   const gatewayToolsRaw = gatewayToolsData?.gatewayTools || gatewayToolsData?.tools || gatewayToolsData || []
   const gatewayTools = Array.isArray(gatewayToolsRaw) ? gatewayToolsRaw : []
 
-  const allToolsRaw = allToolsData?.tools || allToolsData || []
-  const allTools = Array.isArray(allToolsRaw) ? allToolsRaw : []
+  const allTools = allToolsPage?.items ?? []
 
   const applyScopingPreset = (preset: ScopingPreset) => {
     // Special case: 'none' should remove all tools

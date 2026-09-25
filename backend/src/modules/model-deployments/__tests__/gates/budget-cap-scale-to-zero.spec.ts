@@ -85,6 +85,10 @@ describe('gate 3: a budget cap scales a deployment to zero and audits it', () =>
       userIds: ['owner-1'],
       body: expect.stringContaining('0.03 of its 0.03 budget'),
     }));
+    // User-visible copy says hosting, never deployment.
+    const sent = notifications.emit.mock.calls[0][0];
+    expect(sent.title).toBe('Hosted model scaled to zero: budget reached');
+    expect(`${sent.title} ${sent.body}`).not.toMatch(/deploy/i);
 
     // Tick 4: at zero, desired matches actual; nothing scales, nothing is re-audited, burn is 0.
     const idle = (await processor.reconcile(id))!;

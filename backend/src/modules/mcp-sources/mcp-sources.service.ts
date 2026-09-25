@@ -250,6 +250,7 @@ export class McpSourcesService {
                 generatedAt: new Date(),
               },
               createdBy: source.createdBy ?? undefined,
+              generated: true,
             });
             tool.definitionHash = computeToolHash(tool).hash;
             await tools.save(tool);

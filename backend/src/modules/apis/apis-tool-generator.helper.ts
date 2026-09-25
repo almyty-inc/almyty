@@ -52,6 +52,10 @@ export class ApisToolGeneratorHelper {
     organizationId: string,
     preloadedOperations?: Operation[],
     onBatchProgress?: (done: number, total: number) => void | Promise<void>,
+    // Who is generating (the importing user): the new tools' createdBy.
+    // Null when no user is known; generated tools are told apart by their
+    // `generated` flag, never by a sentinel creator.
+    createdBy: string | null = null,
   ): Promise<ToolGenerationResult> {
     // When operations are supplied by the caller (e.g. inline from
     // importSchema), skip the heavy relation-loading findOne. That
@@ -131,6 +135,7 @@ export class ApisToolGeneratorHelper {
               operation.description || `${(operation.method || 'GET').toUpperCase()} ${operation.endpoint || ''} operation`,
             ),
             organizationId: api.organizationId,
+            createdBy,
           };
           try {
             const existingTool = await this.toolsService.findByName(options.name, api.organizationId);
@@ -192,7 +197,7 @@ export class ApisToolGeneratorHelper {
       await Promise.all(
         written.created
           .slice(i, i + BATCH_SIZE)
-          .map((tool) => this.toolsService.createToolVersion(tool, 'Auto-generated from API operation', 'system')),
+          .map((tool) => this.toolsService.createToolVersion(tool, 'Auto-generated from API operation', createdBy)),
       );
     }
 

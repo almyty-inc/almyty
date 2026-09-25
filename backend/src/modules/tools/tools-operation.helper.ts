@@ -9,6 +9,14 @@ import { ApiSchema } from '../../entities/api-schema.entity';
 import { ToolsService } from './tools.service';
 import { capGeneratedDescription, precheckToolQuota, withToolQuota } from './tool-quota';
 
+export interface GenerateFromOperationOptions {
+  name: string;
+  description: string;
+  organizationId: string;
+  /** The user generating the tool (the importer); null when unknown. */
+  createdBy?: string | null;
+}
+
 @Injectable()
 export class ToolsOperationHelper {
   private readonly logger = new Logger(ToolsOperationHelper.name);
@@ -26,11 +34,7 @@ export class ToolsOperationHelper {
 
   async createFromOperation(
     operation: Operation,
-    options: {
-      name: string;
-      description: string;
-      organizationId: string;
-    }
+    options: GenerateFromOperationOptions,
   ): Promise<Tool> {
     // Fail fast before loading and translating the operation; the
     // enforcing check runs with the insert below.
@@ -50,7 +54,7 @@ export class ToolsOperationHelper {
     );
 
     // Create initial version
-    await this.tools.createToolVersion(savedTool, 'Auto-generated from API operation', 'system');
+    await this.tools.createToolVersion(savedTool, 'Auto-generated from API operation', options.createdBy ?? null);
 
     this.logger.log(`Auto-generated tool '${savedTool.name}' from operation '${operation.name}'`);
 
@@ -63,11 +67,7 @@ export class ToolsOperationHelper {
    */
   async buildFromOperation(
     operation: Operation,
-    options: {
-      name: string;
-      description: string;
-      organizationId: string;
-    }
+    options: GenerateFromOperationOptions,
   ): Promise<Tool> {
     // Load the operation with its API
     const operationWithApi = await this.operationRepository.findOne({
@@ -104,7 +104,10 @@ export class ToolsOperationHelper {
       operationId: operation.id,
       status: ToolStatus.ACTIVE,
       version: '1.0.0',
-      createdBy: 'system', // Auto-generated
+      // Who generated it (the importing user), or null when unknown. What
+      // marks it as generated is the flag, not a sentinel creator.
+      createdBy: options.createdBy ?? null,
+      generated: true,
       // Tools generated from a private API are private to that API's
       // owner; anything wider would publish the API through its tools.
       ...(operationWithApi.api?.visibility === 'private' && operationWithApi.api.ownerUserId

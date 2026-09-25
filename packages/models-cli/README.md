@@ -15,7 +15,7 @@ Support in almyty is registry data, never a code list. A model is usable when
 its **card** exists in your organization's catalog and:
 
 1. something can call it — a stored LLM provider row, or an endpoint URL from
-   a deployment,
+   a hosted model,
 2. its status is `active`, and
 3. one **validation run** has passed: a real, short call, recorded.
 
@@ -84,7 +84,7 @@ Rejected 3:
 
 It exits 5 when no card satisfies the policy, so a check can be a check.
 
-### Versions, adapters, deployments
+### Versions, adapters, hosting
 
 Registering a version is optional: do it when you want lineage, a manifest
 digest and evaluation history attached to your own artifact. Skip it to just
@@ -95,21 +95,24 @@ run a model that already lives somewhere.
 | `versions` | Registered model versions |
 | `register-version --name <n> --uri <pinned uri> [--base b] [--quantizations q1,q2]` | `hf://org/repo@sha`, `s3://bucket/key@etag`, `gs://bucket/key@gen`, `file:///path@sha` |
 | `adapters` | Every adapter: what it can run (`modelSchemes`), its capabilities, which config fields are secret |
-| `deploy <model> --adapter <key> [...]` | Run a model on a provider's managed product |
-| `deployments` | Desired vs actual, state, spend |
-| `deployment <id>` | One deployment in full, including its endpoint and rate |
+| `host <model> --adapter <key> [...]` | Run a model on a provider's managed product |
+| `hosted` | Hosted models: desired vs actual, state, spend |
+| `hosted <id>` | One hosted model in full, including its endpoint and rate |
 | `scale <id> <replicas>` | Set desired replicas; `0` scales to zero |
 | `teardown <id>` | Tear the endpoint down; weights stay in the registry |
+
+`deploy`, `deployments` and `deployment <id>` also work, as other names for
+`host`, `hosted` and `hosted <id>`.
 
 Naming the model is configuration, so it is the positional argument:
 
 ```sh
-npx @almyty/models deploy hf://Qwen/Qwen3-0.6B@main --adapter huggingface-endpoints
-npx @almyty/models deploy fireworks://accounts/acme/models/qwen3-tuned --adapter fireworks
-npx @almyty/models deploy --model-version <id> --adapter modal --desired '{"replicas":1}'
+npx @almyty/models host hf://Qwen/Qwen3-0.6B@main --adapter huggingface-endpoints
+npx @almyty/models host fireworks://accounts/acme/models/qwen3-tuned --adapter fireworks
+npx @almyty/models host --model-version <id> --adapter modal --desired '{"replicas":1}'
 ```
 
-An **artifact** reference points at bytes and is pinned, so the deployment is
+An **artifact** reference points at bytes and is pinned, so the hosted model is
 reproducible. A **provider reference** (`bedrock://`, `vertex://`,
 `fireworks://`, …) names a model that already exists on a platform, which
 versions it itself. The two do not mix freely: `adapters` lists what each
@@ -127,15 +130,15 @@ provider account once and name the connection.
 
 ```sh
 npx @almyty/connections connect huggingface
-npx @almyty/models deploy hf://Qwen/Qwen3-0.6B@main \
+npx @almyty/models host hf://Qwen/Qwen3-0.6B@main \
   --adapter huggingface-endpoints --credential <connectionId>
 ```
 
 Otherwise pass the object from a file or stdin:
 
 ```sh
-npx @almyty/models deploy hf://Qwen/Qwen3-0.6B@main --adapter huggingface-endpoints --config-file hf.json
-cat hf.json | npx @almyty/models deploy hf://Qwen/Qwen3-0.6B@main --adapter huggingface-endpoints --config-stdin
+npx @almyty/models host hf://Qwen/Qwen3-0.6B@main --adapter huggingface-endpoints --config-file hf.json
+cat hf.json | npx @almyty/models host hf://Qwen/Qwen3-0.6B@main --adapter huggingface-endpoints --config-stdin
 ```
 
 `--config` still works for the fields an adapter does **not** mark secret, and

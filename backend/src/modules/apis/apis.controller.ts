@@ -240,6 +240,8 @@ export class ApisController {
           fileName: file?.originalname,
           description: importSchemaDto.description,
           generateTools: importSchemaDto.generateTools ?? true,
+          // The tools this import generates are recorded as this user's.
+          createdBy: req.user.id ?? null,
         },
       },
       {
@@ -448,6 +450,9 @@ export class ApisController {
     const result = await this.apisService.generateToolsFromApi(
       id,
       req.user.currentOrganizationId,
+      undefined,
+      undefined,
+      req.user.id ?? null,
     );
     return { success: true, data: result, message: 'Tools generated successfully' };
   }
