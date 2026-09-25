@@ -1,5 +1,5 @@
 import { Inject, forwardRef } from '@nestjs/common';
-import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import axios from 'axios';
@@ -20,7 +20,8 @@ import { AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
 import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
-import { assertNotOthersPrivate, nameTaken, resolveVisibilityWrite } from '../../common/authorization/private-visibility';
+import { nameTaken, resolveVisibilityWrite } from '../../common/authorization/private-visibility';
+import { assertManageable, assertReadable } from '../../common/authorization/read-rule';
 import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { Credential } from '../../entities/credential.entity';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
@@ -213,7 +214,7 @@ export class ApisService {
    * implicitly trusting the id. Defence in depth now lives at
    * this layer.
    *
-   * With a `caller`, another member's private API is "not found".
+   * With a `caller`, an API they may not read (read-rule.ts) is "not found".
    */
   async findOne(id: string, organizationId: string, caller?: { id: string }): Promise<Api | null> {
     // Only eager-load `operations` — that's the one relation any
@@ -233,7 +234,7 @@ export class ApisService {
       where: { id, organizationId },
       relations: { operations: true },
     });
-    if (api && caller) await assertNotOthersPrivate(this.accessPolicy, caller, api, 'API');
+    if (api && caller) await assertReadable(this.accessPolicy, caller, api, 'API');
     return api;
   }
 
@@ -411,20 +412,17 @@ export class ApisService {
     organizationId: string,
     userId?: string,
   ): Promise<Api> {
-    const api = await this.findOne(id, organizationId, userId ? { id: userId } : undefined);
+    const api = await this.findOne(id, organizationId);
 
     if (!api) {
       throw new NotFoundException('API not found');
     }
 
-    // Authorization: org owner/admin always, team-scoped requires team lead.
-    // The owner of a private API manages it (canAccess passes the owner).
-    if (userId) {
-      const decision = await this.accessPolicy.canAccess({ id: userId }, api, 'manage');
-      if (!decision.allowed) {
-        throw new ForbiddenException(decision.reason);
-      }
-    }
+    // Cannot read it (a private API of another member, a team API the
+    // caller is not on): 404. Can read it but not manage it: 403. The owner
+    // of a private API manages it (canAccess passes the owner). Internal
+    // callers with no user skip the gate.
+    if (userId) await assertManageable(this.accessPolicy, userId, api, 'API');
 
     // A rename is held to the same organization-wide uniqueness as create
     // (see nameTaken): the API's name seeds its generated tool names.
@@ -518,15 +516,9 @@ export class ApisService {
     if (!existing) {
       throw new NotFoundException('API not found');
     }
-    if (userId) await assertNotOthersPrivate(this.accessPolicy, { id: userId }, existing, 'API');
-
-    // Authorization: org owner/admin always, team-scoped requires team lead.
-    if (userId) {
-      const decision = await this.accessPolicy.canAccess({ id: userId }, existing, 'manage');
-      if (!decision.allowed) {
-        throw new ForbiddenException(decision.reason);
-      }
-    }
+    // Cannot read it: 404, like a missing API. Can read it but not manage
+    // it: 403. Internal callers with no user skip the gate.
+    if (userId) await assertManageable(this.accessPolicy, userId, existing, 'API');
 
     const result = await this.apiRepository.delete({ id, organizationId });
 

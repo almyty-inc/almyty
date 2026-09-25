@@ -22,6 +22,7 @@ import { AccessPolicyService, normaliseVisibility, type ResourceVisibility } fro
 import { gatewayServableTo } from '../gateways/private-gateway';
 import { providerUsableBy } from '../llm-providers/private-provider';
 import { batchAsync } from '../../common/utils/batch-async';
+import { assertManageable, canRead } from '../../common/authorization/read-rule';
 
 /**
  * Whether `userId` may see this credential at all. A private ("just me")
@@ -110,8 +111,8 @@ export class CredentialsService {
       where: { id, organizationId },
     });
 
-    // Another user's private credential is reported as not found.
-    if (!credential || (caller && !credentialVisibleTo(credential, caller.id))) {
+    // A credential the caller may not read (read-rule.ts) is reported as not found.
+    if (!credential || (caller && !(await canRead(this.accessPolicy, caller, credential)))) {
       throw new NotFoundException('Credential not found');
     }
 
@@ -224,15 +225,10 @@ export class CredentialsService {
       throw new NotFoundException('Credential not found');
     }
 
-    // Authorization: org owner/admin always, team-scoped requires team lead.
-    // userId may be undefined for legacy callers; skip the check in that
-    // case so the migration doesn't break existing internal callers.
-    if (userId) {
-      const decision = await this.accessPolicy.canAccess({ id: userId }, credential, 'manage');
-      if (!decision.allowed) {
-        throw new ForbiddenException(decision.reason);
-      }
-    }
+    // Cannot read it (a team credential outside the caller's teams): 404.
+    // Can read it but not manage it: 403. userId may be undefined for
+    // internal callers; they skip the gate.
+    if (userId) await assertManageable(this.accessPolicy, userId, credential, 'Credential');
     // Re-validate team scoping if it's being changed.
     if (userId && (data.visibility !== undefined || data.teamId !== undefined)) {
       const nextVis = data.visibility ?? credential.visibility;
@@ -292,13 +288,9 @@ export class CredentialsService {
       throw new NotFoundException('Credential not found');
     }
 
-    // Authorization: org owner/admin always, team-scoped requires team lead.
-    if (userId) {
-      const decision = await this.accessPolicy.canAccess({ id: userId }, credential, 'manage');
-      if (!decision.allowed) {
-        throw new ForbiddenException(decision.reason);
-      }
-    }
+    // Cannot read it (a team credential outside the caller's teams): 404.
+    // Can read it but not manage it: 403.
+    if (userId) await assertManageable(this.accessPolicy, userId, credential, 'Credential');
 
     await this.credentialRepository.remove(credential);
     this.logger.log(`Credential deleted: ${id} (${credential.name})`);
@@ -316,7 +308,7 @@ export class CredentialsService {
       where: { id, organizationId },
     });
 
-    if (!credential || (caller && !credentialVisibleTo(credential, caller.id))) {
+    if (!credential || (caller && !(await canRead(this.accessPolicy, caller, credential)))) {
       throw new NotFoundException('Credential not found');
     }
 

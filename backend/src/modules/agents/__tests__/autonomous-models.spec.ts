@@ -4,6 +4,8 @@ import { Agent } from '../../../entities/agent.entity';
 import { LlmProvider } from '../../../entities/llm-provider.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { fakeRepository } from '../../../test/fake-repository';
+import { orgMembersPolicy } from '../../../test/execution-access.fixture';
+import { OrganizationRole } from '../../../entities/user-organization.entity';
 import { AgentsService } from '../agents.service';
 import { AgentModels, agentModelsProblems, missingSlots, syncMainRole, unusedPurposes } from '../autonomous-models';
 import { teamOf } from '../autonomous-team';
@@ -203,7 +205,9 @@ describe('AgentsService saves an autonomous agent\'s models', () => {
       {} as any,
       { log: async () => undefined } as any,
       { validatePipeline: () => undefined } as any,
-      { assertCanScopeToTeam: async () => undefined } as any,
+      // The real access policy over the organization's members: reading
+      // the agent is decided like it is in production.
+      orgMembersPolicy('org-1', { 'user-1': OrganizationRole.MEMBER, 'user-2': OrganizationRole.MEMBER }) as any,
       { assertReady: async () => undefined } as any,
     );
     return { svc, agents };

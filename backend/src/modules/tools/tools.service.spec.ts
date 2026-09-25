@@ -523,7 +523,9 @@ describe('ToolsService', () => {
 
       toolRepo.findOne.mockResolvedValue(tool);
       userRepo.findOne.mockResolvedValue(user);
-      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
+      // Readable, not manageable: the manage decision is the one that says no.
+      accessPolicy.canAccess.mockImplementation(async (_u: any, _r: any, action: string) =>
+        action === 'manage' ? { allowed: false, reason: 'denied' } : { allowed: true, reason: 'ok' });
 
       await expect(service.updateTool('tool-1', updateDto, 'org-1', 'user-1')).rejects.toThrow(ForbiddenException);
     });
@@ -707,7 +709,9 @@ describe('ToolsService', () => {
 
       toolRepo.findOne.mockResolvedValue(tool);
       userRepo.findOne.mockResolvedValue(user);
-      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
+      // Readable, not manageable: the manage decision is the one that says no.
+      accessPolicy.canAccess.mockImplementation(async (_u: any, _r: any, action: string) =>
+        action === 'manage' ? { allowed: false, reason: 'denied' } : { allowed: true, reason: 'ok' });
 
       await expect(service.deleteTool('tool-1', 'org-1', 'user-1')).rejects.toThrow(ForbiddenException);
     });
@@ -768,7 +772,9 @@ describe('ToolsService', () => {
 
       toolRepo.findOne.mockResolvedValue(tool);
       userRepo.findOne.mockResolvedValue(user);
-      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
+      // Readable, not manageable: the manage decision is the one that says no.
+      accessPolicy.canAccess.mockImplementation(async (_u: any, _r: any, action: string) =>
+        action === 'manage' ? { allowed: false, reason: 'denied' } : { allowed: true, reason: 'ok' });
 
       await expect(service.activateTool('tool-1', 'org-1', 'user-1')).rejects.toThrow(ForbiddenException);
     });
@@ -819,7 +825,9 @@ describe('ToolsService', () => {
 
       toolRepo.findOne.mockResolvedValue(tool);
       userRepo.findOne.mockResolvedValue(user);
-      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
+      // Readable, not manageable: the manage decision is the one that says no.
+      accessPolicy.canAccess.mockImplementation(async (_u: any, _r: any, action: string) =>
+        action === 'manage' ? { allowed: false, reason: 'denied' } : { allowed: true, reason: 'ok' });
 
       await expect(service.deactivateTool('tool-1', 'org-1', 'user-1')).rejects.toThrow(ForbiddenException);
     });

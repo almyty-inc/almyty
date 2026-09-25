@@ -274,9 +274,9 @@ export class ConnectionsService {
   async get(principal: ConnectionPrincipal, organizationId: string, id: string): Promise<ConnectionView> {
     const row = await this.load(organizationId, id);
     if (!this.canSee(principal, row)) {
-      // Another user's private connection is not found, not forbidden.
-      if (row.visibility === 'private') throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
-      throw new ForbiddenException({ code: 'CONNECTION_FORBIDDEN', message: 'not your connection' });
+      // A connection the caller may not see is not found, not forbidden:
+      // a 403 would confirm the id exists.
+      throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
     }
     return this.view(row, await this.catalog.find(organizationId, row.connectorKey!));
   }
@@ -572,12 +572,15 @@ export class ConnectionsService {
   }
 
   private assertCanManage(principal: ConnectionPrincipal, row: Credential): void {
-    // Private ("just me"): the owner and nobody else, connections:manage
-    // included -- and to anyone else it does not exist.
-    if (row.visibility === 'private') {
-      if (row.ownerUserId && row.ownerUserId === principal.id) return;
+    // The read rule first (read-rule.ts): a connection the caller may not
+    // see -- another user's private one (connections:manage included), a
+    // user-owned one of someone else without connections:manage, any of
+    // the organization's without connections:read -- does not exist for
+    // them. A 403 here would confirm the id.
+    if (!this.canSee(principal, row)) {
       throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
     }
+    if (row.visibility === 'private') return; // canSee: the owner.
     if (!row.ownerUserId) {
       this.assertMember(principal, row.organizationId, CONNECTIONS_MANAGE);
       return;

@@ -21,11 +21,11 @@ import { ToolsStatsHelper } from './tools-stats.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import {
   assertAttachable,
-  assertNotOthersPrivate,
   isOthersPrivate,
   nameTaken,
   resolveVisibilityWrite,
 } from '../../common/authorization/private-visibility';
+import { assertManageable, assertReadable } from '../../common/authorization/read-rule';
 import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { precheckToolQuota, withToolQuota } from './tool-quota';
@@ -212,24 +212,16 @@ export class ToolsService {
     userId: string
   ): Promise<Tool> {
     try {
-      const tool = await this.toolRepository.findOne({
-        where: { id: toolId, organizationId },
-      relations: { categories: true },
-      });
-
-      if (!tool) {
-        throw new NotFoundException('Tool not found');
-      }
-      // Another member's private tool does not exist as far as this caller is concerned.
-      await assertNotOthersPrivate(this.accessPolicy, { id: userId }, tool, 'Tool');
-
-      // Authorization: tool creator can always edit; otherwise org admin/owner or team lead
-      if (tool.createdBy !== userId) {
-        const decision = await this.accessPolicy.canAccess({ id: userId }, tool, 'manage');
-        if (!decision.allowed) {
-          throw new ForbiddenException(decision.reason);
-        }
-      }
+      // Cannot read it (missing, another member's private tool, a team's
+      // the caller is not on): 404. Can read it but not manage it: 403.
+      // The creator always may.
+      const tool = await assertManageable(
+        this.accessPolicy,
+        userId,
+        await this.toolRepository.findOne({ where: { id: toolId, organizationId }, relations: { categories: true } }),
+        'Tool',
+        { ownerManages: true },
+      );
 
       // Re-validate team scoping if it's being changed.
       const updateAnyEarly = updateToolDto as any;
@@ -414,9 +406,10 @@ export class ToolsService {
       throw new NotFoundException('Tool not found');
     }
 
-    // With a caller, another member's private tool is "not found" -- a 403
-    // would confirm it exists.
-    if (caller) await assertNotOthersPrivate(this.accessPolicy, caller, tool, 'Tool');
+    // With a caller, a tool they may not read (another member's private
+    // one, a team's they are not on) is "not found" -- a 403 would confirm
+    // it exists.
+    if (caller) await assertReadable(this.accessPolicy, caller, tool, 'Tool');
     return tool;
   }
 
@@ -532,13 +525,10 @@ export class ToolsService {
     organizationId: string,
     userId: string
   ): Promise<Tool> {
-    const tool = await this.getTool(toolId, organizationId, false, { id: userId });
+    const tool = await this.getTool(toolId, organizationId, false);
 
-    // Authorization: org owner/admin always, team-scoped requires team lead
-    const decision = await this.accessPolicy.canAccess({ id: userId }, tool, 'manage');
-    if (!decision.allowed) {
-      throw new ForbiddenException(decision.reason);
-    }
+    // Cannot read it: 404. Can read it but not manage it: 403.
+    await assertManageable(this.accessPolicy, userId, tool, 'Tool');
 
     if (tool.status === ToolStatus.ACTIVE) {
       return tool;
@@ -564,13 +554,10 @@ export class ToolsService {
     organizationId: string,
     userId: string
   ): Promise<Tool> {
-    const tool = await this.getTool(toolId, organizationId, false, { id: userId });
+    const tool = await this.getTool(toolId, organizationId, false);
 
-    // Authorization: org owner/admin always, team-scoped requires team lead
-    const decision2 = await this.accessPolicy.canAccess({ id: userId }, tool, 'manage');
-    if (!decision2.allowed) {
-      throw new ForbiddenException(decision2.reason);
-    }
+    // Cannot read it: 404. Can read it but not manage it: 403.
+    await assertManageable(this.accessPolicy, userId, tool, 'Tool');
 
     if (tool.status === ToolStatus.INACTIVE) {
       return tool;
@@ -596,15 +583,11 @@ export class ToolsService {
     organizationId: string,
     userId: string
   ): Promise<void> {
-    const tool = await this.getTool(toolId, organizationId, false, { id: userId });
+    const tool = await this.getTool(toolId, organizationId, false);
 
-    // Authorization: tool creator can always delete; otherwise org admin/owner or team lead
-    if (tool.createdBy !== userId) {
-      const decision3 = await this.accessPolicy.canAccess({ id: userId }, tool, 'manage');
-      if (!decision3.allowed) {
-        throw new ForbiddenException(decision3.reason);
-      }
-    }
+    // Cannot read it: the not-found a missing tool gets. Can read it but
+    // not manage it: 403. The creator always may.
+    await assertManageable(this.accessPolicy, userId, tool, 'Tool', { ownerManages: true });
 
     // Soft delete by setting status to deleted
     tool.status = ToolStatus.DELETED;

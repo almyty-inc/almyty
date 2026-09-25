@@ -444,7 +444,7 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
     });
 
     it.each(others)('the dashboard route guard (usage, models, chat, sessions) answers 404 for %s', async (who) => {
-      const guard = new PrivateProviderGuard(repo(LlmProvider), repo(Conversation));
+      const guard = new PrivateProviderGuard(repo(LlmProvider), repo(Conversation), policy);
       const ctx = (userId: string) => ({
         switchToHttp: () => ({ getRequest: () => ({ params: { providerId: privateProvider.id }, user: { id: userId } }) }),
       }) as any;
