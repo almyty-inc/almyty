@@ -185,6 +185,42 @@ describe('ModelPicker', () => {
     expect(within(within(list).getByRole('group', { name: 'Box under the desk' })).getByText('Type the model id your server runs.')).toBeInTheDocument()
   })
 
+  it('says a provider has models listed but none usable, not that it has none', async () => {
+    const MISTRAL = { id: 'prov-mistral', name: 'Mistral', type: 'mistral', status: 'active' }
+    vi.mocked(llmProvidersApi.getAll).mockResolvedValue([OPENAI, MISTRAL] as any)
+    vi.mocked(modelsApi.list).mockResolvedValue([
+      ...CARDS,
+      card(MISTRAL.id, 'mistral-large', { selectable: false, validationStatus: 'never' }),
+      card(MISTRAL.id, 'mistral-small', { selectable: false, validationStatus: 'never' }),
+    ])
+    renderPicker({})
+    const list = await open()
+    const group = within(list).getByRole('group', { name: 'Mistral' })
+    expect(within(group).getByText('2 models listed, none usable yet. Check the provider again on its page.')).toBeInTheDocument()
+    expect(within(group).queryByText(/No models yet/)).not.toBeInTheDocument()
+  })
+
+  it('offers exactly the models the Models page shows as available, from the same list', async () => {
+    // Staging's shape once the provider checks are applied: every listed
+    // model of a checked provider is usable, gpt-4o included.
+    const GOOGLE = { id: 'prov-google', name: 'Google', type: 'google', status: 'active' }
+    const cards = [
+      card(OPENAI.id, 'gpt-4o'),
+      card(OPENAI.id, 'gpt-4o-mini'),
+      card(GOOGLE.id, 'gemini-2.5-flash'),
+      card(OPENAI.id, 'gpt-3.5-turbo', { selectable: false, status: 'inactive' }),
+    ]
+    vi.mocked(llmProvidersApi.getAll).mockResolvedValue([OPENAI, GOOGLE] as any)
+    vi.mocked(modelsApi.list).mockResolvedValue(cards)
+    renderPicker({ providerId: OPENAI.id, model: 'gpt-4o' })
+    expect(screen.queryByTestId('t-model-unavailable')).not.toBeInTheDocument()
+    const list = await open()
+    const offered = within(list).getAllByRole('option').map((o) => o.textContent).sort()
+    expect(offered).toEqual(cards.filter((c) => c.selectable).map((c) => c.vendorModelId).sort())
+    expect(within(list).getByRole('option', { name: 'gpt-4o' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(list).queryByText('Not available')).not.toBeInTheDocument()
+  })
+
   it('offers "Provider default" per provider when the model is optional', async () => {
     const { onChange } = renderPicker({}, { modelOptional: true })
     const list = await open()

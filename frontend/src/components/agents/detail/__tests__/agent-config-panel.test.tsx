@@ -47,9 +47,9 @@ describe('AgentConfigPanel', () => {
   it('surfaces the multi-vendor verifier panel with resolved provider names', async () => {
     renderWithProviders(<AgentConfigPanel agent={agent()} />)
 
-    // Headline: 2 vendors collaborating in one agent
-    expect(await screen.findByText(/2 LLM vendors collaborating/)).toBeInTheDocument()
-    // Primary model + GPT-4o reviewer both render the model id
+    // Headline: two vendors across the roles and the reviewers, in plain words
+    expect(await screen.findByText('Uses models from 2 providers.')).toBeInTheDocument()
+    // The main role + GPT-4o reviewer both render the model id
     expect(screen.getAllByText('gpt-4o').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('Claude reviewer')).toBeInTheDocument()
     expect(screen.getByText('GPT-4o reviewer')).toBeInTheDocument()
@@ -63,7 +63,31 @@ describe('AgentConfigPanel', () => {
     renderWithProviders(
       <AgentConfigPanel agent={agent({ agentConfig: {}, memoryConfig: {} })} />,
     )
-    expect(await screen.findByText('Primary model')).toBeInTheDocument()
+    const models = await screen.findByTestId('overview-models')
+    expect(models).toHaveTextContent('Single')
+    expect(models).toHaveTextContent('gpt-4o')
     expect(screen.queryByText('Verifier panel')).not.toBeInTheDocument()
+  })
+
+  it('shows the roles and strategy the edit page shows, collaborators included, not a lone primary model', async () => {
+    renderWithProviders(
+      <AgentConfigPanel
+        agent={agent({
+          models: {
+            strategy: 'cascade',
+            roles: [
+              { key: 'main', name: 'Main', purpose: 'main', kind: 'model', providerId: 'p-openai', model: 'gpt-4o' },
+              { key: 'drafter', name: 'Drafter', purpose: 'drafter', kind: 'model', routing: { objective: 'cheapest' } },
+              { key: 'checker', name: 'Checker', purpose: 'checker', kind: 'model', providerId: 'p-anthropic', model: 'claude-haiku' },
+            ],
+          },
+          collaboration: { participants: [{ kind: 'agent', agentId: 'critic', role: 'Critic' }] },
+        })}
+      />,
+    )
+    const models = await screen.findByTestId('overview-models')
+    expect(models).toHaveTextContent('Cascade')
+    for (const text of ['Main', 'Drafter', 'Automatic', 'Checker', 'claude-haiku', 'Critic', 'Another agent']) expect(models).toHaveTextContent(text)
+    expect(screen.queryByText('Primary model')).not.toBeInTheDocument()
   })
 })

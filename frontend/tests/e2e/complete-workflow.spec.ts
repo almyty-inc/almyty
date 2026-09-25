@@ -31,39 +31,23 @@ test.describe('Complete E2E Workflow', () => {
       await page.waitForTimeout(500)
     }
 
-    await page.getByRole('link', { name: /connect api/i }).first().click({ force: true })
+    await page.getByRole('link', { name: /connect an api/i }).first().click({ force: true })
     await expect(page).toHaveURL(/\/apis\/new$/)
-    await expect(page.getByRole('heading', { name: /connect.*api/i })).toBeVisible()
-
-    // Fill API form
-    await page.getByLabel(/api name/i).fill('E2E Petstore API')
-    await page.getByLabel(/base url/i).fill(TEST_APIS.PETSTORE.baseUrl)
-
-    // Select OpenAPI type (click combobox, not label)
-    await page.getByRole('combobox').first().click()
-    await page.getByRole('option', { name: /openapi|swagger|rest/i }).click()
-
-    // Submit: step 1 of 2
-    await page.getByRole('button', { name: /continue to schema import/i }).click()
-
-    // Step 2, the schema import, is the new API's own page
-    await expect(page).toHaveURL(/\/apis\/[^/]+\/import\?created=1$/)
-    await expect(page.getByRole('heading', { name: /import.*schema/i })).toBeVisible()
-    await assertHelper.assertToastMessage(/created|success|added/i)
+    await expect(page.getByRole('heading', { name: 'Connect an API' })).toBeVisible()
 
     // ============================================================
-    // STEP 2: Import Schema
+    // STEP 2: One box: the link to its description, then Import
     // ============================================================
-    await page.getByRole('tab', { name: /url/i }).click()
-    await page.getByLabel('Schema URL').fill(TEST_APIS.PETSTORE.schemaUrl)
+    await page.getByLabel('Paste a link, drop a file, or paste it here').fill(TEST_APIS.PETSTORE.schemaUrl)
+    await page.getByRole('button', { name: 'Advanced' }).click()
+    await page.getByLabel('Name', { exact: true }).fill('E2E Petstore API')
+    await page.getByRole('button', { name: 'Import' }).click()
 
-    // Generate tools is on by default - no need to enable
-
-    // Import (button says "Import schema" or "Importing...")
-    await page.getByRole('button', { name: /^import schema$/i }).click()
-    // A finished import opens the API's page
-    await expect(page).toHaveURL(/\/apis\/[^/]+$/, { timeout: 60000 })
-    await assertHelper.assertToastMessage(/imported|success|generated/i)
+    // Petstore declares a key, so the next page asks for it; skip it here.
+    await expect(page).toHaveURL(/\/apis\/[^/]+\/setup\?/)
+    await expect(page.getByText(/Found \d+ operations/)).toBeVisible({ timeout: 60000 })
+    await page.getByRole('button', { name: /skip for now|open/i }).click()
+    await expect(page).toHaveURL(/\/apis\/[^/]+$/)
 
     // ============================================================
     // STEP 3: Verify Tools Generated

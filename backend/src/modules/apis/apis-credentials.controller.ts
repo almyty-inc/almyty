@@ -16,12 +16,46 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateApiGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CredentialService, CreateCredentialDto, UpdateCredentialDto } from './credential.service';
+import { ApiKeyService } from './api-key.service';
 import { CreateApiCredentialBodyDto, UpdateApiCredentialBodyDto } from './dto/api-credential.dto';
+import { SetApiKeyDto } from './dto/api.dto';
 
 @Controller('apis')
 @UseGuards(JwtAuthGuard, RolesGuard, PrivateApiGuard)
 export class ApisCredentialsController {
-  constructor(private readonly credentialService: CredentialService) {}
+  constructor(
+    private readonly credentialService: CredentialService,
+    private readonly apiKeys: ApiKeyService,
+  ) {}
+  /** The API's key as its page shows it: how it is sent and where it comes from. Never the secret. */
+  @Get(':id/key')
+  @Roles('member', 'admin', 'owner')
+  async getKey(@Request() req: any, @Param('id') apiId: string) {
+    const orgId = req.user.currentOrganizationId;
+    if (!orgId) throw new BadRequestException('Organization context required');
+    const data = await this.apiKeys.get(apiId, orgId, { id: req.user.id ?? req.user.sub });
+    return { success: true, data };
+  }
+
+  /** Paste a key (stored as a Credential), or point the API at a connection. */
+  @Put(':id/key')
+  @Roles('admin', 'owner')
+  async setKey(@Request() req: any, @Param('id') apiId: string, @Body() dto: SetApiKeyDto) {
+    const orgId = req.user.currentOrganizationId;
+    if (!orgId) throw new BadRequestException('Organization context required');
+    const data = await this.apiKeys.set(apiId, orgId, req.user.id ?? req.user.sub, dto);
+    return { success: true, data, message: 'Key saved' };
+  }
+
+  @Delete(':id/key')
+  @Roles('admin', 'owner')
+  async removeKey(@Request() req: any, @Param('id') apiId: string) {
+    const orgId = req.user.currentOrganizationId;
+    if (!orgId) throw new BadRequestException('Organization context required');
+    const data = await this.apiKeys.remove(apiId, orgId, req.user.id ?? req.user.sub);
+    return { success: true, data, message: 'Key removed' };
+  }
+
 
   @Post(':id/credentials')
   @Roles('admin', 'owner')

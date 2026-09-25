@@ -35,6 +35,8 @@ interface AuthorizeParams {
   scopes?: string[];
   redirectUri?: string;
   credentialName?: string;
+  /** App path to return to after the callback (e.g. /apis/:id). */
+  returnTo?: string;
 }
 
 interface ClientCredentialsParams {
@@ -45,6 +47,17 @@ interface ClientCredentialsParams {
   scopes?: string[];
   credentialName?: string;
   apiId?: string;
+}
+
+/**
+ * A path in the app to send the browser back to after a sign-in, or null.
+ * Only a same-origin path: a full URL or a protocol-relative one (//host)
+ * would make the callback an open redirect.
+ */
+export function safeReturnPath(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  if (!/^\/(?![\/\\])[A-Za-z0-9\-._~\/?=&%]*$/.test(value) || value.length > 512) return null;
+  return value;
 }
 
 function generatePKCE() {
@@ -326,6 +339,8 @@ export class OAuth2Service {
       redirectUri: callbackUri,
       scopes: resolvedScopes,
       credentialName: credentialName || `OAuth2 - ${provider || 'Custom'}`,
+      // Where the browser goes after the callback: a path in the app only.
+      returnTo: safeReturnPath(params.returnTo),
     };
 
     await this.redis.set(
@@ -364,7 +379,7 @@ export class OAuth2Service {
   async handleCallback(
     code: string,
     state: string,
-  ): Promise<{ credentialId: string }> {
+  ): Promise<{ credentialId: string; returnTo: string | null }> {
     if (!code || !state) {
       throw new BadRequestException('Missing code or state parameter');
     }
@@ -470,7 +485,7 @@ export class OAuth2Service {
       `OAuth2 credential created: ${saved.id} (${saved.name}) for org ${organizationId}`,
     );
 
-    return { credentialId: saved.id };
+    return { credentialId: saved.id, returnTo: safeReturnPath(statePayload.returnTo) };
   }
 
   /**

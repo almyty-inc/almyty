@@ -76,6 +76,7 @@ describe('formatModelPrice', () => {
   })
 
   it('says unpriced when nothing is known', () => {
-    expect(formatModelPrice(null)).toBe('Unpriced')
+    expect(formatModelPrice(null)).toBe('Price unknown')
+    expect(formatModelPrice({ inPerMTok: 0, outPerMTok: 0 })).toBe('Free')
   })
 })

@@ -215,7 +215,16 @@ export function ModelPicker({
         items.push({ key: `${p.id}::${savedModel}`, kind: 'model', label: savedModel, sub: 'Saved, not in the list', provider: p, model: savedModel, saved: true, unavailable: true })
         modelHits += 1
       }
-      const note = own.length === 0 && !q ? (FREE_TEXT_PROVIDER_TYPES.has(p.type) ? 'Type the model id your server runs.' : 'No models yet. Check the provider again on its page.') : undefined
+      // Listed but none usable is not the same as nothing listed: say which.
+      const listed = cards.filter((c) => c.providerId === p.id && c.status !== 'inactive').length
+      const note =
+        own.length === 0 && !q
+          ? listed > 0
+            ? `${listed} model${listed === 1 ? '' : 's'} listed, none usable yet. Check the provider again on its page.`
+            : FREE_TEXT_PROVIDER_TYPES.has(p.type)
+              ? 'Type the model id your server runs.'
+              : 'No models yet. Check the provider again on its page.'
+          : undefined
       if (items.length > 0 || note) out.push({ key: p.id, heading: p.name, items, note })
     }
 

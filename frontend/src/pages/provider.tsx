@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { ArrowLeft, ChevronDown, ChevronRight, ExternalLink, Loader2, Pencil, Play, RefreshCw } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Loader2, Pencil, Play, RefreshCw } from 'lucide-react'
+import { Disclosure } from '@/components/ui/disclosure'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -158,7 +159,7 @@ export function ProviderPage() {
     )
   }
 
-  const status = providerCheck(provider, models.some((m) => m.selectable))
+  const status = providerCheck(provider)
   const visibility: VisibilityValue = { visibility: (provider.visibility as Visibility) ?? 'org', teamId: provider.teamId ?? null }
 
   return (
@@ -471,19 +472,6 @@ function Hosting({ provider, orgId }: { provider: any; orgId: string }) {
           </Card>
         ))
       )}
-    </section>
-  )
-}
-
-function Disclosure({ title, children }: { title: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <section className="rounded-lg border">
-      <button type="button" className="flex w-full items-center gap-1.5 px-4 py-3 text-left font-medium" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        {open ? <ChevronDown className="h-4 w-4" aria-hidden /> : <ChevronRight className="h-4 w-4" aria-hidden />}
-        {title}
-      </button>
-      {open && <div className="space-y-6 border-t px-4 py-4">{children}</div>}
     </section>
   )
 }

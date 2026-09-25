@@ -7,7 +7,7 @@
 
 ## Build it
 
-1. **Import the WSDL.** Open *APIs → Connect API* (`/apis/new`), choose SOAP and enter the service's base URL. Continue to the schema-import page (`/apis/:id/import`) and supply the WSDL URL, file or content. almyty parses the definitions and builds a JSON parameter schema from the XML types.
+1. **Import the WSDL.** Go to *APIs → Connect an API* (`/apis/new`), paste the WSDL link or drop the file, and click **Import**. almyty reads the address from the WSDL, parses the definitions and builds a JSON parameter schema from the XML types. Paste the service key if asked.
 
 2. **Review the generated tools.** Each operation becomes a tool with typed inputs and outputs; the agent never sees the SOAP envelope.
 

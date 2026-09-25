@@ -13,6 +13,8 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
+import { fireEvent, screen } from '@testing-library/react'
+
 import { render } from '@/test/setup'
 import { StrategyChoice } from '../strategy-choice'
 import {
@@ -62,6 +64,8 @@ function backendNumber(name: string): number {
 describe('the autonomous builder mirrors the engine', () => {
   it('offers exactly the strategies the engine implements, in its order', () => {
     const { container } = render(<StrategyChoice models={newAgentModels()} onChange={() => {}} />)
+    // The less common ones wait under "More ways"; open it so all are counted.
+    fireEvent.click(screen.getByRole('button', { name: 'More ways' }))
     const offered = [...container.querySelectorAll('[data-strategy-key]')].map((el) => el.getAttribute('data-strategy-key'))
     const engine = backendList('AUTONOMOUS_STRATEGY_KEYS')
     expect(engine.length).toBeGreaterThan(0)

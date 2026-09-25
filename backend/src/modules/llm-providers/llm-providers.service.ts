@@ -800,6 +800,9 @@ export class LlmProvidersService {
               isHealthy: false,
               lastHealthCheckAt: new Date(),
               lastError: upstreamMessage,
+              // Dated, so the page shows the failed check as current and
+              // not as the history of some earlier call.
+              lastErrorAt: new Date(),
             },
           );
         } catch (updateError: any) {

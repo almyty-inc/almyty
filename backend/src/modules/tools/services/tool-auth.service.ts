@@ -6,6 +6,8 @@
  * order.
  *
  * Resolution order for an API-backed tool:
+ *   0. A connection the API points at (api.authentication.config.connectionId),
+ *      resolved through CredentialRefResolver as the caller.
  *   1. Load the most recent active Credential row for (api, org)
  *      and apply its auth headers + query params.
  *   2. If no credential exists, fall back to api.authentication
@@ -17,7 +19,7 @@
  * Applying a credential also refreshes expired OAuth2 tokens
  * transparently via the credential service.
  */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -26,6 +28,8 @@ import { Api } from '../../../entities/api.entity';
 import { Credential, CredentialType } from '../../../entities/credential.entity';
 import { ToolExecutionOptions } from '../tool-execution.types';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
+import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
+import { connectionAuthConfig, inlineApiAuthView } from '../../credentials/inline-api-auth.helper';
 
 @Injectable()
 export class ToolAuthService {
@@ -36,18 +40,35 @@ export class ToolAuthService {
     private readonly credentialRepository: Repository<Credential>,
     private readonly moduleRef: ModuleRef,
     private readonly envelopeCrypto: EnvelopeCryptoService,
+    @Optional()
+    private readonly credentialRefs?: CredentialRefResolver,
   ) {}
 
   /**
    * Apply credentials to an outbound axios request for an API-backed
-   * tool. Prefers a stored Credential row over the legacy inline
-   * api.authentication field.
+   * tool. An API pointed at a connection sends that connection's key;
+   * otherwise a stored Credential row is preferred over the legacy
+   * inline api.authentication field.
    */
   async applyApiAuth(
     config: AxiosRequestConfig,
     api: Api,
     options: ToolExecutionOptions,
   ): Promise<void> {
+    // 0. A connection the API points at (its Key card's "Connect an
+    // account"). Resolved as the caller, through grants and the audit
+    // trail, like every other consumer of a connection. A connection that
+    // cannot be used fails the call rather than sending it unsigned.
+    const connectionId = api.authentication?.config?.connectionId as string | undefined;
+    if (connectionId && this.credentialRefs) {
+      const resolved = await this.credentialRefs.resolve(options.organizationId, connectionId, {
+        principal: options.userId ? { id: options.userId } : undefined,
+        context: { purpose: 'api_call', resourceType: 'api', resourceId: api.id },
+      });
+      this.applyInlineApiAuth(config, inlineApiAuthView(api.authentication as any, connectionAuthConfig(resolved.config)) as Api['authentication']);
+      return;
+    }
+
     // 1. Prefer proper Credential entity.
     const credential = await this.credentialRepository.findOne({
       where: {
@@ -65,8 +86,11 @@ export class ToolAuthService {
 
     // 2. Fall back to legacy api.authentication inline config.
     if (!api.authentication) return;
+    this.applyInlineApiAuth(config, api.authentication);
+  }
 
-    const authConfig = api.authentication;
+  /** Put an inline `{ type, config }` (secret filled in) onto the request. */
+  private applyInlineApiAuth(config: AxiosRequestConfig, authConfig: Api['authentication']): void {
     config.headers = config.headers || {};
 
     switch (authConfig.type) {
