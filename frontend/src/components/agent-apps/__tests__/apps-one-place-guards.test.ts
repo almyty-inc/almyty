@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 
 /**
@@ -24,7 +24,7 @@ const FILES = [
   'components/agents/detail/interfaces-tab.tsx',
   'components/gateways/managed-by-app-banner.tsx',
   'components/gateways/visitor-oauth-card.tsx',
-  'components/ui/choice-tile.tsx',
+  'components/connect/service-tiles.tsx',
   'pages/app-detail.tsx',
 ]
 
@@ -73,7 +73,7 @@ describe('apps are the one place, in the shared look', () => {
     for (const card of ['custom-domain-card', 'allowed-origins-card', 'visitor-oauth-card', 'hosted-chat-sso-urls']) {
       expect(web).toMatch(new RegExp(`from '@/components/gateways/${card}'`))
     }
-    expect(read('components/agent-apps/app-access.tsx')).toMatch(/from '@\/components\/llm-providers\/who-can-use'/)
+    expect(read('components/agent-apps/app-access.tsx')).toMatch(/from '@\/components\/connect\/who-can-use'/)
   })
 
   it('no file here builds its own domain, allowed sites or sign-in card', () => {
@@ -89,15 +89,13 @@ describe('apps are the one place, in the shared look', () => {
       expect(read(rel), rel).toMatch(/from '@\/components\/ui\/disclosure'/)
     }
     for (const rel of ['components/agent-apps/app-access.tsx', 'components/gateways/visitor-oauth-card.tsx']) {
-      expect(read(rel), rel).toMatch(/from '@\/components\/ui\/choice-tile'/)
+      expect(read(rel), rel).toMatch(/from '@\/components\/connect\/service-tiles'/)
     }
-    // One grid, in the Models tile look.
-    expect(read('components/ui/choice-tile.tsx')).toContain(
+    // One tile markup: the shared one the connect pages use.
+    expect(read('components/connect/service-tiles.tsx')).toContain(
       'flex w-full items-center gap-2.5 rounded-lg border bg-card px-3 py-2.5 text-left text-sm transition-colors',
     )
-    expect(read('pages/models-connect.tsx')).toContain(
-      'flex w-full items-center gap-2.5 rounded-lg border bg-card px-3 py-2.5 text-left text-sm transition-colors',
-    )
+    expect(existsSync(join(SRC, 'components/ui/choice-tile.tsx'))).toBe(false)
   })
 
   it('opens no dialog: pages and inline sections only, confirms through useConfirm', () => {

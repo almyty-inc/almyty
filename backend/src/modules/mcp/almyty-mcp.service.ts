@@ -420,7 +420,7 @@ export class AlmytyMcpService {
       }
       case 'create_gateway': {
         const endpoint = args.endpoint || `/${args.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
-        const toolTypes = ['mcp', 'utcp', 'skills'];
+        const toolTypes = ['mcp', 'utcp', 'skills', 'tools'];
         const isToolKind = toolTypes.includes(args.type);
         // Per-type default configuration. MCP requires `transport`, UTCP requires `protocol`.
         // A bare `{transport: http}` blocks UTCP gateway creation through this tool.

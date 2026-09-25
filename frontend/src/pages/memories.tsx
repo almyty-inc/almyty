@@ -20,7 +20,7 @@ import { formatDateTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { TeamFilter, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
-import { ConnectAccountButton } from '@/components/connections/connect-sheet'
+import { ConnectAccountButton } from '@/components/connections/connect-flow'
 import type { Connection } from '@/types/connections'
 
 type Item = {
@@ -530,9 +530,9 @@ function ConfigCard({ config, backends, credentials, saving, orgId, onSave }: Co
         </div>
 
         <div>
-          <Label className="text-xs">Credentials per backend</Label>
+          <Label className="text-xs">Connection per backend</Label>
           <p className="text-xs text-muted-foreground mb-2">
-            Wire a memory_backend credential (managed in Credentials → Vault) to each external backend. Native needs no credential.
+            Pick the connection each external backend signs in with, or connect one here. Native needs none.
           </p>
           <div className="grid md:grid-cols-2 gap-2">
             {externalBackends.map((b) => (
@@ -570,7 +570,7 @@ function ConfigCard({ config, backends, credentials, saving, orgId, onSave }: Co
             ))}
             {credentials.length === 0 && (
               <p className="text-xs text-muted-foreground italic">
-                No credentials of type <span className="font-mono">memory_backend</span> exist yet — add one from the Credentials page.
+                No memory connection yet. Use Connect next to a backend.
               </p>
             )}
           </div>

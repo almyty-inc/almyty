@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { ChoiceTile, ChoiceTiles } from '@/components/ui/choice-tile'
+import { ChoiceTile, ChoiceTiles } from '@/components/connect/service-tiles'
 import { Disclosure } from '@/components/ui/disclosure'
 import { gatewaysApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'

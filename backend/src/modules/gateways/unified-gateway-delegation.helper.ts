@@ -27,6 +27,7 @@ import { AcpServerService } from '../acp/acp-server.service';
 import { AcpDiscoveryService } from '../acp/acp-discovery.service';
 import { isPrivateGateway } from './private-gateway';
 import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
+import { SkillGeneratorService } from '../tools/skill-generator.service';
 
 /**
  * Per-protocol delegation for gateways exposed under
@@ -106,6 +107,9 @@ export class UnifiedGatewayDelegation {
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
     // Optional for the same reason; resolves the gateway's connection.
     @Optional() private readonly channelCredentials?: ChannelCredentialService,
+    // A shared-tools gateway's Skills listing. Optional for the same reason;
+    // without it /skills answers not found rather than an empty list.
+    @Optional() private readonly skills?: SkillGeneratorService,
   ) {}
 
   async handleGatewayRequest(
@@ -121,11 +125,12 @@ export class UnifiedGatewayDelegation {
     const action = afterGateway.replace(/^\//, '') || '';
 
     // Tag the request so the logging interceptor can attribute it — the
-    // slug path alone identifies neither gateway nor protocol.
+    // slug path alone identifies neither gateway nor protocol. A shared-tools
+    // gateway is tagged with the protocol this request actually speaks.
     setProtocolContext(req, {
       gatewayId: gateway.id,
       organizationId: organization.id,
-      protocol: gateway.type,
+      protocol: gateway.type === GatewayType.TOOLS ? (toolsGatewayProtocol(action) ?? gateway.type) : gateway.type,
     });
 
     // Per-gateway rate limits (configured in the dashboard). Enforced
@@ -201,6 +206,8 @@ export class UnifiedGatewayDelegation {
         this.bumpGatewayCounters(gateway.id, res.statusCode < 400);
         return out;
       }
+      case GatewayType.TOOLS:
+        return this.delegateTools(gateway, organization, orgSlug, action, auth, req, res, body);
       default:
         throw new HttpException(
           `Gateway type '${gateway.type}' does not support direct requests. Use the protocol-specific endpoint or the Skills CLI.`,
@@ -440,6 +447,53 @@ export class UnifiedGatewayDelegation {
     await this.acpServerService.handleJsonRpc(gateway, req, body, res);
   }
 
+  /**
+   * A shared-tools gateway: one address, three protocols, one servable set.
+   * Which protocol a request speaks follows from its path alone
+   * (`toolsGatewayProtocol`), so a client never has to be told to pick one.
+   * Auth has already run above, exactly as for a single-protocol gateway,
+   * and each branch is the same code a single-protocol gateway runs, so MCP,
+   * UTCP and Skills list and call from `servableToolsOnGateway` alike.
+   */
+  private async delegateTools(
+    gateway: Gateway,
+    organization: Organization,
+    orgSlug: string,
+    action: string,
+    auth: any,
+    req: Request,
+    res: Response,
+    body: any,
+  ) {
+    switch (toolsGatewayProtocol(action)) {
+      case 'mcp':
+        // MCP bumps the gateway request counters inside McpService.
+        return this.delegateMcp(gateway, auth, body, req, res);
+      case 'utcp': {
+        const out = await this.delegateUtcp(gateway, organization, action, auth, req, res, body);
+        this.bumpGatewayCounters(gateway.id, res.statusCode < 400);
+        return out;
+      }
+      case 'skills': {
+        if (req.method !== 'GET') {
+          throw new HttpException('Skills are listed with GET', HttpStatus.METHOD_NOT_ALLOWED);
+        }
+        if (!this.skills) {
+          throw new HttpException('Skills are not available on this server', HttpStatus.NOT_FOUND);
+        }
+        const gatewaySlug = (gateway.endpoint || '').replace(/^\/+/, '');
+        const skills = await this.skills.generateIndividualSkills(gateway.id, organization.id, {
+          orgSlug: organization.slug || orgSlug,
+          gatewaySlug,
+        });
+        this.bumpGatewayCounters(gateway.id, true);
+        return res.json({ success: true, data: { skills } });
+      }
+      default:
+        throw new HttpException(`Unknown action: ${action}`, HttpStatus.NOT_FOUND);
+    }
+  }
+
   private async delegateUtcp(
     gateway: Gateway,
     organization: Organization,
@@ -520,4 +574,24 @@ export class UnifiedGatewayDelegation {
         this.logger.warn(`Failed to bump gateway counters: ${err.message}`);
       });
   }
+}
+
+/**
+ * Which protocol a request to a shared-tools gateway speaks, from the path
+ * after the gateway's address:
+ *
+ *   ''                          MCP (JSON-RPC over Streamable HTTP)
+ *   '.well-known/utcp'          UTCP discovery
+ *   'manual', 'execute'         UTCP
+ *   'skills'                    Agent Skills
+ *   any other '.well-known/...' MCP, as on an MCP gateway
+ *
+ * Anything else is null: not found, never a guess.
+ */
+export function toolsGatewayProtocol(action: string): 'mcp' | 'utcp' | 'skills' | null {
+  if (action === '') return 'mcp';
+  if (action === '.well-known/utcp' || action === 'manual' || action === 'execute') return 'utcp';
+  if (action === 'skills') return 'skills';
+  if (action.startsWith('.well-known/')) return 'mcp';
+  return null;
 }

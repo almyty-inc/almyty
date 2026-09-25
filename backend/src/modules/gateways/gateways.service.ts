@@ -21,7 +21,7 @@ import { OrgLicenseResolver } from '../licensing/org-license.resolver';
 import { AccessPolicyService, normaliseVisibility, type ResourceVisibility } from '../../common/authorization/access-policy.service';
 import { ExecutionAccessService, gatewayPrincipal } from '../../common/authorization/execution-access.service';
 import { Agent } from '../../entities/agent.entity';
-import { PRIVATE_CAPABLE_GATEWAY_TYPES, gatewayServableTo } from './private-gateway';
+import { GATEWAY_NOT_FOUND, PRIVATE_CAPABLE_GATEWAY_TYPES, assertGatewayReadable, gatewayReadableBy } from './private-gateway';
 import {
   encryptChannelConfigSecrets,
   hasInlineChannelSecret,
@@ -803,13 +803,18 @@ export class GatewaysService {
    * against the caller's own org while the lookup ran against the slug in
    * the path, handing back another tenant's gateway id, name, type and
    * endpoint. Nothing is said about whether the slug exists.
+   *
+   * No relations are loaded: the one caller (GET /gateways/resolve) answers
+   * with the gateway's own columns, and the name fallback reads every
+   * gateway of the organization, so each relation was a join per gateway.
    */
   async resolveGateway(
     orgSlug: string,
     gatewayNameSlug: string,
     callerOrganizationId: string,
-    // Another member's private gateway resolves exactly like a slug that
-    // does not exist. Required so no caller forgets to say who is asking.
+    // A gateway the caller may not read (another member's private one, a
+    // team's they are not on) resolves exactly like a slug that does not
+    // exist. Required so no caller forgets to say who is asking.
     callerId: string | null,
   ): Promise<Gateway> {
     const organization = await this.organizationRepository.findOne({
@@ -818,24 +823,26 @@ export class GatewaysService {
     if (!organization || organization.id !== callerOrganizationId) {
       throw new NotFoundException(`Gateway not found: @${orgSlug}/${gatewayNameSlug}`);
     }
+    const readable = async (g: Gateway | null | undefined) =>
+      !!g && (await gatewayReadableBy(this.accessPolicy, g, callerId));
 
     // Try matching by endpoint (which is already a slug like /httpbin-skills-gateway)
-    let gateway = await this.gatewayRepository.findOne({
+    let gateway: Gateway | null = await this.gatewayRepository.findOne({
       where: { organizationId: organization.id, endpoint: `/${gatewayNameSlug}` },
-      relations: { tools: { tool: true }, authConfigs: true },
     });
-    if (gateway && !gatewayServableTo(gateway, callerId)) gateway = null;
+    if (!(await readable(gateway))) gateway = null;
 
     // Fallback: match by slugified name
     if (!gateway) {
       const gateways = await this.gatewayRepository.find({
         where: { organizationId: organization.id },
-        relations: { tools: { tool: true }, authConfigs: true },
       });
-      gateway = gateways.find(g =>
-        g.name.toLowerCase().replace(/\s+/g, '-') === gatewayNameSlug
-          && gatewayServableTo(g, callerId)
-      ) || null;
+      for (const g of gateways) {
+        if (g.name.toLowerCase().replace(/\s+/g, '-') === gatewayNameSlug && (await readable(g))) {
+          gateway = g;
+          break;
+        }
+      }
     }
 
     if (!gateway) {
@@ -848,10 +855,13 @@ export class GatewaysService {
   /**
    * Load a gateway of the organization.
    *
-   * `caller` is who is asking. Another user's private gateway is reported
-   * as not found -- to org owners and admins too -- so its existence is
-   * not confirmed. Internal callers that act for the platform rather than
-   * for a person (stats roll-ups, the channel pipeline) omit it.
+   * `caller` is who is asking. A gateway they may not read
+   * (gatewayReadableBy: another user's private one -- to org owners and
+   * admins too -- or a team's they are not on) is reported as not found,
+   * so its existence is not confirmed. Internal callers that act for the
+   * platform rather than for a person (stats roll-ups, the channel
+   * pipeline) omit it; the dashboard routes that omit it sit behind
+   * PrivateGatewayGuard, which applies the same rule.
    */
   async getGateway(
     gatewayId: string,
@@ -870,20 +880,15 @@ export class GatewaysService {
     });
 
     if (!gateway) {
-      throw new NotFoundException('Gateway not found');
+      throw new NotFoundException(GATEWAY_NOT_FOUND);
     }
-    if (caller !== undefined && !gatewayServableTo(gateway, caller?.id)) {
-      throw new NotFoundException('Gateway not found');
+    if (caller !== undefined) {
+      await assertGatewayReadable(this.accessPolicy, gateway, caller?.id);
     }
 
     return gateway;
   }
 
-  /**
-   * The manage gate, with one refinement over canAccess: another user's
-   * private gateway is a 404, not a 403, so a caller probing ids learns
-   * nothing about it.
-   */
   /**
    * A gateway of this organization that the caller may manage, by the
    * same rule updateGateway applies. For write paths that live outside
@@ -891,15 +896,19 @@ export class GatewaysService {
    */
   async findManageable(gatewayId: string, organizationId: string, userId: string): Promise<Gateway> {
     const gateway = await this.gatewayRepository.findOne({ where: { id: gatewayId, organizationId } });
-    if (!gateway) throw new NotFoundException('Gateway not found');
+    if (!gateway) throw new NotFoundException(GATEWAY_NOT_FOUND);
     await this.assertCanManage(gateway, userId);
     return gateway;
   }
 
+  /**
+   * The manage gate, with one refinement over canAccess: a gateway the
+   * caller may not even read (another user's private one, a team's they
+   * are not on) is a 404, not a 403, so a caller probing ids learns
+   * nothing about it.
+   */
   private async assertCanManage(gateway: Gateway, userId: string): Promise<void> {
-    if (!gatewayServableTo(gateway, userId)) {
-      throw new NotFoundException('Gateway not found');
-    }
+    await assertGatewayReadable(this.accessPolicy, gateway, userId);
     const decision = await this.accessPolicy.canAccess({ id: userId }, gateway, 'manage');
     if (!decision.allowed) {
       throw new ForbiddenException(decision.reason);
@@ -1008,7 +1017,7 @@ export class GatewaysService {
     }
 
     if (filters.kind) {
-      const toolTypes = [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS];
+      const toolTypes = [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS, GatewayType.TOOLS];
       if (filters.kind === GatewayKind.TOOL) {
         queryBuilder.andWhere('gateway.type IN (:...toolTypes)', { toolTypes });
       } else {

@@ -6,6 +6,7 @@ import {
   readCurrentOrgId,
   recoverFromStaleOrganizationContext,
 } from '@/store/organization-selection'
+import type { ApiKeyView, ConnectApiInput, ConnectApiResult, SetApiKeyInput } from '@/types/api-connect'
 
 const API_BASE_URL = import.meta.env.ALMYTY_API_BASE_URL || ''
 
@@ -554,8 +555,6 @@ export const apisApi = {
   
   getById: (id: string) => apiGet(`/apis/${id}`),
   
-  create: (data: any) => apiPost('/apis', data),
-  
   update: (id: string, data: any) => apiPut(`/apis/${id}`, data),
   
   delete: (id: string) => apiDel(`/apis/${id}`),
@@ -614,18 +613,28 @@ export const apisApi = {
 
   updateStatus: (id: string, status: string) => apiPut(`/apis/${id}/status`, { status }),
 
-  createHttpApi: (data: any) => apiPost('/apis/http', data),
-
   createSdkApi: (data: any) => apiPost('/apis/sdk', data),
   getSdkMaps: (apiId: string) => apiGet(`/apis/${apiId}/sdk-maps`),
   addDependency: (apiId: string, packageName: string, version: string) => apiPost(`/apis/${apiId}/dependencies`, { packageName, version }),
 
-  // Credential management
-  getCredentials: (apiId: string) => apiGet(`/apis/${apiId}/credentials`),
-  createCredential: (apiId: string, data: any) => apiPost(`/apis/${apiId}/credentials`, data),
-  updateCredential: (apiId: string, credentialId: string, data: any) => apiPut(`/apis/${apiId}/credentials/${credentialId}`, data),
-  deleteCredential: (apiId: string, credentialId: string) => apiDel(`/apis/${apiId}/credentials/${credentialId}`),
-  testCredential: (apiId: string, credentialId: string) => apiPost(`/apis/${apiId}/credentials/${credentialId}/test`),
+  // Connect an API from its description in one call: a link, a file or
+  // pasted text. The response says what was found and what is still needed.
+  connect: (data: ConnectApiInput, file?: File): Promise<ConnectApiResult> => {
+    if (file) {
+      const formData = new FormData()
+      formData.append('schema', file)
+      for (const [key, value] of Object.entries(data)) {
+        if (value !== undefined && value !== null && value !== '') formData.append(key, String(value))
+      }
+      return apiPost('/apis/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+    }
+    return apiPost('/apis/import', data)
+  },
+
+  // The API's one key: how it is sent and where it comes from. Never the secret.
+  getKey: (apiId: string): Promise<ApiKeyView> => apiGet(`/apis/${apiId}/key`),
+  setKey: (apiId: string, data: SetApiKeyInput): Promise<ApiKeyView> => apiPut(`/apis/${apiId}/key`, data),
+  removeKey: (apiId: string): Promise<ApiKeyView> => apiDel(`/apis/${apiId}/key`),
 }
 
 // Tools API
@@ -1220,6 +1229,26 @@ export const credentialsApi = {
   delete: (id: string) => apiDel(`/credentials/${id}`),
   test: (id: string) => apiPost(`/credentials/${id}/test`, {}),
   getUsage: (id: string) => apiGet(`/credentials/${id}/usage`),
+  /** Start an OAuth 2.0 sign-in; the browser goes to authorizationUrl and comes back to returnTo. */
+  oauth2Authorize: (data: {
+    apiId?: string
+    clientId: string
+    clientSecret: string
+    authorizationUrl: string
+    tokenUrl: string
+    scopes?: string[]
+    credentialName?: string
+    returnTo?: string
+  }): Promise<{ authorizationUrl: string; state: string }> => apiPost('/credentials/oauth2/authorize', data),
+  /** A client-credentials token, stored as a credential (for an API when apiId is given). */
+  oauth2ClientCredentials: (data: {
+    apiId?: string
+    clientId: string
+    clientSecret: string
+    tokenUrl: string
+    scopes?: string[]
+    credentialName?: string
+  }): Promise<{ credentialId: string }> => apiPost('/credentials/oauth2/client-credentials', data),
 }
 
 // Access Keys API

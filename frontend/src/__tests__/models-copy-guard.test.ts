@@ -37,7 +37,7 @@ const USER_FACING = [
   join(SRC, 'pages/models-redirects.tsx'),
   join(SRC, 'components/model-picker.tsx'),
   join(SRC, 'components/llm-providers/connect-provider-form.tsx'),
-  join(SRC, 'components/llm-providers/who-can-use.tsx'),
+  join(SRC, 'components/connect/who-can-use.tsx'),
   join(SRC, 'components/llm-providers/provider-status.tsx'),
   join(SRC, 'components/llm-providers/provider-catalog.ts'),
   join(SRC, 'components/llm-providers/schema.ts'),
