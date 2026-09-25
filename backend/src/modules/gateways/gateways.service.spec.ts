@@ -1,10 +1,9 @@
 import { unlimitedQuotaManager } from '../../test/tool-quota.fake';
-import { Not } from 'typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { GatewaysService } from './gateways.service';
-import { GatewaysStatsHelper } from './gateways-stats.helper';
+import { GatewaysStatsHelper, SERVABLE_TOOL_SCOPE_CLAUSE } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
 import { Gateway, GatewayType } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
@@ -23,6 +22,7 @@ import {
   clause,
   organizationScope,
 } from './__tests__/recording-query-builder';
+import { resourceServableThroughGateway } from './private-gateway';
 
 describe('GatewaysService', () => {
   let service: GatewaysService;
@@ -1381,6 +1381,20 @@ describe('GatewaysService', () => {
   });
 
   describe('searchSkillsAcrossGateways', () => {
+    // The gateway list's filter, real, over this membership table: user-1
+    // and user-2 are plain members; team-a has one member; an admin sits
+    // in no team.
+    beforeEach(() => {
+      const m = membershipFixture();
+      m.team('team-a', 'org-1');
+      m.team('team-b', 'org-1');
+      for (const userId of ['user-1', 'user-2', 'team-a-member', 'outsider']) m.member('org-1', userId);
+      m.member('org-1', 'org-admin', OrganizationRole.ADMIN);
+      m.teamMember('team-a', 'team-a-member');
+      m.teamMember('team-b', 'outsider');
+      accessPolicy.visibleWhere = (...args: any[]) => (m.accessPolicy.visibleWhere as any)(...args);
+    });
+
     /**
      * The match belongs in SQL.
      *
@@ -1408,6 +1422,7 @@ describe('GatewaysService', () => {
       toolVisibility: string;
       toolCreatedBy: string | null;
       gatewayToolActive: boolean;
+      gatewayTeamId: string | null; toolTeamId: string | null; toolStatus: string;
     }
 
     let qbCalls: { joins: string[]; wheres: string[]; limit: number | null; params: Record<string, any> };
@@ -1438,9 +1453,14 @@ describe('GatewaysService', () => {
       'gateway.organizationId = :organizationId': (r, p) => r.gatewayOrgId === p.organizationId,
       'gateway.status = :status': (r, p) => r.gatewayStatus === p.status,
       'gatewayTool.isActive = true': (r) => r.gatewayToolActive,
-      [`(gateway.visibility <> 'private' OR gateway."ownerUserId" = :callerId)`]: (r, p) =>
-        r.gatewayVisibility !== 'private' ||
-        (r.gatewayOwnerUserId != null && p.callerId != null && r.gatewayOwnerUserId === p.callerId),
+      'gateway.id IN (:...gatewayIds)': (r, p) => Array.isArray(p.gatewayIds) && p.gatewayIds.includes(r.gatewayId),
+      'tool.status = :toolStatus': (r, p) => r.toolStatus === p.toolStatus,
+      // resourceServableThroughGateway, row by row.
+      [SERVABLE_TOOL_SCOPE_CLAUSE]: (r) =>
+        resourceServableThroughGateway(
+          { visibility: r.gatewayVisibility as any, teamId: r.gatewayTeamId, ownerUserId: r.gatewayOwnerUserId },
+          { visibility: r.toolVisibility as any, teamId: r.toolTeamId, createdBy: r.toolCreatedBy },
+        ),
       [`(tool.visibility <> 'private' OR tool."createdBy" = :callerId)`]: (r, p) =>
         r.toolVisibility !== 'private' ||
         (r.toolCreatedBy != null && p.callerId != null && r.toolCreatedBy === p.callerId),
@@ -1500,6 +1520,20 @@ describe('GatewaysService', () => {
       };
 
       gatewayRepository.createQueryBuilder.mockReturnValue(qb);
+      // The gateways behind the rows, as a table the gateway-list filter
+      // (AccessPolicyService.visibleWhere, real) is evaluated against.
+      const gateways = new Map<string, any>();
+      for (const r of rows) {
+        gateways.set(r.gatewayId, {
+          id: r.gatewayId,
+          organizationId: r.gatewayOrgId,
+          status: r.gatewayStatus,
+          visibility: r.gatewayVisibility,
+          teamId: r.gatewayTeamId,
+          ownerUserId: r.gatewayOwnerUserId,
+        });
+      }
+      gatewayRepository.find.mockImplementation(fakeRepository([...gateways.values()]).find);
     };
 
     const org = { id: 'org-1', name: 'Test Org', slug: 'test-org' };
@@ -1510,12 +1544,12 @@ describe('GatewaysService', () => {
       gatewayEndpoint: '/my-gateway',
       gatewayStatus: 'active',
       gatewayOrgId: 'org-1',
-      gatewayVisibility: 'organization',
+      gatewayVisibility: 'org', gatewayTeamId: null,
       gatewayOwnerUserId: null,
       toolId: 'tool-1',
       toolName: 'Get Users',
       toolDescription: 'Fetches all users from the API',
-      toolVisibility: 'organization',
+      toolVisibility: 'org', toolTeamId: null, toolStatus: 'active',
       toolCreatedBy: 'user-2',
       gatewayToolActive: true,
       ...over,
@@ -1578,7 +1612,7 @@ describe('GatewaysService', () => {
       organizationRepository.findOne.mockResolvedValue(org);
       useRows([
         row({ toolId: 'tool-1', toolName: 'Live Tool', gatewayStatus: 'active' }),
-        row({ toolId: 'tool-2', toolName: 'Dead Tool', gatewayStatus: 'inactive' }),
+        row({ gatewayId: 'gateway-2', toolId: 'tool-2', toolName: 'Dead Tool', gatewayStatus: 'inactive' }),
       ]);
 
       const results = await service.searchSkillsAcrossGateways('org-1', 'tool', 'user-1');
@@ -1587,7 +1621,7 @@ describe('GatewaysService', () => {
       expect(qbCalls.wheres).toContain('gateway.organizationId = :organizationId');
       expect(qbCalls.wheres).toContain('gateway.status = :status');
       // The relation load that used to pull every Tool into heap is gone.
-      expect(gatewayRepository.find).not.toHaveBeenCalled();
+      for (const [args] of gatewayRepository.find.mock.calls) expect(args.relations).toBeUndefined();
     });
 
     it('should only include active tools', async () => {
@@ -1661,18 +1695,31 @@ describe('GatewaysService', () => {
           toolName: 'Tool behind their private gateway',
         }),
         row({
-          gatewayId: 'gw-org',
+          gatewayId: 'gw-mine',
+          gatewayVisibility: 'private',
+          gatewayOwnerUserId: 'user-1',
           toolId: 'my-private-tool',
           toolName: 'My private tool',
           toolVisibility: 'private',
           toolCreatedBy: 'user-1',
         }),
         row({
-          gatewayId: 'gw-org',
+          gatewayId: 'gw-theirs',
+          gatewayVisibility: 'private',
+          gatewayOwnerUserId: 'user-2',
           toolId: 'their-private-tool',
           toolName: 'Their private tool',
           toolVisibility: 'private',
           toolCreatedBy: 'user-2',
+        }),
+        // A private tool attached to a shared gateway: that gateway does not
+        // serve it (gateway-servable), so it is nobody's search result.
+        row({
+          gatewayId: 'gw-org',
+          toolId: 'my-private-tool-on-shared',
+          toolName: 'My private tool on the shared gateway',
+          toolVisibility: 'private',
+          toolCreatedBy: 'user-1',
         }),
       ];
 
@@ -1684,6 +1731,7 @@ describe('GatewaysService', () => {
 
         expect(ids).not.toContain('tool-behind-their-gateway');
         expect(ids).not.toContain('their-private-tool');
+        expect(ids).not.toContain('my-private-tool-on-shared');
       });
 
       it("includes the caller's own private gateway and private tool", async () => {
@@ -1717,7 +1765,7 @@ describe('GatewaysService', () => {
       it('does not treat a private row with no owner as the caller\'s', async () => {
         organizationRepository.findOne.mockResolvedValue(org);
         useRows([
-          row({ toolId: 'orphan-gw', gatewayVisibility: 'private', gatewayOwnerUserId: null }),
+          row({ gatewayId: 'gw-orphan', toolId: 'orphan-gw', gatewayVisibility: 'private', gatewayOwnerUserId: null }),
           row({ toolId: 'orphan-tool', toolVisibility: 'private', toolCreatedBy: null }),
         ]);
 
@@ -1735,6 +1783,52 @@ describe('GatewaysService', () => {
 
       expect(results).toEqual([]);
     });
+
+    describe('team scope and what each gateway serves', () => {
+      const scenario = [
+        row({ gatewayId: 'gw-org', toolId: 'org-tool', toolName: 'Org tool' }),
+        row({
+          gatewayId: 'gw-team-a',
+          gatewayVisibility: 'team',
+          gatewayTeamId: 'team-a',
+          toolId: 'team-a-tool',
+          toolName: 'Team A tool',
+          toolVisibility: 'team',
+          toolTeamId: 'team-a',
+        }),
+        row({ gatewayId: 'gw-team-a', gatewayVisibility: 'team', gatewayTeamId: 'team-a', toolId: 'org-tool-on-team-gw', toolName: 'Org tool on the team gateway' }),
+        // A team tool attached to an org gateway: not served there.
+        row({ gatewayId: 'gw-org', toolId: 'team-a-tool-on-org-gw', toolName: 'Team tool on the org gateway', toolVisibility: 'team', toolTeamId: 'team-a' }),
+        row({ gatewayId: 'gw-org', toolId: 'draft-tool', toolName: 'Draft tool', toolStatus: 'draft' }),
+        row({ gatewayId: 'gw-org', toolId: 'retired-tool', toolName: 'Retired tool', toolStatus: 'deprecated' }),
+      ];
+
+      const search = async (caller: string) =>
+        (await service.searchSkillsAcrossGateways('org-1', 'tool', caller)).map((r) => r.toolId).sort();
+
+      it("a member outside the team finds nothing behind the team's gateway", async () => {
+        organizationRepository.findOne.mockResolvedValue(org);
+        useRows(scenario);
+
+        expect(await search('outsider')).toEqual(['org-tool']);
+      });
+
+      it("the team's member and an org admin find what the team gateway serves", async () => {
+        organizationRepository.findOne.mockResolvedValue(org);
+        useRows(scenario);
+
+        const expected = ['org-tool', 'org-tool-on-team-gw', 'team-a-tool'];
+        expect(await search('team-a-member')).toEqual(expected);
+        expect(await search('org-admin')).toEqual(expected);
+      });
+
+      it('a non-member of the organization is refused', async () => {
+        organizationRepository.findOne.mockResolvedValue(org);
+        useRows(scenario);
+
+        await expect(service.searchSkillsAcrossGateways('org-1', 'tool', 'stranger')).rejects.toBeInstanceOf(ForbiddenException);
+      });
+    });
   });
   describe('getAllUserGateways', () => {
     /**
@@ -1743,56 +1837,57 @@ describe('GatewaysService', () => {
      * skill generator (which loads what it needs itself), and gateway-skills
      * no longer goes through this method at all. Loading every Tool of every
      * active gateway to satisfy that was pure over-fetch.
+     *
+     * Which gateways: the gateway list's own filter (real, over the
+     * membership table below), so the all-skills route never hands a
+     * member a team gateway outside their teams or another member's
+     * private one.
      */
-    it('loads the organization and NOT every tool of every gateway', async () => {
-      const mockGateways = [
-        {
-          id: 'gateway-1',
-          name: 'Gateway One',
-          organizationId: 'org-1',
-          status: 'active',
-          organization: { id: 'org-1', name: 'Test Org' },
-        },
-        {
-          id: 'gateway-2',
-          name: 'Gateway Two',
-          organizationId: 'org-1',
-          status: 'active',
-          organization: { id: 'org-1', name: 'Test Org' },
-        },
-      ];
+    const organization = { id: 'org-1', name: 'Test Org' };
+    const gatewayRows = [
+      { id: 'gw-org', organizationId: 'org-1', status: 'active', visibility: 'org', teamId: null, ownerUserId: null, organization },
+      { id: 'gw-team-a', organizationId: 'org-1', status: 'active', visibility: 'team', teamId: 'team-a', ownerUserId: null, organization },
+      { id: 'gw-mine', organizationId: 'org-1', status: 'active', visibility: 'private', teamId: null, ownerUserId: 'team-a-member', organization },
+      { id: 'gw-theirs', organizationId: 'org-1', status: 'active', visibility: 'private', teamId: null, ownerUserId: 'outsider', organization },
+      { id: 'gw-off', organizationId: 'org-1', status: 'inactive', visibility: 'org', teamId: null, ownerUserId: null, organization },
+      { id: 'gw-foreign', organizationId: 'org-2', status: 'active', visibility: 'org', teamId: null, ownerUserId: null, organization },
+    ];
 
-      gatewayRepository.find.mockResolvedValue(mockGateways);
-
-      const result = await service.getAllUserGateways('org-1', 'user-1');
-
-      expect(result).toEqual(mockGateways);
-      expect(result).toHaveLength(2);
-      expect(gatewayRepository.find).toHaveBeenCalledWith({
-        // Other users' private gateways are not listed.
-        where: [
-          { organizationId: 'org-1', status: 'active', visibility: Not('private') },
-          { organizationId: 'org-1', status: 'active', visibility: 'private', ownerUserId: 'user-1' },
-        ],
-        relations: { organization: true },
-      });
-      const [args] = gatewayRepository.find.mock.calls[0];
-      expect(args.relations).not.toHaveProperty('tools');
+    beforeEach(() => {
+      const m = membershipFixture();
+      m.team('team-a', 'org-1');
+      m.member('org-1', 'team-a-member');
+      m.member('org-1', 'outsider');
+      m.member('org-1', 'org-admin', OrganizationRole.ADMIN);
+      m.teamMember('team-a', 'team-a-member');
+      accessPolicy.visibleWhere = (...args: any[]) => (m.accessPolicy.visibleWhere as any)(...args);
+      gatewayRepository.find.mockImplementation(fakeRepository(gatewayRows).find);
     });
 
-    it('should return empty array when no gateways', async () => {
-      gatewayRepository.find.mockResolvedValue([]);
+    const ids = async (caller: string) => (await service.getAllUserGateways('org-1', caller)).map((g) => g.id).sort();
 
-      const result = await service.getAllUserGateways('org-1', 'user-1');
+    it('loads the organization and NOT every tool of every gateway', async () => {
+      const result = await service.getAllUserGateways('org-1', 'team-a-member');
 
-      expect(result).toEqual([]);
-      expect(gatewayRepository.find).toHaveBeenCalledWith({
-        where: [
-          { organizationId: 'org-1', status: 'active', visibility: Not('private') },
-          { organizationId: 'org-1', status: 'active', visibility: 'private', ownerUserId: 'user-1' },
-        ],
-        relations: { organization: true },
-      });
+      expect(result.every((g) => g.organization?.id === 'org-1')).toBe(true);
+      const [args] = gatewayRepository.find.mock.calls[0];
+      expect(args.relations).toEqual({ organization: true });
+    });
+
+    it("a member outside the team does not get the team's gateway", async () => {
+      expect(await ids('outsider')).toEqual(['gw-org', 'gw-theirs']);
+    });
+
+    it("the team's member gets it, with their own private gateway", async () => {
+      expect(await ids('team-a-member')).toEqual(['gw-mine', 'gw-org', 'gw-team-a']);
+    });
+
+    it("an org admin gets every team gateway but nobody else's private one", async () => {
+      expect(await ids('org-admin')).toEqual(['gw-org', 'gw-team-a']);
+    });
+
+    it('a non-member of the organization is refused', async () => {
+      await expect(service.getAllUserGateways('org-1', 'stranger')).rejects.toBeInstanceOf(ForbiddenException);
     });
   });
 
