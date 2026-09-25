@@ -37,6 +37,7 @@ import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.se
 import { EmailProvisioningService } from './channels/email-provisioning.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { withGatewayQuota } from './gateway-quota';
+import { APP_SURFACE_NEEDS_APP, isAppSurfaceGatewayType } from './app-surface';
 
 /**
  * The partial unique index that actually reserves a hosted-chat slug.
@@ -517,14 +518,28 @@ export class GatewaysService {
     createGatewayDto: CreateGatewayDto,
     organizationId: string,
     userId: string,
-    // A caller that has more writes to do before the surface should
-    // answer creates it INACTIVE and activates it last, so a crash
-    // mid-sequence leaves nothing live. Everything else wants the
-    // gateway routable as soon as it commits.
-    initialStatus: GatewayStatus = GatewayStatus.ACTIVE,
+    options: {
+      // A caller that has more writes to do before the surface should
+      // answer creates it INACTIVE and activates it last, so a crash
+      // mid-sequence leaves nothing live. Everything else wants the
+      // gateway routable as soon as it commits.
+      initialStatus?: GatewayStatus;
+      /**
+       * The app this gateway is a place of. A web chat or messaging
+       * channel (APP_SURFACE_GATEWAY_TYPES) is made only for an app, by
+       * upsertForDistribution when the app publishes the place; without
+       * one it is refused.
+       */
+      forApp?: { appId: string };
+    } = {},
   ): Promise<Gateway> {
+    const initialStatus = options.initialStatus ?? GatewayStatus.ACTIVE;
     try {
       this.logger.log(`[CREATE_GATEWAY] Creating gateway '${createGatewayDto.name}' for org=${organizationId}, user=${userId}`);
+
+      if (isAppSurfaceGatewayType(createGatewayDto.type) && !options.forApp?.appId) {
+        throw new BadRequestException(APP_SURFACE_NEEDS_APP);
+      }
 
       // Verify organization and user permissions
       const organization = await this.organizationRepository.findOne({
@@ -1134,7 +1149,8 @@ export class GatewaysService {
     dto: CreateGatewayDto,
     organizationId: string,
     userId: string,
-    options: { activate?: boolean; gatewayId?: string | null } = {},
+    // The app this gateway is a place of: the only way one of its types is made.
+    options: { appId: string; activate?: boolean; gatewayId?: string | null },
   ): Promise<Gateway> {
     const activate = options.activate ?? true;
     const endpoint = dto.endpoint.startsWith('/') ? dto.endpoint : `/${dto.endpoint}`;
@@ -1147,12 +1163,10 @@ export class GatewaysService {
       }));
 
     if (!existing) {
-      return this.createGateway(
-        dto,
-        organizationId,
-        userId,
-        activate ? GatewayStatus.ACTIVE : GatewayStatus.INACTIVE,
-      );
+      return this.createGateway(dto, organizationId, userId, {
+        initialStatus: activate ? GatewayStatus.ACTIVE : GatewayStatus.INACTIVE,
+        forApp: { appId: options.appId },
+      });
     }
 
     const updated = await this.updateGateway(

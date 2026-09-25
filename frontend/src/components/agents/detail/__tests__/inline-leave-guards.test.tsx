@@ -28,7 +28,7 @@ vi.mock('@/lib/api', () => ({
   memoriesApi: { put: vi.fn() },
   promotedSkillsApi: { promote: vi.fn() },
   agentConstraintsApi: { list: vi.fn(), add: vi.fn(), setActive: vi.fn(), remove: vi.fn() },
-  gatewaysApi: { listSurfaces: vi.fn(), getAll: vi.fn(), create: vi.fn(), update: vi.fn() },
+  gatewaysApi: { getAll: vi.fn(), create: vi.fn(), update: vi.fn() },
   llmProvidersApi: { getAll: vi.fn(), getModels: vi.fn() },
   organizationsApi: { getById: vi.fn() },
   getApiBaseUrl: () => 'https://api.example.com',

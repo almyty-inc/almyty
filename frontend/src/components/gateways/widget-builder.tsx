@@ -48,7 +48,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { gatewaysApi, getApiBaseUrl } from '@/lib/api'
 import { useCopy } from '@/lib/clipboard'
 import { useNotifications } from '@/store/app'
-import { buildWidgetEmbedSnippet } from '@/components/agents/detail/channel-setup'
+import { buildWidgetEmbedSnippet } from '@/components/gateways/widget-embed'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 

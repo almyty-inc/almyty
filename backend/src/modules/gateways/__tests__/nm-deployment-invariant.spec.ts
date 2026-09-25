@@ -135,11 +135,13 @@ describe('n:m deployment invariant (GatewaysService.createGateway)', () => {
       channelDto({ name: 'Slack internal', endpoint: '/slack-internal' }) as any,
       'org-1',
       'user-1',
+      { forApp: { appId: 'app-1' } },
     );
     const second = await service.createGateway(
       channelDto({ name: 'Slack customers', endpoint: '/slack-customers' }) as any,
       'org-1',
       'user-1',
+      { forApp: { appId: 'app-1' } },
     );
 
     expect(first.id).toBeDefined();
@@ -153,6 +155,7 @@ describe('n:m deployment invariant (GatewaysService.createGateway)', () => {
       channelDto({ endpoint: '/mix-slack' }) as any,
       'org-1',
       'user-1',
+      { forApp: { appId: 'app-1' } },
     );
     const telegram = await service.createGateway(
       channelDto({
@@ -163,6 +166,7 @@ describe('n:m deployment invariant (GatewaysService.createGateway)', () => {
       }) as any,
       'org-1',
       'user-1',
+      { forApp: { appId: 'app-1' } },
     );
     const widget = await service.createGateway(
       channelDto({
@@ -173,6 +177,7 @@ describe('n:m deployment invariant (GatewaysService.createGateway)', () => {
       }) as any,
       'org-1',
       'user-1',
+      { forApp: { appId: 'app-1' } },
     );
 
     expect([slack, telegram, widget].every((g) => g.agentId === 'agent-1')).toBe(true);
@@ -184,11 +189,13 @@ describe('n:m deployment invariant (GatewaysService.createGateway)', () => {
       channelDto({ agentId: 'agent-a', endpoint: '/agent-a-slack' }) as any,
       'org-1',
       'user-1',
+      { forApp: { appId: 'app-1' } },
     );
     const b = await service.createGateway(
       channelDto({ agentId: 'agent-b', endpoint: '/agent-b-slack' }) as any,
       'org-1',
       'user-1',
+      { forApp: { appId: 'app-1' } },
     );
 
     expect(a.agentId).toBe('agent-a');
@@ -198,12 +205,13 @@ describe('n:m deployment invariant (GatewaysService.createGateway)', () => {
   });
 
   it('still enforces the ONLY real uniqueness rule: (organizationId, endpoint)', async () => {
-    await service.createGateway(channelDto({ endpoint: '/dupe' }) as any, 'org-1', 'user-1');
+    await service.createGateway(channelDto({ endpoint: '/dupe' }) as any, 'org-1', 'user-1', { forApp: { appId: 'app-1' } });
     await expect(
       service.createGateway(
         channelDto({ agentId: 'agent-other', endpoint: '/dupe' }) as any,
         'org-1',
         'user-1',
+        { forApp: { appId: 'app-1' } },
       ),
     ).rejects.toThrow(/Endpoint already exists/);
   });
@@ -213,6 +221,7 @@ describe('n:m deployment invariant (GatewaysService.createGateway)', () => {
       channelDto({ endpoint: '/kind-check' }) as any,
       'org-1',
       'user-1',
+      { forApp: { appId: 'app-1' } },
     );
     expect(gw.kind).toBe(GatewayKind.AGENT);
     expect(organizationRepository.findOne).toHaveBeenCalled();

@@ -377,7 +377,7 @@ describe('AgentAppsService', () => {
         expect.objectContaining({ endpoint: '/apps/acme-support/slack', agentId: 'agent-1' }),
         ORG,
         'user-1',
-        { activate: false },
+        { appId: 'h-1', activate: false },
       );
       expect(result.gatewayId).toBe('gw-1');
       expect(result.status).toBe(DistributionStatus.LIVE);
@@ -410,7 +410,7 @@ describe('AgentAppsService', () => {
         expect.anything(),
         ORG,
         'user-1',
-        { activate: false },
+        { appId: 'h-1', activate: false },
       );
       expect(order).toEqual([`save:gw-1:${DistributionStatus.LIVE}`, 'activate']);
     });
@@ -444,7 +444,7 @@ describe('AgentAppsService', () => {
 
       await service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1');
 
-      expect(gateways.upsertForDistribution.mock.calls[0][3]).toEqual({ activate: false, gatewayId: 'gw-adopted' });
+      expect(gateways.upsertForDistribution.mock.calls[0][3]).toEqual({ appId: 'h-1', activate: false, gatewayId: 'gw-adopted' });
     });
 
     it('refuses to publish in front of an agent that cannot hold a conversation', async () => {
@@ -480,7 +480,7 @@ describe('AgentAppsService', () => {
         expect.objectContaining({ agentId: 'agent-2' }),
         ORG,
         'user-1',
-        { activate: false },
+        { appId: 'h-1', activate: false },
       );
     });
 

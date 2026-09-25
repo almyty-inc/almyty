@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { existsSync, readFileSync } from 'fs'
-import { join } from 'path'
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
+import { join, relative } from 'path'
 
 /**
  * Apps are the one place an agent is put in front of people, and they
@@ -124,5 +124,28 @@ describe('apps are the one place, in the shared look', () => {
       expect(offenders, rel).toEqual([])
       expect(readableStrings(src).filter((s) => /\bAlmyty\b/.test(s)), rel).toEqual([])
     }
+  })
+
+  // A web chat or a messaging channel is a place on an app; the server
+  // refuses one made any other way. The one screen that makes a gateway is
+  // Share tools, and what it makes is a shared-tools gateway.
+  it('makes no gateway outside an app except the shared-tools one', () => {
+    const creators: string[] = []
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name)
+        if (statSync(path).isDirectory()) {
+          if (name !== '__tests__' && name !== 'test') walk(path)
+        } else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)) {
+          const src = readFileSync(path, 'utf8')
+          if (/gatewaysApi\.create\(|api(Post|Client\.post)\(\s*['"`]\/gateways['"`]/.test(src)) {
+            creators.push(relative(SRC, path))
+          }
+        }
+      }
+    }
+    walk(SRC)
+    expect(creators.sort()).toEqual(['components/gateways/share-tools-form.tsx', 'lib/api.ts'])
+    expect(read('components/gateways/share-tools-form.tsx')).toMatch(/type: 'tools',/)
   })
 })
