@@ -324,6 +324,7 @@ export function GatewayDetailPage() {
       onAssign={(toolId) => assignToolMutation.mutate({ toolId })}
       onRemove={(toolId) => removeToolMutation.mutate({ toolId })}
       securitySaving={updateToolConfigMutation.isPending}
+      hidePresets={isSharedTools}
       onSaveSecurity={(target) =>
         updateToolConfigMutation.mutateAsync({
           gatewayToolId: target.gatewayToolId,
@@ -389,7 +390,7 @@ export function GatewayDetailPage() {
             </div>
             <div>
               <h1 className={DETAIL_TITLE_CLASSES}>{gateway.name}</h1>
-              <p className="text-muted-foreground">{gateway.description || 'API Gateway'}</p>
+              <p className="text-muted-foreground">{gateway.description || (isSharedTools ? 'One address for MCP, UTCP and Skills' : 'API Gateway')}</p>
             </div>
           </div>
         </div>

@@ -54,7 +54,7 @@ export function ConnectSnippets({
         </Tabs>
         {!accessKey && (
           <p className="text-xs text-muted-foreground" data-testid="key-placeholder-note">
-            Replace {ACCESS_KEY_PLACEHOLDER} with an access key. Make one under Advanced, in Access keys.
+            Replace {ACCESS_KEY_PLACEHOLDER} with an access key. Make one under Advanced, with Generate key.
           </p>
         )}
       </CardContent>

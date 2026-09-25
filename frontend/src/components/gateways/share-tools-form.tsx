@@ -374,7 +374,7 @@ export function ShareToolsForm() {
           }}
         />
         <p className="text-sm text-muted-foreground">
-          Every share gets an access key, shown once on the next page. Other sign-in methods, such as OAuth or JWT, can be added there.
+          Every share gets an access key, shown once on the next page. Other sign-in methods, such as OAuth or JWT, can be added there under Advanced.
         </p>
       </Disclosure>
     </FormPage>

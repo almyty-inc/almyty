@@ -275,6 +275,9 @@ describe('a shared-tools gateway page', () => {
     expect(screen.getByTestId('key-placeholder-note')).toBeInTheDocument()
     expect(screen.queryByText('Authentication')).toBeNull()
     expect(screen.queryByRole('tab', { name: 'Integrations' })).toBeNull()
+    // Just the list of what is shared: no scoping presets to learn.
+    expect(screen.getByRole('heading', { name: /Shared tools/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Read only' })).toBeNull()
 
     await user.click(screen.getByRole('button', { name: /^Advanced/ }))
     expect(await screen.findByText('Authentication')).toBeInTheDocument()
