@@ -43,7 +43,7 @@ Every read command takes `--json` and writes undecorated JSON to stdout.
 
 | Command | What it does |
 |---|---|
-| `connect <key> [--method m] [--owner org\|user] [--name n] [--headless] [--open]` | Start a connection |
+| `connect <key> [--method m] [--owner org\|user\|private] [--name n] [--headless] [--open]` | Start a connection |
 | `complete <key> --state s --code c` | Finish a headless sign-in by pasting the code |
 | `validate <id>` | Re-check against the provider; refreshes health and the account label |
 | `rotate <id> [--headless] [--open]` | Replace the secret in place, so everything pointing at the connection keeps working |
@@ -105,8 +105,10 @@ narrows that to a principal.
 
 `--owner org` (the default) makes the connection the organization's: this is
 what agents and deployments use, and it needs `connections:manage` (admin or
-owner). `--owner user` makes it yours. Free and personal organizations allow
-personal connections by default; paid organizations start with them off until
+owner). `--owner user` makes it yours, and you can grant it to others.
+`--owner private` makes it yours alone: nobody else sees or uses it, org admins
+included, and it cannot be granted. Free and personal organizations allow
+personal and private connections by default; paid organizations start with them off until
 an admin turns them on.
 
 ## Secrets never travel on argv
