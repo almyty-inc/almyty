@@ -370,7 +370,7 @@ export class ModelDeploymentsService {
       try {
         if (this.credentialRefs) {
           const resolved = await this.credentialRefs.resolve(organizationId, dto.credentialId, {
-            principal: userId ? { id: userId } : undefined,
+            principal: userId ? { id: userId } : null,
             context: { purpose: 'deploy', resourceType: 'model_deployment' },
           });
           stored = resolved.config ?? {};
@@ -444,7 +444,7 @@ export class ModelDeploymentsService {
         // reconcile, so a personal connection is checked against their
         // grants rather than silently allowed.
         const resolved = await this.credentialRefs.resolve(deployment.organizationId, config.credentialId, {
-          principal: deployment.createdBy ? { id: deployment.createdBy } : undefined,
+          principal: deployment.createdBy ? { id: deployment.createdBy } : null,
           context: { purpose: 'deploy', resourceType: 'model_deployment', resourceId: deployment.id },
         });
         creds = { ...(resolved.config as Record<string, string>) };

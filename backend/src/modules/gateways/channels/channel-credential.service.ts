@@ -5,6 +5,7 @@ import { Gateway } from '../../../entities/gateway.entity';
 import { decryptField } from '../../../common/security/field-crypto';
 import { CredentialRefResolver, ManagedBy } from '../../credentials/credential-ref.resolver';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
+import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
 import {
   channelSecretKeysIn,
   getChannelConfig,
@@ -15,7 +16,8 @@ import {
 export type ChannelUsePurpose = 'channel_inbound' | 'channel_outbound';
 
 /** The slice of a gateway the channel credential paths need. */
-export type ChannelGatewayRef = Pick<Gateway, 'id' | 'type' | 'organizationId' | 'configuration'> & { name?: string };
+export type ChannelGatewayRef = Pick<Gateway, 'id' | 'type' | 'organizationId' | 'configuration'> &
+  Partial<Pick<Gateway, 'visibility' | 'teamId' | 'ownerUserId' | 'isSystem'>> & { name?: string };
 
 /**
  * Managed rows are tagged with the vendor as their connector:
@@ -83,7 +85,10 @@ export class ChannelCredentialService {
     const base = getChannelConfig(gateway.configuration, gateway.organizationId);
     const credentialId = gateway.configuration?.credentialId;
     if (typeof credentialId !== 'string' || credentialId.length === 0) return base;
+    // Used as the gateway: a team connection serves a gateway of its own
+    // team only, a private one a gateway private to its owner only.
     const resolved = await this.credentialRefs.tryResolve(gateway.organizationId, credentialId, {
+      principal: gatewayPrincipal(gateway),
       context: { purpose, resourceType: 'gateway', resourceId: gateway.id },
     });
     if (!resolved) {

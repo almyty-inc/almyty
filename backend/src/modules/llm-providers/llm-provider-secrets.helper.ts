@@ -8,6 +8,7 @@ import {
   CredentialRefResolver,
   ManagedBy,
 } from '../credentials/credential-ref.resolver';
+import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 
 /** The marker maskSensitiveData() puts in place of a key; a client that round-trips it is not rotating. */
 export const MASKED_PROVIDER_KEY = '***masked***';
@@ -51,21 +52,25 @@ export class LlmProviderSecretsHelper {
    */
   async withResolvedSecrets(
     provider: LlmProvider,
-    opts: { principal?: ConnectionUsePrincipal; context?: ConnectionUseContext } = {},
+    opts: { principal?: ConnectionUsePrincipal | ExecutionPrincipal | null; context?: ConnectionUseContext } = {},
   ): Promise<LlmProvider> {
     const context = opts.context ?? { purpose: 'llm_call', resourceType: 'llm_provider', resourceId: provider.id };
+    let principal = opts.principal ?? null;
     // A private provider acts for its owner and nobody else (every path
     // into one is gated on that upstream), so a call that names no user --
     // the health check, a model listing -- resolves its keys as the owner.
-    if (!opts.principal && provider.visibility === 'private' && provider.ownerUserId) {
-      opts = { ...opts, principal: { id: provider.ownerUserId } };
+    if (!principal && provider.visibility === 'private' && provider.ownerUserId) {
+      principal = { id: provider.ownerUserId };
     }
+    // A call that names nobody is the system acting for this provider: a
+    // team provider reaches its own team's rows and no other scoped row.
+    const resolveOpts = { principal, systemFor: principal ? undefined : provider, context };
     if (provider.credentialId) {
-      const resolved = await this.credentialRefs.resolve(provider.organizationId, provider.credentialId, { ...opts, context });
+      const resolved = await this.credentialRefs.resolve(provider.organizationId, provider.credentialId, resolveOpts);
       provider.credential = resolved.credential;
     }
     if (provider.usageCredentialId) {
-      const resolved = await this.credentialRefs.resolve(provider.organizationId, provider.usageCredentialId, { ...opts, context: { ...context, purpose: 'llm_usage' } });
+      const resolved = await this.credentialRefs.resolve(provider.organizationId, provider.usageCredentialId, { ...resolveOpts, context: { ...context, purpose: 'llm_usage' } });
       provider.usageCredential = resolved.credential;
     }
     return provider;

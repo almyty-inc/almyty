@@ -101,13 +101,14 @@ export class ApisService {
    * in from the credential the API points at. Rows not yet moved still
    * carry the secret inline (shim).
    */
-  private async authenticationForRequest(api: Api): Promise<Api['authentication'] | null> {
+  private async authenticationForRequest(api: Api, principal: { id: string } | null): Promise<Api['authentication'] | null> {
     const auth = api.authentication;
     if (!auth || auth.type === 'none') return null;
     const connectionId = auth.config?.connectionId as string | undefined;
     if (connectionId) {
       // A connection's fields are named by its connector; read its key out.
       const resolved = await this.credentialRefs.resolve(api.organizationId, connectionId, {
+        principal,
         context: { purpose: 'api_test', resourceType: 'api', resourceId: api.id },
       });
       return inlineApiAuthView(auth, connectionAuthConfig(resolved.config)) as Api['authentication'];
@@ -115,6 +116,7 @@ export class ApisService {
     const credentialId = auth.config?.credentialId as string | undefined;
     if (!credentialId) return auth;
     const resolved = await this.credentialRefs.resolve(api.organizationId, credentialId, {
+      principal,
       context: { purpose: 'api_test', resourceType: 'api', resourceId: api.id },
     });
     return inlineApiAuthView(auth, resolved.config) as Api['authentication'];
@@ -642,8 +644,9 @@ export class ApisService {
   async testApiConnection(
     apiId: string,
     organizationId: string,
+    userId?: string,
   ): Promise<{ success: boolean; statusCode?: number; responseTime?: number; error?: string }> {
-    const api = await this.findOne(apiId, organizationId);
+    const api = await this.findOne(apiId, organizationId, userId ? { id: userId } : undefined);
 
     if (!api) {
       throw new NotFoundException('API not found');
@@ -682,7 +685,9 @@ export class ApisService {
       // Add authentication if configured. The secret comes from the
       // credential store; the inline config is the shim for rows the
       // startup backfill has not moved yet.
-      const auth = await this.authenticationForRequest(api);
+      // Resolved as the person testing: a team or private credential they
+      // may not use is not sent on their behalf.
+      const auth = await this.authenticationForRequest(api, userId ? { id: userId } : null);
       if (auth && auth.type !== 'none') {
         this.toolGen.applyAuthentication(config, auth);
       }
