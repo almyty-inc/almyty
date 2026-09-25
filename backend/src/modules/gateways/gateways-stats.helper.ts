@@ -8,6 +8,7 @@ import { Gateway, GatewayStatus } from '../../entities/gateway.entity';
 import { Organization } from '../../entities/organization.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { GatewaysService } from './gateways.service';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 /**
  * How many metric rows one gateway's stats will look at.
@@ -50,6 +51,7 @@ export class GatewaysStatsHelper {
     private usageMetricRepository: Repository<UsageMetric>,
     @Inject(forwardRef(() => GatewaysService))
     private readonly service: GatewaysService,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async getGatewayStats(
@@ -128,17 +130,18 @@ export class GatewaysStatsHelper {
       requestCount: number;
     }>;
   }> {
-    // Get gateway counts. Another user's private gateway is not counted:
-    // a number that moves when someone else makes a "just me" gateway is
-    // a way to learn that it exists.
-    const gatewayCounts = await this.gatewayRepository
+    // Only the gateways this caller may see are part of their numbers, by
+    // the rule the gateway list applies: another member's private gateway
+    // and another team's gateway are not counted -- a number that moves
+    // when someone else adds one is a way to learn that it exists.
+    const caller = { id: callerId };
+    const countQuery = this.gatewayRepository
       .createQueryBuilder('gateway')
       .select('gateway.status')
       .addSelect('COUNT(*)', 'count')
-      .where('gateway.organizationId = :organizationId', { organizationId })
-      .andWhere(PRIVATE_GATEWAY_CLAUSE, { callerId })
-      .groupBy('gateway.status')
-      .getRawMany();
+      .where('gateway.organizationId = :organizationId', { organizationId });
+    await this.accessPolicy.applyListFilter(countQuery, caller, organizationId, 'gateway', { ownerColumn: 'ownerUserId' });
+    const gatewayCounts = await countQuery.groupBy('gateway.status').getRawMany();
 
     const statusCounts: Record<string, number> = gatewayCounts.reduce((acc, row) => {
       acc[row.gateway_status] = parseInt(row.count);
@@ -147,34 +150,29 @@ export class GatewaysStatsHelper {
 
     const totalGateways = Object.values(statusCounts).reduce((sum: number, count) => sum + (count as number), 0);
 
-    // Get all gateways for organization
+    // The same gateways, for the request totals and the top ten.
     const gateways = await this.gatewayRepository.find({
-      where: [
-        { organizationId, visibility: Not('private') },
-        { organizationId, visibility: 'private', ownerUserId: callerId },
-      ],
+      where: await this.accessPolicy.visibleWhere<Gateway>(caller, organizationId, {}, { ownerColumn: 'ownerUserId' }),
     });
 
     const totalRequests = gateways.reduce((sum, g) => sum + g.totalRequests, 0);
     const successfulRequests = gateways.reduce((sum, g) => sum + g.successfulRequests, 0);
     const successRate = totalRequests > 0 ? (successfulRequests / totalRequests) * 100 : 0;
 
-    // One average, computed by the database.
-    //
-    // This loaded every usage_metrics row the organization had ever
-    // written -- no window, no take -- to compute a single mean. The
-    // global request-logging interceptor writes two rows per HTTP
-    // request, each with a metadata json blob, so the table grows at
-    // twice the request rate: ~1.7M rows/day at a modest 10 req/s. One
-    // call to this endpoint was enough to OOM the pod within days of an
-    // org going live, and the sibling method above already windows its
-    // own query.
-    const { avg } = await this.usageMetricRepository
-      .createQueryBuilder('metric')
-      .select('AVG(metric.value)', 'avg')
-      .where('metric.organizationId = :organizationId', { organizationId })
-      .andWhere('metric.type = :type', { type: 'response_time' })
-      .getRawOne<{ avg: string | null }>() ?? { avg: null };
+    // One average, computed by the database, over the response times of
+    // those gateways only. The org's other response_time rows carry the
+    // latency of gateways the caller cannot see and of non-gateway
+    // requests; a figure that moves with their traffic is another leak.
+    const gatewayIds = gateways.map((g) => g.id);
+    const { avg } = gatewayIds.length === 0
+      ? { avg: null }
+      : (await this.usageMetricRepository
+          .createQueryBuilder('metric')
+          .select('AVG(metric.value)', 'avg')
+          .where('metric.organizationId = :organizationId', { organizationId })
+          .andWhere('metric.type = :type', { type: 'response_time' })
+          .andWhere('metric.gatewayId IN (:...gatewayIds)', { gatewayIds })
+          .getRawOne<{ avg: string | null }>()) ?? { avg: null };
     const averageResponseTime = avg ? Number(avg) : 0;
 
     // Get top gateways by request count

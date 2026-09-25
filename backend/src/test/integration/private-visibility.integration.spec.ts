@@ -225,7 +225,7 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
         { ensureSystemGateway: jest.fn().mockResolvedValue(undefined), validateGatewayConfiguration: jest.fn() } as any,
         policy,
       );
-      stats = new GatewaysStatsHelper(repo(Gateway), repo(Organization), repo(UsageMetric), service);
+      stats = new GatewaysStatsHelper(repo(Gateway), repo(Organization), repo(UsageMetric), service, policy);
       (service as any).statsHelper = stats;
     });
 
