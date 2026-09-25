@@ -477,16 +477,13 @@ export function GatewayDetailPage() {
         </div>
       )}
 
-      {/* Gateway Configuration — type-specific. A shared-tools gateway's
-          address is in its Connect card above. */}
-      {!isSharedTools && (
-        <GatewayConfigurationCard
-          gateway={gateway}
-          orgSlug={orgSlug}
-          onCopySuccess={success}
-          onCopyError={errorNotif}
-        />
-      )}
+      {/* Gateway Configuration — type-specific */}
+      <GatewayConfigurationCard
+        gateway={gateway}
+        orgSlug={currentOrganization?.slug || currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'}
+        onCopySuccess={success}
+        onCopyError={errorNotif}
+      />
 
       {/* Channel-type credential form (per-adapter token / webhook / OAuth fields) */}
       {isChannelType(gateway.type) && (
