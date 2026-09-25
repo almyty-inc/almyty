@@ -199,7 +199,7 @@ describeIfDb('private visibility on agents, tools and APIs (real Postgres)', () 
       new AnalyticsSummariesHelper(ds.getRepository(AuditLog), ds.getRepository(AgentRun)),
     );
     versions = new VersionsService(ds);
-    hub = new ToolHubService(ds.getRepository(ToolTemplate), ds.getRepository(Tool), ds.getRepository(Api), audit);
+    hub = new ToolHubService(ds.getRepository(ToolTemplate), ds.getRepository(Tool), ds.getRepository(Api), audit, policy);
 
     // The owner's private resources, created through the services so the
     // owner stamping is what is under test, plus one org-wide of each.

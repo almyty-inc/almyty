@@ -7,6 +7,7 @@ import {
   SandboxExecutionResult,
   WorkerInput,
   WorkerOutput,
+  WorkerReadyMessage,
 } from './types';
 import { DependencyManagerService } from './dependency-manager.service';
 
@@ -27,6 +28,13 @@ const DEFAULT_MAX_QUEUE_SIZE = 100;
  * `configuration.timeout`.
  */
 const DEFAULT_MAX_TIMEOUT_MS = 300_000;
+/**
+ * How long a worker may take to boot (spawn, permission model, net guard,
+ * require hooks) before the tool's own timeout starts. Generous, because
+ * it is only reached when the host is badly overloaded or the worker is
+ * wedged; either way the execution fails rather than hanging.
+ */
+const DEFAULT_BOOT_TIMEOUT_MS = 30_000;
 
 /**
  * Compiled files outside the worker's directory that the worker's net
@@ -182,7 +190,11 @@ export class NodeSandboxService {
     // Clamped whatever the tool asked for: `configuration.timeout` and an
     // API's `timeoutMs` are tenant-supplied, and a worker holds its pool
     // slot for as long as its timer allows.
-    const timeoutMs = effectiveSandboxTimeoutMs(request.timeoutMs, this.limits().maxTimeoutMs);
+    const limits = this.limits();
+    const timeoutMs = effectiveSandboxTimeoutMs(request.timeoutMs, limits.maxTimeoutMs);
+    // How long a worker may take to boot before its budget starts. Not
+    // charged to the tool, and not clamped by it either.
+    const bootTimeoutMs = limits.bootTimeoutMs;
     const memoryLimitMb = request.memoryLimitMb ?? DEFAULT_MEMORY_LIMIT_MB;
     // Handed to nested `tools.invoke` calls instead of the outer request's
     // signal: aborted when this worker ends for any reason, and also when
@@ -236,6 +248,10 @@ export class NodeSandboxService {
 
       const result = await new Promise<SandboxExecutionResult>((resolve) => {
         let settled = false;
+        // One timer at a time: the boot cap until the worker says it is
+        // ready, then the tool's own budget.
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let ready = false;
 
         const worker = new Worker(workerPath, workerOpts);
 
@@ -253,13 +269,31 @@ export class NodeSandboxService {
           resolve(r);
         };
 
-        const timer = setTimeout(() => {
+        // The tool's timeout starts when the worker has booted, not when
+        // it was spawned: under load, starting a worker (isolate, permission
+        // model, net guard, require hooks) can take a good part of a short
+        // budget, and that time is the platform's, not the tool's. A worker
+        // that never gets that far is still stopped, by its own cap.
+        timer = setTimeout(() => {
           settle({
             success: false,
-            error: `Execution timed out after ${timeoutMs}ms`,
+            error: `Sandbox worker did not start within ${bootTimeoutMs}ms`,
             executionTimeMs: Date.now() - start,
           });
-        }, timeoutMs);
+        }, bootTimeoutMs);
+        const onReady = () => {
+          // Only the first one counts: the budget is never restarted.
+          if (ready || settled) return;
+          ready = true;
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            settle({
+              success: false,
+              error: `Execution timed out after ${timeoutMs}ms`,
+              executionTimeMs: Date.now() - start,
+            });
+          }, timeoutMs);
+        };
 
         // Wire up the caller's AbortSignal. If it fires mid-flight,
         // terminate the worker and resolve as cancelled.
@@ -286,7 +320,11 @@ export class NodeSandboxService {
         // an `invoke-tool` message; we run ToolExecutorService via
         // the callback the caller supplied and post the response
         // back keyed by the same `id`.
-        worker.on('message', async (msg: WorkerOutput | InvokeToolRequestMessage) => {
+        worker.on('message', async (msg: WorkerOutput | InvokeToolRequestMessage | WorkerReadyMessage) => {
+          if ((msg as any)?.type === 'ready') {
+            onReady();
+            return;
+          }
           if ((msg as any)?.type === 'invoke-tool') {
             const invokeMsg = msg as InvokeToolRequestMessage;
             if (!request.invokeTool) {
@@ -577,6 +615,7 @@ export class NodeSandboxService {
     maxQueuePerOrg: number;
     maxNestedWorkers: number;
     maxTimeoutMs: number;
+    bootTimeoutMs: number;
   } {
     const maxWorkers = positiveIntFromEnv('SANDBOX_MAX_WORKERS', DEFAULT_MAX_WORKERS);
     const maxQueueSize = positiveIntFromEnv('SANDBOX_MAX_QUEUE_SIZE', DEFAULT_MAX_QUEUE_SIZE);
@@ -595,6 +634,7 @@ export class NodeSandboxService {
       ),
       maxNestedWorkers: positiveIntFromEnv('SANDBOX_MAX_NESTED_WORKERS', maxWorkers * 4),
       maxTimeoutMs: positiveIntFromEnv('SANDBOX_MAX_TIMEOUT_MS', DEFAULT_MAX_TIMEOUT_MS),
+      bootTimeoutMs: positiveIntFromEnv('SANDBOX_BOOT_TIMEOUT_MS', DEFAULT_BOOT_TIMEOUT_MS),
     };
   }
 }

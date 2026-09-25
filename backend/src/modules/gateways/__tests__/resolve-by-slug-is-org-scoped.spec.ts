@@ -2,6 +2,8 @@ import { NotFoundException } from '@nestjs/common';
 
 import { GatewaysService } from '../gateways.service';
 import { fakeRepository } from '../../../test/fake-repository';
+import { orgMembersPolicy } from '../../../test/execution-access.fixture';
+import { OrganizationRole } from '../../../entities/user-organization.entity';
 
 /**
  * `GET /gateways/resolve/:orgSlug/:gatewaySlug` acted on the slug in the
@@ -32,6 +34,9 @@ describe('resolveGateway is scoped to the caller\'s organization', () => {
     const service = Object.create(GatewaysService.prototype) as GatewaysService;
     (service as any).organizationRepository = organizationRepository;
     (service as any).gatewayRepository = gatewayRepository;
+    // The real read rule over a real membership table: caller-user is a
+    // plain member of the caller's organization and of nothing else.
+    (service as any).accessPolicy = orgMembersPolicy(CALLER_ORG_ID, { 'caller-user': OrganizationRole.MEMBER });
     return { service, organizationRepository, gatewayRepository };
   }
 
@@ -98,5 +103,23 @@ describe('resolveGateway is scoped to the caller\'s organization', () => {
     await expect(
       service.resolveGateway('caller-corp', 'prod-gateway', CALLER_ORG_ID, 'caller-user'),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  // GET /gateways/resolve answers with the gateway's own columns (id, name,
+  // type, endpoint, organizationId). The lookups used to join every
+  // GatewayTool with its Tool, and every auth config -- per gateway of the
+  // organization on the name fallback -- for a response that reads none of it.
+  it('loads no relations, by endpoint or by the name fallback', async () => {
+    const own = { ...VICTIM_GATEWAY, id: 'gw-own', organizationId: CALLER_ORG_ID, endpoint: '/other', name: 'Prod Gateway' };
+    const { service, gatewayRepository } = makeService({ orgs: [CALLER_ORG], gateways: [own] });
+
+    const gateway = await service.resolveGateway('caller-corp', 'prod-gateway', CALLER_ORG_ID, 'caller-user');
+    expect(gateway.id).toBe('gw-own');
+
+    const calls = [...gatewayRepository.findOne.mock.calls, ...gatewayRepository.find.mock.calls];
+    expect(calls.length).toBe(2);
+    for (const [options] of calls) {
+      expect(options).not.toHaveProperty('relations');
+    }
   });
 });

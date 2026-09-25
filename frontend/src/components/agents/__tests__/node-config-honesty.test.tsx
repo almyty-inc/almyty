@@ -9,7 +9,7 @@
  * the Merge node's Best of N copy named a routing policy that does not exist.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import type { Node } from '@xyflow/react'
 
 import { renderWithProviders } from '@/test/setup'
@@ -70,70 +70,67 @@ describe('Loop node config', () => {
   it('says the node outputs the array rather than running downstream nodes per item', () => {
     renderPanel(node('loop', { iterableExpression: '{{input.items}}' }))
 
-    expect(
-      screen.getByText(/does not run the nodes downstream of it once per/i),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/The steps after it run once, on the whole list/i)).toBeInTheDocument()
   })
 })
 
 describe('Transform node config', () => {
-  it('does not label the expression editor as JavaScript', () => {
+  it('does not call the template JavaScript, even as text', () => {
     renderPanel(node('transform', { expression: '' }))
-
-    const editor = screen.getByTestId('code-editor')
-    expect(editor.getAttribute('data-language')).not.toBe('javascript')
-    expect(editor.getAttribute('data-language')).toBe('text')
+    expect(document.body.textContent).not.toMatch(/javascript/i)
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Edit values as text' }))
+    expect(screen.queryByTestId('code-editor')).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/javascript/i)
   })
 
   it('offers a placeholder the resolver can actually resolve', () => {
     renderPanel(node('transform', { expression: '' }))
 
     // Date.now() fails the resolver's dot-path whitelist and throws.
-    expect(screen.getByTestId('code-editor').getAttribute('data-placeholder')).not.toContain(
-      'Date.now',
-    )
+    expect(screen.getByRole('textbox', { name: 'Result' }).getAttribute('data-placeholder')).not.toContain('Date.now')
   })
 
-  it('says plainly that the template is not JavaScript', () => {
+  it('says plainly that the result is text', () => {
     renderPanel(node('transform', { expression: '' }))
 
-    expect(screen.getByText(/a template, not javascript/i)).toBeInTheDocument()
+    expect(screen.getByText(/still arrives downstream as text/i)).toBeInTheDocument()
   })
 })
 
 describe('Output node config', () => {
   const upstream = node('llm_call', {})
 
-  it('shows the picker placeholder for a hand-written template instead of a stale choice', () => {
-    // Both controls edit data.mapping. Bound naively, the picker kept showing
-    // the last node picked and overwrote a hand-written template on reopen.
+  it('shows what it answers with by name, one field, no template syntax', () => {
+    // One field edits data.mapping. There is no second picker to disagree with it.
     renderPanel(node('output', { mapping: '{{input.message}}' }), [upstream])
 
-    expect(screen.getByText('Pick an upstream node')).toBeInTheDocument()
-    expect(screen.getByLabelText('Template')).toHaveValue('{{input.message}}')
+    const field = screen.getByRole('textbox', { name: 'What it answers with' })
+    expect(field).toHaveTextContent('Input › message')
+    expect(field.textContent).not.toContain('{{')
   })
 
-  it('reflects a picked node in the same template field', () => {
+  it('names a picked step the same way', () => {
     renderPanel(node('output', { mapping: '{{nodes.llm_call_1.output}}' }), [upstream])
 
-    expect(screen.queryByText('Pick an upstream node')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Template')).toHaveValue('{{nodes.llm_call_1.output}}')
+    expect(screen.getByRole('textbox', { name: 'What it answers with' })).toHaveTextContent('Model call › Answer')
   })
 
   it('says the result is rendered as text', () => {
     renderPanel(node('output', { mapping: '' }), [upstream])
 
-    expect(screen.getByText(/arrives here\s+as JSON text/i)).toBeInTheDocument()
+    expect(screen.getByText(/Arrives as text: an answer that is a list or an object comes as JSON/i)).toBeInTheDocument()
   })
 })
 
 describe('Merge node config', () => {
   it('names where the judging call actually gets its model', () => {
     renderPanel(node('merge', { strategy: 'best_of_n' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
 
     const copy = document.body.textContent || ''
     expect(copy).not.toMatch(/this agent's default routing policy/i)
     expect(copy).toMatch(/organization's default routing policy/i)
-    expect(copy).toMatch(/the run fails at this node/i)
+    expect(copy).toMatch(/the run fails here/i)
   })
 })

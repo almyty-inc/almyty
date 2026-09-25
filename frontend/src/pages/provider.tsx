@@ -16,7 +16,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import type { Visibility, VisibilityValue } from '@/components/ui/visibility-field'
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
-import { ConnectAccountButton } from '@/components/connections/connect-sheet'
+import { ConnectAccountButton } from '@/components/connections/connect-flow'
 import { ModelPicker } from '@/components/model-picker'
 import { ModelRow } from '@/components/models/model-row'
 import { EditModelForm } from '@/components/models/edit-model-form'
@@ -28,7 +28,7 @@ import { ProviderStatus, providerCheck } from '@/components/llm-providers/provid
 import { HOSTING_ADAPTER_FOR_TYPE, keyUrlFor, providerTileLabel, takesBaseUrl } from '@/components/llm-providers/provider-catalog'
 import { providerLogos, providerUsageApiSupport, usageApiSupported } from '@/components/llm-providers/provider-type-config'
 import { BASE_URL_PRIVATE_HOST_HINT, buildProviderUpdateBody } from '@/components/llm-providers/schema'
-import { WhoCanUse } from '@/components/llm-providers/who-can-use'
+import { WhoCanUse } from '@/components/connect/who-can-use'
 import { llmProvidersApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { modelAdaptersApi, modelDeploymentsApi, readAdapterRefusal } from '@/lib/deployments-api'
@@ -206,7 +206,7 @@ export function ProviderPage() {
       <Card>
         <CardContent className="space-y-5 pt-6">
           <ReplaceKey provider={provider} onSaved={() => check.mutate()} />
-          <WhoCanUse value={visibility} onChange={(next) => update.mutate({ visibility: next.visibility, teamId: next.teamId })} disabled={update.isPending} />
+          <WhoCanUse value={visibility} onChange={(next) => update.mutate({ visibility: next.visibility, teamId: next.teamId })} disabled={update.isPending} noun="this provider and its models" />
           <div className="max-w-md">
             <ModelPicker
               idPrefix="provider-default"

@@ -6,11 +6,13 @@ import { Api } from '../../entities/api.entity';
 import { ToolHubService } from './tool-hub.service';
 import { ToolHubController } from './tool-hub.controller';
 import { ToolsModule } from '../tools/tools.module';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ToolTemplate, Tool, Api]),
     forwardRef(() => ToolsModule),
+    AuthorizationModule,
   ],
   providers: [ToolHubService],
   controllers: [ToolHubController],

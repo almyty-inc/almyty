@@ -4,10 +4,9 @@ import userEvent from '@testing-library/user-event'
 
 import { render } from '../../test/setup'
 import { GatewayNewPage } from '../gateway-new'
-import { CredentialNewPage } from '../credential-new'
 import { GatewayEditForm } from '../../components/gateways/detail/gateway-edit-form'
 import { ConnectProviderForm } from '../../components/llm-providers/connect-provider-form'
-import { credentialsApi, gatewaysApi, llmProvidersApi } from '../../lib/api'
+import { gatewaysApi, llmProvidersApi } from '../../lib/api'
 
 /**
  * The "Private (just me)" choice on the gateway, provider and credential
@@ -88,26 +87,6 @@ describe('new gateway page', () => {
     expect(screen.getByText(/A chat channel can't be private/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create gateway' })).toBeDisabled()
     expect(gatewaysApi.create).not.toHaveBeenCalled()
-  })
-})
-
-describe('new credential page', () => {
-  it('sends visibility private', async () => {
-    const user = userEvent.setup()
-    vi.mocked(credentialsApi.create).mockResolvedValue({ id: 'cred-new' })
-    render(<CredentialNewPage />)
-
-    expect(screen.getByRole('heading', { name: 'Add credential' })).toBeInTheDocument()
-    await user.type(screen.getByLabelText(/^Name/), 'My key')
-    await user.type(screen.getByLabelText(/^API key/), 'sk-123456789')
-    await user.click(privateOption())
-    await user.click(screen.getByRole('button', { name: 'Create credential' }))
-
-    await waitFor(() => expect(credentialsApi.create).toHaveBeenCalled())
-    expect(vi.mocked(credentialsApi.create).mock.calls[0][0]).toMatchObject({
-      name: 'My key', visibility: 'private', teamId: null,
-    })
-    await waitFor(() => expect(mockNavigate.mock.calls.at(-1)?.[0]).toBe('/credentials'))
   })
 })
 

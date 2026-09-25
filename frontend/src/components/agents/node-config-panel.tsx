@@ -1,21 +1,16 @@
-import React, { useState, useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { Node } from '@xyflow/react'
-import { X, Trash2, Code } from 'lucide-react'
+import type { Edge, Node } from '@xyflow/react'
+import { X, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Disclosure } from '@/components/ui/disclosure'
 import { CodeEditor } from '@/components/ui/code-editor'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
 
@@ -26,6 +21,9 @@ import { NODE_TYPE_CONFIG, type PipelineNodeType } from './nodes'
 import { ModelPicker, type ModelSelection, type ProviderOption } from '@/components/model-picker'
 import type { Tool, Agent } from '@/types'
 import type { RoutingPolicy } from '@/types/models'
+import { STEP_NAMES, earlierSteps } from './step-values'
+import { StepCatalog, StepTextMode, StepValueField, StepValueSelect } from './step-value-field'
+import { OtherValues, ToolStepInputs, mappingEntries, toMapping, toolParameters, type MappingEntry } from './tool-step-inputs'
 
 // ─── Shared types ────────────────────────────────────────────────────────────
 
@@ -36,6 +34,8 @@ type UpdateDataFn = (key: string, value: unknown) => void
 interface NodeConfigPanelProps {
   node: Node | null
   nodes: Node[]
+  /** The wires, so a step offers the values of the steps before it. Without them every other step is offered. */
+  edges?: Edge[]
   onUpdateNode: (nodeId: string, data: NodeData) => void
   onDeleteNode: (nodeId: string) => void
   onClose: () => void
@@ -99,10 +99,47 @@ function NodeModelField({ node, idPrefix, onUpdateNode }: { node: Node; idPrefix
   )
 }
 
+/**
+ * The bottom of every step: what a first pass does not need. Each step
+ * passes its own extras; the step's id and "Edit values as text" are here
+ * for all of them.
+ */
+function StepAdvanced({ node, children }: { node: Node; children?: React.ReactNode }) {
+  const { asText, setAsText } = React.useContext(StepTextMode)
+  return (
+    <Disclosure title="Advanced" testId="step-advanced">
+      {children}
+      <div className="flex items-center justify-between gap-2">
+        <Label htmlFor={`step-as-text-${node.id}`} className="text-xs font-normal">
+          Edit values as text
+        </Label>
+        <Switch id={`step-as-text-${node.id}`} checked={asText} onCheckedChange={setAsText} />
+      </div>
+      <div>
+        <Label className="text-xs text-muted-foreground">Step id</Label>
+        <div className="mt-0.5 font-mono text-xs" data-testid="step-id">
+          {node.id}
+        </div>
+      </div>
+    </Disclosure>
+  )
+}
+
 // ─── Main Panel ──────────────────────────────────────────────────────────────
 
-export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClose }: NodeConfigPanelProps) {
-  if (!node) return null
+export function NodeConfigPanel(props: NodeConfigPanelProps) {
+  if (!props.node) return null
+  // Keyed by node id: "Edit values as text" and every per-step picker start
+  // fresh on each step rather than carrying over from the last one.
+  return <StepPanel key={props.node.id} {...props} node={props.node} />
+}
+
+function StepPanel({ node, nodes, edges, onUpdateNode, onDeleteNode, onClose }: NodeConfigPanelProps & { node: Node }) {
+  const { currentOrganization } = useOrganizationStore()
+  const [asText, setAsText] = useState(false)
+  const { data: toolsPage } = useQuery({ ...toolsQuery(currentOrganization?.id), enabled: !!currentOrganization })
+  const tools = (toolsPage?.items ?? []) as any[]
+  const steps = useMemo(() => earlierSteps(node, nodes, edges, tools), [node, nodes, edges, tools])
 
   const nodeType = node.type as PipelineNodeType
   const config = NODE_TYPE_CONFIG[nodeType]
@@ -116,174 +153,165 @@ export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClo
   }
 
   return (
-    <div className="w-full lg:w-[320px] border-l bg-muted/30 flex flex-col overflow-hidden h-full">
-      {/* Header */}
-      <div className="px-4 py-3 border-b flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <div className={`w-2.5 h-2.5 rounded-full ${config?.color || 'bg-zinc-500'}`} />
-          <span className="text-sm font-semibold">{config?.label || nodeType}</span>
+    <StepTextMode.Provider value={{ asText, setAsText }}>
+      <StepCatalog.Provider value={{ steps, nodes }}>
+        <div className="w-full lg:w-[320px] border-l bg-muted/30 flex flex-col overflow-hidden h-full">
+          {/* Header */}
+          <div className="px-4 py-3 border-b flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <div className={`w-2.5 h-2.5 rounded-full ${config?.color || 'bg-zinc-500'}`} />
+              <span className="text-sm font-semibold">{STEP_NAMES[nodeType] || nodeType}</span>
+            </div>
+            <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Close step settings" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {nodeType === 'input' && <InputConfig node={node} updateData={updateData} />}
+            {nodeType === 'output' && <OutputConfig node={node} updateData={updateData} />}
+            {nodeType === 'llm_call' && <LlmCallConfig node={node} tools={tools} updateData={updateData} onUpdateNode={onUpdateNode} />}
+            {nodeType === 'tool_call' && <ToolCallConfig node={node} nodes={nodes} tools={tools} onUpdateNode={onUpdateNode} />}
+            {nodeType === 'condition' && <ConditionConfig node={node} updateData={updateData} />}
+            {nodeType === 'transform' && <TransformConfig node={node} updateData={updateData} />}
+            {nodeType === 'merge' && <MergeConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
+            {nodeType === 'parallel' && <ParallelConfig node={node} />}
+            {nodeType === 'sub_agent' && <SubAgentConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
+            {nodeType === 'loop' && <LoopConfig node={node} updateData={updateData} />}
+            {nodeType === 'verify' && <VerifyConfig node={node} updateData={updateData} />}
+            {nodeType === 'extract_context' && <ExtractContextConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
+            {nodeType === 'decision' && <DecisionConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
+          </div>
+
+          {/* Footer: delete */}
+          <div className="px-4 py-3 border-t shrink-0">
+            <Button variant="destructive" size="sm" className="w-full" onClick={() => onDeleteNode(node.id)}>
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              Delete step
+            </Button>
+          </div>
         </div>
-        <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Close node configuration" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Node ID (read-only) */}
-        <div>
-          <Label className="text-xs text-muted-foreground">Node ID</Label>
-          <div className="text-xs font-mono mt-0.5">{node.id}</div>
-        </div>
-
-        {/* Type-specific configs */}
-        {nodeType === 'input' && <InputConfig node={node} updateData={updateData} />}
-        {nodeType === 'output' && <OutputConfig node={node} nodes={nodes} updateData={updateData} />}
-        {/* Keyed by node id: the panel is not remounted when you click a
-            different node, so without this the custom-model mode picked on
-            one node would carry over to the next one. */}
-        {nodeType === 'llm_call' && <LlmCallConfig key={node.id} node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
-        {nodeType === 'tool_call' && <ToolCallConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
-        {/* Keyed by node id for the same reason as the Model Call editor:
-            the visual builder holds source/operator/value in state seeded
-            from the node it first rendered for, and clicking a second
-            condition node would otherwise rebuild that node's expression
-            around the previous node's source. */}
-        {nodeType === 'condition' && <ConditionConfig key={node.id} node={node} nodes={nodes} updateData={updateData} />}
-        {nodeType === 'transform' && <TransformConfig node={node} updateData={updateData} />}
-        {nodeType === 'merge' && <MergeConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
-        {nodeType === 'parallel' && <ParallelConfig />}
-        {nodeType === 'sub_agent' && <SubAgentConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
-        {nodeType === 'loop' && <LoopConfig node={node} updateData={updateData} />}
-        {nodeType === 'verify' && <VerifyConfig node={node} updateData={updateData} />}
-        {nodeType === 'extract_context' && <ExtractContextConfig key={node.id} node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
-        {nodeType === 'decision' && <DecisionConfig key={node.id} node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
-      </div>
-
-      {/* Footer: delete */}
-      <div className="px-4 py-3 border-t shrink-0">
-        <Button
-          variant="destructive"
-          size="sm"
-          className="w-full"
-          onClick={() => onDeleteNode(node.id)}
-        >
-          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-          Delete node
-        </Button>
-      </div>
-    </div>
+      </StepCatalog.Provider>
+    </StepTextMode.Provider>
   )
 }
 
-// --- Input Node Config ---
+// --- Input ---
+
+const FIELD_TYPES = [
+  { value: 'string', label: 'Text' },
+  { value: 'number', label: 'Number' },
+  { value: 'integer', label: 'Whole number' },
+  { value: 'boolean', label: 'Yes or no' },
+  { value: 'array', label: 'List' },
+  { value: 'object', label: 'Group of fields' },
+] as const
+
+/**
+ * "What does it start with?": the fields a run is given, one row each. A
+ * step that declares none starts with a message, which is what chat and
+ * the API send; it is shown, and only written once something changes. The
+ * whole schema is under Advanced.
+ */
 function InputConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
+  const schema = (node.data.schema as Record<string, any>) || {}
+  const props: Record<string, any> = schema.properties && typeof schema.properties === 'object' ? schema.properties : {}
+  const declared = Object.keys(props)
+  const rows = declared.length > 0 ? declared : ['message']
+  const current = declared.length > 0 ? props : { message: { type: 'string' } }
+
+  const write = (nextProps: Record<string, any>, required?: string[]) => {
+    const req = (required ?? (Array.isArray(schema.required) ? schema.required : [])).filter((k: string) => k in nextProps)
+    updateData('schema', { ...schema, type: schema.type ?? 'object', properties: nextProps, ...(schema.required !== undefined || req.length > 0 ? { required: req } : {}) })
+  }
+  const rename = (from: string, to: string) => {
+    const next: Record<string, any> = {}
+    for (const k of Object.keys(current)) next[k === from ? to : k] = current[k]
+    const required = (Array.isArray(schema.required) ? schema.required : []).map((k: string) => (k === from ? to : k))
+    write(next, required)
+  }
+  const retype = (key: string, type: string) => write({ ...current, [key]: { ...current[key], type } })
+  const remove = (key: string) => {
+    const { [key]: _gone, ...rest } = current
+    write(rest)
+  }
+  const add = () => {
+    let n = rows.length + 1
+    while (`field_${n}` in current) n += 1
+    write({ ...current, [`field_${n}`]: { type: 'string' } })
+  }
+
   return (
     <div className="space-y-3">
       <div>
-        <Label>Input Schema</Label>
-        <div className="mt-1">
-          <JsonSchemaBuilder
-            value={(node.data.schema as Record<string, unknown>) || { type: 'object', properties: {} }}
-            onChange={(schema) => updateData('schema', schema)}
-          />
-        </div>
-        <p className="text-xs text-muted-foreground mt-1">
-          Define the JSON Schema for pipeline input.
-        </p>
+        <p className="text-sm font-medium">What does it start with?</p>
+        <p className="mt-1 text-xs text-muted-foreground">What a run is given. Chat and the API send a message.</p>
       </div>
-    </div>
-  )
-}
-
-// --- Output Node Config ---
-function OutputConfig({ node, nodes, updateData }: { node: Node; nodes: Node[]; updateData: UpdateDataFn }) {
-  const availableNodes = nodes.filter(n => n.id !== node.id && n.type !== 'input' && n.type !== 'output')
-  const mapping = (node.data.mapping as string) || ''
-  // The picker and the box below edit one field, not two. Binding the
-  // picker's value to that same field is what makes it visible: choose a
-  // node and the box fills in, write a template of your own and the picker
-  // falls back to its placeholder instead of showing a stale choice that
-  // overwrites what you typed the next time you open it.
-  const pickedNode = availableNodes.some(n => `{{nodes.${n.id}.output}}` === mapping)
-
-  return (
-    <div className="space-y-3">
-      <div>
-        <Label htmlFor="node-output-source">Output Template</Label>
-        <Select
-          value={pickedNode ? mapping : ''}
-          onValueChange={(v) => updateData('mapping', v)}
-        >
-          <SelectTrigger id="node-output-source" className="mt-1">
-            <SelectValue placeholder="Pick an upstream node" />
-          </SelectTrigger>
-          <SelectContent>
-            {/*
-              Same dead end as the provider select above: delete the middle
-              node and there is nothing left to map an output from, so the
-              select opened on a 4px sliver that explained nothing.
-            */}
-            {availableNodes.length === 0 && (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                No upstream nodes yet — add a node between Input and Output.
-              </div>
+      <div className="space-y-2">
+        {rows.map((key, i) => (
+          <div key={`${i}`} className="flex items-center gap-1" data-testid={`input-field-${key}`}>
+            <Input className="h-8 text-xs" aria-label={`Field ${i + 1} name`} value={key} onChange={(e) => e.target.value && rename(key, e.target.value)} />
+            <Select value={current[key]?.type ?? 'string'} onValueChange={(v) => retype(key, v)}>
+              <SelectTrigger className="h-8 w-32 shrink-0 text-xs" aria-label={`Field ${i + 1} kind`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FIELD_TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {rows.length > 1 && (
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label={`Remove field ${i + 1}`} onClick={() => remove(key)}>
+                <X className="h-3 w-3" />
+              </Button>
             )}
-            {availableNodes.map(n => (
-              <SelectItem key={n.id} value={`{{nodes.${n.id}.output}}`}>
-                {NODE_TYPE_CONFIG[n.type as PipelineNodeType]?.label || n.type}: {n.id}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground mt-1">
-          A shortcut: picking a node writes its output reference into the template below.
-        </p>
+          </div>
+        ))}
+        <Button variant="outline" size="sm" className="w-full" onClick={add}>
+          Add a field
+        </Button>
       </div>
-
-      <div>
-        <Label htmlFor="output-mapping-custom">Template</Label>
-        <Textarea
-          id="output-mapping-custom"
-          className="mt-1 font-mono text-xs"
-          rows={3}
-          value={mapping}
-          onChange={(e) => updateData('mapping', e.target.value)}
-          placeholder="{{nodes.llm_1.output}}"
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          The pipeline result, written with {'{{nodes.<id>.output}}'} syntax. It is
-          rendered as text, so a node whose output is an object or an array arrives here
-          as JSON text.
-        </p>
-      </div>
+      <StepAdvanced node={node}>
+        <div>
+          <Label>Schema</Label>
+          <div className="mt-1">
+            <JsonSchemaBuilder value={(node.data.schema as Record<string, unknown>) || { type: 'object', properties: {} }} onChange={(next) => updateData('schema', next)} />
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">The JSON Schema a run&apos;s input is checked against.</p>
+        </div>
+      </StepAdvanced>
     </div>
   )
 }
 
-// --- Extract {{...}} variables from a template string ---
-function extractTemplateVariables(text: string): string[] {
-  const matches = text.match(/\{\{([^}]+)\}\}/g)
-  if (!matches) return []
-  return [...new Set(matches.map(m => m.replace(/^\{\{|\}\}$/g, '').trim()))]
+// --- Output ---
+function OutputConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
+  return (
+    <div className="space-y-3">
+      <StepValueField
+        id="output-mapping"
+        label="What it answers with"
+        multiline
+        value={(node.data.mapping as string) || ''}
+        onChange={(v) => updateData('mapping', v)}
+        placeholder="Usually the last step's answer"
+        hint="Arrives as text: an answer that is a list or an object comes as JSON."
+      />
+      <StepAdvanced node={node} />
+    </div>
+  )
 }
 
-// --- LLM Call Config ---
-function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: UpdateDataFn; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
-  const { currentOrganization } = useOrganizationStore()
+// --- Model call ---
+function LlmCallConfig({ node, tools, updateData, onUpdateNode }: { node: Node; tools: any[]; updateData: UpdateDataFn; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
   const [toolSearch, setToolSearch] = useState('')
   const [showAllTools, setShowAllTools] = useState(false)
-  const { data: toolsPage } = useQuery({
-    ...toolsQuery(currentOrganization?.id),
-    enabled: !!currentOrganization,
-  })
-
   const temperature = typeof node.data.temperature === 'number' ? node.data.temperature : 0.7
-
-  const toolList = (toolsPage?.items ?? []) as Array<Pick<Tool, 'id' | 'name'>>
-  // Extract template variables from prompts
-  const systemPromptVars = extractTemplateVariables((node.data.systemPrompt as string) || '')
-  const userPromptVars = extractTemplateVariables((node.data.userPromptTemplate as string) || '')
+  const toolList = tools as Array<Pick<Tool, 'id' | 'name'>>
 
   return (
     <div className="space-y-3">
@@ -299,72 +327,23 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
         onChange={(next, provider) => onUpdateNode(node.id, withModelSelection(node.data, next, provider))}
       />
 
-      <div>
-        <Label htmlFor="system-prompt">System Prompt</Label>
-        <Textarea
-          id="system-prompt"
-          className="mt-1 font-mono text-xs"
-          rows={4}
-          value={(node.data.systemPrompt as string) || ''}
-          onChange={(e) => updateData('systemPrompt', e.target.value)}
-          placeholder="You are a helpful assistant..."
-        />
-        {systemPromptVars.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1">
-            <span className="text-[10px] text-muted-foreground">Variables:</span>
-            {systemPromptVars.map(v => (
-              <code key={v} className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1 rounded">{v}</code>
-            ))}
-          </div>
-        )}
-      </div>
+      <StepValueField
+        id="system-prompt"
+        label="Instructions"
+        multiline
+        value={(node.data.systemPrompt as string) || ''}
+        onChange={(v) => updateData('systemPrompt', v)}
+        placeholder="You are a helpful assistant..."
+      />
 
-      <div>
-        <Label htmlFor="user-prompt">User Prompt Template</Label>
-        <Textarea
-          id="user-prompt"
-          className="mt-1 font-mono text-xs"
-          rows={3}
-          value={(node.data.userPromptTemplate as string) || ''}
-          onChange={(e) => updateData('userPromptTemplate', e.target.value)}
-          placeholder="{{input.message}}"
-        />
-        {userPromptVars.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1">
-            <span className="text-[10px] text-muted-foreground">Variables:</span>
-            {userPromptVars.map(v => (
-              <code key={v} className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1 rounded">{v}</code>
-            ))}
-          </div>
-        )}
-        <p className="text-xs text-muted-foreground mt-1">
-          Use {'{{input.*}}'} or {'{{nodes.<id>.output}}'} for dynamic values.
-        </p>
-      </div>
-
-      <div>
-        <Label>Temperature: {temperature.toFixed(2)}</Label>
-        <Slider
-          className="mt-2"
-          value={[temperature]}
-          min={0}
-          max={2}
-          step={0.01}
-          onValueChange={([v]) => updateData('temperature', v)}
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="max-tokens">Max Tokens</Label>
-        <Input
-          id="max-tokens"
-          type="number"
-          className="mt-1"
-          value={(node.data.maxTokens as number) || ''}
-          onChange={(e) => updateData('maxTokens', e.target.value ? parseInt(e.target.value) : undefined)}
-          placeholder="4096"
-        />
-      </div>
+      <StepValueField
+        id="user-prompt"
+        label="Message"
+        multiline
+        value={(node.data.userPromptTemplate as string) || ''}
+        onChange={(v) => updateData('userPromptTemplate', v)}
+        placeholder="What to send the model, e.g. the input's message"
+      />
 
       <div>
         {(() => {
@@ -374,7 +353,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
           // Group tools by source
           const grouped: Record<string, typeof toolList> = {}
           toolList.forEach((t: any) => {
-            const source = t.metadata?.sourceApi?.name || t.metadata?.apiName || (t.type === 'api' ? 'API Tools' : 'Custom Tools')
+            const source = t.metadata?.sourceApi?.name || t.metadata?.apiName || (t.type === 'api' ? 'API tools' : 'Your tools')
             if (!grouped[source]) grouped[source] = []
             grouped[source].push(t)
           })
@@ -383,52 +362,64 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
           return (
             <>
               <div className="flex items-center justify-between">
-                <Label>Tools for function calling</Label>
-                <span className="text-xs text-muted-foreground">{selectedTools.length} of {toolList.length}</span>
+                <Label>Tools it can use</Label>
+                <span className="text-xs text-muted-foreground">
+                  {selectedTools.length} of {toolList.length}
+                </span>
               </div>
 
               {toolList.length === 0 ? (
-                <p className="text-xs text-muted-foreground mt-1">No tools available. Create tools first.</p>
+                <p className="text-xs text-muted-foreground mt-1">No tools yet. Make some under Tools.</p>
               ) : (
                 <>
                   <div className="flex gap-1 mt-1 mb-2">
-                    <button type="button" className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-                      onClick={() => updateData('toolIds', allIds)}>All</button>
-                    <button type="button" className="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      onClick={() => updateData('toolIds', [])}>None</button>
-                    {groups.map(([source, tools]) => (
-                      <button key={source} type="button" className="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors truncate max-w-[80px]"
+                    <button type="button" className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors" onClick={() => updateData('toolIds', allIds)}>
+                      All
+                    </button>
+                    <button type="button" className="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors" onClick={() => updateData('toolIds', [])}>
+                      None
+                    </button>
+                    {groups.map(([source, groupTools]) => (
+                      <button
+                        key={source}
+                        type="button"
+                        className="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors truncate max-w-[80px]"
                         onClick={() => {
-                          const groupIds = (tools as any[]).map(t => t.id)
-                          const otherIds = selectedTools.filter(id => !groupIds.includes(id))
-                          const allGroupSelected = groupIds.every(id => selectedTools.includes(id))
+                          const groupIds = (groupTools as any[]).map((t) => t.id)
+                          const otherIds = selectedTools.filter((id) => !groupIds.includes(id))
+                          const allGroupSelected = groupIds.every((id) => selectedTools.includes(id))
                           updateData('toolIds', allGroupSelected ? otherIds : [...otherIds, ...groupIds])
                         }}
                         title={source}
-                      >{source}</button>
+                      >
+                        {source}
+                      </button>
                     ))}
                   </div>
 
                   <Input
-                    placeholder="Filter tools..."
+                    placeholder="Filter tools"
                     value={toolSearch}
-                    onChange={(e) => { setToolSearch(e.target.value); setShowAllTools(false) }}
+                    onChange={(e) => {
+                      setToolSearch(e.target.value)
+                      setShowAllTools(false)
+                    }}
                     className="mb-1 text-xs h-7"
                   />
 
                   <div className="space-y-0.5 max-h-[180px] overflow-y-auto border rounded-md p-1.5">
-                    {groups.map(([source, tools]) => {
-                      const filtered = toolSearch
-                        ? (tools as any[]).filter(t => t.name?.toLowerCase().includes(toolSearch.toLowerCase()))
-                        : tools as any[]
+                    {groups.map(([source, groupTools]) => {
+                      const filtered = toolSearch ? (groupTools as any[]).filter((t) => t.name?.toLowerCase().includes(toolSearch.toLowerCase())) : (groupTools as any[])
                       if (filtered.length === 0) return null
-                      const groupIds = (tools as any[]).map(t => t.id)
-                      const allSelected = groupIds.every(id => selectedTools.includes(id))
+                      const groupIds = (groupTools as any[]).map((t) => t.id)
+                      const allSelected = groupIds.every((id) => selectedTools.includes(id))
                       return (
                         <div key={source}>
-                          <button type="button" className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider py-1 w-full hover:text-foreground"
+                          <button
+                            type="button"
+                            className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground py-1 w-full hover:text-foreground"
                             onClick={() => {
-                              const otherIds = selectedTools.filter(id => !groupIds.includes(id))
+                              const otherIds = selectedTools.filter((id) => !groupIds.includes(id))
                               updateData('toolIds', allSelected ? otherIds : [...otherIds, ...groupIds])
                             }}
                           >
@@ -439,9 +430,14 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
                             const isSelected = selectedTools.includes(tool.id)
                             return (
                               <label key={tool.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-accent/10 rounded px-1 py-0.5 ml-3">
-                                <input type="checkbox" checked={isSelected} onChange={(e) => {
-                                  updateData('toolIds', e.target.checked ? [...selectedTools, tool.id] : selectedTools.filter(id => id !== tool.id))
-                                }} className="rounded" />
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    updateData('toolIds', e.target.checked ? [...selectedTools, tool.id] : selectedTools.filter((id) => id !== tool.id))
+                                  }}
+                                  className="rounded"
+                                />
                                 <span className="truncate">{tool.name}</span>
                               </label>
                             )
@@ -461,53 +457,55 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
           )
         })()}
       </div>
+
+      <StepAdvanced node={node}>
+        <div>
+          <Label>Temperature: {temperature.toFixed(2)}</Label>
+          <Slider className="mt-2" value={[temperature]} min={0} max={2} step={0.01} onValueChange={([v]) => updateData('temperature', v)} />
+          <p className="mt-1 text-xs text-muted-foreground">Lower is steadier, higher is more varied.</p>
+        </div>
+        <div>
+          <Label htmlFor="max-tokens">Longest answer (tokens)</Label>
+          <Input
+            id="max-tokens"
+            type="number"
+            className="mt-1"
+            value={(node.data.maxTokens as number) || ''}
+            onChange={(e) => updateData('maxTokens', e.target.value ? parseInt(e.target.value) : undefined)}
+            placeholder="4096"
+          />
+        </div>
+      </StepAdvanced>
     </div>
   )
 }
 
-// --- Tool Call Config ---
-function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: UpdateDataFn; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
-  const { currentOrganization } = useOrganizationStore()
-
-  const { data: toolsPage } = useQuery({
-    ...toolsQuery(currentOrganization?.id),
-    enabled: !!currentOrganization,
-  })
-
-  const toolList = (toolsPage?.items ?? []) as Array<Pick<Tool, 'id' | 'name'>>
-  const params: ParameterMapping[] = (node.data.parameterMapping as ParameterMapping[]) || []
-
-  const addParam = () => {
-    updateData('parameterMapping', [...params, { key: '', value: '' }])
-  }
-
-  const updateParam = (index: number, field: 'key' | 'value', val: string) => {
-    const updated = [...params]
-    updated[index] = { ...updated[index], [field]: val }
-    updateData('parameterMapping', updated)
-  }
-
-  const removeParam = (index: number) => {
-    updateData('parameterMapping', params.filter((_, i) => i !== index))
-  }
+// --- Tool call ---
+function ToolCallConfig({ node, nodes, tools, onUpdateNode }: { node: Node; nodes: Node[]; tools: any[]; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
+  const toolList = tools as Array<Pick<Tool, 'id' | 'name'>>
+  const tool = tools.find((t) => t.id === node.data.toolId)
+  const params = toolParameters(tool)
+  const mapping = node.data.parameterMapping
+  const entries = mappingEntries(mapping)
+  const extra = params ? entries.filter((e) => !(e.key in params.properties)) : []
 
   return (
     <div className="space-y-3">
       <div>
-        <Label>Tool</Label>
+        <Label htmlFor="tool-step-tool">Tool</Label>
         <Select
           value={(node.data.toolId as string) || ''}
           onValueChange={(v) => {
-            const tool = toolList.find((t) => t.id === v)
+            const picked = toolList.find((t) => t.id === v)
             onUpdateNode(node.id, {
               ...node.data,
               toolId: v,
-              toolName: tool?.name || '',
+              toolName: picked?.name || '',
             })
           }}
         >
-          <SelectTrigger className="mt-1">
-            <SelectValue placeholder="Select tool" />
+          <SelectTrigger id="tool-step-tool" className="mt-1">
+            <SelectValue placeholder="Pick a tool" />
           </SelectTrigger>
           <SelectContent>
             {/*
@@ -515,45 +513,30 @@ function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; update
               end: the node fails validation, Save is blocked, and the
               screen never says why.
             */}
-            {toolList.length === 0 && (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                No tools yet — generate some from an API, or create one under Tools.
-              </div>
-            )}
+            {toolList.length === 0 && <div className="px-3 py-2 text-sm text-muted-foreground">No tools yet. Make some from an API, or under Tools.</div>}
             {toolList.map((t) => (
-              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+              <SelectItem key={t.id} value={t.id}>
+                {t.name}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      <div>
-        <Label>Parameter Mapping</Label>
-        <div className="mt-1 space-y-2">
-          {params.map((p, i) => (
-            <div key={i} className="flex items-center gap-1">
-              <Input
-                className="text-xs"
-                placeholder="key"
-                value={p.key}
-                onChange={(e) => updateParam(i, 'key', e.target.value)}
-              />
-              <Input
-                className="text-xs font-mono"
-                placeholder="{{input.value}}"
-                value={p.value}
-                onChange={(e) => updateParam(i, 'value', e.target.value)}
-              />
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Remove parameter" onClick={() => removeParam(i)}>
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          ))}
-          <Button variant="outline" size="sm" className="w-full" onClick={addParam}>
-            Add parameter
-          </Button>
-        </div>
-      </div>
+      {node.data.toolId ? <ToolStepInputs node={node} nodes={nodes} tool={tool} onUpdateNode={onUpdateNode} /> : null}
+
+      <StepAdvanced node={node}>
+        {params && (
+          <OtherValues
+            title="Other values it gets"
+            node={node}
+            entries={entries}
+            known={Object.keys(params.properties)}
+            write={(next: MappingEntry[]) => onUpdateNode(node.id, { ...node.data, parameterMapping: toMapping(next, mapping) })}
+            hint={extra.length === 0 ? 'Values the tool does not list, sent along with the rest.' : undefined}
+          />
+        )}
+      </StepAdvanced>
     </div>
   )
 }
@@ -561,11 +544,11 @@ function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; update
 // --- Condition operators ---
 const CONDITION_OPERATORS = [
   { value: '===', label: 'equals' },
-  { value: '!==', label: 'not equals' },
-  { value: '>', label: 'greater than' },
-  { value: '<', label: 'less than' },
-  { value: '>=', label: 'greater or equal' },
-  { value: '<=', label: 'less or equal' },
+  { value: '!==', label: 'does not equal' },
+  { value: '>', label: 'is more than' },
+  { value: '<', label: 'is less than' },
+  { value: '>=', label: 'is at least' },
+  { value: '<=', label: 'is at most' },
   { value: 'includes', label: 'contains' },
   { value: '!includes', label: 'does not contain' },
   { value: 'startsWith', label: 'starts with' },
@@ -613,16 +596,13 @@ function buildConditionExpression(source: string, operator: string, value: strin
   return `${source} ${operator} ${quotedValue}`
 }
 
-// --- Condition Config ---
-function ConditionConfig({ node, nodes, updateData }: { node: Node; nodes: Node[]; updateData: UpdateDataFn }) {
-  const [useRawMode, setUseRawMode] = useState(false)
+// --- Condition ---
+function ConditionConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
+  const { asText } = React.useContext(StepTextMode)
   const expression = (node.data.expression as string) || ''
-
-  const availableOutputs = nodes.filter(n => n.id !== node.id && n.type !== 'output')
-
-  // Try to parse existing expression
   const parsed = useMemo(() => parseConditionExpression(expression), [expression])
-
+  // The parts are held here, seeded from the node: an expression is only
+  // built once all three say something.
   const [condSource, setCondSource] = useState(parsed?.source || '')
   const [condOperator, setCondOperator] = useState(parsed?.operator || '===')
   const [condValue, setCondValue] = useState(parsed?.value || '')
@@ -631,254 +611,196 @@ function ConditionConfig({ node, nodes, updateData }: { node: Node; nodes: Node[
     setCondSource(source)
     setCondOperator(operator)
     setCondValue(value)
-    const expr = buildConditionExpression(source, operator, value)
-    updateData('expression', expr)
+    updateData('expression', buildConditionExpression(source, operator, value))
   }
+
+  const custom = !!expression && !parsed
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <Label>Condition</Label>
-        <button
-          type="button"
-          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-          onClick={() => setUseRawMode(!useRawMode)}
-        >
-          <Code className="h-3 w-3" />
-          {useRawMode ? 'Visual builder' : 'Raw expression'}
-        </button>
-      </div>
-
-      {useRawMode ? (
+      {asText ? (
         <div>
+          <Label>Condition</Label>
           <div className="mt-1">
-            <CodeEditor
-              value={expression}
-              onChange={(value) => updateData('expression', value)}
-              language="javascript"
-              height="100px"
-              placeholder="{{nodes.llm_1.output.sentiment}} === 'positive'"
-            />
+            <CodeEditor value={expression} onChange={(value) => updateData('expression', value)} language="javascript" height="100px" />
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            JavaScript expression that evaluates to true/false.
-          </p>
+          <p className="text-xs text-muted-foreground mt-1">An expression that comes out true or false.</p>
         </div>
+      ) : custom ? (
+        <p className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground" data-testid="condition-custom">
+          This condition is written as an expression. Change it under Advanced with Edit values as text.
+        </p>
       ) : (
         <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
-          <div>
-            <Label htmlFor="node-if" className="text-xs">If</Label>
-            <Select
-              value={condSource}
-              onValueChange={(v) => updateCondition(v, condOperator, condValue)}
-            >
-              <SelectTrigger id="node-if" className="mt-1 text-xs font-mono">
-                <SelectValue placeholder="Select source" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableOutputs.map(n => {
-                  const nodeLabel = NODE_TYPE_CONFIG[n.type as PipelineNodeType]?.label || n.type
-                  const val = n.type === 'input' ? `{{input}}` : `{{nodes.${n.id}.output}}`
-                  return (
-                    <SelectItem key={n.id} value={val} className="text-xs font-mono">
-                      {nodeLabel}: {n.id}
-                    </SelectItem>
-                  )
-                })}
-              </SelectContent>
-            </Select>
-          </div>
+          <StepValueSelect id="node-if" label="If" value={condSource} onChange={(v) => updateCondition(v, condOperator, condValue)} />
 
           <div>
-            <Label htmlFor="node-operator" className="text-xs">Operator</Label>
-            <Select
-              value={condOperator}
-              onValueChange={(v) => updateCondition(condSource, v, condValue)}
-            >
+            <Label htmlFor="node-operator" className="text-xs">
+              Is
+            </Label>
+            <Select value={condOperator} onValueChange={(v) => updateCondition(condSource, v, condValue)}>
               <SelectTrigger id="node-operator" className="mt-1 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {CONDITION_OPERATORS.map(op => (
-                  <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>
+                {CONDITION_OPERATORS.map((op) => (
+                  <SelectItem key={op.value} value={op.value}>
+                    {op.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
           <div>
-            <Label htmlFor="node-value" className="text-xs">Value</Label>
-            <Input id="node-value"
-              className="mt-1 text-xs"
-              value={condValue}
-              onChange={(e) => updateCondition(condSource, condOperator, e.target.value)}
-              placeholder="Value to compare"
-            />
+            <Label htmlFor="node-value" className="text-xs">
+              Value
+            </Label>
+            <Input id="node-value" className="mt-1 text-xs" value={condValue} onChange={(e) => updateCondition(condSource, condOperator, e.target.value)} placeholder="What to compare with" />
           </div>
-
-          {expression && (
-            <div className="pt-1 border-t">
-              <span className="text-[10px] text-muted-foreground">Expression:</span>
-              <code className="block text-[10px] font-mono bg-background rounded px-2 py-1 mt-0.5 break-all">
-                {expression}
-              </code>
-            </div>
-          )}
         </div>
       )}
 
-      <p className="text-xs text-muted-foreground">
-        The "True" handle connects to the right path, "False" connects below.
-      </p>
+      <p className="text-xs text-muted-foreground">The right-hand handle is the yes path, the bottom one the no path.</p>
+      <StepAdvanced node={node} />
     </div>
   )
 }
 
-// --- Transform Config ---
+// --- Transform ---
 function TransformConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
   return (
     <div className="space-y-3">
-      <div>
-        <Label htmlFor="transform-expr">Transform Template</Label>
-        <div className="mt-1">
-          <CodeEditor
-            value={(node.data.expression as string) || ''}
-            onChange={(value) => updateData('expression', value)}
-            language="text"
-            height="140px"
-            placeholder={'{\n  "summary": "{{nodes.llm_1.output}}",\n  "source": "{{input.url}}"\n}'}
-          />
-        </div>
-        <p className="text-xs text-muted-foreground mt-1">
-          A template, not JavaScript. Each {'{{...}}'} is replaced by a value read out of{' '}
-          <code>input</code>, <code>nodes</code> or <code>variables</code> by dot path.
-          There are no function calls, arithmetic or indexing. The node outputs the
-          rendered text, so a template shaped like JSON produces a JSON string
-          downstream, not an object.
-        </p>
-      </div>
+      <StepValueField
+        id="transform-expr"
+        label="Result"
+        multiline
+        value={(node.data.expression as string) || ''}
+        onChange={(v) => updateData('expression', v)}
+        placeholder="Text with values from earlier steps"
+        hint="Put earlier values into text. Shaped like JSON, it still arrives downstream as text."
+      />
+      <StepAdvanced node={node} />
     </div>
   )
 }
 
-// --- Merge Config ---
+// --- Merge ---
+const MERGE_STRATEGIES = [
+  { value: 'first_response', label: 'First to finish', summary: 'Passes on the first branch that finishes.' },
+  { value: 'best_of_n', label: 'Best answer, picked by a judge', summary: 'A judge model picks the best branch.' },
+  { value: 'concatenate', label: 'All of them, joined', summary: 'Passes on every branch, joined.' },
+  { value: 'consensus', label: 'What most agree on', summary: 'Passes on what most branches agree on.' },
+] as const
+
 function MergeConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: UpdateDataFn; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
+  const strategy = (node.data.strategy as string) || 'first_response'
+  const current = MERGE_STRATEGIES.find((s) => s.value === strategy)
   return (
     <div className="space-y-3">
-      <div>
-        <Label htmlFor="node-merge-strategy">Merge Strategy</Label>
-        <Select
-          value={(node.data.strategy as string) || 'first_response'}
-          onValueChange={(v) => updateData('strategy', v)}
-        >
-          <SelectTrigger id="node-merge-strategy" className="mt-1">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="first_response">First Response</SelectItem>
-            <SelectItem value="best_of_n">Best of N</SelectItem>
-            <SelectItem value="concatenate">Concatenate</SelectItem>
-            <SelectItem value="consensus">Consensus</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <p className="text-sm" data-testid="merge-summary">
+        {current?.summary ?? 'Combines the branches wired into it.'}
+      </p>
+      <StepAdvanced node={node}>
+        <div>
+          <Label htmlFor="node-merge-strategy">How to combine</Label>
+          <Select value={strategy} onValueChange={(v) => updateData('strategy', v)}>
+            <SelectTrigger id="node-merge-strategy" className="mt-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MERGE_STRATEGIES.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-      {(node.data.strategy === 'best_of_n' || node.data.strategy === 'consensus') && (
-        // The panel said the judge used "this node's own provider or routing
-        // policy" and offered no way to set either. The executor reads a
-        // pinned provider from judgeConfig and a policy from the node.
-        <ModelPicker
-          idPrefix="merge-judge"
-          layout="stack"
-          allowRouting
-          providerLabel="Judge provider"
-          modelLabel="Judge model"
-          providerOptionalLabel="Organization default routing policy"
-          value={{
-            providerId: (node.data.judgeConfig as any)?.providerId,
-            model: (node.data.judgeConfig as any)?.model,
-            routing: (node.data.routing as RoutingPolicy) || undefined,
-          }}
-          onChange={(next) => {
-            const { judgeConfig, routing: _routing, ...rest } = node.data as Record<string, any>
-            const { providerId: _p, model: _m, ...judgeRest } = (judgeConfig || {}) as Record<string, any>
-            const nextJudge = next.providerId ? { ...judgeRest, providerId: next.providerId, model: next.model || undefined } : judgeRest
-            onUpdateNode(node.id, {
-              ...rest,
-              ...(Object.keys(nextJudge).length > 0 ? { judgeConfig: nextJudge } : {}),
-              ...(next.routing ? { routing: next.routing } : {}),
-            })
-          }}
-        />
-      )}
+        {(strategy === 'best_of_n' || strategy === 'consensus') && (
+          // The executor reads a pinned judge from judgeConfig and a policy from the node.
+          <ModelPicker
+            idPrefix="merge-judge"
+            layout="stack"
+            allowRouting
+            providerLabel="Judge provider"
+            modelLabel="Judge model"
+            providerOptionalLabel="Organization default routing policy"
+            value={{
+              providerId: (node.data.judgeConfig as any)?.providerId,
+              model: (node.data.judgeConfig as any)?.model,
+              routing: (node.data.routing as RoutingPolicy) || undefined,
+            }}
+            onChange={(next) => {
+              const { judgeConfig, routing: _routing, ...rest } = node.data as Record<string, any>
+              const { providerId: _p, model: _m, ...judgeRest } = (judgeConfig || {}) as Record<string, any>
+              const nextJudge = next.providerId ? { ...judgeRest, providerId: next.providerId, model: next.model || undefined } : judgeRest
+              onUpdateNode(node.id, {
+                ...rest,
+                ...(Object.keys(nextJudge).length > 0 ? { judgeConfig: nextJudge } : {}),
+                ...(next.routing ? { routing: next.routing } : {}),
+              })
+            }}
+          />
+        )}
 
-      {node.data.strategy === 'best_of_n' && (
-        <>
+        {strategy === 'best_of_n' && (
+          <>
+            <div>
+              <Label htmlFor="judge-prompt">What the judge looks for</Label>
+              <Textarea
+                id="judge-prompt"
+                className="mt-1 text-xs"
+                rows={4}
+                value={(node.data.judgePrompt as string) || ''}
+                onChange={(e) => updateData('judgePrompt', e.target.value)}
+                placeholder="Pick the best response considering quality and accuracy..."
+              />
+              <p className="mt-1 text-xs text-muted-foreground">Leave it empty to ask for the best one. The judge answers with the option number only.</p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              The judge uses this step&apos;s own model, else the organization&apos;s default routing policy. With neither, the run fails here. A single branch is
+              passed on without judging.
+            </p>
+          </>
+        )}
+
+        {strategy === 'consensus' && (
           <div>
-            <Label htmlFor="judge-prompt">Judge Prompt</Label>
-            <Textarea
-              id="judge-prompt"
-              className="mt-1 text-xs"
-              rows={4}
-              value={(node.data.judgePrompt as string) || ''}
-              onChange={(e) => updateData('judgePrompt', e.target.value)}
-              placeholder="Pick the best response considering quality and accuracy..."
+            <Label htmlFor="consensus-threshold">How many must agree</Label>
+            <Input
+              id="consensus-threshold"
+              type="number"
+              className="mt-1"
+              min={0}
+              max={1}
+              step={0.1}
+              value={(node.data.consensusThreshold as number) ?? 0.5}
+              onChange={(e) => updateData('consensusThreshold', parseFloat(e.target.value))}
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              Leave empty to ask for the best option and nothing else. The judge must answer
-              with just the option number.
+              A share from 0 to 1. The step also hands on <code>agreement</code> and <code>consensusReached</code>, so a condition after it can branch on
+              disagreement.
             </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            The judging call uses this node&apos;s own provider or routing policy, and
-            falls back to the organization&apos;s default routing policy. With none of
-            the three set, the run fails at this node. One incoming branch is returned
-            as-is, without a judging call.
-          </p>
-        </>
-      )}
-
-      {node.data.strategy === 'consensus' && (
-        <div>
-          <Label htmlFor="consensus-threshold">Consensus Threshold</Label>
-          <Input
-            id="consensus-threshold"
-            type="number"
-            className="mt-1"
-            min={0}
-            max={1}
-            step={0.1}
-            value={(node.data.consensusThreshold as number) ?? 0.5}
-            onChange={(e) => updateData('consensusThreshold', parseFloat(e.target.value))}
-          />
-          <p className="mt-1 text-xs text-muted-foreground">
-            The share of branches that have to agree. The node outputs the combined answer
-            plus <code>agreement</code> and <code>consensusReached</code>, so a Condition
-            node downstream can branch on disagreement.
-          </p>
-        </div>
-      )}
+        )}
+      </StepAdvanced>
     </div>
   )
 }
 
-// --- Parallel Config ---
-function ParallelConfig() {
+// --- Parallel ---
+function ParallelConfig({ node }: { node: Node }) {
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        The Parallel node fans out execution to all connected branches. Each branch runs simultaneously. Connect branches to a Merge node to collect results.
-      </p>
-      <div className="rounded-lg border p-3 bg-orange-50 dark:bg-orange-950/30">
-        <p className="text-xs text-orange-700 dark:text-orange-300">
-          No additional configuration needed. Connect output handles to different pipeline branches.
-        </p>
-      </div>
+      <p className="text-sm text-muted-foreground">Runs every branch wired out of it at the same time. Wire the branches into a merge step to collect them.</p>
+      <StepAdvanced node={node} />
     </div>
   )
 }
 
-// --- Sub-Agent Config ---
+// --- Sub-agent ---
 function SubAgentConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: UpdateDataFn; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
   const { data: agents } = useQuery({
     queryKey: ['agents-for-subagent'],
@@ -892,32 +814,22 @@ function SubAgentConfig({ node, updateData, onUpdateNode }: { node: Node; update
   const agentList = (agents || []) as Array<Pick<Agent, 'id' | 'name'>>
   const mappings: ParameterMapping[] = (node.data.inputMapping as ParameterMapping[]) || []
 
-  const addMapping = () => {
-    updateData('inputMapping', [...mappings, { key: '', value: '' }])
-  }
-
   const updateMapping = (index: number, field: 'key' | 'value', val: string) => {
     const updated = [...mappings]
     updated[index] = { ...updated[index], [field]: val }
     updateData('inputMapping', updated)
   }
 
-  const removeMapping = (index: number) => {
-    updateData('inputMapping', mappings.filter((_, i) => i !== index))
-  }
-
   return (
     <div className="space-y-3">
       <div>
-        <Label>Agent</Label>
+        <Label htmlFor="sub-agent-agent">Agent</Label>
         <Select
           value={(node.data.agentId as string) || ''}
           onValueChange={(v) => {
             const agent = agentList.find((a) => a.id === v)
-            // One write, not two. Both `updateData` calls spread the same
-            // `node.data` prop -- React has not re-rendered between them --
-            // and onUpdateNode replaces `data` wholesale, so writing the
-            // name second used to drop the id written first.
+            // One write, not two: onUpdateNode replaces `data` wholesale, so
+            // writing the name second used to drop the id written first.
             onUpdateNode(node.id, {
               ...node.data,
               agentId: v,
@@ -925,96 +837,81 @@ function SubAgentConfig({ node, updateData, onUpdateNode }: { node: Node; update
             })
           }}
         >
-          <SelectTrigger className="mt-1">
-            <SelectValue placeholder="Select agent" />
+          <SelectTrigger id="sub-agent-agent" className="mt-1">
+            <SelectValue placeholder="Pick an agent" />
           </SelectTrigger>
           <SelectContent>
-            {/*
-              A required field whose select opens on nothing is a dead
-              end: the node fails validation, Save is blocked, and the
-              screen never says why.
-            */}
-            {agentList.length === 0 && (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                No other agents to call yet.
-              </div>
-            )}
+            {agentList.length === 0 && <div className="px-3 py-2 text-sm text-muted-foreground">No other agents to call yet.</div>}
             {agentList.map((a) => (
-              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+              <SelectItem key={a.id} value={a.id}>
+                {a.name}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      <div>
-        <Label>Input Mapping</Label>
-        <div className="mt-1 space-y-2">
-          {mappings.map((m, i) => (
-            <div key={i} className="flex items-center gap-1">
-              <Input
-                className="text-xs"
-                placeholder="key"
-                value={m.key}
-                onChange={(e) => updateMapping(i, 'key', e.target.value)}
-              />
-              <Input
-                className="text-xs font-mono"
-                placeholder="{{input.value}}"
-                value={m.value}
-                onChange={(e) => updateMapping(i, 'value', e.target.value)}
-              />
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Remove mapping" onClick={() => removeMapping(i)}>
+      <div className="space-y-2">
+        <p className="text-sm font-medium">What to send it</p>
+        {mappings.map((m, i) => (
+          <div key={i} className="space-y-1 rounded-lg border bg-background p-2">
+            <div className="flex items-center gap-1">
+              <Input className="h-8 text-xs" aria-label={`Value ${i + 1} name`} placeholder="name" value={m.key} onChange={(e) => updateMapping(i, 'key', e.target.value)} />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                aria-label={`Remove value ${i + 1}`}
+                onClick={() =>
+                  updateData(
+                    'inputMapping',
+                    mappings.filter((_, j) => j !== i),
+                  )
+                }
+              >
                 <X className="h-3 w-3" />
               </Button>
             </div>
-          ))}
-          <Button variant="outline" size="sm" className="w-full" onClick={addMapping}>
-            Add mapping
-          </Button>
-        </div>
+            <StepValueField id={`sub-agent-value-${i}`} label={`Value ${i + 1}`} hideLabel value={m.value || ''} onChange={(v) => updateMapping(i, 'value', v)} />
+          </div>
+        ))}
+        <Button variant="outline" size="sm" className="w-full" onClick={() => updateData('inputMapping', [...mappings, { key: '', value: '' }])}>
+          Add a value
+        </Button>
       </div>
+      <StepAdvanced node={node} />
     </div>
   )
 }
 
-// --- Loop Node Config ---
+// --- Loop ---
 function LoopConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
   return (
     <div className="space-y-3">
-      <div>
-        <Label>Iterable Expression</Label>
-        <div className="mt-1">
-          <CodeEditor
-            value={(node.data.iterableExpression as string) || ''}
-            onChange={(value) => updateData('iterableExpression', value)}
-            language="javascript"
-            height="80px"
-            placeholder="{{nodes.tool_1.output.items}}"
+      <StepValueSelect id="loop-items" label="Go through" value={(node.data.iterableExpression as string) || ''} onChange={(v) => updateData('iterableExpression', v)} placeholder="Pick a list from an earlier step" />
+      <p className="text-xs text-muted-foreground">
+        Hands on that list, up to the most items set under Advanced. The steps after it run once, on the whole list; to run them per item, fan out through a
+        parallel step.
+      </p>
+      <StepAdvanced node={node}>
+        <div>
+          <Label htmlFor="node-max-iterations">Most items</Label>
+          <Input
+            id="node-max-iterations"
+            type="number"
+            className="mt-1"
+            min={1}
+            max={1000}
+            value={(node.data.maxIterations as number) || 100}
+            onChange={(e) => updateData('maxIterations', parseInt(e.target.value) || 100)}
           />
         </div>
-        <p className="text-xs text-muted-foreground mt-1">
-          Template expression that resolves to an array. This node outputs that array,
-          capped at Max Iterations. It does not run the nodes downstream of it once per
-          item — read the whole list with <code>{'{{nodes.<id>.output}}'}</code>, or fan
-          it out through a Parallel node.
-        </p>
-      </div>
-      <div>
-        <Label htmlFor="node-max-iterations">Max Iterations</Label>
-        <Input id="node-max-iterations"
-          type="number"
-          className="mt-1"
-          min={1}
-          max={1000}
-          value={(node.data.maxIterations as number) || 100}
-          onChange={(e) => updateData('maxIterations', parseInt(e.target.value) || 100)}
-        />
-      </div>
+      </StepAdvanced>
     </div>
   )
 }
 
-// --- Verify Config ---
+// --- Verify ---
 
 interface VerifyChecker {
   name?: string
@@ -1025,80 +922,54 @@ interface VerifyChecker {
 }
 
 const VERIFY_POLICIES = [
-  { value: 'any_fail_blocks', label: 'Any checker fails -> fail' },
-  { value: 'majority', label: 'Majority of checkers' },
-  { value: 'all_pass', label: 'All checkers must pass' },
+  { value: 'any_fail_blocks', label: 'Any checker fails, it fails' },
+  { value: 'majority', label: 'Most checkers decide' },
+  { value: 'all_pass', label: 'Every checker must pass' },
 ] as const
 
 function VerifyConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
-  const checkers: VerifyChecker[] = Array.isArray(node.data.checkers)
-    ? (node.data.checkers as VerifyChecker[])
-    : []
+  const checkers: VerifyChecker[] = Array.isArray(node.data.checkers) ? (node.data.checkers as VerifyChecker[]) : []
 
   // Every write goes through the whole list, so a checker that names a role
   // and nothing else -- what the strategy compiler emits, and what keeps an
   // ejected graph portable -- keeps its roleKey when any other field is
   // edited.
   const patchChecker = (index: number, patch: Partial<VerifyChecker>) => {
-    updateData('checkers', checkers.map((c, i) => (i === index ? { ...c, ...patch } : c)))
+    updateData(
+      'checkers',
+      checkers.map((c, i) => (i === index ? { ...c, ...patch } : c)),
+    )
   }
   const addChecker = () => {
     updateData('checkers', [...checkers, { name: '', providerId: '', model: '', instructions: '' }])
   }
   const removeChecker = (index: number) => {
-    updateData('checkers', checkers.filter((_, i) => i !== index))
+    updateData(
+      'checkers',
+      checkers.filter((_, i) => i !== index),
+    )
   }
 
   return (
     <div className="space-y-3">
-      <div>
-        <Label htmlFor="verify-target">Target</Label>
-        <Textarea
-          id="verify-target"
-          className="mt-1 font-mono text-xs"
-          rows={2}
-          value={(node.data.target as string) || ''}
-          onChange={(e) => updateData('target', e.target.value || undefined)}
-          placeholder="{{nodes.draft.output}}"
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          What gets checked. Leave it empty to check the output of the step(s) wired into
-          this node.
-        </p>
-      </div>
+      <StepValueField
+        id="verify-target"
+        label="What to check"
+        multiline
+        value={(node.data.target as string) || ''}
+        onChange={(v) => updateData('target', v || undefined)}
+        placeholder="Empty: the answer of the step wired into it"
+      />
 
-      <div>
-        <Label htmlFor="verify-spec">Spec</Label>
-        <Textarea
-          id="verify-spec"
-          className="mt-1 text-xs"
-          rows={4}
-          value={(node.data.spec as string) || ''}
-          onChange={(e) => updateData('spec', e.target.value)}
-          placeholder="The answer must cite a source for every figure."
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          The rules every checker holds the target to. {'{{...}}'} values are resolved before
-          the checkers see it.
-        </p>
-      </div>
-
-      <div>
-        <Label htmlFor="verify-policy">Merge policy</Label>
-        <Select
-          value={(node.data.policy as string) || 'any_fail_blocks'}
-          onValueChange={(v) => updateData('policy', v)}
-        >
-          <SelectTrigger id="verify-policy" className="mt-1">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {VERIFY_POLICIES.map((p) => (
-              <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <StepValueField
+        id="verify-spec"
+        label="Rules"
+        multiline
+        value={(node.data.spec as string) || ''}
+        onChange={(v) => updateData('spec', v)}
+        placeholder="The answer must cite a source for every figure."
+        hint="What every checker holds it to."
+      />
 
       <div>
         <div className="flex items-center justify-between">
@@ -1106,39 +977,21 @@ function VerifyConfig({ node, updateData }: { node: Node; updateData: UpdateData
           <span className="text-xs text-muted-foreground">{checkers.length}</span>
         </div>
 
-        {checkers.length === 0 && (
-          <p className="text-xs text-muted-foreground mt-1">
-            At least one checker is required. Point each one at a different provider to get a
-            cross-vendor panel.
-          </p>
-        )}
+        {checkers.length === 0 && <p className="text-xs text-muted-foreground mt-1">Add at least one. Give each a different provider for a panel across vendors.</p>}
 
         <div className="mt-2 space-y-2">
           {checkers.map((checker, i) => (
             <div key={i} className="rounded-lg border p-2 space-y-2 bg-background">
               <div className="flex items-center gap-1">
-                <Input
-                  className="text-xs"
-                  aria-label={`Checker ${i + 1} name`}
-                  placeholder="name"
-                  value={checker.name || ''}
-                  onChange={(e) => patchChecker(i, { name: e.target.value })}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  aria-label={`Remove checker ${i + 1}`}
-                  onClick={() => removeChecker(i)}
-                >
+                <Input className="text-xs" aria-label={`Checker ${i + 1} name`} placeholder="name" value={checker.name || ''} onChange={(e) => patchChecker(i, { name: e.target.value })} />
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label={`Remove checker ${i + 1}`} onClick={() => removeChecker(i)}>
                   <X className="h-3 w-3" />
                 </Button>
               </div>
 
               {checker.roleKey && !checker.providerId && (
                 <p className="text-[11px] text-muted-foreground">
-                  Filled at run time by role <code>{checker.roleKey}</code>. Pick a provider
-                  below to pin it instead.
+                  Filled at run time by role <code>{checker.roleKey}</code>. Pick a provider below to pin it instead.
                 </p>
               )}
 
@@ -1171,73 +1024,78 @@ function VerifyConfig({ node, updateData }: { node: Node; updateData: UpdateData
       </div>
 
       <p className="text-xs text-muted-foreground">
-        A checker only tries to refute. This node never fails the run on a bad verdict — it
-        outputs <code>verdict</code>, <code>passed</code> and <code>failures</code>, so a
-        Condition node downstream is what decides to retry, escalate or stop.
+        A checker only tries to find what is wrong. The step never fails the run: it hands on <code>verdict</code>, <code>passed</code> and <code>failures</code>, and a
+        condition after it decides what happens next.
       </p>
+
+      <StepAdvanced node={node}>
+        <div>
+          <Label htmlFor="verify-policy">How the checkers agree</Label>
+          <Select value={(node.data.policy as string) || 'any_fail_blocks'} onValueChange={(v) => updateData('policy', v)}>
+            <SelectTrigger id="verify-policy" className="mt-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {VERIFY_POLICIES.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </StepAdvanced>
     </div>
   )
 }
 
-// --- Extract Context Config ---
+// --- Extract context ---
 function ExtractContextConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: UpdateDataFn; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
-
   return (
     <div className="space-y-3">
-      <div>
-        <Label htmlFor="extract-task">Task</Label>
-        <Textarea
-          id="extract-task"
-          className="mt-1 font-mono text-xs"
-          rows={2}
-          value={(node.data.task as string) || ''}
-          onChange={(e) => updateData('task', e.target.value || undefined)}
-          placeholder="{{input.message}}"
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          What the brief is for. Leave it empty to use the run input.
-        </p>
-      </div>
+      <StepValueField
+        id="extract-task"
+        label="What the brief is for"
+        multiline
+        value={(node.data.task as string) || ''}
+        onChange={(v) => updateData('task', v || undefined)}
+        placeholder="Empty: the run's input"
+      />
 
-      <div>
-        <Label htmlFor="extract-sources">Sources</Label>
-        <Textarea
-          id="extract-sources"
-          className="mt-1 font-mono text-xs"
-          rows={2}
-          value={(node.data.sources as string) || ''}
-          onChange={(e) => updateData('sources', e.target.value || undefined)}
-          placeholder="{{nodes.explore_1.output}}"
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          What gets compressed. Leave it empty to use the output of the step(s) wired into this
-          node. With neither, the node fails rather than passing the transcripts through.
-        </p>
-      </div>
+      <StepValueField
+        id="extract-sources"
+        label="What to boil down"
+        multiline
+        value={(node.data.sources as string) || ''}
+        onChange={(v) => updateData('sources', v || undefined)}
+        placeholder="Empty: the steps wired into it"
+        hint="With neither this nor a step wired in, the step fails rather than pass everything on."
+      />
 
       <NodeModelField node={node} idPrefix="extract" onUpdateNode={onUpdateNode} />
 
-      <div>
-        <Label htmlFor="extract-instruction">Instruction</Label>
-        <Textarea
-          id="extract-instruction"
-          className="mt-1 text-xs"
-          rows={3}
-          value={(node.data.instruction as string) || ''}
-          onChange={(e) => updateData('instruction', e.target.value || undefined)}
-          placeholder="Leave empty to use the built-in extraction instruction"
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          The brief has to come back in the structured format this node parses. Replace the
-          built-in instruction only if the replacement still asks for that format — a brief
-          that does not parse fails the node.
-        </p>
-      </div>
+      <StepAdvanced node={node}>
+        <div>
+          <Label htmlFor="extract-instruction">Instruction</Label>
+          <Textarea
+            id="extract-instruction"
+            className="mt-1 text-xs"
+            rows={3}
+            value={(node.data.instruction as string) || ''}
+            onChange={(e) => updateData('instruction', e.target.value || undefined)}
+            placeholder="Empty: the built-in instruction"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            The brief has to come back in the format this step reads. Replace the built-in instruction only with one that still asks for it; a brief that does not
+            parse fails the step.
+          </p>
+        </div>
+      </StepAdvanced>
     </div>
   )
 }
 
-// --- Decision Config ---
+// --- Decision ---
 
 interface DecisionOption {
   id: string
@@ -1253,18 +1111,13 @@ interface DecisionQuestion {
   optionsOrderPolicy?: 'asis' | 'permute2' | 'prior_debias'
 }
 
-// `boolean` is a contract type but the node refuses it: a boolean question
-// declares no options, so it has no abstain edge and the threshold protects
-// nothing. It is offerable only on a node that already carries it, so an
-// imported graph can be read and corrected rather than silently failing.
+// Only what the step runs. A saved graph can carry a `boolean` question or
+// a debiasing order policy the step refuses at run time; neither is offered
+// as a choice, and a step that carries one says so and offers the fix.
 const DECISION_TYPES = [
-  { value: 'choice', label: 'Choice - pick one declared option' },
-  { value: 'score', label: 'Score - pick one ordered level' },
+  { value: 'choice', label: 'Pick one answer' },
+  { value: 'score', label: 'Pick one level, in order' },
 ] as const
-
-// Same rule: only `asis` is served today, and the node refuses the other two
-// by name rather than quietly serving the declared order.
-const DECISION_ORDER_POLICIES = [{ value: 'asis', label: 'As written' }] as const
 
 function DecisionConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: UpdateDataFn; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
   const question = ((node.data.question as DecisionQuestion) || {}) as DecisionQuestion
@@ -1302,49 +1155,12 @@ function DecisionConfig({ node, updateData, onUpdateNode }: { node: Node; update
 
   return (
     <div className="space-y-3">
-      {/* The decide call takes its model like a Model Call node does:
+      {/* The decide call takes its model like a model call does:
           role, pinned provider, routing policy, then the org default. */}
       <NodeModelField node={node} idPrefix="decision" onUpdateNode={onUpdateNode} />
-      <div>
-        <Label htmlFor="decision-question-id">Question ID</Label>
-        <Input
-          id="decision-question-id"
-          className="mt-1 font-mono text-xs"
-          value={question.id || ''}
-          onChange={(e) => patchQuestion({ id: e.target.value })}
-          placeholder="decision"
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          Answers come back keyed by this id.
-        </p>
-      </div>
 
       <div>
-        <Label htmlFor="decision-type">Question type</Label>
-        <Select value={type} onValueChange={(v) => patchQuestion({ type: v as DecisionQuestion['type'] })}>
-          <SelectTrigger id="decision-type" className="mt-1">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {DECISION_TYPES.map((t) => (
-              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-            ))}
-            {isBoolean && (
-              <SelectItem value="boolean">Boolean - refused by this node</SelectItem>
-            )}
-          </SelectContent>
-        </Select>
-        {isBoolean && (
-          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-            This node refuses a boolean question at run time: it declares no options, so it has
-            no abstain edge and no threshold to clear. Ask it as a choice with yes / no /
-            abstain options instead.
-          </p>
-        )}
-      </div>
-
-      <div>
-        <Label htmlFor="decision-prompt">Prompt</Label>
+        <Label htmlFor="decision-prompt">Question</Label>
         <Textarea
           id="decision-prompt"
           className="mt-1 text-xs"
@@ -1353,23 +1169,26 @@ function DecisionConfig({ node, updateData, onUpdateNode }: { node: Node; update
           onChange={(e) => patchQuestion({ prompt: e.target.value })}
           placeholder="Does this ticket describe a billing problem?"
         />
-        <p className="text-xs text-muted-foreground mt-1">
-          The question asked of the state wired into this node. It is answered with a
-          distribution over the options below, not with prose.
-        </p>
+        <p className="text-xs text-muted-foreground mt-1">Asked about what is wired into this step, and answered with one of the answers below.</p>
       </div>
+
+      {isBoolean && (
+        <p className="text-xs text-amber-600 dark:text-amber-400" data-testid="decision-boolean">
+          This step cannot run a yes-or-no question: it has no answer for &ldquo;cannot tell&rdquo;. Under Advanced, make it pick one answer, with yes, no and a
+          &ldquo;cannot tell&rdquo; answer.
+        </p>
+      )}
 
       <div>
         <div className="flex items-center justify-between">
-          <Label>Options</Label>
+          <Label>Answers</Label>
           <span className="text-xs text-muted-foreground">{options.length}</span>
         </div>
 
         {abstainCount === 0 && (
           <p className="text-xs text-muted-foreground mt-1">
-            No abstain option. Every choice question needs one — without it the node cannot
-            answer "the state does not say" and returns its best-scoring wrong option
-            instead.
+            Mark one answer as &ldquo;cannot tell&rdquo;. Without it the step cannot say the state does not answer the question, and hands on its best wrong
+            guess instead.
           </p>
         )}
 
@@ -1377,116 +1196,105 @@ function DecisionConfig({ node, updateData, onUpdateNode }: { node: Node; update
           {options.map((option, i) => (
             <div key={i} className="rounded-lg border p-2 space-y-2 bg-background">
               <div className="flex items-center gap-1">
-                <Input
-                  className="text-xs font-mono"
-                  aria-label={`Option ${i + 1} id`}
-                  placeholder="option id"
-                  value={option.id || ''}
-                  onChange={(e) => patchOption(i, { id: e.target.value })}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  aria-label={`Remove option ${i + 1}`}
-                  onClick={() => removeOption(i)}
-                >
+                <Input className="text-xs font-mono" aria-label={`Answer ${i + 1}`} placeholder="answer" value={option.id || ''} onChange={(e) => patchOption(i, { id: e.target.value })} />
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label={`Remove answer ${i + 1}`} onClick={() => removeOption(i)}>
                   <X className="h-3 w-3" />
                 </Button>
               </div>
 
               <Input
                 className="text-xs"
-                aria-label={`Option ${i + 1} description`}
-                placeholder="what this option means (optional)"
+                aria-label={`Answer ${i + 1} meaning`}
+                placeholder="what this answer means (optional)"
                 value={option.description || ''}
                 onChange={(e) => patchOption(i, { description: e.target.value || undefined })}
               />
 
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id={`decision-abstain-${i}`}
-                    aria-label={`Option ${i + 1} is the abstain option`}
-                    checked={option.abstain === true}
-                    onCheckedChange={(checked) =>
-                      checked ? markAbstain(i) : patchOption(i, { abstain: undefined })
-                    }
-                  />
-                  <Label htmlFor={`decision-abstain-${i}`} className="text-xs font-normal">
-                    Abstain
-                  </Label>
-                </div>
-
-                {option.abstain !== true && (
-                  <div className="flex items-center gap-1">
-                    <Label
-                      htmlFor={`decision-threshold-${i}`}
-                      className="text-xs font-normal text-muted-foreground"
-                    >
-                      Threshold
-                    </Label>
-                    <Input
-                      id={`decision-threshold-${i}`}
-                      className="text-xs w-20"
-                      type="number"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      aria-label={`Option ${i + 1} threshold`}
-                      value={
-                        typeof thresholds[option.id] === 'number' ? String(thresholds[option.id]) : ''
-                      }
-                      onChange={(e) => setThreshold(option.id, e.target.value)}
-                    />
-                  </div>
-                )}
+              <div className="flex items-center gap-2">
+                <Switch
+                  id={`decision-abstain-${i}`}
+                  aria-label={`Answer ${i + 1} means cannot tell`}
+                  checked={option.abstain === true}
+                  onCheckedChange={(checked) => (checked ? markAbstain(i) : patchOption(i, { abstain: undefined }))}
+                />
+                <Label htmlFor={`decision-abstain-${i}`} className="text-xs font-normal">
+                  Cannot tell
+                </Label>
               </div>
             </div>
           ))}
 
           <Button variant="outline" size="sm" className="w-full" onClick={addOption}>
-            Add option
+            Add answer
           </Button>
         </div>
       </div>
 
-      <div>
-        <Label htmlFor="decision-order-policy">Option order</Label>
-        <Select
-          value={orderPolicy}
-          onValueChange={(v) => patchQuestion({ optionsOrderPolicy: v as DecisionQuestion['optionsOrderPolicy'] })}
-        >
-          <SelectTrigger id="decision-order-policy" className="mt-1">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {DECISION_ORDER_POLICIES.map((p) => (
-              <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-            ))}
-            {unservedOrderPolicy && (
-              <SelectItem value={orderPolicy}>{orderPolicy} - refused by this node</SelectItem>
-            )}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground mt-1">
-          Where an option sits in the prompt moves the answer on its own, so the order they
-          happen to be written in is a confound. Only <code>asis</code> is served today.
-        </p>
-        {unservedOrderPolicy && (
-          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-            This node refuses <code>{orderPolicy}</code> at run time rather than quietly serving
-            the declared order, because a caller who asked for the order to be debiased cannot
-            tell from the distribution that it was not.
-          </p>
-        )}
-      </div>
-
       <p className="text-xs text-muted-foreground">
-        The node leaves by the edge of the winning option. An answer that scores below that
-        option's threshold leaves by <code>abstain</code> instead, so a low-confidence guess
-        is never handed downstream as a decision.
+        The step leaves by the edge of the winning answer. An answer below its bar leaves by the &ldquo;cannot tell&rdquo; edge instead, so a weak guess is never
+        handed on as a decision.
       </p>
+
+      <StepAdvanced node={node}>
+        <div>
+          <Label htmlFor="decision-type">Kind of question</Label>
+          <Select value={isBoolean ? '' : type} onValueChange={(v) => patchQuestion({ type: v as DecisionQuestion['type'] })}>
+            <SelectTrigger id="decision-type" className="mt-1">
+              <SelectValue placeholder="Pick a kind" />
+            </SelectTrigger>
+            <SelectContent>
+              {DECISION_TYPES.map((t) => (
+                <SelectItem key={t.value} value={t.value}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {options.some((o) => o.abstain !== true) && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">How sure it must be</p>
+            <p className="text-xs text-muted-foreground">From 0 to 1, per answer. Below it, the step leaves by &ldquo;cannot tell&rdquo;. Empty: no bar.</p>
+            {options.map((option, i) =>
+              option.abstain === true ? null : (
+                <div key={i} className="flex items-center justify-between gap-2">
+                  <Label htmlFor={`decision-threshold-${i}`} className="text-xs font-normal font-mono">
+                    {option.id || `Answer ${i + 1}`}
+                  </Label>
+                  <Input
+                    id={`decision-threshold-${i}`}
+                    className="text-xs w-20"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    aria-label={`Answer ${i + 1} bar`}
+                    value={typeof thresholds[option.id] === 'number' ? String(thresholds[option.id]) : ''}
+                    onChange={(e) => setThreshold(option.id, e.target.value)}
+                  />
+                </div>
+              ),
+            )}
+          </div>
+        )}
+
+        <div>
+          <Label htmlFor="decision-question-id">Answers come back under</Label>
+          <Input id="decision-question-id" className="mt-1 font-mono text-xs" value={question.id || ''} onChange={(e) => patchQuestion({ id: e.target.value })} placeholder="decision" />
+        </div>
+
+        {unservedOrderPolicy && (
+          <div className="space-y-2" data-testid="decision-order-policy">
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              This step is set to reorder its answers ({orderPolicy}), which it does not do yet, so it would refuse to run. It asks them in the order written.
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={() => patchQuestion({ optionsOrderPolicy: 'asis' })}>
+              Use the written order
+            </Button>
+          </div>
+        )}
+      </StepAdvanced>
     </div>
   )
 }
