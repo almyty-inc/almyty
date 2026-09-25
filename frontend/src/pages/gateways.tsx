@@ -20,6 +20,7 @@ import { DataTable, createActionsColumn, createSortableColumn } from '@/componen
 import type { ColumnDef } from '@tanstack/react-table'
 
 import { gatewaysApi } from '@/lib/api'
+import { gatewaysQuery } from '@/lib/list-queries'
 import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
@@ -57,13 +58,11 @@ export function GatewaysPage() {
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
 
   const { data: gatewaysData, isLoading, isError, error: gatewaysError, refetch: refetchGateways } = useQuery({
-    queryKey: ['gateways', currentOrganization?.id],
-    queryFn: () => gatewaysApi.getAll(),
+    ...gatewaysQuery(currentOrganization?.id),
     enabled: !!currentOrganization,
   })
 
-  const gatewaysExtracted = gatewaysData?.gateways || []
-  const gateways = Array.isArray(gatewaysExtracted) ? gatewaysExtracted : []
+  const gateways = gatewaysData?.items ?? []
 
   // Gateways is the protocol page: MCP, A2A, ACP, UTCP, Skills and the
   // OpenAI-compatible endpoint. Messaging platforms are reached through

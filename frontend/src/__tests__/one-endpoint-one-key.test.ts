@@ -41,8 +41,10 @@ describe('tool lists share one key prefix', () => {
   it('the builder picker and the gateway assigner read under the same prefix', () => {
     expect(read('pages/agent-builder.tsx')).toContain("queryKey: ['tools', currentOrganization?.id, 'all']")
     // The assigner lives on the gateway's own page now (the list page's
-    // sheet is gone); its key sits under the ['tools'] prefix too.
-    expect(read('pages/gateway-detail.tsx')).toContain("queryKey: ['tools', currentOrganization?.id]")
+    // sheet is gone); it reads the shared toolsQuery, whose key sits under
+    // the ['tools'] prefix too.
+    expect(read('pages/gateway-detail.tsx')).toContain('...toolsQuery(currentOrganization?.id)')
+    expect(read('lib/list-queries.ts')).toContain("queryKey: ['tools', organizationId]")
   })
 
   it('the tools page invalidates the prefix that covers all of them', () => {

@@ -1124,6 +1124,33 @@
       "sha256": "44cc16af94a40f8e2260d0289bb385f90f7c18e51831f73f2281f2588419896a"
     },
     {
+      "id": "settings-approval-policies-enabled",
+      "title": "Business approval policies with an empty policy list",
+      "path": "screenshots/settings-approval-policies-enabled.png",
+      "capturedAt": "2026-09-24T13:56:05.000Z",
+      "status": "current",
+      "sha256": "6a41362debab6895732b1c6a5c31ca05938cda00586a4bc73d4c6e701c306ada",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/hooks/use-entitlement.ts",
+        "frontend/src/hooks/use-billing-plan.ts",
+        "frontend/src/lib/plan-catalog.ts",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
+      "notes": "Observed and visually reviewed in the authorized seeded Business organization. No approval policy was created or changed."
+    },
+    {
       "id": "settings-approval-policies-locked",
       "title": "Approval policies locked without the Business entitlement",
       "path": "screenshots/settings-approval-policies-locked.png",
@@ -1152,6 +1179,55 @@
       "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
     },
     {
+      "id": "settings-approval-policy-new",
+      "title": "New approval policy page with match conditions and sequential steps",
+      "path": "screenshots/settings-approval-policy-new.png",
+      "capturedAt": "2026-09-24T13:57:42.000Z",
+      "status": "current",
+      "sha256": "92a0173c78e6c89c1ca39457aa9df7d2bb1826855011f11a8e2836c43fc0c119",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/approvals/policies/new"
+      },
+      "sources": [
+        "frontend/src/pages/approval-policy.tsx",
+        "frontend/src/components/settings/approval-policy-form.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "8b3d9e8ff058b680216dea80acd42ef044691ab50069a20a39f4209d415276f4",
+      "notes": "Blank creation form opened through New policy and visually reviewed at a taller viewport. No values were submitted and no policy was created."
+    },
+    {
+      "id": "settings-audit-streams-enabled",
+      "title": "Business audit streaming with target configuration unlocked",
+      "path": "screenshots/settings-audit-streams-enabled.png",
+      "capturedAt": "2026-09-24T13:58:57.000Z",
+      "status": "current",
+      "sha256": "3e6215ebd1c8b4ea3b6635f5335959599c987c8f42ca9c1fd1198cc00e21a2d0",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/audit-streams"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/hooks/use-entitlement.ts",
+        "frontend/src/hooks/use-billing-plan.ts",
+        "frontend/src/lib/plan-catalog.ts",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
+      "notes": "Observed and visually reviewed the empty target configuration form. The token is blank; no stream was registered and no audit data was sent externally."
+    },
+    {
       "id": "settings-audit-streams-locked",
       "title": "Audit streaming locked without the Business entitlement",
       "path": "screenshots/settings-audit-streams-locked.png",
@@ -1178,6 +1254,33 @@
       ],
       "sourceDigest": "5205d93a732e7602134bb1c7e368b5423276c8ffbeed52b3cb9bf34ba8119b39",
       "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
+    },
+    {
+      "id": "settings-compliance-enabled",
+      "title": "Business compliance policy defaults and posture report",
+      "path": "screenshots/settings-compliance-enabled.png",
+      "capturedAt": "2026-09-24T13:58:20.000Z",
+      "status": "current",
+      "sha256": "a35683471f7513e857a4c15dba6824ec16f9767910266c21ee5fd1572597bcf6",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/compliance"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/hooks/use-entitlement.ts",
+        "frontend/src/hooks/use-billing-plan.ts",
+        "frontend/src/lib/plan-catalog.ts",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
+      "notes": "Observed and visually reviewed secure-default policy and loaded posture report. No policy or guardrail settings were changed."
     },
     {
       "id": "settings-compliance-locked",
@@ -1259,6 +1362,33 @@
       "notes": "Contains only the seeded Ava Chen demo identity. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
+      "id": "settings-rbac-enabled",
+      "title": "Business Roles settings with custom roles unlocked",
+      "path": "screenshots/settings-rbac-enabled.png",
+      "capturedAt": "2026-09-24T13:54:37.000Z",
+      "status": "current",
+      "sha256": "1f5c5caf9be493f2281f762601823e8a4e05a45868871e56fb59cc8c89eb940e",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/rbac"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/hooks/use-entitlement.ts",
+        "frontend/src/hooks/use-billing-plan.ts",
+        "frontend/src/lib/plan-catalog.ts",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
+      "notes": "Observed and visually reviewed in the authorized seeded Business organization. Custom role controls are unlocked; no role or access policy was created. Existing locked-state evidence is separate."
+    },
+    {
       "id": "settings-rbac-locked",
       "title": "Advanced RBAC locked without the Business entitlement",
       "path": "screenshots/settings-rbac-locked.png",
@@ -1287,6 +1417,60 @@
       "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
     },
     {
+      "id": "settings-rbac-new-policy",
+      "title": "New access policy inline form on an entitled Business organization",
+      "path": "screenshots/settings-rbac-new-policy.png",
+      "capturedAt": "2026-09-24T18:44:29.595Z",
+      "status": "current",
+      "sha256": "e5ceb39e432e9a6eb9bf15229b2650bf05bec6a9ba1799b9e0372df406b59d3f",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/rbac"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/hooks/use-entitlement.ts",
+        "frontend/src/hooks/use-billing-plan.ts",
+        "frontend/src/lib/plan-catalog.ts",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
+      "notes": "Visually reviewed actual staging capture on the authorized seeded Business fixture. Scrolled to show the complete unsaved form and empty policies list. The form has no condition editor; attribute conditions require the API. No policy was submitted and no permissions or billing were changed."
+    },
+    {
+      "id": "settings-rbac-new-role",
+      "title": "Inline custom role creation with permission strings",
+      "path": "screenshots/settings-rbac-new-role.png",
+      "capturedAt": "2026-09-24T14:01:00.000Z",
+      "status": "current",
+      "sha256": "0f4730525c5db0bcc998aef4ed7c611a67e32fa857361531095abc8ded192b91",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/rbac"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/hooks/use-entitlement.ts",
+        "frontend/src/hooks/use-billing-plan.ts",
+        "frontend/src/lib/plan-catalog.ts",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
+      "notes": "Observed and visually reviewed the blank New custom role inline form. Displayed examples are placeholders; no role was created, assigned or granted."
+    },
+    {
       "id": "settings-security",
       "title": "Security settings with password form and session limitations",
       "path": "screenshots/settings-security.png",
@@ -1311,6 +1495,33 @@
       ],
       "sourceDigest": "611bbc6250da25666fa9c084e0f16e10bbf21a899b2f885985c220a4245b2987",
       "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved. Dependency review additionally records the directly imported settings tab and plan indicator; original pixels and capture time preserved."
+    },
+    {
+      "id": "settings-sso-enabled",
+      "title": "Business SSO and SCIM configuration controls",
+      "path": "screenshots/settings-sso-enabled.png",
+      "capturedAt": "2026-09-24T13:59:53.000Z",
+      "status": "current",
+      "sha256": "8d9c9564023b2d1d256df93a6368d5451ea4f984dfab421fe744c13a8764bd8a",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/sso"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/hooks/use-entitlement.ts",
+        "frontend/src/hooks/use-billing-plan.ts",
+        "frontend/src/lib/plan-catalog.ts",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
+      "notes": "Observed and visually reviewed SAML configuration and SCIM provisioning controls in the authorized seeded Business organization. SSO remains disabled, fields are defaults/placeholders, and no SCIM token was generated. The displayed SCIM address belongs to the staging capture environment, not the public documentation base URL."
     },
     {
       "id": "settings-sso-locked",

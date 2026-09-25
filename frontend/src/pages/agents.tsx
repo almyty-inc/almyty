@@ -29,16 +29,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { PageIntro } from '@/components/onboarding/page-intro'
 import { QueryError } from '@/components/ui/query-error'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,6 +38,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { agentsApi, externalAgentsApi } from '@/lib/api'
+import { agentsQuery } from '@/lib/list-queries'
 import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
@@ -83,8 +75,7 @@ export function AgentsPage() {
   const { currentOrganization } = useOrganizationStore()
   const { success, error: errorNotif } = useNotifications()
 
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null)
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showTemplates, setShowTemplates] = useState(true)
@@ -93,12 +84,7 @@ export function AgentsPage() {
 
   // Fetch agents
   const { data: agentsData, isLoading, isError, error: agentsError, refetch: refetchAgents } = useQuery({
-    queryKey: ['agents', currentOrganization?.id],
-    queryFn: async () => {
-      const d = await agentsApi.getAll()
-      const result = d?.agents || (Array.isArray(d) ? d : [])
-      return Array.isArray(result) ? result : []
-    },
+    ...agentsQuery(currentOrganization?.id),
     enabled: !!currentOrganization,
   })
 
@@ -163,8 +149,6 @@ export function AgentsPage() {
       queryClient.removeQueries({ queryKey: ['agent', agentId] })
       queryClient.removeQueries({ queryKey: ['entity-versions', 'Agent', agentId] })
       queryClient.removeQueries({ queryKey: ['agent-audit-log', agentId] })
-      setDeleteDialogOpen(false)
-      setAgentToDelete(null)
     },
     onError: (err: any) => {
       errorNotif('Failed to delete agent', getApiErrorMessage(err, 'Please try again.'))
@@ -447,9 +431,14 @@ export function AgentsPage() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
-                              onClick={() => {
-                                setAgentToDelete(agent)
-                                setDeleteDialogOpen(true)
+                              onClick={async () => {
+                                const ok = await confirm({
+                                  title: 'Delete agent?',
+                                  description: `This will permanently delete "${agent.name}" and all its execution history. This action cannot be undone.`,
+                                  confirmLabel: 'Delete agent',
+                                  destructive: true,
+                                })
+                                if (ok) deleteAgentMutation.mutate(agent.id)
                               }}
                             >
                               <Trash2 className="h-4 w-4 mr-2" />
@@ -506,30 +495,7 @@ export function AgentsPage() {
         </>
       )}
 
-      {/* Delete Agent Confirmation */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete agent?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete "{agentToDelete?.name}" and all its execution history. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (agentToDelete) {
-                  deleteAgentMutation.mutate(agentToDelete.id)
-                }
-              }}
-              variant="destructive"
-            >
-              Delete agent
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {confirmDialog}
     </div>
   )
 }
