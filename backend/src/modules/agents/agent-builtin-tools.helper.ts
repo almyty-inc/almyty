@@ -284,6 +284,8 @@ export class AgentBuiltInToolsHelper {
             toolCallId: parameters._toolCallId ?? null,
             reason: parameters.reason || 'agent requested approval',
             payload: parameters.payload ?? null,
+            // A run through a gateway asks in its gateway's scope.
+            principal: principalOfRun(run),
           });
           run.status = AgentRunStatus.WAITING_APPROVAL;
           return {

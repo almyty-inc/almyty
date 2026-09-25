@@ -16,6 +16,12 @@ import { Tool, ToolStatus, ToolType } from '../../entities/tool.entity';
 import { Credential, CredentialType } from '../../entities/credential.entity';
 import { Api, ApiType } from '../../entities/api.entity';
 import { McpSource, McpSourceStatus } from '../../entities/mcp-source.entity';
+import { ConnectionGrant } from '../../entities/connection-grant.entity';
+import { Agent } from '../../entities/agent.entity';
+import { Workspace } from '../../entities/workspace.entity';
+import { SpendBudget } from '../../entities/spend-budget.entity';
+import { GrantsService } from '../../modules/connections/grants/grants.service';
+import { GrantsUsePolicy } from '../../modules/connections/grants/grants-use.policy';
 
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import {
@@ -375,6 +381,89 @@ describeIfDb('the run principal decides team scope on the execution path (real P
         }
         expect(callTool).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  // ── 3. grants and org governance see the principal ────────────────
+
+  describe('the grants policy and org governance judge a gateway run as the gateway', () => {
+    let grants: GrantsService;
+    let governed: CredentialRefResolver;
+    let beforeUse: jest.Mock;
+    let orgConnection: Credential;
+    let teamConnection: Credential;
+    let budgetId: string;
+    const denied = { response: { code: 'CONNECTION_NOT_GRANTED' } };
+    const use = (connection: Credential, principal: ExecutionPrincipal | null, context: Record<string, string> = {}) =>
+      governed.resolve(organizationId, connection.id, { principal, context: { purpose: 'llm_call', ...context } as any });
+
+    beforeAll(async () => {
+      const audit = { log: jest.fn() } as any;
+      grants = new GrantsService(
+        repo(ConnectionGrant), repo(Credential), repo(UserOrganization), repo(UserTeam), repo(Team),
+        repo(Agent), repo(Workspace), repo(SpendBudget), audit,
+      );
+      beforeUse = jest.fn().mockResolvedValue(undefined);
+      governed = new CredentialRefResolver(
+        repo(Credential), makeEnvelopeCryptoMock(), new GrantsUsePolicy(grants), { beforeConnect: jest.fn(), beforeUse } as any, gate,
+      );
+      const base = { organizationId, isActive: true, type: CredentialType.API_KEY, connectorKey: 'openai' };
+      orgConnection = await insert(Credential, { ...base, name: 'Org OpenAI', config: { apiKey: 'sk-org' }, visibility: 'org', teamId: null, ownerUserId: null });
+      teamConnection = await insert(Credential, { ...base, name: 'Payments OpenAI conn', config: { apiKey: 'sk-pay' }, visibility: 'team', teamId, ownerUserId: null });
+      budgetId = (await insert(SpendBudget, { organizationId, limitCents: 100 }) as any).id;
+    });
+
+    beforeEach(() => beforeUse.mockClear());
+
+    it('a gateway with no grant is refused an org connection; it is not the system', async () => {
+      for (const principal of [orgGateway(), paymentsGateway()]) {
+        await expect(use(orgConnection, principal)).rejects.toMatchObject(denied);
+      }
+      // A resolve with nobody behind it is still the system path.
+      await expect(use(orgConnection, null)).resolves.toBeDefined();
+      // An org admin holds connections:manage; a member does not.
+      await expect(use(orgConnection, as('admin'))).resolves.toBeDefined();
+      await expect(use(orgConnection, as('outsider'))).rejects.toMatchObject(denied);
+    });
+
+    it("a team grant reaches the team's gateway (as its team), and no other gateway", async () => {
+      await insert(ConnectionGrant, { organizationId, connectionId: orgConnection.id, principalType: 'team', principalId: teamId, permission: 'use', budgetId });
+      grants.invalidate(orgConnection.id);
+      await expect(use(orgConnection, paymentsGateway())).resolves.toBeDefined();
+      await expect(use(orgConnection, as('teammate'))).resolves.toBeDefined();
+      for (const principal of [orgGateway(), otherTeamGateway(), as('outsider')]) {
+        await expect(use(orgConnection, principal)).rejects.toMatchObject(denied);
+      }
+    });
+
+    it('an agent grant reaches any gateway running that agent', async () => {
+      const agentId = '00000000-0000-4000-8000-00000000a9e7';
+      await insert(ConnectionGrant, { organizationId, connectionId: teamConnection.id, principalType: 'agent', principalId: agentId, permission: 'use' });
+      grants.invalidate(teamConnection.id);
+      await expect(use(teamConnection, paymentsGateway(), { resourceType: 'agent', resourceId: agentId })).resolves.toBeDefined();
+      // Without the agent's grant: refused. A gateway holds no connections:read,
+      // so a team connection it holds no grant on reads as missing.
+      await expect(use(teamConnection, paymentsGateway())).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
+      // The team rule still comes first: another team's gateway does not see it at all.
+      await expect(use(teamConnection, otherTeamGateway(), { resourceType: 'agent', resourceId: agentId })).rejects.toMatchObject(notFound);
+    });
+
+    it('governance receives the gateway, its team, and the grant (with its budget) that allowed the use', async () => {
+      await use(orgConnection, paymentsGateway());
+      expect(beforeUse).toHaveBeenCalledTimes(1);
+      const [org, connection, principal, context, decision] = beforeUse.mock.calls[0];
+      expect(org).toBe(organizationId);
+      expect(connection.id).toBe(orgConnection.id);
+      expect(principal).toMatchObject({ userId: undefined, gatewayId: (paymentsGateway() as any).gatewayId, teamIds: [teamId] });
+      expect(context).toMatchObject({ purpose: 'llm_call', principalKinds: ['team'] });
+      expect(decision).toMatchObject({ via: 'grant', grant: { principalType: 'team', principalId: teamId, budgetId } });
+
+      beforeUse.mockClear();
+      await use(orgConnection, as('teammate'));
+      const [, , userPrincipalSeen, userContext] = beforeUse.mock.calls[0];
+      expect(userPrincipalSeen).toMatchObject({ userId: users.teammate });
+      expect(userPrincipalSeen.gatewayId).toBeUndefined();
+      expect(userContext.principalKinds).toBeUndefined();
     });
   });
 });
