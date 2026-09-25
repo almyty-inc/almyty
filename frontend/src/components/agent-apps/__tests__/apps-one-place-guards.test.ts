@@ -48,6 +48,8 @@ function labels(source: string): string[] {
   for (const m of source.matchAll(/\blabel(?:=|:\s*)["']([^"'\n{}]+)["']/g)) out.push(m[1])
   // Attributes may hold arrow functions, so `=>` does not end the tag.
   for (const m of source.matchAll(/<(Button|TabsTrigger|CardTitle|Label|h[1-4])\b(?:=>|[^>])*>\s*([^<{]+?)\s*<\//g)) out.push(m[2])
+  // A link's words, also inside a Button asChild, after any icon.
+  for (const m of source.matchAll(/<Link\b(?:=>|[^>])*>(?:\s*<[A-Z]\w*\b[^>]*\/>)?\s*([^<{]+?)\s*</g)) out.push(m[1])
   return out.map((s) => s.trim()).filter((s) => /[A-Za-z]/.test(s))
 }
 
