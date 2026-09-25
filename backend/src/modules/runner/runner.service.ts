@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, EntityManager } from 'typeorm';
 
@@ -13,6 +13,7 @@ import {
   normaliseVisibility,
 } from '../../common/authorization/access-policy.service';
 import { nameTaken } from '../../common/authorization/private-visibility';
+import { assertManageable } from '../../common/authorization/read-rule';
 
 /**
  * Runner ids are uuids. Checked before an id that arrived over the wire
@@ -619,13 +620,7 @@ export class RunnerService {
    */
   private async loadManageable(runnerId: string, userId: string, organizationId: string): Promise<Runner> {
     const runner = await this.runners.findOne({ where: { id: runnerId, organizationId } });
-    if (!runner) throw new NotFoundException('runner not found');
-    if (runner.ownerUserId === userId) return runner;
-    const read = await this.accessPolicy.canAccess({ id: userId }, runner, 'read');
-    if (!read.allowed) throw new NotFoundException('runner not found');
-    const manage = await this.accessPolicy.canAccess({ id: userId }, runner, 'manage');
-    if (!manage.allowed) throw new ForbiddenException(manage.reason);
-    return runner;
+    return assertManageable(this.accessPolicy, userId, runner, 'runner', { ownerManages: true });
   }
 
   private assertName(name: string | undefined): void {

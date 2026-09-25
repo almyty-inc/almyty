@@ -38,7 +38,7 @@ export class ChannelInstallationsController {
   @ApiOperation({ summary: 'List workspace installations for this channel gateway' })
   async listInstallations(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     const orgId = req.user.currentOrganizationId;
-    const gateway = await this.gatewaysService.getGateway(id, orgId, false);
+    const gateway = await this.gatewaysService.getGateway(id, orgId, false, { id: req.user.sub || req.user.id });
     if (!gateway) throw new NotFoundException('Gateway not found');
     const installations = await this.installationService.listForGateway(gateway.id);
     return { success: true, data: installations };
@@ -53,7 +53,7 @@ export class ChannelInstallationsController {
     @Param('installationId', ParseUUIDPipe) installationId: string,
   ) {
     const orgId = req.user.currentOrganizationId;
-    const gateway = await this.gatewaysService.getGateway(id, orgId, false);
+    const gateway = await this.gatewaysService.getGateway(id, orgId, false, { id: req.user.sub || req.user.id });
     if (!gateway) throw new NotFoundException('Gateway not found');
     const installation = await this.installationService.revoke(gateway.id, installationId);
     return { success: true, data: installation };

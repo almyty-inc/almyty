@@ -2,7 +2,7 @@ import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentReadinessService } from './agent-readiness.service';
 import { AgentTemplate, getAgentTemplates } from './agent-templates';
 import { EstimatedCost, estimateAgentCost } from './agent-cost-estimator';
-import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { validateUrl } from '../../common/security/url-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -18,9 +18,9 @@ import { AgentModels, agentModelsProblems, syncMainRole } from './autonomous-mod
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
 import {
   assertAttachable,
-  assertNotOthersPrivate,
   resolveVisibilityWrite,
 } from '../../common/authorization/private-visibility';
+import { assertManageable, canRead } from '../../common/authorization/read-rule';
 import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { collectAgentReferences, collectProviderReferences } from './agent-references';
 import { LlmProvider } from '../../entities/llm-provider.entity';
@@ -484,21 +484,21 @@ export class AgentsService {
   }
 
   /**
-   * Fetch an agent by id within an organization. With a `caller`,
-   * another member's private agent is "not found" (404, never 403, so
-   * its existence is not confirmed). System paths that act on an agent
-   * as its owner (scheduler, heartbeat, runtime) call without a caller.
+   * Fetch an agent by id within an organization. With a `caller`, an
+   * agent they may not read (read-rule.ts: another member's private agent,
+   * a team agent outside their teams) is "not found" -- the same 404 a
+   * missing id gets, never a 403, so its existence is not confirmed. A
+   * `null` caller (nobody) reads organization-wide agents only. System
+   * paths that act on an agent as its owner (scheduler, heartbeat,
+   * runtime) call without a caller.
    */
   async getAgent(id: string, organizationId: string, caller?: { id: string } | null): Promise<Agent> {
     const agent = await this.agentRepository.findOne({
       where: { id, organizationId },
     });
 
-    if (!agent) {
+    if (!agent || (caller !== undefined && !(await canRead(this.accessPolicy, caller, agent)))) {
       throw new NotFoundException(`Agent not found: ${id}`);
-    }
-    if (caller !== undefined) {
-      await assertNotOthersPrivate(this.accessPolicy, caller, agent, 'Agent');
     }
 
     return agent;
@@ -622,7 +622,7 @@ export class AgentsService {
 
     // Permission check: admin+ can update any agent, members can only update their own
     if (userId) {
-      await this.checkAgentPermission(agent, organizationId, userId, 'edit_agents');
+      await this.checkAgentPermission(agent, userId);
     }
 
     // Re-validate team scoping if it's being changed on this update.
@@ -755,7 +755,7 @@ export class AgentsService {
 
     // Permission check: admin+ can delete any agent, members can only delete their own
     if (userId) {
-      await this.checkAgentPermission(agent, organizationId, userId, 'delete_agents');
+      await this.checkAgentPermission(agent, userId);
     }
 
     // Log before removal since the agent won't exist after
@@ -775,7 +775,7 @@ export class AgentsService {
 
   async activateAgent(id: string, organizationId: string, userId?: string): Promise<Agent> {
     const agent = await this.getAgent(id, organizationId, userId ? { id: userId } : undefined);
-    if (userId) await this.checkAgentPermission(agent, organizationId, userId, 'edit_agents');
+    if (userId) await this.checkAgentPermission(agent, userId);
     await this.readiness.assertReady(agent, userId);
 
     agent.status = AgentStatus.ACTIVE;
@@ -791,6 +791,7 @@ export class AgentsService {
 
   async deactivateAgent(id: string, organizationId: string, userId?: string): Promise<Agent> {
     const agent = await this.getAgent(id, organizationId, userId ? { id: userId } : undefined);
+    if (userId) await this.checkAgentPermission(agent, userId);
     agent.status = AgentStatus.INACTIVE;
     const saved = await this.agentRepository.save(agent);
     this.logger.log(`[DEACTIVATE_AGENT] Agent deactivated: id=${id}`);
@@ -803,9 +804,9 @@ export class AgentsService {
   }
 
   async getReadiness(id: string, organizationId: string, userId: string) {
+    // Reading the readiness takes reading the agent: getAgent answers an
+    // agent the caller may not read with the not-found a missing one gets.
     const agent = await this.getAgent(id, organizationId, { id: userId });
-    const decision = await this.accessPolicy.canAccess({ id: userId }, agent, 'read');
-    if (!decision.allowed) throw new ForbiddenException(decision.reason);
     return this.readiness.inspect(agent, userId);
   }
 
@@ -856,7 +857,8 @@ export class AgentsService {
   // ── Version Management ──
 
   async saveVersion(agentId: string, organizationId: string, changelog?: string, userId?: string): Promise<void> {
-    const agent = await this.getAgent(agentId, organizationId);
+    const agent = await this.getAgent(agentId, organizationId, userId ? { id: userId } : undefined);
+    if (userId) await this.checkAgentPermission(agent, userId);
     const versions: AgentVersionSnapshot[] = agent.metadata?.versions || [];
     versions.push({
       version: agent.version,
@@ -879,7 +881,8 @@ export class AgentsService {
   }
 
   async rollbackToVersion(agentId: string, organizationId: string, versionIndex: number, userId?: string): Promise<Agent> {
-    const agent = await this.getAgent(agentId, organizationId);
+    const agent = await this.getAgent(agentId, organizationId, userId ? { id: userId } : undefined);
+    if (userId) await this.checkAgentPermission(agent, userId);
     const versions: AgentVersionSnapshot[] = agent.metadata?.versions || [];
     if (versionIndex < 0 || versionIndex >= versions.length) {
       throw new BadRequestException('Invalid version index');
@@ -974,26 +977,13 @@ export class AgentsService {
   }
 
   /**
-   * Check if user has permission to modify an agent.
-   * Creator can always modify their own agent. Otherwise the
-   * AccessPolicyService two-tier rule applies: org owner/admin pass,
-   * team-scoped agents require team lead, others are denied.
+   * The manage gate for an agent (read-rule.ts): an agent the caller may
+   * not read is the not-found a missing agent gets; one they may read but
+   * not manage is a 403. The creator can always modify their own agent;
+   * otherwise org owner/admin pass, team-scoped agents need a team lead.
    */
-  private async checkAgentPermission(
-    agent: Agent,
-    organizationId: string,
-    userId: string,
-    _permission: string,
-  ): Promise<void> {
-    // If the user created the agent, they can always modify it
-    if (agent.createdBy === userId) {
-      return;
-    }
-
-    const decision = await this.accessPolicy.canAccess({ id: userId }, agent, 'manage');
-    if (!decision.allowed) {
-      throw new ForbiddenException(decision.reason);
-    }
+  private async checkAgentPermission(agent: Agent, userId: string): Promise<void> {
+    await assertManageable(this.accessPolicy, userId, agent, 'Agent', { ownerManages: true });
   }
 
   /**

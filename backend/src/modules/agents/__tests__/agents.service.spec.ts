@@ -522,7 +522,9 @@ describe('AgentsService', () => {
         }],
       });
       userRepo.findOne.mockResolvedValue(memberUser);
-      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
+      // Readable, not manageable: the manage decision is the one that says no.
+      accessPolicy.canAccess.mockImplementation(async (_u: any, _r: any, action: string) =>
+        action === 'manage' ? { allowed: false, reason: 'denied' } : { allowed: true, reason: 'ok' });
 
       await expect(service.updateAgent('agent-1', { name: 'Nope' }, 'org-1', 'member-user'))
         .rejects.toThrow(ForbiddenException);
@@ -567,7 +569,9 @@ describe('AgentsService', () => {
         }],
       });
       userRepo.findOne.mockResolvedValue(memberUser);
-      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
+      // Readable, not manageable: the manage decision is the one that says no.
+      accessPolicy.canAccess.mockImplementation(async (_u: any, _r: any, action: string) =>
+        action === 'manage' ? { allowed: false, reason: 'denied' } : { allowed: true, reason: 'ok' });
 
       await expect(service.deleteAgent('agent-1', 'org-1', 'member-user'))
         .rejects.toThrow(ForbiddenException);
@@ -601,7 +605,8 @@ describe('AgentsService', () => {
       accessPolicy.canAccess.mockResolvedValue({ allowed: false, reason: 'Not on this team' });
       const inspect = jest.fn();
       (service as any).readiness = { inspect };
-      await expect(service.getReadiness('agent-1', 'org-1', 'other')).rejects.toThrow(ForbiddenException);
+      // The same 404 a missing agent gets: a 403 would confirm it exists.
+      await expect(service.getReadiness('agent-1', 'org-1', 'other')).rejects.toThrow(NotFoundException);
       expect(inspect).not.toHaveBeenCalled();
     });
 

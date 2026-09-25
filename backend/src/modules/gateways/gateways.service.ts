@@ -22,6 +22,7 @@ import { AccessPolicyService, normaliseVisibility, type ResourceVisibility } fro
 import { ExecutionAccessService, gatewayPrincipal } from '../../common/authorization/execution-access.service';
 import { Agent } from '../../entities/agent.entity';
 import { GATEWAY_NOT_FOUND, PRIVATE_CAPABLE_GATEWAY_TYPES, assertGatewayReadable, gatewayReadableBy } from './private-gateway';
+import { assertManageable } from '../../common/authorization/read-rule';
 import {
   encryptChannelConfigSecrets,
   hasInlineChannelSecret,
@@ -908,11 +909,7 @@ export class GatewaysService {
    * nothing about it.
    */
   private async assertCanManage(gateway: Gateway, userId: string): Promise<void> {
-    await assertGatewayReadable(this.accessPolicy, gateway, userId);
-    const decision = await this.accessPolicy.canAccess({ id: userId }, gateway, 'manage');
-    if (!decision.allowed) {
-      throw new ForbiddenException(decision.reason);
-    }
+    await assertManageable(this.accessPolicy, userId, gateway, 'Gateway');
   }
 
   /**
@@ -1229,12 +1226,14 @@ export class GatewaysService {
   ): Promise<void> {
     const gateway = await this.getGateway(gatewayId, organizationId, false);
 
+    // Authorization first: a gateway the caller may not read is the 404 a
+    // missing one gets, whatever kind it is. Org owner/admin always,
+    // team-scoped requires team lead.
+    await this.assertCanManage(gateway, userId);
+
     if (gateway.isSystem) {
       throw new BadRequestException('System gateways cannot be deleted');
     }
-
-    // Authorization: org owner/admin always, team-scoped requires team lead
-    await this.assertCanManage(gateway, userId);
 
     await this.releaseChannelCredential(gateway);
     await this.gatewayRepository.remove(gateway);

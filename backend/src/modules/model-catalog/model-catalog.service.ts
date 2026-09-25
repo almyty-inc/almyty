@@ -159,7 +159,9 @@ export class ModelCatalogService {
     let providerRow: LlmProvider | null = null;
     if (input.providerId) {
       const provider = await this.providers.findOne({ where: { id: input.providerId, organizationId } });
-      if (!provider) throw new NotFoundException('Provider not found');
+      // A person registering a card on another member's private provider is
+      // told it does not exist, like everywhere else that provider is named.
+      if (!provider || (userId && !providerUsableBy(provider, userId))) throw new NotFoundException('Provider not found');
       providerRow = provider;
       providerType = provider.type;
       checkedProvider = providerChecked(provider);
@@ -563,7 +565,10 @@ export class ModelCatalogService {
   }
 
   async update(organizationId: string, id: string, input: UpdateModelInput, userId?: string): Promise<Model> {
-    const card = await this.get(organizationId, id);
+    // A person (userId) acting on a card served by another member's private
+    // provider gets the not-found a missing card gets; internal callers
+    // (the deployment auto-validation) pass no user.
+    const card = await this.get(organizationId, id, userId);
     const before = { privacyTier: card.privacyTier, region: card.region, status: card.status, pricingOverride: card.pricingOverride };
     if (input.name !== undefined) card.name = input.name;
     if (input.capabilities !== undefined) card.capabilities = input.capabilities ?? {};
@@ -594,7 +599,10 @@ export class ModelCatalogService {
   }
 
   async remove(organizationId: string, id: string, userId?: string): Promise<void> {
-    const card = await this.get(organizationId, id);
+    // A person (userId) acting on a card served by another member's private
+    // provider gets the not-found a missing card gets; internal callers
+    // (the deployment auto-validation) pass no user.
+    const card = await this.get(organizationId, id, userId);
     await this.models.remove(card);
     this.audit(Object.assign(card, { id }), AuditAction.DELETE, userId, {});
   }
@@ -606,7 +614,10 @@ export class ModelCatalogService {
    * says in the audit row who asked, when it was not a person.
    */
   async validate(organizationId: string, id: string, userId?: string, source?: string): Promise<ValidationOutcome> {
-    const card = await this.get(organizationId, id);
+    // A person (userId) acting on a card served by another member's private
+    // provider gets the not-found a missing card gets; internal callers
+    // (the deployment auto-validation) pass no user.
+    const card = await this.get(organizationId, id, userId);
     const provider = await this.router.providerFor(card);
     if (!provider) {
       return this.recordValidation(card, false, 'This model has no callable provider', userId, undefined, source);

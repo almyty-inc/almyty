@@ -26,6 +26,7 @@ import type { Model } from '../../entities/model.entity';
 import { ModelCatalogService } from '../model-catalog/model-catalog.service';
 
 import { AccessPolicyService, normaliseVisibility } from '../../common/authorization/access-policy.service';
+import { assertManageable } from '../../common/authorization/read-rule';
 import { assertProviderUsableBy } from './private-provider';
 import { providerListsModels } from './provider-profile';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
@@ -421,14 +422,10 @@ export class LlmProvidersService {
         throw new NotFoundException('Provider not found');
       }
 
-      // Another user's private provider does not exist for this caller.
-      assertProviderUsableBy(provider, userId);
-
-      // Authorization: org owner/admin always, team-scoped requires team lead
-      const decision = await this.accessPolicy.canAccess({ id: userId }, provider, 'manage');
-      if (!decision.allowed) {
-        throw new ForbiddenException(decision.reason);
-      }
+      // A provider the caller may not read (another member's private one,
+      // a team's they are not on) does not exist for them: 404. Can read it
+      // but not manage it: 403.
+      await assertManageable(this.accessPolicy, userId, provider, 'Provider');
 
       // Re-validate team scoping if it's being changed.
       const updateAnyEarly = updateDto as any;
@@ -649,14 +646,12 @@ export class LlmProvidersService {
     organizationId: string,
     userId: string
   ): Promise<void> {
-    // Another user's private provider is not found, not forbidden.
     const provider = await this.getProvider(providerId, organizationId, false, { id: userId });
 
-    // Authorization: org owner/admin always, team-scoped requires team lead
-    const decision = await this.accessPolicy.canAccess({ id: userId }, provider, 'manage');
-    if (!decision.allowed) {
-      throw new ForbiddenException(decision.reason);
-    }
+    // A provider the caller may not read (another member's private one, a
+    // team's they are not on) is not found, not forbidden. Can read it but
+    // not manage it: 403.
+    await assertManageable(this.accessPolicy, userId, provider, 'Provider');
 
     // Retire the cards while they can still be found by providerId; the
     // FK nulls it on delete. Kept, not deleted: runs reference card ids.

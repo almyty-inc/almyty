@@ -48,7 +48,7 @@ export class ChannelEventsController {
     @Query('limit') limit?: string,
   ) {
     const orgId = req.user.currentOrganizationId;
-    const gateway = await this.gatewaysService.getGateway(id, orgId, false);
+    const gateway = await this.gatewaysService.getGateway(id, orgId, false, { id: req.user.sub || req.user.id });
     if (!gateway) throw new NotFoundException('Gateway not found');
     const events = await this.channelGatewayService.listEventsForGateway(
       gateway.id,
@@ -65,7 +65,7 @@ export class ChannelEventsController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     const orgId = req.user.currentOrganizationId;
-    const gateway = await this.gatewaysService.getGateway(id, orgId, false);
+    const gateway = await this.gatewaysService.getGateway(id, orgId, false, { id: req.user.sub || req.user.id });
     if (!gateway) throw new NotFoundException('Gateway not found');
     const result = await this.channelGatewayService.testConnection(gateway);
     return { success: true, data: result };

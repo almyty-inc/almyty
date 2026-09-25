@@ -26,6 +26,7 @@ import { A2AAgentCardService } from '../a2a/a2a-agent-card.service';
 import { AcpServerService } from '../acp/acp-server.service';
 import { AcpDiscoveryService } from '../acp/acp-discovery.service';
 import { isPrivateGateway } from './private-gateway';
+import { findServableGatewayAgent } from './gateway-servable';
 import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
 import { SkillGeneratorService } from '../tools/skill-generator.service';
 
@@ -389,9 +390,12 @@ export class UnifiedGatewayDelegation {
       action === '.well-known/agent.json' ||
       (action === '' && req.method === 'GET')
     ) {
-      const agent = await this.agentRepository.findOne({
-        where: { id: gateway.agentId, organizationId: organization.id },
-      });
+      // A card is a publication: only an active agent this gateway may
+      // serve has one. A draft, inactive or out-of-scope agent is the
+      // not-found a missing agent gets.
+      const agent = organization.id === gateway.organizationId
+        ? await findServableGatewayAgent(this.agentRepository, gateway)
+        : null;
       if (!agent) {
         throw new HttpException('Agent not found for this A2A gateway', HttpStatus.NOT_FOUND);
       }
@@ -427,9 +431,11 @@ export class UnifiedGatewayDelegation {
     body: any,
   ) {
     if (action === '.well-known/acp') {
-      const agent = await this.agentRepository.findOne({
-        where: { id: gateway.agentId, organizationId: organization.id },
-      });
+      // Only an active agent this gateway may serve has a discovery
+      // document; anything else is the not-found a missing agent gets.
+      const agent = organization.id === gateway.organizationId
+        ? await findServableGatewayAgent(this.agentRepository, gateway)
+        : null;
       if (!agent) {
         throw new HttpException('Agent not found for this ACP gateway', HttpStatus.NOT_FOUND);
       }
