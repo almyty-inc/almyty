@@ -30,8 +30,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * `down()` copies each app's branding back onto its hosted chat. Apps
  * created by step 1 are left in place.
  */
-export class AppOwnsBranding1750812500000 implements MigrationInterface {
-  name = 'AppOwnsBranding1750812500000';
+export class AppOwnsBranding1750812600000 implements MigrationInterface {
+  name = 'AppOwnsBranding1750812600000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

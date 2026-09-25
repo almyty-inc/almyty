@@ -14,7 +14,7 @@ import { hostedChatBlockFor, hostedChatConfigFrom, HOSTED_CHAT_DEFAULTS } from '
  * function the public hosted chat answers with, so "reads branding from
  * the app only" is checked against the code that serves the page.
  */
-const FILE = '1750812500000-AppOwnsBranding.ts';
+const FILE = '1750812600000-AppOwnsBranding.ts';
 
 function statements(which: 'up' | 'down'): string[] {
   const src = readFileSync(join(__dirname, '..', '..', 'migrations', FILE), 'utf8');
