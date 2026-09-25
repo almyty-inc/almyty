@@ -19,6 +19,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, LlmProviderSearchFilters } from './llm-providers.service';
 import { LlmModelsHelper } from './llm-models.helper';
 import { getProviderDisplayName, getProviderDescription, getProviderFeatures, getProviderKeyUrl, getProviderDocsUrl } from './llm-provider-catalog';
+import { providerListsModels } from './provider-profile';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PrivateProviderGuard } from './private-provider.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -465,6 +466,9 @@ export class LlmProvidersController {
       features: getProviderFeatures(type),
       keyUrl: getProviderKeyUrl(type),
       docsUrl: getProviderDocsUrl(type),
+      // False when the vendor serves no model list: connecting it then
+      // needs the model to use (connect answers MODEL_REQUIRED otherwise).
+      listsModels: providerListsModels(type),
     }));
 
     return {

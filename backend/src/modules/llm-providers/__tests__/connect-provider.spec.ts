@@ -29,6 +29,7 @@ import { LlmModelsHelper } from '../llm-models.helper';
 import { DefaultModelResolver } from '../default-model.resolver';
 import { ModelCatalogService } from '../../model-catalog/model-catalog.service';
 import { ModelRouterService } from '../../model-catalog/routing/model-router.service';
+import { providerListsModels } from '../provider-profile';
 
 /**
  * Connect a provider: one request that saves it, checks the key with a real
@@ -43,6 +44,8 @@ const VENDOR_MODELS = [{ id: 'gpt-5' }, { id: 'gpt-5-mini' }, { id: 'o4-mini' }]
 const OTHER_VENDORS: Record<string, Array<{ id: string }>> = {
   anthropic: [{ id: 'claude-sonnet-5' }, { id: 'claude-opus-5' }, { id: 'claude-haiku-5' }],
   groq: [{ id: 'llama-4.1-70b-versatile' }, { id: 'qwen3-32b' }, { id: 'deepseek-r2-distill' }],
+  // Qwen serves no list on this surface.
+  qwen: [],
 };
 
 function vendorRefusal(): Error {
@@ -167,6 +170,40 @@ describe('connect a provider', () => {
     expect(await catalog.list('org-1', { selectable: true })).toEqual([]);
     expect(store.rows).toHaveLength(0);
     expect(audit.logDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('a vendor with no model list asks for the model before anything is saved or called', async () => {
+    const response = await service
+      .connectProvider({ type: LlmProviderType.QWEN, configuration: { apiKey: GOOD_KEY } }, 'org-1', 'user-a')
+      .then(() => ({}) as Record<string, any>, (e: BadRequestException) => e.getResponse() as Record<string, any>);
+
+    expect(response).toMatchObject({ code: 'MODEL_REQUIRED', message: 'Qwen (QwenCloud) does not list its models. Enter the model you want to use.' });
+    expect(providers.rows()).toHaveLength(0);
+    expect(store.rows).toHaveLength(0);
+    // The list the connect page reads says which tiles need that field.
+    expect(providerListsModels(LlmProviderType.QWEN)).toBe(false);
+    expect(providerListsModels(LlmProviderType.VERTEX_AI)).toBe(false);
+    expect(providerListsModels(LlmProviderType.OPENAI)).toBe(true);
+    expect(providerListsModels(LlmProviderType.CUSTOM)).toBe(true);
+  });
+
+  it('a vendor with no model list shows the model the check called, usable', async () => {
+    // A database is slower than a Map: the card for the probed model must
+    // be written before connect reads the list back, not merely soon.
+    const save = models.save.getMockImplementation()!;
+    models.save.mockImplementation(async (entity: any) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return save(entity);
+    });
+    const result = await service.connectProvider(
+      { type: LlmProviderType.QWEN, configuration: { apiKey: GOOD_KEY, model: 'qwen3-max' } },
+      'org-1',
+      'user-a',
+    );
+
+    expect(result.models.map((m) => m.vendorModelId)).toEqual(['qwen3-max']);
+    expect(result.models[0].isSelectable()).toBe(true);
+    expect(models.rows()).toHaveLength(1);
   });
 
   it('a failure that is not the key says it could not connect, not that the key was wrong', async () => {
