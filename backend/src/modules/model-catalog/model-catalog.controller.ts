@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpException, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query, Request, UseGuards, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpException, HttpStatus, Optional, Param, ParseUUIDPipe, Patch, Post, Query, Request, UseGuards, ValidationPipe } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -7,8 +7,13 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { ModelCatalogService } from './model-catalog.service';
 import { ListModelsQueryDto, RegisterModelBodyDto, RoutePreviewBodyDto, SyncModelsBodyDto, UpdateModelBodyDto } from './dto/model-catalog-controller.dto';
 import { ModelRouterService } from './routing/model-router.service';
+import { CatalogWarmupService } from './catalog-warmup.service';
 
-/** Cards in, cards out. Nothing here calls a provider except the validation run, which is the point of it. */
+/**
+ * Cards in, cards out. Nothing here calls a provider except the validation
+ * run, which is the point of it, and the list when it has nothing usable
+ * to show (it syncs the org's providers first, see CatalogWarmupService).
+ */
 @ApiTags('Models')
 @ApiBearerAuth()
 @Controller('models')
@@ -17,6 +22,7 @@ export class ModelCatalogController {
   constructor(
     private readonly catalog: ModelCatalogService,
     private readonly router: ModelRouterService,
+    @Optional() private readonly warmup?: CatalogWarmupService,
   ) {}
 
   private orgId(req: any): string {
@@ -50,7 +56,16 @@ export class ModelCatalogController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'List models' })
   async list(@Request() req: any, @Query(new ValidationPipe({ transform: true })) query: ListModelsQueryDto) {
-    const rows = await this.catalog.list(this.orgId(req), query, req.user?.id ?? null);
+    const organizationId = this.orgId(req);
+    const viewerId = req.user?.id ?? null;
+    let rows = await this.catalog.list(organizationId, query, viewerId);
+    // Nothing usable to show (the Models page and the picker both read
+    // this): sync the providers that should be serving models, waiting a
+    // few seconds for it, instead of answering with an empty list until
+    // the next sweep. Debounced per provider (CatalogWarmupService).
+    if (this.warmup && !rows.some((r) => view(r).selectable) && (await this.warmup.warmOnLoad(organizationId, viewerId, query?.providerId))) {
+      rows = await this.catalog.list(organizationId, query, viewerId);
+    }
     return { success: true, data: rows.map(view) };
   }
 

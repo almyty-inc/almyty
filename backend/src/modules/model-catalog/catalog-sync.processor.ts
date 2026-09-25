@@ -3,6 +3,7 @@ import { Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Job, Queue } from 'bull';
 
 import { ModelCatalogService } from './model-catalog.service';
+import { BootSyncResult, CatalogWarmupService } from './catalog-warmup.service';
 
 export const MODEL_CATALOG_SYNC_QUEUE = 'model-catalog-sync';
 export const MODEL_CATALOG_BACKFILL_JOB = 'backfill';
@@ -19,13 +20,15 @@ const DEFAULT_SWEEP_CRON = '17 */6 * * *';
  * Keeps every organization's model list in step with what its providers
  * serve.
  *
- * At boot, a one-shot backfill imports the list of every active provider
- * that has no models yet. After that a repeatable sweep lists every active
- * provider again (MODEL_CATALOG_SYNC_CRON, default every six hours; `off`
- * disables it), so new models appear and retired ones are marked
- * unavailable on their own. Connecting a provider, changing it and every
- * passing key check sync it too. Both jobs are off under NODE_ENV=test and
- * when MODEL_CATALOG_BACKFILL=off.
+ * At boot, a one-shot job checks the key of every active provider that
+ * has never been synced and imports its list (CatalogWarmupService: a
+ * stable job id so replicas queue it once, and a Postgres advisory lock
+ * so only one instance runs it). After that a repeatable sweep lists
+ * every active provider again (MODEL_CATALOG_SYNC_CRON, default every six
+ * hours; `off` disables it), so new models appear and retired ones are
+ * marked unavailable on their own. Connecting a provider, changing it and
+ * every passing key check sync it too. Both jobs are off under
+ * NODE_ENV=test and when MODEL_CATALOG_BACKFILL=off.
  */
 @Processor(MODEL_CATALOG_SYNC_QUEUE)
 export class CatalogSyncProcessor implements OnApplicationBootstrap {
@@ -34,6 +37,7 @@ export class CatalogSyncProcessor implements OnApplicationBootstrap {
   constructor(
     @InjectQueue(MODEL_CATALOG_SYNC_QUEUE) private readonly queue: Queue,
     private readonly catalog: ModelCatalogService,
+    private readonly warmup: CatalogWarmupService,
   ) {}
 
   isEnabled(): boolean {
@@ -88,21 +92,20 @@ export class CatalogSyncProcessor implements OnApplicationBootstrap {
   }
 
   @Process(MODEL_CATALOG_BACKFILL_JOB)
-  async handleBackfill(_job?: Job): Promise<{ providers: number; synced: number; created: number; failed: number }> {
-    const result = await this.catalog.backfill();
-    this.logger.log(
-      `Model catalog backfill: ${result.synced} of ${result.providers} provider(s) synced, ${result.created} card(s) created, ${result.failed} failed`,
-    );
-    return result;
+  async handleBackfill(_job?: Job): Promise<BootSyncResult> {
+    return this.warmup.syncNeverSynced('boot');
   }
 
   @Process(MODEL_CATALOG_SWEEP_JOB)
-  async handleSweep(_job?: Job): Promise<{ providers: number; synced: number; failed: number; keyRejected: number }> {
+  async handleSweep(_job?: Job): Promise<{ providers: number; synced: number; failed: number; keyRejected: number; neverSynced: BootSyncResult }> {
+    // Providers still never synced (down at boot, or added while the key
+    // check could not pass) get their key check and list first.
+    const neverSynced = await this.warmup.syncNeverSynced('sweep');
     const result = await this.catalog.syncEveryProvider();
     this.logger.log(
       `Model catalog sweep: ${result.synced} of ${result.providers} provider(s) synced, ${result.failed} failed (${result.keyRejected} refused the key)`,
     );
-    return result;
+    return { ...result, neverSynced };
   }
 
   @OnQueueFailed()
