@@ -1100,18 +1100,27 @@ export class GatewaysService {
    * `activate: false` hands the caller a gateway that exists but does
    * not answer yet, for a publish that has its own bookkeeping to
    * finish before the surface goes live.
+   *
+   * `gatewayId` is the gateway the distribution already answers on. It
+   * wins over the endpoint, so a surface whose endpoint is not the
+   * distribution's (one an app took over rather than stood up) is
+   * re-synced rather than joined by a second gateway on the same address.
    */
   async upsertForDistribution(
     dto: CreateGatewayDto,
     organizationId: string,
     userId: string,
-    options: { activate?: boolean } = {},
+    options: { activate?: boolean; gatewayId?: string | null } = {},
   ): Promise<Gateway> {
     const activate = options.activate ?? true;
     const endpoint = dto.endpoint.startsWith('/') ? dto.endpoint : `/${dto.endpoint}`;
-    const existing = await this.gatewayRepository.findOne({
-      where: { endpoint, organizationId },
-    });
+    const existing =
+      (options.gatewayId
+        ? await this.gatewayRepository.findOne({ where: { id: options.gatewayId, organizationId } })
+        : null) ??
+      (await this.gatewayRepository.findOne({
+        where: { endpoint, organizationId },
+      }));
 
     if (!existing) {
       return this.createGateway(
