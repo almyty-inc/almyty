@@ -70,7 +70,7 @@ describe('share tools page', () => {
 
     await waitFor(() => expect(gatewaysApi.create).toHaveBeenCalled())
     expect(vi.mocked(gatewaysApi.create).mock.calls[0][0]).toMatchObject({
-      name: 'listPets', type: 'tools', visibility: 'private', teamId: null, toolIds: ['t1'],
+      name: 'List pets', type: 'tools', visibility: 'private', teamId: null, toolIds: ['t1'],
     })
     await waitFor(() => expect(mockNavigate.mock.calls.at(-1)?.[0]).toBe('/gateways/gw-new'))
   })

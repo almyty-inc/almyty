@@ -40,6 +40,13 @@ describe('share tools reuses the shared pieces', () => {
     expect(form).toMatch(/import \{ Disclosure \} from '@\/components\/ui\/disclosure'/)
   })
 
+  it('picks APIs with the shared choice tiles and names tools for people', () => {
+    expect(form).toMatch(/import \{ ChoiceTile, ChoiceTiles \} from '@\/components\/connect\/service-tiles'/)
+    expect(form).toMatch(/readableToolName/)
+    // No hand-rolled tile button next to the shared one.
+    expect(form).not.toMatch(/<button\b/)
+  })
+
   it('has one Advanced fold in the codebase, not a copy per page', () => {
     const own = all.filter(({ text }) => /function Disclosure\s*\(/.test(text)).map(({ rel }) => rel)
     expect(own).toEqual(['components/ui/disclosure.tsx'])
