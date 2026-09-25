@@ -53,5 +53,7 @@ export interface ImportSchemaOptions {
   fileName?: string;
   description?: string;
   generateTools?: boolean;
+  /** Who is importing: the generated tools' createdBy (null when unknown). */
+  createdBy?: string | null;
 }
 
