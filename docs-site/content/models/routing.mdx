@@ -46,7 +46,7 @@ Selection is pure: the same cards and the same policy always give the same plan.
 
 1. **Filter.** A card is eligible when it is [selectable](/models#support-is-data-not-a-list), its privacy tier is at or below the ceiling, its region is known and allowed, it has every required capability, and its price fits the budget headroom. Each card that fails records a reason (`privacy tier public above ceiling private_cloud`, `region unknown, policy requires one of eu-central`, `lacks tools`, `over the spend limit`, and so on).
 2. **Order.** With a `fallbackChain`, the plan is the chain in the order given. Otherwise `cheapest` sorts by blended feed price (three quarters input, one quarter output, per million tokens), `fastest` by measured p50 latency, and `pinned` moves the pinned card to the front of the price order. Unpriced or unmeasured cards sort last.
-3. **Resolve.** Each candidate is paired with something callable: its inference provider, or, for a model on your cloud account, a transient provider built from its endpoint URL and the cloud's token. A card whose provider is unhealthy or inactive is rejected at this point with the provider's status as the reason.
+3. **Resolve.** Each candidate is paired with something callable: its provider, or, for a model on your cloud account, a transient provider built from its endpoint URL and the cloud's token. A card whose provider is unhealthy or inactive is rejected at this point with the provider's status as the reason.
 
 ## Walking the plan
 

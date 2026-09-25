@@ -70,7 +70,7 @@ Organization roles do not override another person's **Private** resources. The t
 
 Teams are sub-groups within an organization for finer-grained access control. Every organization gets a default **"Everyone"** team on creation; every member is automatically a member of it. Org owners are added as `team_admin` (lead); other roles are added as `team_member`.
 
-Resources that expose a visibility selector (tools, agents, protocol gateways, runners, credentials, APIs and inference providers) have three visibility settings:
+Resources that expose a visibility selector (tools, agents, protocol gateways, runners, credentials, APIs and model providers) have three visibility settings:
 
 - **Private** (`visibility='private'`): only the resource's owner can see or use it. This is enforced by the backend, including against other org owners/admins, not just hidden in the UI.
 - **Org-wide** (`visibility='org'`): visible to every member of the organization.

@@ -64,7 +64,7 @@ export class ModelCatalogController {
 
   @Post('sync')
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Import what a provider lists (or, with no providerId, what every active provider lists) as unvalidated cards; vanished ids go inactive' })
+  @ApiOperation({ summary: 'Import what a provider lists (or, with no providerId, what every active provider lists); usable at once when the provider key check has passed; vanished ids go inactive' })
   async sync(@Request() req: any, @Body(ValidationPipe) body?: SyncModelsBodyDto) {
     const organizationId = this.orgId(req);
     if (body?.providerId) {
@@ -105,7 +105,8 @@ export class ModelCatalogController {
   }
 }
 
-function view(card: any) {
+/** A card as the API returns it: the row plus whether it is usable now and its effective price. */
+export function view(card: any) {
   return { ...card, selectable: typeof card.isSelectable === 'function' ? card.isSelectable() : false, effectivePricing: typeof card.effectivePricing === 'function' ? card.effectivePricing() : null };
 }
 

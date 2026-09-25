@@ -1,19 +1,20 @@
-# Inference Providers API
+# Providers API
 
 > This is the HTTP API reference. For UI walkthroughs, see [Getting Started](/) and the feature guides above.
 
-![Model catalog in the UI, with provider attribution and validation status](/screenshots/models.png)
+![Models page, with connected providers and their models](/screenshots/models.png)
 
 
-REST API reference for managing LLM provider connections.
+REST API reference for connecting and managing providers.
 
 ## Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| `POST` | `/llm-providers/connect` | Connect a provider: save it, check the key, list its models, in one request (admin/owner) |
 | `GET` | `/llm-providers` | List all providers |
-| `POST` | `/llm-providers` | Add a provider (admin/owner) |
-| `GET` | `/llm-providers/provider-types` | Every vendor the platform can call, with display name, features, and key/docs links |
+| `POST` | `/llm-providers` | Add a provider without waiting for its check (admin/owner) |
+| `GET` | `/llm-providers/provider-types` | Every vendor the platform can call, with display name, features, key/docs links and `listsModels` |
 | `POST` | `/llm-providers/test-connection` | Probe a `{type, apiKey}` pair before saving it |
 | `POST` | `/llm-providers/models/by-type` | List a vendor's models from a `{type, apiKey}` pair, before saving |
 | `GET` | `/llm-providers/:id` | Get provider by ID |
@@ -21,9 +22,50 @@ REST API reference for managing LLM provider connections.
 | `DELETE` | `/llm-providers/:id` | Delete a provider (admin/owner) |
 | `GET` | `/llm-providers/:id/usage` | Request, token, and cost totals for one provider |
 | `GET` | `/llm-providers/:id/models` | Models this saved provider currently lists |
-| `POST` | `/llm-providers/:id/test` | Test connection |
+| `POST` | `/llm-providers/:id/test` | Check the key again |
 | `POST` | `/llm-providers/:id/chat` | Send a chat message |
 
+## Connect a provider
+
+One request that saves the provider, checks its key with one real call, and lists its models. On success every model it lists is usable. On failure nothing is saved.
+
+```bash
+curl -X POST https://api.almyty.com/llm-providers/connect \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "type": "openai", "configuration": { "apiKey": "sk-..." } }'
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `type` | string | Yes | The provider type, as `GET /llm-providers/provider-types` lists it |
+| `name` | string | No | Defaults to the provider's own name |
+| `configuration` | object | No | The key and the few fields the type needs, as for [Add a Provider](#configuration): `apiKey`, `apiUrl` (your own server, Ollama), `bedrock.region`, `azure.resourceName` and `azure.deploymentName`, `vertex.projectId`, `runpod.endpointId`, and `model` for a type whose `listsModels` is false |
+| `credentialId` | uuid | No | Use a saved connection instead of pasting a key |
+| `visibility` | string | No | `org` (default), `team` or `private` |
+| `teamId` | uuid | No | With `visibility: team` |
+
+```json
+{
+  "success": true,
+  "data": {
+    "provider": { "id": "7c1e...", "name": "OpenAI", "type": "openai", "isHealthy": true, "...": "..." },
+    "models": [{ "id": "4f2a...", "vendorModelId": "gpt-5", "selectable": true, "effectivePricing": { "inPerMTok": 1.25, "outPerMTok": 10 }, "...": "..." }],
+    "check": { "ok": true, "responseTime": 412 }
+  }
+}
+```
+
+A failure answers `400` with one plain sentence in `message`, the vendor's own words in `detail` and the vendor's key page in `keyUrl`:
+
+| `error` | When |
+|---|---|
+| `KEY_REJECTED` | The vendor refused the key: `"OpenAI rejected this key."` |
+| `CHECK_FAILED` | The check did not pass for another reason (unreachable, timeout, a model the key cannot use): `"Could not connect to OpenAI."` |
+| `MODEL_REQUIRED` | The type serves no model list and no `configuration.model` was given |
+| `INVALID_CONFIGURATION` | A required field is missing or the URL is not allowed |
+
+The vendor's own 401 never reaches you as a 401, so a client does not mistake it for its own session ending.
 ## Add a Provider
 
 `type` picks the vendor, and everything else about the connection — the key, the base URL, the default call parameters — lives under `configuration`.
@@ -171,6 +213,6 @@ Which vendors almyty can call is registry data, not a list frozen in these docs,
 | What does this saved provider currently serve? | `GET /llm-providers/:id/models` |
 | What would this key serve, before I save it? | `POST /llm-providers/models/by-type` with `{type, apiKey}` |
 
-A model is only *usable* once it has a card in your catalog that is active, points at a callable provider, and has passed one real validation run. `GET /models` lists the cards with that state, `POST /models/sync` imports what a provider currently lists, and `POST /models/:id/validate` runs the call that makes a card selectable. See the [Models](/models) guide for the whole flow.
+A model is *usable* once it is active, points at a callable provider, and that provider's key check has passed; the check covers every model the provider lists. `GET /models` lists them with that state and `POST /models/sync` reads a provider's list again. See the [Models](/models) guide for the whole flow.
 
 `custom` is the escape hatch: any OpenAI-compatible API, pointed at with `configuration.apiUrl` and shaped with `configuration.custom`.

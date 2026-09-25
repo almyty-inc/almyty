@@ -109,7 +109,7 @@ describe('ModelCatalogService', () => {
     expect(cleared.pricingSource).toBe('feed:openrouter');
   });
 
-  it('syncFromProvider imports listed models once, as unvalidated cards', async () => {
+  it('syncFromProvider imports listed models once; from a provider not yet checked they wait for the check', async () => {
     (svc as any).modelsHelper.fetchModelsFromProvider.mockResolvedValue([{ id: 'gpt-x', name: 'GPT X' }, { id: 'gpt-y', name: 'GPT Y' }]);
     const first = await svc.syncFromProvider('org', 'p1');
     expect(first.created.map((c) => c.vendorModelId)).toEqual(['gpt-x', 'gpt-y']);
@@ -117,6 +117,116 @@ describe('ModelCatalogService', () => {
     const second = await svc.syncFromProvider('org', 'p1');
     expect(second.created).toEqual([]);
     expect(second.skipped).toBe(2);
+  });
+
+  describe('readiness: the provider key check makes its models usable', () => {
+    const fetch = () => (svc as any).modelsHelper.fetchModelsFromProvider as jest.Mock;
+    const checkedAt = new Date('2026-09-20T10:00:00Z');
+    const markChecked = async (healthy = true) => {
+      await providers.update({ id: 'p1' }, { isHealthy: healthy, lastHealthCheckAt: checkedAt });
+    };
+    const selectableIds = async () => (await svc.list('org', { selectable: true })).map((c) => c.vendorModelId).sort();
+
+    it('a passing check makes every waiting model usable at once, and nothing else', async () => {
+      fetch().mockResolvedValue([{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
+      await svc.syncFromProvider('org', 'p1');
+      // The vendor said `c` is gone on a real call, and `b` was retired.
+      await models.update({ vendorModelId: 'c' }, { validationStatus: 'failed', status: 'error' });
+      await models.update({ vendorModelId: 'b' }, { status: 'inactive', metadata: { retiredAt: 'x', retiredReason: 'not listed by provider' } });
+      expect(await selectableIds()).toEqual([]);
+
+      await markChecked();
+      const changed = await svc.applyProviderCheck('org', 'p1', { passed: true });
+
+      expect(await selectableIds()).toEqual(['a']);
+      expect(changed).toBe(2);
+      expect(models.rows.find((m) => m.vendorModelId === 'a')!.metadata?.checkedBy).toBe('provider_check');
+      expect(models.rows.find((m) => m.vendorModelId === 'c')!.validationStatus).toBe('failed');
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: AuditAction.MODEL_VALIDATED, details: expect.objectContaining({ source: 'provider_check', passed: true, count: 2 }) }));
+    });
+
+    it('models listed by a provider whose key already checked out are usable as they arrive', async () => {
+      await markChecked();
+      fetch().mockResolvedValue([{ id: 'new-1' }, { id: 'new-2' }]);
+      await svc.syncFromProvider('org', 'p1');
+      expect(await selectableIds()).toEqual(['new-1', 'new-2']);
+      // ...and so is one registered by hand against it.
+      const byHand = await svc.register('org', { name: 'x', vendorModelId: 'by-hand', providerId: 'p1' });
+      expect(byHand.isSelectable()).toBe(true);
+    });
+
+    it('a provider whose last check failed, or that is switched off, lends its models nothing', async () => {
+      await markChecked(false);
+      fetch().mockResolvedValue([{ id: 'a' }]);
+      await svc.syncFromProvider('org', 'p1');
+      expect(await selectableIds()).toEqual([]);
+      await providers.update({ id: 'p1' }, { isHealthy: true, status: LlmProviderStatus.INACTIVE });
+      await svc.syncFromProvider('org', 'p1');
+      fetch().mockResolvedValue([{ id: 'a' }, { id: 'b' }]);
+      await svc.syncFromProvider('org', 'p1');
+      expect(await selectableIds()).toEqual([]);
+    });
+
+    it('a rejected key takes the models back out; an outage does not; the next pass restores them', async () => {
+      await markChecked();
+      fetch().mockResolvedValue([{ id: 'a' }, { id: 'b' }]);
+      await svc.syncFromProvider('org', 'p1');
+      expect(await selectableIds()).toEqual(['a', 'b']);
+
+      expect(await svc.applyProviderCheck('org', 'p1', { passed: false, keyRejected: false, error: 'timeout' })).toBe(0);
+      expect(await selectableIds()).toEqual(['a', 'b']);
+
+      await svc.applyProviderCheck('org', 'p1', { passed: false, keyRejected: true, error: 'Incorrect API key provided' });
+      expect(await selectableIds()).toEqual([]);
+      expect(models.rows.find((m) => m.vendorModelId === 'a')!.lastValidationError).toBe('Incorrect API key provided');
+
+      await svc.applyProviderCheck('org', 'p1', { passed: true });
+      expect(await selectableIds()).toEqual(['a', 'b']);
+    });
+
+    it('a key check touches only its own provider in its own organization', async () => {
+      providers.seed(Object.assign(new LlmProvider(), { id: 'p2', organizationId: 'org', name: 'Other', type: LlmProviderType.OPENAI, status: LlmProviderStatus.ACTIVE, isHealthy: true, configuration: {} }));
+      models.seed(Object.assign(new Model(), { id: 'other-org', organizationId: 'org2', providerId: 'p1', vendorModelId: 'z', name: 'z', status: 'active', validationStatus: 'never' }));
+      models.seed(Object.assign(new Model(), { id: 'other-provider', organizationId: 'org', providerId: 'p2', vendorModelId: 'y', name: 'y', status: 'active', validationStatus: 'never' }));
+      await svc.applyProviderCheck('org', 'p1', { passed: true });
+      expect(models.rows.find((m) => m.id === 'other-org')!.validationStatus).toBe('never');
+      expect(models.rows.find((m) => m.id === 'other-provider')!.validationStatus).toBe('never');
+    });
+  });
+
+  describe('the periodic sweep', () => {
+    const fetch = () => (svc as any).modelsHelper.fetchModelsFromProvider as jest.Mock;
+    const selectableIds = async () => (await svc.list('org', { selectable: true })).map((c) => c.vendorModelId).sort();
+
+    beforeEach(async () => {
+      await providers.update({ id: 'p1' }, { isHealthy: true, lastHealthCheckAt: new Date() });
+      fetch().mockResolvedValue([{ id: 'a' }, { id: 'b' }]);
+      await svc.syncFromProvider('org', 'p1');
+    });
+
+    it('picks up new models and marks retired ones unavailable, across organizations', async () => {
+      providers.seed(Object.assign(new LlmProvider(), { id: 'q1', organizationId: 'org2', name: 'Groq', type: LlmProviderType.GROQ, status: LlmProviderStatus.ACTIVE, isHealthy: true, lastHealthCheckAt: new Date(), configuration: {} }));
+      providers.seed(Object.assign(new LlmProvider(), { id: 'off', organizationId: 'org', name: 'Off', type: LlmProviderType.GROQ, status: LlmProviderStatus.INACTIVE, isHealthy: true, configuration: {} }));
+      fetch().mockImplementation(async (p: LlmProvider) => (p.id === 'p1' ? [{ id: 'a' }, { id: 'c' }] : [{ id: 'llama' }]));
+
+      const result = await svc.syncEveryProvider();
+
+      expect(result).toEqual({ providers: 2, synced: 2, failed: 0, keyRejected: 0 });
+      expect(await selectableIds()).toEqual(['a', 'c']);
+      expect(models.rows.find((m) => m.vendorModelId === 'b')!.metadata?.retiredReason).toBe('not listed by provider');
+      expect((await svc.list('org2', { selectable: true })).map((m) => m.vendorModelId)).toEqual(['llama']);
+      expect(fetch().mock.calls.map(([p]) => p.id)).not.toContain('off');
+    });
+
+    it('a listing refused for the key takes the models out; one that merely failed does not', async () => {
+      fetch().mockRejectedValueOnce(Object.assign(new Error('Request failed with status code 503'), { response: { status: 503 } }));
+      expect(await svc.syncEveryProvider()).toEqual({ providers: 1, synced: 0, failed: 1, keyRejected: 0 });
+      expect(await selectableIds()).toEqual(['a', 'b']);
+
+      fetch().mockRejectedValueOnce(Object.assign(new Error('Request failed with status code 401'), { response: { status: 401 } }));
+      expect(await svc.syncEveryProvider()).toEqual({ providers: 1, synced: 0, failed: 1, keyRejected: 1 });
+      expect(await selectableIds()).toEqual([]);
+    });
   });
 
   describe('auto-population', () => {
