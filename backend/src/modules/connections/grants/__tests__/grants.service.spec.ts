@@ -113,20 +113,24 @@ describe('GrantsService.grant: the manage authorisation matrix', () => {
     await expect(h.service.grant(h.orgConn.id, { principalType: 'role', principalId: 'member' }, h.admin)).resolves.toMatchObject({ principalType: 'role', principalId: 'member' });
     await expect(h.service.grant(h.orgConn.id, { principalType: 'role', principalId: 'member' }, h.member)).rejects.toMatchObject({ response: { code: 'CONNECTION_GRANT_FORBIDDEN' } });
     await expect(h.service.grant(h.userConn.id, { principalType: 'user', principalId: U_FRIEND }, h.admin)).rejects.toMatchObject({ response: { code: 'CONNECTION_GRANT_FORBIDDEN' } });
-    await expect(h.service.grant(h.userConn.id, { principalType: 'user', principalId: U_FRIEND }, h.member)).rejects.toMatchObject({ response: { code: 'CONNECTION_GRANT_FORBIDDEN' } });
+    // A member who may not see someone else's user-scoped connection, and
+    // holds no grant on it, gets the not-found (read rule before manage).
+    await expect(h.service.grant(h.userConn.id, { principalType: 'user', principalId: U_FRIEND }, h.member)).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
   });
 
   it('a manage grant lets its holder add further grants; a use grant does not', async () => {
     const h = harness();
     await h.service.grant(h.userConn.id, { principalType: 'user', principalId: U_FRIEND, permission: 'manage' }, h.owner);
     await expect(h.service.grant(h.userConn.id, { principalType: 'user', principalId: U_MEMBER }, h.friend)).resolves.toMatchObject({ principalId: U_MEMBER });
+    // The member now holds a use grant, so they know it exists: the 403.
     await expect(h.service.grant(h.userConn.id, { principalType: 'team', principalId: TEAM }, h.member)).rejects.toMatchObject({ response: { code: 'CONNECTION_GRANT_FORBIDDEN' } });
   });
 
   it('team-visibility connections: a manage-grant holder outside the team is refused, an admin is not', async () => {
     const h = harness();
     await h.service.grant(h.teamConn.id, { principalType: 'user', principalId: U_MEMBER, permission: 'manage' }, h.admin);
-    await expect(h.service.grant(h.teamConn.id, { principalType: 'user', principalId: U_FRIEND }, h.member)).rejects.toMatchObject({ response: { code: 'CONNECTION_GRANT_FORBIDDEN', message: 'not a member of the connection team' } });
+    // Team only is team only: outside the team the connection does not exist, grant or no grant.
+    await expect(h.service.grant(h.teamConn.id, { principalType: 'user', principalId: U_FRIEND }, h.member)).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
   });
 
   it('validates the target: unknown users, teams, agents, workspaces, roles, non-uuid ids and foreign budgets', async () => {
@@ -170,7 +174,7 @@ describe('GrantsService.grant: the manage authorisation matrix', () => {
     h.credentials.rows.push(legacy);
     await expect(h.service.grant(legacy.id, { principalType: 'user', principalId: U_MEMBER }, h.admin)).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
     await expect(h.service.grant(h.orgConn.id, { principalType: 'user', principalId: U_MEMBER }, h.admin, OTHER_ORG)).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
-    await expect(h.service.grant(h.orgConn.id, { principalType: 'user', principalId: U_MEMBER }, h.outsider)).rejects.toMatchObject({ response: { code: 'CONNECTION_GRANT_FORBIDDEN' } });
+    await expect(h.service.grant(h.orgConn.id, { principalType: 'user', principalId: U_MEMBER }, h.outsider)).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
   });
 });
 
@@ -180,7 +184,9 @@ describe('GrantsService.list and revoke', () => {
     await h.service.grant(h.userConn.id, { principalType: 'user', principalId: U_FRIEND }, h.owner);
     expect(await h.service.list(h.userConn.id, h.owner)).toHaveLength(1);
     expect(await h.service.list(h.userConn.id, h.admin, ORG)).toHaveLength(1);
-    await expect(h.service.list(h.userConn.id, h.member)).rejects.toMatchObject({ response: { code: 'CONNECTION_GRANT_FORBIDDEN' } });
+    // Cannot see it and holds no grant: not found. Holds a use grant (friend) or
+    // can see it (an org connection): the 403.
+    await expect(h.service.list(h.userConn.id, h.member)).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
     await expect(h.service.list(h.userConn.id, h.friend)).rejects.toMatchObject({ response: { code: 'CONNECTION_GRANT_FORBIDDEN' } });
     await expect(h.service.list(h.orgConn.id, h.member)).rejects.toMatchObject({ response: { code: 'CONNECTION_GRANT_FORBIDDEN' } });
     expect(await h.service.list(h.orgConn.id, h.admin)).toEqual([]);
@@ -190,7 +196,7 @@ describe('GrantsService.list and revoke', () => {
     const h = harness();
     const g1 = await h.service.grant(h.userConn.id, { principalType: 'user', principalId: U_FRIEND }, h.owner);
     const g2 = await h.service.grant(h.userConn.id, { principalType: 'agent', principalId: AGENT_MINE }, h.owner);
-    await expect(h.service.revoke(g1.id, h.member)).rejects.toMatchObject({ response: { code: 'CONNECTION_GRANT_FORBIDDEN' } });
+    await expect(h.service.revoke(g1.id, h.member)).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
     await expect(h.service.revoke(g1.id, h.admin)).resolves.toMatchObject({ id: g1.id, principalId: U_FRIEND });
     expect(h.audit.log).toHaveBeenLastCalledWith(expect.objectContaining({
       action: 'connection_revoke_grant', resourceId: h.userConn.id, userId: U_ADMIN,
@@ -205,7 +211,7 @@ describe('GrantsService.list and revoke', () => {
     const h = harness();
     const g = await h.service.grant(h.orgConn.id, { principalType: 'user', principalId: U_MEMBER }, h.admin);
     await expect(h.service.revoke(g.id, h.admin, OTHER_ORG)).rejects.toMatchObject({ response: { code: 'GRANT_NOT_FOUND' } });
-    await expect(h.service.revoke(g.id, h.outsider)).rejects.toMatchObject({ response: { code: 'CONNECTION_GRANT_FORBIDDEN' } });
+    await expect(h.service.revoke(g.id, h.outsider)).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
   });
   // The controller used to call revoke() -- which removes the row and writes
   // the audit entry -- and only THEN compare the grant's connectionId to the
@@ -263,7 +269,8 @@ describe('GrantsService.assertCanUse and the resolve audit', () => {
     const h = harness();
     await h.service.grant(h.teamConn.id, { principalType: 'team', principalId: TEAM }, h.admin);
     await expect(h.service.assertCanUse(h.friend, h.teamConn)).resolves.toMatchObject({ via: 'grant', grant: { principalType: 'team' } });
-    await expect(h.service.assertCanUse(h.member, h.teamConn)).rejects.toMatchObject({ reason: 'not a member of the connection team' });
+    // Outside the team it is not found, not "not granted": that would confirm it exists.
+    await expect(h.service.assertCanUse(h.member, h.teamConn)).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
   });
 
   it('caches the grant list for 30 seconds per connection and drops it on grant / revoke', async () => {
