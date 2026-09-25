@@ -250,6 +250,17 @@ export class ApisService {
           .where('op."apiId" = api.id'),
       'api_operationCount',
     );
+    // Live tools from this API, linked directly or through one of its
+    // operations. The dashboard's "APIs without tools" used to guess this on
+    // the client from metadata copies and the first page of tools, and
+    // flagged APIs that had tools.
+    qb.addSelect(
+      `(SELECT COUNT(t.id) FROM tools t
+          WHERE t.status <> 'deleted'
+            AND (t."apiId" = api.id
+                 OR t."operationId" IN (SELECT o.id FROM operations o WHERE o."apiId" = api.id)))`,
+      'api_toolCount',
+    );
     // `id` is not decoration. `createdAt` is a millisecond timestamp, and
     // two APIs written in the same millisecond order arbitrarily between
     // one request and the next — so with `skip`/`take` a tied row can
@@ -261,6 +272,7 @@ export class ApisService {
     const { entities, raw } = await qb.getRawAndEntities();
     entities.forEach((api, i) => {
       api.operationCount = Number(raw[i]?.api_operationCount ?? 0);
+      api.toolCount = Number(raw[i]?.api_toolCount ?? 0);
     });
     return { apis: entities, total };
   }

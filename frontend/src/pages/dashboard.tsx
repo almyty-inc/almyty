@@ -26,6 +26,9 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { pluralize } from '@/lib/utils'
 import type { RequestLog } from '@/types'
 
+/** Gateway types that take gateway sign-in (API key, bearer, OAuth). */
+const PROTOCOL_GATEWAY_TYPES = new Set(['mcp', 'utcp', 'skills', 'a2a', 'acp', 'openai_chat'])
+
 // Helper to humanize a log path. The activity feed only receives
 // protocol traffic (MCP/UTCP/A2A requests and tool executions), so
 // describe the action rather than guessing from loose substrings —
@@ -187,24 +190,19 @@ export function DashboardPage() {
   const hasAnything =
     apisTotal + toolsTotal + agents.length > 0 || gateways.some((g: { isSystem?: boolean }) => !g.isSystem)
 
-  // Action items: APIs with no generated tools
-  // Tools connect to APIs through operations, not directly via apiId
+  // Action items: APIs with no tools. The server counts each API's live
+  // tools (linked directly or through an operation); guessing here from
+  // metadata copies and the first page of tools flagged APIs that had tools.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const apisWithNoTools = apis.filter((a: any) => {
-    // Check via operations.tools (if loaded) or via tool metadata
-    const hasToolsViaOps = a.operations?.some((op: any) => op.tools?.length > 0)
-    const hasToolsViaMeta = tools.some((t: any) =>
-      t.metadata?.sourceApi?.id === a.id ||
-      t.metadata?.apiId === a.id ||
-      a.operations?.some((op: any) => op.id === t.operationId)
-    )
-    return !hasToolsViaOps && !hasToolsViaMeta
-  })
+  const apisWithNoTools = apis.filter((a: any) => typeof a.toolCount === 'number' && a.toolCount === 0)
 
-  // Action items: Gateways with no auth configured
-  // Check authConfigs array, not a count field
+  // Action items: protocol gateways anyone can call. Only the protocol types
+  // take gateway sign-in; chat and channel gateways authenticate their own
+  // way and the built-in system gateway uses OAuth, so counting those said
+  // something untrue about them.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const gatewaysWithNoAuth = gateways.filter((g: any) => {
+    if (g.isSystem || !PROTOCOL_GATEWAY_TYPES.has(g.type)) return false
     return !g.authConfigs?.length && !g.authMethods?.length
   })
 
@@ -276,7 +274,7 @@ export function DashboardPage() {
                       className="flex items-center gap-2 text-sm text-amber-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
                     >
                       <AlertTriangle className="h-4 w-4 shrink-0" />
-                      <span>{apisWithNoTools.length} API(s) have no generated tools</span>
+                      <span>{apisWithNoTools.length === 1 ? '1 API has no tools yet' : `${apisWithNoTools.length} APIs have no tools yet`}</span>
                     </Link>
                   )}
                   {gatewaysWithNoAuth.length > 0 && (
@@ -285,7 +283,7 @@ export function DashboardPage() {
                       className="flex items-center gap-2 text-sm text-amber-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
                     >
                       <AlertTriangle className="h-4 w-4 shrink-0" />
-                      <span>{gatewaysWithNoAuth.length} gateway(s) have no authentication configured</span>
+                      <span>{gatewaysWithNoAuth.length === 1 ? '1 gateway is open to anyone: add sign-in' : `${gatewaysWithNoAuth.length} gateways are open to anyone: add sign-in`}</span>
                     </Link>
                   )}
                 </div>
