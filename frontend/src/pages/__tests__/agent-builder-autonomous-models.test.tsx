@@ -307,6 +307,96 @@ describe('the autonomous page', () => {
     await waitFor(() => expect(within(main).getByRole('combobox', { name: 'Model' })).toHaveTextContent('gpt-4o'))
   })
 
+  it('keeps the words short and plain, and shows the less common ways only on request', async () => {
+    openAgent({ strategy: 'single', roles: [MAIN] })
+    const card = await screen.findByTestId('strategy-card')
+    expect(within(card).getByText('Pick how the models share the work.')).toBeInTheDocument()
+    expect(within(card).getByTestId('strategy-option-single')).toHaveTextContent('One model does everything.')
+    expect(within(card).getByTestId('strategy-flow-cascade')).toHaveTextContent('Cheap model answersChecker double-checksMain model fixes it if needed')
+    // Panel and Explore wait behind "More ways", closed at first.
+    expect(within(card).queryByTestId('strategy-option-panel')).not.toBeInTheDocument()
+    expect(within(card).queryByTestId('strategy-option-explore_extract_patch')).not.toBeInTheDocument()
+    fireEvent.click(within(card).getByRole('button', { name: 'More ways' }))
+    expect(within(card).getByTestId('strategy-option-panel')).toBeInTheDocument()
+    expect(within(card).getByTestId('strategy-option-explore_extract_patch')).toBeInTheDocument()
+
+    // Only what is missing, as the thing to do; nothing under a strategy that has what it needs.
+    expect(within(card).getByTestId('strategy-needs-cascade')).toHaveTextContent(/^Add a drafter and a checker$/)
+    expect(within(card).getByTestId('strategy-needs-best_of_n')).toHaveTextContent(/^Add a checker$/)
+    expect(within(card).queryByTestId('strategy-needs-single')).not.toBeInTheDocument()
+    expect(card).not.toHaveTextContent(/Needs:/)
+
+    const page = document.body.textContent || ''
+    for (const jargon of [/refut/i, /principal/i, /N-1/, /shape each request/i]) expect(page).not.toMatch(jargon)
+  })
+
+  it('opens More ways by itself when the agent already uses one of those ways', async () => {
+    openAgent({
+      strategy: 'panel',
+      roles: [
+        MAIN,
+        { key: 'panelist_1', name: 'Panelist 1', purpose: 'panelist', kind: 'model', providerId: 'prov-openai', model: 'gpt-4o-mini' },
+        { key: 'panelist_2', name: 'Panelist 2', purpose: 'panelist', kind: 'model', providerId: 'prov-openai', model: 'gpt-4o' },
+      ],
+    })
+    expect(await screen.findByTestId('strategy-option-panel')).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('shows every collaborator, the judge and the verifier panel of an older agent, and a save loses none of them', async () => {
+    const user = userEvent.setup()
+    const agentConfig = {
+      canCallAgents: false,
+      verify: {
+        enabled: true,
+        policy: 'any_fail_blocks',
+        maxReviseLoops: 2,
+        triggers: ['on_final_output'],
+        checkers: [
+          { name: 'GPT-4o reviewer', providerId: 'prov-openai', model: 'gpt-4o', instructions: 'Check tone.' },
+          { name: 'Mini reviewer', providerId: 'prov-openai', model: 'gpt-4o-mini' },
+        ],
+      },
+      constraints: { enabled: true, autoLearn: true },
+    }
+    const collaboration = {
+      strategy: 'debate',
+      participants: [
+        { kind: 'model', providerId: 'prov-openai', model: 'gpt-4o-mini', role: 'Skeptic', instructions: 'Push back.', temperature: 0.7 },
+        { kind: 'agent', agentId: 'critic', role: 'Critic' },
+      ],
+      judge: { kind: 'model', providerId: 'prov-openai', model: 'gpt-4o' },
+    }
+    openAgent(null, { agentConfig, collaboration })
+
+    // On the page: the main model, each collaborator and the judge as teammates, and the verifier panel.
+    const card = await screen.findByTestId('models-card')
+    expect(within(card).getAllByRole('listitem')).toHaveLength(4)
+    expect(screen.getByLabelText('Role 2 name')).toHaveValue('Skeptic')
+    expect(screen.getByLabelText('Role 3 name')).toHaveValue('Critic')
+    expect(screen.getByLabelText('Role 4 name')).toHaveValue('Judge')
+    const verifier = screen.getByTestId('verifier-card')
+    expect(within(verifier).getByText('GPT-4o reviewer')).toBeInTheDocument()
+    expect(within(verifier).getByText('Mini reviewer')).toBeInTheDocument()
+
+    // Saved unchanged: nothing the agent had is gone.
+    await waitFor(() => expect(saveButton()).toBeEnabled())
+    await user.click(saveButton())
+    await waitFor(() => expect(agentsApi.update).toHaveBeenCalled())
+    const sent = vi.mocked(agentsApi.update).mock.calls[0][1] as any
+    expect(sent.agentConfig).toEqual(agentConfig)
+    expect(sent.models).toEqual({
+      strategy: 'single',
+      roles: [
+        MAIN,
+        { key: 'teammate_1', name: 'Skeptic', purpose: 'teammate', kind: 'model', providerId: 'prov-openai', model: 'gpt-4o-mini', temperature: 0.7, instructions: 'Push back.' },
+        { key: 'teammate_2', name: 'Critic', purpose: 'teammate', kind: 'agent', agentId: 'critic' },
+        { key: 'teammate_3', name: 'Judge', purpose: 'teammate', kind: 'model', providerId: 'prov-openai', model: 'gpt-4o' },
+      ],
+    })
+    // Collaboration is cleared only because every member of it is now a role.
+    expect(sent.collaboration).toBeNull()
+  })
+
   it('keeps advanced settings behind a disclosure, and saves them', async () => {
     const user = userEvent.setup()
     openAgent({ strategy: 'single', roles: [MAIN] })

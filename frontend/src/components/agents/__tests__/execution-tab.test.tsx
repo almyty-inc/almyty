@@ -175,7 +175,7 @@ describe('the Execution tab saves what you choose', () => {
 
     const summary = screen.getByTestId('autonomous-models-summary')
     expect(within(summary).getByTestId('summary-strategy')).toHaveTextContent('Cascade')
-    expect(summary).toHaveTextContent(/the drafter, a cheaper model, takes each step/i)
+    expect(summary).toHaveTextContent(/A cheaper model answers first and a checker double-checks it/)
     expect(await within(summary).findByText('OpenAI / gpt-4o')).toBeInTheDocument()
     expect(within(summary).getByTestId('summary-role-drafter')).toHaveTextContent('Cheap drafts')
     expect(within(summary).getByTestId('summary-role-drafter')).toHaveTextContent('Routed by policy (cheapest)')

@@ -41,7 +41,7 @@ vi.mock('@/components/model-picker', () => ({
 }))
 
 const NOW = '2026-09-25T10:00:00.000Z'
-const OPENAI = { id: 'p1', name: 'OpenAI', type: 'openai', status: 'active', visibility: 'org', teamId: null, lastSuccessAt: NOW, configuration: { apiKey: '***masked***', model: 'gpt-4o' } }
+const OPENAI = { id: 'p1', name: 'OpenAI', type: 'openai', status: 'active', visibility: 'org', teamId: null, lastSuccessAt: NOW, keyChecked: true, configuration: { apiKey: '***masked***', model: 'gpt-4o' } }
 
 const card = (vendorModelId: string, over: Record<string, any> = {}) =>
   ({
@@ -90,7 +90,7 @@ describe('ProviderPage', () => {
   })
 
   it('says the key was rejected, in the provider words', async () => {
-    vi.mocked(llmProvidersApi.getById).mockResolvedValue({ ...OPENAI, status: 'error', lastSuccessAt: null, lastError: '401 Incorrect API key provided', lastErrorAt: NOW } as any)
+    vi.mocked(llmProvidersApi.getById).mockResolvedValue({ ...OPENAI, status: 'error', keyChecked: false, lastSuccessAt: null, lastError: '401 Incorrect API key provided', lastErrorAt: NOW } as any)
     vi.mocked(modelsApi.list).mockResolvedValue([card('gpt-4o', { selectable: false })])
     at()
     expect(await screen.findByTestId('provider-status')).toHaveTextContent('Key rejected')

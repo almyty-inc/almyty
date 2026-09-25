@@ -1,8 +1,9 @@
 /**
  * One model, as a row: the same row on /models (All models) and on a
- * provider's page. Name, the id the provider knows it by, price per million
- * tokens, context length, and whether an agent can use it, with a short
- * plain reason when not.
+ * provider's page. Name, the id the provider knows it by when that differs
+ * from the name, price per million tokens (or "Price unknown"), context
+ * length when known, and whether an agent can use it, with a short plain
+ * reason when not.
  */
 import type { ReactNode } from 'react'
 import { CheckCircle2, CircleSlash } from 'lucide-react'
@@ -65,16 +66,25 @@ export function effectivePrice(card: Pick<ModelCard, 'pricing' | 'pricingOverrid
   return card.pricingOverride ?? card.pricing ?? null
 }
 
-/** "$2.50 in / $10.00 out" per million tokens, or "No price". */
+/** A price of zero both ways: a model on a server you run, which costs nothing per token. */
+export function isFree(pricing: ModelPricing | null | undefined): boolean {
+  return !!pricing && pricing.inPerMTok === 0 && pricing.outPerMTok === 0
+}
+
+/**
+ * "$2.50 in / $10.00 out" per million tokens, "Free" for a model that truly
+ * costs nothing, and "Price unknown" when nobody knows: never a made-up $0.
+ */
 export function formatPrice(pricing: ModelPricing | null | undefined): string {
-  if (!pricing) return 'No price'
+  if (!pricing) return 'Price unknown'
+  if (isFree(pricing)) return 'Free'
   const unit = pricing.currency && pricing.currency !== 'USD' ? ` ${pricing.currency}` : ''
   return `$${trimPrice(pricing.inPerMTok)} in / $${trimPrice(pricing.outPerMTok)} out${unit}`
 }
 
-/** "128k", "1M", or a dash when unknown. */
+/** "128k", "1M", or empty when unknown (the cell stays blank). */
 export function formatContext(n: number | null | undefined): string {
-  if (!n) return '--'
+  if (!n) return ''
   if (n >= 1_000_000) return `${Number((n / 1_000_000).toFixed(1))}M`
   if (n >= 1000) return `${Math.round(n / 1000)}k`
   return String(n)
@@ -110,23 +120,28 @@ export interface ModelRowProps {
 
 export function ModelRow({ card, providerName, provider, action, children, onOpen }: ModelRowProps) {
   const state = availability(card, provider)
+  const price = effectivePrice(card)
+  // The id under the name only when it says something the name does not.
+  const showId = card.vendorModelId !== card.name
   const main = (
     <>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{card.name}</div>
-        <div className="truncate font-mono text-xs text-muted-foreground">
-          {card.vendorModelId}
-          {providerName ? <span className="font-sans"> · {providerName}</span> : null}
-        </div>
+        {(showId || providerName) && (
+          <div className="truncate font-mono text-xs text-muted-foreground" data-testid="model-id">
+            {showId ? card.vendorModelId : null}
+            {providerName ? <span className="font-sans">{showId ? ' · ' : ''}{providerName}</span> : null}
+          </div>
+        )}
         {!state.usable && state.detail && (
           <p className="mt-0.5 truncate text-xs text-muted-foreground" data-testid="model-unavailable-detail">{state.detail}</p>
         )}
       </div>
       <div className="w-40 shrink-0 text-xs tabular-nums sm:text-right" data-testid="model-price">
-        {formatPrice(effectivePrice(card))}
-        <div className="text-[11px] text-muted-foreground">per 1M tokens</div>
+        <span className={cn(!price && 'text-muted-foreground')}>{formatPrice(price)}</span>
+        {price && !isFree(price) && <div className="text-[11px] text-muted-foreground">per 1M tokens</div>}
       </div>
-      <div className="w-16 shrink-0 text-xs tabular-nums sm:text-right" data-testid="model-context" title="Context length">
+      <div className="w-16 shrink-0 text-xs tabular-nums sm:text-right" data-testid="model-context" title={card.contextLength ? 'Context length' : undefined}>
         {formatContext(card.contextLength)}
       </div>
       <div className="w-36 shrink-0 sm:text-right">

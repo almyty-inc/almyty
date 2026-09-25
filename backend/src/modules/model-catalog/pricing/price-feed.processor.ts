@@ -2,7 +2,7 @@ import { InjectQueue, OnQueueFailed, Process, Processor } from '@nestjs/bull';
 import { Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Job, Queue } from 'bull';
 
-import { ApplyToCatalogResult, PriceFeedService } from './price-feed.service';
+import { ApplyToCatalogResult, PRICE_FEED_MAX_AGE_MS, PriceFeedService } from './price-feed.service';
 
 export const MODEL_PRICE_FEED_QUEUE = 'model-price-feed';
 export const MODEL_PRICE_FEED_JOB = 'refresh';
@@ -18,8 +18,9 @@ const DEFAULT_CRON = '0 4 * * *';
  * Daily model price refresh: pull both feeds, then write prices onto every
  * catalog card. Cadence via MODEL_PRICE_FEED_CRON (or =off), always off
  * under NODE_ENV=test and when MODEL_PRICE_FEED_DISABLED=true. A replica
- * that boots with an empty Redis cache also queues one immediate refresh
- * so cards are not unpriced until 04:00.
+ * that boots with an empty or day-old Redis cache also queues one immediate
+ * refresh so cards are not unpriced until 04:00, and a sync that creates
+ * cards the feed cannot price refreshes it first (PriceFeedService.ensureFresh).
  */
 @Processor(MODEL_PRICE_FEED_QUEUE)
 export class PriceFeedProcessor implements OnApplicationBootstrap {
@@ -77,14 +78,18 @@ export class PriceFeedProcessor implements OnApplicationBootstrap {
       );
       this.logger.log(`Model price feed refresh registered: "${cron}"`);
 
-      if (!this.priceFeed.hasData()) {
-        // The fixed jobId dedupes across replicas booting at the same time.
+      const age = this.priceFeed.ageMs();
+      if (age === null || age >= PRICE_FEED_MAX_AGE_MS) {
+        // Empty, or older than a day (the Redis copy outlives a missed
+        // daily run): prices for models listed since then would otherwise
+        // wait for 04:00. The fixed jobId dedupes across replicas booting
+        // at the same time.
         await this.queue.add(
           MODEL_PRICE_FEED_JOB,
           { reason: 'bootstrap' },
           { jobId: BOOTSTRAP_JOB_ID, removeOnComplete: true, removeOnFail: true },
         );
-        this.logger.log('Model price feed cache empty, queued an immediate refresh');
+        this.logger.log(`Model price feed cache ${age === null ? 'empty' : 'stale'}, queued an immediate refresh`);
       }
     } catch (error: any) {
       // Scheduling is best-effort; a Redis hiccup at bootstrap must not take the API down.
