@@ -201,7 +201,7 @@ function SdkParamField({ param, value, onChange, depth = 0 }: {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="parameter">Tool Param</SelectItem>
+          <SelectItem value="parameter">Tool param</SelectItem>
           <SelectItem value="literal">Hardcoded</SelectItem>
           <SelectItem value="credential">Credential</SelectItem>
         </SelectContent>
@@ -488,7 +488,7 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
       {/* Export selector */}
       {selectedPackage && (
         <div>
-          <Label htmlFor="sdk-class-export">Class / Export</Label>
+          <Label htmlFor="sdk-class-export">Class / export</Label>
           <Select value={selectedExport} onValueChange={setSelectedExport}>
             <SelectTrigger id="sdk-class-export">
               <SelectValue placeholder="Select an export" />
@@ -522,7 +522,7 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
       {/* Constructor parameters */}
       {currentExport?.constructorParams && currentExport.constructorParams.length > 0 && (
         <div className="space-y-2">
-          <Label className="text-sm font-semibold">Constructor Parameters</Label>
+          <Label className="text-sm font-semibold">Constructor parameters</Label>
           <div className="space-y-2 border rounded-lg p-3 bg-muted/20">
             {currentExport.constructorParams.map((param) => (
               <SdkParamField
@@ -568,7 +568,7 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
       {/* Method arguments */}
       {selectedMethodEntry && selectedMethodEntry.method.params.length > 0 && (
         <div className="space-y-2">
-          <Label className="text-sm font-semibold">Method Arguments</Label>
+          <Label className="text-sm font-semibold">Method arguments</Label>
           <div className="space-y-2 border rounded-lg p-3 bg-muted/20">
             {selectedMethodEntry.method.params.map((param) => (
               <SdkParamField
@@ -585,7 +585,7 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
       {/* Response mapping */}
       {selectedMethodKey && (
         <div>
-          <Label htmlFor="sdk-response-data-path">Response Data Path (optional)</Label>
+          <Label htmlFor="sdk-response-data-path">Response data path (optional)</Label>
           <Input id="sdk-response-data-path"
             placeholder="e.g. data.items"
             value={dataPath}

@@ -172,7 +172,7 @@ export function AgentsTab() {
         <StatCard icon={Bot} label="Executions (7d)" value={formatNumber(agentStats.total7d)} />
         <StatCard
           icon={CheckCircle2}
-          label="Success Rate"
+          label="Success rate"
           value={`${agentStats.overallSuccessRate}%`}
           className={
             agentStats.overallSuccessRate >= 90
@@ -186,7 +186,7 @@ export function AgentsTab() {
         />
         <StatCard
           icon={Clock}
-          label="Avg Run Time"
+          label="Avg run time"
           value={formatMs(agentStats.avgExecutionTime)}
         />
       </div>
@@ -203,11 +203,11 @@ export function AgentsTab() {
                 <tr className="border-b text-left bg-muted">
                   <th className={TH}>Agent</th>
                   <th className={TH}>Status</th>
-                  <th className={`${TH} text-right`}>Total Execs</th>
+                  <th className={`${TH} text-right`}>Total execs</th>
                   <th className={`${TH} text-right`}>24h</th>
                   <th className={`${TH} text-right`}>7d</th>
-                  <th className={`${TH} text-right`}>Success Rate</th>
-                  <th className={`${TH} text-right`}>Avg Time</th>
+                  <th className={`${TH} text-right`}>Success rate</th>
+                  <th className={`${TH} text-right`}>Avg time</th>
                   <th className={`${TH} text-right`}>Cost</th>
                 </tr>
               </thead>

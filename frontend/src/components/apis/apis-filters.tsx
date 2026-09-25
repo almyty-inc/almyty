@@ -46,7 +46,7 @@ export function ApisFilters({
           <SelectValue placeholder="Type" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Types</SelectItem>
+          <SelectItem value="all">All types</SelectItem>
           <SelectItem value={ApiType.OPENAPI}>OpenAPI</SelectItem>
           <SelectItem value={ApiType.GRAPHQL}>GraphQL</SelectItem>
           <SelectItem value={ApiType.SOAP}>SOAP</SelectItem>
@@ -60,7 +60,7 @@ export function ApisFilters({
           <SelectValue placeholder="Health" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Status</SelectItem>
+          <SelectItem value="all">All status</SelectItem>
           <SelectItem value={ApiHealthStatus.HEALTHY}>Healthy</SelectItem>
           <SelectItem value={ApiHealthStatus.DEGRADED}>Degraded</SelectItem>
           <SelectItem value={ApiHealthStatus.UNHEALTHY}>Unhealthy</SelectItem>

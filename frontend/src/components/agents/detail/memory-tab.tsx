@@ -231,7 +231,7 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
                     <TableHead>Type</TableHead>
                     <TableHead>Scope</TableHead>
                     <TableHead>Tags</TableHead>
-                    <TableHead>Access Count</TableHead>
+                    <TableHead>Access count</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

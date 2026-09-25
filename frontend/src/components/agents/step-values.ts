@@ -13,7 +13,7 @@
  */
 import type { Edge, Node } from '@xyflow/react'
 
-/** A step type's name as the panels say it (the palette keeps its own labels). */
+/** A step type's name as the panels say it (the palette, the canvas and the builder's checks say it the same way). */
 export const STEP_NAMES: Record<string, string> = {
   input: 'Input',
   output: 'Output',

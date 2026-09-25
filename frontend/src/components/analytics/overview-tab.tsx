@@ -85,12 +85,12 @@ export function OverviewTab() {
           <StatCard icon={Globe} label="Requests (24h)" value={formatNumber(overview.last24h?.requests || 0)} />
           <StatCard
             icon={Wrench}
-            label="Tool Executions (24h)"
+            label="Tool executions (24h)"
             value={formatNumber(overview.last24h?.toolExecutions || 0)}
           />
           <StatCard
             icon={Clock}
-            label="Avg Response (24h)"
+            label="Avg response (24h)"
             value={formatMs(overview.last24h?.avgResponseTime || 0)}
           />
           <StatCard
@@ -107,7 +107,7 @@ export function OverviewTab() {
           <StatCard icon={Globe} label="Requests (7d)" value={formatNumber(overview.last7d?.requests || 0)} />
           <StatCard
             icon={Wrench}
-            label="Tool Executions (7d)"
+            label="Tool executions (7d)"
             value={formatNumber(overview.last7d?.toolExecutions || 0)}
           />
           <StatCard

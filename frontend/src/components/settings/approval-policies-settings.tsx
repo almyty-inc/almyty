@@ -53,7 +53,7 @@ export function ApprovalPoliciesSettings() {
       fallback={
         <UpgradePrompt
           feature="approval_policy"
-          title="Approval Policies"
+          title="Approval policies"
           description="Require multi-step, conditional, or quorum sign-off before an agent runs a sensitive action — e.g. refunds over a threshold need finance and a manager."
         />
       }

@@ -8,12 +8,12 @@ test.describe('Authentication - Registration', () => {
 
   test('should display registration form', async ({ page }) => {
     await expect(page.getByRole('heading', { name: /register|sign up/i })).toBeVisible()
-    await expect(page.getByLabel('First Name')).toBeVisible()
-    await expect(page.getByLabel('Last Name')).toBeVisible()
+    await expect(page.getByLabel('First name')).toBeVisible()
+    await expect(page.getByLabel('Last name')).toBeVisible()
     await expect(page.getByLabel(/Email/i)).toBeVisible() // Fixed: "Email address" not "Email"
     await expect(page.getByLabel('Password', { exact: true })).toBeVisible()
-    await expect(page.getByLabel('Confirm Password')).toBeVisible()
-    await expect(page.getByLabel('Organization Name')).toBeVisible()
+    await expect(page.getByLabel('Confirm password')).toBeVisible()
+    await expect(page.getByLabel('Organization name')).toBeVisible()
     await expect(page.getByRole('button', { name: /create account|register|sign up/i })).toBeVisible() // Fixed: button says "Create account"
   })
 
@@ -21,12 +21,12 @@ test.describe('Authentication - Registration', () => {
     const testUser = AuthHelper.generateTestUser()
 
     // Fill registration form
-    await page.getByLabel('First Name').fill(testUser.firstName)
-    await page.getByLabel('Last Name').fill(testUser.lastName)
+    await page.getByLabel('First name').fill(testUser.firstName)
+    await page.getByLabel('Last name').fill(testUser.lastName)
     await page.getByLabel(/Email/i).fill(testUser.email)
     await page.getByLabel('Password', { exact: true }).fill(testUser.password)
-    await page.getByLabel('Confirm Password').fill(testUser.password)
-    await page.getByLabel('Organization Name').fill(testUser.organizationName)
+    await page.getByLabel('Confirm password').fill(testUser.password)
+    await page.getByLabel('Organization name').fill(testUser.organizationName)
 
     // Check terms checkbox (REQUIRED!)
     await page.getByLabel(/terms.*service|agree/i).check()
@@ -64,7 +64,7 @@ test.describe('Authentication - Registration', () => {
 
     await page.getByLabel('Email').fill(testUser.email)
     await page.getByLabel('Password', { exact: true }).fill('weak')
-    await page.getByLabel('Confirm Password').click() // Blur password field
+    await page.getByLabel('Confirm password').click() // Blur password field
 
     // Should show password strength error
     await expect(page.getByText(/password.*at least|password.*minimum|password.*strong/i)).toBeVisible()
@@ -74,8 +74,8 @@ test.describe('Authentication - Registration', () => {
     const testUser = AuthHelper.generateTestUser()
 
     await page.getByLabel('Password', { exact: true }).fill(testUser.password)
-    await page.getByLabel('Confirm Password').fill('DifferentPassword123')
-    await page.getByLabel('Organization Name').click() // Blur confirm password field
+    await page.getByLabel('Confirm password').fill('DifferentPassword123')
+    await page.getByLabel('Organization name').click() // Blur confirm password field
 
     // Should show password mismatch error
     await expect(page.getByText(/password.*match|password.*same/i)).toBeVisible()
@@ -87,12 +87,12 @@ test.describe('Authentication - Registration', () => {
     await apiHelper.register(existingUser)
 
     // Try to register with same email
-    await page.getByLabel('First Name').fill('New')
-    await page.getByLabel('Last Name').fill('User')
+    await page.getByLabel('First name').fill('New')
+    await page.getByLabel('Last name').fill('User')
     await page.getByLabel(/Email/i).fill(existingUser.email)
     await page.getByLabel('Password', { exact: true }).fill('NewPassword@123')
-    await page.getByLabel('Confirm Password').fill('NewPassword@123')
-    await page.getByLabel('Organization Name').fill('New Org')
+    await page.getByLabel('Confirm password').fill('NewPassword@123')
+    await page.getByLabel('Organization name').fill('New Org')
 
     // Check terms checkbox (REQUIRED!)
     await page.getByLabel(/terms.*service|agree/i).check()
@@ -109,12 +109,12 @@ test.describe('Authentication - Registration', () => {
     const testUser = AuthHelper.generateTestUser()
     const specialPassword = 'T3st!@#$%^&*()_+-=[]{}|;:,.<>?'
 
-    await page.getByLabel('First Name').fill(testUser.firstName)
-    await page.getByLabel('Last Name').fill(testUser.lastName)
+    await page.getByLabel('First name').fill(testUser.firstName)
+    await page.getByLabel('Last name').fill(testUser.lastName)
     await page.getByLabel(/Email/i).fill(testUser.email)
     await page.getByLabel('Password', { exact: true }).fill(specialPassword)
-    await page.getByLabel('Confirm Password').fill(specialPassword)
-    await page.getByLabel('Organization Name').fill(testUser.organizationName)
+    await page.getByLabel('Confirm password').fill(specialPassword)
+    await page.getByLabel('Organization name').fill(testUser.organizationName)
 
     // Check terms checkbox (REQUIRED!)
     await page.getByLabel(/terms.*service|agree/i).check()
@@ -130,10 +130,10 @@ test.describe('Authentication - Registration', () => {
     const testUser = AuthHelper.generateTestUser()
     const customOrgName = 'My Custom Organization 2025'
 
-    await page.getByLabel('Organization Name').fill(customOrgName)
+    await page.getByLabel('Organization name').fill(customOrgName)
 
     // Organization name field should accept the value
-    await expect(page.getByLabel('Organization Name')).toHaveValue(customOrgName)
+    await expect(page.getByLabel('Organization name')).toHaveValue(customOrgName)
   })
 
   test('should have link to login page', async ({ page }) => {
@@ -172,10 +172,10 @@ test.describe('Authentication - Registration', () => {
 
     await page.getByLabel(/Email/i).fill(testUser.email)
     await page.getByLabel('Password', { exact: true }).fill(testUser.password)
-    await page.getByLabel('Confirm Password').fill(testUser.password)
-    await page.getByLabel('Organization Name').fill(testUser.organizationName)
-    await page.getByLabel('First Name').fill(testUser.firstName)
-    await page.getByLabel('Last Name').fill(testUser.lastName)
+    await page.getByLabel('Confirm password').fill(testUser.password)
+    await page.getByLabel('Organization name').fill(testUser.organizationName)
+    await page.getByLabel('First name').fill(testUser.firstName)
+    await page.getByLabel('Last name').fill(testUser.lastName)
 
     // Check terms checkbox (REQUIRED!)
     await page.getByLabel(/terms.*service|agree/i).check()
