@@ -62,9 +62,9 @@ export interface DispatchOptions {
   callerUserId?: string | null;
   /**
    * The principal of the run this dispatch belongs to. When set it decides
-   * instead of callerUserId, so a gateway run is judged by its gateway's
-   * scope (see resolveForDispatch). The workspace check still reads
-   * callerUserId: a workspace belongs to a person.
+   * instead of callerUserId -- for the runner (resolveForDispatch) and for
+   * the workspace (WorkspaceService.findForDispatch) -- so a gateway run is
+   * judged by its gateway's scope, not refused for having no user.
    */
   principal?: ExecutionPrincipal;
 }
@@ -187,7 +187,7 @@ export class RunnerCallService implements OnModuleDestroy {
     // workspace kept taking work and any id at all was accepted.
     let workspace: { id: string; cwd: string } | null = null;
     if (workspaceId !== undefined) {
-      workspace = await this.workspaces.findForDispatch(workspaceId, runner.id, options.callerUserId);
+      workspace = await this.workspaces.findForDispatch(workspaceId, runner.id, options.principal ?? options.callerUserId);
       if (!workspace) {
         throw new RunnerCallError(
           RUNNER_CALL_ERRORS.WORKSPACE_NOT_FOUND,
