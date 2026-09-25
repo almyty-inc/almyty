@@ -17,6 +17,7 @@ import { PriceFeedService } from './pricing/price-feed.service';
 import { ModelRouterService } from './routing/model-router.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { providerUsableBy } from '../llm-providers/private-provider';
+import { providerChecked } from './readiness';
 
 /** Override as the API accepts it; currency defaults to USD when omitted. */
 export type ModelPricingInput = Omit<ModelPricing, 'currency'> & { currency?: string };
@@ -80,11 +81,13 @@ export interface ValidationOutcome {
 }
 
 /**
- * The catalog is data: a card exists because someone registered it (by
- * hand, from a provider's list, or from a deployment we made), and it is
- * selectable only once a real call has gone through. There is no code
- * list of supported models anywhere; this service is where "supported"
- * is decided, per org, by evidence.
+ * The catalog is data: a card exists because a connected provider lists
+ * the model (or someone registered it by hand, or a model started on the
+ * customer's cloud made one), and it is selectable once a real call has
+ * gone through: for a provider's models, the provider's key check; for an
+ * endpoint with no provider, a check of its own. There is no code list of
+ * supported models anywhere; this service is where "supported" is decided,
+ * per org, by evidence.
  */
 @Injectable()
 export class ModelCatalogService {
@@ -149,10 +152,12 @@ export class ModelCatalogService {
       throw new BadRequestException({ code: 'MODEL_NOT_CALLABLE', message: 'A model needs a providerId or an endpointRef.url to be called through' });
     }
     let providerType: string | null = null;
+    let checkedProvider = false;
     if (input.providerId) {
       const provider = await this.providers.findOne({ where: { id: input.providerId, organizationId } });
       if (!provider) throw new NotFoundException('Provider not found');
       providerType = provider.type;
+      checkedProvider = providerChecked(provider);
     } else {
       providerType = input.endpointRef?.providerType ?? LlmProviderType.CUSTOM;
     }
@@ -186,8 +191,12 @@ export class ModelCatalogService {
       pricingSource: input.pricingOverride ? 'manual' : 'unpriced',
 
       status: 'active',
-      validationStatus: 'never',
-      metadata: input.metadata ?? null,
+      // Usable at once when its provider's key check has passed: the
+      // readiness rule is the provider's, not a step per model. A card
+      // for an endpoint (no provider) waits for its own check.
+      validationStatus: checkedProvider ? 'passed' : 'never',
+      lastValidatedAt: checkedProvider ? new Date() : null,
+      metadata: checkedProvider ? { ...(input.metadata ?? {}), checkedBy: 'provider_check' } : input.metadata ?? null,
     });
     this.applyFeedPrice(card);
     let saved: Model;
@@ -270,6 +279,12 @@ export class ModelCatalogService {
     if (created.length) this.audit(created[0], AuditAction.MODEL_REGISTERED, userId, { providerId, count: created.length, source: 'provider_list' });
     if (retired.length) this.audit(retired[0], AuditAction.UPDATE, userId, { providerId, retired: retired.map((c) => c.vendorModelId), reason: 'not listed by provider' });
     if (reinstated.length) this.audit(reinstated[0], AuditAction.UPDATE, userId, { providerId, reinstated: reinstated.map((c) => c.vendorModelId) });
+    // A key check that finished while this sync was listing only marked
+    // the cards that existed then; the ones just created missed it.
+    if (created.some((c) => c.validationStatus === 'never')) {
+      const now = await this.providers.findOne({ where: { id: providerId, organizationId } });
+      if (now && providerChecked(now)) await this.applyProviderCheck(organizationId, providerId, { passed: true });
+    }
     return { created, skipped, retired, reinstated };
   }
 
@@ -399,8 +414,13 @@ export class ModelCatalogService {
     return retired;
   }
 
-  /** A card for a vendor model as the provider lists it: unvalidated, priced from the feed. */
+  /**
+   * A card for a vendor model as the provider lists it, priced from the
+   * feed. It is usable at once when the provider's key check has passed
+   * (see providerChecked); otherwise it waits for that check.
+   */
   private newProviderCard(provider: LlmProvider, listed: { id: string; name?: string }, metadata: Record<string, any>): Model {
+    const checked = providerChecked(provider);
     const card = this.models.create({
       organizationId: provider.organizationId,
       name: listed.name || listed.id,
@@ -411,11 +431,78 @@ export class ModelCatalogService {
       privacyTier: provider.type === LlmProviderType.OLLAMA ? 'local' : 'public',
       pricingSource: 'unpriced',
       status: 'active',
-      validationStatus: 'never',
-      metadata,
+      validationStatus: checked ? 'passed' : 'never',
+      lastValidatedAt: checked ? provider.lastHealthCheckAt ?? new Date() : null,
+      metadata: checked ? { ...metadata, checkedBy: 'provider_check' } : metadata,
     });
     this.applyFeedPrice(card);
     return card;
+  }
+
+  /**
+   * The readiness rule. A provider's models become usable when the
+   * provider's key check passes, all of them at once: the check is a real
+   * call with that key, and the list the models came from is the vendor's
+   * own statement that it serves them. There is no per-model step.
+   *
+   * Passed: every card of this provider still waiting on the check is
+   * marked checked. A card that failed on its own (the vendor answered
+   * MODEL_NOT_FOUND for it) keeps its failure; a retired card stays
+   * retired, since `status` is what takes it out.
+   *
+   * Key rejected: the provider's checked cards go back to waiting, with
+   * the reason, so nothing served by a key the vendor refuses is offered.
+   * Any other failure (an outage, a timeout) changes nothing here: the
+   * router already skips an unhealthy provider, and a blip must not make
+   * every model look unavailable.
+   */
+  async applyProviderCheck(
+    organizationId: string,
+    providerId: string,
+    outcome: { passed: boolean; keyRejected?: boolean; error?: string },
+  ): Promise<number> {
+    if (!outcome.passed && !outcome.keyRejected) return 0;
+    const cards = await this.models.find({ where: { organizationId, providerId } });
+    const now = new Date();
+    const changed: Model[] = [];
+    for (const card of cards) {
+      if (outcome.passed && card.validationStatus === 'never') {
+        card.validationStatus = 'passed';
+        card.lastValidatedAt = now;
+        card.lastValidationError = null;
+        card.metadata = { ...(card.metadata ?? {}), checkedBy: 'provider_check' };
+      } else if (!outcome.passed && card.validationStatus === 'passed' && card.metadata?.checkedBy === 'provider_check') {
+        card.validationStatus = 'never';
+        card.lastValidatedAt = now;
+        card.lastValidationError = (outcome.error ?? 'The provider rejected its key').slice(0, 1000);
+      } else {
+        continue;
+      }
+      changed.push(await this.models.save(card));
+    }
+    if (changed.length) {
+      this.audit(changed[0], AuditAction.MODEL_VALIDATED, undefined, {
+        providerId,
+        passed: outcome.passed,
+        count: changed.length,
+        source: 'provider_check',
+        ...(outcome.passed ? {} : { error: outcome.error }),
+      });
+    }
+    return changed.length;
+  }
+
+  /**
+   * Connect-time sync: import what the provider lists and hand back its
+   * cards, for the page that just checked the key to show. Unlike the
+   * lifecycle hook this waits and throws, because the person is looking.
+   */
+  async syncAndListProvider(organizationId: string, providerId: string): Promise<Model[]> {
+    const inFlight = this.syncInFlight.get(providerId);
+    if (inFlight) await inFlight;
+    await this.syncFromProvider(organizationId, providerId);
+    this.syncedAt.set(providerId, Date.now());
+    return this.models.find({ where: { organizationId, providerId }, order: { createdAt: 'ASC' } });
   }
 
   async update(organizationId: string, id: string, input: UpdateModelInput, userId?: string): Promise<Model> {

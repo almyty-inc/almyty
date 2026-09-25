@@ -26,10 +26,12 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { LlmProviderType } from '../../entities/llm-provider.entity';
 import {
   CreateLlmProviderBodyDto,
+  ConnectLlmProviderBodyDto,
   UpdateLlmProviderBodyDto,
   ChatRequestBodyDto,
   LlmProviderSearchQueryDto,
 } from './dto/llm-providers-controller.dto';
+import { view as modelView } from '../model-catalog/model-catalog.controller';
 
 /**
  * The status a failed handler answers with.
@@ -96,6 +98,53 @@ export class LlmProvidersController {
           success: false,
           message: error.message,
           error: 'PROVIDER_CREATION_FAILED',
+        },
+        failureStatus(error, HttpStatus.BAD_REQUEST),
+      );
+    }
+  }
+
+  /**
+   * Connect a provider: save it, check the key with a real call, and list
+   * its models, in one request. On success every listed model is usable.
+   * On failure nothing is saved and the answer says what went wrong in one
+   * sentence (`message`), with the vendor's words (`detail`) and where to
+   * get a key (`keyUrl`). `error` is KEY_REJECTED, CHECK_FAILED or
+   * INVALID_CONFIGURATION.
+   */
+  @Post('connect')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'Connect a provider: check the key and list its models' })
+  @ApiResponse({ status: 201, description: 'Provider connected; its models are listed' })
+  @ApiResponse({ status: 400, description: 'The key or the configuration did not pass the check; nothing was saved' })
+  async connectProvider(
+    @Body(ValidationPipe) body: ConnectLlmProviderBodyDto,
+    @Request() req: any,
+  ) {
+    const organizationId = req.user.currentOrganizationId;
+    if (!organizationId) {
+      throw new HttpException(
+        { success: false, message: 'No organization found for user', error: 'NO_ORGANIZATION' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    try {
+      const result = await this.llmProvidersService.connectProvider(body, organizationId, req.user.id);
+      return {
+        success: true,
+        data: { provider: result.provider.toPublicView(), models: result.models.map(modelView), check: result.check },
+        message: 'Provider connected',
+      };
+    } catch (error: any) {
+      const response = error instanceof HttpException ? error.getResponse() : null;
+      const coded = response && typeof response === 'object' ? (response as Record<string, any>) : {};
+      throw new HttpException(
+        {
+          success: false,
+          error: coded.code ?? 'INVALID_CONFIGURATION',
+          message: typeof coded.message === 'string' ? coded.message : error.message,
+          ...(coded.detail ? { detail: coded.detail } : {}),
+          ...(coded.keyUrl ? { keyUrl: coded.keyUrl } : {}),
         },
         failureStatus(error, HttpStatus.BAD_REQUEST),
       );
