@@ -11,6 +11,7 @@ import { GatewayRateLimitService } from '../../gateway-rate-limit.service';
 import { MailService } from '../../../mail/mail.service';
 import { fakeRepository } from '../../../../test/fake-repository';
 import { FakeRedisWithWindows } from '../../../../test/fake-redis-windows';
+import { restoreEnv } from '../../../../test/env';
 
 /**
  * Email sign-in codes: single use, short lived, a bounded number of
@@ -73,7 +74,7 @@ describe('VisitorEmailOtpService', () => {
     process.env.NODE_ENV = 'test';
   });
   afterAll(() => {
-    process.env.NODE_ENV = OLD_ENV;
+    restoreEnv('NODE_ENV', OLD_ENV);
   });
   afterEach(() => jest.useRealTimers());
 

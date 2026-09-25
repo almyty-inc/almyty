@@ -1,5 +1,4 @@
 // Global test setup
-import { Test, TestingModule } from '@nestjs/testing';
 
 // The integration specs boot a real Nest graph and run every migration in
 // their own Postgres schema before the first assertion. That does not finish
@@ -11,8 +10,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 if (process.env.RUN_DB_INTEGRATION === '1') {
   jest.setTimeout(120_000);
 }
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
 
 // Mock console methods to keep tests quiet
 global.console = {
@@ -22,66 +19,6 @@ global.console = {
   info: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
-};
-
-// Mock entities for testing
-export const mockRepository = () => ({
-  find: jest.fn(),
-  findOne: jest.fn(),
-  findOneBy: jest.fn(),
-  findAndCount: jest.fn(),
-  save: jest.fn(),
-  remove: jest.fn(),
-  delete: jest.fn(),
-  update: jest.fn(),
-  create: jest.fn(),
-  count: jest.fn(),
-  createQueryBuilder: jest.fn(() => ({
-    where: jest.fn().mockReturnThis(),
-    andWhere: jest.fn().mockReturnThis(),
-    orWhere: jest.fn().mockReturnThis(),
-    orderBy: jest.fn().mockReturnThis(),
-    skip: jest.fn().mockReturnThis(),
-    take: jest.fn().mockReturnThis(),
-    leftJoinAndSelect: jest.fn().mockReturnThis(),
-    innerJoinAndSelect: jest.fn().mockReturnThis(),
-    getMany: jest.fn(),
-    getOne: jest.fn(),
-    getManyAndCount: jest.fn(),
-    execute: jest.fn(),
-  })),
-});
-
-// Mock DataSource
-export const mockDataSource = () => ({
-  createQueryRunner: jest.fn(() => ({
-    connect: jest.fn(),
-    startTransaction: jest.fn(),
-    commitTransaction: jest.fn(),
-    rollbackTransaction: jest.fn(),
-    release: jest.fn(),
-    manager: {
-      save: jest.fn(),
-      remove: jest.fn(),
-      findOne: jest.fn(),
-      find: jest.fn(),
-    },
-  })),
-  manager: {
-    save: jest.fn(),
-    remove: jest.fn(),
-    findOne: jest.fn(),
-    find: jest.fn(),
-    transaction: jest.fn(),
-  },
-});
-
-// Helper to create mock providers for entities
-export const createMockProviders = (entities: any[]) => {
-  return entities.map(entity => ({
-    provide: getRepositoryToken(entity),
-    useFactory: mockRepository,
-  }));
 };
 
 // axios and redis stay real here too. The global doubles they replaced
@@ -105,36 +42,14 @@ export const createMockProviders = (entities: any[]) => {
 // real tokens with src/test/jwt.ts. Pinned by
 // __tests__/no-global-jwt-stub.spec.ts.
 
-// Global test helpers
-export class TestHelper {
-  static async createTestingModule(providers: any[] = []): Promise<TestingModule> {
-    return Test.createTestingModule({
-      providers: [
-        {
-          provide: DataSource,
-          useFactory: mockDataSource,
-        },
-        ...providers,
-      ],
-    }).compile();
-  }
+// No shared repository, DataSource or TestingModule doubles live here. The
+// ones that did answered every query-builder call with `this` and every read
+// with `undefined`, so a spec built on them passed whatever SQL the code
+// under test composed. Specs use src/test/fake-repository.ts and friends.
+// Pinned by __tests__/no-shared-match-anything-doubles.spec.ts.
 
-  static mockEntity<T>(entity: new () => T, data: Partial<T>): T {
-    const instance = new entity();
-    Object.assign(instance, data);
-    return instance;
-  }
-
-  static resetAllMocks() {
-    jest.clearAllMocks();
-  }
-}
-
-// Setup and teardown
 beforeEach(() => {
-  TestHelper.resetAllMocks();
+  jest.clearAllMocks();
 });
 
-afterAll(async () => {
-  // Clean up any global resources
-});
+export {};

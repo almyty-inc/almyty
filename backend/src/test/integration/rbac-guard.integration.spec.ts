@@ -30,6 +30,7 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
+import { listenOnLoopback } from '../http';
 
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
@@ -139,7 +140,7 @@ async function buildApp(user: any): Promise<{ app: INestApplication; jwt: JwtSer
   }).compile();
 
   const app = moduleRef.createNestApplication();
-  await app.init();
+  await listenOnLoopback(app);
 
   const jwt = moduleRef.get(JwtService);
   return { app, jwt };

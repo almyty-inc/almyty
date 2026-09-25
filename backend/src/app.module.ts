@@ -7,8 +7,6 @@ import { buildThrottlerOptions } from './common/security/throttler-options';
 import { CacheModule } from '@nestjs/cache-manager';
 import { BullModule } from '@nestjs/bull';
 import { RedisModule } from '@nestjs-modules/ioredis';
-import { versionsConfig } from 'typeorm-versions';
-import { CustomVersionSubscriber } from './common/custom-version-subscriber';
 import { VersionContextInterceptor } from './common/interceptors/version-context.interceptor';
 
 // Import entities
@@ -118,7 +116,7 @@ import { loadEeModules } from './ee-loader';
 // Optional single-image frontend serving (almyty/almyty). Returns [] for the
 // plain api image, so the module tree is unchanged when SERVE_FRONTEND is off.
 import { frontendStaticImports } from './common/frontend/frontend-static';
-import { appQueryLogging } from './config/query-logger';
+import { appTypeOrmOptions } from './config/app-typeorm.options';
 import { appDataSourceFactory } from './common/errors/redact-query-error';
 
 @Module({
@@ -133,50 +131,10 @@ import { appDataSourceFactory } from './common/errors/redact-query-error';
       envFilePath: ['.env.local', '.env'],
     }),
 
-    // Database — use individual params (not URL) for proper SSL control
+    // Database -- options (and DB_SSL) in config/app-typeorm.options.ts
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
-        const dbSsl = configService.get('DB_SSL', 'false') === 'true';
-
-        const config = versionsConfig({
-            type: 'postgres' as const,
-            host: configService.get<string>('DATABASE_HOST', 'localhost'),
-            port: parseInt(configService.get<string>('DATABASE_PORT', '5432')),
-            username: configService.get<string>('DATABASE_USERNAME', 'postgres'),
-            password: configService.get<string>('DATABASE_PASSWORD', 'password'),
-            database: configService.get<string>('DATABASE_NAME', 'almyty'),
-            entities: [__dirname + '/entities/*.entity{.ts,.js}'],
-            migrations: [__dirname + '/migrations/*{.ts,.js}'],
-            // Pods migrate on boot only when explicitly enabled (the local
-            // default). In the cluster DB_MIGRATIONS_RUN=false: a single
-            // gated migration Job runs before the rollout, so the N replicas
-            // don't race each other running the same migrations on startup.
-            migrationsRun:
-              configService.get('DB_MIGRATIONS_RUN', 'true') !== 'false',
-            synchronize: false,
-            // Failing and slow queries are logged with their SQL and error,
-            // never their parameters (row contents).
-            ...appQueryLogging(configService.get<string>('NODE_ENV')),
-            ssl: dbSsl ? { rejectUnauthorized: false } : false,
-            extra: {
-              // Default pool 10 → 30. Tool generation now batches 20
-              // saves in flight per import (was 5); 30 gives the
-              // import worker its full batch + spare connections for
-              // the rest of the app's concurrent request handling.
-              // Postgres default max_connections is 100; one pod
-              // taking 30 leaves plenty for sibling pods + admin.
-              max: parseInt(configService.get<string>('DB_POOL_SIZE', '30')),
-              ...(dbSsl && { ssl: { rejectUnauthorized: false } }),
-            },
-          });
-        // Replace default subscriber with our custom one that tracks the user
-        (config as any).subscribers = [CustomVersionSubscriber];
-        return {
-          ...config,
-          autoLoadEntities: true,
-        } as any;
-      },
+      useFactory: (configService: ConfigService) => appTypeOrmOptions(configService),
       // Failed queries are rethrown without their parameters (row
       // contents), whoever logs or reports the error afterwards.
       dataSourceFactory: async (options) => appDataSourceFactory(options),

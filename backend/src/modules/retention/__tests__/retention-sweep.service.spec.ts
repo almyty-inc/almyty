@@ -3,6 +3,7 @@ import { RetentionSweepService } from '../retention-sweep.service';
 import { RetentionPolicy } from '../../../entities/retention-policy.entity';
 import { AgentRunStatus } from '../../../entities/agent-run.entity';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
+import { restoreEnv } from '../../../test/env';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -348,7 +349,7 @@ describe('RetentionSweepService', () => {
       service.onModuleDestroy();
       expect((service as any).timer).toBeUndefined();
     } finally {
-      process.env.NODE_ENV = prev;
+      restoreEnv('NODE_ENV', prev);
     }
   });
   describe('per-app retention (sweepApps)', () => {

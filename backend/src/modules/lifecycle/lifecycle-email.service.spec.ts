@@ -11,6 +11,7 @@ import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
 import { MailService } from '../mail/mail.service';
 import { OnboardingService } from '../onboarding/onboarding.service';
+import { restoreEnv } from '../../test/env';
 
 const USER_ID = 'user-1';
 const ORG_ID = 'org-1';
@@ -85,7 +86,7 @@ describe('LifecycleEmailService', () => {
   });
 
   afterEach(() => {
-    process.env.LIFECYCLE_EMAILS_ENABLED = ORIGINAL_ENV;
+    restoreEnv('LIFECYCLE_EMAILS_ENABLED', ORIGINAL_ENV);
     jest.clearAllMocks();
   });
 

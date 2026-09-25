@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import { listenOnLoopback } from '../../../../test/http';
 
 import { AgentExecution } from '../../../../entities/agent-execution.entity';
 import { RoutingAnalyticsController } from '../routing-analytics.controller';
@@ -78,7 +79,7 @@ describe('GET /analytics/routing/failure-rate', () => {
       .compile();
 
     app = moduleRef.createNestApplication();
-    await app.init();
+    await listenOnLoopback(app);
   });
 
   afterAll(async () => {
