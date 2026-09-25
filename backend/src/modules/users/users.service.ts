@@ -17,6 +17,9 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { effectiveMemberships, isEffectiveMembership } from '../../common/authorization/membership';
 import { ORGANIZATION_ROLE_RANK } from '../organizations/organization-role-rank';
 import { ConnectionOffboardingService } from '../connections/connection-offboarding.service';
+import { WipedConnection } from '../connections/member-connection-offboarding';
+import { ResourceHandoverHelper } from '../organizations/resource-handover.helper';
+import { AuditLog } from '../../entities/audit-log.entity';
 
 export interface PaginatedUsers {
   users: User[];
@@ -67,6 +70,9 @@ export class UsersService {
     // that build this service positionally and never delete still compile.
     @Inject(forwardRef(() => ConnectionOffboardingService))
     private readonly connectionOffboarding?: ConnectionOffboardingService,
+    // Same: deleting an account hands the person's resources over first.
+    @Inject(forwardRef(() => ResourceHandoverHelper))
+    private readonly handover?: ResourceHandoverHelper,
   ) {}
 
   async findAll(options: {
@@ -381,11 +387,50 @@ export class UsersService {
       }
     }
 
-    // The person's own connections do not die with the users row:
-    // credentials.ownerUserId has no foreign key, so they would stay
-    // stored, and valid at the provider, owned by nobody. Wipe and
-    // provider-revoke them first (ConnectionOffboardingService); if the
-    // wipe fails the account is not deleted and the delete can be retried.
+    // What the person leaves in each organization they have a membership
+    // row in -- active or deactivated, since a deactivated member's private
+    // rows are still theirs -- goes the way a removed member's does
+    // (ResourceHandoverHelper): private agents, tools, APIs, gateways,
+    // providers and credentials move to whoever deleted the account when
+    // they are a member there, otherwise to that organization's
+    // longest-standing owner, and stay private; runners are deregistered
+    // with their tools; their own connections are wiped; grants naming them
+    // are dropped. Nothing has a foreign key to users that would do this:
+    // the rows stayed owned by an id that no longer exists, private to
+    // nobody, which no admin could reach or transfer.
+    const handover = this.requireHandover();
+    const actor = actorUserId && actorUserId !== id ? actorUserId : null;
+    const wiped: WipedConnection[] = [];
+    const memberships = await this.userOrganizationRepository.find({ where: { userId: id } });
+    const audit = await this.userRepository.manager.transaction(async (manager) => {
+      const entries: AuditLog[] = [];
+      for (const { organizationId } of memberships) {
+        const actorHere = actor
+          ? await manager.getRepository(UserOrganization).findOne({ where: { userId: actor, organizationId } })
+          : null;
+        const toUserId = actorHere && isEffectiveMembership(actorHere)
+          ? actor!
+          : await handover.longestStandingOtherOwner(manager, organizationId, id);
+        entries.push(...(await handover.handOverPrivateResources(manager, {
+          organizationId,
+          fromUserId: id,
+          toUserId,
+          actorUserId: actor ?? toUserId,
+          reason: 'user_deleted',
+          wipedConnections: wiped,
+        })));
+      }
+      return entries;
+    });
+    handover.publishCommitted(audit);
+    await handover.revokeWipedConnectionsAtProviders(wiped, { userId: id, actorUserId: actor ?? id, reason: 'user_deleted' });
+
+    // Connections in an organization they hold no membership row in any
+    // more do not die with the users row either: credentials.ownerUserId
+    // has no foreign key, so they would stay stored, and valid at the
+    // provider, owned by nobody. Wipe and provider-revoke those too
+    // (ConnectionOffboardingService); if the wipe fails the account is not
+    // deleted and the delete can be retried.
     await this.requireOffboarding().offboard({
       organizationId: null,
       userId: id,
@@ -393,6 +438,13 @@ export class UsersService {
       reason: 'user_deleted',
     });
     await this.userRepository.remove(user);
+  }
+
+  private requireHandover(): ResourceHandoverHelper {
+    // Nest always injects it; only a hand-built instance can lack it, and
+    // deleting an account without it would strand the person's private rows.
+    if (!this.handover) throw new Error('ResourceHandoverHelper is not wired into UsersService');
+    return this.handover;
   }
 
   private requireOffboarding(): ConnectionOffboardingService {

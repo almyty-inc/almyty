@@ -73,6 +73,20 @@ describe('ApprovalsPage', () => {
     expect(screen.queryByText('No pending approvals')).not.toBeInTheDocument()
   })
 
+  it('labels a private agent\'s request private, not org', async () => {
+    ;(approvalsApi.list as any).mockResolvedValue([
+      {
+        id: 'a-p', organizationId: 'org-1', teamId: null, visibility: 'private', runId: 'run-p', agentId: 'agent-p',
+        toolCallId: null, reason: 'Pay the rent', payload: null, status: 'pending', decidedBy: null, decidedAt: null,
+        decisionReason: null, expiresAt: null, createdAt: new Date().toISOString(),
+      },
+    ])
+    render(<ApprovalsPage />)
+    await screen.findByText('Pay the rent')
+    expect(screen.getByText('private')).toBeInTheDocument()
+    expect(screen.queryByText('org')).not.toBeInTheDocument()
+  })
+
   it('shows the empty state when the list is empty', async () => {
     ;(approvalsApi.list as any).mockResolvedValue([])
     render(<ApprovalsPage />)

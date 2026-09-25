@@ -1,6 +1,6 @@
 # Approval Policies
 
-Enterprise (`approval_policy` entitlement). Require the right people to sign off before a consequential action goes through: finance then an admin, two reviewers for a quorum, or a gate that only trips over a dollar threshold. Single-gate [approvals](/approvals) (one authorized reviewer approves or rejects a paused run) are free and enough for most workflows. Approval policies add structured sign-off on top: **multi-step** chains, **conditional** matching ("only for refunds over $1,000"), and **quorum** ("any two reviewers").
+Requires the `approval_policy` entitlement (Business or Enterprise on the hosted platform). Require the right people to sign off before a consequential action goes through: finance then an admin, two reviewers for a quorum, or a gate that only trips over a dollar threshold. Single-gate [approvals](/approvals) (one authorized reviewer approves or rejects a paused run) are free and enough for most workflows. Approval policies add structured sign-off on top: **multi-step** chains, **conditional** matching ("only for refunds over $1,000"), and **quorum** ("any two reviewers").
 
 ![A refund over threshold paused for human approval, with Approve and Reject](/screenshots/approval-refund-820.png)
 
@@ -8,11 +8,15 @@ When no policy matches a request, the OSS single-gate behavior applies unchanged
 
 ## Anatomy of a policy
 
-Without the `approval_policy` entitlement, **Settings → Approvals** shows the locked view below. This is separate from the free, single-gate approval queue.
+With the entitlement enabled, **Settings → Approvals** lists policies and provides **New policy**. This is separate from the free, single-gate approval queue.
 
-![Approval policy settings locked on a Pro demo organization](/screenshots/settings-approval-policies-locked.png)
+![Approval policy settings with New policy available on a Business organization](/screenshots/settings-approval-policies-enabled.png)
 
-Create policies under **Settings**, or via the API. A policy is a match condition, an ordered set of sign-off steps, and a priority:
+Click **New policy** to open the dedicated editor, or create a policy through the API. The editor includes match conditions and sequential sign-off steps:
+
+![New approval policy editor with match conditions and sequential steps](/screenshots/settings-approval-policy-new.png)
+
+A policy is a match condition, an ordered set of sign-off steps, and a priority:
 
 ```json
 {

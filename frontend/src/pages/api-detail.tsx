@@ -25,7 +25,8 @@ import { OverviewTab } from '@/components/apis/detail/overview-tab'
 import { SchemaTab } from '@/components/apis/detail/schema-tab'
 import { SecurityTab } from '@/components/apis/detail/security-tab'
 
-import { apisApi, toolsApi } from '@/lib/api'
+import { apisApi } from '@/lib/api'
+import { toolsQuery } from '@/lib/list-queries'
 import { useOrganizationStore } from '@/store/organization'
 import { ApiType, ApiOperation, Tool } from '@/types'
 
@@ -69,14 +70,12 @@ export function ApiDetailPage() {
   })
 
   // Get all tools to count those from this API
-  const { data: allToolsData } = useQuery({
-    queryKey: ['tools', currentOrganization?.id],
-    queryFn: () => toolsApi.getAll(currentOrganization?.id),
+  const { data: allToolsPage } = useQuery({
+    ...toolsQuery(currentOrganization?.id),
     enabled: !!currentOrganization,
   })
 
-  const allToolsExtracted = allToolsData?.tools || allToolsData || []
-  const allTools = Array.isArray(allToolsExtracted) ? allToolsExtracted : []
+  const allTools = allToolsPage?.items ?? []
   const apiTools = allTools.filter((tool: Tool) => tool.metadata?.sourceApi?.id === id || (tool as unknown as Record<string, string>).apiId === id)
 
   const getApiTypeIcon = (type: ApiType) => {

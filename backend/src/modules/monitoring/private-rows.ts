@@ -54,3 +54,57 @@ export function notOthersPrivateAgentRun(column: string): string {
     `WHERE pr.id = ${column} ` +
     `AND pra.visibility = 'private' AND ${OWNER_IS_NOT_VIEWER('pra."createdBy"')})`;
 }
+/**
+ * The same rows as the fragments above, plus the team tier: a row tied to
+ * a team resource is kept only for an org owner/admin or an active member
+ * of that team -- AccessPolicyService.canAccess, which is what the lists
+ * of those resources filter by. Analytics and the onboarding guide use
+ * these: a request log line, a usage row or a checklist tick for a team
+ * gateway tells a member outside the team that it exists and how it is
+ * used, when the gateway list itself does not show it to them.
+ *
+ * Membership is read the way AccessPolicyService reads it: an org
+ * membership counts when it is active and not a pending invite
+ * (common/authorization/membership.ts), a team membership when it is
+ * active and the team is in the resource's organization. A team row with
+ * no teamId is kept from everyone but owners/admins, as canAccess denies
+ * it. Each binds `:privateViewerId`; a null viewer is no member and no
+ * owner, so it keeps neither tier.
+ */
+const VIEWER = 'CAST(:privateViewerId AS text)';
+
+function viewerMaySeeTeamRow(alias: string): string {
+  return `(EXISTS (SELECT 1 FROM user_organizations vo WHERE vo."organizationId" = ${alias}."organizationId" ` +
+    `AND vo."userId"::text = ${VIEWER} AND vo."isActive" IS NOT FALSE ` +
+    `AND (vo."inviteAccepted" = true OR vo."inviteToken" IS NULL) AND vo.role IN ('owner', 'admin')) ` +
+    `OR EXISTS (SELECT 1 FROM user_teams vt JOIN teams vtt ON vtt.id = vt."teamId" ` +
+    `WHERE vt."teamId" = ${alias}."teamId" AND vtt."organizationId" = ${alias}."organizationId" ` +
+    `AND vt."userId"::text = ${VIEWER} AND vt."isActive" = true))`;
+}
+
+function outsideViewerScope(alias: string, ownerColumn: string): string {
+  return `((${alias}.visibility = 'private' AND ${OWNER_IS_NOT_VIEWER(`${alias}."${ownerColumn}"`)}) ` +
+    `OR (${alias}.visibility = 'team' AND NOT ${viewerMaySeeTeamRow(alias)}))`;
+}
+
+export function inViewerScopeGateway(column: string): string {
+  return `NOT EXISTS (SELECT 1 FROM gateways pg WHERE pg.id = ${column} AND ${outsideViewerScope('pg', 'ownerUserId')})`;
+}
+
+export function inViewerScopeProvider(column: string): string {
+  return `NOT EXISTS (SELECT 1 FROM llm_providers pp WHERE pp.id = ${column} AND ${outsideViewerScope('pp', 'ownerUserId')})`;
+}
+
+export function inViewerScopeTool(column: string): string {
+  return `NOT EXISTS (SELECT 1 FROM tools pt WHERE pt.id = ${column} AND ${outsideViewerScope('pt', 'createdBy')})`;
+}
+
+export function inViewerScopeAgent(column: string): string {
+  return `NOT EXISTS (SELECT 1 FROM agents pa WHERE pa.id = ${column} AND ${outsideViewerScope('pa', 'createdBy')})`;
+}
+
+/** A row keyed by agent run id: dropped when the run's agent is outside the viewer's scope. */
+export function inViewerScopeAgentRun(column: string): string {
+  return `NOT EXISTS (SELECT 1 FROM agent_runs pr JOIN agents pra ON pra.id = pr."agentId" ` +
+    `WHERE pr.id = ${column} AND ${outsideViewerScope('pra', 'createdBy')})`;
+}

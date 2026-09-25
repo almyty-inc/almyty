@@ -77,7 +77,7 @@ Deleted.
 | Flag | Commands | Meaning |
 |---|---|---|
 | `--provider` | register | The inference provider's id |
-| `--model` | register | The vendor model id sent on the wire. Not the model source that `deploy` takes below |
+| `--model` | register | The vendor model id sent on the wire. Not the model source that `host` takes below |
 | `--tier` | register | `public`, `private_cloud` or `local` |
 | `--region` | register | Region label used by routing allowlists. A model with no region is excluded by any policy that sets one |
 | `--context` | register | Context length in tokens |
@@ -85,7 +85,7 @@ Deleted.
 
 ## Your cloud account
 
-These commands run a model on [your own cloud account](/models/your-cloud). The command names and the `--adapter` flag keep the API's names: `deploy` starts a model, `deployments` lists the ones on your clouds, and `--adapter` takes the cloud's `providerType`.
+These commands run a model on [your own cloud account](/models/your-cloud): `host` starts a model, `hosted` lists the ones on your clouds, and `--adapter` takes the cloud's `providerType`. `deploy`, `deployments` and `deployment <id>` also work, as other names for `host`, `hosted` and `hosted <id>`, matching the API's `/model-deployments` routes.
 
 List the clouds and what each can do:
 
@@ -106,7 +106,7 @@ The model source is the **positional argument**. The cloud's account details car
 $ cat > hf.json <<'JSON'
 {"token":"hf_...","namespace":"acme","region":"eu-west-1","instanceType":"nvidia-a10g"}
 JSON
-$ npx @almyty/models deploy hf://Qwen/Qwen3-0.6B \
+$ npx @almyty/models host hf://Qwen/Qwen3-0.6B \
     --adapter huggingface-endpoints \
     --config-file hf.json \
     --desired '{"replicas":1,"region":"eu","privacyTier":"private_cloud"}' \
@@ -115,10 +115,10 @@ Queued.
 c07b...  huggingface-endpoints  pending  replicas ?/1
 ```
 
-The model is in `list` at once, not yet selectable; validate it once it is running. Better still, connect the account once and name the connection, so no key reaches this machine's filesystem at all:
+The model is in `list` at once, not yet selectable; almyty runs its validation when the endpoint is ready, and it becomes selectable if that run passes (`validate <id>` runs it again). Better still, connect the account once and name the connection, so no key reaches this machine's filesystem at all:
 
 ```bash
-$ npx @almyty/models deploy hf://Qwen/Qwen3-0.6B \
+$ npx @almyty/models host hf://Qwen/Qwen3-0.6B \
     --adapter huggingface-endpoints \
     --credential 9b4c... \
     --desired '{"replicas":1,"region":"eu","privacyTier":"private_cloud"}'
@@ -127,10 +127,10 @@ $ npx @almyty/models deploy hf://Qwen/Qwen3-0.6B \
 Or a model the cloud already hosts:
 
 ```bash
-$ npx @almyty/models deploy bedrock://anthropic.claude-3-sonnet-20240229-v1:0 --adapter aws-bedrock-import
+$ npx @almyty/models host bedrock://anthropic.claude-3-sonnet-20240229-v1:0 --adapter aws-bedrock-import
 ```
 
-`--config '<json>'` still exists, but `deploy` screens it against the cloud's config schema and refuses it the moment it carries a field the cloud marks secret: `token` for `huggingface-endpoints`, `tokenId` and `tokenSecret` for `modal`, `apiKey` for `fireworks` and the rest. argv is written to your shell history, is echoed by most CI runners and is readable by any process through `ps`, so a secret that travelled that way is disclosed. `--config` is also refused outright when the cloud catalog cannot be read, because then almyty does not know which of the fields are secret and will not guess. Run `adapters` to see which fields each one marks secret. `--config` is fine for the fields that are not secret, such as `namespace`, `region`, `instanceType` or `gpu`.
+`--config '<json>'` still exists, but `host` screens it against the cloud's config schema and refuses it the moment it carries a field the cloud marks secret: `token` for `huggingface-endpoints`, `tokenId` and `tokenSecret` for `modal`, `apiKey` for `fireworks` and the rest. argv is written to your shell history, is echoed by most CI runners and is readable by any process through `ps`, so a secret that travelled that way is disclosed. `--config` is also refused outright when the cloud catalog cannot be read, because then almyty does not know which of the fields are secret and will not guess. Run `adapters` to see which fields each one marks secret. `--config` is fine for the fields that are not secret, such as `namespace`, `region`, `instanceType` or `gpu`.
 
 | Flag | Meaning |
 |---|---|
@@ -151,13 +151,13 @@ $ npx @almyty/models deploy bedrock://anthropic.claude-3-sonnet-20240229-v1:0 --
 Watch state and spend:
 
 ```bash
-$ npx @almyty/models deployments
+$ npx @almyty/models hosted
 c07b...  huggingface-endpoints  ready  replicas 1/1  spent 2.40 USD
 e18a...  huggingface-endpoints  failed  replicas 0/1  spent 0.00 USD
     quota exceeded for nvidia-a10g in eu-west-1
 ```
 
-`deployment <id>` shows one. Change the replica count (0 stops it) or shut it down. Both record what you want; almyty applies it at the cloud within two minutes:
+`hosted <id>` shows one. Change the replica count (0 stops it) or shut it down. Both record what you want; almyty applies it at the cloud within two minutes:
 
 ```bash
 $ npx @almyty/models scale c07b... 0
@@ -171,7 +171,7 @@ c07b...  huggingface-endpoints  tearing_down  replicas 1/0  spent 2.40 USD
 
 ## Registered versions
 
-Optional, and not needed to run anything: `deploy` takes the source directly and pins a Hugging Face repository for you. Register a version when you want a manifest digest, lineage and evaluation history recorded against your own weights, then pass `--model-version` to `deploy`.
+Optional, and not needed to run anything: `host` takes the source directly and pins a Hugging Face repository for you. Register a version when you want a manifest digest, lineage and evaluation history recorded against your own weights, then pass `--model-version` to `host`.
 
 ```bash
 $ npx @almyty/models versions

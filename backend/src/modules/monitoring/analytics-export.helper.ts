@@ -2,11 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Raw, Repository } from 'typeorm';
 import {
-  notOthersPrivateAgent,
-  notOthersPrivateAgentRun,
-  notOthersPrivateGateway,
-  notOthersPrivateProvider,
-  notOthersPrivateTool,
+  inViewerScopeAgent,
+  inViewerScopeAgentRun,
+  inViewerScopeGateway,
+  inViewerScopeProvider,
+  inViewerScopeTool,
 } from './private-rows';
 
 import { RequestLog } from '../../entities/request-log.entity';
@@ -61,8 +61,8 @@ export class AnalyticsExportHelper {
         .where('gw.organizationId = :orgId', { orgId: query.organizationId })
         .andWhere('log.timestamp BETWEEN :from AND :to', { from, to })
         // Not another member's private gateway's or private tool's traffic.
-        .andWhere(notOthersPrivateGateway('log."gatewayId"'), { privateViewerId })
-        .andWhere(unlessNull('log."toolId"', notOthersPrivateTool), { privateViewerId })
+        .andWhere(inViewerScopeGateway('log."gatewayId"'), { privateViewerId })
+        .andWhere(unlessNull('log."toolId"', inViewerScopeTool), { privateViewerId })
         // Only the columns the export emits.
         //
         // `take(10000)` bounds the row count and nothing bounded the row
@@ -100,9 +100,9 @@ export class AnalyticsExportHelper {
           createdAt: Between(from, to),
           // Not another member's private tool, nor a call made through
           // their private gateway or by a run of their private agent.
-          toolId: Raw((column) => notOthersPrivateTool(column), { privateViewerId }),
-          gatewayId: Raw((column) => unlessNull(column, notOthersPrivateGateway), { privateViewerId }),
-          runId: Raw((column) => unlessNull(column, notOthersPrivateAgentRun), { privateViewerId }),
+          toolId: Raw((column) => inViewerScopeTool(column), { privateViewerId }),
+          gatewayId: Raw((column) => unlessNull(column, inViewerScopeGateway), { privateViewerId }),
+          runId: Raw((column) => unlessNull(column, inViewerScopeAgentRun), { privateViewerId }),
         },
         select: {
           id: true, toolId: true, userId: true, organizationId: true, success: true,
@@ -132,9 +132,9 @@ export class AnalyticsExportHelper {
           createdAt: Between(from, to),
           // Not another member's private provider's, agent's or
           // gateway's sessions.
-          providerId: Raw((column) => unlessNull(column, notOthersPrivateProvider), { privateViewerId }),
-          agentId: Raw((column) => unlessNull(column, notOthersPrivateAgent), { privateViewerId }),
-          gatewayId: Raw((column) => unlessNull(column, notOthersPrivateGateway), { privateViewerId }),
+          providerId: Raw((column) => unlessNull(column, inViewerScopeProvider), { privateViewerId }),
+          agentId: Raw((column) => unlessNull(column, inViewerScopeAgent), { privateViewerId }),
+          gatewayId: Raw((column) => unlessNull(column, inViewerScopeGateway), { privateViewerId }),
         },
         select: {
           // `type` is in the CSV column list below but is not a column on

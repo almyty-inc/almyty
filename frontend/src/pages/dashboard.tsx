@@ -15,7 +15,8 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
-import { gatewaysApi, toolsApi, apisApi, agentsApi, analyticsApi, onboardingApi } from '@/lib/api'
+import { apisApi, analyticsApi, onboardingApi } from '@/lib/api'
+import { agentsQuery, gatewaysQuery, toolsQuery } from '@/lib/list-queries'
 import { GuideCard } from '@/components/onboarding/guide-card'
 import { useOnboarding } from '@/components/onboarding/use-onboarding'
 import { nextStep, stepsDone } from '@/components/onboarding/guide-steps'
@@ -82,8 +83,7 @@ export function DashboardPage() {
     error: gatewaysError,
     refetch: refetchGateways,
   } = useQuery({
-    queryKey: ['gateways', orgId],
-    queryFn: () => gatewaysApi.getAll(),
+    ...gatewaysQuery(orgId),
     enabled: !!currentOrganization,
   })
 
@@ -94,8 +94,7 @@ export function DashboardPage() {
     error: toolsError,
     refetch: refetchTools,
   } = useQuery({
-    queryKey: ['tools', orgId],
-    queryFn: () => toolsApi.getAll(orgId),
+    ...toolsQuery(orgId),
     enabled: !!currentOrganization,
   })
 
@@ -118,8 +117,7 @@ export function DashboardPage() {
     error: agentsError,
     refetch: refetchAgents,
   } = useQuery({
-    queryKey: ['agents', orgId],
-    queryFn: () => agentsApi.getAll(),
+    ...agentsQuery(orgId),
     enabled: !!currentOrganization,
   })
 
@@ -167,17 +165,14 @@ export function DashboardPage() {
     )
   }
 
-  const gatewaysExtracted = gatewaysData?.gateways || []
-  const gateways = Array.isArray(gatewaysExtracted) ? gatewaysExtracted : []
+  const gateways = gatewaysData?.items ?? []
   const gatewaysTotal = gatewaysData?.total ?? gateways.length
-  const toolsExtracted = toolsData?.tools || []
-  const tools = Array.isArray(toolsExtracted) ? toolsExtracted : []
+  const tools = toolsData?.items ?? []
   const toolsTotal = toolsData?.total ?? tools.length
   const apisExtracted = apisData?.apis || []
   const apis = Array.isArray(apisExtracted) ? apisExtracted : []
   const apisTotal = apisData?.total ?? apis.length
-  const agentsExtracted = agentsData || []
-  const agents = Array.isArray(agentsExtracted) ? agentsExtracted : []
+  const agents = agentsData ?? []
 
   const recentLogs = recentLogsData?.data || []
 

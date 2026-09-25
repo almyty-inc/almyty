@@ -13,7 +13,7 @@ import { Repository } from 'typeorm';
 import { promises as dns } from 'dns';
 
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
-import { OrganizationRole } from '../../../entities/user-organization.entity';
+import { resourceAudience } from '../../notifications/resource-audience';
 import { GatewaysService } from '../gateways.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { hostedChatBaseDomain, hostedChatConfigFrom } from './hosted-chat.config';
@@ -58,6 +58,9 @@ export interface ActiveHolder {
   gatewayId: string;
   organizationId: string;
   name: string;
+  /** The gateway's scope: a private gateway's events go to its owner alone. */
+  visibility: 'org' | 'team' | 'private';
+  ownerUserId: string | null;
   block: CustomDomainConfig;
 }
 
@@ -66,6 +69,9 @@ export interface DueClaim {
   gatewayId: string;
   organizationId: string;
   name: string;
+  /** The gateway's scope: a private gateway's events go to its owner alone. */
+  visibility: 'org' | 'team' | 'private';
+  ownerUserId: string | null;
   block: CustomDomainConfig;
 }
 
@@ -164,7 +170,7 @@ export class PgCustomDomainStore implements CustomDomainStore {
 
   async activeHolder(hostname: string, exceptGatewayId: string): Promise<ActiveHolder | null> {
     const rows = await this.gateways.query(
-      `SELECT "id", "organizationId", "name", "customDomain" FROM "gateways"
+      `SELECT "id", "organizationId", "name", "visibility", "ownerUserId", "customDomain" FROM "gateways"
         WHERE "type" = 'hosted_chat'
           AND ("customDomain" ->> 'status') = 'active'
           AND ("customDomain" ->> 'hostname') = $1
@@ -173,7 +179,7 @@ export class PgCustomDomainStore implements CustomDomainStore {
       [hostname, exceptGatewayId],
     );
     const row = Array.isArray(rows) ? rows[0] : null;
-    return row ? { gatewayId: row.id, organizationId: row.organizationId, name: row.name, block: row.customDomain } : null;
+    return row ? { gatewayId: row.id, organizationId: row.organizationId, name: row.name, visibility: row.visibility, ownerUserId: row.ownerUserId ?? null, block: row.customDomain } : null;
   }
 
   async takeOver(
@@ -212,7 +218,7 @@ export class PgCustomDomainStore implements CustomDomainStore {
 
   async dueForRecheck(checkedBefore: string, limit: number): Promise<DueClaim[]> {
     const rows = await this.gateways.query(
-      `SELECT "id", "organizationId", "name", "customDomain" FROM "gateways"
+      `SELECT "id", "organizationId", "name", "visibility", "ownerUserId", "customDomain" FROM "gateways"
         WHERE "type" = 'hosted_chat'
           AND ("customDomain" ->> 'status') = 'active'
           AND (("customDomain" ->> 'lastCheckedAt') IS NULL OR ("customDomain" ->> 'lastCheckedAt') < $1)
@@ -224,6 +230,8 @@ export class PgCustomDomainStore implements CustomDomainStore {
       gatewayId: row.id,
       organizationId: row.organizationId,
       name: row.name,
+      visibility: row.visibility,
+      ownerUserId: row.ownerUserId ?? null,
       block: row.customDomain,
     }));
   }
@@ -490,11 +498,18 @@ export class CustomDomainService implements OnModuleInit, OnModuleDestroy {
     return { checked, demoted };
   }
 
-  private async notifyDemoted(claim: Pick<DueClaim, 'gatewayId' | 'organizationId' | 'name' | 'block'>, reason: string): Promise<void> {
+  private async notifyDemoted(
+    claim: Pick<DueClaim, 'gatewayId' | 'organizationId' | 'name' | 'visibility' | 'ownerUserId' | 'block'>,
+    reason: string,
+  ): Promise<void> {
+    // The hostname, the gateway's name and a link to it: the org admins'
+    // to read for an org or team gateway, the owner's alone for a private one.
+    const audience = resourceAudience(claim);
+    if (!audience) return;
     await this.notifications?.emit({
       type: 'domains.unverified',
       organizationId: claim.organizationId,
-      roleTarget: { orgRoles: [OrganizationRole.OWNER, OrganizationRole.ADMIN] },
+      ...audience,
       title: `${claim.block.hostname} is no longer served`,
       body: reason,
       link: `/gateways/${claim.gatewayId}`,

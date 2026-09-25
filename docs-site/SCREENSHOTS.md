@@ -61,19 +61,32 @@ any image still needs recapture; use it before calling #675 complete.
 Keep historical failure evidence explicitly historical rather than replacing
 it with an unrelated successful screen.
 
+## September 24 enabled-feature captures
+
+The authorized Business demo fixture now has reviewed captures of Roles, the
+inline custom-role and access-policy forms, approval policy list and editor,
+compliance policy and report, audit-stream target configuration, and SSO/SCIM
+controls. These use
+separate `*-enabled.png` or form-specific paths, preserving the earlier locked
+states. Each new record has its own observed capture time, image hash and source
+fingerprint. No roles, policies, stream targets, IdP configuration or provisioning
+tokens were created during this capture pass; visible controls are not evidence
+of a completed external integration.
+
+Browser capture initially failed with a WebKit snapshot error. Capturing a new
+blank page before navigating to the staging app recovered it without restarting
+the shared browser daemon. This is an observed recovery, not a confirmed fix for
+the underlying browser failure.
+
 ## Enabled-feature evidence still needed
 
 The `*-locked.png` captures record a Pro organization's actual entitlement
 gates during the earlier capture pass; they also need recapturing after the UI
 refresh. They do **not** verify the enabled feature, its editor, or a successful
-configuration. The following views still need captures from an
-authorized, seeded organization with the corresponding entitlements:
+configuration. The following views still need captures or end-to-end evidence
+from an authorized, seeded organization with the corresponding entitlements:
 
-- SSO configuration and provisioning controls
-- Custom roles and attribute-based policies
-- Approval policy editor
-- Compliance policy and report
-- Audit export controls and streaming configuration
+- Audit export controls and a downloaded evidence file
 - Connections governance controls
 - Customer-managed encryption key status and configuration
 - Chargeback report

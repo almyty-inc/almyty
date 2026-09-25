@@ -446,7 +446,7 @@ export class ApisService {
         `SELECT id FROM tools
           WHERE "organizationId" = $1 AND status <> 'deleted'
             AND ("apiId" = $2 OR "operationId" IN (SELECT id FROM operations WHERE "apiId" = $2))
-            AND ("createdBy" IS NULL OR "createdBy" = 'system' OR "createdBy" = $3::varchar)`,
+            AND (generated = true OR "createdBy" IS NULL OR "createdBy" = $3::varchar)`,
         [organizationId, api.id, scope.ownerId],
       );
       await assertNoSharedDependents(
@@ -478,7 +478,7 @@ export class ApisService {
         `UPDATE tools SET visibility = 'private', "teamId" = NULL, "createdBy" = $3::varchar
           WHERE "organizationId" = $1
             AND ("apiId" = $2 OR "operationId" IN (SELECT id FROM operations WHERE "apiId" = $2))
-            AND ("createdBy" IS NULL OR "createdBy" = 'system' OR "createdBy" = $3::varchar)`,
+            AND (generated = true OR "createdBy" IS NULL OR "createdBy" = $3::varchar)`,
         [organizationId, saved.id, saved.ownerUserId],
       );
     }

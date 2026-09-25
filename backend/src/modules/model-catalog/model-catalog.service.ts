@@ -458,13 +458,14 @@ export class ModelCatalogService {
   /**
    * The gate to selectability: one real, short chat call through the card's
    * provider with its vendor model id. Passing flips validationStatus; a
-   * failure records why. Nothing else marks a card validated.
+   * failure records why. Nothing else marks a card validated. `source`
+   * says in the audit row who asked, when it was not a person.
    */
-  async validate(organizationId: string, id: string, userId?: string): Promise<ValidationOutcome> {
+  async validate(organizationId: string, id: string, userId?: string, source?: string): Promise<ValidationOutcome> {
     const card = await this.get(organizationId, id);
     const provider = await this.router.providerFor(card);
     if (!provider) {
-      return this.recordValidation(card, false, 'This model has no callable provider', userId);
+      return this.recordValidation(card, false, 'This model has no callable provider', userId, undefined, source);
     }
     const session = Conversation.createConversation({
       providerId: provider.id.startsWith('endpoint:') ? undefined : provider.id,
@@ -483,10 +484,10 @@ export class ModelCatalogService {
       if (typeof response.usage?.inputTokens === 'number') {
         card.measuredLatencyMs = { p50: latencyMs, p95: latencyMs, updatedAt: new Date().toISOString() };
       }
-      return this.recordValidation(card, true, undefined, userId, latencyMs);
+      return this.recordValidation(card, true, undefined, userId, latencyMs, source);
     } catch (error: any) {
       const message = error?.message ?? String(error);
-      return this.recordValidation(card, false, message.slice(0, 1000), userId, Date.now() - started);
+      return this.recordValidation(card, false, message.slice(0, 1000), userId, Date.now() - started, source);
     }
   }
 
