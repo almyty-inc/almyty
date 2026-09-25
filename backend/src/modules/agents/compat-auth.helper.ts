@@ -52,12 +52,23 @@ export async function authenticateCompatKey(apiKeys: Repository<ApiKey>, token: 
   // The key acts as its user, so the user has to be active and still a
   // member of the key's organization. Removing a member does not
   // deactivate their keys; this is what stops them working.
-  const user = apiKey.user;
-  if (!user || !user.isActive || !hasEffectiveMembership(user.organizationMemberships, apiKey.organizationId)) {
+  if (!keyUserIsMember(apiKey)) {
     throw new UnauthorizedException('API key is not valid for that organization');
   }
 
   return apiKey;
+}
+
+/**
+ * A key acts as its user: valid only while that user is active and an
+ * effective member of the key's organization. Needs `user` loaded with
+ * its `organizationMemberships`. Shared by every surface that accepts a
+ * platform key outside ApiKeyStrategy (the /v1 compat endpoints, the
+ * unified /:org/:agent route).
+ */
+export function keyUserIsMember(apiKey: Pick<ApiKey, 'user' | 'organizationId'>): boolean {
+  const user = apiKey.user;
+  return !!user && !!user.isActive && hasEffectiveMembership(user.organizationMemberships, apiKey.organizationId);
 }
 
 /**

@@ -1,5 +1,6 @@
 import { ConsoleLogger } from '@nestjs/common';
 
+import { redactQueryError } from '../errors/redact-query-error';
 import { getRequestContext } from '../request-context';
 
 /**
@@ -37,34 +38,44 @@ export class CorrelatedConsoleLogger extends ConsoleLogger {
    * structured payload someone means to read as JSON, and appending to
    * it would corrupt it; the stack-trace second argument is likewise
    * left alone.
+   *
+   * A failed query's error handed over as an object is printed whole by
+   * the console logger (util.inspect), bound parameters included; those
+   * are row contents and are redacted first (redact-query-error.ts).
    */
   private decorate(message: unknown): unknown {
+    redactQueryError(message);
     if (typeof message !== 'string') return message;
     const suffix = this.suffix();
     return suffix ? `${message}${suffix}` : message;
   }
 
+  private redactRest(rest: any[]): any[] {
+    rest.forEach((arg) => redactQueryError(arg));
+    return rest;
+  }
+
   log(message: any, ...rest: any[]): void {
-    super.log(this.decorate(message) as any, ...rest);
+    super.log(this.decorate(message) as any, ...this.redactRest(rest));
   }
 
   error(message: any, ...rest: any[]): void {
-    super.error(this.decorate(message) as any, ...rest);
+    super.error(this.decorate(message) as any, ...this.redactRest(rest));
   }
 
   warn(message: any, ...rest: any[]): void {
-    super.warn(this.decorate(message) as any, ...rest);
+    super.warn(this.decorate(message) as any, ...this.redactRest(rest));
   }
 
   debug(message: any, ...rest: any[]): void {
-    super.debug(this.decorate(message) as any, ...rest);
+    super.debug(this.decorate(message) as any, ...this.redactRest(rest));
   }
 
   verbose(message: any, ...rest: any[]): void {
-    super.verbose(this.decorate(message) as any, ...rest);
+    super.verbose(this.decorate(message) as any, ...this.redactRest(rest));
   }
 
   fatal(message: any, ...rest: any[]): void {
-    super.fatal(this.decorate(message) as any, ...rest);
+    super.fatal(this.decorate(message) as any, ...this.redactRest(rest));
   }
 }

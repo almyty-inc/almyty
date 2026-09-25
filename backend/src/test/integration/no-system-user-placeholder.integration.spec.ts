@@ -89,3 +89,22 @@ describe('no "system" placeholder reaches tool execution or run creation', () =>
     expect(src).not.toMatch(/^\s*'system',\s*$/m);
   });
 });
+
+describe('no "system" creator on generated tools', () => {
+  const SRC = join(__dirname, '..', '..');
+  // Every place a tool or tool version is created by generation, and the
+  // readers that used to match the sentinel.
+  const FILES = [
+    'modules/tools/tools-operation.helper.ts',
+    'modules/tools/tool-generator.service.ts',
+    'modules/apis/apis-tool-generator.helper.ts',
+    'modules/apis/apis.service.ts',
+    'modules/mcp-sources/mcp-sources.service.ts',
+  ];
+
+  it.each(FILES)('%s', (rel) => {
+    const src = readFileSync(join(SRC, rel), 'utf8');
+    expect(src).not.toMatch(/createdBy['"]?\s*[:=]\s*'system'/);
+    expect(src).not.toMatch(/createToolVersion\([^)]*'system'\)/);
+  });
+});

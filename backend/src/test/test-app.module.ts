@@ -124,6 +124,7 @@ import { ToolsService } from '../modules/tools/tools.service';
 import { AgentsService } from '../modules/agents/agents.service';
 import { LlmProvidersService } from '../modules/llm-providers/llm-providers.service';
 import { DEV_ONLY_JWT_SECRET } from '../modules/auth/dev-jwt-secret';
+import { appDataSourceFactory } from '../common/errors/redact-query-error';
 
 // Mock Redis
 const mockRedis = {
@@ -193,6 +194,8 @@ const mockRedis = {
           logging: false,
         } as any;
       },
+      // As app.module.ts builds it: failed queries without their parameters.
+      dataSourceFactory: async (options) => appDataSourceFactory(options),
     }),
 
     TypeOrmModule.forFeature([
