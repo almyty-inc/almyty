@@ -137,7 +137,7 @@ describeIfDb('private visibility on agents, tools and APIs (real Postgres)', () 
 
     policy = new AccessPolicyService(ds.getRepository(UserOrganization), ds.getRepository(UserTeam));
     const audit = { log: jest.fn(), logCreate: jest.fn(), logUpdate: jest.fn(), logDelete: jest.fn(), computeChanges: jest.fn() } as any;
-    const statsHelper = new ToolsStatsHelper(ds.getRepository(Tool), ds.getRepository(ToolExecution));
+    const statsHelper = new ToolsStatsHelper(ds.getRepository(Tool), ds.getRepository(ToolExecution), policy);
     tools = new ToolsService(
       ds.getRepository(Tool),
       ds.getRepository(ToolVersion),

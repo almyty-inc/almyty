@@ -102,6 +102,10 @@ function makeQueryBuilder(returnTools: Tool[] = [], total = 0) {
     getMany: jest.fn().mockResolvedValue(returnTools),
     select: jest.fn().mockReturnThis(),
     getRawMany: jest.fn().mockResolvedValue([]),
+    // As a subquery (the org-wide tool stats' visible-tools filter, whose
+    // SQL overview-stats-scope.integration.spec.ts runs against Postgres).
+    getQuery: jest.fn().mockReturnValue('SELECT 1'),
+    getParameters: jest.fn().mockReturnValue({}),
   };
   // clone returns a copy that also has getCount
   qb.clone.mockReturnValue({ ...qb });

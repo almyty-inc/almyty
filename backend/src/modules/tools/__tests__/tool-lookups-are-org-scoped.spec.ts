@@ -6,6 +6,8 @@ import { ToolsController } from '../tools.controller';
 import { ToolsStatsHelper } from '../tools-stats.helper';
 import { ToolStatus } from '../../../entities/tool.entity';
 import { fakeRepository, FakeRepository } from '../../../test/fake-repository';
+import { OrganizationRole } from '../../../entities/user-organization.entity';
+import { orgMembersPolicy } from '../../../test/execution-access.fixture';
 
 /**
  * Three tool lookups the tenancy audit had not reached, each keyed by an
@@ -133,7 +135,7 @@ describe('ToolsStatsHelper top tools are named from the caller org only', () => 
         ),
     };
 
-    const helper = new ToolsStatsHelper(tools as any, executions as any);
+    const helper = new ToolsStatsHelper(tools as any, executions as any, orgMembersPolicy(ORG, { 'user-1': OrganizationRole.MEMBER }));
     const result = await helper.getOrganizationToolStats(ORG, 'user-1');
 
     expect(result.topUsedTools.map((t) => t.tool.id)).toEqual(['tool-mine']);
@@ -150,6 +152,10 @@ function chain(terminal: { getRawOne?: any; getRawMany?: any[] }) {
   for (const m of ['select', 'addSelect', 'where', 'andWhere', 'groupBy', 'orderBy', 'limit']) {
     qb[m] = () => qb;
   }
+  // Used as a subquery (the caller's visible tools); its SQL is proven
+  // against Postgres in overview-stats-scope.integration.spec.ts.
+  qb.getQuery = () => 'SELECT 1';
+  qb.getParameters = () => ({});
   qb.getRawOne = async () => {
     if (!('getRawOne' in terminal)) throw new Error('unexpected getRawOne');
     return terminal.getRawOne;
