@@ -51,6 +51,7 @@ describe('old Models addresses', () => {
   it.each([
     ['/llm-providers', '/models', 'models-page'],
     ['/llm-providers/new', '/models/connect', 'connect-page'],
+    ['/llm-providers?new=1', '/models/connect', 'connect-page'],
     ['/models/new', '/models/connect', 'connect-page'],
     ['/llm-providers/p1', '/models/providers/p1', 'provider-page p1'],
     ['/llm-providers/p1/edit', '/models/providers/p1', 'provider-page p1'],

@@ -117,7 +117,7 @@ function ConnectionsRedirect() {
 }
 
 import { HostedChatPage } from '@/pages/hosted-chat'
-import { ConnectRedirect, ModelRedirect, ProviderRedirect } from '@/pages/models-redirects'
+import { ConnectRedirect, ModelRedirect, ProviderRedirect, ProvidersRedirect } from '@/pages/models-redirects'
 import { AppsPage } from '@/pages/apps'
 import { AppDetailPage } from '@/pages/app-detail'
 import { currentTenantSlug } from '@/lib/tenant-host'
@@ -218,7 +218,7 @@ export function createAppRoutes() {
           {/* Older addresses, each to the page that replaced it. */}
           <Route path="/models/new" element={<ConnectRedirect />} />
           <Route path="/models/:id" element={<ModelRedirect />} />
-          <Route path="/llm-providers" element={<Navigate to="/models" replace />} />
+          <Route path="/llm-providers" element={<ProvidersRedirect />} />
           <Route path="/llm-providers/new" element={<ConnectRedirect />} />
           <Route path="/llm-providers/:id/edit" element={<ProviderRedirect />} />
           <Route path="/llm-providers/:id" element={<ProviderRedirect />} />

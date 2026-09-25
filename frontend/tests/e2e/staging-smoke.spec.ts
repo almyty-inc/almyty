@@ -78,7 +78,6 @@ test.describe('Top-level nav renders without error', () => {
     { label: 'Agents', path: '/agents' },
     { label: 'Credentials', path: '/credentials' },
     { label: 'Models', path: '/models' },
-    { label: 'Inference providers', path: '/llm-providers' },
     { label: 'Memory', path: '/memories' },
     { label: 'Analytics', path: '/analytics' },
     { label: 'Settings', path: '/settings' },
@@ -144,10 +143,10 @@ test.describe('Create pages open from deep-link', () => {
   // Create flows that became pages keep their old `?new=1` links working
   // by forwarding to the page.
   const deepLinks = [
-    { label: 'Add inference provider', path: '/llm-providers?new=1', lands: /\/llm-providers\/new$/, heading: 'Add inference provider' },
+    { label: 'Connect a provider', path: '/llm-providers?new=1', lands: /\/models\/connect$/, heading: 'Connect a provider' },
     { label: 'Connect API', path: '/apis?new=1', lands: /\/apis\/new$/, heading: 'Connect API' },
     { label: 'Create tool', path: '/tools?new=1', lands: /\/tools\/new$/, heading: 'Create tool' },
-    { label: 'Add model', path: '/models?new=1', lands: /\/models\/new$/, heading: 'Add model' },
+    { label: 'Connect a provider, from the old Add model link', path: '/models?new=1', lands: /\/models\/connect$/, heading: 'Connect a provider' },
     { label: 'Create gateway', path: '/gateways?new=1', lands: /\/gateways\/new$/, heading: 'Create gateway' },
     { label: 'Create app', path: '/apps?new=1', lands: /\/apps\/new$/, heading: 'Create app' },
     { label: 'Add credential', path: '/credentials?new=1', lands: /\/credentials\/new$/, heading: 'Add credential' },

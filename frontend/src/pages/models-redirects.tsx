@@ -11,6 +11,13 @@ import { modelsApi } from '@/lib/models-api'
 import { modelDeploymentsApi } from '@/lib/deployments-api'
 import { deploymentForCard } from '@/lib/model-hosting'
 
+/** /llm-providers: the Models page, or connecting a provider for ?new=1 (the old command palette link). */
+export function ProvidersRedirect() {
+  const location = useLocation()
+  const wantsNew = new URLSearchParams(location.search).get('new') === '1'
+  return <Navigate to={wantsNew ? '/models/connect' : '/models'} replace />
+}
+
 /** /llm-providers/:id and /llm-providers/:id/edit: the provider's page. */
 export function ProviderRedirect() {
   const { id = '' } = useParams<{ id: string }>()
