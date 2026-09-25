@@ -4,7 +4,6 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -15,6 +14,7 @@ import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { isOthersPrivate } from '../../common/authorization/private-visibility';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { assertManageable } from '../../common/authorization/read-rule';
 import { AuditResource } from '../../entities/audit-log.entity';
 import {
   sanitizeConfiguration,
@@ -370,25 +370,19 @@ export class ToolHubService {
     userId: string,
     dto: PublishToolTemplateDto,
   ): Promise<ToolTemplate> {
-    const tool = await this.toolRepository.findOne({
-      where: { id: dto.toolId, organizationId: orgId },
-      relations: { api: true },
-    });
     // 404 rather than 403 for a tool of another organization, and for one
-    // the caller may not read: a 403 would confirm the id exists.
-    if (!tool || isOthersPrivate(tool, userId)) {
-      throw new NotFoundException('Tool not found');
-    }
-    const read = await this.accessPolicy.canAccess({ id: userId }, tool, 'read');
-    if (!read.allowed) {
-      throw new NotFoundException('Tool not found');
-    }
-    if (tool.createdBy !== userId) {
-      const manage = await this.accessPolicy.canAccess({ id: userId }, tool, 'manage');
-      if (!manage.allowed) {
-        throw new ForbiddenException(`You cannot publish '${tool.name}': ${manage.reason}`);
-      }
-    }
+    // the caller may not read: a 403 would confirm the id exists. Then the
+    // manage rule editing it uses: its creator, or canAccess 'manage'.
+    const tool = await assertManageable(
+      this.accessPolicy,
+      userId,
+      await this.toolRepository.findOne({
+        where: { id: dto.toolId, organizationId: orgId },
+        relations: { api: true },
+      }),
+      'Tool',
+      { ownerManages: true },
+    );
     const visibility = tool.visibility ?? 'org';
     if (visibility !== 'org') {
       throw new BadRequestException(

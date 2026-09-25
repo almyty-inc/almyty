@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, ServiceUnavailableException, Optional, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ServiceUnavailableException, Optional, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import { EventEmitter } from 'events';
@@ -11,6 +11,7 @@ import { AccessPolicyService } from '../../common/authorization/access-policy.se
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { assertManageable } from '../../common/authorization/read-rule';
 import {
   APPROVAL_POLICY_HOOK,
   ApprovalPolicyApproval,
@@ -216,10 +217,7 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
 
     // One the caller may not even see (another member's private request,
     // another team's) is not found; one they see but may not decide, 403.
-    const read = await this.accessPolicy.canAccess(caller, row, 'read');
-    if (!read.allowed) throw new NotFoundException('approval request not found');
-    const can = await this.accessPolicy.canAccess(caller, row, 'manage');
-    if (!can.allowed) throw new ForbiddenException(can.reason);
+    await assertManageable(this.accessPolicy, caller.id, row, 'approval request');
 
     if (row.status !== 'pending') {
       throw new BadRequestException(`approval already ${row.status}`);
