@@ -9,6 +9,7 @@ import { GatewayAuthValidators } from '../gateway-auth-validators.helper';
 import { hashKey } from '../gateway-auth-utils';
 import { fakeRepository } from '../../../test/fake-repository';
 import { realJwtService, signTestJwt } from '../../../test/jwt';
+import { restoreEnv } from '../../../test/env';
 import { GatewayAuth, GatewayAuthType } from '../../../entities/gateway-auth.entity';
 import { Gateway } from '../../../entities/gateway.entity';
 import { User } from '../../../entities/user.entity';
@@ -168,16 +169,18 @@ describe('GatewayAuthService', () => {
       const originalEnv = process.env.JWT_SECRET;
       delete process.env.JWT_SECRET;
 
-      await expect(
-        service.createGatewayAuth('gateway-1', {
-          type: GatewayAuthType.JWT,
-          isRequired: true,
-          isActive: true,
-          configuration: {},
-        }, 'org-1')
-      ).rejects.toThrow(BadRequestException);
-
-      process.env.JWT_SECRET = originalEnv;
+      try {
+        await expect(
+          service.createGatewayAuth('gateway-1', {
+            type: GatewayAuthType.JWT,
+            isRequired: true,
+            isActive: true,
+            configuration: {},
+          }, 'org-1')
+        ).rejects.toThrow(BadRequestException);
+      } finally {
+        restoreEnv('JWT_SECRET', originalEnv);
+      }
     });
 
     it('should validate CUSTOM auth requires headerName or queryName', async () => {
