@@ -3,7 +3,7 @@
  * server, an MCP server, an S3-compatible registry. Every custom connector
  * gets one api_key method whose schema carries the base URL (prefilled) and
  * the key (secret, optional for keyless servers). A page at
- * /settings/connections/custom/new.
+ * /connections/custom/new.
  */
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -17,7 +17,8 @@ import { connectorsApi, errorMessage } from '@/lib/connections-api'
 import { useNotifications } from '@/store/app'
 import { CONNECTOR_KIND_LABELS, type ConnectorKind, type ConnectorValidation, type CreateConnectorBody } from '@/types/connections'
 import type { JsonSchemaObject } from '@/types/deployments'
-import { CONNECTORS_QUERY_KEY } from './connect-sheet'
+import { CONNECTORS_QUERY_KEY } from './connect-flow'
+import { CONNECTIONS_ADVANCED_PATH, connectServicePath } from './paths'
 
 const SELECT_CLASS =
   'flex h-9 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50'
@@ -117,7 +118,7 @@ export interface CustomConnectorFormProps {
   onCreated?: (key: string) => void
 }
 
-/** /settings/connections/custom/new */
+/** /connections/custom/new */
 export function CustomConnectorCreate({ onCreated }: CustomConnectorFormProps) {
   const queryClient = useQueryClient()
   const notifications = useNotifications()
@@ -129,13 +130,13 @@ export function CustomConnectorCreate({ onCreated }: CustomConnectorFormProps) {
     mutationFn: (body: CreateConnectorBody) => connectorsApi.create(body),
     onSuccess: (connector, body) => {
       queryClient.invalidateQueries({ queryKey: CONNECTORS_QUERY_KEY })
-      notifications.success('Connector added', `${connector?.displayName ?? body.displayName} is in the gallery. Connect it to start using it.`)
+      notifications.success('Service added', `${connector?.displayName ?? body.displayName} is on the list. Connect it to start using it.`)
       const key = connector?.key ?? body.key
       if (onCreated) onCreated(key)
       // Straight on to connecting it, as the gallery's own Connect would.
-      else guard.leave(`/settings/connections/connect/${encodeURIComponent(key)}`)
+      else guard.leave(connectServicePath(key))
     },
-    onError: (error: unknown) => notifications.error('Could not add connector', errorMessage(error, 'The connector was not saved')),
+    onError: (error: unknown) => notifications.error('Could not add the service', errorMessage(error, 'It was not saved.')),
   })
 
   const set = <K extends keyof CustomConnectorForm>(key: K, value: CustomConnectorForm[K]) => setForm((prev) => ({ ...prev, [key]: value }))
@@ -154,12 +155,12 @@ export function CustomConnectorCreate({ onCreated }: CustomConnectorFormProps) {
 
   return (
     <FormPage
-      title="Add custom connector"
-      description="Anything with a known API format: an OpenAI-compatible server, an MCP server, an S3 registry. Admins only."
-      back={{ to: '/settings/connections', label: 'Connections' }}
+      title="Add a custom service"
+      description="Anything with a known API format: an OpenAI-compatible server, an MCP server, an S3 bucket. Admins only."
+      back={{ to: CONNECTIONS_ADVANCED_PATH, label: 'Advanced' }}
       guard={guard}
       onSubmit={submit}
-      submitLabel="Add connector"
+      submitLabel="Add service"
       submitting={create.isPending}
       width="narrow"
     >

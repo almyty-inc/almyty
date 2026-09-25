@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, CheckCircle2, Search } from 'lucide-react'
+import { ArrowLeft, CheckCircle2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { PageHeader } from '@/components/layout/page-header'
+import { PickedService, ServiceTileGrid, type ServiceTileGroup } from '@/components/connect/service-tiles'
 import { ConnectProviderForm, type ConnectResult } from '@/components/llm-providers/connect-provider-form'
 import { PROVIDER_TILE_GROUPS, isProviderType, providerTileLabel } from '@/components/llm-providers/provider-catalog'
 import { providerLogos } from '@/components/llm-providers/provider-type-config'
-import { cn } from '@/lib/utils'
 import { safeReturnTo } from '@/lib/return-to'
 
 /** How many model names the success panel lists before "and N more". */
@@ -48,12 +46,15 @@ export function ConnectProviderPage() {
     setSearchParams(params)
   }
 
-  const groups = useMemo(() => {
+  const groups: ServiceTileGroup[] = useMemo(() => {
     const q = search.trim().toLowerCase()
     return PROVIDER_TILE_GROUPS.map((g) => ({
-      ...g,
-      types: q ? g.types.filter((t) => providerTileLabel(t).toLowerCase().includes(q) || t.includes(q)) : g.types,
-    })).filter((g) => g.types.length > 0)
+      id: g.id,
+      title: g.title,
+      tiles: g.types
+        .filter((t) => !q || providerTileLabel(t).toLowerCase().includes(q) || t.includes(q))
+        .map((t) => ({ key: t, label: providerTileLabel(t), icon: providerLogos[t] || '⚙️' })),
+    })).filter((g) => g.tiles.length > 0)
   }, [search])
 
   const onConnected = (next: ConnectResult) => {
@@ -72,36 +73,27 @@ export function ConnectProviderPage() {
       <PageHeader title="Connect a provider" description="Connect a provider once and its models show up everywhere in almyty." />
 
       {type ? (
-        <Card>
-          <CardContent className="space-y-5 pt-6">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-xl" aria-hidden>
-                  {providerLogos[type] || '⚙️'}
-                </span>
-                <h2 className="text-lg font-semibold">{providerTileLabel(type)}</h2>
-              </div>
-              {!result && (
-                <Button variant="ghost" size="sm" onClick={() => pick(null)}>
-                  Choose another provider
-                </Button>
-              )}
-            </div>
-
-            {result ? (
-              <ConnectedSummary result={result} onDone={() => navigate(returnTo)} onOpen={() => navigate(`/models/providers/${result.provider.id}`)} />
-            ) : (
-              <ConnectProviderForm key={type} type={type} onConnected={onConnected} />
-            )}
-          </CardContent>
-        </Card>
+        <PickedService
+          icon={providerLogos[type] || '⚙️'}
+          title={providerTileLabel(type)}
+          onChooseAnother={result ? undefined : () => pick(null)}
+          chooseAnotherLabel="Choose another provider"
+        >
+          {result ? (
+            <ConnectedSummary result={result} onDone={() => navigate(returnTo)} onOpen={() => navigate(`/models/providers/${result.provider.id}`)} />
+          ) : (
+            <ConnectProviderForm key={type} type={type} onConnected={onConnected} />
+          )}
+        </PickedService>
       ) : (
-        <div className="space-y-6">
-          <div className="relative max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-            <Input className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search providers" aria-label="Search providers" />
-          </div>
-          {groups.length === 0 && (
+        <ServiceTileGrid
+          groups={groups}
+          search={search}
+          onSearch={setSearch}
+          onPick={pick}
+          searchLabel="Search providers"
+          testIdPrefix="provider-tile"
+          empty={
             <p className="text-sm text-muted-foreground">
               No provider matches &ldquo;{search}&rdquo;. If it speaks the OpenAI API, connect it as{' '}
               <button type="button" className="text-primary hover:underline" onClick={() => pick('custom')}>
@@ -109,35 +101,8 @@ export function ConnectProviderPage() {
               </button>
               .
             </p>
-          )}
-          {groups.map((group) => (
-            <section key={group.id} aria-labelledby={`tiles-${group.id}`} className="space-y-2">
-              <h2 id={`tiles-${group.id}`} className="text-sm font-medium text-muted-foreground">
-                {group.title}
-              </h2>
-              <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                {group.types.map((t) => (
-                  <li key={t}>
-                    <button
-                      type="button"
-                      data-testid={`provider-tile-${t}`}
-                      onClick={() => pick(t)}
-                      className={cn(
-                        'flex w-full items-center gap-2.5 rounded-lg border bg-card px-3 py-2.5 text-left text-sm transition-colors',
-                        'hover:border-primary/50 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-                      )}
-                    >
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-base" aria-hidden>
-                        {providerLogos[t] || '⚙️'}
-                      </span>
-                      <span className="min-w-0 truncate font-medium">{providerTileLabel(t)}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
+          }
+        />
       )}
     </div>
   )

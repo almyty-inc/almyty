@@ -89,7 +89,7 @@ describe('PoliciesTable', () => {
   // Add and edit are pages now (policy-form.test.tsx drives them).
   it('links each row to its edit page', async () => {
     render(<PoliciesTable />)
-    expect(await screen.findByRole('link', { name: 'Edit Approved vendors' })).toHaveAttribute('href', '/settings/connections/policies/p1')
+    expect(await screen.findByRole('link', { name: 'Edit Approved vendors' })).toHaveAttribute('href', '/connections/policies/p1')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -99,6 +99,6 @@ describe('PoliciesTable', () => {
     expect(await screen.findByText('No policies yet')).toBeInTheDocument()
     const links = screen.getAllByRole('link', { name: 'Add policy' })
     expect(links).toHaveLength(2)
-    for (const link of links) expect(link).toHaveAttribute('href', '/settings/connections/policies/new')
+    for (const link of links) expect(link).toHaveAttribute('href', '/connections/policies/new')
   })
 })

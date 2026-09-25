@@ -17,6 +17,7 @@ export function Disclosure({
   defaultOpen = false,
   className,
   bodyClassName,
+  testId,
 }: {
   title: string
   summary?: ReactNode
@@ -24,10 +25,11 @@ export function Disclosure({
   defaultOpen?: boolean
   className?: string
   bodyClassName?: string
+  testId?: string
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <section className={cn('rounded-lg border', className)}>
+    <section className={cn('rounded-lg border', className)} data-testid={testId}>
       <button type="button" className="flex w-full items-center gap-1.5 px-4 py-3 text-left font-medium" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         {open ? <ChevronDown className="h-4 w-4 shrink-0" aria-hidden /> : <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />}
         {title}
