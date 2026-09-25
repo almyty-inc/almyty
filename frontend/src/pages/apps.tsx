@@ -46,9 +46,9 @@ export function AppsPage() {
         description={
           isLoading ? (
             <span className="inline-block h-4 w-48 animate-pulse rounded bg-muted" />
-          ) : (
+          ) : apps.length > 0 ? (
             pluralized(apps.length, 'app')
-          )
+          ) : undefined
         }
         actions={
           <Button onClick={() => navigate('/apps/new')}>
@@ -70,7 +70,7 @@ export function AppsPage() {
           variant="panel"
           icon={Package}
           title="No apps yet"
-          description="An app gathers agents under your branding and publishes them as a web app, a messaging channel, a terminal, or a desktop app."
+          description="An app puts your agent in front of people: on the web, in Slack or another chat app, or as a terminal or desktop app."
           action={
             <Button onClick={() => navigate('/apps/new')}>
               <Plus className="mr-2 h-4 w-4" />
