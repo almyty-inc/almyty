@@ -101,7 +101,7 @@ describe('CliGeneratorService', () => {
     it('should generate a bash bundle for gateway tools', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       gatewayToolRepository.find.mockResolvedValue([
-        { tool: mockTool, isActive: true },
+        { tool: mockTool, gateway: mockGateway, isActive: true },
       ]);
 
       const result = await service.generateGatewayCliBunde('gw-1', 'bash', 'org-1');
@@ -117,7 +117,7 @@ describe('CliGeneratorService', () => {
     it('should generate a node bundle for gateway tools', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       gatewayToolRepository.find.mockResolvedValue([
-        { tool: mockTool, isActive: true },
+        { tool: mockTool, gateway: mockGateway, isActive: true },
       ]);
 
       const result = await service.generateGatewayCliBunde('gw-1', 'node', 'org-1');

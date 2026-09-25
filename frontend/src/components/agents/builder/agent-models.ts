@@ -69,18 +69,17 @@ export const STRATEGY_LABELS: Record<AutonomousStrategyKey, string> = {
   explore_extract_patch: 'Explore, extract, patch',
 }
 
-/** What the engine does, one or two sentences each. Accurate, not aspirational. */
+/** What the engine does, one short plain sentence each. Accurate, not aspirational. */
 export const STRATEGY_DESCRIPTIONS: Record<AutonomousStrategyKey, string> = {
-  single: 'The main role runs every step.',
-  cascade:
-    'The drafter, a cheaper model, takes each step. When it has a final answer the checker reviews it and tries to refute it; only if the check fails does the main role redo that step.',
-  best_of_n:
-    'The main role works the task. When it has an answer it writes more candidate answers from the same context, without tools, and the checker picks the best one.',
-  panel:
-    'The main role works the task, then each panelist answers too (a model over the same conversation, an agent as its own run). The checker, or the main role if there is no checker, writes the answer they agree on.',
-  explore_extract_patch:
-    'Explorers first gather with the agent\'s tools in parallel, each as its own run on its own model. The summariser compresses what they found into a brief, the main role does the task from the brief, and the checker verifies the answer; a failed check goes back to the main role to revise. Experimental, and not claimed to save money.',
+  single: 'One model does everything.',
+  cascade: 'A cheaper model answers first and a checker double-checks it. The main model steps in only when the check fails.',
+  best_of_n: 'The main model writes several answers and the checker picks the best.',
+  panel: 'Other models or agents answer too, and one answer is written from all of them.',
+  explore_extract_patch: 'Helpers look around first and their findings are summed up. The main model works from that, and a checker checks the answer.',
 }
+
+/** The strategies shown up front; the rest wait under "More ways". */
+export const PRIMARY_STRATEGY_KEYS: readonly AutonomousStrategyKey[] = ['single', 'cascade', 'best_of_n']
 
 export const PURPOSE_LABELS: Record<RolePurpose, string> = {
   main: 'Main',
@@ -93,15 +92,14 @@ export const PURPOSE_LABELS: Record<RolePurpose, string> = {
 }
 
 export const PURPOSE_DESCRIPTIONS: Record<RolePurpose, string> = {
-  main: 'Runs the loop: plans, calls tools and writes the answer.',
-  drafter: 'A cheaper model that takes each step first; the main role only redoes a step whose check failed.',
-  checker: 'Reviews an answer and tries to refute it, or picks the best of several.',
-  panelist: 'Answers the same task alongside the main role.',
-  explorer: 'Gathers with the agent\'s tools before the main role starts.',
-  summariser: 'Compresses what the explorers found into a brief.',
-  teammate: 'The main role can hand it work as a tool, in every strategy.',
+  main: 'Does the work and writes the answer.',
+  drafter: 'A cheaper model that answers first.',
+  checker: 'Double-checks an answer, or picks the best one.',
+  panelist: 'Answers the same question too.',
+  explorer: 'Looks around with the tools first.',
+  summariser: 'Sums up what the explorers found.',
+  teammate: 'The main model can hand it work.',
 }
-
 /** "a drafter", "an explorer". */
 function withArticle(purpose: RolePurpose): string {
   return /^[aeiou]/.test(purpose) ? `an ${purpose}` : `a ${purpose}`
@@ -123,8 +121,8 @@ export function missingSlotCounts(models: Pick<AgentModels, 'strategy' | 'roles'
   return out
 }
 
-/** "Cascade needs a drafter and a checker", or null when nothing is missing. */
-export function missingSlotsSentence(models: Pick<AgentModels, 'strategy' | 'roles'>): string | null {
+/** What is missing, in words: "a drafter and a checker", or null when nothing is. */
+function missingSlotsWords(models: Pick<AgentModels, 'strategy' | 'roles'>): string | null {
   const missing = missingSlotCounts(models)
   if (missing.length === 0) return null
   const parts = missing.map(({ purpose, missing: n }) => {
@@ -133,7 +131,19 @@ export function missingSlotsSentence(models: Pick<AgentModels, 'strategy' | 'rol
     const have = min - n
     return have === 0 ? `${min} ${purpose}s` : `${n} more ${purpose}${n === 1 ? '' : 's'}`
   })
-  return `${STRATEGY_LABELS[models.strategy]} needs ${joinAnd(parts)}`
+  return joinAnd(parts)
+}
+
+/** "Cascade needs a drafter and a checker", or null when nothing is missing. */
+export function missingSlotsSentence(models: Pick<AgentModels, 'strategy' | 'roles'>): string | null {
+  const words = missingSlotsWords(models)
+  return words ? `${STRATEGY_LABELS[models.strategy]} needs ${words}` : null
+}
+
+/** "Add a drafter and a checker": only what is missing, or null when nothing is. */
+export function missingSlotsAction(models: Pick<AgentModels, 'strategy' | 'roles'>): string | null {
+  const words = missingSlotsWords(models)
+  return words ? `Add ${words}` : null
 }
 
 /** Purposes the chosen strategy reads. Teammates are read by every strategy. */
@@ -198,29 +208,74 @@ export function newAgentModels(): AgentModels {
 }
 
 const MAIN_ROLE_FIELDS = ['providerId', 'model', 'routing', 'temperature', 'maxTokens'] as const
+const TEAMMATE_FIELDS = ['providerId', 'model', 'routing', 'temperature', 'maxTokens', 'instructions'] as const
+
+/**
+ * An agent's collaboration participants and judge, as teammate roles, the
+ * way the AgentModels migration turns them into roles. The page no longer
+ * edits collaboration and a save clears it, so anything still in it has to
+ * show up here or it would be lost on the next save. Nothing is dropped: a
+ * participant missing its model or agent shows up as a role that asks for
+ * one, and Save waits until it has one.
+ */
+function teammatesFromCollaboration(collaboration: unknown, taken: Set<string>): AgentModelRole[] {
+  if (!collaboration || typeof collaboration !== 'object') return []
+  const c = collaboration as { participants?: unknown; judge?: unknown }
+  const members: Array<{ elem: Record<string, any>; judge: boolean }> = []
+  if (Array.isArray(c.participants)) {
+    for (const p of c.participants) if (p && typeof p === 'object') members.push({ elem: p as Record<string, any>, judge: false })
+  }
+  if (c.judge && typeof c.judge === 'object') members.push({ elem: c.judge as Record<string, any>, judge: true })
+
+  const out: AgentModelRole[] = []
+  let n = 0
+  for (const { elem, judge } of members) {
+    n += 1
+    let key = `teammate_${n}`
+    for (let i = n; taken.has(key); i++) key = `teammate_${i + 1}`
+    taken.add(key)
+    const role = typeof elem.role === 'string' && elem.role.trim() ? elem.role.trim() : judge ? 'Judge' : `Teammate ${n}`
+    if (elem.kind === 'agent') {
+      out.push({ key, name: role, purpose: 'teammate', kind: 'agent', ...(elem.agentId ? { agentId: elem.agentId } : {}) })
+      continue
+    }
+    const teammate: AgentModelRole = { key, name: role, purpose: 'teammate', kind: 'model' }
+    for (const f of TEAMMATE_FIELDS) {
+      if (elem[f] !== undefined && elem[f] !== null && elem[f] !== '') (teammate as any)[f] = elem[f]
+    }
+    out.push(teammate)
+  }
+  return out
+}
 
 /**
  * What the page edits for an agent: its models, or, for an agent saved
- * before models existed, a Single strategy on its modelConfig.
+ * before models existed, a Single strategy on its modelConfig. Either way
+ * any collaboration participants and judge it still has come along as
+ * teammates.
  */
-export function modelsFromAgent(agent: { models?: AgentModels | null; modelConfig?: Record<string, any> | null }): AgentModels {
+export function modelsFromAgent(agent: { models?: AgentModels | null; modelConfig?: Record<string, any> | null; collaboration?: unknown }): AgentModels {
+  let base: AgentModels
   if (agent.models && Array.isArray(agent.models.roles)) {
-    return {
+    base = {
       strategy: agent.models.strategy,
       roles: agent.models.roles.map((r) => ({ ...r })),
       ...(agent.models.candidates !== undefined && agent.models.candidates !== null
         ? { candidates: agent.models.candidates }
         : {}),
     }
-  }
-  const main: AgentModelRole = { key: 'main', name: 'Main', purpose: 'main', kind: 'model' }
-  const config = agent.modelConfig
-  if (config) {
-    for (const f of MAIN_ROLE_FIELDS) {
-      if (config[f] !== undefined && config[f] !== null && config[f] !== '') (main as any)[f] = config[f]
+  } else {
+    const main: AgentModelRole = { key: 'main', name: 'Main', purpose: 'main', kind: 'model' }
+    const config = agent.modelConfig
+    if (config) {
+      for (const f of MAIN_ROLE_FIELDS) {
+        if (config[f] !== undefined && config[f] !== null && config[f] !== '') (main as any)[f] = config[f]
+      }
     }
+    base = { strategy: 'single', roles: [main] }
   }
-  return { strategy: 'single', roles: [main] }
+  const teammates = teammatesFromCollaboration(agent.collaboration, new Set(base.roles.map((r) => r.key)))
+  return teammates.length ? { ...base, roles: [...base.roles, ...teammates] } : base
 }
 
 function hasProvider(role: AgentModelRole): boolean {

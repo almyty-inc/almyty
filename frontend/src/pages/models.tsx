@@ -173,7 +173,7 @@ export function ModelsPage() {
               <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {providers.map((p: any) => {
                   const own = cardsByProvider[p.id] ?? []
-                  const check = providerCheck(p, own.some((c) => c.selectable))
+                  const check = providerCheck(p)
                   return (
                     <li key={p.id}>
                       <Link

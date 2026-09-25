@@ -12,15 +12,6 @@
       "sha256": "c94b58f0f0c815fbb223492905bb6a79c98972f42157f255c2a44cf5cd844466"
     },
     {
-      "id": "agent-builder-empty",
-      "title": "agent builder empty",
-      "path": "screenshots/agent-builder-empty.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "eb4e16caf366576df0a2f76b92c0c544e598efa74f1026cc4bb5d5fcd7134a53"
-    },
-    {
       "id": "agent-builder-node-palette",
       "title": "agent builder node palette",
       "path": "screenshots/agent-builder-node-palette.png",
@@ -101,62 +92,6 @@
       "status": "needs-recapture",
       "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
       "sha256": "0c857a615f0262d587219eebec75d75045dbfe9c1a62e05f610bceccc385b2df"
-    },
-    {
-      "id": "agent-skills",
-      "title": "agent skills",
-      "path": "screenshots/agent-skills.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "593c3669f7fb23bed93e701f190ac0ca4f95c6507eb260d8de9e09a4dae99370"
-    },
-    {
-      "id": "agent-verify-config-dialog",
-      "title": "Verification dialog showing policy and cross-vendor reviewer fields",
-      "path": "screenshots/agent-verify-config-dialog.png",
-      "capturedAt": "2026-09-22T15:04:43.634Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "44d320a8ab557a0c43d1c269698fed55477d51c98cdb5167783addeb04e14364",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/agents"
-      },
-      "sources": [
-        "frontend/src/pages/agent-detail.tsx",
-        "frontend/src/components/agents",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "f5eb2a1187d6d06571c36e96800be0493d285b722ec7078fd92eff4509b73bbe",
-      "notes": "Upper portion of the scrollable verification dialog; no configuration saved. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
-    },
-    {
-      "id": "agents-empty",
-      "title": "Agent list with no agents in a seeded empty organization",
-      "path": "screenshots/agents-empty.png",
-      "capturedAt": "2026-09-23T11:03:22.543Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "6e5171fe48f8bcbf1997576c2e13791e0a55436314e7d07d8b9b3b995bf4436d",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/agents"
-      },
-      "sources": [
-        "frontend/src/pages/agents.tsx",
-        "frontend/src/components/agents",
-        "frontend/src/components/onboarding",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "02a490c925894745a60d9b90a78354c94e64fe914a7080f26c57f41d1813b1dd",
-      "notes": "Genuine loaded empty state in an existing seeded QA organization; no entities were deleted to obtain it."
     },
     {
       "id": "agents-list",
@@ -324,104 +259,6 @@
       "notes": "One actual staging UI execution; not a production reliability benchmark. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
-      "id": "api-auth-curl",
-      "title": "api auth curl",
-      "path": "screenshots/api-auth-curl.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "d1db4d4fc3f51620e849f2db1d31bb325ebbac76a07cde827801c58aeab2e3e1"
-    },
-    {
-      "id": "api-detail",
-      "title": "Connected Open-Meteo API with parsed operation and generated tool",
-      "path": "screenshots/api-detail.png",
-      "capturedAt": "2026-09-23T09:18:25.838Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "cfc481629a98c618201e51c93cadbb3d23ce69f7c1a8a684d0025ff2854d887e",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/apis"
-      },
-      "sources": [
-        "frontend/src/pages/api-detail.tsx",
-        "frontend/src/components/apis",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "7f655b4e2f07238c281362054f28c4b93793fc901b4438b80648b6a3e8e3dbf2",
-      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
-    },
-    {
-      "id": "api-error-sample",
-      "title": "api error sample",
-      "path": "screenshots/api-error-sample.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "d9836462c748005884cb2d37cf9bda3bca5e61ea0abb3b21c65cbe3fbef28897"
-    },
-    {
-      "id": "api-rate-limit-headers",
-      "title": "api rate limit headers",
-      "path": "screenshots/api-rate-limit-headers.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "79ff0cc3172ea7325cab0d62fd0ab1fe117fa252352761833cbfb5bb11ccf1ac"
-    },
-    {
-      "id": "apis-empty",
-      "title": "API list with no connected APIs in a seeded empty organization",
-      "path": "screenshots/apis-empty.png",
-      "capturedAt": "2026-09-23T11:03:50.580Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "ffe182b475611dfedff2d5d5efea4ef0ca929824f3fa8921451f60d67c998023",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/apis"
-      },
-      "sources": [
-        "frontend/src/pages/apis.tsx",
-        "frontend/src/components/apis",
-        "frontend/src/components/onboarding",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "7d084c001997e1ea57b783c34b6a10ac4bc693eca19f084c13db115517a37f4f",
-      "notes": "Genuine loaded empty state in an existing seeded QA organization; no entities were deleted to obtain it."
-    },
-    {
-      "id": "apis-import-dialog",
-      "title": "Import OpenAPI schema from a URL with automatic tool generation",
-      "path": "screenshots/apis-import-dialog.png",
-      "capturedAt": "2026-09-23T09:17:23.485Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "39c5c059a9dbfd5fefb02e13c3dd6e9050d6041a44c081916538c7bfd24500dd",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/apis"
-      },
-      "sources": [
-        "frontend/src/pages/apis.tsx",
-        "frontend/src/components/SchemaImportDialog.tsx",
-        "frontend/src/components/apis",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "9c84a1e35935b4301ab207b95328ca2297f1ee270de3e8a29cda0faed533c45e",
-      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
-    },
-    {
       "id": "apis-list",
       "title": "APIs list with an imported Open-Meteo demo schema",
       "path": "screenshots/apis-list.png",
@@ -452,28 +289,6 @@
       "status": "needs-recapture",
       "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
       "sha256": "b1c09457867b05eeda0c80f4544abad0d22deeee02cd295a35b43912107d8dcd"
-    },
-    {
-      "id": "approvals-empty",
-      "title": "Approvals loaded with no pending requests",
-      "path": "screenshots/approvals-empty.png",
-      "capturedAt": "2026-09-23T10:51:24.914Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "ff8e7ee724823959cbfde07a840a530103bcf24e3868db36ac352648e4a0bf67",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/approvals"
-      },
-      "sources": [
-        "frontend/src/pages/approvals.tsx",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "0cabdcfe55009e438a513277dba58a0debff394a59f07491a535a7b9405ba24d",
-      "notes": "Genuine loaded empty state; no approval was approved, rejected, or created."
     },
     {
       "id": "approvals-pending",
@@ -591,15 +406,6 @@
       "status": "needs-recapture",
       "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
       "sha256": "73a8ceaf9161f967acb65a0739628d7aaa130eaa5f548b8193be984aa553b322"
-    },
-    {
-      "id": "auth-login",
-      "title": "Sign-in screen",
-      "path": "screenshots/auth-login.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "3ecef9358b4307987d32c815779c2f8b49358b8b3a37fec6d451a63ca1af2f9e"
     },
     {
       "id": "auth-register",
@@ -727,15 +533,6 @@
       "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
     },
     {
-      "id": "command-palette",
-      "title": "Global ⌘K command palette",
-      "path": "screenshots/command-palette.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "492d12ae7c8da3928998e6e3e825311c8bc82ec2c69092afa3baa6e2f59864e2"
-    },
-    {
       "id": "connections",
       "title": "Connections catalog with all Settings sections visible",
       "path": "screenshots/connections.png",
@@ -757,29 +554,6 @@
       ],
       "sourceDigest": "a3fb96a17709cca4ba2a230089d19dd7f080dc5731899837a0508f458deada7b",
       "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
-    },
-    {
-      "id": "credentials-add",
-      "title": "Blank Add Credential form with organization and team visibility",
-      "path": "screenshots/credentials-add.png",
-      "capturedAt": "2026-09-23T10:44:46.657Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "aac7105d09f3b6a414dcbfc59a6e6e5e9d383363275fa59572d30bff46dda474",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/credentials"
-      },
-      "sources": [
-        "frontend/src/pages/credentials.tsx",
-        "frontend/src/components/credentials",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "f77989e05b1fa1f846234e68ee523342390b04e393cc7b1cf8b32914c37a1da9",
-      "notes": "No credential was entered or created. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "credentials-vault",
@@ -805,26 +579,8 @@
       "notes": "Only labels and status are visible; no secret values were revealed. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
-      "id": "dashboard-empty",
-      "title": "Empty-org dashboard — first-run onboarding checklist",
-      "path": "screenshots/dashboard-empty.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "d602270b684628809a3cab2641db4b24e47ef40ccc51a9bc263b27188d38b38a"
-    },
-    {
-      "id": "dashboard-populated",
-      "title": "dashboard populated",
-      "path": "screenshots/dashboard-populated.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "3446843cf086e6d51b8893ba316dbaf5d50395cb121bce5e0db1660576f66a24"
-    },
-    {
       "id": "gateway-detail-tools",
-      "title": "Gateway detail — Tools tab with scoping",
+      "title": "Gateway detail \u2014 Tools tab with scoping",
       "path": "screenshots/gateway-detail-tools.png",
       "capturedAt": null,
       "status": "needs-recapture",
@@ -859,39 +615,6 @@
       "sha256": "8ce35bad186b518728f4f61f25a05718db98a9edb94154da5333ea9f26878420"
     },
     {
-      "id": "gateways-create-dialog",
-      "title": "Create Gateway dialog (MCP / A2A / UTCP / Skills)",
-      "path": "screenshots/gateways-create-dialog.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "6b9fdaff72e50113f7389cb59a35a04217971ddecbafdebe2325d810931cfa38"
-    },
-    {
-      "id": "gateways-empty",
-      "title": "New organization with only the built-in system gateway",
-      "path": "screenshots/gateways-empty.png",
-      "capturedAt": "2026-09-23T11:06:30.835Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "42b72ad1a564ec60defc6ce4adda1e31e7bdcd8afc35a6b78c0601537a90f6c8",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/gateways"
-      },
-      "sources": [
-        "frontend/src/pages/gateways.tsx",
-        "frontend/src/components/gateways",
-        "frontend/src/components/onboarding",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "3a775b3ee9fa40b026dd2f6f59bbb9be2d8a523d940ef5243c7d3c6eb8087261",
-      "notes": "Legacy filename retained; this is NOT a zero-gateway state. New organizations include the built-in system gateway. No user-created gateways are present."
-    },
-    {
       "id": "interfaces-channel-config",
       "title": "interfaces channel config",
       "path": "screenshots/interfaces-channel-config.png",
@@ -910,15 +633,6 @@
       "sha256": "981ad7f99f7e76e0d34d788f046417d0caba96e2fc133b53c60b40a11ee657ab"
     },
     {
-      "id": "keyboard-shortcuts",
-      "title": "Keyboard shortcuts help dialog",
-      "path": "screenshots/keyboard-shortcuts.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "27864f372797b0d45181737aa4ce15a6752c5f3f518f33c0a0d55c5d18f18e32"
-    },
-    {
       "id": "llm-providers-create",
       "title": "Add LLM Provider dialog",
       "path": "screenshots/llm-providers-create.png",
@@ -926,38 +640,6 @@
       "status": "needs-recapture",
       "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
       "sha256": "b890a50dca4543856c488141c13a8988cc3bf08ed257e84e28c5c8ea55137943"
-    },
-    {
-      "id": "llm-providers-empty",
-      "title": "Models page — empty state",
-      "path": "screenshots/llm-providers-empty.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "6bfcaeca65d1ee8ff87aec86d7acd2cd5062bdbb90298048250607fee173357d"
-    },
-    {
-      "id": "memories",
-      "title": "Long-tier seeded demo memory entries",
-      "path": "screenshots/memories.png",
-      "capturedAt": "2026-09-23T10:47:32.593Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "2b9544dc9b7fa57e4435dd0d436c46be9ea00dbc9bc311a4fae2fa1b44fa5e72",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/memories"
-      },
-      "sources": [
-        "frontend/src/pages/memories.tsx",
-        "frontend/src/components/connections",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "769cfb4ae1b1c9e93ded1f92473dfafd91532467e563b6b51128d80315996096",
-      "notes": "Browse filtered to the long tier. The displayed policies and percentages are seeded demo content, not almyty commercial terms or product measurements."
     },
     {
       "id": "memory-write",
@@ -1088,15 +770,6 @@
       "sha256": "1b1cd0d9afbed153cd9e0a2018e6b8cdb044b93920be5080745dc94b411db426"
     },
     {
-      "id": "runner-new",
-      "title": "runner new",
-      "path": "screenshots/runner-new.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "63c56e0fe2d858941dce74b0b488a1356d1d776448da1186a79578120f904546"
-    },
-    {
       "id": "runners-list",
       "title": "runners list",
       "path": "screenshots/runners-list.png",
@@ -1128,7 +801,7 @@
       "title": "Business approval policies with an empty policy list",
       "path": "screenshots/settings-approval-policies-enabled.png",
       "capturedAt": "2026-09-24T13:56:05.000Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6a41362debab6895732b1c6a5c31ca05938cda00586a4bc73d4c6e701c306ada",
       "source": {
         "kind": "browser",
@@ -1148,42 +821,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
-      "notes": "Observed and visually reviewed in the authorized seeded Business organization. No approval policy was created or changed."
-    },
-    {
-      "id": "settings-approval-policies-locked",
-      "title": "Approval policies locked without the Business entitlement",
-      "path": "screenshots/settings-approval-policies-locked.png",
-      "capturedAt": "2026-09-23T10:54:31.157Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "4b7ccb7935f979db6e929787b351ce2b09f69fa8c55cf0bdbc66a817f19e0894",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/settings/approvals"
-      },
-      "sources": [
-        "frontend/src/pages/settings.tsx",
-        "frontend/src/components/settings",
-        "frontend/src/components/entitlement-gate.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/lib/plan-catalog.ts",
-        "frontend/src/hooks/use-entitlement.ts",
-        "frontend/src/hooks/use-billing-plan.ts",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "5205d93a732e7602134bb1c7e368b5423276c8ffbeed52b3cb9bf34ba8119b39",
-      "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
+      "notes": "Observed and visually reviewed in the authorized seeded Business organization. No approval policy was created or changed.",
+      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
     },
     {
       "id": "settings-approval-policy-new",
       "title": "New approval policy page with match conditions and sequential steps",
       "path": "screenshots/settings-approval-policy-new.png",
       "capturedAt": "2026-09-24T13:57:42.000Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "92a0173c78e6c89c1ca39457aa9df7d2bb1826855011f11a8e2836c43fc0c119",
       "source": {
         "kind": "browser",
@@ -1198,14 +844,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "8b3d9e8ff058b680216dea80acd42ef044691ab50069a20a39f4209d415276f4",
-      "notes": "Blank creation form opened through New policy and visually reviewed at a taller viewport. No values were submitted and no policy was created."
+      "notes": "Blank creation form opened through New policy and visually reviewed at a taller viewport. No values were submitted and no policy was created.",
+      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
     },
     {
       "id": "settings-audit-streams-enabled",
       "title": "Business audit streaming with target configuration unlocked",
       "path": "screenshots/settings-audit-streams-enabled.png",
       "capturedAt": "2026-09-24T13:58:57.000Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3e6215ebd1c8b4ea3b6635f5335959599c987c8f42ca9c1fd1198cc00e21a2d0",
       "source": {
         "kind": "browser",
@@ -1225,42 +872,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
-      "notes": "Observed and visually reviewed the empty target configuration form. The token is blank; no stream was registered and no audit data was sent externally."
-    },
-    {
-      "id": "settings-audit-streams-locked",
-      "title": "Audit streaming locked without the Business entitlement",
-      "path": "screenshots/settings-audit-streams-locked.png",
-      "capturedAt": "2026-09-23T10:55:16.352Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "54e3cea5490abcdb1cde5ff3890cbe9eff98e89cc5ce822cd3e84de15a6850a4",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/settings/audit-streams"
-      },
-      "sources": [
-        "frontend/src/pages/settings.tsx",
-        "frontend/src/components/settings",
-        "frontend/src/components/entitlement-gate.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/lib/plan-catalog.ts",
-        "frontend/src/hooks/use-entitlement.ts",
-        "frontend/src/hooks/use-billing-plan.ts",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "5205d93a732e7602134bb1c7e368b5423276c8ffbeed52b3cb9bf34ba8119b39",
-      "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
+      "notes": "Observed and visually reviewed the empty target configuration form. The token is blank; no stream was registered and no audit data was sent externally.",
+      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
     },
     {
       "id": "settings-compliance-enabled",
       "title": "Business compliance policy defaults and posture report",
       "path": "screenshots/settings-compliance-enabled.png",
       "capturedAt": "2026-09-24T13:58:20.000Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a35683471f7513e857a4c15dba6824ec16f9767910266c21ee5fd1572597bcf6",
       "source": {
         "kind": "browser",
@@ -1280,35 +900,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
-      "notes": "Observed and visually reviewed secure-default policy and loaded posture report. No policy or guardrail settings were changed."
-    },
-    {
-      "id": "settings-compliance-locked",
-      "title": "Compliance Pack locked without the Business entitlement",
-      "path": "screenshots/settings-compliance-locked.png",
-      "capturedAt": "2026-09-23T10:54:55.249Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "fa51005005706990b92167ab6fdd1bad7f8336ee615a18ffaedd7eabceff7b1b",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/settings/compliance"
-      },
-      "sources": [
-        "frontend/src/pages/settings.tsx",
-        "frontend/src/components/settings",
-        "frontend/src/components/entitlement-gate.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/lib/plan-catalog.ts",
-        "frontend/src/hooks/use-entitlement.ts",
-        "frontend/src/hooks/use-billing-plan.ts",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "5205d93a732e7602134bb1c7e368b5423276c8ffbeed52b3cb9bf34ba8119b39",
-      "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
+      "notes": "Observed and visually reviewed secure-default policy and loaded posture report. No policy or guardrail settings were changed.",
+      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
     },
     {
       "id": "settings-encryption-locked",
@@ -1339,34 +932,11 @@
       "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
     },
     {
-      "id": "settings-profile",
-      "title": "Seeded demo profile settings",
-      "path": "screenshots/settings-profile.png",
-      "capturedAt": "2026-09-23T06:09:49.642Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "110e0266508f287d6e0af2f6387017b01a6f4f17df783bd06e71dbb708eeadad",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/settings/profile"
-      },
-      "sources": [
-        "frontend/src/pages/settings.tsx",
-        "frontend/src/components/settings",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "d3f2bf3088629637a3bbdaa6900ccfa9b48ebc56a6bc90ad7e5a26e24dcc5668",
-      "notes": "Contains only the seeded Ava Chen demo identity. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
-    },
-    {
       "id": "settings-rbac-enabled",
       "title": "Business Roles settings with custom roles unlocked",
       "path": "screenshots/settings-rbac-enabled.png",
       "capturedAt": "2026-09-24T13:54:37.000Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1f5c5caf9be493f2281f762601823e8a4e05a45868871e56fb59cc8c89eb940e",
       "source": {
         "kind": "browser",
@@ -1386,42 +956,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
-      "notes": "Observed and visually reviewed in the authorized seeded Business organization. Custom role controls are unlocked; no role or access policy was created. Existing locked-state evidence is separate."
-    },
-    {
-      "id": "settings-rbac-locked",
-      "title": "Advanced RBAC locked without the Business entitlement",
-      "path": "screenshots/settings-rbac-locked.png",
-      "capturedAt": "2026-09-23T10:54:09.141Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "37d230e35c131e92bf9541440ac87bc0ccaf330a4dce6d0b2c08dc2b6882b197",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/settings/rbac"
-      },
-      "sources": [
-        "frontend/src/pages/settings.tsx",
-        "frontend/src/components/settings",
-        "frontend/src/components/entitlement-gate.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/lib/plan-catalog.ts",
-        "frontend/src/hooks/use-entitlement.ts",
-        "frontend/src/hooks/use-billing-plan.ts",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "5205d93a732e7602134bb1c7e368b5423276c8ffbeed52b3cb9bf34ba8119b39",
-      "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
+      "notes": "Observed and visually reviewed in the authorized seeded Business organization. Custom role controls are unlocked; no role or access policy was created. Existing locked-state evidence is separate.",
+      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
     },
     {
       "id": "settings-rbac-new-policy",
       "title": "New access policy inline form on an entitled Business organization",
       "path": "screenshots/settings-rbac-new-policy.png",
       "capturedAt": "2026-09-24T18:44:29.595Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e5ceb39e432e9a6eb9bf15229b2650bf05bec6a9ba1799b9e0372df406b59d3f",
       "source": {
         "kind": "browser",
@@ -1441,14 +984,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
-      "notes": "Visually reviewed actual staging capture on the authorized seeded Business fixture. Scrolled to show the complete unsaved form and empty policies list. The form has no condition editor; attribute conditions require the API. No policy was submitted and no permissions or billing were changed."
+      "notes": "Visually reviewed actual staging capture on the authorized seeded Business fixture. Scrolled to show the complete unsaved form and empty policies list. The form has no condition editor; attribute conditions require the API. No policy was submitted and no permissions or billing were changed.",
+      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
     },
     {
       "id": "settings-rbac-new-role",
       "title": "Inline custom role creation with permission strings",
       "path": "screenshots/settings-rbac-new-role.png",
       "capturedAt": "2026-09-24T14:01:00.000Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0f4730525c5db0bcc998aef4ed7c611a67e32fa857361531095abc8ded192b91",
       "source": {
         "kind": "browser",
@@ -1468,40 +1012,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
-      "notes": "Observed and visually reviewed the blank New custom role inline form. Displayed examples are placeholders; no role was created, assigned or granted."
-    },
-    {
-      "id": "settings-security",
-      "title": "Security settings with password form and session limitations",
-      "path": "screenshots/settings-security.png",
-      "capturedAt": "2026-09-23T06:08:27.178Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "9c79e3877c85ae804199b7bba684fac5561b08ba6086edeb18db9d4a2e0b74c9",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/settings/security"
-      },
-      "sources": [
-        "frontend/src/pages/settings.tsx",
-        "frontend/src/components/settings",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css",
-        "frontend/src/components/SecurityTab.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/lib/plan-catalog.ts"
-      ],
-      "sourceDigest": "611bbc6250da25666fa9c084e0f16e10bbf21a899b2f885985c220a4245b2987",
-      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved. Dependency review additionally records the directly imported settings tab and plan indicator; original pixels and capture time preserved."
+      "notes": "Observed and visually reviewed the blank New custom role inline form. Displayed examples are placeholders; no role was created, assigned or granted.",
+      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
     },
     {
       "id": "settings-sso-enabled",
       "title": "Business SSO and SCIM configuration controls",
       "path": "screenshots/settings-sso-enabled.png",
       "capturedAt": "2026-09-24T13:59:53.000Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8d9c9564023b2d1d256df93a6368d5451ea4f984dfab421fe744c13a8764bd8a",
       "source": {
         "kind": "browser",
@@ -1521,35 +1040,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
-      "notes": "Observed and visually reviewed SAML configuration and SCIM provisioning controls in the authorized seeded Business organization. SSO remains disabled, fields are defaults/placeholders, and no SCIM token was generated. The displayed SCIM address belongs to the staging capture environment, not the public documentation base URL."
-    },
-    {
-      "id": "settings-sso-locked",
-      "title": "Single Sign-On locked without the Business entitlement",
-      "path": "screenshots/settings-sso-locked.png",
-      "capturedAt": "2026-09-23T10:53:22.808Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "5c4c5e7d2665f3f52217e75d593e0e9cbb411678e9e55fbb8a2383e877301021",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/settings/sso"
-      },
-      "sources": [
-        "frontend/src/pages/settings.tsx",
-        "frontend/src/components/settings",
-        "frontend/src/components/entitlement-gate.tsx",
-        "frontend/src/components/plan-indicator.tsx",
-        "frontend/src/lib/plan-catalog.ts",
-        "frontend/src/hooks/use-entitlement.ts",
-        "frontend/src/hooks/use-billing-plan.ts",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "5205d93a732e7602134bb1c7e368b5423276c8ffbeed52b3cb9bf34ba8119b39",
-      "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
+      "notes": "Observed and visually reviewed SAML configuration and SCIM provisioning controls in the authorized seeded Business organization. SSO remains disabled, fields are defaults/placeholders, and no SCIM token was generated. The displayed SCIM address belongs to the staging capture environment, not the public documentation base URL.",
+      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
     },
     {
       "id": "settings-teams",
@@ -1670,80 +1162,9 @@
       "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
-      "id": "tools-create-dialog",
-      "title": "Create Manual Tool execution method selector",
-      "path": "screenshots/tools-create-dialog.png",
-      "capturedAt": "2026-09-22T15:11:04.704Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "4888392990cc88d9f88fd0af58b5fce88b6e946d6c4075846c4a0693c4ed7a63",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/tools"
-      },
-      "sources": [
-        "frontend/src/pages/tools.tsx",
-        "frontend/src/components/tools",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "41a677c029ca848b97c90e47b10ba216a5f7a916213d905f22a482f00016f710",
-      "notes": "Seven available execution methods shown in the open selector. No tool created or configuration saved. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
-    },
-    {
-      "id": "tools-empty",
-      "title": "Tool list with no tools in a seeded empty organization",
-      "path": "screenshots/tools-empty.png",
-      "capturedAt": "2026-09-23T11:04:12.555Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "6a90c06c2927affd4643011f461986b84d86b14d584d583882bc44600dff0cf9",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/tools"
-      },
-      "sources": [
-        "frontend/src/pages/tools.tsx",
-        "frontend/src/components/tools",
-        "frontend/src/components/onboarding",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "28228b1b1097a9611588593da97cda3d55dc51692c22e870dd48bbc1be6621b8",
-      "notes": "Genuine loaded empty state in an existing seeded QA organization; no entities were deleted to obtain it."
-    },
-    {
       "id": "tools-list",
       "title": "Tools list with Active filter on the current page",
       "path": "screenshots/tools-list.png",
-      "capturedAt": "2026-09-22T15:10:21.424Z",
-      "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
-      "sha256": "3c3ac6115b5d8a46ded9a683461ecfda2dabc5f102792fc7b3fb8679ddb1622f",
-      "source": {
-        "kind": "browser",
-        "environment": "staging",
-        "route": "/tools"
-      },
-      "sources": [
-        "frontend/src/pages/tools.tsx",
-        "frontend/src/pages/tool-hub.tsx",
-        "frontend/src/components/tools",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "ebdb59176185ec9766bb49330f0271d5efec8930d93bc38e8149d28cd3ad5f43",
-      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
-    },
-    {
-      "id": "tools",
-      "title": "Tools list with Active filter on the current page",
-      "path": "screenshots/tools.png",
       "capturedAt": "2026-09-22T15:10:21.424Z",
       "status": "needs-recapture",
       "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",

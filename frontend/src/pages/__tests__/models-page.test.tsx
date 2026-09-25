@@ -34,8 +34,8 @@ vi.mock('@/components/ui/select', async () => {
 })
 
 const NOW = '2026-09-25T10:00:00.000Z'
-const OPENAI = { id: 'prov-openai', name: 'OpenAI', type: 'openai', status: 'active', lastSuccessAt: NOW }
-const ANTHROPIC = { id: 'prov-anthropic', name: 'Anthropic', type: 'anthropic', status: 'active', lastSuccessAt: NOW }
+const OPENAI = { id: 'prov-openai', name: 'OpenAI', type: 'openai', status: 'active', lastSuccessAt: NOW, keyChecked: true }
+const ANTHROPIC = { id: 'prov-anthropic', name: 'Anthropic', type: 'anthropic', status: 'active', lastSuccessAt: NOW, keyChecked: true }
 const GROQ = { id: 'prov-groq', name: 'Groq', type: 'groq', status: 'error', lastError: 'Request failed with status code 401', lastErrorAt: NOW }
 
 function card(providerId: string, vendorModelId: string, over: Record<string, any> = {}) {
@@ -128,6 +128,54 @@ describe('ModelsPage', () => {
     expect(screen.getByTestId('model-row-card-claude-sonnet-5')).toBeInTheDocument()
     expect(screen.queryByTestId('model-row-card-gpt-4o')).not.toBeInTheDocument()
     expect(screen.queryByTestId('model-group-prov-openai')).not.toBeInTheDocument()
+  })
+
+  it('says "Key works" only by the rule that makes the models usable, never over a failed check', async () => {
+    // A check ran and failed: the old page read lastHealthCheckAt as proof.
+    const MISTRAL = { id: 'prov-mistral', name: 'Mistral', type: 'mistral', status: 'active', isHealthy: false, lastHealthCheckAt: NOW, lastError: 'connect ETIMEDOUT', keyChecked: false }
+    // Real traffic went through, but the key check never ran.
+    const GEMINI = { id: 'prov-gemini', name: 'Gemini', type: 'google', status: 'active', lastSuccessAt: NOW, keyChecked: false }
+    vi.mocked(llmProvidersApi.getAll).mockResolvedValue([OPENAI, MISTRAL, GEMINI] as any)
+    vi.mocked(modelsApi.list).mockResolvedValue([
+      card(OPENAI.id, 'gpt-4o'),
+      card(MISTRAL.id, 'mistral-large', { selectable: false, validationStatus: 'never' }),
+      card(GEMINI.id, 'gemini-2.5-flash', { selectable: false, validationStatus: 'never' }),
+    ])
+    at()
+    const status = async (id: string) => within(await screen.findByTestId(`provider-card-${id}`)).getByTestId('provider-status')
+    expect(await status('prov-openai')).toHaveTextContent('Key works')
+    expect(await status('prov-mistral')).toHaveTextContent('Check failed')
+    expect(await status('prov-gemini')).toHaveTextContent('Not checked yet')
+    expect(within(await screen.findByTestId('model-row-card-mistral-large')).getByTestId('model-availability')).toHaveTextContent('Provider check failed')
+  })
+
+  it('shows an unknown price as unknown, a free model as free, and no context when unknown', async () => {
+    const OLLAMA = { id: 'prov-ollama', name: 'Ollama box', type: 'ollama', status: 'active', keyChecked: true }
+    vi.mocked(llmProvidersApi.getAll).mockResolvedValue([OPENAI, OLLAMA] as any)
+    vi.mocked(modelsApi.list).mockResolvedValue([
+      card(OPENAI.id, 'gpt-image-2'),
+      card(OLLAMA.id, 'llama3.2', { pricing: { inPerMTok: 0, outPerMTok: 0, currency: 'USD' } }),
+    ])
+    at()
+    const unknown = await screen.findByTestId('model-row-card-gpt-image-2')
+    expect(within(unknown).getByTestId('model-price')).toHaveTextContent(/^Price unknown$/)
+    expect(within(unknown).getByTestId('model-context')).toHaveTextContent(/^$/)
+    const free = screen.getByTestId('model-row-card-llama3.2')
+    expect(within(free).getByTestId('model-price')).toHaveTextContent(/^Free$/)
+    expect(screen.queryByText(/\$0 in/)).not.toBeInTheDocument()
+  })
+
+  it('shows the model id under the name only when it differs from the name', async () => {
+    vi.mocked(modelsApi.list).mockResolvedValue([
+      card(OPENAI.id, 'deepseek-v4-flash:0731'),
+      card(ANTHROPIC.id, 'claude-sonnet-5', { name: 'Claude Sonnet 5' }),
+    ])
+    at()
+    const same = await screen.findByTestId('model-row-card-deepseek-v4-flash:0731')
+    expect(within(same).getAllByText('deepseek-v4-flash:0731')).toHaveLength(1)
+    expect(within(same).queryByTestId('model-id')).not.toBeInTheDocument()
+    const differs = screen.getByTestId('model-row-card-claude-sonnet-5')
+    expect(within(differs).getByTestId('model-id')).toHaveTextContent('claude-sonnet-5')
   })
 
   it('filters by provider', async () => {

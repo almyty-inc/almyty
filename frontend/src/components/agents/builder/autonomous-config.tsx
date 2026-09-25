@@ -10,7 +10,10 @@ import React, { useState } from 'react'
 import { ChevronDown, ChevronRight, Search, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Link } from 'react-router-dom'
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { VerifierPanelList } from '@/components/agents/verifier-panel'
 import { RunLimitsSection, type RunLimitsConfig } from '@/components/agents/builder/run-limits-section'
 import { ModelsSection } from '@/components/agents/builder/models-section'
 import { StrategyChoice } from '@/components/agents/builder/strategy-choice'
@@ -19,6 +22,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import type { AgentModels } from '@/types/agent-models'
+import type { Agent } from '@/types'
 
 export interface AutonomousConfigProps {
   agentId?: string
@@ -37,6 +41,9 @@ export interface AutonomousConfigProps {
     canCallAgents?: boolean
     canCreateAgents?: boolean
     runLimits?: RunLimitsConfig
+    /** Shown read-only here and saved back as it is; edited on the overview. */
+    verify?: NonNullable<Agent['agentConfig']>['verify']
+    constraints?: NonNullable<Agent['agentConfig']>['constraints']
   }
   onAgentConfigChange: (v: AutonomousConfigProps['agentConfig']) => void
   /** The organization's agents; a panelist or teammate role can be one of them. */
@@ -86,6 +93,24 @@ export function AutonomousConfig({
       {/* Models: the roles, then how they work together */}
       <ModelsSection models={models} onChange={onModelsChange} agentId={agentId} availableAgents={availableAgents} />
       <StrategyChoice models={models} onChange={onModelsChange} />
+
+      {/* The verifier panel is saved with the agent as it is; it is changed on the overview. */}
+      {agentConfig.verify?.enabled && (
+        <Card data-testid="verifier-card">
+          <CardHeader>
+            <CardTitle className="text-base">Verifier panel</CardTitle>
+            <CardDescription className="text-xs">These models check every final answer before it goes out.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <VerifierPanelList verify={agentConfig.verify} />
+            {agentId && (
+              <Link to={`/agents/${agentId}`} className="inline-block text-xs text-primary hover:underline">
+                Change it on the agent's overview
+              </Link>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tools */}
       <Card>
