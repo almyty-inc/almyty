@@ -26,6 +26,7 @@ import { assertNoSharedDependents } from '../../common/authorization/private-dep
 import { Credential } from '../../entities/credential.entity';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { connectionAuthConfig, hasInlineApiSecret, inlineApiAuthView, splitInlineApiAuth } from '../credentials/inline-api-auth.helper';
+import { generatedToolScope } from '../tools/generated-tool-scope';
 
 import { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions } from './dto/apis.dto';
 export type { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions };
@@ -487,18 +488,22 @@ export class ApisService {
     await this.moveInlineAuth(api);
     const saved = await this.apiRepository.save(api);
 
-    // The tools generated from an API are its public face; a private API
-    // with org-wide tools would still be usable by everyone. Take the
-    // generated ones (and the owner's own) private with it. Tools other
-    // members built on top of it keep their owner and stop resolving the
-    // API at run time.
-    if (becomesPrivate && saved.ownerUserId) {
+    // The tools generated from an API are its public face and carry its
+    // scope (generatedToolScope): a team API with org-wide tools was listed
+    // to the whole organization, a private one with org-wide tools usable
+    // by everyone. Whenever the scope changes, the generated tools follow
+    // it -- narrower or wider. Going private also takes the owner's own
+    // tools on it (and ownerless ones) private; tools other members built
+    // on top of it keep their owner and stop resolving the API at run time.
+    if (scope) {
+      const toolScope = generatedToolScope(saved);
       await this.dataSource.query(
-        `UPDATE tools SET visibility = 'private', "teamId" = NULL, "createdBy" = $3::varchar
+        `UPDATE tools SET visibility = $3, "teamId" = $4::uuid, "createdBy" = COALESCE($5::varchar, "createdBy")
           WHERE "organizationId" = $1
             AND ("apiId" = $2 OR "operationId" IN (SELECT id FROM operations WHERE "apiId" = $2))
-            AND (generated = true OR "createdBy" IS NULL OR "createdBy" = $3::varchar)`,
-        [organizationId, saved.id, saved.ownerUserId],
+            AND (generated = true
+                 OR ($3 = 'private' AND $6::boolean AND ("createdBy" IS NULL OR "createdBy" = $5::varchar)))`,
+        [organizationId, saved.id, toolScope.visibility, toolScope.teamId, toolScope.createdBy ?? null, becomesPrivate],
       );
     }
 
