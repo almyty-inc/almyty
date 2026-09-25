@@ -54,7 +54,7 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
             {api.schema && (
               <Button variant="outline" size="sm" onClick={onOpenSchemaImport}>
                 <Upload className="mr-2 h-4 w-4" />
-                Update schema
+                Update the description
               </Button>
             )}
           </div>
@@ -64,11 +64,11 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
             <div className="text-center py-12">
               <Code className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground mb-4">
-                No operations found. Import a schema to get started.
+                No operations yet. Import the API's description to get them.
               </p>
               <Button onClick={onOpenSchemaImport}>
                 <Upload className="mr-2 h-4 w-4" />
-                Import schema
+                Import a description
               </Button>
             </div>
           ) : (

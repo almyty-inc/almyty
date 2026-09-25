@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { ArrowLeft, ChevronDown, ChevronRight, ExternalLink, Loader2, Pencil, Play, RefreshCw } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Loader2, Pencil, Play, RefreshCw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -13,6 +13,7 @@ import { SecretInput } from '@/components/ui/secret-input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { Disclosure } from '@/components/ui/disclosure'
 import type { Visibility, VisibilityValue } from '@/components/ui/visibility-field'
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { ConnectAccountButton } from '@/components/connections/connect-sheet'
@@ -471,19 +472,6 @@ function Hosting({ provider, orgId }: { provider: any; orgId: string }) {
           </Card>
         ))
       )}
-    </section>
-  )
-}
-
-function Disclosure({ title, children }: { title: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <section className="rounded-lg border">
-      <button type="button" className="flex w-full items-center gap-1.5 px-4 py-3 text-left font-medium" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        {open ? <ChevronDown className="h-4 w-4" aria-hidden /> : <ChevronRight className="h-4 w-4" aria-hidden />}
-        {title}
-      </button>
-      {open && <div className="space-y-6 border-t px-4 py-4">{children}</div>}
     </section>
   )
 }

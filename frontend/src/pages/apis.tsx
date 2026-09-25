@@ -166,7 +166,7 @@ export function ApisPage() {
           <Button asChild>
             <Link to="/apis/new">
               <Plus className="mr-2 h-4 w-4" />
-              Connect API
+              Connect an API
             </Link>
           </Button>
         }
@@ -185,7 +185,7 @@ export function ApisPage() {
             <Button asChild>
               <Link to="/apis/new">
                 <Plus className="mr-2 h-4 w-4" />
-                Connect API
+                Connect an API
               </Link>
             </Button>
           }
