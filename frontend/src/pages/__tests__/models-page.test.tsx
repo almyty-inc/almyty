@@ -156,6 +156,26 @@ describe('ModelsPage', () => {
     expect(screen.queryByRole('heading', { name: 'All models' })).not.toBeInTheDocument()
   })
 
+  it("lists a hosted model's provider row as the model, not as a connected provider", async () => {
+    // The reconcile loop writes a provider row per hosted model; agents call
+    // the model through it, but nobody connected it.
+    const PLUMBING = { id: 'prov-qwen', name: 'Qwen on Modal', type: 'openai', status: 'active', lastSuccessAt: NOW, metadata: { managedBy: { kind: 'model_endpoint', id: 'd-1' } } }
+    vi.mocked(llmProvidersApi.getAll).mockResolvedValue([OPENAI, PLUMBING] as any)
+    vi.mocked(modelsApi.list).mockResolvedValue([card(OPENAI.id, 'gpt-4o'), card(PLUMBING.id, 'qwen3-0.6b')])
+    at()
+    await screen.findByTestId('provider-card-prov-openai')
+    expect(screen.queryByTestId('provider-card-prov-qwen')).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Qwen on Modal' })).not.toBeInTheDocument()
+    expect(within(await screen.findByTestId('model-group-__hosted__')).getByTestId('model-row-card-qwen3-0.6b')).toBeInTheDocument()
+  })
+
+  it('goes straight to connecting when the only provider rows belong to hosted models', async () => {
+    vi.mocked(llmProvidersApi.getAll).mockResolvedValue([{ id: 'prov-qwen', name: 'Qwen on Modal', type: 'openai', metadata: { managedBy: { kind: 'model_endpoint', id: 'd-1' } } }] as any)
+    vi.mocked(modelsApi.list).mockResolvedValue([])
+    at()
+    expect(await screen.findByTestId('models-empty')).toBeInTheDocument()
+  })
+
   it('sends old ?tab=providers and ?new=1 links to connecting a provider', async () => {
     renderAtRoute(<ModelsPage />, { path: '/models', url: '/models?tab=providers', paths: ['/models/connect'] })
     expect(await screen.findByText('at /models/connect')).toBeInTheDocument()

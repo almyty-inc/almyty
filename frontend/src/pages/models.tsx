@@ -14,7 +14,7 @@ import { PageIntro } from '@/components/onboarding/page-intro'
 import { ModelRow } from '@/components/models/model-row'
 import { useHostedModels } from '@/components/models/use-model-data'
 import { ProviderStatus, providerCheck } from '@/components/llm-providers/provider-status'
-import { providerTileLabel } from '@/components/llm-providers/provider-catalog'
+import { isHostedModelPlumbing, providerTileLabel } from '@/components/llm-providers/provider-catalog'
 import { providerLogos } from '@/components/llm-providers/provider-type-config'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
 import { deploymentForCard, readableModelName, unlistedDeployments } from '@/lib/model-hosting'
@@ -62,19 +62,24 @@ export function ModelsPage() {
   const { deployments } = useHostedModels()
   const orphans = useMemo(() => unlistedDeployments(cardsQuery.data ?? [], deployments), [cardsQuery.data, deployments])
 
-  const providers = useMemo(() => (Array.isArray(providersQuery.data) ? providersQuery.data : []), [providersQuery.data])
+  const allProviders = useMemo(() => (Array.isArray(providersQuery.data) ? providersQuery.data : []), [providersQuery.data])
+  // A hosted model's provider row is that model's plumbing, written by the
+  // reconcile loop: its model is listed under "Hosted on your cloud", and
+  // the row is not a provider anyone connected.
+  const providers = useMemo(() => allProviders.filter((p: any) => !isHostedModelPlumbing(p)), [allProviders])
+  const plumbing = useMemo(() => new Set(allProviders.filter(isHostedModelPlumbing).map((p: any) => p.id as string)), [allProviders])
   const cards = useMemo(() => cardsQuery.data ?? [], [cardsQuery.data])
   const byId = useMemo(() => Object.fromEntries(providers.map((p: any) => [p.id, p])), [providers])
 
   const cardsByProvider = useMemo(() => {
     const out: Record<string, ModelCard[]> = {}
     for (const c of cards) {
-      const key = c.providerId && byId[c.providerId] ? c.providerId : c.providerId ? null : HOSTED
+      const key = c.providerId && byId[c.providerId] ? c.providerId : !c.providerId || plumbing.has(c.providerId) ? HOSTED : null
       if (!key) continue
       ;(out[key] ||= []).push(c)
     }
     return out
-  }, [cards, byId])
+  }, [cards, byId, plumbing])
 
   const groups = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -100,7 +105,7 @@ export function ModelsPage() {
   const noProviders = !providersQuery.isLoading && !providersQuery.isError && providers.length === 0
 
   const openCard = (card: ModelCard) => {
-    if (card.providerId) {
+    if (card.providerId && !plumbing.has(card.providerId)) {
       navigate(`/models/providers/${card.providerId}#model-${card.id}`)
       return
     }

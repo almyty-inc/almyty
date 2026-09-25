@@ -93,6 +93,16 @@ export function defaultProviderName(type: string): string {
   return providerTypeLabels[type as LlmProviderType] || type
 }
 
+/**
+ * A model hosted on your cloud gets a provider row written for it by the
+ * reconcile loop (metadata.managedBy.kind model_endpoint). The API returns
+ * it, because agents call the hosted model through it, but it is that
+ * model's plumbing, not a provider anyone connected.
+ */
+export function isHostedModelPlumbing(provider: Record<string, any> | null | undefined): boolean {
+  return provider?.metadata?.managedBy?.kind === 'model_endpoint'
+}
+
 export function isProviderType(value: string | null | undefined): value is LlmProviderType {
   return !!value && (Object.values(LlmProviderType) as string[]).includes(value)
 }
