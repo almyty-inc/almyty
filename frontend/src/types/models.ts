@@ -138,7 +138,7 @@ export const ROUTING_OBJECTIVES: RoutingObjective[] = ['cheapest', 'fastest', 'p
 export const ROUTING_OBJECTIVE_LABELS: Record<RoutingObjective, string> = {
   cheapest: 'Cheapest',
   fastest: 'Fastest',
-  pinned: 'Pinned card',
+  pinned: 'A fixed model first',
 }
 
 /** Goes on an llm_call node's config as `routing`, instead of a providerId. */

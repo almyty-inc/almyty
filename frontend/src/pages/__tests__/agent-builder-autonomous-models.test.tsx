@@ -43,8 +43,15 @@ vi.mock('@/lib/api', () => ({
   toolsApi: { getAll: vi.fn().mockResolvedValue([]) },
   organizationsApi: { getTeams: vi.fn().mockResolvedValue([]) },
 }))
-// No catalog cards, so the picker lists what the provider returns.
-vi.mock('@/lib/models-api', () => ({ modelsApi: { list: vi.fn().mockResolvedValue([]) } }))
+// The picker lists the provider's synced models (one search box, no provider step).
+vi.mock('@/lib/models-api', () => ({
+  modelsApi: {
+    list: vi.fn().mockResolvedValue([
+      { id: 'card-gpt-4o', name: 'gpt-4o', vendorModelId: 'gpt-4o', providerId: 'prov-openai', status: 'active', selectable: true },
+      { id: 'card-gpt-4o-mini', name: 'gpt-4o-mini', vendorModelId: 'gpt-4o-mini', providerId: 'prov-openai', status: 'active', selectable: true },
+    ]),
+  },
+}))
 // The policy editor is its own tested component; a routed role only needs the policy it starts with.
 vi.mock('@/components/models/routing-policy-editor', () => ({ RoutingPolicyField: () => null }))
 
@@ -92,6 +99,16 @@ function openAgent(models: any, extra?: Record<string, any>) {
 
 const saveButton = () => screen.getByRole('button', { name: /save/i })
 
+
+/** Pick from the one-box model picker inside a role: open it, choose the option. */
+async function pickModel(role: HTMLElement, name: RegExp) {
+  const trigger = await within(role).findByRole('combobox', { name: 'Model' })
+  await waitFor(() => expect(trigger).not.toBeDisabled())
+  fireEvent.click(trigger)
+  const list = await screen.findByRole('listbox')
+  fireEvent.click(await within(list).findByRole('option', { name }))
+}
+
 describe('the autonomous page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -134,10 +151,7 @@ describe('the autonomous page', () => {
 
     await user.type(screen.getByPlaceholderText('You are a helpful assistant that...'), 'Answer questions.')
     const main = screen.getByTestId('role-main')
-    await user.click(within(main).getByRole('combobox', { name: 'Provider' }))
-    await user.click(await screen.findByRole('option', { name: /OpenAI/ }))
-    await user.click(await within(main).findByTestId('role-main-model-select'))
-    await user.click(await screen.findByRole('option', { name: 'gpt-4o' }))
+    await pickModel(main, /gpt-4o(?!-mini)/)
 
     await waitFor(() => expect(screen.queryByTestId('builder-next-steps')).not.toBeInTheDocument())
     await user.click(saveButton())
@@ -179,8 +193,8 @@ describe('the autonomous page', () => {
 
     // Filled slots still need their models.
     expect(screen.getByTestId('builder-validation-errors')).toHaveTextContent('Drafter: pick a model, or route it by policy')
-    await user.click(within(screen.getByTestId('role-drafter')).getByRole('radio', { name: 'Routed by policy' }))
-    await user.click(within(screen.getByTestId('role-checker')).getByRole('radio', { name: 'Routed by policy' }))
+    await pickModel(screen.getByTestId('role-drafter'), /Automatic/)
+    await pickModel(screen.getByTestId('role-checker'), /Automatic/)
 
     await waitFor(() => expect(screen.queryByTestId('builder-validation-errors')).not.toBeInTheDocument())
     await waitFor(() => expect(saveButton()).toBeEnabled())
@@ -290,7 +304,7 @@ describe('the autonomous page', () => {
     openAgent(null)
     const main = await screen.findByTestId('role-main')
     expect(screen.getByTestId('strategy-option-single')).toHaveAttribute('aria-checked', 'true')
-    await waitFor(() => expect(within(main).getByRole('combobox', { name: 'Provider' })).toHaveTextContent('OpenAI'))
+    await waitFor(() => expect(within(main).getByRole('combobox', { name: 'Model' })).toHaveTextContent('gpt-4o'))
   })
 
   it('keeps advanced settings behind a disclosure, and saves them', async () => {
