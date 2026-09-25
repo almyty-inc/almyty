@@ -801,7 +801,8 @@
       "title": "Business approval policies with an empty policy list",
       "path": "screenshots/settings-approval-policies-enabled.png",
       "capturedAt": "2026-09-24T13:56:05.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "Shared UI components under this page changed (components/ui); recapture to confirm it still matches.",
       "sha256": "6a41362debab6895732b1c6a5c31ca05938cda00586a4bc73d4c6e701c306ada",
       "source": {
         "kind": "browser",
@@ -828,7 +829,8 @@
       "title": "New approval policy page with match conditions and sequential steps",
       "path": "screenshots/settings-approval-policy-new.png",
       "capturedAt": "2026-09-24T13:57:42.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "Shared UI components under this page changed (components/ui); recapture to confirm it still matches.",
       "sha256": "92a0173c78e6c89c1ca39457aa9df7d2bb1826855011f11a8e2836c43fc0c119",
       "source": {
         "kind": "browser",
@@ -850,7 +852,8 @@
       "title": "Business audit streaming with target configuration unlocked",
       "path": "screenshots/settings-audit-streams-enabled.png",
       "capturedAt": "2026-09-24T13:58:57.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "Shared UI components under this page changed (components/ui); recapture to confirm it still matches.",
       "sha256": "3e6215ebd1c8b4ea3b6635f5335959599c987c8f42ca9c1fd1198cc00e21a2d0",
       "source": {
         "kind": "browser",
@@ -877,7 +880,8 @@
       "title": "Business compliance policy defaults and posture report",
       "path": "screenshots/settings-compliance-enabled.png",
       "capturedAt": "2026-09-24T13:58:20.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "Shared UI components under this page changed (components/ui); recapture to confirm it still matches.",
       "sha256": "a35683471f7513e857a4c15dba6824ec16f9767910266c21ee5fd1572597bcf6",
       "source": {
         "kind": "browser",
@@ -932,7 +936,8 @@
       "title": "Business Roles settings with custom roles unlocked",
       "path": "screenshots/settings-rbac-enabled.png",
       "capturedAt": "2026-09-24T13:54:37.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "Shared UI components under this page changed (components/ui); recapture to confirm it still matches.",
       "sha256": "1f5c5caf9be493f2281f762601823e8a4e05a45868871e56fb59cc8c89eb940e",
       "source": {
         "kind": "browser",
@@ -959,7 +964,8 @@
       "title": "New access policy inline form on an entitled Business organization",
       "path": "screenshots/settings-rbac-new-policy.png",
       "capturedAt": "2026-09-24T18:44:29.595Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "Shared UI components under this page changed (components/ui); recapture to confirm it still matches.",
       "sha256": "e5ceb39e432e9a6eb9bf15229b2650bf05bec6a9ba1799b9e0372df406b59d3f",
       "source": {
         "kind": "browser",
@@ -986,7 +992,8 @@
       "title": "Inline custom role creation with permission strings",
       "path": "screenshots/settings-rbac-new-role.png",
       "capturedAt": "2026-09-24T14:01:00.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "Shared UI components under this page changed (components/ui); recapture to confirm it still matches.",
       "sha256": "0f4730525c5db0bcc998aef4ed7c611a67e32fa857361531095abc8ded192b91",
       "source": {
         "kind": "browser",
@@ -1013,7 +1020,8 @@
       "title": "Business SSO and SCIM configuration controls",
       "path": "screenshots/settings-sso-enabled.png",
       "capturedAt": "2026-09-24T13:59:53.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "Shared UI components under this page changed (components/ui); recapture to confirm it still matches.",
       "sha256": "8d9c9564023b2d1d256df93a6368d5451ea4f984dfab421fe744c13a8764bd8a",
       "source": {
         "kind": "browser",
