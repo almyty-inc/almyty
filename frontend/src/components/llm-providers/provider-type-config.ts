@@ -1,16 +1,13 @@
 /**
- * Visual constants for LLM provider rows: emoji logos, status dot colors,
- * and health text colors. Shared by `pages/llm-providers.tsx`, the table
- * column factory, and the provider details sheet.
+ * What a person reads about each provider type: its name, its logo, where
+ * its key is made, and whether its usage can be read back.
  */
 import { LlmProviderType } from '@/types'
 
 /**
- * Every provider type, with the name a person reads, in the order the
- * create form offers them. One list, because two hand-maintained ones
- * drift: the filter on the providers page was eight entries behind the
- * create form, so a provider you could create could not be filtered for.
- * `provider-types.test.ts` fails if an enum value has no entry here.
+ * Every provider type, with the name a person reads. One list, because
+ * hand-maintained ones drift. `provider-types.test.ts` fails if an enum
+ * value has no entry here or no tile on /models/connect.
  */
 export const providerTypeLabels: Record<LlmProviderType, string> = {
   [LlmProviderType.OPENAI]: 'OpenAI',
@@ -54,11 +51,6 @@ export const providerTypeLabels: Record<LlmProviderType, string> = {
   [LlmProviderType.CUSTOM]: 'Custom',
 }
 
-/** The list both the create form and the page filter render. */
-export const providerTypeOptions: { value: LlmProviderType; label: string }[] = (
-  Object.entries(providerTypeLabels) as [LlmProviderType, string][]
-).map(([value, label]) => ({ value, label }))
-
 export const providerLogos: Record<string, string> = {
   openai: '🤖',
   anthropic: '🧠',
@@ -99,20 +91,6 @@ export const providerLogos: Record<string, string> = {
   runpod: '⬢',
   modal: '◐',
   custom: '⚙️',
-}
-
-export const statusColors: Record<string, string> = {
-  active: 'bg-emerald-500',
-  inactive: 'bg-muted-foreground',
-  error: 'bg-red-500',
-  configuring: 'bg-yellow-500',
-}
-
-export const healthColors = {
-  healthy: 'text-green-600',
-  degraded: 'text-yellow-600',
-  down: 'text-red-600',
-  unknown: 'text-muted-foreground',
 }
 
 /**

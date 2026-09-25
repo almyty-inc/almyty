@@ -123,11 +123,11 @@ hooked.describe('Connections - gallery', () => {
   })
 })
 
-hooked.describe('Connections - from the Add inference provider page', () => {
-  hooked('the connect flow opens inline from Add inference provider', async ({ authenticatedPage: page }) => {
-    await page.goto('/llm-providers/new')
+hooked.describe('Connections - from connecting a provider', () => {
+  hooked('the connect flow opens inline from a provider tile', async ({ authenticatedPage: page }) => {
+    await page.goto('/models/connect?type=openai')
     await page.waitForLoadState('networkidle')
-    await expect(page.getByRole('heading', { name: 'Add inference provider', level: 1 })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Connect a provider', level: 1 })).toBeVisible()
 
     // The add form is on the page, not in a dialog.
     await expect(page.getByRole('dialog')).toHaveCount(0)

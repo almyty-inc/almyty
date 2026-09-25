@@ -7,7 +7,7 @@ import type { Agent } from '@/types'
 
 vi.mock('@/lib/api', () => ({
   agentsApi: { update: vi.fn().mockResolvedValue({}) },
-  llmProvidersApi: { getAll: vi.fn(), getModels: vi.fn().mockResolvedValue([]) },
+  llmProvidersApi: { getAll: vi.fn() },
 }))
 vi.mock('@/lib/models-api', () => ({ modelsApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('@/components/models/routing-policy-editor', () => ({ RoutingPolicyField: () => null }))
@@ -68,8 +68,9 @@ describe('verification settings, edited on the agent page', () => {
     renderWithProviders(<AgentConfigPanel agent={agent()} />)
     fireEvent.click(screen.getByRole('button', { name: /Configure verification/ }))
     await screen.findByTestId('verify-config-editor')
-    // The provider has no catalog cards and lists nothing, so the picker
-    // says so rather than handing over a bare text field unexplained.
-    expect(await screen.findByTestId('verify-reviewer-0-model-empty')).toBeInTheDocument()
+    // The provider lists no models: the saved one stays on the field
+    // rather than reading as unset, and nothing asks for free text.
+    await waitFor(() => expect(screen.getByTestId('verify-reviewer-0-model-value')).toHaveTextContent('claude'))
+    expect(screen.queryByTestId('verify-reviewer-0-model-input')).not.toBeInTheDocument()
   })
 })

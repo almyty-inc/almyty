@@ -3,8 +3,9 @@ import { z } from 'zod'
 import { MODEL_PRIVACY_TIERS, type ModelCapabilities, type ModelPricing } from '@/types/models'
 
 /**
- * Form schemas for the catalog dialogs. Numbers arrive as strings from the
- * inputs; the schemas coerce them and treat an empty field as "not set".
+ * The per-model settings form on a provider's page. Numbers arrive as
+ * strings from the inputs; the schema coerces them and treats an empty
+ * field as "not set".
  */
 
 const optionalPositiveInt = z
@@ -17,7 +18,7 @@ const optionalPrice = z
   .optional()
   .transform((v) => (v === '' || v === undefined ? undefined : v))
 
-export const capabilitiesSchema = z.object({
+const capabilitiesSchema = z.object({
   tools: z.boolean().optional(),
   vision: z.boolean().optional(),
   reasoning: z.boolean().optional(),
@@ -25,37 +26,7 @@ export const capabilitiesSchema = z.object({
   structuredOutput: z.boolean().optional(),
 })
 
-export const privacyTierSchema = z.enum(MODEL_PRIVACY_TIERS as [string, ...string[]])
-
-/** A server you run: an OpenAI-compatible URL becomes a custom inference provider plus a model. */
-export const serverModelSchema = z.object({
-  name: z.string().trim().min(1, 'Name is required').max(255),
-  url: z.string().trim().url('Enter the base URL including http:// or https://').refine((v) => /^https?:\/\//i.test(v), 'Only http and https URLs'),
-  apiKey: z.string().optional(),
-  connectionId: z.string().optional(),
-  vendorModelId: z.string().trim().min(1, 'Model id is required').max(255),
-  privacyTier: privacyTierSchema,
-  region: z.string().trim().max(64).optional(),
-  contextLength: optionalPositiveInt,
-  capabilities: capabilitiesSchema.optional(),
-})
-
-export type ServerModelFormData = z.input<typeof serverModelSchema>
-export type ServerModelFormOutput = z.output<typeof serverModelSchema>
-
-export const registerModelSchema = z.object({
-  name: z.string().trim().min(1, 'Name is required').max(255),
-  providerId: z.string().min(1, 'Pick an inference provider'),
-  vendorModelId: z.string().trim().min(1, 'Model id is required').max(255),
-  privacyTier: privacyTierSchema,
-  region: z.string().trim().max(64).optional(),
-  contextLength: optionalPositiveInt,
-  capabilities: capabilitiesSchema.optional(),
-})
-
-export type RegisterModelFormData = z.input<typeof registerModelSchema>
-export type RegisterModelFormOutput = z.output<typeof registerModelSchema>
-
+const privacyTierSchema = z.enum(MODEL_PRIVACY_TIERS as [string, ...string[]])
 export const editModelSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(255),
   privacyTier: privacyTierSchema,

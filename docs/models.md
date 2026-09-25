@@ -12,13 +12,28 @@ Design and provider deltas: `docs/design/models-layer.md`. Registry details: `do
 
 ## Support is data, not a list
 
-There is no code list of supported models. A model is usable when its **card** exists in the org's catalog and:
+There is one concept a person deals with: a **connected provider**. You connect a provider once (a vendor API key, your own OpenAI-compatible server, Ollama, or a cloud account); every model it lists appears on its own, everywhere a model is chosen. Nothing is added per model.
+
+There is no code list of supported models. A model is usable when its card exists in the org's catalog and:
 
 1. it has a way to be called (a stored LLM provider row, or an endpoint URL from a model running on the customer's cloud account),
 2. its status is `active`, and
-3. one **validation run** has passed (`POST /models/:id/validate` makes a real, short call and records the result).
+3. it is **checked**.
 
-`Model.isSelectable()` is the only definition of "usable". A retired vendor model fails validation and drops out; a new self-hosted endpoint joins the moment its run passes. Nothing else flips the flag.
+### Readiness
+
+A provider's models become usable when the **provider's key check** passes, all of them at once. The check is one real, short chat call with that key (`LlmProvidersService.performHealthCheck`); the list the models came from is the vendor's own statement that it serves them. There is no per-model step.
+
+- **Passed.** Every card of the provider still waiting on the check is marked checked (`validationStatus: passed`, `metadata.checkedBy: provider_check`, one `model_validated` audit row with `source: provider_check` and the count). Models synced from a provider whose last check passed arrive checked (`readiness.ts`, `providerChecked`: the provider is `active`, `isHealthy`, and `lastHealthCheckAt` is set; `isHealthy` alone defaults to true, so it cannot tell "never checked" from "passed").
+- **Key rejected.** A 401/403, or the vendor's words for one, sends the provider's checked cards back to waiting with the reason, so nothing served by a key the vendor refuses is offered. The next passing check restores them. Any other failure (outage, timeout) changes nothing: the router already skips an unhealthy provider, and a blip must not empty every model list.
+- **Model gone.** A real call the vendor answers `MODEL_NOT_FOUND` (retired, or never offered to this key) marks that one card `failed` / `error` with the vendor's message (`ModelRouterService.markModelNotFound`, called from the chat runner), so no list offers it again. A key check does not revive it; a passing check of that model does. A model the provider stops listing goes `inactive` on the next sync (below).
+- **Endpoint with no provider row.** Checked by its own call, `POST /models/:id/validate`. A model started on the customer's cloud is checked this way by itself when it reaches ready (below).
+
+`Model.isSelectable()` is still the only definition of "usable" (active, callable, `validationStatus: passed`); what changed is who writes `passed`. The router, `GET /models?selectable=true`, the MCP tools and the CLI all read it.
+
+### Connect
+
+`POST /llm-providers/connect { type, name?, configuration?, credentialId?, visibility?, teamId? }` does the whole thing in one request: saves the provider (the name defaults to the provider's own; visibility to org-wide), runs the key check, lists the models and answers `{ provider, models, check }`. A check that fails leaves nothing behind (the provider and the key row it made are removed, the removal audited) and answers 400 with `error: KEY_REJECTED | CHECK_FAILED | INVALID_CONFIGURATION`, one plain sentence in `message` ("OpenAI rejected this key."), the vendor's own words in `detail` and where to get a key in `keyUrl`. There is no model field: the models come from the provider. The key lives in `credentials` like every other secret.
 
 ## Provider profiles and protocols
 
@@ -209,13 +224,13 @@ user declares what it supports and validation is a real call.
 
 Ways a card comes to exist:
 
-- **Automatically, from the provider.** Creating an LLM provider, changing its configuration, and every passing health check (`POST /llm-providers/:id/test`, and the check that runs a second after create and update) import what the provider currently lists, in the background. Cards already present are left alone. A card whose vendor id has vanished from the list goes `inactive` with `metadata.retiredAt` and `metadata.retiredReason: "not listed by provider"`; it is never deleted, because runs and audit rows reference card ids, and it comes back on its own when the provider lists it again. An empty list (the vendor could not be asked) retires nothing. Deleting a provider retires its cards the same way (`retiredReason: "provider deleted"`); the card's `providerId` is nulled by the database, so it is no longer callable.
-- **Health check as validation.** The health check makes a real call with the provider's resolved model. Passing records a validation run on that provider's card for that vendor id (`validationStatus: passed`, `lastValidatedAt`, `measuredLatencyMs`), creating the card when the catalog has none, so a fresh organization with one healthy provider can route right away. A `MODEL_NOT_FOUND` failure marks the card `failed` with the error; any other failure leaves the catalog alone. The audit row carries `source: health_check`.
-- **Backfill on boot.** Every active provider that has no cards yet is synced once at startup (a queued job with a stable id, so replicas do it once; off under `NODE_ENV=test` and `MODEL_CATALOG_BACKFILL=off`).
+- **Automatically, from the provider.** Connecting a provider, changing its configuration, every passing key check (`POST /llm-providers/:id/test`, and the check that runs a second after a plain create or update) and a sweep every six hours (`MODEL_CATALOG_SYNC_CRON`, `CatalogSyncProcessor`) import what the provider currently lists. Listing costs nothing at the vendor, which is why the sweep runs by default while the chat-call health re-check (`PROVIDER_HEALTH_RECHECK_CRON`) stays opt-in; a sweep whose listing the vendor refuses for the key counts as a rejected key (see Readiness). Cards already present are left alone. A card whose vendor id has vanished from the list goes `inactive` with `metadata.retiredAt` and `metadata.retiredReason: "not listed by provider"`; it is never deleted, because runs and audit rows reference card ids, and it comes back on its own when the provider lists it again. An empty list (the vendor could not be asked) retires nothing. Deleting a provider retires its cards the same way (`retiredReason: "provider deleted"`); the card's `providerId` is nulled by the database, so it is no longer callable.
+- **The key check's own model.** The key check calls the provider's resolved model. Passing also records that model's latency on its card, creating the card when the catalog has none, which is how a provider that serves no list (Vertex AI) still gets its configured model. A `MODEL_NOT_FOUND` failure marks that card `failed`. The audit row carries `source: health_check`.
+- **Backfill on boot.** Every active provider that has no cards yet is synced once at startup (a queued job with a stable id, so replicas do it once; off under `NODE_ENV=test` and `MODEL_CATALOG_BACKFILL=off`, which also switches the sweep off).
 - `POST /models/sync { providerId }` runs the same import for one provider by hand; `POST /models/sync` with no body runs it for every active provider of the org and returns a per-provider summary (`created`, `skipped`, `retired`, `reinstated`, `error`).
-- `POST /models` against a stored provider (admin picks the vendor id).
-- **A server you run.** Any OpenAI-compatible server (vLLM, Ollama, TGI, llama.cpp, LiteLLM) is a `custom` LLM provider (`POST /llm-providers { type: "custom", configuration: { apiUrl, apiKey? } }`, key encrypted like every other) plus an ordinary card (`POST /models { providerId, vendorModelId }`). Creating the provider also syncs what `GET <base>/models` lists. The UI's "A server you run" path does both calls.
-- **A model on your cloud account.** `POST /model-deployments` creates the card at once (`status: deploying`, not selectable) and links it, unless `modelId` names an existing card; optional `name` and `vendorModelId` label it. When the endpoint reaches `ready` the reconcile processor fills `endpointRef.url` and `deploymentId`, sets the card `active`, and writes its provider row. The tick that moves the deployment into `ready` (claimed with a compare-and-set, so once however many ticks see it) then runs the validation itself, audited with `source: hosted_model_ready`, unless the card has already passed; a pass makes it selectable, and a failure is recorded on the card without affecting the reconcile.
+- `POST /models` against a stored provider (admin picks the vendor id), for an id the vendor serves but does not list. It is checked when its provider is.
+- **A server you run.** Any OpenAI-compatible server (vLLM, Ollama, TGI, llama.cpp, LiteLLM) is a `custom` provider, connected like any other (`POST /llm-providers/connect { type: "custom", configuration: { apiUrl, apiKey? } }`); what `GET <base>/models` lists becomes its models.
+- **A model on your cloud account.** `POST /model-deployments` creates the card at once (`status: deploying`, not selectable) and links it, unless `modelId` names an existing card; optional `name` and `vendorModelId` label it. When the endpoint reaches `ready` the reconcile processor fills `endpointRef.url` and `deploymentId`, sets the card `active`, and writes its provider row. The tick that moves the deployment into `ready` (claimed with a compare-and-set, so once however many ticks see it) then checks it with one short real call itself, audited with `source: hosted_model_ready`, unless the card has already passed; a pass makes it selectable without anyone pressing anything, and a failure is recorded on the card without affecting the reconcile.
 
 Every register, validate, price change and route is an audit row (`model_registered`, `model_validated`, `model_price_updated`, `model_routed`).
 
@@ -245,13 +260,17 @@ Selection is pure (`routing/model-router.ts`): filter by selectability, tier cei
 
 **Organization default.** An `llm_call` node that names neither a `providerId` nor a `routing` policy uses the organization's default policy, `settings.defaultRouting`, when one is set. It has the same shape as the node policy and is read and written through the organization endpoints (`GET /organizations/:id`, `PATCH /organizations/:id { settings: { defaultRouting } }`; `null` clears it, other `settings` keys are left as they are). The PATCH validates the policy: `objective` is one of `cheapest | fastest | pinned`, `privacyTier` one of `local | private_cloud | public`, `regions` and `fallbackChain` are string arrays, `capabilities` an object of booleans, `pinnedModel` a string, `budgetHeadroomCents` a non-negative integer or `null`. A policy on the node always wins over the default. The executor caches the default for 30 seconds per organization, so a change applies to the next run, not the one in flight. A node with neither, in an organization without a default, fails with a message that says so.
 
-**Latency learning.** `fastest` ranks by `measuredLatencyMs.p50`, which real traffic keeps current: after every routed answer the router folds the response time into the answering card (p50 as an exponential moving average with weight 0.2 for the new sample; p95 jumps to a slower sample at once and decays toward faster ones by a tenth per sample). The estimate lives in memory and is written to the card at most once a minute; after a restart it is seeded from the stored value. A validation run or a passing health check resets both to that single measurement.
+**Latency learning.** `fastest` ranks by `measuredLatencyMs.p50`, which real traffic keeps current: after every routed answer the router folds the response time into the answering card (p50 as an exponential moving average with weight 0.2 for the new sample; p95 jumps to a slower sample at once and decays toward faster ones by a tenth per sample). The estimate lives in memory and is written to the card at most once a minute; after a restart it is seeded from the stored value. A model's own check, or a passing key check that probed it, resets both to that single measurement.
 
 The answer records what happened. `ChatResponse.routing` and the node result carry `{ modelId, modelVersionId, vendorModelId, providerId, rationale, attempt, tried, rejected }`, and the same lands in the audit log as `model_routed`. `nodeResults[nodeId].routing` on a run shows which card served which step and why.
 
 Autonomous agents route too: `modelConfig.routing` on the agent replaces `providerId` for every step. Streaming takes the head of the plan (a stream cannot switch models mid-answer) and stamps the same attribution with attempt 1. With `MODEL_ROUTER_VERIFY_ESCALATION=true` and `routing.escalation: { onVerifyFail: 'next-candidate', maxEscalations? }`, a verifier rejection sends the revision to the next candidate of the plan instead of the same model; the run's working memory carries the adjusted policy and the count, and the run emits `route.escalated`.
 
+Each role of an autonomous agent's models (drafter, checker, panelists, explorers, summariser, teammates) takes a routing policy the same way, and every call it makes stamps the same attribution on its step, together with the role (`docs/autonomous-models.md`).
+
 **Several models in one agent.** Routing picks one model per step and falls back when it fails. Running models *alongside* each other is the agent graph's job, not the router's: a `parallel` node fans out to as many `llm_call` nodes as you like, each with its own `routing` policy or pinned provider, and a `merge` node collects the answers. Merge strategies are `first_response` (whichever returns first), `concatenate`, `best_of_n` (a judge model picks one) and `consensus`. So Claude, Kimi, Qwen and GPT can answer the same prompt in one run and a judge can choose between them, or four steps of one agent can each use a different model. The two mechanisms compose: every branch of a fan-out still routes, still records its attribution, and still falls back on its own.
+
+An autonomous agent composes models without a graph: its models name the roles, and a cascade, best of N, panel or explore-extract-patch strategy runs them inside the loop (`docs/autonomous-models.md`).
 
 Every card is called through a stored provider row. A card served by a model on the customer's cloud account gets one written by the reconcile processor when that model reaches ready: an `openai` provider pointed at the OpenAI-compatible base, so chat goes to `<base>/chat/completions` and the key lives in the credential store like any other provider's. A server the customer runs is a `custom` provider they create themselves (`POST /llm-providers`), with the same chat path. A card with no usable provider row is not a candidate, and a provider whose connection no longer resolves for the caller drops out of the plan rather than being called without it.
 
@@ -259,7 +278,7 @@ Routing needs the catalog module wired in (it is, in `app.module.ts`); without i
 
 ## Models on your cloud account (`model-deployments`)
 
-A model hosted on the customer's own cloud account is still one card in the Models list; where it runs is an attribute ("Runs on: Your Hugging Face account (Inference Endpoint)"), and its state, hourly cost, budget and start/stop/scale controls live on the card's detail. User-facing copy never says "deployment" or "tracked artifact": the docs site calls this "your cloud account" and each adapter "a cloud". The code names stay: the `model-deployments` module, the `ModelDeployment` entity, `/model-deployments`, `/model-adapters`, the CLI's `deploy`/`deployments`/`scale`/`teardown`, and `deploymentId` fields. User docs: `docs-site/content/models/your-cloud.mdx`.
+A model hosted on the customer's own cloud account is still one model in the Models list. The cloud account is a provider like any other: it is connected from the same grid of providers, and its provider page has a "Start a model" action that asks one thing, which model (a Hugging Face repository). Weight buckets, regions, dedicated or serverless, scale to zero and adapters go under Advanced. The model's state, hourly cost, budget and start/stop controls live on that provider page. User-facing copy never says "deployment" or "tracked artifact": the docs site calls this "your cloud account". The code names stay: the `model-deployments` module, the `ModelDeployment` entity, `/model-deployments`, `/model-adapters`, the CLI's `deploy`/`deployments`/`scale`/`teardown`, and `deploymentId` fields. User docs: `docs-site/content/models/your-cloud.mdx`.
 
 `GET /model-adapters` describes every registered adapter as data: capabilities, the model references it accepts (`modelSchemes`), and a JSON schema for its config (`x-secret: true` marks fields that are encrypted at rest and never returned). `POST /model-deployments` records desired state and creates the card at once (`status: deploying`, linked through `endpointRef.deploymentId` once ready; optional `name` and `vendorModelId` label it; `modelId` attaches an existing card instead). The reconcile queue (`MODEL_RECONCILE_CRON`, default every 2 minutes) is the only thing that talks to a provider. `POST /model-deployments/:id/scale { replicas }` and `/teardown` change desired state only.
 
@@ -318,9 +337,10 @@ npx @almyty/models teardown <hostedId>
 ```
 
 `list` and `get` report **why** a card is not selectable — a status that is
-not active and its retirement reason, nothing that can call it, or no passed
-validation run — rather than printing a name and leaving the router's refusal
-to be discovered by running something.
+not active and its retirement reason, nothing that can call it, a provider
+whose key check has not passed, or a model the vendor said is gone — rather
+than printing a name and leaving the router's refusal to be discovered by
+running something.
 
 `route` is `POST /models/route-preview` from the terminal: it takes a policy
 and answers with the ordered candidates and every rejection with its reason,
@@ -345,7 +365,8 @@ Exit codes are the suite's shared table: 0 success, 1 unexpected, 2 usage,
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time backfill of providers that have no cards yet |
+| `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time backfill of providers that have no cards yet, and the periodic sweep |
+| `MODEL_CATALOG_SYNC_CRON` | `17 */6 * * *` | The sweep that lists every active provider again, so new models appear and retired ones are marked unavailable; `off` disables |
 | `MODEL_PRICE_FEED_CRON` | `0 4 * * *` | Price feed refresh; `off` disables |
 | `MODEL_RECONCILE_CRON` | `*/2 * * * *` | Reconcile sweep for models on cloud accounts; `off` disables |
 | `MODEL_STUB_ADAPTER` | unset | `true` registers the stub adapter in production too |

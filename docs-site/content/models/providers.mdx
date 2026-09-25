@@ -1,23 +1,23 @@
-# Inference providers
+# Providers
 
-An inference provider is a key almyty calls a vendor with, or the address of a server you run. Add one and its models appear in [Models](/models) in the background; the first passing health check makes the default model selectable, and the router can pick it. almyty ships 39 inference provider types: 38 named vendors, plus `custom`, which takes any server that speaks the OpenAI chat API.
+A provider is where almyty calls models: a vendor's API with your key, your own OpenAI-compatible server, Ollama, or a cloud account. Connect one from **Models → Connect a provider** and every model it lists appears in [Models](/models); when its key check passes they are all usable at once. almyty ships 39 provider types: 38 named vendors, plus `custom` (shown as **Your own server**), which takes any server that speaks the OpenAI chat API.
 
 ![Models page](/screenshots/models.png)
 
-Inference providers have their own page, reached from **Inference providers** in the header of the Models page (`/llm-providers`). Adding, testing and editing one there is described in [Inference providers in the dashboard](/llm-providers). This page is the vendor reference.
+Connecting, checking and managing a provider in the dashboard is described in [Connect a provider](/llm-providers). This page is the vendor reference: what each provider needs and how almyty talks to it.
 
-## Inference provider or your cloud
+## A vendor's API or your cloud
 
-- **Inference providers** host models and answer chat requests. almyty calls them with your key, or calls a server you run at its URL. That is every entry below.
-- **[Your cloud account](/models/your-cloud)** runs a model you name on capacity in your own account, which almyty starts, sizes and stops. A few names appear on both lists (Together, Fireworks, Baseten, Nebius, DigitalOcean, Modal) because the vendor both serves a pay-per-call catalog and rents dedicated capacity.
+- **A vendor's API** hosts models and answers chat requests. almyty calls it with your key, or calls your own server at its URL. That is every entry below.
+- **[Your cloud account](/models/your-cloud)** runs an open model you pick on capacity in your own account, which almyty starts, sizes and stops. You connect the cloud account like any other provider and use **Start a model** on its page. A few names appear on both lists (Together, Fireworks, Baseten, Nebius, DigitalOcean, Modal) because the vendor both serves a pay-per-call catalog and rents dedicated capacity.
 
-DigitalOcean is the clearest case of both: Gradient Serverless Inference is an inference provider here, pay per call, nothing to start. Gradient Dedicated Inference is [a cloud you run a model on](/models/your-cloud#digitalocean) with reserved GPUs. They are different products behind the same account.
+DigitalOcean is the clearest case of both: Gradient Serverless Inference is a pay-per-call provider here, nothing to start. Gradient Dedicated Inference is [a cloud you run a model on](/models/your-cloud#digitalocean) with reserved GPUs. They are different products behind the same account.
 
 ## Verification
 
 Every row below was checked against the vendor's current documentation on 2026-09-09, with a source URL per row in `docs/design/call-only-vendors.md`. Where a doc was ambiguous, an unauthenticated HTTP or DNS probe filled the gap. No live API key was used for any of it: nothing here was tested against a real account. Anything a vendor's docs do not state is marked "not documented" rather than assumed.
 
-## Inference provider types
+## Provider types
 
 ### First-party model vendors
 
@@ -94,63 +94,45 @@ Every native type ships with its default base URL; set `configuration.apiUrl` to
 - **AWS Bedrock** answers through the `bedrock-runtime` OpenAI-compatible surface with a Bedrock API key sent as a plain bearer token. There is no SigV4 signing. Claude is not served on this surface: the API compatibility matrix lists ChatCompletions as unsupported for every Claude row on Bedrock, so Claude requires the native Converse or Messages API, which almyty does not call here. Models that do work include the OpenAI, xAI, Qwen, Z.ai and Writer families. Model ids are often inference profile ids (`us.`, `global.` prefixed), read from the live list rather than hardcoded.
 - **Azure OpenAI** uses the `/openai/v1` data-plane surface with no `api-version` query string, and the key travels as `api-key`, not `Authorization: Bearer`, because on this surface a bearer token means an Entra ID token and fails. The listing is the resource's catalog, not its deployments, so the deployment name is still what you name as the model.
 - **Vertex AI cannot use a static API key.** Google's docs state that only Google Cloud Auth works on this OpenAI-compatible surface; the credential is a service-account JSON key (or a pasted access token), and a short-lived OAuth token is minted per call. It serves no model list on this surface, so a model must be named at save time. Partner models on Vertex (Claude, Mistral, Grok, Jamba) run through Model Garden's native `:rawPredict`, not this surface, so `vertex_ai` only serves Gemini plus self-deployed endpoints. Llama on Vertex Model-as-a-Service is retired.
-- **Qwen, Z.ai, SambaNova and Fireworks document no model listing** on their OpenAI-compatible surface. A model must be configured at save time; a failure resolves to `NO_MODEL_CONFIGURED` rather than a guessed id.
+- **Qwen, Z.ai, SambaNova and Fireworks document no model listing** on their OpenAI-compatible surface (nor do Doubao Ark and Spark). Connecting one asks for the model to use, and that model is what it serves in almyty; add more with `POST /models`.
 - **Azure OpenAI, Azure AI Foundry and Modal cannot be validated by key alone.** `model` is the customer's own deployment or endpoint name, so a valid key against nothing deployed still cannot answer. Modal in particular needs a Shared Endpoint created first from its own dashboard.
 - **RunPod always carries an endpoint id in the URL.** There is no shared base URL: for the public catalog it is a shared model slug, for a private worker it is the customer's own endpoint id. Either way it is a required field.
 - **DigitalOcean's tool calling is not documented** on the Gradient Serverless Inference surface, and streaming is only implied by "OpenAI-compatible" rather than shown in a documented example. **Nebius streaming is not documented** either, though the rest of the surface is OpenAI-compatible. None of these is asserted as working; the health check is what tells you.
 - **Perplexity is Responses-shaped now**, not Chat Completions. The legacy Sonar chat-completions alias retires 2026-09-27; the Router API that would replace it is still private preview. The default base already targets the Responses-shaped surface a paying customer can use today.
 - **Hosts that serve other authors' open models** (DeepInfra, Novita, Together, Fireworks, Baseten, Nebius, SambaNova, Cerebras, RunPod, Modal, OpenRouter) are priced from the feed under their own namespace. A DeepSeek model on RunPod is never billed at DeepSeek's list price; without a feed quote it stays unpriced. DigitalOcean, RunPod and Modal currently have no LiteLLM namespace at all, so models there are unpriced until one exists.
 - **Usage reconciliation.** Only OpenAI and Anthropic document a usage or billing API almyty can ingest, so [cost governance](/cost-governance) cannot reconcile estimates against actuals for anything else.
-- **Replicate** is not an inference provider type: its API is predictions-based and has no chat-completions endpoint to ride.
+- **Replicate** is not a provider type: its API is predictions-based and has no chat-completions endpoint to ride.
 
 ## Keys
 
-A key belongs to one inference provider, is encrypted at rest with the platform key (or your own KMS on Enterprise), and is never returned by the API. The provider form links to each vendor's key page. Vendors that offer a sign-in flow can be connected without pasting anything: OpenRouter mints a key scoped to almyty when you approve it. See [Connections](/connections).
+A key belongs to one provider, is stored in [Connections](/connections), encrypted at rest with the platform key (or your own KMS on Enterprise), and is never returned by the API. The connect form links to each vendor's key page. Instead of pasting a key you can connect an account: vendors that offer a sign-in flow can be connected without pasting anything (OpenRouter mints a key scoped to almyty when you approve it), and a key already saved as a connection can be picked.
 
-## A server you run
+## Your own server
 
-vLLM, Ollama, TGI, llama.cpp, a LiteLLM proxy, a vendor that is not on the list: if it answers `POST <base>/chat/completions`, it is a `custom` inference provider, and each model it serves is an ordinary model on that provider.
+vLLM, Ollama, TGI, llama.cpp, a LiteLLM proxy, a vendor that is not on the list: if it answers `POST <base>/chat/completions`, it is **Your own server** (type `custom`).
 
-In the dashboard, click **Add model** on the Models page, choose **A server you run**, and give the base URL, the key (leave it empty for a server that checks none) and the model id. The model shows **Runs on: Your server (host)**. Validate it to make it selectable.
+In the dashboard, open **Models → Connect a provider**, pick **Your own server (OpenAI-compatible)**, and give the base URL and, if the server checks one, a key. almyty checks it with one real call and lists what `GET <base>/models` serves; every model it lists is usable once the check passes. Ollama has its own tile and reads your pulled models from `GET /api/tags`.
 
-Over the API it is two calls: the inference provider, then the model.
+Over the API it is one call:
 
 ```bash
-curl -X POST https://api.almyty.com/llm-providers \
+curl -X POST https://api.almyty.com/llm-providers/connect \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Lab box",
     "type": "custom",
+    "name": "Lab box",
     "configuration": { "apiUrl": "http://10.0.0.7:8000/v1", "apiKey": "..." }
   }'
-
-curl -X POST https://api.almyty.com/models \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{ "name": "Lab box", "providerId": "7c1e...", "vendorModelId": "qwen3-32b", "privacyTier": "local", "region": "office" }'
 ```
 
-`configuration.apiKey` is optional; it is encrypted at rest like every other key. Because a `custom` provider serves `GET <base>/models`, adding it also imports what the server lists, so the second call is only needed for a model the server does not list or to set the tier and region yourself. From the terminal, add the model against the provider's id and validate it:
+The answer carries the provider and the models it found. A model the server serves but does not list can still be added against the provider with `POST /models` (or `npx @almyty/models register`); it is usable when the provider is.
 
-```bash
-$ npx @almyty/models register --name "Lab box" --provider 7c1e... --model qwen3-32b --tier local --region office
-Registered.
-Lab box  [qwen3-32b]  local/office  unpriced
-    4f2a...  not selectable (validation: never)
-Run: almyty models validate 4f2a...
-
-$ npx @almyty/models validate 4f2a...
-Passed in 640 ms.
-Lab box  [qwen3-32b]  local/office  unpriced
-    4f2a...  selectable
-```
-
-A server you run has no feed price, so give the model a price override if you want `cheapest` to weigh it, or leave it unpriced and let the router place it last. A server on a private or loopback address needs `LLM_ALLOW_PRIVATE_URLS=true` on a self-hosted API (`OLLAMA_ALLOW_PRIVATE_URLS=true` for the `ollama` type); on hosted almyty the server must be reachable at a public URL.
+Your own server has no feed price, so give its models a price override under **Advanced** on the provider's page if you want Automatic to weigh them, or leave them unpriced and the router places them last. Set their privacy tier there too (`local` for a box in your office). A server on a private or loopback address needs `LLM_ALLOW_PRIVATE_URLS=true` on a self-hosted API (`OLLAMA_ALLOW_PRIVATE_URLS=true` for the `ollama` type); on hosted almyty the server must be reachable at a public URL.
 
 ## Related
 
-- [Inference providers in the dashboard](/llm-providers): the provider form, connection test and parameters
-- [Models](/models): the list, validation and pricing
-- [Your cloud account](/models/your-cloud): run a model on capacity in your own account
+- [Connect a provider](/llm-providers): the connect page, the provider's page and the key check
+- [Models](/models): the list, when a model is usable, and pricing
+- [Your cloud account](/models/your-cloud): start an open model on capacity in your own account
 - [Connections](/connections): keys, sign-in flows and who may use them
