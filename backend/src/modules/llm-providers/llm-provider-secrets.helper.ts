@@ -150,11 +150,19 @@ export class LlmProviderSecretsHelper {
    * A private connection is its owner's alone, so it can back only a
    * provider that is private to the same owner -- otherwise everyone the
    * provider answers would be calling with the owner's key. Another
-   * user's private connection is reported as not found. Rows this
-   * provider manages for itself follow the provider (syncManagedScope).
+   * user's private connection is reported as not found. A team connection
+   * backs only a provider of that team (or one private to someone who may
+   * use it): on an org-wide provider every run outside the team would fail
+   * to resolve the key, so the save is refused and says who
+   * (CredentialRefResolver.assertAttachable). Rows this provider manages
+   * for itself follow the provider (syncManagedScope).
    */
   async assertKeysServable(
-    provider: Pick<LlmProvider, 'organizationId' | 'visibility' | 'ownerUserId' | 'credentialId' | 'usageCredentialId'> & { id?: string },
+    provider: Pick<LlmProvider, 'organizationId' | 'visibility' | 'ownerUserId' | 'credentialId' | 'usageCredentialId'> & {
+      id?: string;
+      teamId?: string | null;
+      name?: string | null;
+    },
     actorId: string,
   ): Promise<void> {
     const refs: Array<[ProviderKeyKind, string | null | undefined]> = [
@@ -165,6 +173,20 @@ export class LlmProviderSecretsHelper {
       if (!credentialId) continue;
       const row = await this.credentialRefs.load(provider.organizationId, credentialId);
       if (provider.id && CredentialRefResolver.isManagedBy(row, this.managedBy(provider as LlmProvider, kind))) continue;
+      if (row.visibility === 'team') {
+        await this.credentialRefs.assertAttachable(
+          row,
+          {
+            organizationId: provider.organizationId,
+            visibility: provider.visibility,
+            teamId: provider.visibility === 'team' ? (provider.teamId ?? null) : null,
+            ownerUserId: provider.ownerUserId ?? null,
+            noun: 'LLM provider',
+          },
+          { actorId },
+        );
+        continue;
+      }
       if (row.visibility !== 'private') continue;
       if (!row.ownerUserId || row.ownerUserId !== actorId) {
         throw new NotFoundException({ code: 'CREDENTIAL_NOT_FOUND', message: 'credential not found' });

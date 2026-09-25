@@ -124,6 +124,43 @@ export class ApisService {
   }
 
   /**
+   * Every credential an API's calls resolve -- the connection or
+   * credential its authentication names, and rows bound to it
+   * (`credentials.apiId`) -- must be usable by everyone the API's scope
+   * covers. A team connection on an org-wide API was accepted and then
+   * failed, as "credential not found", for every caller outside the team;
+   * now the save is refused with a 400 that says who
+   * (CredentialRefResolver.assertAttachable). `actorId` is checked against
+   * the ids the authentication names in this write only.
+   */
+  private async assertAuthAttachable(api: Api, actorId: string | null | undefined, authChanged: boolean): Promise<void> {
+    // Always injected in the app; some hand-built specs leave it out.
+    if (!this.credentialRefs) return;
+    const target = {
+      organizationId: api.organizationId,
+      visibility: api.visibility,
+      teamId: api.teamId,
+      ownerUserId: api.ownerUserId,
+      noun: 'API',
+    };
+    const managedBy = api.id ? { kind: 'api' as const, id: api.id } : undefined;
+    const named = new Set<string>();
+    for (const id of [api.authentication?.config?.connectionId, api.authentication?.config?.credentialId]) {
+      if (typeof id === 'string' && id) named.add(id);
+    }
+    for (const id of named) {
+      const row = await this.credentialRefs.load(api.organizationId, id);
+      await this.credentialRefs.assertAttachable(row, target, { actorId: authChanged ? actorId : null, managedBy });
+    }
+    if (!api.id) return;
+    const bound = await this.credentialRefs.boundToApi(api.organizationId, api.id);
+    for (const row of bound) {
+      if (named.has(row.id)) continue;
+      await this.credentialRefs.assertAttachable(row, target, { managedBy });
+    }
+  }
+
+  /**
    * Visibility, team and owner for a new API. The creator owns it, so
    * 'private' is private to them; a team scope is checked against the
    * creator's memberships.
@@ -187,6 +224,8 @@ export class ApisService {
       status: ApiStatus.DRAFT,
     });
 
+    // A connection it names must cover its scope (assertAuthAttachable).
+    await this.assertAuthAttachable(api, userId, true);
     // Enforced with the insert, under the organization API-quota lock.
     let saved = await withApiQuota(this.apiRepository.manager, createApiData.organizationId, 1, (tx) =>
       tx.getRepository(Api).save(api),
@@ -354,6 +393,7 @@ export class ApisService {
       ownerUserId: userId ?? null,
     });
 
+    await this.assertAuthAttachable(api, userId, true);
     // Enforced with the insert, under the organization API-quota lock.
     let saved = await withApiQuota(this.apiRepository.manager, organizationId, 1, (tx) => tx.getRepository(Api).save(api));
     if (hasInlineApiSecret(data.authentication)) {
@@ -483,6 +523,10 @@ export class ApisService {
       api.visibility = scope.visibility;
       api.teamId = scope.teamId;
       api.ownerUserId = scope.ownerId;
+    }
+    // The credentials it calls with must cover its (new) scope.
+    if (scope || rest.authentication !== undefined) {
+      await this.assertAuthAttachable(api, userId, rest.authentication !== undefined);
     }
     // An inline secret in the new authentication moves to the store.
     await this.moveInlineAuth(api);

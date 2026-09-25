@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -10,6 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { Credential, CredentialType } from '../../entities/credential.entity';
+import { Team } from '../../entities/team.entity';
 import { CONNECTIONS_GOVERNANCE_HOOK, ConnectionsGovernanceHook } from '../../common/ee-hooks/ee-hooks';
 import { decryptField, isEncrypted } from '../../common/security/field-crypto';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
@@ -278,6 +280,62 @@ export class CredentialRefResolver {
     await this.assertScopedUse(credential, CredentialRefResolver.executionPrincipalOf(opts.principal), opts);
   }
 
+  /** The rows bound to an API (`credentials.apiId`), for the save-time scope check. */
+  async boundToApi(organizationId: string, apiId: string): Promise<Credential[]> {
+    return (await this.credentials.find({ where: { organizationId, apiId } })) ?? [];
+  }
+
+  /**
+   * Save-time twin of the scope rule: may `credential` be attached to
+   * `target` (an LLM provider, an API, an MCP source)?
+   *
+   * Whoever uses the target uses the credential with it, and resolve()
+   * refuses a team or private row to everyone its scope does not cover.
+   * Attaching a Payments connection to an org-wide provider used to be
+   * accepted and then fail, as "credential not found", for every run
+   * outside Payments. So it is refused here, with a 400 that says who
+   * could not use it, unless the target's own scope is covered by the
+   * credential's: a team row backs a target of the same team (or one
+   * private to someone who may use the row), a private row a target
+   * private to its owner. Organization rows, and rows the target manages
+   * for itself, always pass.
+   *
+   * `actorId`, when given, must be able to use the row themselves; a row
+   * they may not use is not found, as on resolve.
+   */
+  async assertAttachable(
+    credential: Credential,
+    target: SystemActor & { noun: string; name?: string | null },
+    options: { actorId?: string | null; managedBy?: Pick<ManagedBy, 'kind' | 'id'> } = {},
+  ): Promise<void> {
+    const visibility = credential.visibility ?? 'org';
+    if (visibility === 'org') return;
+    if (options.managedBy && CredentialRefResolver.isManagedBy(credential, options.managedBy)) return;
+    if (options.actorId) {
+      await this.assertScopedUse(credential, { kind: 'user', userId: options.actorId, source: 'session' }, {});
+    }
+    if (await this.systemScopeCovers(target, credential)) return;
+    const label = credential.name ? ` '${credential.name}'` : '';
+    const noun = target.noun;
+    if (visibility === 'private') {
+      throw new BadRequestException(
+        `The connection${label} is private to its owner, so nobody else who uses this ${noun} could use it. ` +
+          `Make the ${noun} private to that owner, or use a connection shared with the organization.`,
+      );
+    }
+    const team = credential.teamId && this.credentials.manager
+      ? await this.credentials.manager
+          .getRepository(Team)
+          .findOne({ where: { id: credential.teamId, organizationId: credential.organizationId }, select: { id: true, name: true } })
+          .catch(() => null)
+      : null;
+    const teamName = team?.name ? `the team '${team.name}'` : 'its team';
+    throw new BadRequestException(
+      `The connection${label} belongs to ${teamName} only, so anyone outside that team who uses this ${noun} ` +
+        `(other members of the organization, and gateways not scoped to that team) could not use it. ` +
+        `Scope the ${noun} to ${teamName}, or use a connection shared with the organization.`,
+    );
+  }
   /**
    * Private and team scope, applied at resolve time for every credential,
    * plain rows included (the grants policy only ever sees rows that carry
