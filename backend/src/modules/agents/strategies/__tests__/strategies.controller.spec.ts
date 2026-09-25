@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import { listenOnLoopback } from '../../../../test/http';
 
 import { Strategy } from '../../../../entities/strategy.entity';
 import { StrategiesController } from '../strategies.controller';
@@ -38,7 +39,7 @@ describe('GET /strategies', () => {
       .compile();
 
     app = moduleRef.createNestApplication();
-    await app.init();
+    await listenOnLoopback(app);
   });
 
   afterAll(async () => {

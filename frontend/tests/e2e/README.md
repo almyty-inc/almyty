@@ -49,7 +49,7 @@ npm run test:e2e -- --grep "CRITICAL"       # Critical bug tests
 | `dashboard.spec.ts` | 15 | Stats cards, quick actions, navigation |
 | `gateway-management.spec.ts` | 9 | Gateway CRUD, type validation |
 | `gateways-crud-scoping.spec.ts` | 15 | Create gateways (MCP/A2A/UTCP), tool scoping |
-| `llm-providers.spec.ts` | 18 | Provider config, connection testing, models |
+| `models-connect.spec.ts` | 3 | Connect a provider, its models, picking one in one search box, old addresses |
 | `organizations.spec.ts` | 13 | Org management, members, teams, roles |
 | `settings.spec.ts` | 20 | Profile, organization settings, security |
 | `tools-generation-execution.spec.ts` | 10 | Tool generation from schemas, execution |

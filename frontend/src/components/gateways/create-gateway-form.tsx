@@ -15,7 +15,8 @@ import {
 } from '@/components/ui/select'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
-import { agentsApi, gatewaysApi, getApiBaseUrl } from '@/lib/api'
+import { gatewaysApi, getApiBaseUrl } from '@/lib/api'
+import { agentsQuery } from '@/lib/list-queries'
 import { captureEvent } from '@/lib/analytics'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { cn } from '@/lib/utils'
@@ -106,15 +107,10 @@ export function CreateGatewayForm() {
   const guard = useLeaveGuard(isDirty)
 
   const { data: agentsData } = useQuery({
-    queryKey: ['agents', currentOrganization?.id],
-    queryFn: async () => {
-      const d = await agentsApi.getAll()
-      const result = d?.agents || (Array.isArray(d) ? d : [])
-      return Array.isArray(result) ? result : []
-    },
+    ...agentsQuery(currentOrganization?.id),
     enabled: !!currentOrganization && kind === 'agent',
   })
-  const agents: Agent[] = Array.isArray(agentsData) ? agentsData : []
+  const agents: Agent[] = agentsData ?? []
   const typeOptions = kind === 'tool' ? TOOL_GATEWAY_TYPES : AGENT_GATEWAY_TYPES
 
   const create = useMutation({

@@ -37,7 +37,7 @@ describe('every dashboard route has a way in', () => {
     '/', '/login', '/register', '/forgot-password', '/reset-password',
     '/verify-email', '/accept-invite', '/oauth/callback',
     // Redirects, not destinations.
-    '/llm-providers', '/connections',
+    '/llm-providers', '/llm-providers/new', '/models/new', '/connections',
     // Entered by following a link or a CLI prompt from outside the app.
     '/invite/accept', '/cli-login', '/oauth/consent',
   ])

@@ -394,7 +394,12 @@ export function AgentDetailPage() {
         </TabsList>
 
         <TabsContent value="execution" className="space-y-6">
-          <ExecutionTab agentId={agent.id} mode={agent.mode === 'autonomous' ? 'autonomous' : 'workflow'} />
+          <ExecutionTab
+            agentId={agent.id}
+            mode={agent.mode === 'autonomous' ? 'autonomous' : 'workflow'}
+            models={agent.models}
+            modelConfig={agent.modelConfig}
+          />
         </TabsContent>
 
         <TabsContent value="overview" className="space-y-6">

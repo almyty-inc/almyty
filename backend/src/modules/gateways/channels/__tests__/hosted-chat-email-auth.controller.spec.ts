@@ -13,6 +13,7 @@ import { MailService } from '../../../mail/mail.service';
 import { Gateway, GatewayStatus, GatewayType } from '../../../../entities/gateway.entity';
 import { fakeRepository } from '../../../../test/fake-repository';
 import { FakeRedisWithWindows } from '../../../../test/fake-redis-windows';
+import { listenOnLoopback } from '../../../../test/http';
 import {
   ClauseModel,
   ExecutedQuery,
@@ -89,7 +90,7 @@ describe('HostedChatEmailAuthController (HTTP)', () => {
     }).compile();
     app = moduleRef.createNestApplication();
     app.use(cookieParser());
-    await app.init();
+    await listenOnLoopback(app);
   });
 
   afterEach(async () => app.close());

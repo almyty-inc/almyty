@@ -237,16 +237,21 @@ export class LlmChatRunnerHelper {
         // persistent record. Keep the per-attempt log above.
 
         // A retired or mistyped model id is not transient: surface it as
-        // a typed error the scheduler and UI can act on, and forget any
-        // cached default so the next call re-asks the vendor.
+        // a typed error the scheduler and UI can act on, forget any
+        // cached default so the next call re-asks the vendor, and mark
+        // the model unavailable so no list offers it again.
         if (isModelNotFoundResponse(statusCode, error.response?.data || error.response?.body)) {
           this.defaultModels.invalidate(provider.id);
-          throw new ModelNotFoundError(
+          const notFound = new ModelNotFoundError(
             request.model ?? provider.configuration?.model ?? 'unknown',
             provider.id,
             provider.type,
             vendorMessage(error.response?.data || error.response?.body),
           );
+          if (this.router && provider.organizationId && notFound.model !== 'unknown') {
+            void this.router.markModelNotFound(provider.organizationId, provider.id, notFound.model, notFound.message);
+          }
+          throw notFound;
         }
 
         // Retry only on retryable status codes (429, 500, 502, 503)

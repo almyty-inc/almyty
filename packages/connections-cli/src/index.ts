@@ -79,7 +79,7 @@ Read:
   grants <id>                           Who may use this connection
 
 Connect:
-  connect <key> [--method m] [--owner org|user] [--name n] [--headless] [--open]
+  connect <key> [--method m] [--owner org|user|private] [--name n] [--headless] [--open]
                                         Sign-in connectors print an authorize URL (--open launches
                                         a browser, --headless asks the provider for a code to paste).
                                         Form connectors prompt for each field, secrets not echoed.
@@ -135,7 +135,7 @@ export function needArg(positional: string[], index: number, name: string, usage
 
 export function connectBody(flags: ParsedArgs['flags'], input?: Record<string, unknown>): Record<string, unknown> {
   const body: Record<string, unknown> = { owner: str(flags, 'owner') ?? 'org' };
-  if (!['org', 'user'].includes(body.owner as string)) throw new UsageError('--owner must be org or user');
+  if (!['org', 'user', 'private'].includes(body.owner as string)) throw new UsageError('--owner must be org, user or private');
   if (str(flags, 'method')) body.method = str(flags, 'method');
   if (str(flags, 'name')) body.name = str(flags, 'name');
   if (input && Object.keys(input).length > 0) body.input = input;

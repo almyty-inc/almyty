@@ -24,7 +24,7 @@ import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { hostedChatConfigFrom, slugFromHost } from './hosted-chat.config';
 import { trustedClientIp } from '../../../common/security/client-ip';
-import { verifiesFinalOutput } from '../../agents/final-answer';
+import { withholdsCandidateAnswers } from '../../agents/final-answer';
 import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
 
 /**
@@ -391,7 +391,7 @@ export class HostedChatController {
       gateway.organizationId,
       gateway.agentId,
     );
-    const withholdCandidateChunks = verifiesFinalOutput(run.agent?.agentConfig);
+    const withholdCandidateChunks = withholdsCandidateAnswers(run.agent);
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -439,8 +439,9 @@ export class HostedChatController {
     // tool calls. That is also where anything the stream did not carry
     // is made up. The response is the last word: if it contradicts what
     // was streamed, the page is told to `reset` the reply. With a verify
-    // panel on the final output nothing is sent before the verdict; the
-    // page reconciles from the transcript on `done`.
+    // panel on the final output, or a multi-model strategy that checks or
+    // judges candidate answers, nothing is sent before the answer is
+    // chosen; the page reconciles from the transcript on `done`.
     type StepStream = { kind: 'text' | 'tool' | null; held: string[]; sent: string; working?: boolean };
     const steps = new Map<number, StepStream>();
     const stepOf = (data: any): number | null => (typeof data?.step === 'number' ? data.step : null);

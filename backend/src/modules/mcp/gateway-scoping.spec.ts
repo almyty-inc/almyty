@@ -14,13 +14,16 @@ import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { SkillGeneratorService } from '../tools/skill-generator.service';
 import { PromotedSkillsService } from '../promoted-skills/promoted-skills.service';
+import { fakeRepository } from '../../test/fake-repository';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { OrganizationRole } from '../../entities/user-organization.entity';
+import { orgMembersPolicy } from '../../test/execution-access.fixture';
 
 describe('MCP Gateway Scoping', () => {
   let mcpService: McpService;
   let toolHandler: McpToolHandler;
   let contentHandler: McpContentHandler;
   let gatewayToolRepository: any;
-  let resourceRepository: any;
   let module: TestingModule;
 
   const mockGatewayTools = [
@@ -48,10 +51,10 @@ describe('MCP Gateway Scoping', () => {
   ];
 
   const mockAllResources = [
-    { id: 'r-1', name: 'HourlyResponse', description: 'Weather hourly', api: { id: 'api-weather', organizationId: 'org-1' } },
-    { id: 'r-2', name: 'Pet', description: null, api: { id: 'api-petstore', organizationId: 'org-1' } },
-    { id: 'r-3', name: 'Order', description: null, api: { id: 'api-petstore', organizationId: 'org-1' } },
-    { id: 'r-4', name: 'HttpbinResponse', description: 'Httpbin resp', api: { id: 'api-httpbin', organizationId: 'org-1' } },
+    { id: '00000000-0000-4000-8000-000000000001', name: 'HourlyResponse', description: 'Weather hourly', apiId: 'api-weather', api: { id: 'api-weather', organizationId: 'org-1' } },
+    { id: '00000000-0000-4000-8000-000000000002', name: 'Pet', description: null, apiId: 'api-petstore', api: { id: 'api-petstore', organizationId: 'org-1' } },
+    { id: '00000000-0000-4000-8000-000000000003', name: 'Order', description: null, apiId: 'api-petstore', api: { id: 'api-petstore', organizationId: 'org-1' } },
+    { id: '00000000-0000-4000-8000-000000000004', name: 'HttpbinResponse', description: 'Httpbin resp', apiId: 'api-httpbin', api: { id: 'api-httpbin', organizationId: 'org-1' } },
   ];
 
   beforeEach(async () => {
@@ -59,6 +62,7 @@ describe('MCP Gateway Scoping', () => {
       providers: [
         McpToolHandler,
         McpContentHandler,
+        { provide: AccessPolicyService, useValue: orgMembersPolicy('org-1', { 'u-1': OrganizationRole.MEMBER }) },
         { provide: PromotedSkillsService, useValue: { listForServing: jest.fn().mockResolvedValue([]), get: jest.fn() } },
         McpServerRequestService,
         McpService,
@@ -67,8 +71,10 @@ describe('MCP Gateway Scoping', () => {
           useValue: { find: jest.fn().mockResolvedValue([]), findOne: jest.fn() },
         },
         {
+          // A table that evaluates the where clause, so the gateway's API
+          // scope is what the query itself asks for, not a post-filter.
           provide: getRepositoryToken(Resource),
-          useValue: { find: jest.fn().mockResolvedValue([]), findOne: jest.fn() },
+          useValue: fakeRepository(mockAllResources),
         },
         {
           provide: getRepositoryToken(Organization),
@@ -85,10 +91,13 @@ describe('MCP Gateway Scoping', () => {
           },
         },
         {
+          // Weather holds the gateway's one tool; Pets holds only tools the
+          // gateway does not publish.
           provide: getRepositoryToken(ToolCategory),
-          useValue: {
-            find: jest.fn().mockResolvedValue([]),
-          },
+          useValue: fakeRepository([
+            { id: 'cat-weather', name: 'Weather', slug: 'weather', organizationId: 'org-1', isActive: true, sortOrder: 0, tools: [mockAllOrgTools[0]] },
+            { id: 'cat-pets', name: 'Pets', slug: 'pets', organizationId: 'org-1', isActive: true, sortOrder: 1, tools: [mockAllOrgTools[1], mockAllOrgTools[2]] },
+          ] as any[]),
         },
         {
           provide: ToolsService,
@@ -118,7 +127,6 @@ describe('MCP Gateway Scoping', () => {
     toolHandler = module.get<McpToolHandler>(McpToolHandler);
     contentHandler = module.get<McpContentHandler>(McpContentHandler);
     gatewayToolRepository = module.get(getRepositoryToken(GatewayTool));
-    resourceRepository = module.get(getRepositoryToken(Resource));
   });
 
   describe('tools/list scoping', () => {
@@ -142,9 +150,6 @@ describe('MCP Gateway Scoping', () => {
   });
 
   describe('resources/list scoping', () => {
-    beforeEach(() => {
-      resourceRepository.find.mockResolvedValue(mockAllResources);
-    });
 
     it('should return only resources from gateway tool APIs when gatewayId provided', async () => {
       const result = await contentHandler.handleResourcesList({}, 'org-1', 'gateway-1');
@@ -216,9 +221,55 @@ describe('MCP Gateway Scoping', () => {
     });
   });
 
+  describe('resources/read scoping', () => {
+    const read = (uri: string, gatewayId?: string) =>
+      mcpService.handleJsonRpc({ jsonrpc: '2.0', id: 9, method: 'resources/read', params: { uri } }, 'org-1', 'u-1', gatewayId) as Promise<any>;
+    const shape = (res: any) => (res.error ? { code: res.error.code, message: res.error.message } : { result: res.result });
+
+    it('reads the resource of an API the gateway serves', async () => {
+      const res = await read(`almyty://resources/${mockAllResources[0].id}`, 'gateway-1');
+      expect(res.result.contents[0].uri).toBe(`almyty://resources/${mockAllResources[0].id}`);
+    });
+
+    it('answers a resource the gateway does not publish exactly like a nonexistent one', async () => {
+      const missing = shape(await read('almyty://resources/00000000-0000-4000-8000-0000000000ff', 'gateway-1'));
+      expect(missing).toEqual({ code: -32001, message: 'Resource not found' });
+      for (const resource of mockAllResources.slice(1)) {
+        expect(shape(await read(`almyty://resources/${resource.id}`, 'gateway-1'))).toEqual(missing);
+      }
+    });
+
+    it('still reads any org resource off-gateway', async () => {
+      const res = await read(`almyty://resources/${mockAllResources[1].id}`);
+      expect(res.result.contents).toHaveLength(1);
+    });
+  });
+
+  describe('tools/discover and tools/search scoping', () => {
+    it('counts on a gateway only the tools the gateway serves', async () => {
+      const result = await toolHandler.handleToolsDiscover({}, 'org-1', 'gateway-1', { id: 'u-1' });
+      expect(result.totalTools).toBe(1);
+      expect(result.categories.map((c: any) => [c.slug, c.toolCount])).toEqual([['weather', 1]]);
+    });
+
+    it('keeps org-wide category counts off-gateway', async () => {
+      const toolsService = module.get(ToolsService);
+      (toolsService.getTools as jest.Mock).mockResolvedValue({ tools: mockAllOrgTools, total: 3 });
+      const result = await toolHandler.handleToolsDiscover({}, 'org-1', undefined, { id: 'u-1' });
+      expect(result.categories.map((c: any) => [c.slug, c.toolCount])).toEqual([['weather', 1], ['pets', 2]]);
+    });
+
+    it('searches and counts on a gateway only the tools the gateway serves', async () => {
+      const toolsService = module.get(ToolsService);
+      (toolsService.getTools as jest.Mock).mockResolvedValue({ tools: mockAllOrgTools, total: 3 });
+      const result = await toolHandler.handleToolsSearch({ query: 'e' }, 'org-1', 'gateway-1', { id: 'u-1' });
+      expect(result.tools.map((t: any) => t.name)).toEqual(['open_meteo_forecast']);
+      expect(result).toMatchObject({ total: 1, hasMore: false });
+    });
+  });
+
   describe('end-to-end via handleJsonRpc', () => {
     it('should scope tools, resources, and prompts when gatewayId passed', async () => {
-      resourceRepository.find.mockResolvedValue(mockAllResources);
       const gatewayRepository = module.get(getRepositoryToken(Gateway));
       (gatewayRepository as any).findOne = jest.fn().mockResolvedValue({ id: 'gateway-1', name: 'Open-Meteo', organizationId: 'org-1' });
 

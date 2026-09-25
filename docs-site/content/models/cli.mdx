@@ -1,6 +1,6 @@
 # Models CLI
 
-`@almyty/models` manages your models from the terminal: list and add them, validate them, run a model on your own cloud account, and watch what it costs. It shares the login of every other almyty CLI.
+`@almyty/models` manages your models from the terminal: list them and say why one cannot be picked, adjust them, run a model on your own cloud account, and watch what it costs. It shares the login of every other almyty CLI.
 
 ```bash
 $ npx @almyty/auth login
@@ -11,14 +11,14 @@ The umbrella CLI exposes the same commands as `almyty models <command>`. Every c
 
 ## Models
 
-List every model, or only the ones the router may pick:
+Models come from connected providers by themselves, usable once the provider's key check passes. List every model, or only the ones the router may pick:
 
 ```bash
 $ npx @almyty/models list
 Claude Sonnet  [claude-sonnet-5]  public  $3/$15 per M (feed:litellm)
     9b0d...  selectable
 Qwen3 32B on our vLLM  [qwen3-32b]  private_cloud/eu-central  unpriced
-    4f2a...  not selectable (validation: never)
+    4f2a...  not selectable: waiting for its provider's key check (check the provider on the Models page)
 
 $ npx @almyty/models list --selectable
 ```
@@ -29,7 +29,7 @@ Show one model:
 $ npx @almyty/models get 9b0d...
 ```
 
-Add a model against an inference provider, naming the vendor id yourself:
+Add a model a provider serves but does not list, naming the vendor id yourself. It is usable when its provider is:
 
 ```bash
 $ npx @almyty/models register \
@@ -41,20 +41,19 @@ $ npx @almyty/models register \
     --context 32768
 Registered.
 Qwen3 32B on our vLLM  [qwen3-32b]  private_cloud/eu-central  unpriced
-    4f2a...  not selectable (validation: never)
-Run: almyty models validate 4f2a...
+    4f2a...  selectable
 ```
 
-A server you run (vLLM, Ollama, TGI, llama.cpp, LiteLLM) works the same way: it is a `custom` inference provider, set up once in the dashboard or with `POST /llm-providers` (see [A server you run](/models/providers#a-server-you-run)), and `--provider` names it. Its key lives on the inference provider, so no key is ever passed here.
+Your own server (vLLM, Ollama, TGI, llama.cpp, LiteLLM) works the same way: it is a `custom` provider, connected once in the dashboard or with `POST /llm-providers/connect` (see [Your own server](/models/providers#your-own-server)), and `--provider` names it. Its key lives with the provider, so no key is ever passed here.
 
-Import what an inference provider currently lists, as unvalidated models:
+Read what a provider currently lists again (this also happens by itself every six hours):
 
 ```bash
 $ npx @almyty/models sync 7c1e...
 12 card(s) created, 3 already present.
 ```
 
-Run the validation that makes a model selectable. The exit code is 1 when it fails:
+Check one model with a real short call. A provider's key check already covers its models; this is for an endpoint with no provider row. The exit code is 1 when it fails:
 
 ```bash
 $ npx @almyty/models validate 4f2a...
@@ -76,8 +75,8 @@ Deleted.
 
 | Flag | Commands | Meaning |
 |---|---|---|
-| `--provider` | register | The inference provider's id |
-| `--model` | register | The vendor model id sent on the wire. Not the model source that `deploy` takes below |
+| `--provider` | register | The provider's id |
+| `--model` | register | The vendor model id sent on the wire. Not the model source that `host` takes below |
 | `--tier` | register | `public`, `private_cloud` or `local` |
 | `--region` | register | Region label used by routing allowlists. A model with no region is excluded by any policy that sets one |
 | `--context` | register | Context length in tokens |
@@ -85,7 +84,7 @@ Deleted.
 
 ## Your cloud account
 
-These commands run a model on [your own cloud account](/models/your-cloud). The command names and the `--adapter` flag keep the API's names: `deploy` starts a model, `deployments` lists the ones on your clouds, and `--adapter` takes the cloud's `providerType`.
+These commands run a model on [your own cloud account](/models/your-cloud): `host` starts a model, `hosted` lists the ones on your clouds, and `--adapter` takes the cloud's `providerType`. `deploy`, `deployments` and `deployment <id>` also work, as other names for `host`, `hosted` and `hosted <id>`, matching the API's `/model-deployments` routes.
 
 List the clouds and what each can do:
 
@@ -98,7 +97,7 @@ huggingface-endpoints  Hugging Face Inference Endpoints
 ...
 ```
 
-`--json` includes each cloud's `modelSchemes` (every source it accepts, as literal prefixes) and its config schema, the same data the **Add model** form renders from.
+`--json` includes each cloud's `modelSchemes` (every source it accepts, as literal prefixes) and its config schema, the same data the **Start a model** form renders from.
 
 The model source is the **positional argument**. The cloud's account details carry secrets, so they come from a file, from stdin or from a saved connection, never from argv. Start a model from a Hugging Face repository:
 
@@ -106,7 +105,7 @@ The model source is the **positional argument**. The cloud's account details car
 $ cat > hf.json <<'JSON'
 {"token":"hf_...","namespace":"acme","region":"eu-west-1","instanceType":"nvidia-a10g"}
 JSON
-$ npx @almyty/models deploy hf://Qwen/Qwen3-0.6B \
+$ npx @almyty/models host hf://Qwen/Qwen3-0.6B \
     --adapter huggingface-endpoints \
     --config-file hf.json \
     --desired '{"replicas":1,"region":"eu","privacyTier":"private_cloud"}' \
@@ -115,10 +114,10 @@ Queued.
 c07b...  huggingface-endpoints  pending  replicas ?/1
 ```
 
-The model is in `list` at once, not yet selectable; validate it once it is running. Better still, connect the account once and name the connection, so no key reaches this machine's filesystem at all:
+The model is in `list` at once, not yet selectable; almyty checks it with one short call when the endpoint is ready, and it becomes selectable if that passes (`validate <id>` runs it again). Better still, connect the account once and name the connection, so no key reaches this machine's filesystem at all:
 
 ```bash
-$ npx @almyty/models deploy hf://Qwen/Qwen3-0.6B \
+$ npx @almyty/models host hf://Qwen/Qwen3-0.6B \
     --adapter huggingface-endpoints \
     --credential 9b4c... \
     --desired '{"replicas":1,"region":"eu","privacyTier":"private_cloud"}'
@@ -127,10 +126,10 @@ $ npx @almyty/models deploy hf://Qwen/Qwen3-0.6B \
 Or a model the cloud already hosts:
 
 ```bash
-$ npx @almyty/models deploy bedrock://anthropic.claude-3-sonnet-20240229-v1:0 --adapter aws-bedrock-import
+$ npx @almyty/models host bedrock://anthropic.claude-3-sonnet-20240229-v1:0 --adapter aws-bedrock-import
 ```
 
-`--config '<json>'` still exists, but `deploy` screens it against the cloud's config schema and refuses it the moment it carries a field the cloud marks secret: `token` for `huggingface-endpoints`, `tokenId` and `tokenSecret` for `modal`, `apiKey` for `fireworks` and the rest. argv is written to your shell history, is echoed by most CI runners and is readable by any process through `ps`, so a secret that travelled that way is disclosed. `--config` is also refused outright when the cloud catalog cannot be read, because then almyty does not know which of the fields are secret and will not guess. Run `adapters` to see which fields each one marks secret. `--config` is fine for the fields that are not secret, such as `namespace`, `region`, `instanceType` or `gpu`.
+`--config '<json>'` still exists, but `host` screens it against the cloud's config schema and refuses it the moment it carries a field the cloud marks secret: `token` for `huggingface-endpoints`, `tokenId` and `tokenSecret` for `modal`, `apiKey` for `fireworks` and the rest. argv is written to your shell history, is echoed by most CI runners and is readable by any process through `ps`, so a secret that travelled that way is disclosed. `--config` is also refused outright when the cloud catalog cannot be read, because then almyty does not know which of the fields are secret and will not guess. Run `adapters` to see which fields each one marks secret. `--config` is fine for the fields that are not secret, such as `namespace`, `region`, `instanceType` or `gpu`.
 
 | Flag | Meaning |
 |---|---|
@@ -151,13 +150,13 @@ $ npx @almyty/models deploy bedrock://anthropic.claude-3-sonnet-20240229-v1:0 --
 Watch state and spend:
 
 ```bash
-$ npx @almyty/models deployments
+$ npx @almyty/models hosted
 c07b...  huggingface-endpoints  ready  replicas 1/1  spent 2.40 USD
 e18a...  huggingface-endpoints  failed  replicas 0/1  spent 0.00 USD
     quota exceeded for nvidia-a10g in eu-west-1
 ```
 
-`deployment <id>` shows one. Change the replica count (0 stops it) or shut it down. Both record what you want; almyty applies it at the cloud within two minutes:
+`hosted <id>` shows one. Change the replica count (0 stops it) or shut it down. Both record what you want; almyty applies it at the cloud within two minutes:
 
 ```bash
 $ npx @almyty/models scale c07b... 0
@@ -171,7 +170,7 @@ c07b...  huggingface-endpoints  tearing_down  replicas 1/0  spent 2.40 USD
 
 ## Registered versions
 
-Optional, and not needed to run anything: `deploy` takes the source directly and pins a Hugging Face repository for you. Register a version when you want a manifest digest, lineage and evaluation history recorded against your own weights, then pass `--model-version` to `deploy`.
+Optional, and not needed to run anything: `host` takes the source directly and pins a Hugging Face repository for you. Register a version when you want a manifest digest, lineage and evaluation history recorded against your own weights, then pass `--model-version` to `host`.
 
 ```bash
 $ npx @almyty/models versions

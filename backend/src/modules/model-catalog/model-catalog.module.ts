@@ -15,6 +15,7 @@ import { PriceFeedService } from './pricing/price-feed.service';
 import { MODEL_PRICE_FEED_QUEUE, PriceFeedProcessor } from './pricing/price-feed.processor';
 import { ModelRouterService } from './routing/model-router.service';
 import { MODEL_CATALOG_SYNC_QUEUE, CatalogSyncProcessor } from './catalog-sync.processor';
+import { CatalogWarmupService } from './catalog-warmup.service';
 import { ModelCatalogService } from './model-catalog.service';
 import { ModelCatalogController } from './model-catalog.controller';
 
@@ -33,7 +34,7 @@ import { ModelCatalogController } from './model-catalog.controller';
     KmsModule,
     forwardRef(() => LlmProvidersModule),
   ],
-  providers: [PriceFeedService, PriceFeedProcessor, CatalogSyncProcessor, ModelRouterService, ModelCatalogService],
+  providers: [PriceFeedService, PriceFeedProcessor, CatalogSyncProcessor, CatalogWarmupService, ModelRouterService, ModelCatalogService],
   controllers: [ModelCatalogController, RoutingAnalyticsController],
   exports: [PriceFeedService, ModelRouterService, ModelCatalogService],
 })

@@ -65,6 +65,19 @@ export function membershipFixture(): MembershipFixture {
   };
 }
 
+/**
+ * The real access policy over one organization's members and nothing
+ * else (no teams), for specs that only need org roles to be true.
+ */
+export function orgMembersPolicy(
+  organizationId: string,
+  members: Record<string, OrganizationRole> = {},
+): AccessPolicyService {
+  const m = membershipFixture();
+  for (const [userId, role] of Object.entries(members)) m.member(organizationId, userId, role);
+  return m.accessPolicy;
+}
+
 /** Fixed ids for the usual cast, so specs read the same. */
 export const CAST = {
   org: '0a000000-0000-4000-8000-000000000001',

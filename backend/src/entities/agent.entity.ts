@@ -1,5 +1,6 @@
 import type { RoutingPolicy } from '../modules/model-catalog/routing/model-router';
 import type { AgentCollaboration } from '../modules/agents/collaboration-participants';
+import type { AgentModels } from '../modules/agents/autonomous-models';
 export type {
   AgentCollaboration,
   CollaborationParticipant,
@@ -253,6 +254,18 @@ export class Agent {
    */
   @Column({ type: 'json', nullable: true })
   collaboration: AgentCollaboration | null;
+
+  /**
+   * An autonomous agent's models: its roles (main, drafter, checker,
+   * panelists, explorers, a summariser, teammates -- each a model, or for
+   * panelists and teammates another agent) and the strategy that says how
+   * they work together on each step of the loop. The main role is mirrored
+   * into `modelConfig` on every write. Null on a workflow agent, whose
+   * multi-model shape is its graph. See autonomous-models.ts and
+   * docs/autonomous-models.md.
+   */
+  @Column({ type: 'json', nullable: true })
+  models: AgentModels | null;
 
   @Column({ type: 'varchar', nullable: true })
   webhookUrl: string;

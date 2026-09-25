@@ -5,7 +5,8 @@ import { Wrench } from 'lucide-react'
 
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
-import { analyticsApi, toolsApi } from '@/lib/api'
+import { analyticsApi } from '@/lib/api'
+import { toolsQuery } from '@/lib/list-queries'
 import { cn } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import type { Tool, ToolUsageEntry } from '@/types'
@@ -24,16 +25,11 @@ export function ToolsTab() {
     enabled: !!currentOrganization,
   })
 
-  const { data: toolsRaw } = useQuery({
-    queryKey: ['tools', currentOrganization?.id],
-    queryFn: async () => {
-      const d = await toolsApi.getAll(currentOrganization?.id)
-      const result = d?.tools || (Array.isArray(d) ? d : [])
-      return Array.isArray(result) ? result : []
-    },
+  const { data: toolsPage } = useQuery({
+    ...toolsQuery(currentOrganization?.id),
     enabled: !!currentOrganization,
   })
-  const tools: Tool[] = Array.isArray(toolsRaw) ? toolsRaw : []
+  const tools: Tool[] = toolsPage?.items ?? []
   const toolMap = Object.fromEntries(tools.map((t: Tool) => [t.id, t]))
 
   return (

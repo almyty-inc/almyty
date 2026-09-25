@@ -21,16 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -117,7 +108,7 @@ export function ToolsPage() {
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 10
-  const [deletingTool, setDeletingTool] = useState<Tool | null>(null)
+  const { confirm, dialog: confirmDialog } = useConfirm()
   // Old ?new=1 links (bookmarks, docs) land on the create page.
   useNewParamRedirect('/tools/new')
 
@@ -133,7 +124,6 @@ export function ToolsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tools'] })
       notifications.success('Tool deleted', 'The tool has been removed.')
-      setDeletingTool(null)
     },
     onError: (error: any) => {
       notifications.error('Could not delete the tool', getApiErrorMessage(error, 'The tool is still there.'))
@@ -402,9 +392,15 @@ export function ToolsPage() {
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation()
-                  setDeletingTool(tool)
+                  const ok = await confirm({
+                    title: 'Delete tool?',
+                    description: `This will permanently delete the tool "${tool.name}". This action cannot be undone.`,
+                    confirmLabel: 'Delete tool',
+                    destructive: true,
+                  })
+                  if (ok) deleteToolMutation.mutate(tool.id)
                 }}
               >
                 Delete
@@ -611,35 +607,7 @@ export function ToolsPage() {
       </TabsContent>
       </Tabs>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog
-        open={!!deletingTool}
-        onOpenChange={(open) => !open && setDeletingTool(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete tool?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete the tool "{deletingTool?.name}". This
-              action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (deletingTool) {
-                  deleteToolMutation.mutate(deletingTool.id)
-                }
-              }}
-              variant="destructive"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
+      {confirmDialog}
     </div>
   )
 }

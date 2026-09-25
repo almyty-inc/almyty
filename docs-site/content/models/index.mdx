@@ -1,40 +1,68 @@
 # Models
 
-An autonomous agent takes many steps, and not every step deserves the same model. A planning step wants the strongest reasoning model; a summary step wants the cheapest; anything that touches customer data may only leave the building on a private endpoint. almyty keeps one record for every model your organization can call, with its price, latency, privacy tier and capabilities, and lets each step ask for the cheapest, fastest or most private model that fits. A vendor's API, a server you run and a model on your own cloud account all end up as models in the same list, and the router treats them alike.
+An autonomous agent takes many steps, and not every step deserves the same model. A planning step wants the strongest reasoning model; a summary step wants the cheapest; anything that touches customer data may only leave the building on a private endpoint. almyty keeps one list of every model your organization can call, with its price, context length and capabilities, and lets each step pick a model or let almyty choose the cheapest one that fits.
+
+There is one thing to set up: a **provider**. Connect a provider once and every model it serves appears in that list by itself. There is nothing to add per model.
 
 ```
-A provider's API     --+
-A server you run     --+-->  Model  -->  validation run  -->  usable  -->  router picks it
-Your cloud account   --+     (runs on, price, tier,           (one real call)          (cheapest | fastest | private)
-                              latency, capabilities)
+Connect a provider  -->  key checked  -->  its models appear  -->  pick one, or Automatic
+(OpenAI, Anthropic,      (one real call)    (price, context,         (in any agent, node
+ your own server,                            availability)            or role)
+ a cloud account...)
 ```
 
-Nothing here is a hardcoded list. What almyty "supports" is whatever your models say, and a model only counts once a real call through it has passed.
+## Connect a provider
+
+1. Open **Models** in the sidebar and click **Connect a provider**.
+2. Find your provider in the grid: first-party vendors (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Cohere and more), hosted inference (Groq, Together, OpenRouter, Fireworks, Cerebras and more), clouds (Azure, AWS Bedrock, Vertex AI, Hugging Face, Modal and more), **Your own server** for anything OpenAI-compatible, and **Ollama**.
+3. Paste the API key, or connect an account instead. Your own server and Ollama ask for the base URL and an optional key. A few providers ask for the one or two things they cannot work without: the region for AWS Bedrock, the resource and deployment for Azure, the project for Vertex AI.
+4. **Who can use it** is everyone in your organization unless you change it to just you or a team.
+5. Click **Connect**.
+
+almyty checks the key right away with one real call and shows the models it found. If the check fails you are told why in one line, for example "OpenAI rejected this key.", with a link to the page where the provider issues keys; nothing is saved until the key works.
+
+The provider is named after itself (rename it on its page later). There is no model id, privacy, region or context length to fill in: models come from the provider's own list, prices from the automatic price feed, and context length and capabilities from the same data. Anything you want to override lives under **Advanced** on the provider's page.
 
 ## The Models page
 
-**Models** lists every model your organization can use, as a grid or a table. Each one shows:
+**Connected** shows one card per provider: its name, whether its key works, and how many models it serves. Click one to open the provider's page.
 
-- **Runs on**: where it is called, for example "Anthropic API", "Your server (llm.example.internal)", "Your AWS account (Bedrock)" or "Your Hugging Face account (Inference Endpoint)"
+**All models** lists every model from every connected provider, grouped by provider and searchable, with:
+
 - the price per million tokens in and out, and the context length
-- its validation state
-- for a model on [your cloud account](/models/your-cloud): its status (Starting, Running, Scaled to zero, Resizing, Needs attention, Shutting down, Shut down or Failed), hourly cost and budget
+- whether it is available right now; if not, why: the provider no longer offers it, the provider said it is not available, or the provider's key check failed
 
-The page header links to **Inference providers**, where the keys almyty calls vendors with live. See [Inference providers](/models/providers).
+With no provider connected, the page goes straight to connecting one.
 
-### Add a model
+## A provider's page
 
-**Add model** asks one question: **Where does it run?**
+The provider's page shows whether its key works (with **Check again**), its models, the default model, who can use it, and **Replace key**. Everything else sits under **Advanced**: per-model overrides of price, context length, privacy tier, region and capabilities, an admin key for usage reconciliation, and default generation parameters. Removing a provider asks once and retires its models, which stay in past runs.
 
-- **A provider's API.** Pick an inference provider you set up, or set one up right there, then pick the model from its live list.
-- **A server you run.** Any OpenAI-compatible server (vLLM, Ollama, TGI, llama.cpp, LiteLLM): give its base URL, an optional key and the model id. See [A server you run](/models/providers#a-server-you-run).
-- **Your cloud account.** Name the model source, pick the cloud (Hugging Face Inference Endpoints, Modal, AWS Bedrock, SageMaker, Google Vertex AI, Microsoft Foundry, Baseten, Together, Fireworks, Nebius, RunPod or DigitalOcean), a size and a budget. almyty starts it there and reports its state and cost. See [Your cloud account](/models/your-cloud).
+A cloud account provider (Hugging Face, Modal, AWS, Vertex AI, Azure and the like) also has **Start a model**: see [Your cloud account](/models/your-cloud).
 
-**Sync from providers** imports what your inference providers currently list. Imported models become usable once a validation run passes.
+## Choosing a model
 
-### A model's detail
+Everywhere a model is chosen (an agent, a workflow step, a role, a provider's default) there is one search box that lists every available model, grouped by provider. Type part of a name to narrow it. **Automatic** at the top lets almyty pick per call: the cheapest model that fits the step, or the fastest, within the limits you set (see [Routing](/models/routing)). **Connect a provider** at the bottom opens the connect page in a new tab; the list refreshes when you come back.
 
-Click a model to see its facts (runs on, vendor id, price and where the price came from, context, capabilities, privacy tier, region, measured latency, last validation), and to validate, edit or remove it. A model on your cloud account also shows its status, cost, budget, endpoint URL and lineage ("Based on Llama 3.1 70B, 4-bit"), with Start, Stop, replicas and Shut down.
+## When a model is usable
+
+A model is usable (the list offers it, the router may pick it) when:
+
+1. it can be called: its provider is connected, or it has an endpoint URL;
+2. it is active; and
+3. it is checked: its provider's key check has passed.
+
+The key check is one real call with the provider's key. When it passes, every model that provider lists becomes usable at once; there is no step per model. It runs when you connect the provider, when you change it, and when you click **Check again**.
+
+Models stay current by themselves:
+
+- **New models appear.** The provider's list is read again when you connect it, when you change it, on every passing key check, and every six hours. A provider that has never been synced has its key checked and its list read when the API starts, and when the Models page or a model picker finds nothing usable to show.
+- **Retired models leave.** A model the provider stops listing is marked "no longer offered" (`status: inactive`, `metadata.retiredReason: "not listed by provider"`). It is never deleted, because past runs point at it, and it comes back if the provider lists it again.
+- **A model that stops answering leaves.** When a real call gets "model not found" from the provider, that model is marked unavailable at once, so nothing picks it again. Scheduled agents that used it pause and say which model to replace.
+- **A key the provider refuses takes its models out** until the key is replaced and a check passes. An outage does not: the router just skips the provider while it is down.
+- **A model on your cloud account** becomes usable by itself when it is running: almyty makes one short call through it as soon as the cloud reports it ready.
+
+Nothing here is a hardcoded list. What almyty supports is whatever your connected providers serve.
 
 ## What a model records
 
@@ -42,68 +70,29 @@ This is the machine-readable record the router reads, returned by the [Models AP
 
 | Field | Meaning |
 |---|---|
-| `name` | The label shown in the list and in dropdowns |
-| `providerId` or `endpointRef.url` | How the model is called: an inference provider (a vendor's API or a server you run) or the endpoint of a model on your cloud |
+| `name` | The label shown in lists |
+| `providerId` or `endpointRef.url` | How the model is called: its provider, or the endpoint of a model on your cloud |
 | `vendorModelId` | The id sent on the wire, for example `claude-sonnet-5` |
 | `capabilities` | `tools`, `vision`, `reasoning`, `embedding`, `structuredOutput` as booleans |
 | `contextLength` | Tokens of context |
-| `privacyTier` | `local`, `private_cloud` or `public` (default `public`) |
+| `privacyTier` | `local`, `private_cloud` or `public` (default `public`; `local` for Ollama) |
 | `region` | Where the model runs, used by region allowlists |
 | `pricing`, `pricingSource`, `pricingOverride` | Dollars per million tokens in and out, where the number came from, and an override that wins while set |
 | `measuredLatencyMs` | `p50` and `p95` learned from real traffic |
 | `status` | `active`, `inactive`, `error` or `deploying` (a model on your cloud that is still starting) |
-| `validationStatus`, `lastValidatedAt`, `lastValidationError` | The outcome of the last validation run: `never`, `passed` or `failed` |
+| `validationStatus`, `lastValidatedAt`, `lastValidationError` | Whether the model is checked: `passed` once its provider's key check passed, `never` while it waits for one, `failed` when the provider said the model is not available |
+| `selectable` | Whether it is usable right now (computed) |
 | `base`, `modelVersionId` | For a model on your cloud: what it is based on, and its pinned source |
 
-Every model belongs to one organization. Members can read models; adding, editing, validating and removing need the admin or owner role.
-
-## Support is data, not a list
-
-A model is **selectable** (the router may pick it, dropdowns show it) when all three hold:
-
-1. it has a way to be called: an inference provider or an endpoint URL;
-2. its status is `active`; and
-3. one **validation run** has passed.
-
-That is the only definition of "supported". A vendor model that gets retired fails its next validation and drops out on its own; a server you brought up this morning joins the moment its validation passes. Nobody edits a list.
-
-## Where models come from
-
-**From your inference providers, automatically.** Adding an inference provider, changing its configuration, and every passing health check import what the provider currently lists, in the background. Models that already exist are left alone. A model whose vendor id has vanished from the list goes `inactive` with `metadata.retiredAt` and `metadata.retiredReason: "not listed by provider"`; it is never deleted, because runs and audit rows point at model ids, and it comes back on its own when the provider lists it again. An empty list (the vendor could not be asked) retires nothing. Deleting an inference provider retires its models the same way and unlinks them, so they are no longer callable.
-
-**The health check is a validation.** Testing an inference provider makes a real call with its resolved model. When it passes, that provider's model records a passed validation run (with the measured latency), and the model is created if the list had none. A fresh organization with one healthy provider can route right away. A `MODEL_NOT_FOUND` failure marks the model `failed` with the error; any other failure leaves the list alone.
-
-**On boot.** Every active inference provider that has no models yet is synced once at startup. Set `MODEL_CATALOG_BACKFILL=off` to skip it.
-
-**By hand.** Sync one inference provider or all of them, or add a model against an inference provider with a vendor id of your choosing. A server you run is a `custom` inference provider, so its models are added the same way:
-
-```bash
-$ npx @almyty/models sync 7c1e...            # one inference provider
-$ npx @almyty/models register --name "Qwen3 32B on our vLLM" --provider 7c1e... --model qwen3-32b --tier private_cloud --region eu-central
-```
-
-See [Inference providers](/models/providers) for the vendor list and [CLI](/models/cli) for every command.
-
-**On your cloud account.** Starting a model on [your cloud account](/models/your-cloud) adds it to the list at once, with status `deploying` and not yet selectable. It turns `active` when its endpoint is ready.
-
-A model added by hand, or started on your cloud, begins with `validationStatus: never`. Run the validation to make it selectable:
-
-```bash
-$ npx @almyty/models validate 4f2a...
-Passed in 812 ms.
-Qwen3 32B on our vLLM  [qwen3-32b]  private_cloud/eu-central  unpriced
-    4f2a...  selectable
-```
-
-The validation is one short real call through the model. It records the outcome, the latency, and an audit row. A failing call records the error on the model and leaves it unselectable.
+Every model belongs to one organization. Members can read models; connecting providers and editing models need the admin or owner role. A model served by another member's private provider is not shown to you.
 
 ## Privacy tiers
 
-Tiers are ordered `local < private_cloud < public`. A routing policy names the most public tier a request may use, so a policy with `privacyTier: private_cloud` can pick a local model or a private-cloud model, never a public vendor. Set the tier when you add a model. A model on a vendor's inference provider defaults to `public`; one on your cloud account defaults to `private_cloud`. Give a server you run the tier it deserves (`local` for a box in your office).
+Tiers are ordered `local < private_cloud < public`. A routing policy names the most public tier a request may use, so a policy with `privacyTier: private_cloud` can pick a local model or a private-cloud model, never a public vendor. A vendor's models default to `public`, Ollama's to `local`, and a model on your cloud account to `private_cloud`. Change a model's tier under **Advanced** on its provider's page (`local` for a box in your office, for example).
 
 ## Pricing
 
-Prices are automatic. A daily job (`MODEL_PRICE_FEED_CRON`, default 04:00) loads the LiteLLM cost map and cross-checks the OpenRouter models API. Models are priced from the cached feed when they are added and refreshed by the job. When the two sources disagree by more than 25 percent, the model keeps both numbers in `metadata.pricingDisagreement` so you can decide.
+Prices are automatic. A daily job (`MODEL_PRICE_FEED_CRON`, default 04:00) loads the LiteLLM cost map and cross-checks the OpenRouter models API. Models are priced from the cached feed when they appear and refreshed by the job. When the two sources disagree by more than 25 percent, the model keeps both numbers in `metadata.pricingDisagreement` so you can decide.
 
 `pricingSource` says where the number came from:
 
@@ -116,31 +105,41 @@ Prices are automatic. A daily job (`MODEL_PRICE_FEED_CRON`, default 04:00) loads
 | `manual` | An override you set |
 | `unpriced` | No source had a price |
 
-An override (`pricingOverride`) wins over the feed until you clear it. A model with no price from any source is **unpriced**: the model says so, every run that used it says so, and the cost is never silently zero. Hosts that serve other authors' open models (Novita, DeepInfra and the like) are never billed at the original author's list price; without a feed quote such a model is unpriced. A server you run has no feed price either: give it an override if you want `cheapest` to weigh it, or leave it unpriced and the router places it last.
+An override (`pricingOverride`) wins over the feed until you clear it. A model with no price from any source is **unpriced**: the model says so, every run that used it says so, and the cost is never silently zero. Hosts that serve other authors' open models (Novita, DeepInfra and the like) are never billed at the original author's list price; without a feed quote such a model is unpriced. Your own server has no feed price either: give its models an override under **Advanced** if you want Automatic to weigh them, or leave them unpriced and the router places them last.
 
 The router's `cheapest` objective ranks by a blended price, three quarters input and one quarter output per million tokens. Cost per run still uses the exact in and out prices; see [Cost governance](/cost-governance).
 
 ## Latency
 
-`fastest` ranks by `measuredLatencyMs.p50`, which real traffic keeps current. After every routed answer the router folds the response time into the answering model: p50 as a moving average (a new sample weighs one fifth), p95 jumping to a slower sample at once and drifting back toward faster ones a tenth per sample. The estimate is written to the model at most once a minute and survives restarts. A validation run or a passing health check resets both to that single measurement.
+`fastest` ranks by `measuredLatencyMs.p50`, which real traffic keeps current. After every routed answer the router folds the response time into the answering model: p50 as a moving average (a new sample weighs one fifth), p95 jumping to a slower sample at once and drifting back toward faster ones a tenth per sample. The estimate is written to the model at most once a minute and survives restarts. A key check that probed a model resets both to that single measurement.
+
+## From the terminal and the API
+
+```bash
+$ npx @almyty/models list --selectable        # what can be picked right now, and why the rest cannot
+$ npx @almyty/models sync 7c1e...             # read one provider's list again
+```
+
+Connecting a provider over the API is one call, `POST /llm-providers/connect`; see the [Providers API](/api-reference/llm-providers-api#connect-a-provider). Every command is in [CLI](/models/cli).
 
 ## Configuration
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time sync of inference providers that have no models |
+| `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time sync of providers that have never been synced, and the periodic sweep |
+| `MODEL_CATALOG_SYNC_CRON` | `17 */6 * * *` | How often every provider's list is read again; `off` disables |
 | `MODEL_PRICE_FEED_CRON` | `0 4 * * *` | Price feed refresh; `off` disables |
 | `MODEL_RECONCILE_CRON` | `*/2 * * * *` | How often models on your cloud accounts are checked and brought to the state you asked for; `off` disables |
 | `MODEL_ROUTER_VERIFY_ESCALATION` | unset | `true` lets a verifier rejection advance the route plan; see [Routing](/models/routing#verify-escalation) |
 | `MODEL_STUB_ADAPTER` | unset | `true` registers the in-memory `stub` cloud in production too |
-| `LLM_ALLOW_PRIVATE_URLS` | unset | `true` lets a server you run sit on a private or loopback address (a vLLM box on the LAN) on a self-hosted API |
+| `LLM_ALLOW_PRIVATE_URLS` | unset | `true` lets your own server sit on a private or loopback address (a vLLM box on the LAN) on a self-hosted API |
 | `MODEL_REGISTRY_S3_*` | falls back to `STORAGE_S3_*` | Single-tenant seed of the one organization's bucket connection on first boot; ignored with more than one organization |
 | `CONFORMANCE_LIVE` | unset | The `providerType` whose conformance suite runs against the real cloud |
 
 ## Related
 
-- [Routing](/models/routing): the policy an agent step carries and how a model is chosen
-- [Inference providers](/models/providers): every vendor, and a server you run
-- [Your cloud account](/models/your-cloud): run a model on 12 clouds by naming it
-- [Connections](/connections): where the keys behind inference providers and cloud accounts live
+- [Providers](/models/providers): every provider, what it needs, and your own server
+- [Routing](/models/routing): Automatic, and how a model is chosen per step
+- [Your cloud account](/models/your-cloud): start an open model on your own cloud
+- [Connections](/connections): where provider keys and cloud accounts live
 - [Autonomous agents](/agents/autonomous): the agents that do the routing

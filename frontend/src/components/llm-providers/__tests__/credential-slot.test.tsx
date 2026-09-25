@@ -4,22 +4,12 @@ import userEvent from '@testing-library/user-event'
 import { useForm } from 'react-hook-form'
 
 import { render } from '../../../test/setup'
-import { EditProviderForm } from '../edit-provider-form'
-import { CredentialRefSummary, isMaskedKey } from '../credential-slot'
+import { CredentialRefSummary, CredentialSlot, isMaskedKey } from '../credential-slot'
 
 vi.mock('@/lib/api', () => ({
   llmProvidersApi: { testConnection: vi.fn(), chat: vi.fn(), getModels: vi.fn() },
 }))
 
-// The visibility picker reads the org's teams; not what this file tests.
-vi.mock('@/components/ui/visibility-field', () => ({
-  VisibilityField: () => <div data-testid="visibility-field" />,
-}))
-
-// The default-model picker has its own tests; not what this file tests.
-vi.mock('@/components/model-picker', () => ({
-  ModelPicker: () => <div data-testid="model-picker" />,
-}))
 
 vi.mock('@/lib/connections-api', () => ({
   connectionsApi: {
@@ -33,12 +23,27 @@ vi.mock('@/lib/connections-api', () => ({
 
 const credentialRef = { id: 'conn-openai', name: 'OpenAI prod', connectorKey: 'openai', healthStatus: 'valid' }
 
-function EditHarness({ provider, onUpdate }: { provider: any; onUpdate: (payload: any) => void }) {
-  const form = useForm<any>({
-    defaultValues: { name: provider.name, model: '', maxTokens: 4096, temperature: 0.7, apiKey: '', usageApiKey: '', credentialId: undefined, usageCredentialId: undefined },
-  })
-  const mutation = { isPending: false, mutate: (payload: any) => onUpdate(payload) } as any
-  return <EditProviderForm onCancel={() => {}} editForm={form} providerToEdit={provider} updateProviderMutation={mutation} />
+/** A form with one slot, the way the provider page's Advanced section uses it. */
+function SlotHarness({ provider, usage = false, allowClear = true, onSubmit }: { provider: any; usage?: boolean; allowClear?: boolean; onSubmit: (data: any) => void }) {
+  const form = useForm<any>({ defaultValues: { apiKey: '', usageApiKey: '', credentialId: undefined, usageCredentialId: undefined } })
+  return (
+    <form onSubmit={form.handleSubmit(onSubmit)}>
+      <CredentialSlot
+        label={usage ? 'Usage key' : 'API key'}
+        credentialRef={usage ? provider.usageCredentialRef : provider.credentialRef}
+        hasStoredKey={isMaskedKey(usage ? provider.configuration?.usageApiKey : provider.configuration?.apiKey)}
+        connectorKey={provider.type}
+        form={form}
+        idField={usage ? 'usageCredentialId' : 'credentialId'}
+        keyField={usage ? 'usageApiKey' : 'apiKey'}
+        keyInputId="slot-key"
+        keyLabel="New API key"
+        keyPlaceholder="Leave blank to keep the existing key"
+        allowClear={allowClear}
+      />
+      <button type="submit">Save changes</button>
+    </form>
+  )
 }
 
 const withRef = { id: 'p-1', type: 'openai', name: 'prod', credentialRef, usageCredentialRef: null, configuration: { apiKey: '***masked***', usageApiKey: undefined } }
@@ -67,30 +72,30 @@ describe('CredentialRefSummary', () => {
   })
 })
 
-describe('EditProviderForm credential slots', () => {
+describe('CredentialSlot', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('opens on the backing connection and submits without touching the credential', async () => {
     const onUpdate = vi.fn()
-    render(<EditHarness provider={withRef} onUpdate={onUpdate} />)
+    render(<SlotHarness provider={withRef} onSubmit={onUpdate} />)
 
     const slot = within(screen.getByTestId('credential-slot-credentialId'))
     expect(slot.getByRole('button', { name: 'Keep current' })).toHaveAttribute('aria-pressed', 'true')
     expect(slot.getByTestId('credential-ref')).toHaveTextContent('OpenAI prod')
-    // No key input and no masked marker anywhere in the dialog.
+    // No key input and no masked marker anywhere in the form.
     expect(screen.queryByLabelText('New API key')).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('***masked***')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
-    const data = onUpdate.mock.calls[0][0].data
+    const data = onUpdate.mock.calls[0][0]
     expect(data.credentialId).toBeUndefined()
     expect(data.apiKey).toBe('')
   })
 
   it('lists inference connections of the vendor first and submits the picked one as credentialId', async () => {
     const onUpdate = vi.fn()
-    render(<EditHarness provider={withRef} onUpdate={onUpdate} />)
+    render(<SlotHarness provider={withRef} onSubmit={onUpdate} />)
     const slot = within(screen.getByTestId('credential-slot-credentialId'))
     fireEvent.click(slot.getByRole('button', { name: 'Use existing connection' }))
 
@@ -104,14 +109,14 @@ describe('EditProviderForm credential slots', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
-    const data = onUpdate.mock.calls[0][0].data
+    const data = onUpdate.mock.calls[0][0]
     expect(data.credentialId).toBe('conn-openai')
     expect(data.apiKey).toBe('')
   })
 
   it('carries a pasted key and clears the connection field when the user pastes instead', async () => {
     const onUpdate = vi.fn()
-    render(<EditHarness provider={withRef} onUpdate={onUpdate} />)
+    render(<SlotHarness provider={withRef} onSubmit={onUpdate} />)
     const slot = within(screen.getByTestId('credential-slot-credentialId'))
     fireEvent.click(slot.getByRole('button', { name: 'Paste a key' }))
     const input = slot.getByLabelText('New API key') as HTMLInputElement
@@ -121,7 +126,7 @@ describe('EditProviderForm credential slots', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
-    const data = onUpdate.mock.calls[0][0].data
+    const data = onUpdate.mock.calls[0][0]
     expect(data.apiKey).toBe('sk-new-key')
     expect(data.credentialId).toBeUndefined()
   })
@@ -129,7 +134,7 @@ describe('EditProviderForm credential slots', () => {
   it('sends null to clear the usage connection', async () => {
     const onUpdate = vi.fn()
     const provider = { ...withRef, usageCredentialRef: { id: 'conn-adm', name: 'OpenAI admin', connectorKey: 'openai', healthStatus: 'failed' } }
-    render(<EditHarness provider={provider} onUpdate={onUpdate} />)
+    render(<SlotHarness provider={provider} usage onSubmit={onUpdate} />)
     const slot = within(screen.getByTestId('credential-slot-usageCredentialId'))
     expect(within(slot.getByTestId('credential-ref')).getByTestId('connection-health')).toHaveAttribute('data-status', 'failed')
     fireEvent.click(slot.getByRole('button', { name: 'Remove' }))
@@ -137,11 +142,11 @@ describe('EditProviderForm credential slots', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
-    expect(onUpdate.mock.calls[0][0].data.usageCredentialId).toBeNull()
+    expect(onUpdate.mock.calls[0][0].usageCredentialId).toBeNull()
   })
 
-  it('does not offer Remove for the inference key of a vendor that needs one', () => {
-    render(<EditHarness provider={withRef} onUpdate={vi.fn()} />)
+  it('does not offer Remove when the slot cannot be cleared', () => {
+    render(<SlotHarness provider={withRef} allowClear={false} onSubmit={vi.fn()} />)
     const slot = within(screen.getByTestId('credential-slot-credentialId'))
     expect(slot.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
   })

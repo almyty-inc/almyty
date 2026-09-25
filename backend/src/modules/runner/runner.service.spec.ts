@@ -25,6 +25,7 @@ describe('RunnerService', () => {
   let sessions: FakeRepository<RunnerSession>;
   let workspaces: FakeRepository<Workspace> & { createQueryBuilder?: jest.Mock };
   let fakePublisher: { publish: jest.Mock; unpublish: jest.Mock; listForRunner: jest.Mock };
+  let userOrgs: { rows: Array<{ userId: string; organizationId: string; role: OrganizationRole; isActive: boolean }>; [k: string]: any };
 
   const ownerUserId = 'user-1';
   const organizationId = 'org-1';
@@ -114,7 +115,7 @@ describe('RunnerService', () => {
     // outsider are plain members, `admin-1` is an org admin. user-1 and
     // the colleague are on team-1; the outsider and the admin are on no
     // team.
-    const userOrgs = {
+    userOrgs = {
       rows: [
         { userId: ownerUserId, organizationId, role: OrganizationRole.MEMBER, isActive: true },
         { userId: 'colleague', organizationId, role: OrganizationRole.MEMBER, isActive: true },
@@ -476,6 +477,39 @@ describe('RunnerService', () => {
       await expect(service.resolveForDispatch(runner.id, 'colleague')).resolves.toMatchObject({ id: runner.id });
       await expect(service.resolveForDispatch(runner.id, 'outsider')).rejects.toBeInstanceOf(NotFoundException);
       await expect(service.resolveForDispatch(runner.id)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  // A runner is its registering member's machine acting in this org. While
+  // that membership is not in effect -- deactivated in the org, or SCIM
+  // active:false, both of which set user_organizations.isActive = false --
+  // the runner takes work from nobody; reactivation brings it back.
+  describe('a runner whose registering member is deactivated in the org', () => {
+    const setOwnerActive = (isActive: boolean) => {
+      for (const row of userOrgs.rows) {
+        if (row.userId === ownerUserId && row.organizationId === organizationId) row.isActive = isActive;
+      }
+    };
+
+    it.each([
+      ['an org runner', 'org' as const, ['colleague', 'admin-1', null]],
+      ['a team runner', 'team' as const, ['colleague', 'admin-1']],
+    ])('%s takes no dispatch from anyone until the membership is reactivated', async (_label, visibility, callers) => {
+      const runner = await registerAs(visibility);
+      await runners.update(runner.id, { state: RunnerState.ONLINE });
+      for (const caller of callers) {
+        await expect(service.resolveForDispatch(runner.id, caller)).resolves.toMatchObject({ id: runner.id });
+      }
+
+      setOwnerActive(false);
+      for (const caller of callers) {
+        await expect(service.resolveForDispatch(runner.id, caller)).rejects.toBeInstanceOf(NotFoundException);
+      }
+
+      setOwnerActive(true);
+      for (const caller of callers) {
+        await expect(service.resolveForDispatch(runner.id, caller)).resolves.toMatchObject({ id: runner.id });
+      }
     });
   });
 

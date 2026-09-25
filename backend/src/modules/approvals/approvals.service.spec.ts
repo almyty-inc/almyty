@@ -1,3 +1,4 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ApprovalsService } from './approvals.service';
 import { AgentRunStatus } from '../../entities/agent-run.entity';
 import { FakePolicyApprovalsRepo } from './__tests__/fake-policy-approvals';
@@ -6,7 +7,9 @@ import { fakeRepository } from '../../test/fake-repository';
 
 class FakePolicy {
   decision: { allowed: boolean; reason: string } = { allowed: true, reason: 'ok' };
-  async canAccess() { return this.decision; }
+  /** Per action when set; otherwise `decision` answers every action. */
+  byAction: Record<string, { allowed: boolean; reason: string }> = {};
+  async canAccess(_user: unknown, _row: unknown, action: string) { return this.byAction[action] ?? this.decision; }
   async applyListFilter() { return { bypass: true, teamIds: [] }; }
 }
 
@@ -48,6 +51,29 @@ describe('ApprovalsService', () => {
       expect(runs.row('r1')!.status).toBe(AgentRunStatus.WAITING_APPROVAL);
       expect(runs.row('r-sibling')!.status).toBe(AgentRunStatus.RUNNING);
       expect(events.length).toBe(1);
+    });
+
+    it('a private agent\'s request is private to the agent\'s owner, whatever team the caller passes', async () => {
+      const { svc, approvals } = makeService();
+      approvals.agents.seed({ id: 'pa', organizationId: 'org-1', visibility: 'private', createdBy: 'owner-1' });
+      const row = await svc.create({ organizationId: 'org-1', teamId: 't1', runId: 'r1', agentId: 'pa', reason: 'x' });
+      expect(row).toMatchObject({ visibility: 'private', ownerUserId: 'owner-1', teamId: null });
+      expect(approvals.rows()[0]).toMatchObject({ visibility: 'private', ownerUserId: 'owner-1' });
+    });
+
+    it('reads the agent in the request\'s organization only', async () => {
+      const { svc, approvals } = makeService();
+      approvals.agents.seed({ id: 'pa', organizationId: 'other-org', visibility: 'private', createdBy: 'owner-1' });
+      const row = await svc.create({ organizationId: 'org-1', teamId: null, runId: 'r1', agentId: 'pa', reason: 'x' });
+      expect(row).toMatchObject({ visibility: 'org', ownerUserId: null });
+    });
+
+    it('refuses a private agent with no recorded owner', async () => {
+      const { svc, approvals } = makeService();
+      approvals.agents.seed({ id: 'pa', organizationId: 'org-1', visibility: 'private', createdBy: null });
+      await expect(svc.create({ organizationId: 'org-1', teamId: null, runId: 'r1', agentId: 'pa', reason: 'x' }))
+        .rejects.toBeInstanceOf(BadRequestException);
+      expect(approvals.rows()).toEqual([]);
     });
 
     it('is idempotent on (runId, toolCallId)', async () => {
@@ -123,9 +149,18 @@ describe('ApprovalsService', () => {
 
     it('refuses when policy denies', async () => {
       const { svc, policy } = makeService();
-      policy.decision = { allowed: false, reason: 'team lead required' };
+      policy.byAction.manage = { allowed: false, reason: 'team lead required' };
       const row = await svc.create({ organizationId: 'o', teamId: 't1', runId: 'r', agentId: 'a', reason: 'x' });
       await expect(svc.approve(row.id, { decidedBy: 'u' }, { id: 'u' }, row.organizationId)).rejects.toThrow(/team lead/);
+    });
+
+    it('answers a request the caller may not even see as not found, not forbidden', async () => {
+      const { svc, policy } = makeService();
+      policy.decision = { allowed: false, reason: 'private resource belongs to another user' };
+      const row = await svc.create({ organizationId: 'o', teamId: null, runId: 'r', agentId: 'a', reason: 'x' });
+      await expect(svc.approve(row.id, { decidedBy: 'u' }, { id: 'u' }, 'o')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(svc.reject(row.id, { decidedBy: 'u' }, { id: 'u' }, 'o')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(svc.findOne(row.id, { id: 'u' }, 'o')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 

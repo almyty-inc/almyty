@@ -3,8 +3,10 @@
 A runner is a small daemon you start on a machine (your laptop, a cloud VM, a
 Kubernetes pod, a Docker container, an edge device) anywhere Node runs. It
 connects that machine to almyty and exposes it to your agents: they run commands
-and use the local tools and files there, while every LLM call still goes through
-the backend. Your code and credentials never leave the machine.
+and use the local tools and files there. almyty's own model calls go through the
+backend; coding CLIs started on the runner call their providers directly. Tool
+results return to the calling agent, so local execution is not a promise that
+file contents or secrets cannot leave the machine.
 
 ![A runner's detail page: detected binaries and the Coding agents card](/screenshots/runner-detail.png)
 
@@ -21,7 +23,7 @@ On the machine, install once and call the installed binaries:
 ```bash
 npm i -g @almyty/runner @almyty/auth
 almyty-auth login
-almyty-runner start --name my-laptop   # add --org <org-id> if you belong to several orgs
+almyty-runner start --name my-laptop --org <org-id>
 almyty-runner status
 ```
 
@@ -67,8 +69,11 @@ the orchestration; the runner runs the members.
 ## Workspaces
 
 Work happens inside a **workspace**: a reservation of a working directory on the
-runner, with a time limit. Processes are isolated per workspace and cleaned up
-when it is released, so one job cannot reach another's files.
+runner, with a time limit. Processes are tracked per workspace and cleaned up
+when it is released. The current runner uses host execution, not a filesystem
+or network sandbox: a workspace does not prevent a command from accessing other
+files the daemon's operating-system user can read. Set local path and command
+restrictions and review the [runner safety limits](/cli/runner#what-a-runner-can-do-on-your-machine).
 
 ## Notes
 

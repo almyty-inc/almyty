@@ -62,7 +62,9 @@ describe('@almyty/connections', () => {
     expect(connectBody({ owner: 'user', method: 'api_key' }, { apiKey: 'k' })).toEqual({ owner: 'user', method: 'api_key', input: { apiKey: 'k' } });
     expect(connectBody({})).toEqual({ owner: 'org' });
     expect(connectBody({ name: 'prod key' })).toEqual({ owner: 'org', name: 'prod key' });
-    expect(() => connectBody({ owner: 'team' })).toThrow('--owner must be org or user');
+    // Private: yours alone, org admins included in nobody else.
+    expect(connectBody({ owner: 'private' })).toEqual({ owner: 'private' });
+    expect(() => connectBody({ owner: 'team' })).toThrow('--owner must be org, user or private');
   });
 
   it('parses --input as a JSON object only', () => {
@@ -222,7 +224,7 @@ describe('conventions', () => {
   });
 
   it('exits 2 for a usage error, so a bad flag is not mistaken for a failure', () => {
-    expect(exitCodeFor(new UsageError('--owner must be org or user'))).toBe(EXIT.USAGE);
+    expect(exitCodeFor(new UsageError('--owner must be org, user or private'))).toBe(EXIT.USAGE);
     expect(exitCodeFor(new Error('--state is required'))).toBe(EXIT.USAGE);
   });
 

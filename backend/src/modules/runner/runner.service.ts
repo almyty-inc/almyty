@@ -464,6 +464,14 @@ export class RunnerService {
     } else if (visibility !== 'org') {
       throw new NotFoundException('runner not found');
     }
+    // A runner is its registering member's machine acting in this org.
+    // While that membership is not in effect (deactivated in the org, SCIM
+    // active:false, never accepted) the runner takes work from nobody --
+    // not the member's teammates, not an admin, not a system job -- and
+    // reactivating the membership brings it back. Same 404 as above.
+    if (!runner.ownerUserId || !(await this.accessPolicy.getOrgRole(runner.ownerUserId, runner.organizationId))) {
+      throw new NotFoundException('runner not found');
+    }
     if (!canAcceptWork(runner.state)) {
       throw new BadRequestException(`runner ${runner.name} is ${runner.state}; cannot accept dispatch`);
     }

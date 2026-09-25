@@ -1,16 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useForm } from 'react-hook-form'
 
 import { render } from '../../test/setup'
 import { GatewayNewPage } from '../gateway-new'
 import { CredentialNewPage } from '../credential-new'
 import { GatewayEditForm } from '../../components/gateways/detail/gateway-edit-form'
-import { EditProviderForm } from '../../components/llm-providers/edit-provider-form'
-import { CreateProviderForm } from '../../components/llm-providers/create-provider-form'
-import { buildProviderCreateBody, buildProviderUpdateBody } from '../../components/llm-providers/schema'
-import { credentialsApi, gatewaysApi } from '../../lib/api'
+import { ConnectProviderForm } from '../../components/llm-providers/connect-provider-form'
+import { credentialsApi, gatewaysApi, llmProvidersApi } from '../../lib/api'
 
 /**
  * The "Private (just me)" choice on the gateway, provider and credential
@@ -24,7 +21,7 @@ vi.mock('../../lib/api', () => ({
   credentialsApi: { create: vi.fn(), getAll: vi.fn().mockResolvedValue([]) },
   agentsApi: { getAll: vi.fn().mockResolvedValue([]) },
   organizationsApi: { getTeams: vi.fn().mockResolvedValue([]) },
-  llmProvidersApi: { testConnection: vi.fn(), getModels: vi.fn().mockResolvedValue([]) },
+  llmProvidersApi: { connect: vi.fn(), providerTypes: vi.fn().mockResolvedValue([]), getModels: vi.fn().mockResolvedValue([]) },
 }))
 
 vi.mock('@/components/credential-picker', () => ({
@@ -114,50 +111,17 @@ describe('new credential page', () => {
   })
 })
 
-describe('provider forms', () => {
-  it('create form forwards private to the create body', async () => {
+describe('connect a provider', () => {
+  it('sends private with no team once the scope is changed', async () => {
     const user = userEvent.setup()
-    const mutate = vi.fn()
-    function Harness() {
-      const form = useForm<any>({ defaultValues: { name: 'Mine', type: 'ollama', apiKey: '', apiUrl: '' } })
-      return <CreateProviderForm createForm={form} createProviderMutation={{ isPending: false, mutate } as any} onCancel={() => {}} />
-    }
-    render(<Harness />)
+    vi.mocked(llmProvidersApi.connect).mockResolvedValue({ provider: { id: 'p-1', name: 'Ollama', type: 'ollama' }, models: [] })
+    render(<ConnectProviderForm type="ollama" onConnected={() => {}} />)
+    await user.click(screen.getByRole('button', { name: 'Change' }))
     await user.click(privateOption())
-    await user.click(screen.getByRole('button', { name: 'Add inference provider' }))
+    await user.click(screen.getByRole('button', { name: 'Connect' }))
 
-    await waitFor(() => expect(mutate).toHaveBeenCalled())
-    const body = buildProviderCreateBody(mutate.mock.calls[0][0])
-    expect(body).toMatchObject({ name: 'Mine', type: 'ollama', visibility: 'private', teamId: null })
-  })
-
-  it('edit form starts at the stored scope and sends private only when changed', async () => {
-    const user = userEvent.setup()
-    const mutate = vi.fn()
-    function Harness() {
-      const form = useForm<any>({ defaultValues: { name: 'prod', model: '', maxTokens: 4096, temperature: 0.7 } })
-      return (
-        <EditProviderForm
-          editForm={form}
-          providerToEdit={{ id: 'p-1', type: 'openai', name: 'prod', visibility: 'org', teamId: null }}
-          updateProviderMutation={{ isPending: false, mutate } as any}
-          availableModels={[]}
-          modelsLoading={false}
-          onCancel={() => {}}
-        />
-      )
-    }
-    render(<Harness />)
-    expect(screen.getByRole('radio', { name: /Org-wide/ })).toHaveAttribute('aria-checked', 'true')
-
-    await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    await waitFor(() => expect(mutate).toHaveBeenCalledTimes(1))
-    expect(buildProviderUpdateBody(mutate.mock.calls[0][0].data)).not.toHaveProperty('visibility')
-
-    await user.click(privateOption())
-    await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    await waitFor(() => expect(mutate).toHaveBeenCalledTimes(2))
-    expect(buildProviderUpdateBody(mutate.mock.calls[1][0].data)).toMatchObject({ visibility: 'private', teamId: null })
+    await waitFor(() => expect(llmProvidersApi.connect).toHaveBeenCalled())
+    expect(vi.mocked(llmProvidersApi.connect).mock.calls[0][0]).toMatchObject({ type: 'ollama', visibility: 'private', teamId: null })
   })
 })
 

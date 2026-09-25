@@ -6,7 +6,7 @@ import { PublishToolForm, isPublishable, type PublishableTool } from '@/componen
 import { FormPage } from '@/components/layout/form-page'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
-import { toolsApi } from '@/lib/api'
+import { toolQuery } from '@/lib/list-queries'
 import { useOrganizationStore } from '@/store/organization'
 
 /** `/tools/:id/publish` -- publish a tool as a template in the org's tool hub. */
@@ -14,8 +14,7 @@ export function ToolPublishPage() {
   const { id } = useParams<{ id: string }>()
   const { currentOrganization } = useOrganizationStore()
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['tool', id],
-    queryFn: () => toolsApi.getById(id!, currentOrganization!.id),
+    ...toolQuery(id, currentOrganization?.id),
     enabled: !!id && !!currentOrganization,
   })
   const tool = data as PublishableTool | undefined

@@ -65,3 +65,53 @@ describe('create_agent records a real owner', () => {
     }
   });
 });
+
+describe('create_agent never makes a temporary agent wider than its parent', () => {
+  const OWNER = '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d';
+  const RUNNER = '1b4e28ba-2fa1-11d2-883f-0016d3cca427';
+
+  async function childOf(parent: Record<string, any>, run: Record<string, any> = { userId: RUNNER }) {
+    const agents = fakeRepository<Agent>({ make: () => new Agent(), idPrefix: 'agent' });
+    const helper = new AgentBuiltInToolsHelper(agents as any, {} as any, {} as any, {} as any, {} as any);
+    const out = await helper.executeBuiltInTool(
+      'create_agent',
+      { name: 'Child', instructions: 'x' },
+      { id: 'run-1', organizationId: 'org-1', agentId: 'agent-parent', ...run } as any,
+      {
+        id: 'agent-parent',
+        name: 'Parent',
+        modelConfig: { model: 'm' },
+        agentConfig: { canCreateAgents: true },
+        toolIds: [],
+        ...parent,
+      } as any,
+    );
+    return agents.row(out!.result.agentId)!;
+  }
+
+  it("a private parent's child is private to the parent's owner", async () => {
+    const child = await childOf({ visibility: 'private', teamId: null, createdBy: OWNER }, { userId: OWNER });
+    expect(child.visibility).toBe('private');
+    expect(child.teamId).toBeNull();
+    expect(child.createdBy).toBe(OWNER);
+  });
+
+  it("stays the owner's even when the run is someone else's", async () => {
+    const child = await childOf({ visibility: 'private', teamId: null, createdBy: OWNER }, { userId: null, endUserId: 'v' });
+    expect(child.visibility).toBe('private');
+    expect(child.createdBy).toBe(OWNER);
+  });
+
+  it("a team parent's child is that team's", async () => {
+    const child = await childOf({ visibility: 'team', teamId: 'team-7', createdBy: OWNER });
+    expect(child.visibility).toBe('team');
+    expect(child.teamId).toBe('team-7');
+    expect(child.createdBy).toBe(RUNNER);
+  });
+
+  it("an org parent's child is org-wide", async () => {
+    const child = await childOf({ visibility: 'org', teamId: null, createdBy: OWNER });
+    expect(child.visibility).toBe('org');
+    expect(child.teamId).toBeNull();
+  });
+});

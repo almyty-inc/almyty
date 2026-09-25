@@ -18,6 +18,7 @@ import { QueryError } from '@/components/ui/query-error'
 
 import { CodeBlock } from '@/components/ui/code-block'
 import { toolsApi, workspacesApi } from '@/lib/api'
+import { toolQuery } from '@/lib/list-queries'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { formatDateTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
@@ -44,11 +45,7 @@ export function ToolDetailPage() {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('')
 
   const { data: toolData, isLoading, isError, error: toolError, refetch: refetchTool } = useQuery({
-    queryKey: ['tool', id],
-    queryFn: async () => {
-      if (!currentOrganization?.id) throw new Error('No organization selected')
-      return await toolsApi.getById(id!, currentOrganization.id)
-    },
+    ...toolQuery(id, currentOrganization?.id),
     enabled: !!id && !!currentOrganization,
   })
 
