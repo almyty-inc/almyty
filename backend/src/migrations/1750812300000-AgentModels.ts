@@ -29,8 +29,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * the `parallel` strategy (the original strategy and rules are not kept)
  * and drops the column.
  */
-export class AgentModels1750812200000 implements MigrationInterface {
-  name = 'AgentModels1750812200000';
+export class AgentModels1750812300000 implements MigrationInterface {
+  name = 'AgentModels1750812300000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

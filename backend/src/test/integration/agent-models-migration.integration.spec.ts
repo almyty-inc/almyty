@@ -14,7 +14,7 @@ import { teamOf } from '../../modules/agents/autonomous-team';
  * then read back through the engine's own validator and team resolver, so
  * "keeps working identically" is checked against the code that runs it.
  */
-const FILE = '1750812200000-AgentModels.ts';
+const FILE = '1750812300000-AgentModels.ts';
 
 function statements(which: 'up' | 'down'): string[] {
   const src = readFileSync(join(__dirname, '..', '..', 'migrations', FILE), 'utf8');
