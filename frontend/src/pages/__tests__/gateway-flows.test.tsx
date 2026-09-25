@@ -38,6 +38,8 @@ vi.mock('@/lib/api', async () => {
       revokeApiKey: vi.fn(),
       getEvents: vi.fn(),
       testChannelConnection: vi.fn(),
+      activate: vi.fn(),
+      deactivate: vi.fn(),
     },
     toolsApi: { getAll: vi.fn() },
     agentsApi: { getAll: vi.fn() },
@@ -115,65 +117,188 @@ beforeEach(() => {
   vi.mocked(agentsApi.getAll).mockResolvedValue([{ id: 'agent-1', name: 'Support agent' }] as any)
 })
 
-describe('/gateways/new', () => {
-  it('is where an old ?new=1 link lands', async () => {
+const SHAREABLE = [
+  { id: 't1', name: 'listPets', status: 'active', visibility: 'org', api: { id: 'api-1', name: 'Petstore' } },
+  // The list carries a spec-imported tool's API on its operation.
+  { id: 't2', name: 'getPet', status: 'active', visibility: 'org', operation: { api: { id: 'api-1', name: 'Petstore' } } },
+  { id: 't3', name: 'deletePet', status: 'draft', visibility: 'org', api: { id: 'api-1', name: 'Petstore' } },
+  { id: 't4', name: 'weatherNow', status: 'active', visibility: 'org' },
+  { id: 't5', name: 'myNotes', status: 'active', visibility: 'private' },
+]
+
+const SHARED = {
+  id: 'gw-9',
+  name: 'Petstore',
+  description: '',
+  type: 'tools',
+  status: 'active',
+  endpoint: '/petstore',
+  configuration: {},
+}
+
+describe('/gateways/new: share tools', () => {
+  beforeEach(() => {
+    vi.mocked(toolsApi.getAll).mockResolvedValue({ tools: SHAREABLE } as any)
+    vi.mocked(gatewaysApi.getById).mockImplementation(async (id: string) => (id === 'gw-9' ? SHARED : GATEWAY) as any)
+  })
+
+  it('is where an old ?new=1 link lands, and asks for tools, not a protocol or an agent', async () => {
     renderAt('/gateways?new=1')
     await waitFor(() => expect(where()).toBe('/gateways/new'))
-    expect(screen.getByRole('heading', { level: 1, name: 'Create gateway' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Share tools' })).toBeInTheDocument()
+    await screen.findByTestId('share-api-api-1')
+    expect(screen.queryByLabelText(/^Protocol/)).toBeNull()
+    expect(screen.queryByRole('radio', { name: /^Agent/ })).toBeNull()
+    expect(screen.queryByText(/A2A|Slack|Telegram/)).toBeNull()
   })
 
-  it('creates an MCP gateway with its default configuration, then opens it', async () => {
+  it('shares a whole API: its active tools, named after it, then shows the key and the snippets', async () => {
     const user = userEvent.setup()
-    vi.mocked(gatewaysApi.create).mockResolvedValue({ id: 'gw-9', initialApiKey: 'gw_secret_once' } as any)
+    vi.mocked(gatewaysApi.create).mockResolvedValue({
+      id: 'gw-9',
+      initialApiKey: 'ak_secret_once',
+      sharedTools: { associated: 2, skipped: [] },
+    } as any)
     renderAt('/gateways/new')
 
-    await user.type(screen.getByLabelText(/^Name/), 'Pet Tools')
-    expect(screen.getByLabelText(/^Endpoint path/)).toHaveValue('/pet-tools')
-    await user.click(screen.getByLabelText(/^Protocol/))
-    await user.click(await screen.findByRole('option', { name: /^MCP/ }))
-    await user.click(screen.getByRole('button', { name: 'Create gateway' }))
+    await user.click(await screen.findByTestId('share-api-api-1'))
+    // The draft is part of the API but can't be shared; the name follows the API.
+    expect(screen.getByLabelText(/^Name/)).toHaveValue('Petstore')
+    expect(screen.getByText(/Address: .*\/acme\/petstore$/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Share 2 tools' }))
 
     await waitFor(() =>
-      expect(gatewaysApi.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: 'Pet Tools',
-          type: 'mcp',
-          endpoint: '/pet-tools',
-          kind: 'tool',
-          configuration: { transport: 'http' },
-        }),
-      ),
+      expect(gatewaysApi.create).toHaveBeenCalledWith({
+        name: 'Petstore',
+        type: 'tools',
+        kind: 'tool',
+        endpoint: '/petstore',
+        description: undefined,
+        configuration: {},
+        visibility: 'org',
+        teamId: null,
+        toolIds: ['t1', 't2'],
+      }),
     )
     await waitFor(() => expect(where()).toBe('/gateways/gw-9'))
-    // The key minted with the gateway is shown once, on its page.
-    const shown = await screen.findByTestId('initial-api-key')
-    expect(shown).toHaveTextContent('gw_secret_once')
-    expect(shown).toHaveTextContent(/won't see it again/)
+    expect(await screen.findByTestId('initial-api-key')).toHaveTextContent('ak_secret_once')
+    // The snippets carry the key, right away.
+    const claudeCode = await screen.findByTestId('snippet-claude-code')
+    expect(claudeCode).toHaveTextContent('claude mcp add petstore --transport http')
+    expect(claudeCode).toHaveTextContent('/acme/petstore --header "x-api-key: ak_secret_once"')
+    expect(screen.queryByTestId('key-placeholder-note')).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Cursor' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Claude Desktop' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'UTCP' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Skills' })).toBeInTheDocument()
   })
 
-  it('refuses a submit with no name or protocol and focuses the first', async () => {
+  it('says which picked tools were not shared, and why', async () => {
+    const user = userEvent.setup()
+    vi.mocked(gatewaysApi.create).mockResolvedValue({
+      id: 'gw-9',
+      initialApiKey: 'ak_secret_once',
+      sharedTools: { associated: 1, skipped: [{ toolId: 't4', reason: 'Tool is paused.' }] },
+    } as any)
+    renderAt('/gateways/new')
+    await user.click(await screen.findByLabelText(/weatherNow/))
+    await user.click(screen.getByLabelText(/listPets/))
+    await user.click(screen.getByRole('button', { name: 'Share 2 tools' }))
+
+    const skipped = await screen.findByTestId('shared-tools-skipped')
+    expect(skipped).toHaveTextContent("1 tool wasn't shared")
+    expect(skipped).toHaveTextContent('Tool is paused.')
+  })
+
+  it('names a single-tool share after the tool', async () => {
     const user = userEvent.setup()
     renderAt('/gateways/new')
-    await user.click(screen.getByRole('button', { name: 'Create gateway' }))
+    await user.click(await screen.findByLabelText(/weatherNow/))
+    expect(screen.getByLabelText(/^Name/)).toHaveValue('weatherNow')
+  })
 
-    const name = screen.getByLabelText(/^Name/)
-    await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'))
-    expect(screen.getByText('Type is required')).toBeInTheDocument()
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^Protocol/)))
+  it('keeps a draft out of reach', async () => {
+    renderAt('/gateways/new')
+    expect(await screen.findByLabelText(/deletePet/)).toBeDisabled()
+  })
+
+  it('makes a share private when it holds a private tool', async () => {
+    const user = userEvent.setup()
+    vi.mocked(gatewaysApi.create).mockResolvedValue({ id: 'gw-9' } as any)
+    renderAt('/gateways/new')
+    await user.click(await screen.findByLabelText(/myNotes/))
+    await user.click(screen.getByRole('button', { name: 'Share 1 tool' }))
+    await waitFor(() =>
+      expect(gatewaysApi.create).toHaveBeenCalledWith(expect.objectContaining({ visibility: 'private', toolIds: ['t5'] })),
+    )
+  })
+
+  it('opens with an API already picked from its page', async () => {
+    renderAt('/gateways/new?api=api-1')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Share 2 tools' })).toBeInTheDocument())
+    expect(screen.getByTestId('share-api-api-1')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('refuses to share nothing', async () => {
+    const user = userEvent.setup()
+    renderAt('/gateways/new')
+    await screen.findByTestId('share-api-api-1')
+    await user.click(screen.getByRole('button', { name: 'Share tools' }))
+    expect(await screen.findByText('Pick at least one tool, or an API.')).toBeInTheDocument()
     expect(gatewaysApi.create).not.toHaveBeenCalled()
   })
 
-  it('asks for the agent when the gateway serves one', async () => {
+  it('keeps path, description and who can use it under Advanced', async () => {
     const user = userEvent.setup()
     renderAt('/gateways/new')
-    await user.click(screen.getByRole('radio', { name: /^Agent/ }))
-    await user.type(screen.getByLabelText(/^Name/), 'Helper')
-    await user.click(screen.getByLabelText(/^Protocol/))
-    await user.click(await screen.findByRole('option', { name: /^A2A/ }))
-    await user.click(screen.getByRole('button', { name: 'Create gateway' }))
+    await screen.findByTestId('share-api-api-1')
+    expect(screen.queryByLabelText(/^Path/)).toBeNull()
+    expect(screen.queryByLabelText(/^Description/)).toBeNull()
+    await user.click(screen.getByRole('button', { name: /^Advanced/ }))
+    expect(screen.getByLabelText(/^Path/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Description/)).toBeInTheDocument()
+    expect(screen.getByTestId('who-can-use')).toBeInTheDocument()
+  })
+})
 
-    expect(await screen.findByText(/Choose the agent/)).toBeInTheDocument()
-    expect(gatewaysApi.create).not.toHaveBeenCalled()
+describe('a shared-tools gateway page', () => {
+  beforeEach(() => {
+    vi.mocked(gatewaysApi.getById).mockResolvedValue(SHARED as any)
+  })
+
+  it('leads with the address and snippets; keys, usage and events wait under Advanced', async () => {
+    const user = userEvent.setup()
+    renderAt('/gateways/gw-9')
+    expect(await screen.findByTestId('connect-snippets')).toBeInTheDocument()
+    // No key in hand any more: a placeholder, and where a new one comes from.
+    expect(screen.getByTestId('snippet-claude-code')).toHaveTextContent('<your-access-key>')
+    expect(screen.getByTestId('key-placeholder-note')).toBeInTheDocument()
+    expect(screen.queryByText('Authentication')).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Integrations' })).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /^Advanced/ }))
+    expect(await screen.findByText('Authentication')).toBeInTheDocument()
+    expect(screen.getByText('Performance metrics')).toBeInTheDocument()
+  })
+
+  it('pauses and resumes with one switch', async () => {
+    const user = userEvent.setup()
+    vi.mocked(gatewaysApi.deactivate).mockResolvedValue({} as any)
+    renderAt('/gateways/gw-9')
+    const toggle = await screen.findByRole('switch', { name: 'Pause' })
+    expect(within(screen.getByTestId('gateway-status-switch')).getByText('Live')).toBeInTheDocument()
+    await user.click(toggle)
+    await waitFor(() => expect(gatewaysApi.deactivate).toHaveBeenCalledWith('gw-9'))
+    expect(gatewaysApi.update).not.toHaveBeenCalled()
+  })
+
+  it('shows a paused gateway as paused, and resumes it', async () => {
+    const user = userEvent.setup()
+    vi.mocked(gatewaysApi.getById).mockResolvedValue({ ...SHARED, status: 'inactive' } as any)
+    vi.mocked(gatewaysApi.activate).mockResolvedValue({} as any)
+    renderAt('/gateways/gw-9')
+    await user.click(await screen.findByRole('switch', { name: 'Resume' }))
+    await waitFor(() => expect(gatewaysApi.activate).toHaveBeenCalledWith('gw-9'))
   })
 })
 
@@ -200,7 +325,6 @@ describe('gateway detail, edited on its own page', () => {
         name: 'Petstore v2',
         endpoint: '/petstore',
         description: 'Pets',
-        status: 'active',
       }),
     )
     await waitFor(() => expect(where()).toBe('/gateways/gw-1'))

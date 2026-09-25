@@ -11,7 +11,7 @@ import { credentialsApi, gatewaysApi, llmProvidersApi } from '../../lib/api'
 
 /**
  * The "Private (just me)" choice on the gateway, provider and credential
- * create/edit flows -- which are pages now, not dialogs -- has to reach the
+ * create/edit flows -- which are pages, not dialogs -- has to reach the
  * server as visibility: 'private' with no team.
  */
 
@@ -19,6 +19,7 @@ vi.mock('../../lib/api', () => ({
   gatewaysApi: { create: vi.fn(), getAll: vi.fn().mockResolvedValue([]) },
   getApiBaseUrl: () => 'https://api.test',
   credentialsApi: { create: vi.fn(), getAll: vi.fn().mockResolvedValue([]) },
+  toolsApi: { getAll: vi.fn().mockResolvedValue({ tools: [{ id: 't1', name: 'listPets', status: 'active', visibility: 'org' }] }) },
   agentsApi: { getAll: vi.fn().mockResolvedValue([]) },
   organizationsApi: { getTeams: vi.fn().mockResolvedValue([]) },
   llmProvidersApi: { connect: vi.fn(), providerTypes: vi.fn().mockResolvedValue([]), getModels: vi.fn().mockResolvedValue([]) },
@@ -53,41 +54,34 @@ beforeEach(() => {
 
 const privateOption = () => screen.getByRole('radio', { name: /Private/ })
 
-describe('new gateway page', () => {
+describe('share tools page', () => {
   it('is a page, not a dialog, and sends visibility private with no team', async () => {
     const user = userEvent.setup()
     vi.mocked(gatewaysApi.create).mockResolvedValue({ id: 'gw-new' })
     render(<GatewayNewPage />)
 
-    expect(screen.getByRole('heading', { name: 'Create gateway' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Share tools' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
-    await user.type(screen.getByLabelText(/^Name/), 'Mine')
-    await user.click(screen.getByRole('combobox', { name: /^Protocol/ }))
-    await user.click((await screen.findAllByText('MCP - Model Context Protocol')).at(-1)!)
+    await user.click(await screen.findByLabelText(/listPets/))
+    await user.click(screen.getByRole('button', { name: /^Advanced/ }))
+    await user.click(screen.getByRole('button', { name: 'Change' }))
     await user.click(privateOption())
-    await user.click(screen.getByRole('button', { name: 'Create gateway' }))
+    await user.click(screen.getByRole('button', { name: 'Share 1 tool' }))
 
     await waitFor(() => expect(gatewaysApi.create).toHaveBeenCalled())
     expect(vi.mocked(gatewaysApi.create).mock.calls[0][0]).toMatchObject({
-      name: 'Mine', type: 'mcp', visibility: 'private', teamId: null,
+      name: 'listPets', type: 'tools', visibility: 'private', teamId: null, toolIds: ['t1'],
     })
     await waitFor(() => expect(mockNavigate.mock.calls.at(-1)?.[0]).toBe('/gateways/gw-new'))
   })
 
-  it('will not submit a private chat channel', async () => {
-    const user = userEvent.setup()
+  it('has no agent or chat channel to pick, so nothing here can be a private chat channel', async () => {
     render(<GatewayNewPage />)
-
-    await user.click(screen.getByText('Agent'))
-    await user.type(screen.getByLabelText(/^Name/), 'Support')
-    await user.click(screen.getByRole('combobox', { name: /^Protocol/ }))
-    await user.click((await screen.findAllByText('Slack')).at(-1)!)
-    await user.click(privateOption())
-
-    expect(screen.getByText(/A chat channel can't be private/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Create gateway' })).toBeDisabled()
-    expect(gatewaysApi.create).not.toHaveBeenCalled()
+    await screen.findByLabelText(/listPets/)
+    expect(screen.queryByText('Agent')).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: /^Protocol/ })).not.toBeInTheDocument()
+    expect(screen.queryByText('Slack')).not.toBeInTheDocument()
   })
 })
 

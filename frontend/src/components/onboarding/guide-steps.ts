@@ -87,11 +87,11 @@ export const JOURNEYS: Journey[] = [
       },
       {
         key: 'gateway',
-        title: 'Publish tools through a gateway',
+        title: 'Share your tools',
         description: () =>
-          'A gateway serves the tools you pick at one address, over MCP, A2A, UTCP or Agent Skills. Done once a gateway has at least one tool.',
-        cta: 'Create a gateway',
-        target: () => ({ to: '/gateways/new', place: 'Gateways › Create gateway' }),
+          'Pick tools and get one address that works in any MCP, UTCP or Skills client. Done once it shares at least one tool.',
+        cta: 'Share tools',
+        target: () => ({ to: '/gateways/new', place: 'Gateways › Share tools' }),
       },
       {
         key: 'external_client',
