@@ -8,6 +8,18 @@ export interface GatewayInfo {
   id: string;
   name: string;
   type: string;
+  /** The gateway's address, e.g. /petstore; the install ref resolves by it first. */
+  endpoint?: string;
+}
+
+/**
+ * The gateway segment of an install ref: the address slug, else the name
+ * as a clean slug (a-z0-9, single dashes), the two forms the server resolves.
+ */
+export function gatewayRefSlug(gw: Pick<GatewayInfo, 'name' | 'endpoint'>): string {
+  const fromEndpoint = (gw.endpoint ?? '').replace(/^\/+/, '');
+  if (fromEndpoint) return fromEndpoint;
+  return (gw.name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 export interface ParsedRef {
@@ -123,6 +135,7 @@ export class AlmytyClient {
       id: gw.id,
       name: gw.name,
       type: gw.type,
+      endpoint: gw.endpoint ?? undefined,
     }));
   }
 

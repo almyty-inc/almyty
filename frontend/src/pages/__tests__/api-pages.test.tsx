@@ -267,7 +267,10 @@ describe('/apis/:id/setup: finish connecting', () => {
     vi.mocked(apisApi.getKey).mockResolvedValue(keyView as any)
     const user = userEvent.setup()
     const { router } = renderAt('/apis/api-1/setup?job=job-1&key=1')
-    await user.click(await screen.findByRole('button', { name: 'Skip for now' }))
+    const skip = await screen.findByRole('button', { name: 'Skip for now' })
+    // Styled as a link, not bare text nobody reads as clickable.
+    expect(skip).toHaveClass('text-primary', 'hover:underline')
+    await user.click(skip)
     await waitFor(() => expect(router.state.location.pathname).toBe('/apis/api-1'))
     expect(apisApi.setKey).not.toHaveBeenCalled()
   })

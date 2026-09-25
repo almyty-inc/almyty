@@ -139,11 +139,11 @@ export function agentForDistribution(
  */
 export const PUBLISH_REFUSALS = Object.freeze({
   NOT_SERVED: 'This ships as a file people download, so there is nothing to publish.',
-  NO_AGENT: 'A published product needs an agent to answer. Add one first.',
-  APP_INACTIVE: 'This product is switched off. Turn it back on before publishing.',
+  NO_AGENT: 'A published app needs an agent to answer. Add one first.',
+  APP_INACTIVE: 'This app is switched off. Turn it back on before publishing.',
   MISSING_CREDENTIALS: 'This platform cannot carry a message yet. It still needs: ',
   AGENT_NOT_ON_APP:
-    'The agent this surface is set to answer with is no longer part of this product. Pick one that is.',
+    'The agent this place is set to answer with is no longer part of this app. Pick one that is.',
   AGENT_NOT_CONVERSATIONAL:
     'A chat surface needs an agent that holds a conversation. This one runs as a workflow, which answers a call rather than a person, so switch it to autonomous or pick a different agent.',
 });

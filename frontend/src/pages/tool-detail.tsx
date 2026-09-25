@@ -25,6 +25,7 @@ import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { GatewayToolAssociation } from '@/types'
 import { isPublishable } from '@/components/tools/publish-tool-form'
+import { gatewayClientName } from '@/lib/gateway-connect'
 
 export function ToolDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -804,7 +805,7 @@ function ExportsSection({ toolId, gateways }: { toolId: string; gateways: Gatewa
                 <div>
                   <Label className="text-xs text-muted-foreground">Claude Code</Label>
                   <div className="mt-1">
-                    <CodeBlock value={`"mcpServers": {\n  "${mcpGateway.name.toLowerCase().replace(/\s+/g, '-')}": {\n    "url": "${apiBase}/${orgSlug}${mcpGateway.endpoint}",\n    "headers": { "X-API-Key": "YOUR_KEY" }\n  }\n}`} language="json" maxHeight="120px" />
+                    <CodeBlock value={`"mcpServers": {\n  "${gatewayClientName(mcpGateway)}": {\n    "url": "${apiBase}/${orgSlug}${mcpGateway.endpoint}",\n    "headers": { "X-API-Key": "YOUR_KEY" }\n  }\n}`} language="json" maxHeight="120px" />
                   </div>
                 </div>
               </div>

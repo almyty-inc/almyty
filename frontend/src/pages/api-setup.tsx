@@ -215,7 +215,8 @@ export function ApiSetupPage() {
         {everythingDone ? (
           <Button onClick={() => navigate(`/apis/${id}`)}>Open {api.name}</Button>
         ) : (
-          <Button variant="ghost" onClick={() => navigate(`/apis/${id}`)}>
+          // A link-style button: plain words, but it reads as something to click.
+          <Button variant="link" className="px-0" data-testid="setup-skip" onClick={() => navigate(`/apis/${id}`)}>
             Skip for now
           </Button>
         )}

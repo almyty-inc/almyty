@@ -34,15 +34,18 @@ export const PAGE_INTROS = {
   },
   credentials: {
     page: '/connections',
-    text: 'The keys and accounts almyty uses for you, stored encrypted. Connect a service once, then pick it in any API, tool or agent.',
+    // Adds to the subtitle rather than repeating it: where keys go, and
+    // where AI providers are connected instead.
+    text: 'Keys are stored encrypted and never shown again once saved. AI model providers are connected on Models, where their models come with them.',
   },
   models: {
     page: '/models',
-    text: 'Every model your agents can call and what it costs. Connect a provider once and all of its models show up here and in every model chooser.',
+    // Adds to the subtitle rather than repeating it: prices, and when a model can be picked.
+    text: 'Prices fill in by themselves and stay current. A new model can be picked once a first test call to it has worked.',
   },
   memories: {
     page: '/memories',
-    text: 'What your agents remember from one run to the next. Entries appear as agents save them, and you can review or remove them here.',
+    text: 'Entries appear as agents save them. Open one to review it or remove it.',
   },
 } as const
 

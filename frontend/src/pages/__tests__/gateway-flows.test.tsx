@@ -202,6 +202,8 @@ describe('/gateways/new: share tools', () => {
     } as any)
     renderAt('/gateways/new')
     await user.click(await screen.findByLabelText(/weatherNow/))
+    // A single tool of an API is found by searching for it.
+    await user.type(screen.getByRole('textbox', { name: 'Search APIs and tools' }), 'list')
     await user.click(screen.getByLabelText(/listPets/))
     await user.click(screen.getByRole('button', { name: 'Share 2 tools' }))
 
@@ -210,16 +212,48 @@ describe('/gateways/new: share tools', () => {
     expect(skipped).toHaveTextContent('Tool is paused.')
   })
 
-  it('names a single-tool share after the tool', async () => {
+  it('names a single-tool share after the tool, in words', async () => {
     const user = userEvent.setup()
     renderAt('/gateways/new')
     await user.click(await screen.findByLabelText(/weatherNow/))
-    expect(screen.getByLabelText(/^Name/)).toHaveValue('weatherNow')
+    expect(screen.getByLabelText(/^Name/)).toHaveValue('Weather now')
   })
 
   it('keeps a draft out of reach', async () => {
+    const user = userEvent.setup()
     renderAt('/gateways/new')
-    expect(await screen.findByLabelText(/deletePet/)).toBeDisabled()
+    await user.click(await screen.findByTestId('share-api-api-1'))
+    await user.click(within(screen.getByTestId('share-picked-api-1')).getByRole('button', { name: /Petstore/ }))
+    expect(screen.getByLabelText(/deletePet/)).toBeDisabled()
+  })
+
+  it('shows a picked API as one line that opens into its tools, by readable names', async () => {
+    const user = userEvent.setup()
+    vi.mocked(toolsApi.getAll).mockResolvedValue({
+      tools: [
+        { id: 'p1', name: 'swagger_petstore_openapi_3_0_place_order', status: 'active', visibility: 'org', api: { id: 'api-p', name: 'Swagger Petstore - OpenAPI 3.0' } },
+        { id: 'p2', name: 'swagger_petstore_openapi_3_0_get_pet_by_id', status: 'active', visibility: 'org', operation: { name: 'Find pet by ID', api: { id: 'api-p', name: 'Swagger Petstore - OpenAPI 3.0' } } },
+      ],
+    } as any)
+    renderAt('/gateways/new')
+    // Nothing listed before a pick: the API is one tile.
+    await user.click(await screen.findByTestId('share-api-api-p'))
+    expect(screen.queryByLabelText(/place_order/)).toBeNull()
+    const picked = screen.getByTestId('share-picked-api-p')
+    expect(picked).toHaveTextContent('2 tools · Choose which')
+
+    await user.click(within(picked).getByRole('button', { name: /Swagger Petstore/ }))
+    const placeOrder = screen.getByLabelText(/Place order/)
+    expect(placeOrder).toBeChecked()
+    expect(screen.getByLabelText(/Find pet by ID/)).toBeChecked()
+    // The machine name stays, small and in mono; the API name is not repeated on every row.
+    const row = placeOrder.closest('li')!
+    expect(within(row).getByText('swagger_petstore_openapi_3_0_place_order')).toHaveClass('font-mono')
+    expect(row).not.toHaveTextContent('Swagger Petstore - OpenAPI 3.0')
+
+    await user.click(placeOrder)
+    expect(screen.getByRole('button', { name: 'Share 1 tool' })).toBeInTheDocument()
+    expect(screen.getByTestId('share-api-api-p')).toHaveTextContent('1 of 2 picked')
   })
 
   it('makes a share private when it holds a private tool', async () => {

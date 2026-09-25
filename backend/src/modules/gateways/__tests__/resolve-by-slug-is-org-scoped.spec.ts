@@ -122,4 +122,13 @@ describe('resolveGateway is scoped to the caller\'s organization', () => {
       expect(options).not.toHaveProperty('relations');
     }
   });
+
+  // The dashboard prints the name as a clean slug when a gateway has no
+  // endpoint to go by; "Swagger Petstore - OpenAPI 3.0" must resolve from it.
+  it('resolves the name fallback by its clean slug', async () => {
+    const own = { ...VICTIM_GATEWAY, id: 'gw-pet', organizationId: CALLER_ORG_ID, endpoint: '/other', name: 'Swagger Petstore - OpenAPI 3.0' };
+    const { service } = makeService({ orgs: [CALLER_ORG], gateways: [own] });
+    const gateway = await service.resolveGateway('caller-corp', 'swagger-petstore-openapi-3-0', CALLER_ORG_ID, 'caller-user');
+    expect(gateway.id).toBe('gw-pet');
+  });
 });

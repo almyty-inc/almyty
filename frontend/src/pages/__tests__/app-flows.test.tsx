@@ -10,7 +10,7 @@ import { AppDistributionNewPage } from '../app-distribution-new'
 import { AppDistributionPage } from '../app-distribution'
 import { AppSigningNewPage } from '../app-signing-new'
 import { agentAppsApi, type AgentApp } from '@/lib/agent-apps'
-import { credentialsApi } from '@/lib/api'
+import { agentsApi, credentialsApi } from '@/lib/api'
 
 // These tests are about routes, so they need the real router rather than
 // the stubs src/test/setup.tsx installs for every suite.
@@ -150,39 +150,66 @@ describe('/apps/new', () => {
     await waitFor(() => expect(where()).toBe('/apps/new'))
   })
 
-  it('creates the app with the address derived from the name, then opens it', async () => {
-    api.create.mockResolvedValue({ slug: 'acme-help' })
+  it('asks for the agent first, names the app after it, then creates and opens it', async () => {
+    api.create.mockResolvedValue({ slug: 'triage' })
     renderAt('/apps/new')
 
-    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Acme Help' } })
-    expect(screen.getByLabelText(/^Address/)).toHaveValue('acme-help')
+    fireEvent.click(await screen.findByLabelText(/^Agent/))
+    fireEvent.click(await screen.findByRole('option', { name: 'Triage' }))
+    // The name and the address follow the agent until someone types their own.
+    expect(screen.getByLabelText(/^Name/)).toHaveValue('Triage')
+    expect(screen.getByLabelText(/^Address/)).toHaveValue('triage')
     fireEvent.click(screen.getByRole('button', { name: 'Create app' }))
 
     await waitFor(() =>
       expect(api.create).toHaveBeenCalledWith({
-        name: 'Acme Help',
-        slug: 'acme-help',
+        name: 'Triage',
+        slug: 'triage',
         description: null,
-        agentIds: [],
+        agentIds: ['triage-1'],
       }),
     )
-    await waitFor(() => expect(where()).toBe('/apps/acme-help'))
+    await waitFor(() => expect(where()).toBe('/apps/triage'))
   })
 
-  it('refuses a submit with no name and focuses the field', async () => {
+  it('keeps a name someone typed, with the address derived from it', async () => {
+    api.create.mockResolvedValue({ slug: 'acme-help' })
     renderAt('/apps/new')
+    fireEvent.change(await screen.findByLabelText(/^Name/), { target: { value: 'Acme Help' } })
+    fireEvent.click(await screen.findByLabelText(/^Agent/))
+    fireEvent.click(await screen.findByRole('option', { name: 'Billing' }))
+    expect(screen.getByLabelText(/^Name/)).toHaveValue('Acme Help')
+    expect(screen.getByLabelText(/^Address/)).toHaveValue('acme-help')
+    fireEvent.click(screen.getByRole('button', { name: 'Create app' }))
+    await waitFor(() => expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ name: 'Acme Help', agentIds: ['billing-2'] })))
+  })
+
+  it('refuses an app with no agent, and says why on the agent field', async () => {
+    renderAt('/apps/new')
+    const agent = await screen.findByLabelText(/^Agent/)
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Acme Help' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create app' }))
 
-    const name = screen.getByLabelText(/^Name/)
-    await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'))
-    await waitFor(() => expect(document.activeElement).toBe(name))
+    await waitFor(() => expect(agent).toHaveAttribute('aria-invalid', 'true'))
+    expect(screen.getByText('Pick the agent people will talk to.')).toBeInTheDocument()
     expect(api.create).not.toHaveBeenCalled()
   })
 
-  it('keeps safe defaults out of the flow and points to Settings', () => {
+  it('links to making an agent when the organization has none', async () => {
+    vi.mocked(agentsApi.getAll).mockResolvedValueOnce([] as any)
     renderAt('/apps/new')
+    const none = await screen.findByTestId('app-no-agents')
+    expect(within(none).getByRole('link', { name: 'Create an agent' })).toHaveAttribute('href', '/agents/new')
+    fireEvent.click(screen.getByRole('button', { name: 'Create app' }))
+    expect(api.create).not.toHaveBeenCalled()
+  })
+
+  it('says what an app is in plain words, and keeps safe defaults out of the flow', async () => {
+    renderAt('/apps/new')
+    expect(screen.getByText(/An app puts your agent in front of people/)).toBeInTheDocument()
     expect(screen.getByText(/defaults are applied automatically/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/Cost ceiling/i)).toBeNull()
+    expect(screen.queryByText(/product/i)).toBeNull()
   })
 })
 
@@ -199,13 +226,27 @@ describe('the app page', () => {
     await waitFor(() => expect(where()).toBe('/apps/support/distributions/new'))
   })
 
+  it('leads with adding an agent while the app has none', async () => {
+    api.getById.mockResolvedValue(app({ agentIds: [], distributions: [] }))
+    renderAt('/apps/support')
+    expect(await screen.findByRole('tab', { name: /Agents \(0\)/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('link', { name: /Add a place/ })).toBeNull()
+    expect(screen.getByRole('combobox', { name: 'Add an agent' })).toBeInTheDocument()
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /Where people use it/ }))
+    fireEvent.click(await screen.findByRole('tab', { name: /Where people use it/ }))
+    const buttons = screen.getAllByRole('button', { name: /Add an agent/ })
+    fireEvent.click(buttons[buttons.length - 1])
+    await waitFor(() => expect(screen.getByRole('tab', { name: /Agents \(0\)/ })).toHaveAttribute('aria-selected', 'true'))
+  })
+
   it('says what stops the app from shipping, once, on the app page', async () => {
     api.check.mockResolvedValue({
       ok: false,
-      refusals: [{ code: 'NO_AGENTS', message: 'A product needs at least one agent.' }],
+      refusals: [{ code: 'NO_AGENTS', message: 'An app needs an agent.' }],
     })
     renderAt('/apps/support')
-    expect(await screen.findByText('A product needs at least one agent.')).toBeInTheDocument()
+    expect(await screen.findByText('An app needs an agent.')).toBeInTheDocument()
   })
 })
 
@@ -273,13 +314,13 @@ describe('/apps/:slug/distributions/whatsapp_cloud', () => {
     api.checkDistribution.mockResolvedValue({
       ok: false,
       refusals: [
-        { code: 'NO_AGENTS', message: 'A product needs at least one agent.' },
+        { code: 'NO_AGENTS', message: 'An app needs an agent.' },
         { code: 'MISSING_CREDENTIALS', message: 'It still needs: access_token' },
       ],
     })
     renderAt('/apps/support/distributions/whatsapp_cloud')
     expect(await screen.findByText(/app itself is not ready/)).toBeInTheDocument()
-    expect(screen.queryByText('A product needs at least one agent.')).toBeNull()
+    expect(screen.queryByText('An app needs an agent.')).toBeNull()
     expect(screen.queryByText(/It still needs/)).toBeNull()
     expect(screen.getAllByText('Needed before this can go live.').length).toBe(4)
   })
@@ -371,7 +412,7 @@ describe('other distribution pages', () => {
   it('asks which agent answers when the app has more than one', async () => {
     api.getById.mockResolvedValue(app({ agentIds: ['triage-1', 'billing-2'] }))
     renderAt('/apps/support/distributions/discord')
-    expect(await screen.findByLabelText('Answered by')).toHaveTextContent(/Triage \(the product default\)/)
+    expect(await screen.findByLabelText('Answered by')).toHaveTextContent(/Triage \(the app default\)/)
   })
 
   it('saves the agent the surface answers with through the one Save', async () => {

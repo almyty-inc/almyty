@@ -263,9 +263,35 @@ describe('/connections/connect', () => {
     expect(router.state.location.search).toBe('?service=other')
   })
 
-  it('sends an AI model provider to Models, where its models come with it', async () => {
+  it('shows AI models as one tile that leads to Models, with no AI or GPU hosting groups of its own', async () => {
+    const modal: Connector = { key: 'modal', kind: 'deployment', adapterKey: 'modal', displayName: 'Modal', connect: [{ type: 'api_key' }] }
+    const stub: Connector = { key: 'deploy-stub', kind: 'deployment', adapterKey: 'stub', displayName: 'Stub (in-memory)', connect: [{ type: 'api_key' }] }
+    vi.mocked(connectorsApi.list).mockResolvedValue([github, slack, openai, modal, stub, other])
     const { router } = at()
-    fireEvent.click(await screen.findByTestId('service-tile-openai'))
+    const tile = await screen.findByTestId('service-tile-ai-models')
+    expect(tile).toHaveTextContent('Connect on Models')
+    expect(screen.queryByTestId('service-tile-openai')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('service-tile-modal')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('service-tile-deploy-stub')).not.toBeInTheDocument()
+    expect(screen.queryByText('GPU hosting')).not.toBeInTheDocument()
+    expect(screen.queryByText(/stub/i)).not.toBeInTheDocument()
+    fireEvent.click(tile)
+    await waitFor(() => expect(router.state.location.pathname).toBe('/models/connect'))
+  })
+
+  it('keeps the AI models tile while a search matches an AI provider, and drops it otherwise', async () => {
+    at()
+    const box = await screen.findByRole('textbox', { name: 'Search services' })
+    fireEvent.change(box, { target: { value: 'openai' } })
+    expect(screen.getByTestId('service-tile-ai-models')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save its key as another service' })).not.toBeInTheDocument()
+    fireEvent.change(box, { target: { value: 'github' } })
+    expect(screen.queryByTestId('service-tile-ai-models')).not.toBeInTheDocument()
+    expect(screen.getByTestId('service-tile-github')).toBeInTheDocument()
+  })
+
+  it('sends a link to an AI model provider on to Models, where its models come with it', async () => {
+    const { router } = at('/connections/connect?service=openai')
     await waitFor(() => expect(router.state.location.pathname).toBe('/models/connect'))
     expect(router.state.location.search).toBe('?type=openai')
   })

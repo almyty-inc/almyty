@@ -342,7 +342,7 @@ export class AgentAppsService {
     const existing = await this.appRepository.findOne({
       where: { organizationId, slug: dto.slug.trim().toLowerCase() },
     });
-    if (existing) throw new ConflictException('A product with that name already exists');
+    if (existing) throw new ConflictException('An app with that name already exists');
 
     return this.appRepository.save(
       this.appRepository.create({
@@ -374,7 +374,7 @@ export class AgentAppsService {
       const slug = dto.slug.trim().toLowerCase();
       if (slug !== app.slug) {
         const clash = await this.appRepository.findOne({ where: { organizationId, slug } });
-        if (clash) throw new ConflictException('A product with that name already exists');
+        if (clash) throw new ConflictException('An app with that name already exists');
       }
       app.slug = slug;
     }

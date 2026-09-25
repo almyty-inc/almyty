@@ -312,7 +312,7 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
             // the screen where it gets fixed.
             <p className="text-xs text-muted-foreground">
               Anyone with the link or the binary can use this, so it spends against your
-              model keys. A product open to anyone needs all three before it can be
+              model keys. An app open to anyone needs all three before it can be
               published.
             </p>
           )}

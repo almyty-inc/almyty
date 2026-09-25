@@ -59,4 +59,22 @@ describe('page intros', () => {
       expect(text.length).toBeLessThan(200)
     }
   })
+
+  // An intro that restates the subtitle under it is noise. Four words in a
+  // row shared with the page's own description is a restatement.
+  it('adds to the page subtitle instead of repeating it', () => {
+    const words = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean)
+    const runs = (s: string) => {
+      const w = words(s)
+      return new Set(w.slice(0, -3).map((_, i) => w.slice(i, i + 4).join(' ')))
+    }
+    for (const topic of PAGE_INTRO_TOPICS) {
+      const { page, text } = PAGE_INTROS[topic]
+      const src = readFileSync(pageFileFor(page), 'utf8')
+      const subtitle = src.match(/<PageHeader[\s\S]*?description="([^"]+)"/)?.[1]
+      if (!subtitle) continue
+      const shared = [...runs(text)].filter((r) => runs(subtitle).has(r))
+      expect(shared, `${topic} intro repeats its subtitle`).toEqual([])
+    }
+  })
 })
