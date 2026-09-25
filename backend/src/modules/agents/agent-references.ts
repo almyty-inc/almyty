@@ -1,4 +1,5 @@
 import type { Agent, AgentPipeline } from '../../entities/agent.entity';
+import type { AgentModels } from './autonomous-models';
 
 /**
  * Every tool and agent an agent definition points at: `toolIds`, the
@@ -13,6 +14,7 @@ export function collectAgentReferences(agent: {
   toolIds?: string[] | null;
   pipeline?: AgentPipeline | null;
   collaboration?: Agent['collaboration'] | LegacyCollaboration | null;
+  models?: Pick<AgentModels, 'roles'> | null;
 }): { toolIds: Set<string>; agentIds: Set<string> } {
   const toolIds = new Set<string>();
   const agentIds = new Set<string>();
@@ -38,6 +40,10 @@ export function collectAgentReferences(agent: {
   addParticipant(collab?.judge);
   for (const member of collab?.agents ?? []) if (member?.agentId) agentIds.add(member.agentId);
   if (collab?.judgeAgentId) agentIds.add(collab.judgeAgentId);
+  // Agent roles (panelists, teammates) of an autonomous agent's models.
+  for (const role of agent.models?.roles ?? []) {
+    if (role && role.kind === 'agent' && typeof role.agentId === 'string' && role.agentId) agentIds.add(role.agentId);
+  }
   return { toolIds, agentIds };
 }
 /**
@@ -53,6 +59,7 @@ export function collectProviderReferences(agent: {
   pipeline?: AgentPipeline | null;
   agentConfig?: Agent['agentConfig'] | null;
   collaboration?: Agent['collaboration'] | LegacyCollaboration | null;
+  models?: Pick<AgentModels, 'roles'> | null;
 }): Set<string> {
   const ids = new Set<string>();
   const add = (value: unknown) => {
@@ -76,6 +83,10 @@ export function collectProviderReferences(agent: {
     | undefined;
   for (const p of [...(collab?.participants ?? []), collab?.judge]) {
     if (p && p.kind === 'model') add(p.providerId);
+  }
+  // The model roles of an autonomous agent's models.
+  for (const role of agent.models?.roles ?? []) {
+    if (role && role.kind === 'model') add(role.providerId);
   }
   return ids;
 }
