@@ -15,6 +15,7 @@ import { Gateway, GatewayStatus, GatewayType } from '../../../../src/entities/ga
 import { fakeRepository } from '../../../../src/test/fake-repository';
 import { FakeRedis } from '../../../../src/test/fake-redis';
 import { FakeSamlIdp } from '../../../../src/test/fake-saml-idp';
+import { listenOnLoopback } from '../../../../src/test/http';
 import {
   ClauseModel,
   ExecutedQuery,
@@ -116,7 +117,7 @@ async function harness(opts: { protocol?: 'saml' | 'oidc' } = {}) {
   }).compile();
   const app: INestApplication = moduleRef.createNestApplication();
   app.use(cookieParser());
-  await app.init();
+  await listenOnLoopback(app);
   return { app, idp, redis, clock, endUsers, gateways, hostedChat, sso };
 }
 

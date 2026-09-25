@@ -19,6 +19,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import request from 'supertest';
+import { listenOnLoopback } from '../http';
 import cookieParser from 'cookie-parser';
 import { JwtService } from '@nestjs/jwt';
 
@@ -107,7 +108,7 @@ if (!SKIP) useIsolatedSchema(SCHEMA);
     app = module.createNestApplication();
     app.use(cookieParser());
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-    await app.init();
+    await listenOnLoopback(app);
 
     ds = module.get(DataSource);
     const jwtService = module.get(JwtService);
@@ -430,16 +431,15 @@ if (!SKIP) useIsolatedSchema(SCHEMA);
       },
     );
 
-    // Start listening
+    // Already listening on 127.0.0.1 (see beforeAll)
     const server = app.getHttpServer();
-    await new Promise<void>(resolve => server.listen(0, resolve));
     const port = (server.address() as any).port;
 
     // Connect to SSE
     const ssePromise = new Promise<string>((resolve) => {
       let data = '';
       const req = require('http').get(
-        `http://localhost:${port}/${ORG_SLUG}/${AGENT_SLUG}/runs/${runId}/stream`,
+        `http://127.0.0.1:${port}/${ORG_SLUG}/${AGENT_SLUG}/runs/${runId}/stream`,
         { headers: { Authorization: `Bearer ${authToken}`, Accept: 'text/event-stream' } },
         (res: any) => {
           res.on('data', (chunk: Buffer) => { data += chunk.toString(); });

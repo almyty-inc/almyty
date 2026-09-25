@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { INestApplication, NotFoundException } from '@nestjs/common';
 import request from 'supertest';
+import { listenOnLoopback } from '../../../test/http';
 import * as crypto from 'crypto';
 
 import { ApiKey } from '../../../entities/api-key.entity';
@@ -60,7 +61,7 @@ describe('POST /v1/messages', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    await app.init();
+    await listenOnLoopback(app);
   });
 
   afterAll(async () => await app?.close());
