@@ -160,7 +160,7 @@ export class McpService {
           break;
 
         case 'resources/read':
-          result = await this.contentHandler.handleResourceRead(request.params as McpReadResourceRequest, organizationId, caller);
+          result = await this.contentHandler.handleResourceRead(request.params as McpReadResourceRequest, organizationId, caller, gatewayId);
           break;
 
         case 'resources/templates/list':

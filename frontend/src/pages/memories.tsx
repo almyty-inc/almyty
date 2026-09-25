@@ -10,16 +10,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { PageIntro } from '@/components/onboarding/page-intro'
 import { Link } from 'react-router-dom'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { QueryError } from '@/components/ui/query-error'
@@ -109,7 +100,7 @@ export function MemoriesPage() {
     }
   }
 
-  const [memoryToDelete, setMemoryToDelete] = useState<Item | null>(null)
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const removeMut = useMutation({
     mutationFn: ({ id, mode }: { id: string; mode: 'soft' | 'hard' }) => memoriesApi.remove(id, mode),
     onSuccess: () => {
@@ -117,12 +108,10 @@ export function MemoriesPage() {
       // Removing frees capacity, so the soft-cap warnings the sibling
       // key holds are stale too.
       qc.invalidateQueries({ queryKey: ['memories', 'softcap-warnings', orgId] })
-      setMemoryToDelete(null)
       notify.success('Memory deleted')
     },
     // Without this a rejected delete left the row in place and said nothing.
     onError: (err: any) => {
-      setMemoryToDelete(null)
       notify.error('Failed to delete memory', err?.message ?? String(err))
     },
   })
@@ -284,7 +273,15 @@ export function MemoriesPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => setMemoryToDelete(m)}
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: 'Delete memory?',
+                            description: `This removes the memory from search and retrieval for every agent in this workspace. It starts "${m.content.slice(0, 80)}${m.content.length > 80 ? '…' : ''}".`,
+                            confirmLabel: 'Delete memory',
+                            destructive: true,
+                          })
+                          if (ok) removeMut.mutate({ id: m.id, mode: 'soft' })
+                        }}
                         title="Soft delete"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -405,33 +402,7 @@ export function MemoriesPage() {
         to happen on a single stray click with no way back. Confirm first,
         quoting enough of the memory that you know which one you picked.
       */}
-      <AlertDialog
-        open={memoryToDelete !== null}
-        onOpenChange={(open) => { if (!open) setMemoryToDelete(null) }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete memory?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This removes the memory from search and retrieval for every agent in this
-              workspace.{memoryToDelete ? ` It starts "${memoryToDelete.content.slice(0, 80)}${memoryToDelete.content.length > 80 ? '…' : ''}".` : ''}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (memoryToDelete) {
-                  removeMut.mutate({ id: memoryToDelete.id, mode: 'soft' })
-                }
-              }}
-              variant="destructive"
-            >
-              Delete memory
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {confirmDialog}
     </div>
   )
 }

@@ -190,11 +190,20 @@ export class AgentBuiltInToolsHelper {
             isTemporary: true,
             parentRunId: run.id,
             pipeline: { nodes: [], edges: [] },
+            // Never wider than its parent. It runs on the parent's model
+            // config and on tools the parent holds, so it takes the parent's
+            // scope: a team parent's child is that team's, and a private
+            // parent's child is private to the same owner. Left at the
+            // column default ('org'), a private or team agent's child was
+            // listed and runnable across the whole organization.
+            visibility: agent.visibility ?? 'org',
+            teamId: agent.visibility === 'team' ? agent.teamId ?? null : null,
             // Owned by whoever the parent run works for -- the user
             // invoke_agent runs the child as -- and by nobody for a run
-            // without one (a visitor's). Never a sentinel string in an
+            // without one (a visitor's). A private parent's child is its
+            // owner's, whoever the run is for. Never a sentinel string in an
             // owner column.
-            createdBy: run.userId ?? null,
+            createdBy: agent.visibility === 'private' ? agent.createdBy ?? null : run.userId ?? null,
           });
           const savedAgent = await this.agentRepository.save(tempAgent);
           return { result: { agentId: savedAgent.id, name: savedAgent.name, status: 'created' } };

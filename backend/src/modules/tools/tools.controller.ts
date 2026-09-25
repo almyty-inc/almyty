@@ -406,7 +406,7 @@ export class ToolsController {
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('apiId', ParseUUIDPipe) apiId: string,
     @Body(ValidationPipe) generateDto: GenerateToolsFromApiDto,
-    @Request() _req: any,
+    @Request() req: any,
   ) {
     try {
       // Get the API
@@ -432,6 +432,7 @@ export class ToolsController {
         defaultTimeout: generateDto.defaultTimeout,
         defaultRetries: generateDto.defaultRetries,
         categoryIds: generateDto.categoryIds,
+        createdBy: req.user?.id ?? null,
       };
 
       const result = await this.toolGeneratorService.generateToolsFromApi(api, options);

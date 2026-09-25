@@ -44,6 +44,8 @@ import { ResourceHandoverHelper } from './resource-handover.helper';
   ],
   providers: [OrganizationsService, OrganizationsInvitesHelper, TeamMembershipHelper, ResourceHandoverHelper],
   controllers: [OrganizationsController, InvitesController],
-  exports: [OrganizationsService],
+  // ResourceHandoverHelper: account deletion (UsersService) hands a person's
+  // resources over the way a member removal does.
+  exports: [OrganizationsService, ResourceHandoverHelper],
 })
 export class OrganizationsModule {}

@@ -34,8 +34,8 @@ describe('MCP content derived from private resources', () => {
   const privateApi = { id: 'api-private', organizationId: 'org-1', visibility: 'private', ownerUserId: 'owner' };
   const orgApi = { id: 'api-org', organizationId: 'org-1', visibility: 'org', ownerUserId: 'owner' };
   const resources = [
-    { id: 'r-private', name: 'SecretShape', description: null, schema: { secret: true }, api: privateApi },
-    { id: 'r-org', name: 'PublicShape', description: null, schema: { open: true }, api: orgApi },
+    { id: '0b6f2c1e-5a4d-4e3f-9c2b-1a0d9e8f7c6b', name: 'SecretShape', description: null, schema: { secret: true }, api: privateApi },
+    { id: '7d1e3a5c-2b4f-4a6e-8c0d-9e1f2a3b4c5d', name: 'PublicShape', description: null, schema: { open: true }, api: orgApi },
   ];
 
   const rpc = (method: string, params: any, userId?: string) =>
@@ -121,18 +121,18 @@ describe('MCP content derived from private resources', () => {
 
   describe('resources/read', () => {
     it("reads another member's private API resource as not found", async () => {
-      const res = await rpc('resources/read', { uri: 'almyty://resources/r-private' }, 'admin');
+      const res = await rpc('resources/read', { uri: 'almyty://resources/0b6f2c1e-5a4d-4e3f-9c2b-1a0d9e8f7c6b' }, 'admin');
       expect(res.result).toBeUndefined();
       expect(res.error.message).toContain('Resource not found');
     });
 
     it('reads it for the owner', async () => {
-      const res = await rpc('resources/read', { uri: 'almyty://resources/r-private' }, 'owner');
+      const res = await rpc('resources/read', { uri: 'almyty://resources/0b6f2c1e-5a4d-4e3f-9c2b-1a0d9e8f7c6b' }, 'owner');
       expect(res.result.contents[0].text).toContain('secret');
     });
 
     it('with no known caller it is not found', async () => {
-      const res = await rpc('resources/read', { uri: 'almyty://resources/r-private' });
+      const res = await rpc('resources/read', { uri: 'almyty://resources/0b6f2c1e-5a4d-4e3f-9c2b-1a0d9e8f7c6b' });
       expect(res.error.message).toContain('Resource not found');
     });
   });

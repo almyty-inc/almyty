@@ -215,7 +215,7 @@ Ways a card comes to exist:
 - `POST /models/sync { providerId }` runs the same import for one provider by hand; `POST /models/sync` with no body runs it for every active provider of the org and returns a per-provider summary (`created`, `skipped`, `retired`, `reinstated`, `error`).
 - `POST /models` against a stored provider (admin picks the vendor id).
 - **A server you run.** Any OpenAI-compatible server (vLLM, Ollama, TGI, llama.cpp, LiteLLM) is a `custom` LLM provider (`POST /llm-providers { type: "custom", configuration: { apiUrl, apiKey? } }`, key encrypted like every other) plus an ordinary card (`POST /models { providerId, vendorModelId }`). Creating the provider also syncs what `GET <base>/models` lists. The UI's "A server you run" path does both calls.
-- **A model on your cloud account.** `POST /model-deployments` creates the card at once (`status: deploying`, not selectable) and links it, unless `modelId` names an existing card; optional `name` and `vendorModelId` label it. When the endpoint reaches `ready` the reconcile processor fills `endpointRef.url` and `deploymentId`, sets the card `active`, and writes its provider row; a validation run then makes it selectable.
+- **A model on your cloud account.** `POST /model-deployments` creates the card at once (`status: deploying`, not selectable) and links it, unless `modelId` names an existing card; optional `name` and `vendorModelId` label it. When the endpoint reaches `ready` the reconcile processor fills `endpointRef.url` and `deploymentId`, sets the card `active`, and writes its provider row. The tick that moves the deployment into `ready` (claimed with a compare-and-set, so once however many ticks see it) then runs the validation itself, audited with `source: hosted_model_ready`, unless the card has already passed; a pass makes it selectable, and a failure is recorded on the card without affecting the reconcile.
 
 Every register, validate, price change and route is an audit row (`model_registered`, `model_validated`, `model_price_updated`, `model_routed`).
 
@@ -312,13 +312,13 @@ npx @almyty/models route [--objective cheapest|fastest|pinned] [--tier t] [--reg
 npx @almyty/models versions
 npx @almyty/models register-version --name <n> --uri <pinned registry uri> [--base b] [--quantizations q1,q2]
 npx @almyty/models adapters
-npx @almyty/models deploy <model> --adapter <key> [--base b] [--config-file <path>] [--config-stdin]
-                         [--desired '<json>'] [--credential <id>] [--budget <id>] [--card <cardId>]
-npx @almyty/models deploy --model-version <modelVersionId> --adapter <key> [...]
-npx @almyty/models deployments
-npx @almyty/models deployment <id>
-npx @almyty/models scale <deploymentId> <replicas>
-npx @almyty/models teardown <deploymentId>
+npx @almyty/models host <model> --adapter <key> [--base b] [--config-file <path>] [--config-stdin]
+                        [--desired '<json>'] [--credential <id>] [--budget <id>] [--card <cardId>]
+npx @almyty/models host --model-version <modelVersionId> --adapter <key> [...]
+npx @almyty/models hosted
+npx @almyty/models hosted <id>
+npx @almyty/models scale <hostedId> <replicas>
+npx @almyty/models teardown <hostedId>
 ```
 
 `list` and `get` report **why** a card is not selectable — a status that is

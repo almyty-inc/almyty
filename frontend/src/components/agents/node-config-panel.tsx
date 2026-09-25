@@ -19,7 +19,8 @@ import { Switch } from '@/components/ui/switch'
 import { CodeEditor } from '@/components/ui/code-editor'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
 
-import { toolsApi, agentsApi } from '@/lib/api'
+import { agentsApi } from '@/lib/api'
+import { toolsQuery } from '@/lib/list-queries'
 import { useOrganizationStore } from '@/store/organization'
 import { NODE_TYPE_CONFIG, type PipelineNodeType } from './nodes'
 import { ModelPicker, type ModelSelection, type ProviderOption } from '@/components/model-picker'
@@ -272,18 +273,14 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
   const { currentOrganization } = useOrganizationStore()
   const [toolSearch, setToolSearch] = useState('')
   const [showAllTools, setShowAllTools] = useState(false)
-  const { data: tools } = useQuery({
-    queryKey: ['tools', currentOrganization?.id],
-    queryFn: async () => {
-      const res = await toolsApi.getAll(currentOrganization?.id)
-      return Array.isArray(res) ? res : res?.tools || []
-    },
+  const { data: toolsPage } = useQuery({
+    ...toolsQuery(currentOrganization?.id),
     enabled: !!currentOrganization,
   })
 
   const temperature = typeof node.data.temperature === 'number' ? node.data.temperature : 0.7
 
-  const toolList = (Array.isArray(tools) ? tools : (tools as any)?.tools || []) as Array<Pick<Tool, 'id' | 'name'>>
+  const toolList = (toolsPage?.items ?? []) as Array<Pick<Tool, 'id' | 'name'>>
   // Extract template variables from prompts
   const systemPromptVars = extractTemplateVariables((node.data.systemPrompt as string) || '')
   const userPromptVars = extractTemplateVariables((node.data.userPromptTemplate as string) || '')
@@ -472,16 +469,12 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
 function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: UpdateDataFn; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
   const { currentOrganization } = useOrganizationStore()
 
-  const { data: tools } = useQuery({
-    queryKey: ['tools', currentOrganization?.id],
-    queryFn: async () => {
-      const res = await toolsApi.getAll(currentOrganization?.id)
-      return Array.isArray(res) ? res : res?.tools || []
-    },
+  const { data: toolsPage } = useQuery({
+    ...toolsQuery(currentOrganization?.id),
     enabled: !!currentOrganization,
   })
 
-  const toolList = (Array.isArray(tools) ? tools : (tools as any)?.tools || []) as Array<Pick<Tool, 'id' | 'name'>>
+  const toolList = (toolsPage?.items ?? []) as Array<Pick<Tool, 'id' | 'name'>>
   const params: ParameterMapping[] = (node.data.parameterMapping as ParameterMapping[]) || []
 
   const addParam = () => {

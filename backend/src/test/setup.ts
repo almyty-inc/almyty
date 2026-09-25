@@ -1,6 +1,5 @@
 // Global test setup
 import { Test, TestingModule } from '@nestjs/testing';
-import { assertExtensionsInPublic } from './integration/test-db-extensions';
 
 // The integration specs boot a real Nest graph and run every migration in
 // their own Postgres schema before the first assertion. That does not finish
@@ -11,18 +10,6 @@ import { assertExtensionsInPublic } from './integration/test-db-extensions';
 // the test.
 if (process.env.RUN_DB_INTEGRATION === '1') {
   jest.setTimeout(120_000);
-}
-
-// After every DB-integration spec file, the extensions the migrations need
-// must still be in `public`. A spec that let its migrations create one in
-// its own schema fails here, by name, rather than some later spec failing
-// with "function uuid_generate_v4() does not exist".
-if (process.env.RUN_DB_INTEGRATION === '1') {
-  afterAll(async () => {
-    const specPath = expect.getState().testPath ?? '';
-    if (!/[\\/]test[\\/]integration[\\/]/.test(specPath)) return;
-    await assertExtensionsInPublic(specPath);
-  });
 }
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -97,33 +84,14 @@ export const createMockProviders = (entities: any[]) => {
   }));
 };
 
-// Mock external HTTP calls
-export const mockAxios = {
-  get: jest.fn(),
-  post: jest.fn(),
-  put: jest.fn(),
-  delete: jest.fn(),
-  patch: jest.fn(),
-  request: jest.fn(),
-};
-
-jest.mock('axios', () => mockAxios);
-
-// Mock Redis
-export const mockRedis = {
-  get: jest.fn(),
-  set: jest.fn(),
-  del: jest.fn(),
-  exists: jest.fn(),
-  expire: jest.fn(),
-  ttl: jest.fn(),
-  keys: jest.fn(),
-  flushdb: jest.fn(),
-};
-
-jest.mock('redis', () => ({
-  createClient: () => mockRedis,
-}));
+// axios and redis stay real here too. The global doubles they replaced
+// answered every HTTP call and every redis command with `undefined`: a spec
+// could reach a real outbound request or a redis read without knowing it,
+// and pass, and a spec that declared its own axios mock silently got this
+// file's double instead of the one it asked for. A spec that needs HTTP
+// stubbed mocks axios itself or spies on the method it expects; one that
+// needs redis uses src/test/fake-redis.ts.
+// Pinned by __tests__/no-global-http-redis-doubles.spec.ts.
 
 // bcrypt and bcryptjs stay real here: a global double that says every
 // password matches makes every wrong-password path untestable. Specs that
@@ -159,8 +127,6 @@ export class TestHelper {
 
   static resetAllMocks() {
     jest.clearAllMocks();
-    Object.values(mockAxios).forEach(mock => mock.mockReset());
-    Object.values(mockRedis).forEach(mock => mock.mockReset());
   }
 }
 

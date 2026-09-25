@@ -6,7 +6,7 @@ and a source it traces back to. Import a schema and you get a tool per operation
 Need custom logic instead? Write one by hand from HTTP, GraphQL, JavaScript, an
 LLM prompt, or an npm SDK.
 
-![Tools list showing typed tools with name, type, status, and source API](/screenshots/tools-list.png)
+![Tools list filtered to active tools on the current page, with names, source labels, and status](/screenshots/tools-list.png)
 
 ## Two ways to get tools
 
@@ -20,12 +20,10 @@ tool for each operation, with parameters, types, and validation already filled i
 | SOAP | Each WSDL operation |
 | Protobuf | Each RPC method |
 
-**Create one by hand.** Click **Create Tool** and pick an execution method. Give
+**Create one by hand.** Click **Create tool** to open `/tools/new` and pick an execution method. Give
 it a name and description (the description is what agents see when deciding
 whether to call it), define input parameters with the JSON Schema builder, then
 configure the method.
-
-![Create tool dialog showing the five execution methods](/screenshots/tools-create-dialog.png)
 
 ## Tool types
 
@@ -41,7 +39,7 @@ configure the method.
 Open a tool to configure it and run it against real inputs in the tool tester
 before an agent ever touches it.
 
-![Tool detail with configuration and the tool tester](/screenshots/tool-detail.png)
+![Generated weather tool with its parameter schema and Test Tool tab](/screenshots/tool-detail.png)
 
 ## Put tools in front of an LLM
 

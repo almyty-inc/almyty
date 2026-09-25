@@ -18,7 +18,7 @@ bedrock://...                        every 2 min                          status
 4. Pick the cloud: Hugging Face Inference Endpoints, Modal, AWS Bedrock, SageMaker, Google Vertex AI, Microsoft Foundry, Baseten, Together, Fireworks, Nebius, RunPod or DigitalOcean. A cloud that cannot read the source you named is not offered.
 5. Choose the account (a saved [connection](/connections), or the cloud's own fields), the size (hardware, replicas, region) and, optionally, a [budget](/cost-governance).
 
-The model is in the list at once, with status **Starting**. It turns active when the endpoint is ready, and usable once a validation run passes, the same rule as every other model. Validate it from its detail page when it reads **Running**.
+The model is in the list at once, with status **Starting**. It turns active when the endpoint is ready, and usable once a validation run passes, the same rule as every other model. almyty runs that validation itself when the model first reads **Running**; if it fails, the reason is on the model's detail page, and you can validate it again from there.
 
 ## On the model
 
@@ -43,14 +43,14 @@ The cloud's account details hold secrets, so they come from a file, from stdin o
 $ cat > hf.json <<'JSON'
 {"token":"hf_...","namespace":"acme","region":"eu-west-1","instanceType":"nvidia-a10g"}
 JSON
-$ npx @almyty/models deploy hf://Qwen/Qwen3-14B --adapter huggingface-endpoints \
+$ npx @almyty/models host hf://Qwen/Qwen3-14B --adapter huggingface-endpoints \
     --config-file hf.json \
     --desired '{"replicas":1,"privacyTier":"private_cloud","region":"eu-west-1"}'
 Queued.
 c07b...  huggingface-endpoints  pending  replicas ?/1
 ```
 
-The model is in `npx @almyty/models list` straight away. Once it is running, validate it and it is selectable:
+The model is in `npx @almyty/models list` straight away. When the endpoint is ready, almyty runs its validation, and it is selectable once that run passes. `validate` runs it again, for instance after a failure you have fixed:
 
 ```bash
 $ npx @almyty/models validate 4f2a...
@@ -60,7 +60,7 @@ Passed in 1210 ms.
 A model the cloud already hosts starts the same way, with its reference as the source:
 
 ```bash
-$ npx @almyty/models deploy fireworks://accounts/acme/models/qwen3-tuned --adapter fireworks
+$ npx @almyty/models host fireworks://accounts/acme/models/qwen3-tuned --adapter fireworks
 ```
 
 Every flag is on [the CLI page](/models/cli#your-cloud-account); the HTTP calls are in the [Models API](/api-reference/models-api#your-cloud-account).

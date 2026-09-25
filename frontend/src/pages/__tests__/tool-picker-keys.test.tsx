@@ -114,7 +114,7 @@ describe('the tool pickers see what the tools page changes', () => {
     await user.click(within(row).getByRole('button', { name: 'Actions' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
     const confirm = await screen.findByRole('alertdialog')
-    await user.click(within(confirm).getByRole('button', { name: 'Delete' }))
+    await user.click(within(confirm).getByRole('button', { name: 'Delete tool' }))
 
     await waitFor(() => expect(toolsApi.delete).toHaveBeenCalled())
     await waitFor(() =>

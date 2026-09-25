@@ -1,16 +1,18 @@
 # Audit Export & SIEM Streaming
 
-Enterprise (`audit_export` entitlement). Hand security an evidence file, and feed the same events into the SIEM they already alert from. The audit log itself (who did what, to which resource, from which IP) is part of the open-source platform and browsable under [Analytics](/analytics). This feature adds the two things security teams ask for: **bulk export** for evidence and retention, and **streaming** into your SIEM.
-
-![The Audit Trail under Analytics, with Export CSV and Export JSON](/screenshots/analytics-audit.png)
+Requires the `audit_export` entitlement (Business or Enterprise on the hosted platform). Hand security an evidence file, and feed the same events into the SIEM they already alert from. The audit log itself (who did what, to which resource, from which IP) is part of the open-source platform and browsable under [Analytics](/analytics). This feature adds the two things security teams ask for: **bulk export** for evidence and retention, and **streaming** into your SIEM.
 
 ## Export
 
-From the **Audit Trail** tab under [Analytics](/analytics), click **Export CSV** or **Export JSON**. Exports are filterable (date range, `resourceType`, `action`, `userId`) and capped at 50,000 rows. The file downloads as an attachment (`audit-export-YYYY-MM-DD.json|csv`) with an `X-Audit-Export-Count` header.
+With the entitlement enabled, use **CSV** or **JSON** beside the filters in the **Audit Trail** tab under [Analytics](/analytics). The page-header **Export CSV** and **Export JSON** buttons export the request log, not the audit trail. Audit exports are filterable (date range, `resourceType`, `action`, `userId`) and capped at 50,000 rows. The file downloads as an attachment (`audit-export-YYYY-MM-DD.json|csv`) with an `X-Audit-Export-Count` header.
 
 CSV columns: `id, createdAt, organizationId, userId, userEmail, action, resourceType, resourceId, resourceName, status, ipAddress, details`. Admin/owner only. The export endpoint and its query parameters are in the [API reference](/api-reference).
 
 ## SIEM streaming
+
+With the entitlement enabled, open **Settings → Audit streaming**. The **Add target** form accepts a target type, endpoint, token and optional action filter. This demo has no configured targets:
+
+![Enabled audit streaming settings with an empty Add target form](/screenshots/settings-audit-streams-enabled.png)
 
 Register a stream target and audit events are forwarded as they occur. A stream is a target type, an endpoint, a token, and an optional action filter:
 

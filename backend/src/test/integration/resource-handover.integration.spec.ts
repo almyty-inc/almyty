@@ -25,6 +25,8 @@ import { RunnerCapabilityPublisher } from '../../modules/runner/runner-capabilit
 import { OrganizationsService } from '../../modules/organizations/organizations.service';
 import { ResourceHandoverHelper } from '../../modules/organizations/resource-handover.helper';
 import { ConnectionOffboardingService } from '../../modules/connections/connection-offboarding.service';
+import { UsersService } from '../../modules/users/users.service';
+import { ApiKey } from '../../entities/api-key.entity';
 import { TeamDeleteDemotesResources1750809000000 } from '../../migrations/1750809000000-TeamDeleteDemotesResources';
 
 /**
@@ -440,6 +442,78 @@ describeIfDb('Resource handover on member removal and team deletion (real Postgr
       expect(await repo(ConnectionGrant).find({ where: { connectionId: otherOrgConn } })).toEqual([]);
       // Rows wiped earlier hold no secret any more, so no provider is asked about them again.
       expect(providerRevokes).toEqual([{ id: otherOrgConn, config: { apiKey: 'encrypted:gcm:aa:bb:cc' } }]);
+    });
+  });
+
+  describe('account deletion', () => {
+    let deleter: string; // the org owner deleting the account
+    let otherOwner: string; // owner of a second org the person had been deactivated in
+    let leaver: string;
+    let runnerId: string;
+    let orgConn: string;
+    let here: Record<Kind, string>;
+    let there: Record<Kind, string>;
+    let users: UsersService;
+
+    beforeAll(async () => {
+      deleter = await makeUser('del-owner', organizationId, OrganizationRole.OWNER, new Date('2024-02-01'));
+      leaver = await makeUser('del-leaver', organizationId, OrganizationRole.MEMBER, new Date('2024-02-02'));
+      otherOwner = await makeUser('del-other-owner', otherOrgId, OrganizationRole.OWNER, new Date('2024-02-03'));
+      // A membership deactivated earlier: not "belongs elsewhere", but the
+      // person's private rows there are still theirs.
+      await save(UserOrganization, { userId: leaver, organizationId: otherOrgId, role: OrganizationRole.MEMBER, isActive: false, inviteAccepted: true });
+
+      here = await makeResources(organizationId, leaver, { visibility: 'private' });
+      there = await makeResources(otherOrgId, leaver, { visibility: 'private' });
+      runnerId = (await runners.register(runnerInput('del-leaver-box', 'org'), leaver, organizationId)).runner.id;
+      orgConn = (await save(Credential, {
+        organizationId, name: `conn ${++seq}`, type: CredentialType.API_KEY, connectorKey: 'openai',
+        config: { apiKey: 'encrypted:gcm:aa:bb:cc' }, isActive: true, visibility: 'org', ownerUserId: null,
+      }) as any).id;
+      await save(ConnectionGrant, { organizationId, connectionId: orgConn, principalType: 'user', principalId: leaver, permission: 'use' });
+
+      const audit = new AuditLogService(repo(AuditLog), repo(User));
+      users = new UsersService(
+        repo(User), repo(UserOrganization), repo(ApiKey), offboarding,
+        new ResourceHandoverHelper(audit, runners, offboarding),
+      );
+      await users.deleteInOrg(leaver, organizationId, deleter);
+    });
+
+    it('deletes the account', async () => {
+      expect(await repo(User).findOne({ where: { id: leaver } })).toBeNull();
+    });
+
+    it('hands the person\'s private rows in this organization to whoever deleted the account, still private', async () => {
+      for (const { kind, entity, ownerColumn } of LISTED) {
+        const row: any = await repo(entity).findOne({ where: { id: here[kind] } });
+        expect({ kind, owner: row[ownerColumn], visibility: row.visibility }).toEqual({ kind, owner: deleter, visibility: 'private' });
+        expect(await listIds(deleter, organizationId, kind)).toContain(here[kind]);
+      }
+    });
+
+    it('hands the private rows in an organization they had been deactivated in to that organization\'s longest-standing owner', async () => {
+      for (const { kind, entity, ownerColumn } of LISTED) {
+        const row: any = await repo(entity).findOne({ where: { id: there[kind] } });
+        expect({ kind, owner: row[ownerColumn], visibility: row.visibility }).toEqual({ kind, owner: otherOwner, visibility: 'private' });
+      }
+    });
+
+    it('deregisters their runner with its tools and drops the grants that named them', async () => {
+      expect(await repo(Runner).findOne({ where: { id: runnerId } })).toBeNull();
+      const tools = await repo(Tool).createQueryBuilder('t').where(`t."runnerConfig"->>'runnerId' = :runnerId`, { runnerId }).getMany();
+      expect(tools).toEqual([]);
+      expect(await repo(ConnectionGrant).find({ where: { connectionId: orgConn } })).toEqual([]);
+    });
+
+    it('audits every transfer as an account deletion, by whoever deleted it', async () => {
+      const [agentTransfer] = await auditRows({ action: AuditAction.OWNERSHIP_TRANSFER, resourceId: here.agent });
+      expect(agentTransfer).toMatchObject({ userId: deleter });
+      expect(agentTransfer.details).toMatchObject({ reason: 'user_deleted', fromUserId: leaver, toUserId: deleter });
+      const [elsewhere] = await repo(AuditLog).find({ where: { organizationId: otherOrgId, action: AuditAction.OWNERSHIP_TRANSFER, resourceId: there.agent } as any });
+      expect(elsewhere.details).toMatchObject({ reason: 'user_deleted', toUserId: otherOwner });
+      const [runnerDeleted] = await auditRows({ action: AuditAction.DELETE, resourceType: AuditResource.RUNNER, resourceId: runnerId });
+      expect(runnerDeleted.details).toMatchObject({ reason: 'user_deleted', ownerUserId: leaver });
     });
   });
 
