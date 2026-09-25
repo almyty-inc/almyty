@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import axios from 'axios';
+import Redis from 'ioredis';
 
 /**
  * The global jest setup runs before every spec. It used to mock `axios`
@@ -20,13 +21,12 @@ describe('global jest setup and axios / redis', () => {
     expect(axios.create({ baseURL: 'http://example.invalid' }).defaults.baseURL).toBe('http://example.invalid');
   });
 
-  it('redis is the real library', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const redis = require('redis');
-    expect(jest.isMockFunction(redis.createClient)).toBe(false);
-    const client = redis.createClient({ url: 'redis://127.0.0.1:1' });
+  it('ioredis (the client the app uses) is the real library', () => {
+    expect(jest.isMockFunction(Redis.prototype.get)).toBe(false);
+    const client = new Redis('redis://127.0.0.1:1', { lazyConnect: true });
     // A real client is not connected until asked to be.
-    expect(client.isOpen).toBe(false);
+    expect(client.status).toBe('wait');
+    client.disconnect();
   });
 
   it('the setup file does not mock axios or redis', () => {
