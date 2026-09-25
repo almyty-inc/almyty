@@ -10,7 +10,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
-import { AgentApp, AppAuthMode } from '../../entities/agent-app.entity';
+import { AgentApp } from '../../entities/agent-app.entity';
 import {
   DistributionStatus,
   DistributionTarget,
@@ -37,7 +37,6 @@ import {
   checkDistribution,
   checkApp,
   appSlugError,
-  defaultLimitsFor,
   defaultBundleId,
   isPackagedTarget,
 } from './agent-app.rules';
@@ -59,20 +58,9 @@ import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { channelConnectorKey } from '../gateways/channels/channel-credential.service';
 import { channelSecretKeysIn } from '../gateways/channels/channel-config.helper';
 import { distributionManagedBy, splitDistributionSecrets } from './distribution-secrets';
+import { CreateAppDto, newAppFields } from './new-app';
 
-
-export interface CreateAppDto {
-  name: string;
-  slug: string;
-  description?: string;
-  agentIds?: string[];
-  branding?: AgentApp['branding'];
-  authMode?: AppAuthMode;
-  capabilities?: AgentApp['capabilities'];
-  limits?: AgentApp['limits'];
-  privacy?: AgentApp['privacy'];
-
-}
+export type { CreateAppDto } from './new-app';
 
 export type UpdateAppDto = Partial<CreateAppDto> & { isActive?: boolean };
 
@@ -346,24 +334,7 @@ export class AgentAppsService {
     });
     if (existing) throw new ConflictException('An app with that name already exists');
 
-    return this.appRepository.save(
-      this.appRepository.create({
-        organizationId,
-        name: dto.name,
-        slug: dto.slug.trim().toLowerCase(),
-        description: dto.description ?? null,
-        agentIds,
-        branding: dto.branding ?? {},
-        authMode: dto.authMode ?? AppAuthMode.PUBLIC_LINK,
-        capabilities: dto.capabilities ?? {},
-        // A product open to anyone starts with a ceiling on every axis
-        // rather than with empty fields and a publish rule that refuses
-        // it. The numbers are meant to be edited, not discovered.
-        limits: dto.limits ?? defaultLimitsFor(dto.authMode ?? AppAuthMode.PUBLIC_LINK),
-        privacy: dto.privacy ?? null,
-        isActive: true,
-      }),
-    );
+    return this.appRepository.save(this.appRepository.create(newAppFields(organizationId, { ...dto, agentIds })));
   }
 
 
@@ -662,7 +633,7 @@ export class AgentAppsService {
       },
       organizationId,
       userId,
-      { activate: false, gatewayId: distribution.gatewayId },
+      { appId: app.id, activate: false, gatewayId: distribution.gatewayId },
     );
 
     distribution.gatewayId = gateway.id;

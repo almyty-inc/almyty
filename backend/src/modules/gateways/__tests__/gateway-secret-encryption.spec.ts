@@ -83,6 +83,7 @@ describe('GatewaysService — channel secret encryption at rest', () => {
       } as any,
       'org-1',
       'user-1',
+      { forApp: { appId: 'app-1' } },
     );
 
     const saved = gatewayRepository.save.mock.calls[0][0];
@@ -110,6 +111,7 @@ describe('GatewaysService — channel secret encryption at rest', () => {
       } as any,
       'org-1',
       'user-1',
+      { forApp: { appId: 'app-1' } },
     );
 
     const saved = gatewayRepository.save.mock.calls[0][0];
@@ -289,6 +291,7 @@ describe('GatewaysService — channel secrets go to the credential store', () =>
       { name: 'tg-bot', type: GatewayType.TELEGRAM, agentId: 'agent-1', endpoint: '/tg-bot', configuration: { bot_token: '123456:plain-token', aiDisclosure: true } } as any,
       'org-1',
       'user-1',
+      { forApp: { appId: 'app-1' } },
     );
 
     for (const call of gatewayRepository.save.mock.calls) {
@@ -309,6 +312,7 @@ describe('GatewaysService — channel secrets go to the credential store', () =>
       { name: 'tg-bot', type: GatewayType.TELEGRAM, agentId: 'agent-1', endpoint: '/tg-bot', configuration: { credentialId: shared.id } } as any,
       'org-1',
       'user-1',
+      { forApp: { appId: 'app-1' } },
     );
 
     expect(created.configuration).toEqual({ credentialId: shared.id, credentialKeys: ['bot_token'] });

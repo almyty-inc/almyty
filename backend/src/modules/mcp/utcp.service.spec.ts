@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { UtcpService } from './utcp.service';
+import { UtcpService, utcpCallArguments } from './utcp.service';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { Api, ApiType } from '../../entities/api.entity';
 import { Operation, HttpMethod } from '../../entities/operation.entity';
@@ -14,6 +14,8 @@ import { ToolExecutorService } from '../tools/tool-executor.service';
 import { fakeRepository } from '../../test/fake-repository';
 
 const REDIS_TOKEN = 'default_IORedisModuleConnectionToken';
+/** Where the server is reached; a tool that runs here is called at this gateway's address under it. */
+const MANUAL_AT = { baseUrl: 'https://api.test', orgSlug: 'acme' };
 
 describe('UtcpService — spec compliance', () => {
   let service: UtcpService;
@@ -106,7 +108,7 @@ describe('UtcpService — spec compliance', () => {
       toolsService.getTools.mockResolvedValue({ tools: [buildTool()], total: 1 } as any);
       operationRepo.findOne.mockResolvedValue(buildOperation());
 
-      const manual = await service.generateManual({ organizationId: 'org-1', gateway: buildGateway() });
+      const manual = await service.generateManual({ ...MANUAL_AT, organizationId: 'org-1', gateway: buildGateway() });
 
       expect(manual.utcp_version).toBe('1.0.0');
       expect(typeof manual.manual_version).toBe('string');
@@ -134,6 +136,7 @@ describe('UtcpService — spec compliance', () => {
       toolsService.getTools.mockResolvedValue({ tools: [tool, otherTool], total: 2 } as any);
 
       const manual = await service.generateManual({
+        ...MANUAL_AT,
         organizationId: 'org-1',
         gateway: buildGateway(),
       });
@@ -147,7 +150,7 @@ describe('UtcpService — spec compliance', () => {
       toolsService.getTools.mockResolvedValue({ tools: [buildTool()], total: 1 } as any);
       operationRepo.findOne.mockResolvedValue(buildOperation());
 
-      const manual = await service.generateManual({ organizationId: 'org-1', gateway: buildGateway() });
+      const manual = await service.generateManual({ ...MANUAL_AT, organizationId: 'org-1', gateway: buildGateway() });
       const tool = manual.tools[0];
 
       expect(tool.name).toBe('open_meteo_forecast');
@@ -174,7 +177,7 @@ describe('UtcpService — spec compliance', () => {
         buildOperation({ method: HttpMethod.POST, endpoint: '/v1/predict' }),
       );
 
-      const manual = await service.generateManual({ organizationId: 'org-1', gateway: buildGateway() });
+      const manual = await service.generateManual({ ...MANUAL_AT, organizationId: 'org-1', gateway: buildGateway() });
       const tmpl = manual.tools[0].tool_call_template as any;
 
       expect(tmpl.call_template_type).toBe('http');
@@ -204,7 +207,7 @@ describe('UtcpService — spec compliance', () => {
         }),
       );
 
-      const manual = await service.generateManual({ organizationId: 'org-1', gateway: buildGateway() });
+      const manual = await service.generateManual({ ...MANUAL_AT, organizationId: 'org-1', gateway: buildGateway() });
       const auth = manual.tools[0].tool_call_template.auth as any;
 
       expect(auth.auth_type).toBe('api_key');
@@ -228,7 +231,7 @@ describe('UtcpService — spec compliance', () => {
         }),
       );
 
-      const manual = await service.generateManual({ organizationId: 'org-1', gateway: buildGateway() });
+      const manual = await service.generateManual({ ...MANUAL_AT, organizationId: 'org-1', gateway: buildGateway() });
       const json = JSON.stringify(manual);
 
       expect(json).not.toContain('super-secret-real-key');
@@ -242,8 +245,84 @@ describe('UtcpService — spec compliance', () => {
         }),
       );
 
-      const manual = await service.generateManual({ organizationId: 'org-1', gateway: buildGateway() });
+      const manual = await service.generateManual({ ...MANUAL_AT, organizationId: 'org-1', gateway: buildGateway() });
       expect(manual.tools[0].tool_call_template.auth).toBeUndefined();
+    });
+  });
+
+  describe('a tool no API operation backs', () => {
+    it.each([
+      ['HTTP', { httpConfig: { method: 'GET', path: 'https://hooks.example.com/x' } }],
+      ['JavaScript', { code: 'return 1' }],
+      ['GraphQL', { graphqlConfig: { endpoint: 'https://g.example.com', query: '{ a }' } }],
+      ['LLM', { llmConfig: { providerId: 'p', promptTemplate: 'x', outputMode: 'text' } }],
+    ])('lists a hand-made %s tool with a call template for this gateway', async (_type, config) => {
+      const tool = buildTool({ id: 'tool-hand', name: 'hand_made', operationId: null, ...(config as any) });
+      const gateway = buildGateway({
+        authConfigs: [{ type: GatewayAuthType.API_KEY, isActive: true, configuration: { keyHeader: 'x-api-key' } }] as any,
+      });
+      const table = gatewayToolRepo as any;
+      await table.delete({ gatewayId: 'gw-1' });
+      table.seed({ gatewayId: 'gw-1', toolId: tool.id, isActive: true, tool, gateway });
+
+      const manual = await service.generateManual({ ...MANUAL_AT, organizationId: 'org-1', gateway });
+
+      expect(manual.tools.map((t) => t.name)).toEqual(['hand_made']);
+      expect(manual.tools[0].tool_call_template).toEqual({
+        call_template_type: 'http',
+        url: 'https://api.test/acme/test-utcp/execute/tool-hand',
+        http_method: 'POST',
+        content_type: 'application/json',
+        auth: { auth_type: 'api_key', api_key: '{{GATEWAY_GW-1_API_KEY}}', var_name: 'x-api-key', location: 'header' },
+      });
+      expect(operationRepo.findOne).not.toHaveBeenCalled();
+    });
+
+    it('keeps a generated tool whose operation cannot be read, on this gateway\'s template', async () => {
+      operationRepo.findOne.mockRejectedValue(new Error('connection reset'));
+      const manual = await service.generateManual({ ...MANUAL_AT, organizationId: 'org-1', gateway: buildGateway() });
+      expect(manual.tools.map((t) => t.name)).toEqual(['open_meteo_forecast']);
+      expect(manual.tools[0].tool_call_template.url).toBe('https://api.test/acme/test-utcp/execute/tool-1');
+    });
+  });
+
+  describe('utcpCallArguments', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        city: { type: 'string' },
+        days: { type: 'integer' },
+        ratio: { type: 'number' },
+        exact: { type: 'boolean' },
+        tags: { type: 'array' },
+        filter: { type: 'object' },
+        maybe: { type: ['null', 'integer'] },
+      },
+    };
+
+    it('reads query strings back to the types the schema declares', () => {
+      expect(
+        utcpCallArguments(
+          schema,
+          { city: '42', days: '3', ratio: '0.5', exact: 'false', tags: '["a","b"]', filter: '{"x":1}', maybe: '7' },
+          undefined,
+        ),
+      ).toEqual({ city: '42', days: 3, ratio: 0.5, exact: false, tags: ['a', 'b'], filter: { x: 1 }, maybe: 7 });
+    });
+
+    it('leaves a value that does not parse, and an undeclared argument, as it arrived', () => {
+      expect(utcpCallArguments(schema, { days: 'many', exact: 'yes', extra: '1', tags: 'solo' }, undefined)).toEqual({
+        days: 'many',
+        exact: 'yes',
+        extra: '1',
+        tags: ['solo'],
+      });
+    });
+
+    it('takes a JSON object body as the arguments, over the query string', () => {
+      expect(utcpCallArguments(schema, { city: 'Oslo', days: '2' }, { city: 'Paris' })).toEqual({ city: 'Paris', days: 2 });
+      expect(utcpCallArguments(schema, {}, ['not', 'an', 'object'])).toEqual({});
+      expect(utcpCallArguments(null, undefined, undefined)).toEqual({});
     });
   });
 
