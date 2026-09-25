@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { createSign } from 'crypto';
 
+import { assertGcpLocation } from '../../../common/security/vendor-region';
+
 import {
   ActualState,
   AdapterCapabilities,
@@ -167,7 +169,9 @@ export class VertexAdapter implements ModelProviderAdapter {
   }
 
   static base(location: string): string {
-    return `https://${location}-aiplatform.googleapis.com/v1`;
+    // `location` is providerConfig or the requested region: checked, so it
+    // can only ever name a region and never pick the host.
+    return `https://${assertGcpLocation(location)}-aiplatform.googleapis.com/v1`;
   }
 
   private async call(method: string, location: string, path: string, credentials: AdapterCredentials, data?: any, params?: Record<string, string>): Promise<any> {
