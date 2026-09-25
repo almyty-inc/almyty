@@ -10,6 +10,7 @@ import { OAuth2Controller } from '../oauth2.controller';
 import { Credential, CredentialType } from '../../../entities/credential.entity';
 import { fakeRepository } from '../../../test/fake-repository';
 import { FakeRedis } from '../../../test/fake-redis';
+import { restoreEnv } from '../../../test/env';
 
 describe('OAuth2 sign-in returns to where it started', () => {
   const originalFetch = global.fetch;
@@ -33,7 +34,7 @@ describe('OAuth2 sign-in returns to where it started', () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
-    process.env.FRONTEND_URL = originalFrontend;
+    restoreEnv('FRONTEND_URL', originalFrontend);
   });
 
   const start = (returnTo?: string) =>
