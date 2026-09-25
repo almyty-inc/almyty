@@ -209,6 +209,25 @@ const PACKAGED_TARGETS: readonly DistributionTarget[] = Object.freeze([
   DistributionTarget.BINARY,
 ]);
 
+/** Whether a target produces a file someone installs (and so needs a bundle id). */
+export function isPackagedTarget(target: DistributionTarget | string): boolean {
+  return PACKAGED_TARGETS.includes(target as DistributionTarget);
+}
+
+/**
+ * The bundle identifier a packaged distribution starts with, built from
+ * the app's address: `support-bot` becomes `app.almyty.supportbot`.
+ * Nobody has to invent a reverse-domain name to get a first build; one
+ * who signs with their own developer account changes it. The build uses
+ * the same default when a row has none, so the two never disagree.
+ */
+export function defaultBundleId(
+  slug: string,
+  namespace: string = process.env.APP_BUILD_BUNDLE_NAMESPACE ?? 'app.almyty',
+): string {
+  return `${namespace}.${slug.replace(/[^a-z0-9]+/gi, '').toLowerCase()}`;
+}
+
 /**
  * Whether a distribution can be built, on top of the app rules.
  *

@@ -142,11 +142,11 @@ export function createApisColumns({
       onEdit,
       onDelete,
       [
-        { label: 'View Details', onClick: onViewDetails },
-        { label: 'Test Connection', onClick: onTestConnection },
-        { label: 'Import Schema', onClick: onImportSchema },
-        { label: 'Generate Tools', onClick: onGenerateTools },
-        { label: 'Copy Base URL', onClick: onCopyBaseUrl },
+        { label: 'View details', onClick: onViewDetails },
+        { label: 'Test connection', onClick: onTestConnection },
+        { label: 'Import schema', onClick: onImportSchema },
+        { label: 'Generate tools', onClick: onGenerateTools },
+        { label: 'Copy base URL', onClick: onCopyBaseUrl },
       ]
     ),
   ]

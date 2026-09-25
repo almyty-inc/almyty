@@ -84,7 +84,7 @@ describe('rules the server enforces and the builder did not', () => {
     expect(parallel.join(' ')).toMatch(/Parallel: connect at least two steps out of it/)
   })
 
-  it('refuses a Tool Call with no tool and a Sub-Agent with no agent', () => {
+  it('refuses a Tool call with no tool and a Sub-agent with no agent', () => {
     const errors = validateWorkflowGraph(
       [
         n('input_1', 'input'),
@@ -95,8 +95,8 @@ describe('rules the server enforces and the builder did not', () => {
       [e('input_1', 'tool_1'), e('tool_1', 'sub_1'), e('sub_1', 'output_1')],
     )
 
-    expect(errors.join(' ')).toMatch(/Tool Call: pick a tool/)
-    expect(errors.join(' ')).toMatch(/Sub-Agent: pick an agent/)
+    expect(errors.join(' ')).toMatch(/Tool call: pick a tool/)
+    expect(errors.join(' ')).toMatch(/Sub-agent: pick an agent/)
   })
 
   it('refuses a Verify node with no checkers, a checker naming nothing, and an unknown policy', () => {
@@ -171,21 +171,21 @@ describe('graphs the server takes, which the builder must keep taking', () => {
     expect(errors).toEqual([])
   })
 
-  it('still asks a Model Call that names nothing at all to say which model it uses', () => {
+  it('still asks a Model call that names nothing at all to say which model it uses', () => {
     const errors = validateWorkflowGraph(
       [n('input_1', 'input'), n('llm_1', 'llm_call', {}), n('output_1', 'output')],
       [e('input_1', 'llm_1'), e('llm_1', 'output_1')],
     )
 
-    expect(errors).toEqual(['Model Call: pick a model'])
+    expect(errors).toEqual(['Model call: pick a model'])
   })
 
   // The strings are the product. The builder used to say
-  //   Pick a model for the Model Call step "llm_1": choose a provider, or a
+  //   Pick a model for the Model call step "llm_1": choose a provider, or a
   //   routing policy or role to choose one at run time.
   // "llm_1" is an id the canvas never draws, and the tail is our jargon. An
   // item now reads like a to-do: the step as the canvas labels it, then what
-  // to do, in words. Which of two Model Calls it means is answered by
+  // to do, in words. Which of two Model calls it means is answered by
   // clicking it (nodeIds), never by an id in the text.
   it('reads like a to-do, and never shows a node id', () => {
     const nodes = [
@@ -207,7 +207,7 @@ describe('graphs the server takes, which the builder must keep taking', () => {
       for (const node of nodes) expect(message).not.toContain(node.id)
       expect(message).not.toMatch(/routing policy|role to choose|found \d|edges?\b|handle/i)
       expect(message).toMatch(
-        /^((Input|Output|Model Call|Tool Call|Sub-Agent|Verify|Condition|Merge|Parallel|Transform|Loop|Decision|Extract Context)( and [A-Za-z -]+)?(: [a-z]| loop back)|Add |Keep )/,
+        /^((Input|Output|Model call|Tool call|Sub-agent|Verify|Condition|Merge|Parallel|Transform|Loop|Decision|Extract context)( and [A-Za-z -]+)?(: [a-z]| loop back)|Add |Keep )/,
       )
     }
   })
@@ -219,8 +219,8 @@ describe('graphs the server takes, which the builder must keep taking', () => {
     )
 
     expect(issues).toEqual([
-      { text: 'Model Call: pick a model', nodeIds: ['llm_a'] },
-      { text: 'Model Call: pick a model', nodeIds: ['llm_b'] },
+      { text: 'Model call: pick a model', nodeIds: ['llm_a'] },
+      { text: 'Model call: pick a model', nodeIds: ['llm_b'] },
     ])
   })
 

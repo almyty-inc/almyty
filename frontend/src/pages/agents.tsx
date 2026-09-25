@@ -261,7 +261,7 @@ export function AgentsPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-amber-500" />
-                  <h2 className="text-sm font-semibold">Start from a Template</h2>
+                  <h2 className="text-sm font-semibold">Start from a template</h2>
                 </div>
                 <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => setShowTemplates(false)}>
                   Hide
@@ -320,7 +320,7 @@ export function AgentsPage() {
                     onChange={(e) => setStatusFilter(e.target.value)}
                     className="h-9 rounded-md border border-input bg-background px-3 text-sm w-32"
                   >
-                    <option value="all">All Status</option>
+                    <option value="all">All status</option>
                     <option value="draft">Draft</option>
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>

@@ -137,7 +137,7 @@ export function jsxLabels(src: string, tags: string[]): JsxLabel[] {
  * acronyms, product and vendor names, and almyty's own proper nouns.
  */
 export const LABEL_PROPER_NOUNS = new Set([
-  'A2A', 'AI', 'API', 'APIs', 'AWS', 'Anthropic', 'Azure', 'BYOK', 'Bedrock', 'CLI', 'CSV', 'Claude',
+  'A2A', 'ACP', 'AI', 'API', 'APIs', 'AWS', 'Ctrl', 'JSONRPC', 'Linux', 'SSE', 'Shift', 'Twilio', 'Windows', 'Windsurf', 'Anthropic', 'Azure', 'BYOK', 'Bedrock', 'CLI', 'CSV', 'Claude',
   'Codex', 'Copilot', 'Cursor', 'Discord', 'Face', 'Gemini', 'GitHub', 'Google', 'GraphQL', 'HTTP',
   'Hugging', 'I', 'ID', 'IDs', 'IRC', 'JSON', 'JavaScript', 'KMS', 'LLM', 'MCP', 'Markdown', 'Matrix',
   'Microsoft', 'OAuth', 'OIDC', 'Ollama', 'OpenAI', 'OpenAPI', 'PDF', 'PNG', 'Protobuf',
@@ -146,7 +146,12 @@ export const LABEL_PROPER_NOUNS = new Set([
 ])
 
 /** Multi-word names that keep their capitals: named surfaces and specs. */
-export const LABEL_PROPER_PHRASES = ['Tool Hub', 'Agent Skills', 'Hugging Face', 'Google Chat', 'Microsoft Teams']
+export const LABEL_PROPER_PHRASES = [
+  'Tool Hub', 'Agent Skills', 'Hugging Face', 'Google Chat', 'Microsoft Teams', 'Claude Code', 'Claude Desktop',
+  'Amazon Bedrock', 'Cloud Storage', 'Universal Tool Call Protocol', 'Google Cloud Storage', 'VS Code', 'OpenID Connect',
+  'EU AI Act', 'App Store Connect', 'Twilio Account SID', 'Terms of Service', 'Privacy Policy',
+  'Ctrl+Z', 'Ctrl+Shift+Z', 'Ctrl+K',
+]
 
 /** Words after the first that are capitalised without being a proper noun. */
 export function titleCaseWords(label: string): string[] {

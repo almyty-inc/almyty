@@ -141,6 +141,36 @@ describe('labels are sentence case', () => {
     }
     expect(offenders).toEqual([])
   })
+
+  it('holds for field labels, headings, table headers and select options', () => {
+    // "First Name" over one field and "Model name" over the next read as
+    // two products. The same rule as buttons: first word, acronyms and
+    // proper nouns only.
+    const FIELD_TAGS = ['Label', 'label', 'SelectItem', 'option', 'TableHead', 'th', 'h1', 'h2', 'h3', 'h4']
+    const offenders: string[] = []
+    for (const { rel, src } of sources) {
+      for (const el of jsxLabels(src, FIELD_TAGS)) {
+        for (const label of el.variants) {
+          if (titleCaseWords(label).length) offenders.push(`${rel}:${el.line} <${el.tag}> "${label}"`)
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('holds for label, title and header props written as literals', () => {
+    // FormPage titles, stat card labels, column headers and row actions
+    // are strings in props, not JSX children.
+    const offenders: string[] = []
+    const literal = /\b(label|title|header)(?:=|:\s*)(['"])([^'"\n]+)\2/g
+    for (const { rel, src } of sources) {
+      for (const m of src.matchAll(literal)) {
+        const line = src.slice(0, m.index).split('\n').length
+        if (titleCaseWords(m[3]).length) offenders.push(`${rel}:${line} ${m[1]}: "${m[3]}"`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
 })
 
 describe('the brand gradient', () => {

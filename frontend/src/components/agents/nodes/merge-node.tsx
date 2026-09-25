@@ -24,7 +24,7 @@ export function MergeNode({ data, selected }: NodeProps) {
         <span className="text-xs font-semibold text-teal-700 dark:text-teal-300">Merge</span>
       </div>
       <div className="p-3">
-        <div className="text-sm font-medium truncate">Merge Results</div>
+        <div className="text-sm font-medium truncate">Merge results</div>
         <div className="text-xs text-muted-foreground truncate mt-0.5">
           Strategy: {(data.strategy as string) || 'first_response'}
         </div>

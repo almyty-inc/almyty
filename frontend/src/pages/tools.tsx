@@ -561,17 +561,17 @@ export function ToolsPage() {
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="all">All status</SelectItem>
                       <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="inactive">Inactive</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger className="w-32" aria-label="Filter by Type">
+                    <SelectTrigger className="w-32" aria-label="Filter by type">
                       <SelectValue placeholder="Type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="all">All types</SelectItem>
                       <SelectItem value="REST_API">REST</SelectItem>
                       <SelectItem value="GRAPHQL">GraphQL</SelectItem>
                       <SelectItem value="SOAP">SOAP</SelectItem>

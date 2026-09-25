@@ -61,8 +61,8 @@ export function NodePalette() {
 
   return (
     <div className="w-[200px] h-full min-h-0 lg:border-r bg-muted/30 p-3 overflow-y-auto overscroll-contain">
-      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-        Node types
+      <h3 className="text-xs font-semibold text-muted-foreground mb-3">
+        Steps
       </h3>
       <div className="space-y-1">
         {NODE_ORDER.map((type) => {

@@ -8,11 +8,11 @@ test.describe('Settings - Profile & Configuration', () => {
   test('should display settings page', async ({ authenticatedPage: page, assertHelper }) => {
     await assertHelper.assertPageTitle(/settings/i)
 
-    // Should show tab navigation
+    // Five sections; each page keeps its own URL under them
     await expect(page.getByRole('tab', { name: /organization/i })).toBeVisible()
-    await expect(page.getByRole('tab', { name: /members.*teams/i })).toBeVisible()
-    await expect(page.getByRole('tab', { name: /profile/i })).toBeVisible()
-    await expect(page.getByRole('tab', { name: /security/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /your account/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /people and access/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /advanced/i })).toBeVisible()
   })
 
   test('should display organization details', async ({ authenticatedPage: page, assertHelper }) => {
@@ -82,7 +82,7 @@ test.describe('Settings - Profile & Configuration', () => {
 
   test('should switch to profile tab', async ({ authenticatedPage: page, assertHelper }) => {
     // Click profile tab
-    await page.getByRole('tab', { name: /profile/i }).click()
+    await page.goto('/settings/profile')
     await assertHelper.waitForLoadingComplete()
 
     // Should show profile information
@@ -92,7 +92,7 @@ test.describe('Settings - Profile & Configuration', () => {
   })
 
   test('should display user profile information', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('tab', { name: /profile/i }).click()
+    await page.goto('/settings/profile')
     await assertHelper.waitForLoadingComplete()
 
     // Should show user data
@@ -102,7 +102,7 @@ test.describe('Settings - Profile & Configuration', () => {
   })
 
   test('should edit profile information', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('tab', { name: /profile/i }).click()
+    await page.goto('/settings/profile')
     await assertHelper.waitForLoadingComplete()
 
     // Click edit
@@ -131,7 +131,7 @@ test.describe('Settings - Profile & Configuration', () => {
   })
 
   test('should validate profile required fields', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('tab', { name: /profile/i }).click()
+    await page.goto('/settings/profile')
     await assertHelper.waitForLoadingComplete()
 
     // Click edit
@@ -149,7 +149,7 @@ test.describe('Settings - Profile & Configuration', () => {
   })
 
   test('should cancel profile edit', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('tab', { name: /profile/i }).click()
+    await page.goto('/settings/profile')
     await assertHelper.waitForLoadingComplete()
 
     // Click edit
@@ -168,14 +168,14 @@ test.describe('Settings - Profile & Configuration', () => {
   })
 
   test('should display account creation date', async ({ authenticatedPage: page }) => {
-    await page.getByRole('tab', { name: /profile/i }).click()
+    await page.goto('/settings/profile')
 
     // Should show account created date
     await expect(page.getByText(/account.*created|created/i)).toBeVisible()
   })
 
   test('should display account status', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('tab', { name: /profile/i }).click()
+    await page.goto('/settings/profile')
     await assertHelper.waitForLoadingComplete()
 
     // Should show account status label and active status
@@ -185,7 +185,7 @@ test.describe('Settings - Profile & Configuration', () => {
 
   test('should switch to security tab', async ({ authenticatedPage: page, assertHelper }) => {
     // Click security tab
-    await page.getByRole('tab', { name: /security/i }).click()
+    await page.goto('/settings/security')
     await assertHelper.waitForLoadingComplete()
 
     // Should show security settings
@@ -193,7 +193,7 @@ test.describe('Settings - Profile & Configuration', () => {
   })
 
   test('should display password change option', async ({ authenticatedPage: page }) => {
-    await page.getByRole('tab', { name: /security/i }).click()
+    await page.goto('/settings/security')
 
     // Should show password settings
     const changePasswordButton = page.getByRole('button', { name: /change.*password|update.*password/i })
@@ -203,7 +203,7 @@ test.describe('Settings - Profile & Configuration', () => {
   })
 
   test('should display two-factor authentication settings', async ({ authenticatedPage: page }) => {
-    await page.getByRole('tab', { name: /security/i }).click()
+    await page.goto('/settings/security')
 
     // Should show 2FA settings
     const twoFactorText = page.getByText(/two.*factor|2fa|multi.*factor/i)
@@ -214,11 +214,11 @@ test.describe('Settings - Profile & Configuration', () => {
 
   test('should switch between tabs', async ({ authenticatedPage: page, assertHelper }) => {
     // Switch to profile
-    await page.getByRole('tab', { name: /profile/i }).click()
+    await page.goto('/settings/profile')
     await expect(page.getByRole('heading', { name: /profile.*information/i })).toBeVisible()
 
     // Switch to security
-    await page.getByRole('tab', { name: /security/i }).click()
+    await page.goto('/settings/security')
     await assertHelper.waitForLoadingComplete()
     await expect(page.getByRole('heading', { name: /change password|account security/i }).first()).toBeVisible()
 
@@ -236,7 +236,7 @@ test.describe('Settings - Profile & Configuration', () => {
     await page.getByLabel(/organization.*name/i).fill('Test Name')
 
     // Switch tabs
-    await page.getByRole('tab', { name: /profile/i }).click()
+    await page.goto('/settings/profile')
     await page.getByRole('tab', { name: /organization/i }).click()
 
     // Should not have saved unsaved changes
@@ -252,7 +252,7 @@ test.describe('Settings - Profile & Configuration', () => {
     await authHelper.loginViaAPI(testUser.email, testUser.password)
 
     await page.goto('/settings')
-    await page.getByRole('tab', { name: /profile/i }).click()
+    await page.goto('/settings/profile')
 
     // Should eventually load profile
     await assertHelper.waitForLoadingComplete()
@@ -260,7 +260,7 @@ test.describe('Settings - Profile & Configuration', () => {
   })
 
   test('should display email in profile', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('tab', { name: /profile/i }).click()
+    await page.goto('/settings/profile')
     await assertHelper.waitForLoadingComplete()
 
     // Should show email
@@ -268,7 +268,7 @@ test.describe('Settings - Profile & Configuration', () => {
   })
 
   test('should update multiple profile fields at once', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('tab', { name: /profile/i }).click()
+    await page.goto('/settings/profile')
     await assertHelper.waitForLoadingComplete()
 
     // Edit profile

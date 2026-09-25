@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { loadConfig, DEFAULTS, describeIsolationPosture } from '../src/config.js';
+import { loadConfig, DEFAULTS, describeIsolationPosture, runnerNameFromHostname } from '../src/config.js';
 import { enforceShellPolicy, enforceSpawnPolicy } from '../src/policy.js';
 
 /**
@@ -217,11 +217,33 @@ describe('loadConfig', () => {
     })).toThrow(/container, host/);
   });
 
-  it('throws when no name is configured anywhere', () => {
+  it('names the runner after the machine when no name is configured', () => {
+    const cfg = loadConfig({
+      env: {},
+      exists: () => false,
+      readFile: () => '',
+      hostname: () => 'Franes-MacBook-Pro.local',
+    });
+    expect(cfg.name).toBe('franes-macbook-pro');
+  });
+
+  it('a configured name wins over the hostname', () => {
+    const cfg = loadConfig({ env: {}, exists: () => false, readFile: () => '', flags: { name: 'build-box' }, hostname: () => 'ignored' });
+    expect(cfg.name).toBe('build-box');
+  });
+
+  it('turns any hostname into a valid runner name', () => {
+    expect(runnerNameFromHostname('my host_01.example.com')).toBe('my-host_01');
+    expect(runnerNameFromHostname('x'.repeat(80))).toHaveLength(64);
+    expect(runnerNameFromHostname('...')).toBe('');
+  });
+
+  it('throws when no name is configured anywhere and the hostname is unusable', () => {
     expect(() => loadConfig({
       env: {},
       exists: () => false,
       readFile: () => '',
+      hostname: () => '',
     })).toThrow(/runner name is required/);
   });
 

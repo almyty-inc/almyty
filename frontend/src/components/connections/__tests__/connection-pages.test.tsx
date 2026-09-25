@@ -269,7 +269,7 @@ describe('/connections/connect', () => {
     vi.mocked(connectorsApi.list).mockResolvedValue([github, slack, openai, modal, stub, other])
     const { router } = at()
     const tile = await screen.findByTestId('service-tile-ai-models')
-    expect(tile).toHaveTextContent('Connect on Models')
+    expect(tile).toHaveTextContent('Connect AI models')
     expect(screen.queryByTestId('service-tile-openai')).not.toBeInTheDocument()
     expect(screen.queryByTestId('service-tile-modal')).not.toBeInTheDocument()
     expect(screen.queryByTestId('service-tile-deploy-stub')).not.toBeInTheDocument()

@@ -76,7 +76,7 @@ describe('every node type a strategy compiles to has a component', () => {
 
   it('shows a compiled extract_context node the role it compresses with', () => {
     draw(<ExtractContextNode {...nodeProps} id="extract" type="extract_context" data={{ roleKey: 'summariser' }} />)
-    expect(screen.getByText('Extract Context')).toBeInTheDocument()
+    expect(screen.getByText('Extract context')).toBeInTheDocument()
     expect(screen.getByText('Role: summariser')).toBeInTheDocument()
   })
 })

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'fs';
-import { homedir } from 'os';
+import { homedir, hostname } from 'os';
 import { join, isAbsolute, resolve as pathResolve } from 'path';
 
 import { allProbeBinaries } from './coding-agents/index.js';
@@ -146,6 +146,22 @@ export interface LoadConfigInputs {
   globalPath?: string;
   /** Override project config path (testing). */
   projectPath?: string;
+  /** The machine's hostname, used as the name when none is set. Defaults to os.hostname(). */
+  hostname?: () => string;
+}
+
+/**
+ * A hostname turned into a valid runner name (letters, digits, _ and -,
+ * at most 64 characters): "Franes-MacBook-Pro.local" becomes
+ * "franes-macbook-pro". Empty when nothing usable is left.
+ */
+export function runnerNameFromHostname(host: string): string {
+  return host
+    .split('.')[0]
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
 }
 
 export function loadConfig(inputs: LoadConfigInputs = {}): ResolvedConfig {
@@ -199,6 +215,12 @@ export function loadConfig(inputs: LoadConfigInputs = {}): ResolvedConfig {
   if (f.config) resolved.config = mergeRunnerConfig(resolved.config, f.config);
   if (f.binaryProbeList && f.binaryProbeList.length > 0) {
     resolved.binaryProbeList = f.binaryProbeList;
+  }
+
+  // No name anywhere: use the machine's own, which is what a person
+  // would type anyway ("franes-macbook-pro").
+  if (!resolved.name) {
+    resolved.name = runnerNameFromHostname((inputs.hostname ?? hostname)());
   }
 
   if (!resolved.name) {

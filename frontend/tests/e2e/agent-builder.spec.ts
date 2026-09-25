@@ -84,26 +84,26 @@ test.describe('Agent Builder', () => {
     await page.goto('/agents/new')
     await assertHelper.waitForLoadingComplete()
 
-    // Wait for the Node Types heading in the palette sidebar
-    await expect(page.getByRole('heading', { name: 'Node Types' })).toBeVisible({ timeout: 15000 })
+    // Wait for the Steps heading in the palette sidebar
+    await expect(page.getByRole('heading', { name: 'Steps' })).toBeVisible({ timeout: 15000 })
 
     // Verify all 9 node types are listed in the palette
     const expectedNodeTypes = [
       'Input',
-      'LLM Call',
-      'Tool Call',
+      'Model call',
+      'Tool call',
       'Condition',
       'Transform',
       'Merge',
       'Parallel',
-      'Sub-Agent',
+      'Sub-agent',
       'Output',
     ]
 
     for (const nodeType of expectedNodeTypes) {
       // Use the sidebar area (not the canvas) to avoid ambiguity
       // The palette items have a description underneath each name
-      const paletteItem = page.getByRole('heading', { name: 'Node Types' })
+      const paletteItem = page.getByRole('heading', { name: 'Steps' })
         .locator('..')  // parent of heading
         .locator('..')  // container of the palette
         .getByText(nodeType, { exact: true })
@@ -163,7 +163,7 @@ test.describe('Agent Builder', () => {
     // error banner before the user has done anything.
     const nextSteps = page.getByTestId('builder-next-steps')
     await expect(nextSteps).toBeVisible({ timeout: 5000 })
-    await expect(nextSteps).toContainText('Model Call: pick a model')
+    await expect(nextSteps).toContainText('Model call: pick a model')
     await expect(page.getByTestId('builder-validation-errors')).toHaveCount(0)
 
     // Save is live, because pressing it is how you ask.
@@ -173,7 +173,7 @@ test.describe('Agent Builder', () => {
 
     // And it refuses, in as many words, and greys out behind the answer.
     await expect(page.getByTestId('builder-validation-errors')).toContainText(
-      'Model Call: pick a model',
+      'Model call: pick a model',
     )
     await expect(saveButton).toBeDisabled()
 

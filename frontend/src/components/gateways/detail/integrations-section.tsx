@@ -108,7 +108,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               </div>
             </div>
             <div>
-              <Label className="text-sm font-medium">First-Time Setup</Label>
+              <Label className="text-sm font-medium">First-time setup</Label>
               <p className="text-xs text-muted-foreground mb-2">Authenticate once (or use ALMYTY_TOKEN env var):</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{loginCommand}</code>
@@ -119,7 +119,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
             </div>
             <div>
               <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">SKILL.md Preview</Label>
+                <Label className="text-sm font-medium">SKILL.md preview</Label>
                 <Button size="sm" variant="ghost" onClick={() => setShowSkillPreview(!showSkillPreview)}>
                   {showSkillPreview ? 'Hide' : 'Show'}
                 </Button>
@@ -165,7 +165,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label className="text-sm font-medium">JSON-RPC Endpoint</Label>
+              <Label className="text-sm font-medium">JSON-RPC endpoint</Label>
               <p className="text-xs text-muted-foreground mb-1">POST with JSON-RPC 2.0 payloads</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{mcpEndpoint}</code>
@@ -175,7 +175,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               </div>
             </div>
             <div>
-              <Label className="text-sm font-medium">SSE Transport</Label>
+              <Label className="text-sm font-medium">SSE transport</Label>
               <p className="text-xs text-muted-foreground mb-1">Server-Sent Events for streaming</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{sseEndpoint}</code>
@@ -284,7 +284,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               </div>
             </div>
             <div>
-              <Label className="text-sm font-medium">Agent Registration</Label>
+              <Label className="text-sm font-medium">Agent registration</Label>
               <p className="text-xs text-muted-foreground mb-1">POST to register, GET to list</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{a2aBase}/agents</code>
@@ -331,7 +331,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label className="text-sm font-medium">JSON-RPC Endpoint</Label>
+              <Label className="text-sm font-medium">JSON-RPC endpoint</Label>
               <p className="text-xs text-muted-foreground mb-1">POST with JSON-RPC 2.0 payloads (initialize, session/new, session/prompt, etc.)</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{acpBase}</code>
@@ -398,7 +398,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
             </div>
 
             <div className="space-y-2">
-              <h4 className="text-sm font-medium">ACP Server (CLI)</h4>
+              <h4 className="text-sm font-medium">ACP server (CLI)</h4>
               <p className="text-xs text-muted-foreground">Run in your terminal:</p>
               <div className="flex gap-2">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{acpServerCmd}</code>
@@ -440,7 +440,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               </div>
             </div>
             <div>
-              <Label className="text-sm font-medium">Execute Tool</Label>
+              <Label className="text-sm font-medium">Execute tool</Label>
               <p className="text-xs text-muted-foreground mb-1">POST to execute a tool via UTCP</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{utcpBase}/execute</code>
@@ -450,7 +450,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               </div>
             </div>
             <div>
-              <Label className="text-sm font-medium">Tool Manual</Label>
+              <Label className="text-sm font-medium">Tool manual</Label>
               <p className="text-xs text-muted-foreground mb-1">GET to retrieve the UTCP manual</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{utcpBase}/manual</code>

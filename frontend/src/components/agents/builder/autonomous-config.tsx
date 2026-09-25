@@ -23,6 +23,7 @@ import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import type { AgentModels } from '@/types/agent-models'
 import type { Agent } from '@/types'
+import { useOrganizationStore } from '@/store/organization'
 
 export interface AutonomousConfigProps {
   agentId?: string
@@ -63,6 +64,13 @@ export function AutonomousConfig({
   availableAgents,
   heartbeat, onHeartbeatChange,
 }: AutonomousConfigProps) {
+  // The organization's defaults sit above this agent's limits; the run
+  // limits line counts them in, so it says what a run will really get.
+  const orgDefaults = useOrganizationStore((s) => s.currentOrganization?.agentDefaults)
+  const orgRunLimits = {
+    maxSteps: orgDefaults?.maxStepsPerRun || undefined,
+    maxCostCents: orgDefaults?.maxCostPerRun ? Math.floor(orgDefaults.maxCostPerRun * 100) : undefined,
+  }
   const [toolSearch, setToolSearch] = useState('')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
@@ -152,12 +160,12 @@ export function AutonomousConfig({
           <label className="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" checked={memoryConfig.enabled || false}
               onChange={(e) => onMemoryConfigChange({ ...memoryConfig, enabled: e.target.checked })} className="rounded" />
-            <div><p className="text-sm font-medium">Enable Memory</p><p className="text-xs text-muted-foreground">Agent will recall relevant memories before each model call</p></div>
+            <div><p className="text-sm font-medium">Remember between runs</p><p className="text-xs text-muted-foreground">The agent looks up what it saved earlier before it answers</p></div>
           </label>
           <label className="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" checked={memoryConfig.autoSave || false}
               onChange={(e) => onMemoryConfigChange({ ...memoryConfig, autoSave: e.target.checked })} className="rounded" />
-            <div><p className="text-sm font-medium">Auto-save Memories</p><p className="text-xs text-muted-foreground">Automatically extract and save key facts from conversations</p></div>
+            <div><p className="text-sm font-medium">Save facts automatically</p><p className="text-xs text-muted-foreground">Keeps the key facts from each conversation for next time</p></div>
           </label>
         </CardContent>
       </Card>
@@ -185,6 +193,7 @@ export function AutonomousConfig({
       <RunLimitsSection
         value={agentConfig.runLimits ?? {}}
         onChange={(runLimits) => onAgentConfigChange({ ...agentConfig, runLimits })}
+        inherited={orgRunLimits}
       />
 
       {/* Heartbeat */}
@@ -194,7 +203,7 @@ export function AutonomousConfig({
           <label className="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" checked={heartbeat.enabled}
               onChange={(e) => onHeartbeatChange({ ...heartbeat, enabled: e.target.checked })} className="rounded" />
-            <div><p className="text-sm font-medium">Enable Heartbeat</p><p className="text-xs text-muted-foreground">Agent wakes up periodically to check conditions or process tasks</p></div>
+            <div><p className="text-sm font-medium">Wake up on a schedule</p><p className="text-xs text-muted-foreground">Agent wakes up periodically to check conditions or process tasks</p></div>
           </label>
           {heartbeat.enabled && (
             <div className="space-y-4 pt-2">
@@ -204,7 +213,7 @@ export function AutonomousConfig({
                   onChange={(e) => onHeartbeatChange({ ...heartbeat, intervalMinutes: parseInt(e.target.value) || 60 })} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="autonomous-heartbeat-prompt" className="text-sm">Heartbeat Prompt</Label>
+                <Label htmlFor="autonomous-heartbeat-prompt" className="text-sm">Heartbeat prompt</Label>
                 <Textarea id="autonomous-heartbeat-prompt" value={heartbeat.prompt} onChange={(e) => onHeartbeatChange({ ...heartbeat, prompt: e.target.value })}
                   placeholder="Check my inbox for new messages. If there are urgent items, summarize them."
                   className="min-h-[100px] font-mono text-sm" />

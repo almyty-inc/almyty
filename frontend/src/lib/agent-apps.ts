@@ -957,6 +957,15 @@ export function missingChannelFields(
     .filter((key) => !has(key))
 }
 
+/**
+ * The bundle id a desktop or binary place starts with: the app's address
+ * in the app.almyty namespace. Mirrors defaultBundleId in the backend
+ * (agent-app.rules.ts), which seeds it when the place is added.
+ */
+export function defaultBundleId(slug: string): string {
+  return `app.almyty.${slug.replace(/[^a-z0-9]+/gi, '').toLowerCase()}`
+}
+
 /** The address a published web app answers on: its slug, as a subdomain. */
 export function appWebUrl(slug: string): string {
   return `https://${slug}.${hostedChatBaseDomain()}`

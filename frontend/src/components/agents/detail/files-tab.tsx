@@ -119,7 +119,7 @@ export function FilesTab({ agentId, files, error, onRetry }: FilesTabProps) {
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Size</TableHead>
-                  <TableHead>Uploaded By</TableHead>
+                  <TableHead>Uploaded by</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="w-10"></TableHead>
                 </TableRow>

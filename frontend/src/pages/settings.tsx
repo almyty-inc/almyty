@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { Building, Users, User, Shield, ShieldCheck, KeyRound, ShieldAlert, ScrollText, Radio, Lock, CreditCard, Gift, Bell } from 'lucide-react'
+import { Building, Users, User, CreditCard, SlidersHorizontal } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,21 +31,107 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { authApi, organizationsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 
-const SETTINGS_TABS = ['organization', 'members', 'billing', 'referrals', 'profile', 'notifications', 'security', 'sso', 'rbac', 'approvals', 'compliance', 'audit-streams', 'encryption'] as const
-type SettingsTab = typeof SETTINGS_TABS[number]
+/**
+ * Settings used to be thirteen tabs in one row. They are five sections
+ * now, each holding a few pages, and the pages that most teams never open
+ * (approvals, compliance, audit streaming, encryption) sit under
+ * Advanced. Every page keeps its own URL, `/settings/<page>`, so links
+ * from elsewhere (the plan badge, the audit tab) still land where they
+ * did; a section's URL (`/settings/advanced`) opens its first page.
+ * Plan-gated pages gate themselves (EntitlementGate), wherever they sit.
+ */
+export const SETTINGS_SECTIONS = [
+  {
+    key: 'organization',
+    label: 'Organization',
+    icon: Building,
+    description: 'Your organization\'s name and the defaults new agents start with.',
+    pages: [{ key: 'organization', label: 'Details' }],
+  },
+  {
+    key: 'account',
+    label: 'Your account',
+    icon: User,
+    description: 'Your own name, password and what you get notified about.',
+    pages: [
+      { key: 'profile', label: 'Profile' },
+      { key: 'security', label: 'Password and sign-in' },
+      { key: 'notifications', label: 'Notifications' },
+    ],
+  },
+  {
+    key: 'people',
+    label: 'People and access',
+    icon: Users,
+    description: 'Who is in the organization and what each person may do.',
+    pages: [
+      { key: 'members', label: 'Members and teams' },
+      { key: 'rbac', label: 'Roles' },
+      { key: 'sso', label: 'Single sign-on' },
+    ],
+  },
+  {
+    key: 'billing',
+    label: 'Billing',
+    icon: CreditCard,
+    description: 'Your plan, what you have used, and invites that earn credit.',
+    pages: [
+      { key: 'billing', label: 'Plan and usage' },
+      { key: 'referrals', label: 'Referrals' },
+    ],
+  },
+  {
+    key: 'advanced',
+    label: 'Advanced',
+    icon: SlidersHorizontal,
+    description: 'Controls most teams never need: sign-off before actions, compliance, audit export and your own encryption keys.',
+    pages: [
+      { key: 'approvals', label: 'Approvals' },
+      { key: 'compliance', label: 'Compliance' },
+      { key: 'audit-streams', label: 'Audit streaming' },
+      { key: 'encryption', label: 'Encryption' },
+    ],
+  },
+] as const
 
-function getSettingsTab(pathname: string): SettingsTab {
-  for (const t of SETTINGS_TABS) {
-    if (t !== 'organization' && pathname.includes(`/${t}`)) return t
-  }
-  return 'organization'
+type SettingsSection = typeof SETTINGS_SECTIONS[number]
+type SettingsTab = SettingsSection['pages'][number]['key']
+
+/** Every page, by the URL segment it has always had. */
+export const SETTINGS_TABS: SettingsTab[] = SETTINGS_SECTIONS.flatMap((s) => s.pages.map((p) => p.key))
+
+/**
+ * Which page a URL means: `/settings` is Organization, `/settings/<page>`
+ * is that page, `/settings/<section>` is the section's first page, and
+ * anything else falls back to Organization.
+ */
+export function getSettingsTab(pathname: string): SettingsTab {
+  const segment = pathname.split('/').filter(Boolean)[1] ?? ''
+  const page = SETTINGS_TABS.find((t) => t === segment)
+  if (page) return page
+  const section = SETTINGS_SECTIONS.find((s) => s.key === segment)
+  return section ? section.pages[0].key : 'organization'
 }
+
+function sectionOf(tab: SettingsTab): SettingsSection {
+  return SETTINGS_SECTIONS.find((s) => s.pages.some((p) => p.key === tab)) ?? SETTINGS_SECTIONS[0]
+}
+
+const settingsPath = (tab: SettingsTab) => (tab === 'organization' ? '/settings' : `/settings/${tab}`)
 
 export function SettingsPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const settingsTab = getSettingsTab(location.pathname)
-  const setSettingsTab = (t: string) => navigate(t === 'organization' ? '/settings' : `/settings/${t}`)
+  const section = sectionOf(settingsTab)
+
+  // A section URL shows its first page; say so in the address bar too.
+  useEffect(() => {
+    const segment = location.pathname.split('/').filter(Boolean)[1]
+    if (segment && SETTINGS_SECTIONS.some((s) => s.key === segment && s.key !== settingsTab)) {
+      navigate(settingsPath(settingsTab), { replace: true })
+    }
+  }, [location.pathname, settingsTab, navigate])
 
   useEffect(() => {
     document.title = 'Settings | almyty'
@@ -58,7 +144,7 @@ export function SettingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Settings"
-        description="Manage your organization and account settings"
+        description="Your organization, your account and who can do what"
         actions={
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Plan</span>
@@ -67,25 +153,14 @@ export function SettingsPage() {
         }
       />
 
-      {/* The shared pill tabs, as on Analytics, Tools and Memory; each
-          section is still its own URL. */}
-      <Tabs value={settingsTab} onValueChange={setSettingsTab}>
+      {/* The shared pill tabs, as on Analytics, Tools and Memory: one per
+          section. A section with more than one page lists them under it. */}
+      <Tabs value={section.key} onValueChange={(key) => {
+        const next = SETTINGS_SECTIONS.find((s) => s.key === key)
+        if (next) navigate(settingsPath(next.pages[0].key))
+      }}>
         <TabsList aria-label="Settings sections" className="h-auto flex-wrap justify-start">
-          {([
-            { key: 'organization' as SettingsTab, label: 'Organization', icon: Building },
-            { key: 'members' as SettingsTab, label: 'Members & teams', icon: Users },
-            { key: 'billing' as SettingsTab, label: 'Billing', icon: CreditCard },
-            { key: 'referrals' as SettingsTab, label: 'Referrals', icon: Gift },
-            { key: 'profile' as SettingsTab, label: 'Profile', icon: User },
-            { key: 'notifications' as SettingsTab, label: 'Notifications', icon: Bell },
-            { key: 'security' as SettingsTab, label: 'Security', icon: Shield },
-            { key: 'sso' as SettingsTab, label: 'SSO', icon: ShieldCheck },
-            { key: 'rbac' as SettingsTab, label: 'Roles', icon: KeyRound },
-            { key: 'approvals' as SettingsTab, label: 'Approvals', icon: ShieldAlert },
-            { key: 'compliance' as SettingsTab, label: 'Compliance', icon: ScrollText },
-            { key: 'audit-streams' as SettingsTab, label: 'Audit streaming', icon: Radio },
-            { key: 'encryption' as SettingsTab, label: 'Encryption', icon: Lock },
-          ]).map(({ key, label, icon: Icon }) => (
+          {SETTINGS_SECTIONS.map(({ key, label, icon: Icon }) => (
             <TabsTrigger key={key} value={key} className="gap-1.5">
               <Icon className="h-4 w-4" />
               {label}
@@ -93,6 +168,25 @@ export function SettingsPage() {
           ))}
         </TabsList>
       </Tabs>
+
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground" data-testid="settings-section-description">{section.description}</p>
+        {section.pages.length > 1 && (
+          <nav aria-label={`${section.label} pages`} className="flex flex-wrap gap-1">
+            {section.pages.map((p) => (
+              <Button
+                key={p.key}
+                asChild
+                size="sm"
+                variant={p.key === settingsTab ? 'outline' : 'ghost'}
+                className={p.key === settingsTab ? 'bg-background font-semibold shadow-sm' : 'text-muted-foreground'}
+              >
+                <Link to={settingsPath(p.key)} aria-current={p.key === settingsTab ? 'page' : undefined}>{p.label}</Link>
+              </Button>
+            ))}
+          </nav>
+        )}
+      </div>
 
       <div>
         {settingsTab === 'organization' && <OrganizationTab organization={currentOrganization} />}
@@ -262,7 +356,7 @@ function OrganizationTab({ organization }: { organization: any }) {
         </CardHeader>
         <CardContent className="space-y-6">
           <div>
-            <label htmlFor="org-name" className="text-sm font-medium text-muted-foreground">Organization Name</label>
+            <label htmlFor="org-name" className="text-sm font-medium text-muted-foreground">Organization name</label>
             {isEditing ? (
               <Input
                 id="org-name"
@@ -316,7 +410,7 @@ function OrganizationTab({ organization }: { organization: any }) {
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="default-personality" className="text-sm font-medium text-muted-foreground">Default Personality</Label>
+            <Label htmlFor="default-personality" className="text-sm font-medium text-muted-foreground">Default personality</Label>
             <Textarea
               id="default-personality"
               value={defaultPersonality}
@@ -328,7 +422,7 @@ function OrganizationTab({ organization }: { organization: any }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="default-rules" className="text-sm font-medium text-muted-foreground">Default Rules</Label>
+            <Label htmlFor="default-rules" className="text-sm font-medium text-muted-foreground">Default rules</Label>
             <Textarea
               id="default-rules"
               value={defaultRules}
@@ -341,7 +435,7 @@ function OrganizationTab({ organization }: { organization: any }) {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="default-max-cost" className="text-sm font-medium text-muted-foreground">Max Cost per Run ($)</Label>
+              <Label htmlFor="default-max-cost" className="text-sm font-medium text-muted-foreground">Max cost per run ($)</Label>
               <Input
                 id="default-max-cost"
                 type="number"
@@ -353,7 +447,7 @@ function OrganizationTab({ organization }: { organization: any }) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="default-max-steps" className="text-sm font-medium text-muted-foreground">Max Steps per Run</Label>
+              <Label htmlFor="default-max-steps" className="text-sm font-medium text-muted-foreground">Max steps per run</Label>
               <Input
                 id="default-max-steps"
                 type="number"
@@ -506,7 +600,7 @@ export function ProfileTab() {
       <CardContent className="space-y-6">
         <div className="grid grid-cols-2 gap-6">
           <div>
-            <label htmlFor="first-name" className="text-sm font-medium text-muted-foreground">First Name</label>
+            <label htmlFor="first-name" className="text-sm font-medium text-muted-foreground">First name</label>
             {isEditing ? (
               <>
                 <Input
@@ -529,7 +623,7 @@ export function ProfileTab() {
             )}
           </div>
           <div>
-            <label htmlFor="last-name" className="text-sm font-medium text-muted-foreground">Last Name</label>
+            <label htmlFor="last-name" className="text-sm font-medium text-muted-foreground">Last name</label>
             {isEditing ? (
               <>
                 <Input
@@ -554,7 +648,7 @@ export function ProfileTab() {
         </div>
 
         <div>
-          <label htmlFor="email" className="text-sm font-medium text-muted-foreground">Email Address</label>
+          <label htmlFor="email" className="text-sm font-medium text-muted-foreground">Email address</label>
           {isEditing ? (
             <>
               <Input
@@ -607,13 +701,13 @@ export function ProfileTab() {
         
         <div className="grid grid-cols-2 gap-6">
           <div>
-            <label className="text-sm font-medium text-muted-foreground">Account Created</label>
+            <label className="text-sm font-medium text-muted-foreground">Account created</label>
             <div className="text-sm mt-1">
               {formatDate(userProfile.createdAt)}
             </div>
           </div>
           <div>
-            <label className="text-sm font-medium text-muted-foreground">Account Status</label>
+            <label className="text-sm font-medium text-muted-foreground">Account status</label>
             <div className="flex items-center gap-2 mt-1">
               <div className="w-2 h-2 bg-green-500 rounded-full" />
               <span className="text-sm">Active</span>

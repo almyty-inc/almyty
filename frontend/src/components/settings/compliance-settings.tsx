@@ -102,7 +102,7 @@ export function ComplianceSettings() {
       fallback={
         <UpgradePrompt
           feature="compliance_pack"
-          title="Compliance Pack"
+          title="Compliance pack"
           description="Enforce PII filtering and security scanning org-wide, and pull a scored compliance report over your audit activity."
         />
       }

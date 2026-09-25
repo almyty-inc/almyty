@@ -316,7 +316,7 @@ export function GatewaysPage() {
                   <SelectItem value="skills">Skills</SelectItem>
                   <SelectItem value="a2a">A2A</SelectItem>
                   <SelectItem value="acp">ACP</SelectItem>
-                  <SelectItem value="openai_chat">OpenAI Chat</SelectItem>
+                  <SelectItem value="openai_chat">OpenAI chat</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
