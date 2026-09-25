@@ -30,7 +30,7 @@ checks the draft before it ships. Two real runs from its history:
    **GPT-4o at temp 0.3**: and instructions to triage the ticket, look up the order, and draft
    a reply in your voice.
 2. **Attach the tools** it needs, here an **order-lookup** tool generated from a connected
-   orders API. (Connect yours in *APIs → Connect API*.)
+   orders API. (Connect yours in *APIs → Connect an API*: paste the spec link, click **Import**.)
 3. **Add a verifier panel** (*Models & Verification → Configure*): add reviewers from more than
    one vendor, this agent runs **GPT-4o + Gemini 1.5 Pro** with `any_fail_blocks` and up to
    **2 revisions**, triggered `on_final_output`. The primary drafts, the reviewers try to
@@ -49,7 +49,7 @@ checks the draft before it ships. Two real runs from its history:
 
 ## Make it yours
 
-- Swap the orders API for Zendesk/Intercom, same *Connect API* step.
+- Swap the orders API for Zendesk/Intercom, same *Connect an API* step.
 - Tighten or loosen the refund threshold in the constraint.
 - Promote a good run to a **skill** (button on any completed run) so other agents reuse the flow.
 

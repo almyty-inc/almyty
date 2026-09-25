@@ -13,7 +13,18 @@ const SUMMARY: Record<VisibilityValue['visibility'], string> = {
  * "Who can use it", as one line until someone wants to change it. The
  * choice itself is the shared visibility picker (Private, Team, Org-wide).
  */
-export function WhoCanUse({ value, onChange, disabled }: { value: VisibilityValue; onChange: (next: VisibilityValue) => void; disabled?: boolean }) {
+export function WhoCanUse({
+  value,
+  onChange,
+  disabled,
+  noun = 'this provider and its models',
+}: {
+  value: VisibilityValue
+  onChange: (next: VisibilityValue) => void
+  disabled?: boolean
+  /** What the thing is called in the picker's copy. */
+  noun?: string
+}) {
   const { currentOrganization } = useOrganizationStore()
   const [open, setOpen] = useState(false)
   if (!open) {
@@ -29,7 +40,7 @@ export function WhoCanUse({ value, onChange, disabled }: { value: VisibilityValu
   }
   return (
     <div data-testid="who-can-use-picker">
-      <VisibilityField organizationId={currentOrganization?.id ?? ''} value={value} onChange={onChange} disabled={disabled} noun="this provider and its models" />
+      <VisibilityField organizationId={currentOrganization?.id ?? ''} value={value} onChange={onChange} disabled={disabled} noun={noun} />
     </div>
   )
 }

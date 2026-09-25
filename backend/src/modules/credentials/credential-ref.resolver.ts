@@ -286,7 +286,13 @@ export class CredentialRefResolver {
   async rotateManaged(
     organizationId: string,
     credentialId: string,
-    patch: { config: Record<string, any>; secretKeys?: string[]; managedBy: Pick<ManagedBy, 'kind' | 'id'> },
+    patch: {
+      config: Record<string, any>;
+      secretKeys?: string[];
+      managedBy: Pick<ManagedBy, 'kind' | 'id'>;
+      keyName?: string | null;
+      keyLocation?: string | null;
+    },
   ): Promise<Credential> {
     const credential = await this.load(organizationId, credentialId);
     if (!CredentialRefResolver.isManagedBy(credential, patch.managedBy)) {
@@ -299,6 +305,10 @@ export class CredentialRefResolver {
     credential.config = await this.encryptKeys(organizationId, merged, patch.secretKeys);
     await credential.encryptSensitiveDataForOrg(this.envelopeCrypto);
     credential.isActive = true;
+    // Where an API key is sent is part of the same write: a header renamed
+    // together with the key must not keep the old name on the row.
+    if (patch.keyName !== undefined) credential.keyName = patch.keyName as string;
+    if (patch.keyLocation !== undefined) credential.keyLocation = patch.keyLocation as string;
     credential.healthStatus = 'unknown';
     credential.healthError = null;
     const saved = await this.credentials.save(credential);
