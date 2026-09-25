@@ -21,7 +21,7 @@ import {
   resolveVisibilityWrite,
 } from '../../common/authorization/private-visibility';
 import { assertManageable, canRead } from '../../common/authorization/read-rule';
-import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
+import { assertNoSharedDependents, narrowsScope } from '../../common/authorization/private-dependents';
 import { collectAgentReferences, collectProviderReferences } from './agent-references';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { usableProviders } from '../llm-providers/private-provider';
@@ -700,13 +700,19 @@ export class AgentsService {
         organizationId,
       );
     }
-    // Going private would detach this agent from the shared agents that
-    // call it as a sub-agent or collaborator. Refuse and say which.
-    if (scope?.visibility === 'private' && agent.visibility !== 'private' && userId) {
+    // Narrowing it (to private, to a team, or to another team) would detach
+    // this agent from the agents outside the new scope that call it as a
+    // sub-agent, collaborator or role. Refuse and say which.
+    if (scope && userId && narrowsScope(agent, scope)) {
       await assertNoSharedDependents(
         this.agentRepository.manager,
         this.accessPolicy,
-        { noun: 'agent', organizationId, targets: [{ kind: 'agent', id: agent.id }] },
+        {
+          noun: 'agent',
+          organizationId,
+          targets: [{ kind: 'agent', id: agent.id }],
+          into: { visibility: scope.visibility, teamId: scope.teamId },
+        },
         userId,
       );
     }
