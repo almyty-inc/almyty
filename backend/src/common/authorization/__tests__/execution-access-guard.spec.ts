@@ -198,7 +198,15 @@ describe('every execution path goes through the shared scope check', () => {
       {
         what: 'processing an autonomous run\'s step',
         pattern: /\.processStep\(/,
-        allowed: ['modules/agents/agent-runtime.service.ts', 'modules/agents/agent-runtime.processor.ts'],
+        allowed: [
+          'modules/agents/agent-runtime.service.ts',
+          'modules/agents/agent-runtime.processor.ts',
+          // A strategy's child run (explorer, agent panelist or teammate) is
+          // driven inline, and only one startRun has just created -- scope
+          // asserted there -- and processStep re-checks the principal on
+          // every step it takes.
+          'modules/agents/autonomous-strategy.runner.ts',
+        ],
       },
       {
         what: 'queueing an autonomous run\'s next step (only for a run startRun created)',
