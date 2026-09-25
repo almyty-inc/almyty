@@ -72,7 +72,6 @@ const ALERT_DIALOG_PRIMITIVES = new Set<string>([
 const ALERT_DIALOG_PENDING = new Set<string>([
   'components/agents/detail/overview-tab.tsx',
   'components/analytics/budgets-tab.tsx',
-  'components/apis/detail/credentials-tab.tsx',
   'components/connections-governance/policies-table.tsx',
   'components/connections-governance/review-dashboard.tsx',
   'components/connections/connection-detail.tsx',
@@ -82,14 +81,9 @@ const ALERT_DIALOG_PENDING = new Set<string>([
   'components/settings/approval-policies-settings.tsx',
   'components/settings/rbac-settings.tsx',
   'components/tools/mcp-sources-panel.tsx',
-  'pages/agents.tsx',
-  'pages/apis.tsx',
   'pages/hosted-chat.tsx',
-  'pages/memories.tsx',
   'pages/model-detail.tsx',
   'pages/tool-hub.tsx',
-  'pages/tools.tsx',
-  'pages/workspace-detail.tsx',
 ])
 
 const importsAlertDialog = (text: string) =>

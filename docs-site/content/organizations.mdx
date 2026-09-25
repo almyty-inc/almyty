@@ -12,14 +12,14 @@ When you sign up, your first organization is created automatically from the name
 
 To create additional organizations:
 
-1. Open **Settings** in the sidebar.
-2. In the **Organization** tab, scroll to the bottom and click **Create Organization**.
-3. Enter a name and optional description.
-4. You are set as the **owner** of the new organization.
+1. Open **Organizations** (`/organizations`).
+2. Click **Create organization** to open `/organizations/new`.
+3. Enter a name and optional description, then create it.
+4. You are set as the **owner** of the new organization. Its detail, members and settings live at `/organizations/:id`.
 
 ## Switching organizations
 
-Click the organization name in the **sidebar footer** (below the nav links). A dropdown shows all organizations you belong to. Click one to switch; all pages immediately scope to that organization's data.
+Click the organization selector near the top of the sidebar. A dropdown shows all organizations you belong to. Click one to switch; pages scope to that organization's data.
 
 ## Managing members
 
@@ -53,12 +53,14 @@ Click the menu icon on a member row and select **Remove**. Removing a member rev
 
 ### Permission matrix
 
+Organization roles do not override another person's **Private** resources. The table below describes organization-visible resources; the visibility rules further restrict access.
+
 | Action | Owner | Admin | Member | Viewer |
 |--------|-------|-------|--------|--------|
-| View all resources | Yes | Yes | Yes | Yes |
+| View org-wide resources | Yes | Yes | Yes | Yes |
 | Create resources | Yes | Yes | Yes | No |
 | Edit own resources | Yes | Yes | Yes | No |
-| Edit any resource | Yes | Yes | No | No |
+| Edit org-wide or team resources | Yes | Yes | No | No |
 | Manage members | Yes | Yes | No | No |
 | Manage teams | Yes | Yes | No | No |
 | Change settings | Yes | Yes | No | No |
@@ -68,10 +70,13 @@ Click the menu icon on a member row and select **Remove**. Removing a member rev
 
 Teams are sub-groups within an organization for finer-grained access control. Every organization gets a default **"Everyone"** team on creation; every member is automatically a member of it. Org owners are added as `team_admin` (lead); other roles are added as `team_member`.
 
-Resources (tools, agents, gateways, runners, credentials, APIs, LLM providers) can be created with one of two visibility settings:
+Resources that expose a visibility selector (tools, agents, protocol gateways, runners, credentials, APIs and inference providers) have three visibility settings:
 
+- **Private** (`visibility='private'`): only the resource's owner can see or use it. This is enforced by the backend, including against other org owners/admins, not just hidden in the UI.
 - **Org-wide** (`visibility='org'`): visible to every member of the organization.
 - **Team** (`visibility='team'`, with a `teamId`): visible only to members of that team.
+
+Private tools, APIs and sub-agents cannot be attached to a wider-access parent to expose them indirectly. Use a parent private to the same owner, or explicitly share the dependency first. Public chat-channel gateways do not offer Private visibility because their visitors do not have an almyty identity.
 
 When picking a team for a new resource, you can only park it in a team you are `team_admin` (lead) of. Org owners and admins can park resources in any team.
 
@@ -97,13 +102,15 @@ The full picture, for a member acting on a resource:
 
 | Caller role | Resource visibility | Read/Use | Manage |
 |---|---|---|---|
-| Org owner / admin | any | Yes | Yes |
+| Resource owner | own `private` | Yes | Subject to the action's normal role checks |
+| Anyone else, including org owner / admin | another user's `private` | No | No |
+| Org owner / admin | `org` or `team` | Yes | Yes |
 | Org member (no team) | `org` | Yes | requires explicit org-level perm |
 | Org member, `team_admin` of resource's team | `team` | Yes | Yes |
 | Org member, `team_member` of resource's team | `team` | Yes | No |
 | Org member, not in resource's team | `team` | No | No |
 
-Resources without `teamId` are treated as `org`-wide. The default "Everyone" team is *not* the same as org-wide: putting a resource in "Everyone" means every org member can see it (same effect today), but if you ever shrink the team's membership it becomes a real boundary.
+Visibility, not the absence of a `teamId`, determines access: Private resources have no team and remain private; Team resources require a team. Legacy rows with no visibility value default to org-wide. The default "Everyone" team is *not* the same as org-wide: putting a resource in "Everyone" means every org member can see it (same effect today), but if you ever shrink the team's membership it becomes a real boundary.
 
 ## API
 

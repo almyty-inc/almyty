@@ -6,12 +6,12 @@ Every gateway request is authenticated before any tool runs. almyty is default-d
 
 ## Add auth in the UI
 
-1. Open a gateway's detail page and click the **Authentication** tab
-2. Click **Add Auth Method**
+1. Open a gateway's detail page and find the **Authentication** section
+2. Click **Add auth method** to expand the inline form
 3. Select a type: API Key, Bearer Token, Basic Auth, JWT, OAuth 2.1, or None
-4. Fill in the configuration and click **Save**
+4. Fill in the configuration and click **Add auth method**
 
-To issue API keys, click **Manage Keys** after adding an API Key or Bearer Token method. The raw key is shown once at creation time, then stored only as a SHA-256 hash. Keys support optional expiry, scopes, and `lastUsedAt` tracking.
+To issue API keys, click **Generate key** after adding an API Key method. Name the key in the inline form. The raw key is shown once at creation time, then stored only as a SHA-256 hash. The key API also supports optional expiry, scopes, and `lastUsedAt` tracking.
 
 A generated key looks like this (the `key` field appears only in this one response):
 

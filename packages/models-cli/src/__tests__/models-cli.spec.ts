@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  COMMAND_ALIASES,
+  helpText,
+  resolveCommand,
   assertNoArgvSecrets,
   assertStdinIsPiped,
   csv,
@@ -308,6 +311,36 @@ describe('@almyty/models', () => {
 });
 
 // ── Conventions shared with the other almyty CLIs ─────────────────
+
+describe('hosting commands', () => {
+  it('documents the hosting commands and speaks of hosting, never deployment', () => {
+    const help = helpText();
+    for (const command of ['host <model>', 'host --model-version', 'hosted  ', 'hosted <id>', 'scale <hostedId>', 'teardown <hostedId>']) {
+      expect(help, `--help should document ${command}`).toContain(command);
+    }
+    expect(help).toContain('Hosting:');
+    // `deploying` is a card status value the API filters on, not wording.
+    expect(help.replace(/\|deploying\]/g, ']')).not.toMatch(/deploy/i);
+  });
+
+  it('keeps the older command names working as hidden aliases', () => {
+    expect(resolveCommand('deploy')).toBe('host');
+    expect(resolveCommand('deployments')).toBe('hosted');
+    expect(resolveCommand('deployment')).toBe('hosted');
+    expect(resolveCommand('host')).toBe('host');
+    expect(resolveCommand('list')).toBe('list');
+    expect(resolveCommand('toString')).toBe('toString');
+    expect(resolveCommand(undefined)).toBeUndefined();
+    const help = helpText();
+    for (const alias of Object.keys(COMMAND_ALIASES)) expect(help).not.toContain(`  ${alias} `);
+  });
+
+  it('labels the hosted model on a card as hosting', () => {
+    const rendered = formatCardDetail({ id: 'c1', name: 'qwen', vendorModelId: 'qwen', status: 'active', privacyTier: 'private_cloud', deploymentId: 'd1', selectable: true });
+    expect(rendered).toContain('hosted as     d1');
+    expect(rendered).not.toMatch(/deploy/i);
+  });
+});
 
 describe('conventions', () => {
   it('accepts --flag=value as well as --flag value', () => {

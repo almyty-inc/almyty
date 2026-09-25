@@ -43,7 +43,7 @@ export const SUBCOMMANDS: Record<string, Subcommand> = {
   agents: { pkg: '@almyty/agents', group: 'Agents', help: 'List, run, and inspect agents', subcommands: ['list', 'get', 'run', 'runs', 'inspect', 'executions', 'trace', 'cancel'] },
   chat: { pkg: '@almyty/chat', group: 'Agents', help: 'Interactive chat REPL with an agent' },
   skills: { pkg: '@almyty/skills', group: 'Skills', help: 'Install API skills into AI coding agents', subcommands: ['install', 'list', 'search', 'run', 'installed', 'remove', 'gateways', 'daemon', 'watch'] },
-  models: { pkg: '@almyty/models', group: 'Platform', help: 'Model catalog: cards, validation, deployments' },
+  models: { pkg: '@almyty/models', group: 'Platform', help: 'Model catalog: cards, validation, hosting' },
   connections: { pkg: '@almyty/connections', group: 'Platform', help: 'Connect third-party accounts: connectors, validate, grants' },
   runner: { pkg: '@almyty/runner', group: 'Serving', help: 'Run agents on this machine as a daemon' },
   mcp: { pkg: '@almyty/mcp-server', group: 'Serving', help: 'Serve your agents and tools over MCP' },

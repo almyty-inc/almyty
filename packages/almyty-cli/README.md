@@ -26,7 +26,7 @@ options — the umbrella forwards `--help` to the package it delegates to.
 | `almyty agents <cmd>` | `@almyty/agents` | List, run, inspect and trace agents |
 | `almyty chat [ref]` | `@almyty/chat` | Interactive chat REPL |
 | `almyty skills <cmd>` | `@almyty/skills` | Install API skills into AI coding agents |
-| `almyty models <cmd>` | `@almyty/models` | Model catalog: cards, validation, deployments |
+| `almyty models <cmd>` | `@almyty/models` | Models: catalog, validation, hosted models |
 | `almyty connections <cmd>` | `@almyty/connections` | Connect third-party accounts, validate, grant |
 | `almyty runner <cmd>` | `@almyty/runner` | Run agents on this machine as a daemon |
 | `almyty mcp <args>` | `@almyty/mcp-server` | Serve your agents and tools over MCP |

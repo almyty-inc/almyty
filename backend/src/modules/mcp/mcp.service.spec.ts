@@ -430,7 +430,7 @@ describe('McpService', () => {
 
       const mockResources = [
         {
-          id: 'resource-1',
+          id: '3f0e8a4c-1b2d-4c5e-8f6a-7b8c9d0e1f2a',
           name: 'User Schema',
           description: 'User resource schema',
           api: { organizationId: 'org-1' },
@@ -450,7 +450,7 @@ describe('McpService', () => {
       expect(result.jsonrpc).toBe('2.0');
       expect(result.id).toBe('5');
       expect(result.result.resources).toHaveLength(2);
-      expect(result.result.resources[0].uri).toBe('almyty://resources/resource-1');
+      expect(result.result.resources[0].uri).toBe('almyty://resources/3f0e8a4c-1b2d-4c5e-8f6a-7b8c9d0e1f2a');
       expect(result.result.resources[0].name).toBe('User Schema');
     });
 
@@ -460,12 +460,12 @@ describe('McpService', () => {
         id: '6',
         method: 'resources/read',
         params: {
-          uri: 'almyty://resources/resource-1',
+          uri: 'almyty://resources/3f0e8a4c-1b2d-4c5e-8f6a-7b8c9d0e1f2a',
         },
       };
 
       const mockResource = {
-        id: 'resource-1',
+        id: '3f0e8a4c-1b2d-4c5e-8f6a-7b8c9d0e1f2a',
         name: 'User Schema',
         description: 'User resource',
         schema: { type: 'object', properties: { id: { type: 'string' } } },
@@ -479,7 +479,7 @@ describe('McpService', () => {
       expect(result.jsonrpc).toBe('2.0');
       expect(result.id).toBe('6');
       expect(result.result.contents).toBeDefined();
-      expect(result.result.contents[0].uri).toBe('almyty://resources/resource-1');
+      expect(result.result.contents[0].uri).toBe('almyty://resources/3f0e8a4c-1b2d-4c5e-8f6a-7b8c9d0e1f2a');
       expect(result.result.contents[0].mimeType).toBe('application/json');
       expect(result.result.contents[0].text).toBeDefined();
     });

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { isUUID } from 'class-validator';
+import { In, Repository } from 'typeorm';
 
 import {
   JsonRpcErrorCode,
@@ -19,6 +20,7 @@ import { Resource } from '../../../entities/resource.entity';
 import { GatewayTool } from '../../../entities/gateway-tool.entity';
 import { Gateway } from '../../../entities/gateway.entity';
 import { gatewayServableTo } from '../../gateways/private-gateway';
+import { servableToolsOnGateway } from '../../gateways/gateway-servable';
 import { SkillGeneratorService } from '../../tools/skill-generator.service';
 import { PromotedSkillsService } from '../../promoted-skills/promoted-skills.service';
 import { McpToolHandler } from './mcp-tool.handler';
@@ -49,21 +51,15 @@ export class McpContentHandler {
     let resources: Resource[];
 
     if (gatewayId) {
-      // Scope to APIs that have tools assigned to this gateway
-      const gatewayTools = await this.gatewayToolRepository.find({
-        where: { gatewayId, isActive: true },
-        relations: { tool: true },
-      });
-      const apiIds = [...new Set(gatewayTools.map(gt => gt.tool?.apiId).filter(Boolean))];
-      if (apiIds.length === 0) {
-        resources = [];
-      } else {
-        const allResources = await this.resourceRepository.find({
-          where: { api: { organizationId } },
-          relations: { api: true },
-        });
-        resources = allResources.filter(r => apiIds.includes(r.api?.id));
-      }
+      // The resources of the APIs whose tools this gateway serves -- the
+      // same set resources/read resolves against.
+      const apiIds = [...(await this.apiIdsServedOnGateway(gatewayId))];
+      resources = apiIds.length === 0
+        ? []
+        : await this.resourceRepository.find({
+            where: { apiId: In(apiIds), api: { organizationId } },
+            relations: { api: true },
+          });
     } else {
       resources = await this.resourceRepository.find({
         where: { api: { organizationId } },
@@ -97,10 +93,17 @@ export class McpContentHandler {
     return { resourceTemplates: [] };
   }
 
+  /**
+   * resources/read answers from the set resources/list offered. Through a
+   * gateway that is the resources of the APIs whose tools the gateway
+   * serves; a resource outside it, like another member's private API's
+   * resource or a malformed id, reads exactly like one that does not exist.
+   */
   async handleResourceRead(
     params: McpReadResourceRequest,
     organizationId: string,
     caller?: { id: string },
+    gatewayId?: string,
   ): Promise<McpReadResourceResult> {
     const match = params.uri.match(/almyty:\/\/resources\/(.+)/);
     if (!match) {
@@ -108,14 +111,17 @@ export class McpContentHandler {
     }
 
     const resourceId = match[1];
-    const resource = await this.resourceRepository.findOne({
-      where: { id: resourceId, api: { organizationId } },
-      relations: { api: true },
-    });
+    const resource = isUUID(resourceId)
+      ? await this.resourceRepository.findOne({
+          where: { id: resourceId, api: { organizationId } },
+          relations: { api: true },
+        })
+      : null;
 
-    // A resource of another member's private API (any private API when
-    // the caller is unknown) reads like one that does not exist.
-    if (!resource || (resource.api && isOthersPrivate(resource.api, caller?.id ?? null))) {
+    const published = !!resource
+      && !(resource.api && isOthersPrivate(resource.api, caller?.id ?? null))
+      && (!gatewayId || (await this.apiIdsServedOnGateway(gatewayId)).has(resource.apiId));
+    if (!resource || !published) {
       throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, 'Resource not found');
     }
 
@@ -128,6 +134,17 @@ export class McpContentHandler {
         },
       ],
     };
+  }
+
+  /**
+   * The APIs a gateway publishes resources for: those of the tools it
+   * serves, by the shared rule in gateway-servable.ts (active row, active
+   * tool, scope fits the gateway). resources/list and resources/read both
+   * read this, so what is listed and what is readable cannot drift apart.
+   */
+  private async apiIdsServedOnGateway(gatewayId: string): Promise<Set<string>> {
+    const tools = await servableToolsOnGateway(this.gatewayToolRepository, gatewayId);
+    return new Set(tools.map((t) => t.apiId).filter((id): id is string => !!id));
   }
 
   async handlePromptsList(

@@ -91,10 +91,29 @@ function fakeReq(path: string, method = 'POST') {
 function build(rows: AgentExecution[]) {
   const executionRepo = fakeExecutionRepo(rows);
   const cancellations = new AgentExecutionCancellationService(executionRepo as any);
+  // The key's user is loaded with it, as the helper asks: an active
+  // member of org-1, so the key is honored (a removed member's is not;
+  // see gateway-agent-runs.integration.spec.ts).
   const apiKeyRepo = {
-    findOne: jest.fn(async ({ where }: any) =>
+    findOne: jest.fn(async ({ where, relations }: any) =>
       where.keyHash === KEY_HASH && where.organizationId === 'org-1'
-        ? { id: 'key-1', userId: 'user-1', organizationId: 'org-1', isActive: true }
+        ? {
+            id: 'key-1',
+            userId: 'user-1',
+            organizationId: 'org-1',
+            isActive: true,
+            ...(relations?.user
+              ? {
+                  user: {
+                    id: 'user-1',
+                    isActive: true,
+                    organizationMemberships: [
+                      { userId: 'user-1', organizationId: 'org-1', isActive: true, inviteAccepted: true },
+                    ],
+                  },
+                }
+              : {}),
+          }
         : null,
     ),
   };

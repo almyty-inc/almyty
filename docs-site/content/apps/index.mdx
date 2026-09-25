@@ -29,11 +29,11 @@ The separation is deliberate. The same agent can appear in an internal app and a
 
 ## The app detail page
 
-An app is a normal detail page: a header, three tabs (**Distributions**, **Agents**, **Settings**), and a card for each place the product ships. Every card shows a badge for the medium and a status (Live, Building, Draft). Clicking a card opens a dialog to configure that distribution.
+Create an app from **Apps → Create app** (`/apps/new`). Its detail page has a header, three tabs (**Distributions**, **Agents**, **Settings**), and a card for each place the product ships. Every card shows a badge for the medium and a status (Live, Building, Draft). Clicking a card opens its configuration page at `/apps/:slug/distributions/:target`.
 
 ![An app detail page with its distributions as cards](/screenshots/apps-detail.png)
 
-A product with no distributions yet shows an empty state on the Distributions tab, with the same **Add distribution** action as the header.
+A product with no distributions yet shows an empty state on the Distributions tab, with the same **Add distribution** action as the header. That action opens `/apps/:slug/distributions/new`; publishing or building happens separately on the resulting distribution page.
 
 ![An app that is not shipping anywhere yet](/screenshots/apps-empty.png)
 
