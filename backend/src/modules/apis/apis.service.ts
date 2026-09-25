@@ -24,7 +24,7 @@ import { assertNotOthersPrivate, nameTaken, resolveVisibilityWrite } from '../..
 import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { Credential } from '../../entities/credential.entity';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
-import { hasInlineApiSecret, inlineApiAuthView, splitInlineApiAuth } from '../credentials/inline-api-auth.helper';
+import { connectionAuthConfig, hasInlineApiSecret, inlineApiAuthView, splitInlineApiAuth } from '../credentials/inline-api-auth.helper';
 
 import { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions } from './dto/apis.dto';
 export type { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions };
@@ -73,9 +73,12 @@ export class ApisService {
     const current = currentId ? await this.credentialRefs.load(api.organizationId, currentId).catch(() => null) : null;
     let row: Credential;
     if (current && CredentialRefResolver.isManagedBy(current, managedBy) && current.type === split.credentialType) {
-      row = await this.credentialRefs.rotateManaged(api.organizationId, current.id, { config: split.secretConfig, managedBy });
-      row.keyName = split.keyName;
-      row.keyLocation = split.keyLocation;
+      row = await this.credentialRefs.rotateManaged(api.organizationId, current.id, {
+        config: split.secretConfig,
+        managedBy,
+        keyName: split.keyName,
+        keyLocation: split.keyLocation,
+      });
     } else {
       row = await this.credentialRefs.createManaged(api.organizationId, {
         name: `${api.name} ${api.authentication.type} auth`,
@@ -100,6 +103,14 @@ export class ApisService {
   private async authenticationForRequest(api: Api): Promise<Api['authentication'] | null> {
     const auth = api.authentication;
     if (!auth || auth.type === 'none') return null;
+    const connectionId = auth.config?.connectionId as string | undefined;
+    if (connectionId) {
+      // A connection's fields are named by its connector; read its key out.
+      const resolved = await this.credentialRefs.resolve(api.organizationId, connectionId, {
+        context: { purpose: 'api_test', resourceType: 'api', resourceId: api.id },
+      });
+      return inlineApiAuthView(auth, connectionAuthConfig(resolved.config)) as Api['authentication'];
+    }
     const credentialId = auth.config?.credentialId as string | undefined;
     if (!credentialId) return auth;
     const resolved = await this.credentialRefs.resolve(api.organizationId, credentialId, {
@@ -163,6 +174,9 @@ export class ApisService {
 
     const api = this.apiRepository.create({
       ...createApiData,
+      // An inline secret never reaches the row: it goes to the store right
+      // after the first save (the credential row needs the API id).
+      authentication: hasInlineApiSecret(createApiData.authentication) ? null : (createApiData.authentication as any),
       visibility: scope.visibility,
       teamId: scope.teamId,
       ownerUserId: userId ?? null,
@@ -170,12 +184,17 @@ export class ApisService {
     });
 
     // Enforced with the insert, under the organization API-quota lock.
-    const saved = await withApiQuota(this.apiRepository.manager, createApiData.organizationId, 1, (tx) =>
+    let saved = await withApiQuota(this.apiRepository.manager, createApiData.organizationId, 1, (tx) =>
       tx.getRepository(Api).save(api),
     );
+    if (hasInlineApiSecret(createApiData.authentication)) {
+      saved.authentication = createApiData.authentication as Api['authentication'];
+      await this.moveInlineAuth(saved);
+      saved = await this.apiRepository.save(saved);
+    }
 
     // Audit log (fire-and-forget)
-    this.auditLogService.logCreate(createApiData.organizationId, undefined, AuditResource.API, saved.id, saved.name, { type: saved.type });
+    this.auditLogService.logCreate(createApiData.organizationId, userId, AuditResource.API, saved.id, saved.name, { type: saved.type });
 
     return saved;
   }
