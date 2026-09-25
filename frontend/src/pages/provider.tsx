@@ -158,7 +158,7 @@ export function ProviderPage() {
     )
   }
 
-  const status = providerCheck(provider, models.some((m) => m.selectable))
+  const status = providerCheck(provider)
   const visibility: VisibilityValue = { visibility: (provider.visibility as Visibility) ?? 'org', teamId: provider.teamId ?? null }
 
   return (

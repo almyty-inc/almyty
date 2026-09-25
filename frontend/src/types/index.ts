@@ -161,6 +161,11 @@ export interface Gateway {
   successfulRequests: number
   lastRequestAt?: string
   lastHealthCheckAt?: string
+  /**
+   * The key check ran and passed and the provider is on: the rule that makes
+   * every model it lists usable, and what "Key works" shows.
+   */
+  keyChecked?: boolean
   /** Set with lastError; the error is current when it is newer than lastSuccessAt. */
   lastErrorAt?: string
   lastSuccessAt?: string
