@@ -108,7 +108,7 @@ export function CommandPalette() {
   const actionEntries: Entry[] = [
     { id: 'act-new-agent', label: 'Create agent', hint: 'Open the visual agent builder', icon: Plus, action: () => go('/agents/new') },
     { id: 'act-import-agent', label: 'Import agent', hint: 'From an exported agent JSON', icon: Plus, action: () => go('/agents/import') },
-    { id: 'act-new-gateway', label: 'Create gateway', hint: 'MCP, A2A, UTCP, or Skills', icon: Plus, action: () => go('/gateways/new') },
+    { id: 'act-new-gateway', label: 'Share tools', hint: 'One address for MCP, UTCP and Skills', icon: Plus, action: () => go('/gateways/new') },
     { id: 'act-new-app', label: 'Create app', hint: 'Ship an agent to web, desktop, or a chat platform', icon: Plus, action: () => go('/apps/new') },
     { id: 'act-new-tool', label: 'Create tool', hint: 'HTTP, JavaScript, GraphQL, Model, or SDK', icon: Plus, action: () => go('/tools/new') },
     { id: 'act-new-mcp-server', label: 'Add MCP server', hint: 'Use the tools of a remote MCP server', icon: Plus, action: () => go('/tools/mcp-servers/new') },

@@ -49,6 +49,9 @@ export function GatewayConfigurationCard({
     }
   }
 
+  // A shared-tools gateway's address and snippets are its Connect card.
+  if (gateway.type === 'tools') return null
+
   return (
     <Card>
       <CardHeader>
