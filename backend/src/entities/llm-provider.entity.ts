@@ -281,6 +281,15 @@ export class LlmProvider {
   @Column({ nullable: true })
   lastSuccessAt: Date;
 
+  /**
+   * When a sync last imported this provider's model list (a list with
+   * models in it, or the check of a vendor that serves no list). Null
+   * means never: the boot-time catalog sync checks the key and lists the
+   * models of every active provider still at null (CatalogWarmupService).
+   */
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  modelsSyncedAt: Date | null;
+
 
   @CreateDateColumn()
   createdAt: Date;

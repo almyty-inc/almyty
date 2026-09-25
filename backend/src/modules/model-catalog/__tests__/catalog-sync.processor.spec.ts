@@ -3,11 +3,13 @@ import { getQueueToken } from '@nestjs/bull';
 
 import { CatalogSyncProcessor, MODEL_CATALOG_BACKFILL_JOB, MODEL_CATALOG_SWEEP_JOB, MODEL_CATALOG_SYNC_QUEUE } from '../catalog-sync.processor';
 import { ModelCatalogService } from '../model-catalog.service';
+import { CatalogWarmupService } from '../catalog-warmup.service';
 
 describe('CatalogSyncProcessor', () => {
   let processor: CatalogSyncProcessor;
   let queue: { add: jest.Mock; getRepeatableJobs: jest.Mock; removeRepeatableByKey: jest.Mock };
-  let catalog: { backfill: jest.Mock; syncEveryProvider: jest.Mock };
+  let catalog: { syncEveryProvider: jest.Mock };
+  let warmup: { syncNeverSynced: jest.Mock };
   const originalEnv = { ...process.env };
 
   afterEach(() => {
@@ -24,14 +26,15 @@ describe('CatalogSyncProcessor', () => {
       removeRepeatableByKey: jest.fn().mockResolvedValue(undefined),
     };
     catalog = {
-      backfill: jest.fn().mockResolvedValue({ providers: 3, synced: 2, created: 14, failed: 0 }),
       syncEveryProvider: jest.fn().mockResolvedValue({ providers: 3, synced: 2, failed: 1, keyRejected: 1 }),
     };
+    warmup = { syncNeverSynced: jest.fn().mockResolvedValue({ ran: true, providers: 3, vendors: 2, synced: 2, keyRejected: 1, failed: 0, skipped: 0 }) };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CatalogSyncProcessor,
         { provide: getQueueToken(MODEL_CATALOG_SYNC_QUEUE), useValue: queue },
         { provide: ModelCatalogService, useValue: catalog },
+        { provide: CatalogWarmupService, useValue: warmup },
       ],
     }).compile();
     processor = module.get(CatalogSyncProcessor);
@@ -94,10 +97,11 @@ describe('CatalogSyncProcessor', () => {
     await expect(processor.onApplicationBootstrap()).resolves.toBeUndefined();
   });
 
-  it('the jobs run the catalog backfill and the sweep and return their counts', async () => {
-    await expect(processor.handleBackfill()).resolves.toEqual({ providers: 3, synced: 2, created: 14, failed: 0 });
-    expect(catalog.backfill).toHaveBeenCalledTimes(1);
-    await expect(processor.handleSweep()).resolves.toEqual({ providers: 3, synced: 2, failed: 1, keyRejected: 1 });
+  it('the jobs run the boot sync and the sweep and return their counts', async () => {
+    await expect(processor.handleBackfill()).resolves.toEqual({ ran: true, providers: 3, vendors: 2, synced: 2, keyRejected: 1, failed: 0, skipped: 0 });
+    expect(warmup.syncNeverSynced).toHaveBeenCalledWith('boot');
+    await expect(processor.handleSweep()).resolves.toEqual({ providers: 3, synced: 2, failed: 1, keyRejected: 1, neverSynced: expect.objectContaining({ ran: true }) });
+    expect(warmup.syncNeverSynced).toHaveBeenLastCalledWith('sweep');
     expect(catalog.syncEveryProvider).toHaveBeenCalledTimes(1);
   });
 });

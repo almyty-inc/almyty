@@ -299,17 +299,15 @@ describe('ModelCatalogService', () => {
       expect(await svc.syncInBackground('org', 'missing', 'provider_created', 0)).toBeNull();
     });
 
-    it('backfill syncs only active providers that have no cards yet', async () => {
+    it('a sync that imports a list records modelsSyncedAt on that provider only; an empty list does not', async () => {
       providers.seed(Object.assign(new LlmProvider(), { id: 'p2', organizationId: 'org2', name: 'Other', type: LlmProviderType.OPENAI, status: LlmProviderStatus.ACTIVE, isHealthy: true, configuration: {} }));
+      fetch().mockResolvedValueOnce([]);
+      await svc.syncFromProvider('org', 'p1');
+      expect(providers.rows.find((p) => p.id === 'p1')?.modelsSyncedAt ?? null).toBeNull();
       fetch().mockResolvedValueOnce([{ id: 'a' }]);
       await svc.syncFromProvider('org', 'p1');
-      fetch().mockClear();
-      fetch().mockResolvedValue([{ id: 'b' }]);
-      const result = await svc.backfill();
-      expect(result).toEqual({ providers: 2, synced: 1, created: 1, failed: 0 });
-      expect(fetch()).toHaveBeenCalledTimes(1);
-      expect(fetch().mock.calls[0][0].id).toBe('p2');
-      expect(models.rows.find((m) => m.vendorModelId === 'b')?.organizationId).toBe('org2');
+      expect(providers.rows.find((p) => p.id === 'p1')?.modelsSyncedAt).toBeInstanceOf(Date);
+      expect(providers.rows.find((p) => p.id === 'p2')?.modelsSyncedAt ?? null).toBeNull();
     });
 
     it('recordExternalValidation: a passing health check creates the card if needed and makes it selectable', async () => {

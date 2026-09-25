@@ -697,6 +697,8 @@ export class LlmProvidersService {
      * kick-off still works.
      */
     organizationId: string,
+    /** syncModels: false when the caller lists the models itself next (the boot and on-load catalog sync). */
+    options: { syncModels?: boolean } = {},
   ): Promise<{
     isHealthy: boolean;
     responseTime?: number;
@@ -760,7 +762,7 @@ export class LlmProvidersService {
       // Awaited: a vendor with no model list (Vertex AI, Qwen, Ark) serves
       // this model and nothing else anyone can see, and connect lists next.
       await this.recordCatalogValidation(provider, healthCheckModel, { passed: true, latencyMs: responseTime });
-      this.scheduleCatalogSync(provider.id, provider.organizationId, 'health_check');
+      if (options.syncModels !== false) this.scheduleCatalogSync(provider.id, provider.organizationId, 'health_check');
       void this.secrets.recordHealth(provider, true);
 
       return {

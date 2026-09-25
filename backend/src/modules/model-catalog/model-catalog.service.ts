@@ -280,6 +280,9 @@ export class ModelCatalogService {
     if (created.length) this.audit(created[0], AuditAction.MODEL_REGISTERED, userId, { providerId, count: created.length, source: 'provider_list' });
     if (retired.length) this.audit(retired[0], AuditAction.UPDATE, userId, { providerId, retired: retired.map((c) => c.vendorModelId), reason: 'not listed by provider' });
     if (reinstated.length) this.audit(reinstated[0], AuditAction.UPDATE, userId, { providerId, reinstated: reinstated.map((c) => c.vendorModelId) });
+    // An empty list means the vendor could not be asked, so only a list
+    // with models in it counts as synced (see CatalogWarmupService).
+    if (listed.length > 0) await this.markModelsSynced(organizationId, providerId);
     // A key check that finished while this sync was listing only marked
     // the cards that existed then; the ones just created missed it.
     if (created.some((c) => c.validationStatus === 'never')) {
@@ -343,27 +346,13 @@ export class ModelCatalogService {
   }
 
   /**
-   * One-shot on boot (see CatalogSyncProcessor): every active provider
-   * that has no cards yet gets its list imported, so an org set up before
-   * the catalog existed can route without anyone syncing by hand.
-   * Idempotent, so replicas racing on it do no harm.
+   * Record that the provider's models have been synced (llm_providers
+   * .modelsSyncedAt). A sync that imported a list does this itself; the
+   * boot and on-load sync (CatalogWarmupService) calls it for a vendor
+   * that serves no list, once its key check has passed.
    */
-  async backfill(): Promise<{ providers: number; synced: number; created: number; failed: number }> {
-    const providers = await this.providers.find({ where: { status: LlmProviderStatus.ACTIVE } });
-    const result = { providers: providers.length, synced: 0, created: 0, failed: 0 };
-    for (const provider of providers) {
-      const any = await this.models.findOne({ where: { organizationId: provider.organizationId, providerId: provider.id } });
-      if (any) continue;
-      try {
-        const r = await this.syncFromProvider(provider.organizationId, provider.id);
-        result.synced++;
-        result.created += r.created.length;
-      } catch (error: any) {
-        result.failed++;
-        this.logger.warn(`catalog backfill for provider ${provider.id} failed: ${error?.message ?? error}`);
-      }
-    }
-    return result;
+  async markModelsSynced(organizationId: string, providerId: string): Promise<void> {
+    await this.providers.update({ id: providerId, organizationId }, { modelsSyncedAt: new Date() });
   }
 
   /**
