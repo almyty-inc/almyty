@@ -6,19 +6,23 @@ REST reference for models and for running a model on your own cloud account. Eve
 
 ## Models
 
+Models arrive from connected providers by themselves ([`POST /llm-providers/connect`](/api-reference/llm-providers-api#connect-a-provider)); a provider's models are selectable once its key check passes. These routes read and adjust them.
+
 | Method | Endpoint | Role | Description |
 |--------|----------|------|-------------|
 | `GET` | `/models` | member | List models. Filters: `status`, `privacyTier`, `providerId`, `selectable=true` |
-| `POST` | `/models` | admin | Add a model against an inference provider |
-| `POST` | `/models/sync` | admin | Import what one inference provider lists (`{ providerId }`), or every active one with no body |
+| `POST` | `/models` | admin | Add a model a provider serves but does not list |
+| `POST` | `/models/sync` | admin | Read one provider's list again (`{ providerId }`), or every active one with no body |
 | `GET` | `/models/:id` | member | Model detail |
-| `PATCH` | `/models/:id` | admin | Update privacy tier, region, capabilities, price override, status |
-| `POST` | `/models/:id/validate` | admin | One real call through the model; passing makes it selectable |
+| `PATCH` | `/models/:id` | admin | Override privacy tier, region, capabilities, context length, price, status |
+| `POST` | `/models/:id/validate` | admin | One real call through one model. A provider's key check covers its models; this is for an endpoint with no provider row |
 | `DELETE` | `/models/:id` | admin | Remove a model |
 
-Every model in a response carries two computed fields: `selectable` (the support rule) and `effectivePricing` (the override when set, else the feed price).
+Every model in a response carries two computed fields: `selectable` (usable right now) and `effectivePricing` (the override when set, else the feed price).
 
-### Add a model
+### Add a model by hand
+
+For an id the provider serves but does not list. It is checked when its provider is.
 
 ```bash
 curl -X POST https://api.almyty.com/models \
@@ -39,7 +43,7 @@ curl -X POST https://api.almyty.com/models \
 |-----------|------|----------|-------------|
 | `name` | string | Yes | Display name |
 | `vendorModelId` | string | Yes | The id sent on the wire |
-| `providerId` | uuid | One of | An inference provider |
+| `providerId` | uuid | One of | A connected provider |
 | `endpointRef` | object | One of | `{ url }` of an endpoint |
 | `modelVersionId` | uuid | No | A [registered version](#registered-versions) |
 | `capabilities` | object | No | Booleans: `tools`, `vision`, `reasoning`, `embedding`, `structuredOutput` |
@@ -50,20 +54,13 @@ curl -X POST https://api.almyty.com/models \
 | `base` | string | No | What the model is based on, for example `qwen3-14b` |
 | `metadata` | object | No | Free-form |
 
-### A server you run
+### Your own server
 
-Any OpenAI-compatible server (vLLM, Ollama, TGI, llama.cpp, LiteLLM) is a `custom` inference provider plus an ordinary model on it. Create the provider with [`POST /llm-providers`](/api-reference/llm-providers-api), `type: "custom"`, the server's base URL in `configuration.apiUrl` and, if it checks one, its key in `configuration.apiKey`:
-
-```bash
-curl -X POST https://api.almyty.com/llm-providers \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{ "name": "Lab box", "type": "custom", "configuration": { "apiUrl": "http://10.0.0.7:8000/v1" } }'
-```
-
-Then `POST /models` with that `providerId` and the `vendorModelId` the server serves, and validate it. Adding the provider also imports what the server lists at `GET <base>/models`.
+Any OpenAI-compatible server (vLLM, Ollama, TGI, llama.cpp, LiteLLM) is a `custom` provider. Connect it with [`POST /llm-providers/connect`](/api-reference/llm-providers-api#connect-a-provider), `type: "custom"`, the server's base URL in `configuration.apiUrl` and, if it checks one, its key in `configuration.apiKey`. What the server lists at `GET <base>/models` becomes its models, usable once the check passes.
 
 ### Validate
+
+For an endpoint with no provider row (a provider's models are covered by its key check, and a model on your cloud account is checked by itself when it reaches ready):
 
 ```bash
 curl -X POST https://api.almyty.com/models/4f2a.../validate \
@@ -85,7 +82,7 @@ A failed run answers with `success: false`, `passed: false` and `error`, and rec
 
 ### Sync
 
-`POST /models/sync` with no body returns a per-provider summary; with `{ providerId }` the summary for that inference provider: `created` and `reinstated` models, `retired` models, `skipped` count, and `error` per provider where the vendor could not be asked.
+`POST /models/sync` with no body returns a per-provider summary; with `{ providerId }` the summary for that provider: `created` and `reinstated` models, `retired` models, `skipped` count, and `error` per provider where the vendor could not be asked. The same read happens on connect, on every key check and every six hours without anyone calling it.
 
 ### Model fields
 

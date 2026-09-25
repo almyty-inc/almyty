@@ -10,7 +10,7 @@ larger agent flow.
 
 1. Open **Tools → Create tool** (`/tools/new`) and select **Model prompt**.
 2. Give it a **name** and **description**.
-3. Choose a model with the shared model picker. Set up its inference provider under **Models → Inference providers** first if needed.
+3. Choose a model with the shared model picker: one search box over every available model. Connect a provider under **Models → Connect a provider** first if needed.
 4. Write a **system prompt** with standing instructions for the model.
 5. Write a **user prompt template** using `{{parameters.*}}` expressions for dynamic values.
 6. Define the **input parameters** referenced in the templates.
@@ -126,7 +126,7 @@ LLM tools work with any configured provider:
 | **Anthropic** | claude-sonnet-5, claude-opus-5, claude-haiku-4-5, etc. |
 | **Custom** | Any OpenAI-compatible API endpoint |
 
-Configure providers in **Models > Inference providers** before creating LLM tools.
+Connect a provider in **Models → Connect a provider** before creating LLM tools.
 
 ## Cost tracking
 
