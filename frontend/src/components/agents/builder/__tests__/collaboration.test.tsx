@@ -25,7 +25,6 @@ import { llmProvidersApi } from '@/lib/api'
 vi.mock('@/lib/api', () => ({
   llmProvidersApi: {
     getAll: vi.fn(),
-    getModels: vi.fn().mockResolvedValue([{ id: 'gpt-4o', name: 'gpt-4o' }]),
   },
 }))
 vi.mock('@/lib/models-api', () => ({ modelsApi: { list: vi.fn().mockResolvedValue([]) } }))
@@ -82,10 +81,14 @@ describe('collaboration card', () => {
     fireEvent.click(screen.getByRole('button', { name: /Add model/ }))
     expect(onState).toHaveBeenLastCalledWith(expect.objectContaining({ participants: [{ kind: 'model' }, { kind: 'model' }] }))
 
-    // Each model participant chooses its provider and model with the shared picker.
+    // Each model participant chooses its model with the shared picker,
+    // Automatic included.
     const first = screen.getByTestId('participant-0')
-    expect(await within(first).findByText('Choose a provider first')).toBeInTheDocument()
-    expect(within(first).getByRole('radio', { name: 'Routed by policy' })).toBeInTheDocument()
+    const picker = await within(first).findByRole('combobox', { name: 'Model' })
+    await vi.waitFor(() => expect(picker).not.toBeDisabled())
+    expect(picker).toHaveTextContent('Choose a model')
+    fireEvent.click(picker)
+    expect(within(first).getByRole('option', { name: /Automatic/ })).toBeInTheDocument()
   })
 
   it('mixes agents and models, in order, for a sequential chain', async () => {
@@ -120,7 +123,7 @@ describe('collaboration card', () => {
     // Radix renders the chosen item's text in the trigger.
     expect(screen.getByText('A model')).toBeInTheDocument()
     // The judge picks its model with the same picker as everyone else.
-    expect(await screen.findByTestId('autonomous-judge-model-disabled')).toBeInTheDocument()
+    expect(await screen.findByTestId('autonomous-judge-model-trigger')).toBeInTheDocument()
     expect(screen.queryByTestId('no-judge-agents')).not.toBeInTheDocument()
   })
 })

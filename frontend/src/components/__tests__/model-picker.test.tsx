@@ -1,72 +1,42 @@
 /**
- * ModelPicker: the model depends on the provider.
+ * ModelPicker: one searchable list of every model, grouped by provider.
  *
- * The screens it replaced put a free-text model box next to a provider
- * select. These pin the behaviour that replaced it: disabled until a
- * provider is chosen, a select of the catalog's cards (validated or not)
- * or else the provider's live list, free text only for a self-hosted
- * provider, an unreadable or empty list, or the explicit escape hatch.
+ * The picker it replaced asked for a provider first and then a model from
+ * that provider. These pin the single list: search, grouping, what a pick
+ * emits, Automatic, the ways a saved or unlisted id stays visible, and the
+ * way out when nothing is connected.
  */
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor, fireEvent, within } from '@testing-library/react'
+import { screen, fireEvent, within } from '@testing-library/react'
 
 import { renderWithProviders } from '@/test/setup'
-import { ModelPicker, type ModelSelection } from '../model-picker'
+import { ModelPicker, keyRejected, type ModelSelection } from '../model-picker'
 import { llmProvidersApi } from '@/lib/api'
 import { modelsApi } from '@/lib/models-api'
 
 vi.mock('@/lib/api', () => ({
-  llmProvidersApi: { getAll: vi.fn(), getModels: vi.fn() },
+  llmProvidersApi: { getAll: vi.fn() },
 }))
 vi.mock('@/lib/models-api', () => ({ modelsApi: { list: vi.fn() } }))
 vi.mock('@/components/models/routing-policy-editor', () => ({
   RoutingPolicyField: () => React.createElement('div', { 'data-testid': 'routing-policy-field' }),
 }))
 
-// Radix Select does not open in jsdom. A native <select> keeps what is under
-// test -- which options exist, which is chosen, what a choice emits -- and
-// takes its label and test id from the trigger, as the real one does.
-vi.mock('@/components/ui/select', async () => {
-  const R = await import('react')
-  const textOf = (node: any): string =>
-    node == null || typeof node === 'boolean'
-      ? ''
-      : typeof node === 'string' || typeof node === 'number'
-        ? String(node)
-        : Array.isArray(node)
-          ? node.map(textOf).join('')
-          : textOf(node.props?.children)
-  const SelectTrigger = () => null
-  return {
-    Select: ({ value, onValueChange, disabled, children }: any) => {
-      const trigger = R.Children.toArray(children).find((c: any) => c?.type === SelectTrigger) as any
-      return R.createElement(
-        'select',
-        {
-          value: value ?? '',
-          disabled,
-          'aria-label': trigger?.props['aria-label'],
-          'data-testid': trigger?.props['data-testid'],
-          onChange: (e: any) => onValueChange?.(e.target.value),
-        },
-        R.createElement('option', { value: '' }, '--'),
-        children,
-      )
-    },
-    SelectTrigger,
-    SelectValue: () => null,
-    SelectContent: ({ children }: any) => R.createElement(R.Fragment, null, children),
-    SelectItem: ({ value, disabled, children }: any) => R.createElement('option', { value, disabled }, textOf(children)),
-  }
-})
-
 const OPENAI = { id: 'prov-openai', name: 'OpenAI', type: 'openai', status: 'active' }
+const ANTHROPIC = { id: 'prov-anthropic', name: 'Anthropic', type: 'anthropic', status: 'active' }
 const LOCAL = { id: 'prov-local', name: 'Box under the desk', type: 'custom', status: 'active' }
 
-function card(vendorModelId: string, selectable: boolean) {
-  return { id: `card-${vendorModelId}`, name: vendorModelId, vendorModelId, providerId: OPENAI.id, status: 'active', selectable } as any
+function card(providerId: string, vendorModelId: string, over: Record<string, any> = {}) {
+  return { id: `card-${vendorModelId}`, name: vendorModelId, vendorModelId, providerId, status: 'active', selectable: true, ...over } as any
 }
+
+const CARDS = [
+  card(OPENAI.id, 'gpt-4o'),
+  card(OPENAI.id, 'o3'),
+  card(OPENAI.id, 'gpt-3.5-turbo', { selectable: false, status: 'inactive' }),
+  card(ANTHROPIC.id, 'claude-sonnet-5', { name: 'Claude Sonnet 5' }),
+]
 
 function renderPicker(value: ModelSelection, props: Partial<React.ComponentProps<typeof ModelPicker>> = {}) {
   const onChange = vi.fn()
@@ -74,213 +44,198 @@ function renderPicker(value: ModelSelection, props: Partial<React.ComponentProps
   return { ...utils, onChange }
 }
 
+async function open() {
+  const trigger = await screen.findByRole('combobox', { name: 'Model' })
+  await vi.waitFor(() => expect(trigger).not.toBeDisabled())
+  fireEvent.click(trigger)
+  return screen.getByRole('listbox')
+}
+
+const optionNames = (list: HTMLElement) => within(list).getAllByRole('option').map((o) => o.textContent)
+
 describe('ModelPicker', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(llmProvidersApi.getAll).mockResolvedValue([OPENAI, LOCAL] as any)
-    vi.mocked(modelsApi.list).mockResolvedValue([])
-    vi.mocked(llmProvidersApi.getModels).mockResolvedValue([])
+    vi.mocked(llmProvidersApi.getAll).mockResolvedValue([OPENAI, ANTHROPIC, LOCAL] as any)
+    vi.mocked(modelsApi.list).mockResolvedValue(CARDS)
   })
 
-  it('keeps the model disabled until a provider is chosen, and says so', async () => {
+  it('is one searchable list of every model, grouped by provider, with no provider to pick first', async () => {
     renderPicker({})
-    await screen.findByLabelText('Provider', { selector: 'select' })
-    const model = screen.getByTestId('t-model-disabled')
-    expect(model).toBeDisabled()
-    expect(screen.getByText('The models on offer depend on the provider.')).toBeInTheDocument()
-    expect(screen.queryByTestId('t-model-input')).not.toBeInTheDocument()
-    expect(modelsApi.list).not.toHaveBeenCalled()
-    expect(llmProvidersApi.getModels).not.toHaveBeenCalled()
+    const list = await open()
+    expect(within(list).getByRole('group', { name: 'OpenAI' })).toBeInTheDocument()
+    expect(within(list).getByRole('group', { name: 'Anthropic' })).toBeInTheDocument()
+    expect(within(within(list).getByRole('group', { name: 'Anthropic' })).getByRole('option', { name: /Claude Sonnet 5/ })).toBeInTheDocument()
+    // One field: nothing asks for a provider on its own.
+    expect(screen.queryByLabelText('Provider')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('combobox')).toHaveLength(1)
+    // All models in one request, not one per provider.
+    expect(modelsApi.list).toHaveBeenCalledWith()
   })
 
-  it('offers the catalog cards for the provider, marked validated or not, without asking the vendor', async () => {
-    vi.mocked(modelsApi.list).mockResolvedValue([card('gpt-4o', true), card('gpt-4.1-mini', false)])
-    renderPicker({ providerId: OPENAI.id, model: 'gpt-4o' })
-
-    const select = await screen.findByTestId('t-model-select')
-    const options = within(select).getAllByRole('option').map((o) => o.textContent)
-    expect(options).toContain('gpt-4oValidated')
-    expect(options).toContain('gpt-4.1-miniNot validated')
-    expect(select).toHaveValue('gpt-4o')
-    expect(modelsApi.list).toHaveBeenCalledWith({ providerId: OPENAI.id })
-    expect(llmProvidersApi.getModels).not.toHaveBeenCalled()
-    // Never a bare text field while a list exists.
-    expect(screen.queryByTestId('t-model-input')).not.toBeInTheDocument()
+  it('searches across models and providers', async () => {
+    renderPicker({})
+    const list = await open()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'sonnet' } })
+    expect(optionNames(list)).toEqual(['Claude Sonnet 5claude-sonnet-5'])
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'openai' } })
+    expect(optionNames(list)).toEqual(['gpt-4o', 'o3'])
   })
 
-  it('falls back to the provider live list when the catalog has no cards for it', async () => {
-    vi.mocked(llmProvidersApi.getModels).mockResolvedValue([{ id: 'gpt-4o', name: 'gpt-4o' }, { id: 'o3', name: 'o3' }] as any)
-    renderPicker({ providerId: OPENAI.id })
-
-    const select = await screen.findByTestId('t-model-select')
-    expect(within(select).getByRole('option', { name: 'o3' })).toBeInTheDocument()
-    expect(llmProvidersApi.getModels).toHaveBeenCalledWith(OPENAI.id)
+  it('emits the provider and the model id together, and the provider as the second argument', async () => {
+    const { onChange } = renderPicker({})
+    const list = await open()
+    fireEvent.click(within(list).getByRole('option', { name: /Claude Sonnet 5/ }))
+    expect(onChange).toHaveBeenCalledWith({ providerId: ANTHROPIC.id, model: 'claude-sonnet-5' }, expect.objectContaining({ id: ANTHROPIC.id }))
+    // The list closes on a pick.
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 
-  it('locked to a provider (its own edit page), lists only its models and offers no provider field', async () => {
-    vi.mocked(llmProvidersApi.getModels).mockResolvedValue([{ id: 'gpt-4o', name: 'gpt-4o' }, { id: 'o3', name: 'o3' }] as any)
-    const { onChange } = renderPicker({ providerId: OPENAI.id, model: 'gpt-4o' }, { providerLocked: true })
-
-    const select = await screen.findByTestId('t-model-select')
-    expect(screen.queryByLabelText('Provider', { selector: 'select' })).not.toBeInTheDocument()
-    expect(llmProvidersApi.getModels).toHaveBeenCalledWith(OPENAI.id)
-    expect(select).toHaveValue('gpt-4o')
-    fireEvent.change(select, { target: { value: 'o3' } })
-    expect(onChange).toHaveBeenCalledWith({ providerId: OPENAI.id, model: 'o3' }, OPENAI)
-  })
-
-  it('locked to a provider, points at the key on the same page rather than linking away', async () => {
-    vi.mocked(llmProvidersApi.getModels).mockRejectedValue({
-      response: { status: 502, data: { message: 'Request failed with status code 401' } },
-    })
-    renderPicker({ providerId: OPENAI.id }, { providerLocked: true })
-    const error = await screen.findByTestId('t-model-error')
-    expect(error).toHaveTextContent("This provider's key was rejected — check the key on this page")
-    expect(within(error).queryByRole('link')).not.toBeInTheDocument()
-    expect(screen.getByTestId('t-model-error-detail')).toHaveTextContent('Request failed with status code 401')
-  })
-
-  it('shows a loading state while the list is on its way', async () => {
-    vi.mocked(modelsApi.list).mockReturnValue(new Promise(() => {}))
-    renderPicker({ providerId: OPENAI.id })
-    expect(await screen.findByTestId('t-model-loading')).toHaveTextContent('Loading models')
-  })
-
-  it('emits the chosen model with the provider', async () => {
-    vi.mocked(modelsApi.list).mockResolvedValue([card('gpt-4o', true), card('o3', true)])
-    const { onChange } = renderPicker({ providerId: OPENAI.id, model: 'gpt-4o' })
-    fireEvent.change(await screen.findByTestId('t-model-select'), { target: { value: 'o3' } })
+  it('picks with the keyboard', async () => {
+    const { onChange } = renderPicker({})
+    await open()
+    const search = screen.getByRole('searchbox', { name: 'Search models' })
+    fireEvent.change(search, { target: { value: 'o3' } })
+    fireEvent.keyDown(search, { key: 'Enter' })
     expect(onChange).toHaveBeenCalledWith({ providerId: OPENAI.id, model: 'o3' }, expect.objectContaining({ id: OPENAI.id }))
   })
 
-  it('clears the model when the provider changes', async () => {
-    const { onChange } = renderPicker({ providerId: OPENAI.id, model: 'gpt-4o' })
-    fireEvent.change(await screen.findByLabelText('Provider', { selector: 'select' }), { target: { value: LOCAL.id } })
-    expect(onChange).toHaveBeenCalledWith({ providerId: LOCAL.id, model: '' }, expect.objectContaining({ id: LOCAL.id }))
+  it('shows the chosen model and its provider on the field', async () => {
+    renderPicker({ providerId: ANTHROPIC.id, model: 'claude-sonnet-5' })
+    const trigger = await screen.findByRole('combobox', { name: 'Model' })
+    await vi.waitFor(() => expect(trigger).toHaveTextContent('Claude Sonnet 5'))
+    expect(trigger).toHaveTextContent('Anthropic')
   })
 
-  it('keeps a saved model the list does not return, instead of reading as unset', async () => {
-    vi.mocked(modelsApi.list).mockResolvedValue([card('gpt-4o', true)])
-    renderPicker({ providerId: OPENAI.id, model: 'gpt-4o-2024-05-13' })
-    const select = await screen.findByTestId('t-model-select')
-    expect(select).toHaveValue('gpt-4o-2024-05-13')
-    expect(within(select).getByRole('option', { name: /gpt-4o-2024-05-13.*not in the list/ })).toBeInTheDocument()
+  it('offers Automatic first when routing is allowed, and emits a routing policy', async () => {
+    const { onChange, rerender } = renderPicker({ providerId: OPENAI.id, model: 'gpt-4o' }, { allowRouting: true })
+    const list = await open()
+    const first = within(list).getAllByRole('option')[0]
+    expect(first).toHaveTextContent('Automatic: the cheapest model that fits')
+    fireEvent.click(first)
+    expect(onChange).toHaveBeenCalledWith({ routing: { objective: 'cheapest' } })
+
+    rerender(<ModelPicker idPrefix="t" allowRouting value={{ routing: { objective: 'cheapest' } }} onChange={onChange} />)
+    expect(screen.getByRole('combobox', { name: 'Model' })).toHaveTextContent('Automatic: the cheapest model that fits')
+    // The policy's knobs are there, folded away.
+    expect(screen.queryByTestId('routing-policy-field')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Automatic settings' }))
+    expect(screen.getByTestId('routing-policy-field')).toBeInTheDocument()
   })
 
-  it('offers free text only through the explicit escape hatch when a list exists', async () => {
-    vi.mocked(modelsApi.list).mockResolvedValue([card('gpt-4o', true)])
-    const { onChange } = renderPicker({ providerId: OPENAI.id, model: '' })
-    await screen.findByTestId('t-model-select')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Use a model id not in the list' }))
-    const input = screen.getByTestId('t-model-input')
-    fireEvent.change(input, { target: { value: 'ft:gpt-4o:acme' } })
-    expect(onChange).toHaveBeenLastCalledWith({ providerId: OPENAI.id, model: 'ft:gpt-4o:acme' }, expect.anything())
-
-    fireEvent.click(screen.getByRole('button', { name: 'Choose from the list' }))
-    expect(screen.getByTestId('t-model-select')).toBeInTheDocument()
+  it('does not offer Automatic where routing is not allowed', async () => {
+    renderPicker({})
+    const list = await open()
+    expect(within(list).queryByRole('option', { name: /Automatic/ })).not.toBeInTheDocument()
   })
 
-  it('goes straight to free text for a self-hosted provider, without listing', async () => {
-    renderPicker({ providerId: LOCAL.id })
-    expect(await screen.findByTestId('t-model-input')).toBeInTheDocument()
-    expect(screen.getByText('This provider is self-hosted, so type the model id it serves.')).toBeInTheDocument()
-    expect(modelsApi.list).not.toHaveBeenCalled()
-    expect(llmProvidersApi.getModels).not.toHaveBeenCalled()
+  it('links to connecting a provider in a new tab', async () => {
+    renderPicker({})
+    await open()
+    const link = screen.getByRole('link', { name: /Connect a provider/ })
+    expect(link).toHaveAttribute('href', '/models/connect')
+    expect(link).toHaveAttribute('target', '_blank')
   })
 
-  it('says why and falls back to free text when the list cannot be read', async () => {
-    vi.mocked(llmProvidersApi.getModels).mockRejectedValue(new Error('upstream 503'))
-    renderPicker({ providerId: OPENAI.id })
-    expect(await screen.findByTestId('t-model-error')).toHaveTextContent('upstream 503')
-    expect(screen.getByTestId('t-model-input')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /try again/ }))
-    await waitFor(() => expect(llmProvidersApi.getModels).toHaveBeenCalledTimes(2))
+  it('locked to a provider, lists only its models', async () => {
+    const { onChange } = renderPicker({ providerId: OPENAI.id, model: 'gpt-4o' }, { providerLocked: true })
+    const list = await open()
+    expect(within(list).queryByRole('group', { name: 'Anthropic' })).not.toBeInTheDocument()
+    expect(optionNames(list)).toEqual(['gpt-4o', 'o3'])
+    fireEvent.click(within(list).getByRole('option', { name: 'o3' }))
+    expect(onChange).toHaveBeenCalledWith({ providerId: OPENAI.id, model: 'o3' }, expect.objectContaining({ id: OPENAI.id }))
   })
 
-  it('says the key was rejected, links to the provider, and keeps the raw detail', async () => {
-    // What the backend actually sends for a vendor 401: a 502 carrying the
-    // vendor call's own message.
-    vi.mocked(llmProvidersApi.getModels).mockRejectedValue({
-      response: { status: 502, data: { success: false, message: 'Request failed with status code 401', error: 'MODELS_RETRIEVAL_FAILED' } },
-    })
-    renderPicker({ providerId: OPENAI.id })
-    const error = await screen.findByTestId('t-model-error')
-    expect(error).toHaveTextContent("This provider's key was rejected — check it on the provider's page")
-    expect(within(error).getByRole('link', { name: /provider's page/ })).toHaveAttribute('href', '/llm-providers/prov-openai')
-    // The raw text is still there, one click away.
-    expect(screen.getByTestId('t-model-error-detail')).toHaveTextContent('Request failed with status code 401')
-    expect(screen.getByTestId('t-model-input')).toBeInTheDocument()
+  it('hides models that are not available, unless one is the saved choice', async () => {
+    renderPicker({})
+    const list = await open()
+    expect(within(list).queryByRole('option', { name: /gpt-3.5-turbo/ })).not.toBeInTheDocument()
   })
 
-  it.each([
-    'Request failed with status code 403',
-    '401 Incorrect API key provided: sk-...',
-    '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
-  ])('treats %s as a rejected key', async (message) => {
-    vi.mocked(llmProvidersApi.getModels).mockRejectedValue({ response: { status: 502, data: { message } } })
-    renderPicker({ providerId: OPENAI.id })
-    expect(await screen.findByTestId('t-model-error')).toHaveTextContent("key was rejected")
+  it('keeps a saved model that is no longer available, marked', async () => {
+    renderPicker({ providerId: OPENAI.id, model: 'gpt-3.5-turbo' })
+    expect(await screen.findByTestId('t-model-unavailable')).toHaveTextContent('not available')
+    const list = await open()
+    const saved = within(list).getByRole('option', { name: /gpt-3.5-turbo/ })
+    expect(saved).toHaveAttribute('aria-selected', 'true')
+    expect(saved).toHaveTextContent('Not available')
   })
 
-  it('does not blame the key for almyty refusing the request itself', async () => {
-    // A 403 from our own API is a permission problem; the key may be fine.
-    vi.mocked(llmProvidersApi.getModels).mockRejectedValue({ response: { status: 403, data: { message: 'Forbidden resource' } } })
-    renderPicker({ providerId: OPENAI.id })
-    const error = await screen.findByTestId('t-model-error')
-    expect(error).not.toHaveTextContent('key was rejected')
-    expect(error).toHaveTextContent('Forbidden resource')
+  it('keeps a saved id the provider does not list, instead of reading as unset', async () => {
+    renderPicker({ providerId: OPENAI.id, model: 'ft:gpt-4o:acme' })
+    const trigger = await screen.findByRole('combobox', { name: 'Model' })
+    await vi.waitFor(() => expect(trigger).toHaveTextContent('ft:gpt-4o:acme'))
+    const list = await open()
+    expect(within(list).getByRole('option', { name: /ft:gpt-4o:acme.*Saved, not in the list/ })).toHaveAttribute('aria-selected', 'true')
   })
 
-  it('says so when the provider lists nothing', async () => {
-    renderPicker({ providerId: OPENAI.id })
-    expect(await screen.findByTestId('t-model-empty')).toHaveTextContent('This provider lists no models.')
-    expect(screen.getByTestId('t-model-input')).toBeInTheDocument()
+  it('takes a model id that is not in the list when the search matches nothing', async () => {
+    const { onChange } = renderPicker({ providerId: LOCAL.id })
+    const list = await open()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'qwen3:8b' } })
+    const free = within(list).getByRole('option', { name: /Use model id "qwen3:8b"/ })
+    expect(free).toHaveTextContent('with Box under the desk')
+    fireEvent.click(free)
+    expect(onChange).toHaveBeenCalledWith({ providerId: LOCAL.id, model: 'qwen3:8b' }, expect.objectContaining({ id: LOCAL.id }))
   })
 
-  it('offers "Provider default" when the model is optional', async () => {
-    vi.mocked(modelsApi.list).mockResolvedValue([card('gpt-4o', true)])
-    const { onChange } = renderPicker({ providerId: OPENAI.id, model: '' }, { modelOptional: true })
-    const select = await screen.findByTestId('t-model-select')
-    expect(within(select).getByRole('option', { name: 'Provider default' })).toBeInTheDocument()
-    fireEvent.change(select, { target: { value: '__provider_default__' } })
-    expect(onChange).toHaveBeenCalledWith({ providerId: OPENAI.id, model: '' }, expect.anything())
+  it('says what to do for your own server that lists nothing', async () => {
+    renderPicker({})
+    const list = await open()
+    expect(within(within(list).getByRole('group', { name: 'Box under the desk' })).getByText('Type the model id your server runs.')).toBeInTheDocument()
+  })
+
+  it('offers "Provider default" per provider when the model is optional', async () => {
+    const { onChange } = renderPicker({}, { modelOptional: true })
+    const list = await open()
+    fireEvent.click(within(within(list).getByRole('group', { name: 'OpenAI' })).getByRole('option', { name: 'Provider default' }))
+    expect(onChange).toHaveBeenCalledWith({ providerId: OPENAI.id, model: '' }, expect.objectContaining({ id: OPENAI.id }))
+  })
+
+  it('offers the optional label as the first choice, which clears the value', async () => {
+    const { onChange } = renderPicker({ providerId: OPENAI.id, model: 'gpt-4o' }, { providerOptionalLabel: 'Organization default routing policy' })
+    const list = await open()
+    const first = within(list).getAllByRole('option')[0]
+    expect(first).toHaveTextContent('Organization default routing policy')
+    fireEvent.click(first)
+    expect(onChange).toHaveBeenCalledWith({})
+  })
+
+  it('lists only active providers when asked to', async () => {
+    vi.mocked(llmProvidersApi.getAll).mockResolvedValue([OPENAI, { ...ANTHROPIC, status: 'inactive' }] as any)
+    renderPicker({}, { activeOnly: true })
+    const list = await open()
+    expect(within(list).queryByRole('group', { name: 'Anthropic' })).not.toBeInTheDocument()
+    expect(within(list).getByRole('group', { name: 'OpenAI' })).toBeInTheDocument()
   })
 
   it('keeps a working shortcut to connect a provider when there are none', async () => {
     vi.mocked(llmProvidersApi.getAll).mockResolvedValue([] as any)
     renderPicker({})
     const empty = await screen.findByTestId('no-providers')
-    const link = within(empty).getByRole('link', { name: /Connect one/ })
-    expect(link).toHaveAttribute('href', '/llm-providers/new')
-    // A new tab, so whatever was being built here is not thrown away.
+    const link = within(empty).getByRole('link', { name: /Connect a provider/ })
+    expect(link).toHaveAttribute('href', '/models/connect')
     expect(link).toHaveAttribute('target', '_blank')
   })
 
-  it('lists only active providers when asked to', async () => {
-    vi.mocked(llmProvidersApi.getAll).mockResolvedValue([OPENAI, { ...LOCAL, status: 'inactive' }] as any)
-    renderPicker({}, { activeOnly: true })
-    const select = await screen.findByLabelText('Provider', { selector: 'select' })
-    expect(within(select).queryByRole('option', { name: /Box under the desk/ })).not.toBeInTheDocument()
-    expect(within(select).getByRole('option', { name: /OpenAI/ })).toBeInTheDocument()
+  it('shows loading while the list is on its way', async () => {
+    vi.mocked(modelsApi.list).mockReturnValue(new Promise(() => {}))
+    renderPicker({})
+    expect(await screen.findByTestId('t-model-loading')).toHaveTextContent('Loading models')
+  })
+})
+
+describe('keyRejected', () => {
+  it.each([
+    'Request failed with status code 401',
+    'Request failed with status code 403',
+    '401 Incorrect API key provided: sk-...',
+    '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
+  ])('treats %s from the vendor as a rejected key', (message) => {
+    expect(keyRejected({ response: { status: 502, data: { message } } })).toBe(true)
   })
 
-  it('lets the provider be left to the organization default when optional', async () => {
-    const { onChange } = renderPicker({ providerId: OPENAI.id }, { providerOptionalLabel: 'Organization default routing policy' })
-    const select = await screen.findByLabelText('Provider', { selector: 'select' })
-    fireEvent.change(select, { target: { value: '__no_provider__' } })
-    expect(onChange).toHaveBeenCalledWith({})
-  })
-
-  it('switches between a pinned model and a routing policy', async () => {
-    const { onChange, rerender } = renderPicker({ providerId: OPENAI.id, model: 'gpt-4o' }, { allowRouting: true })
-    fireEvent.click(await screen.findByRole('radio', { name: 'Routed by policy' }))
-    expect(onChange).toHaveBeenCalledWith({ routing: { objective: 'cheapest' } })
-
-    rerender(<ModelPicker idPrefix="t" allowRouting value={{ routing: { objective: 'cheapest' } }} onChange={onChange} />)
-    expect(screen.getByTestId('routing-policy-field')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Provider', { selector: 'select' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('radio', { name: 'Pinned provider' }))
-    expect(onChange).toHaveBeenLastCalledWith({})
+  it('does not blame the key for almyty refusing the request itself', () => {
+    expect(keyRejected({ response: { status: 403, data: { message: 'Forbidden resource' } } })).toBe(false)
   })
 })

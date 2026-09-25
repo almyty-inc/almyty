@@ -12,7 +12,7 @@ import { ConnectedChip } from '@/components/connections/connected-chip'
 import { llmProvidersApi } from '@/lib/api'
 import type { Connection } from '@/types/connections'
 import type { ModelCard } from '@/types/models'
-import { BASE_URL_PRIVATE_HOST_HINT, buildProviderCreateBody, structuralFieldsFor } from './schema'
+import { BASE_URL_PRIVATE_HOST_HINT, buildProviderCreateBody, createProviderSchema, structuralFieldsFor } from './schema'
 import { defaultProviderName, keyUrlFor, readConnectFailure, takesBaseUrl, type ConnectFailure } from './provider-catalog'
 import { WhoCanUse } from './who-can-use'
 
@@ -72,16 +72,28 @@ export function ConnectProviderForm({ type, onConnected }: { type: string; onCon
   const submit = (e: FormEvent) => {
     e.preventDefault()
     const next: Record<string, string> = {}
-    if (type === 'custom' && !isHttpUrl(apiUrl)) next.apiUrl = 'Enter the server URL, starting with http:// or https://'
-    if (type === 'ollama' && apiUrl.trim() && !isHttpUrl(apiUrl)) next.apiUrl = 'Enter a URL starting with http:// or https://'
-    if (!ownServer && !account && !apiKey.trim()) next.apiKey = 'Paste your API key'
-    for (const field of fields) {
-      if (field.required && !structural[field.name]?.trim()) next[field.name] = `${field.label} is required`
+    // The same rules the backend applies, so a missing field is said here
+    // rather than after a round trip.
+    const parsed = createProviderSchema.safeParse({
+      name: defaultProviderName(type),
+      type,
+      apiKey: account ? undefined : apiKey.trim() || undefined,
+      apiUrl: apiUrl.trim() || undefined,
+      connectionId: account?.id,
+      model: needsModel ? model : undefined,
+      ...structural,
+    })
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) {
+        const key = String(issue.path[0] ?? '')
+        if (key && !next[key]) next[key] = issue.message
+      }
     }
-    if (needsModel && !model.trim()) next.model = 'Name the model to use'
+    if (type === 'ollama' && apiUrl.trim() && !isHttpUrl(apiUrl)) next.apiUrl = 'Enter a URL starting with http:// or https://'
     setErrors(next)
     if (Object.keys(next).length > 0) return
     setFailure(null)
+    // The name comes from the tile; it can be changed on the provider's page.
     const body = buildProviderCreateBody({
       name: defaultProviderName(type),
       type,
@@ -93,8 +105,6 @@ export function ConnectProviderForm({ type, onConnected }: { type: string; onCon
       visibility: visibility.visibility,
       teamId: visibility.teamId,
     })
-    // The provider's name comes from the tile unless it is changed later.
-    delete body.name
     connect.mutate(body)
   }
 

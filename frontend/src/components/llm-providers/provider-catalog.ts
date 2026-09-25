@@ -97,10 +97,8 @@ export function isProviderType(value: string | null | undefined): value is LlmPr
   return !!value && (Object.values(LlmProviderType) as string[]).includes(value)
 }
 
-/** Types reached at a base URL the person gives; the key is optional for both. */
-export function takesBaseUrl(type: string): boolean {
-  return type === LlmProviderType.CUSTOM || type === LlmProviderType.OLLAMA
-}
+/** Types reached at a server URL the person gives (your own server, Ollama); the key is optional for both. */
+export { baseUrlSupported as takesBaseUrl } from './schema'
 
 export function keyUrlFor(type: string): string | undefined {
   return providerKeyUrls[type]

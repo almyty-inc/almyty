@@ -87,6 +87,12 @@ describe('createProviderSchema: custom (OpenAI-compatible) base URL', () => {
     expect(ok.success).toBe(true)
   })
 
+  it('takes your own server without a key, as the backend does', () => {
+    expect(createProviderSchema.safeParse({ name: 'vLLM', type: 'custom', apiUrl: 'http://gpu-box:8000/v1' }).success).toBe(true)
+    // A key that is there still has to look like one.
+    expect(createProviderSchema.safeParse({ name: 'vLLM', type: 'custom', apiUrl: 'http://gpu-box:8000/v1', apiKey: 'abc' }).success).toBe(false)
+  })
+
   it('keeps the base URL optional for every other type', () => {
     expect(createProviderSchema.safeParse({ name: 'x', type: 'openai', apiKey: 'sk-12345678' }).success).toBe(true)
     expect(baseUrlSupported('custom')).toBe(true)
