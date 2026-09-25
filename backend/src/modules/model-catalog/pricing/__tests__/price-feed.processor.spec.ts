@@ -6,7 +6,7 @@ import {
   MODEL_PRICE_FEED_QUEUE,
   PriceFeedProcessor,
 } from '../price-feed.processor';
-import { PriceFeedService } from '../price-feed.service';
+import { PRICE_FEED_MAX_AGE_MS, PriceFeedService } from '../price-feed.service';
 import { snapshotEnv } from '../../../../test/env';
 
 describe('PriceFeedProcessor', () => {
@@ -20,6 +20,7 @@ describe('PriceFeedProcessor', () => {
     refresh: jest.Mock;
     applyToCatalog: jest.Mock;
     hasData: jest.Mock;
+    ageMs: jest.Mock;
     isDisabled: jest.Mock;
   };
 
@@ -43,6 +44,7 @@ describe('PriceFeedProcessor', () => {
       refresh: jest.fn().mockResolvedValue({ litellm: 10, openrouter: 5, fetchedAt: new Date() }),
       applyToCatalog: jest.fn().mockResolvedValue({ priced: 3, unpriced: 1, flagged: 0 }),
       hasData: jest.fn().mockReturnValue(true),
+      ageMs: jest.fn().mockReturnValue(60_000),
       isDisabled: jest.fn().mockReturnValue(false),
     };
 
@@ -132,6 +134,7 @@ describe('PriceFeedProcessor', () => {
     it('queues one immediate refresh when the cache is empty', async () => {
       process.env.NODE_ENV = 'development';
       priceFeed.hasData.mockReturnValue(false);
+      priceFeed.ageMs.mockReturnValue(null);
 
       await processor.onApplicationBootstrap();
 
@@ -142,6 +145,16 @@ describe('PriceFeedProcessor', () => {
         expect.objectContaining({ jobId: 'model-price-feed-bootstrap' }),
       );
       expect(queue.add.mock.calls[1][2].repeat).toBeUndefined();
+    });
+
+    it('queues one immediate refresh when the cached prices are a day old', async () => {
+      process.env.NODE_ENV = 'development';
+      priceFeed.ageMs.mockReturnValue(PRICE_FEED_MAX_AGE_MS + 1);
+
+      await processor.onApplicationBootstrap();
+
+      expect(queue.add).toHaveBeenCalledTimes(2);
+      expect(queue.add).toHaveBeenLastCalledWith(MODEL_PRICE_FEED_JOB, { reason: 'bootstrap' }, expect.objectContaining({ jobId: 'model-price-feed-bootstrap' }));
     });
 
     it('does not queue an immediate refresh when prices are already loaded', async () => {

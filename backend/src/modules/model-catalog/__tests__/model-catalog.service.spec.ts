@@ -62,7 +62,7 @@ describe('ModelCatalogService', () => {
     expect(card.pricing).toEqual({ inPerMTok: 2, outPerMTok: 10, currency: 'USD' });
     expect(card.pricingSource).toBe('feed:litellm');
     expect(card.contextLength).toBe(200000);
-    expect(priceFeed.lookup).toHaveBeenCalledWith('openai', 'claude-sonnet-5');
+    expect(priceFeed.lookup).toHaveBeenCalledWith('openai', 'claude-sonnet-5', { selfHosted: false });
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: AuditAction.MODEL_REGISTERED, resourceId: card.id, userId: 'u' }));
   });
 
@@ -191,6 +191,40 @@ describe('ModelCatalogService', () => {
       await svc.applyProviderCheck('org', 'p1', { passed: true });
       expect(models.rows.find((m) => m.id === 'other-org')!.validationStatus).toBe('never');
       expect(models.rows.find((m) => m.id === 'other-provider')!.validationStatus).toBe('never');
+    });
+
+    it('cards still waiting under a provider whose check passed long ago become usable with no new check', async () => {
+      // Staging's shape: the cards were imported while a model still needed
+      // a check of its own, and the key check that passed is months old.
+      fetch().mockResolvedValue([{ id: 'a' }, { id: 'b' }, { id: 'gone' }]);
+      await svc.syncFromProvider('org', 'p1');
+      await models.update({ vendorModelId: 'gone' }, { validationStatus: 'failed' });
+      await providers.update({ id: 'p1' }, { isHealthy: true, lastHealthCheckAt: new Date('2026-07-02T10:18:20Z') });
+      providers.seed(Object.assign(new LlmProvider(), { id: 'p-unchecked', organizationId: 'org', name: 'Never checked', type: LlmProviderType.MISTRAL, status: LlmProviderStatus.ACTIVE, isHealthy: true, lastHealthCheckAt: null, configuration: {} }));
+      models.seed(Object.assign(new Model(), { id: 'waiting', organizationId: 'org', providerId: 'p-unchecked', vendorModelId: 'm', name: 'm', status: 'active', validationStatus: 'never' }));
+      expect(await selectableIds()).toEqual([]);
+
+      expect(await svc.reconcileReadiness('org')).toBe(2);
+      expect(await selectableIds()).toEqual(['a', 'b']);
+      expect(models.rows.find((m) => m.vendorModelId === 'a')!.metadata?.checkedBy).toBe('provider_check');
+      // A model the vendor said is gone keeps that, and a provider never
+      // checked lends its models nothing.
+      expect(models.rows.find((m) => m.vendorModelId === 'gone')!.validationStatus).toBe('failed');
+      expect(models.rows.find((m) => m.id === 'waiting')!.validationStatus).toBe('never');
+      // Nothing left to do the second time.
+      expect(await svc.reconcileReadiness('org')).toBe(0);
+    });
+
+    it('reconcileReadiness with no organization covers every organization; with one, only that one', async () => {
+      providers.seed(Object.assign(new LlmProvider(), { id: 'p-org2', organizationId: 'org2', name: 'Theirs', type: LlmProviderType.OPENAI, status: LlmProviderStatus.ACTIVE, isHealthy: true, lastHealthCheckAt: checkedAt, configuration: {} }));
+      models.seed(Object.assign(new Model(), { id: 'theirs', organizationId: 'org2', providerId: 'p-org2', vendorModelId: 't', name: 't', status: 'active', validationStatus: 'never' }));
+      await markChecked();
+      models.seed(Object.assign(new Model(), { id: 'mine', organizationId: 'org', providerId: 'p1', vendorModelId: 'x', name: 'x', status: 'active', validationStatus: 'never' }));
+
+      expect(await svc.reconcileReadiness('org')).toBe(1);
+      expect(models.rows.find((m) => m.id === 'theirs')!.validationStatus).toBe('never');
+      expect(await svc.reconcileReadiness()).toBe(1);
+      expect(models.rows.find((m) => m.id === 'theirs')!.validationStatus).toBe('passed');
     });
   });
 
@@ -477,6 +511,45 @@ describe('ModelCatalogService', () => {
       await expect(svc.get('org', privateCard.id, 'someone-else')).rejects.toMatchObject({ status: 404 });
       await expect(svc.get('org', privateCard.id, null)).rejects.toMatchObject({ status: 404 });
       expect((await svc.get('org', shared.id, 'someone-else')).id).toBe(shared.id);
+    });
+  });
+
+  describe('prices of new cards', () => {
+    const fetch = () => (svc as any).modelsHelper.fetchModelsFromProvider as jest.Mock;
+    const ollama = (id: string, apiUrl?: string) =>
+      Object.assign(new LlmProvider(), { id, organizationId: 'org', name: id, type: LlmProviderType.OLLAMA, status: LlmProviderStatus.ACTIVE, isHealthy: true, configuration: apiUrl ? { apiUrl } : {} });
+
+    it('asks the feed whether an Ollama model is on a server someone runs, and files Ollama Cloud as public', async () => {
+      providers.seed(ollama('cloud', 'https://ollama.com'));
+      providers.seed(ollama('mine', 'http://10.0.0.5:11434'));
+      fetch().mockResolvedValue([{ id: 'deepseek-v4-flash:0731' }]);
+
+      const [cloudCard] = (await svc.syncFromProvider('org', 'cloud')).created;
+      const [ownCard] = (await svc.syncFromProvider('org', 'mine')).created;
+
+      expect(priceFeed.lookup).toHaveBeenCalledWith('ollama', 'deepseek-v4-flash:0731', { selfHosted: false });
+      expect(priceFeed.lookup).toHaveBeenCalledWith('ollama', 'deepseek-v4-flash:0731', { selfHosted: true });
+      expect(cloudCard.privacyTier).toBe('public');
+      expect(ownCard.privacyTier).toBe('local');
+    });
+
+    it('a sync that creates cards the feed could not price refreshes the feed and prices the org; a priced sync does not', async () => {
+      const feed = priceFeed as any;
+      feed.ensureFresh = jest.fn().mockResolvedValue(undefined);
+      feed.applyToCatalog = jest.fn().mockResolvedValue({ priced: 1, unpriced: 0, flagged: 0 });
+
+      fetch().mockResolvedValue([{ id: 'brand-new' }]);
+      await svc.syncFromProvider('org', 'p1');
+      await svc.pricingRun('org');
+      expect(feed.ensureFresh).toHaveBeenCalledTimes(1);
+      expect(feed.applyToCatalog).toHaveBeenCalledWith('org');
+
+      feed.ensureFresh.mockClear();
+      priceFeed.lookup.mockReturnValue({ inPerMTok: 1, outPerMTok: 2, currency: 'USD', source: 'feed:litellm', fetchedAt: new Date() });
+      fetch().mockResolvedValue([{ id: 'brand-new' }, { id: 'priced' }]);
+      await svc.syncFromProvider('org', 'p1');
+      expect(svc.pricingRun('org')).toBeUndefined();
+      expect(feed.ensureFresh).not.toHaveBeenCalled();
     });
   });
 });

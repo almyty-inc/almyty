@@ -6,10 +6,12 @@ import {
   OPENROUTER_MODELS_URL,
   PRICE_FEED_CACHE_KEY,
   PRICE_FEED_CACHE_TTL_SECONDS,
+  PRICE_FEED_MAX_AGE_MS,
   PriceFeedService,
   snapshotAlias,
 } from '../price-feed.service';
 import { Model } from '../../../../entities/model.entity';
+import { LlmProvider, LlmProviderType } from '../../../../entities/llm-provider.entity';
 import { AuditAction, AuditResource } from '../../../../entities/audit-log.entity';
 import { AuditLogService } from '../../../audit-log/audit-log.service';
 import { snapshotEnv } from '../../../../test/env';
@@ -358,6 +360,46 @@ describe('PriceFeedService', () => {
       expect(service.lookup('', 'gpt-4o')).toBeNull();
     });
 
+    it('prices Ollama Cloud models as unknown, never zero; only a server someone runs is free', async () => {
+      await service.refresh();
+      expect(service.lookup('ollama', 'deepseek-v4-flash:0731', { selfHosted: false })).toBeNull();
+      expect(service.lookup('ollama', 'llama3.2', { selfHosted: true })).toMatchObject({ inPerMTok: 0, outPerMTok: 0, source: 'native' });
+
+      const cloud = makeRow({
+        id: 'cloud',
+        providerType: 'ollama',
+        vendorModelId: 'deepseek-v4-flash:0731',
+        pricing: { inPerMTok: 0, outPerMTok: 0, currency: 'USD' },
+        pricingSource: 'native',
+      });
+      (cloud as any).provider = Object.assign(new LlmProvider(), { type: LlmProviderType.OLLAMA, configuration: { apiUrl: 'https://ollama.com' } });
+      const own = makeRow({ id: 'own', providerType: 'ollama', vendorModelId: 'llama3.2' });
+      (own as any).provider = Object.assign(new LlmProvider(), { type: LlmProviderType.OLLAMA, configuration: { apiUrl: 'http://10.0.0.5:11434' } });
+      modelRepository.find.mockResolvedValue([cloud, own]);
+
+      await service.applyToCatalog();
+
+      expect(cloud.pricing).toBeNull();
+      expect(cloud.pricingSource).toBe('unpriced');
+      expect(own.pricing).toEqual({ inPerMTok: 0, outPerMTok: 0, currency: 'USD' });
+      expect(own.pricingSource).toBe('native');
+      // The provider was read for its host; the save writes the card alone.
+      for (const [row] of modelRepository.save.mock.calls) expect((row as any).provider).toBeUndefined();
+    });
+
+    it('ensureFresh fetches when empty or a day old, and not when fresh', async () => {
+      await service.ensureFresh();
+      expect(service.hasData()).toBe(true);
+      expect(mockAxios).toHaveBeenCalledTimes(2);
+
+      await service.ensureFresh();
+      expect(mockAxios).toHaveBeenCalledTimes(2);
+
+      (service as any).fetchedAt = new Date(Date.now() - PRICE_FEED_MAX_AGE_MS - 1000);
+      await Promise.all([service.ensureFresh(), service.ensureFresh()]);
+      expect(mockAxios).toHaveBeenCalledTimes(4);
+    });
+
     it('keeps the other source when one fails', async () => {
       await service.refresh();
       const before = service.lookup('openai', 'gpt-4o');
@@ -538,7 +580,7 @@ describe('PriceFeedService', () => {
 
       const result = await service.applyToCatalog();
       expect(result).toEqual({ priced: 2, unpriced: 1, flagged: 1 });
-      expect(modelRepository.find).toHaveBeenCalledWith({ where: {} });
+      expect(modelRepository.find).toHaveBeenCalledWith({ where: {}, relations: { provider: true } });
 
       expect(auditLog.log).toHaveBeenCalledTimes(2);
       expect(auditLog.log).toHaveBeenCalledWith(
@@ -560,7 +602,7 @@ describe('PriceFeedService', () => {
       auditLog.log.mockClear();
       modelRepository.find.mockResolvedValue([]);
       await service.applyToCatalog('org-2');
-      expect(modelRepository.find).toHaveBeenCalledWith({ where: { organizationId: 'org-2' } });
+      expect(modelRepository.find).toHaveBeenCalledWith({ where: { organizationId: 'org-2' }, relations: { provider: true } });
       expect(auditLog.log).not.toHaveBeenCalled();
     });
 

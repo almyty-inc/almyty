@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { ArrowLeft, ExternalLink, Loader2, Pencil, Play, RefreshCw } from 'lucide-react'
+import { Disclosure } from '@/components/ui/disclosure'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -13,7 +14,6 @@ import { SecretInput } from '@/components/ui/secret-input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { Disclosure } from '@/components/ui/disclosure'
 import type { Visibility, VisibilityValue } from '@/components/ui/visibility-field'
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { ConnectAccountButton } from '@/components/connections/connect-sheet'
@@ -159,7 +159,7 @@ export function ProviderPage() {
     )
   }
 
-  const status = providerCheck(provider, models.some((m) => m.selectable))
+  const status = providerCheck(provider)
   const visibility: VisibilityValue = { visibility: (provider.visibility as Visibility) ?? 'org', teamId: provider.teamId ?? null }
 
   return (

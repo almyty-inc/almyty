@@ -166,6 +166,46 @@ export interface LlmProviderCredentialRef {
 export interface LlmProviderCredentialRefs {
   credentialRef?: LlmProviderCredentialRef | null;
   usageCredentialRef?: LlmProviderCredentialRef | null;
+  /**
+   * Whether the provider's key check has passed (keyCheckPassed). The
+   * provider's "Key works" and the usability of every model it lists both
+   * read this one rule.
+   */
+  keyChecked?: boolean;
+}
+
+/**
+ * The readiness rule for a provider (docs/models.md, "Readiness"): its
+ * key check ran and passed, and it is switched on. `isHealthy` alone is
+ * not enough, since the column defaults to true; the check has run when
+ * `lastHealthCheckAt` is set. Every model the provider lists is usable
+ * while this holds (ModelCatalogService.applyProviderCheck and
+ * reconcileReadiness keep the cards in step), and the UI's "Key works"
+ * is this value, sent as `keyChecked`.
+ */
+export function keyCheckPassed(provider: Pick<LlmProvider, 'status' | 'isHealthy' | 'lastHealthCheckAt'>): boolean {
+  return provider.status === LlmProviderStatus.ACTIVE && provider.isHealthy === true && !!provider.lastHealthCheckAt;
+}
+
+/** Ollama's own hosted service; any other Ollama host is a server someone runs. */
+const OLLAMA_CLOUD_HOST = /(^|\.)ollama\.com$/i;
+
+/**
+ * An Ollama provider pointed at a server someone runs (their machine,
+ * their cluster), as opposed to Ollama Cloud (ollama.com). Only the
+ * former is free per token; Ollama Cloud bills by plan, so the price of
+ * one of its models is unknown, and it is not local either. Works on a
+ * plain row as well as an entity. The server root is read the way
+ * getOllamaBaseUrl reads it (localhost when no URL is set).
+ */
+export function isSelfHostedOllama(provider: Pick<LlmProvider, 'type' | 'configuration'>): boolean {
+  if (provider.type !== LlmProviderType.OLLAMA) return false;
+  const url = provider.configuration?.apiUrl || 'http://localhost:11434';
+  try {
+    return !OLLAMA_CLOUD_HOST.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
 }
 
 @Entity('llm_providers')
@@ -888,6 +928,7 @@ export class LlmProvider {
 
     masked.credentialRef = LlmProvider.refOf(this.credentialId, credential);
     masked.usageCredentialRef = LlmProvider.refOf(this.usageCredentialId, usageCredential);
+    masked.keyChecked = keyCheckPassed(this);
 
     return masked;
   }

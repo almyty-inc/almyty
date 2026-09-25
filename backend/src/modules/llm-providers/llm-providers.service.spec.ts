@@ -1328,7 +1328,7 @@ describe('LlmProvidersService', () => {
       // Error path records the failure via a scoped partial UPDATE.
       expect(llmProviderRepository.update).toHaveBeenCalledWith(
         { id: 'provider-1', organizationId: 'org-1' },
-        expect.objectContaining({ isHealthy: false, lastError: 'API Error' }),
+        expect.objectContaining({ isHealthy: false, lastError: 'API Error', lastErrorAt: expect.any(Date) }),
       );
     });
 

@@ -59,6 +59,12 @@ export class ModelCatalogController {
     const organizationId = this.orgId(req);
     const viewerId = req.user?.id ?? null;
     let rows = await this.catalog.list(organizationId, query, viewerId);
+    // A card still waiting under a provider whose key check has passed is
+    // usable by the readiness rule: bring the stored state in step first,
+    // so the page never shows "Key works" over rows saying "Not available".
+    if (rows.some((r) => r.providerId && r.validationStatus === 'never') && (await this.catalog.reconcileReadiness(organizationId)) > 0) {
+      rows = await this.catalog.list(organizationId, query, viewerId);
+    }
     // Nothing usable to show (the Models page and the picker both read
     // this): sync the providers that should be serving models, waiting a
     // few seconds for it, instead of answering with an empty list until

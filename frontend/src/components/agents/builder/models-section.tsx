@@ -59,8 +59,7 @@ export function ModelsSection({ models, onChange, agentId, availableAgents }: Mo
       <CardHeader>
         <CardTitle className="text-base">Models</CardTitle>
         <CardDescription className="text-xs">
-          The roles that work on each request. A role is a model, or for a panelist or a teammate, another of your
-          agents. How they work together is set below.
+          The models this agent uses. A panelist or a teammate can also be another agent.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
