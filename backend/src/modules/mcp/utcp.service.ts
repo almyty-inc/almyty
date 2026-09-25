@@ -25,13 +25,16 @@ import { GatewayAuthType } from '../../entities/gateway-auth.entity';
 import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService, ToolExecutionResult } from '../tools/tool-executor.service';
 import { ExecutionPrincipal, userPrincipal } from '../../common/authorization/execution-access.service';
-import { batchAsyncSettled } from '../../common/utils/batch-async';
+import { batchAsync } from '../../common/utils/batch-async';
 
 const UTCP_VERSION = '1.0.0';
 
 interface ManualOptions {
   organizationId: string;
   gateway: Gateway;
+  /** Where this server is reached and the organization's slug: the gateway's address is built from both. */
+  baseUrl: string;
+  orgSlug: string;
 }
 
 interface DiscoveryOptions {
@@ -69,9 +72,9 @@ export class UtcpService {
    * `tool_call_template`. Snake_case throughout — UTCP SDKs (python,
    * typescript, go) parse against these exact field names.
    *
-   * Tools are always scoped to the gateway's active assignments;
-   * there is no "global manual" surface — each gateway owns its
-   * own slice of the org's tools.
+   * The manual lists exactly the gateway's servable set, every tool type
+   * included, so it names the same tools MCP tools/list and the Skills
+   * list do. Only the call template differs by type (`buildCallTemplate`).
    */
   async generateManual(opts: ManualOptions): Promise<UtcpManual> {
     const { organizationId, gateway } = opts;
@@ -92,12 +95,9 @@ export class UtcpService {
     }
 
     const tools = await this.resolveTools(gateway);
+    const gatewayBase = gatewayBaseUrl(opts.baseUrl, opts.orgSlug, gateway);
 
-    const utcpToolResults = await batchAsyncSettled(tools, 5, async (tool) => {
-      return this.convertToolToUtcp(tool);
-    });
-
-    const utcpTools: UtcpTool[] = utcpToolResults.filter((t): t is UtcpTool => !!t);
+    const utcpTools: UtcpTool[] = await batchAsync(tools, 5, (tool) => this.convertToolToUtcp(tool, gateway, gatewayBase));
 
     const manual: UtcpManual = {
       utcp_version: UTCP_VERSION,
@@ -125,28 +125,54 @@ export class UtcpService {
    * Convert a Tool to a spec-compliant UtcpTool, with the
    * `tool_call_template` inlined per UTCP spec.
    */
-  private async convertToolToUtcp(tool: Tool): Promise<UtcpTool | null> {
-    const callTemplate = await this.buildCallTemplate(tool);
-    if (!callTemplate) {
-      return null;
-    }
-
+  private async convertToolToUtcp(tool: Tool, gateway: Gateway, gatewayBase: string): Promise<UtcpTool> {
     return {
       name: tool.name,
       description: tool.description || `Tool ${tool.name}`,
       inputs: tool.parameters || { type: 'object', properties: {}, required: [] },
       outputs: tool.outputSchema || { type: 'object' },
       tags: this.extractToolTags(tool),
-      tool_call_template: callTemplate,
+      tool_call_template: await this.buildCallTemplate(tool, gateway, gatewayBase),
     };
   }
 
   /**
-   * Build an HttpCallTemplate from the underlying API + operation.
-   * Returns null if the tool is not backed by an API operation
-   * (manual JS / LLM tools — no http target).
+   * How a UTCP client calls this tool.
+   *
+   * A tool generated from an API operation is plain HTTP against that API,
+   * so its template points there, with the API's auth as placeholders.
+   *
+   * Every other tool runs here and nowhere else: a JavaScript or LLM tool
+   * has no address of its own, and a hand-made HTTP or GraphQL tool is more
+   * than its URL (stored auth, a body template, a GraphQL document, a
+   * response mapping, the gateway's security policy). Its template points
+   * at this gateway's per-tool execute address, authenticated with the
+   * gateway's own auth. The client sends the tool's arguments as the query
+   * string (what a UTCP client does with arguments that are not a body) or
+   * as a JSON body; `utcpCallArguments` reads either against the tool's
+   * input schema.
    */
-  private async buildCallTemplate(tool: Tool): Promise<UtcpHttpCallTemplate | null> {
+  private async buildCallTemplate(tool: Tool, gateway: Gateway, gatewayBase: string): Promise<UtcpHttpCallTemplate> {
+    // A generated tool whose operation cannot be read is still served: it
+    // runs here like any other, so it is never dropped from the manual.
+    const upstream = await this.upstreamCallTemplate(tool).catch(() => null);
+    return upstream ?? this.gatewayCallTemplate(tool, gateway, gatewayBase);
+  }
+
+  private gatewayCallTemplate(tool: Tool, gateway: Gateway, gatewayBase: string): UtcpHttpCallTemplate {
+    const template: UtcpHttpCallTemplate = {
+      call_template_type: 'http',
+      url: `${gatewayBase}/execute/${encodeURIComponent(tool.id)}`,
+      http_method: 'POST',
+      content_type: 'application/json',
+    };
+    const [auth] = this.buildGatewayAuth(gateway);
+    if (auth) template.auth = auth;
+    return template;
+  }
+
+  /** The API operation's own HTTP call, or null for a tool no operation backs. */
+  private async upstreamCallTemplate(tool: Tool): Promise<UtcpHttpCallTemplate | null> {
     if (!tool.operationId) {
       return null;
     }
@@ -314,7 +340,7 @@ export class UtcpService {
    */
   getDiscoveryInfo(opts: DiscoveryOptions): UtcpDiscoveryInfo {
     const { gateway, baseUrl, orgSlug } = opts;
-    const gatewayBase = `${baseUrl}/${orgSlug}${gateway.endpoint}`;
+    const gatewayBase = gatewayBaseUrl(baseUrl, orgSlug, gateway);
 
     const info: UtcpDiscoveryInfo = {
       utcp_version: UTCP_VERSION,
@@ -338,6 +364,30 @@ export class UtcpService {
     }
 
     return info;
+  }
+
+  /**
+   * A call to a tool's own execute address (`<gateway>/execute/<toolId>`),
+   * the one a tool's call template names when the tool runs here. The
+   * arguments are the query string and the JSON body, read against the
+   * tool's input schema. A tool this gateway does not serve is not found,
+   * exactly as on the `execute` envelope.
+   */
+  async executeServedTool(
+    toolId: string,
+    request: { query?: unknown; body?: unknown },
+    organizationId: string,
+    userId: string | null,
+    gatewayId: string,
+    principal: ExecutionPrincipal,
+  ): Promise<UtcpExecutionResult> {
+    const startTime = Date.now();
+    const served = await findServableGatewayTool(this.gatewayToolRepository, gatewayId, toolId);
+    if (!served || served.tool.organizationId !== organizationId) {
+      return this.toolNotFound(toolId, startTime);
+    }
+    const parameters = utcpCallArguments(served.tool.parameters, request.query, request.body);
+    return this.executeUtcpTool({ toolId, parameters }, organizationId, userId, gatewayId, principal);
   }
 
   // UTCP Tool Execution (Proxy Mode — almyty extension)
@@ -465,5 +515,65 @@ export class UtcpService {
 
   private requestId(): string {
     return `utcp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  }
+}
+
+/** The public address of a gateway: `<base>/<org slug><gateway endpoint>`. */
+export function gatewayBaseUrl(baseUrl: string, orgSlug: string, gateway: Pick<Gateway, 'endpoint'>): string {
+  return `${baseUrl.replace(/\/+$/, '')}/${orgSlug}${gateway.endpoint}`;
+}
+
+/**
+ * The arguments of a call to a tool's execute address.
+ *
+ * A UTCP HTTP client sends every argument that is not the template's body
+ * field as a query parameter, so a query value arrives as a string; it is
+ * read back to the type the tool's input schema declares (number, integer,
+ * boolean, or JSON for an object or array). A JSON object body is the
+ * other way to send them and wins over the query string where both name
+ * the same argument. An argument the schema does not declare stays as it
+ * arrived; validating it is the executor's job.
+ */
+export function utcpCallArguments(
+  schema: Record<string, any> | null | undefined,
+  query: unknown,
+  body: unknown,
+): Record<string, any> {
+  const properties: Record<string, any> = schema?.properties ?? {};
+  const args: Record<string, any> = {};
+  if (query && typeof query === 'object') {
+    for (const [name, raw] of Object.entries(query as Record<string, unknown>)) {
+      args[name] = fromQueryValue(properties[name], raw);
+    }
+  }
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
+    Object.assign(args, body);
+  }
+  return args;
+}
+
+function fromQueryValue(property: Record<string, any> | undefined, raw: unknown): unknown {
+  const type = Array.isArray(property?.type) ? property!.type.find((t: string) => t !== 'null') : property?.type;
+  if (typeof raw !== 'string') {
+    if (type === 'array' && raw !== undefined && !Array.isArray(raw)) return [raw];
+    return raw;
+  }
+  switch (type) {
+    case 'number':
+    case 'integer': {
+      const n = Number(raw);
+      return raw.trim() !== '' && Number.isFinite(n) ? n : raw;
+    }
+    case 'boolean':
+      return raw === 'true' ? true : raw === 'false' ? false : raw;
+    case 'object':
+    case 'array':
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return type === 'array' ? [raw] : raw;
+      }
+    default:
+      return raw;
   }
 }

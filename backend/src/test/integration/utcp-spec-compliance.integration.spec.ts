@@ -280,6 +280,8 @@ describeIfDb('UTCP spec compliance (real Postgres)', () => {
     const manual = await service.generateManual({
       organizationId: org.id,
       gateway,
+      baseUrl: 'https://api.test',
+      orgSlug: 'acme',
     });
 
     expect(manual.utcp_version).toBe('1.0.0');
@@ -295,6 +297,8 @@ describeIfDb('UTCP spec compliance (real Postgres)', () => {
     const manual = await service.generateManual({
       organizationId: org.id,
       gateway,
+      baseUrl: 'https://api.test',
+      orgSlug: 'acme',
     });
 
     const names = manual.tools.map((t) => t.name);
@@ -306,6 +310,8 @@ describeIfDb('UTCP spec compliance (real Postgres)', () => {
     const manual = await service.generateManual({
       organizationId: org.id,
       gateway,
+      baseUrl: 'https://api.test',
+      orgSlug: 'acme',
     });
     const tool = manual.tools[0];
 
@@ -332,6 +338,8 @@ describeIfDb('UTCP spec compliance (real Postgres)', () => {
     const manual = await service.generateManual({
       organizationId: org.id,
       gateway,
+      baseUrl: 'https://api.test',
+      orgSlug: 'acme',
     });
     const tmpl = manual.tools[0].tool_call_template as any;
 
@@ -350,6 +358,8 @@ describeIfDb('UTCP spec compliance (real Postgres)', () => {
     const manual = await service.generateManual({
       organizationId: org.id,
       gateway,
+      baseUrl: 'https://api.test',
+      orgSlug: 'acme',
     });
     const auth = manual.tools[0].tool_call_template.auth as any;
 
@@ -363,6 +373,8 @@ describeIfDb('UTCP spec compliance (real Postgres)', () => {
     const manual = await service.generateManual({
       organizationId: org.id,
       gateway,
+      baseUrl: 'https://api.test',
+      orgSlug: 'acme',
     });
     expect(JSON.stringify(manual)).not.toContain('EXTREMELY-SECRET-RAW-KEY');
   });
