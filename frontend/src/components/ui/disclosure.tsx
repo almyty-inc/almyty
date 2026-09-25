@@ -6,9 +6,9 @@ import { cn } from '@/lib/utils'
 /**
  * A bordered section that opens on a click: "Advanced" on a provider's
  * page, "More ways" under an agent's strategies. Closed unless
- * `defaultOpen`; what is inside is not rendered while closed. `summary` is
- * one line of what the defaults are, shown while it is closed, so nobody
- * has to open it to know what they would find.
+ * `defaultOpen`; what is inside is not rendered while closed. `summary`
+ * is one line of what the defaults are, shown while it is closed, so
+ * nobody has to open it to know what they would find.
  */
 export function Disclosure({
   title,
