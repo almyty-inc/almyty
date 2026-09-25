@@ -18,6 +18,7 @@ import { ModelRouterService } from './routing/model-router.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { providerUsableBy } from '../llm-providers/private-provider';
 import { providerChecked } from './readiness';
+import { isKeyRejection } from '../llm-providers/model-errors';
 
 /** Override as the API accepts it; currency defaults to USD when omitted. */
 export type ModelPricingInput = Omit<ModelPricing, 'currency'> & { currency?: string };
@@ -360,6 +361,40 @@ export class ModelCatalogService {
       } catch (error: any) {
         result.failed++;
         this.logger.warn(`catalog backfill for provider ${provider.id} failed: ${error?.message ?? error}`);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * The periodic sweep (CatalogSyncProcessor, MODEL_CATALOG_SYNC_CRON):
+   * every active provider of every organization lists its models again,
+   * so a model a vendor adds appears and one it retires is marked
+   * unavailable without anyone opening a page. Listing costs nothing at
+   * the vendor, unlike the health check's chat call, which is why this and
+   * not that runs by default. A listing the vendor refuses for the key
+   * takes that provider's models out of the lists, the same as a failed
+   * key check would; any other failure is logged and left for next time.
+   */
+  async syncEveryProvider(): Promise<{ providers: number; synced: number; failed: number; keyRejected: number }> {
+    const providers = await this.providers.find({ where: { status: LlmProviderStatus.ACTIVE }, order: { createdAt: 'ASC' } });
+    const result = { providers: providers.length, synced: 0, failed: 0, keyRejected: 0 };
+    for (const provider of providers) {
+      try {
+        await this.syncFromProvider(provider.organizationId, provider.id);
+        this.syncedAt.set(provider.id, Date.now());
+        result.synced++;
+      } catch (error: any) {
+        result.failed++;
+        if (isKeyRejection(error)) {
+          result.keyRejected++;
+          await this.applyProviderCheck(provider.organizationId, provider.id, {
+            passed: false,
+            keyRejected: true,
+            error: String(error?.message ?? error).slice(0, 500),
+          });
+        }
+        this.logger.warn(`scheduled catalog sync for provider ${provider.id} failed: ${error?.message ?? error}`);
       }
     }
     return result;
