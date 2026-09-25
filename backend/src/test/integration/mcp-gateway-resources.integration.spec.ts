@@ -115,7 +115,7 @@ describeIfDb('MCP gateway resources, discover and search scope (real Postgres)',
       ds.getRepository(Organization),
       audit,
       null as any,
-      new ToolsStatsHelper(ds.getRepository(Tool), ds.getRepository(ToolExecution)),
+      new ToolsStatsHelper(ds.getRepository(Tool), ds.getRepository(ToolExecution), policy),
       policy,
     );
     const toolHandler = new McpToolHandler(
@@ -133,6 +133,7 @@ describeIfDb('MCP gateway resources, discover and search scope (real Postgres)',
       null as any,
       toolHandler,
       null as any,
+      policy,
     );
     mcp = new McpService(
       ds.getRepository(Gateway),
