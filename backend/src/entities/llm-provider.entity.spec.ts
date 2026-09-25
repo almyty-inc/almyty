@@ -2,6 +2,7 @@ import {
   LlmProvider,
   LlmProviderType,
   LlmProviderStatus,
+  isSelfHostedOllama,
 } from './llm-provider.entity';
 
 describe('LlmProvider Entity', () => {
@@ -495,6 +496,29 @@ describe('LlmProvider Entity', () => {
       expect(masked.configuration.bedrock.accessKeyId).toBe('***masked***');
       expect(masked.configuration.bedrock.secretAccessKey).toBe('***masked***');
       expect(masked.configuration.bedrock.sessionToken).toBe('***masked***');
+    });
+
+    it('says whether the key check has passed, by the readiness rule the models follow', () => {
+      Object.assign(provider, { status: LlmProviderStatus.ACTIVE, isHealthy: true, lastHealthCheckAt: null });
+      expect(provider.maskSensitiveData().keyChecked).toBe(false);
+      provider.lastHealthCheckAt = new Date('2026-07-02T10:18:20Z');
+      expect(provider.maskSensitiveData().keyChecked).toBe(true);
+      provider.isHealthy = false;
+      expect(provider.maskSensitiveData().keyChecked).toBe(false);
+      Object.assign(provider, { isHealthy: true, status: LlmProviderStatus.INACTIVE });
+      expect(provider.maskSensitiveData().keyChecked).toBe(false);
+    });
+  });
+
+  describe('isSelfHostedOllama', () => {
+    it('is true for an Ollama server someone runs and false for Ollama Cloud or another vendor', () => {
+      const ollama = (apiUrl?: string) => ({ type: LlmProviderType.OLLAMA, configuration: apiUrl ? { apiUrl } : {} }) as any;
+      expect(isSelfHostedOllama(ollama())).toBe(true);
+      expect(isSelfHostedOllama(ollama('http://10.0.0.5:11434/v1'))).toBe(true);
+      expect(isSelfHostedOllama(ollama('https://ollama.com'))).toBe(false);
+      expect(isSelfHostedOllama(ollama('https://api.ollama.com/v1'))).toBe(false);
+      expect(isSelfHostedOllama(ollama('not a url'))).toBe(false);
+      expect(isSelfHostedOllama({ type: LlmProviderType.OPENAI, configuration: {} } as any)).toBe(false);
     });
   });
 

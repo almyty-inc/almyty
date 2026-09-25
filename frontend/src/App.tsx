@@ -46,6 +46,8 @@ const ApiDetailPage = lazy(() => import('@/pages/api-detail').then(m => ({ defau
 const ApiNewPage = lazy(() => import('@/pages/api-new').then(m => ({ default: m.ApiNewPage })))
 const ApiEditPage = lazy(() => import('@/pages/api-edit').then(m => ({ default: m.ApiEditPage })))
 const ApiImportPage = lazy(() => import('@/pages/api-import').then(m => ({ default: m.ApiImportPage })))
+const ApiSetupPage = lazy(() => import('@/pages/api-setup').then(m => ({ default: m.ApiSetupPage })))
+const ApiNewSdkPage = lazy(() => import('@/pages/api-new-sdk').then(m => ({ default: m.ApiNewSdkPage })))
 const ToolsPage = lazy(() => import('@/pages/tools').then(m => ({ default: m.ToolsPage })))
 const ToolDetailPage = lazy(() => import('@/pages/tool-detail').then(m => ({ default: m.ToolDetailPage })))
 const ToolNewPage = lazy(() => import('@/pages/tool-new').then(m => ({ default: m.ToolNewPage })))
@@ -175,9 +177,11 @@ export function createAppRoutes() {
           <Route path="/gateways/:id" element={<GatewayDetailPage />} />
           <Route path="/apis" element={<ApisPage />} />
           <Route path="/apis/new" element={<ApiNewPage />} />
+          <Route path="/apis/new/sdk" element={<ApiNewSdkPage />} />
           <Route path="/apis/:id" element={<ApiDetailPage />} />
           <Route path="/apis/:id/edit" element={<ApiEditPage />} />
           <Route path="/apis/:id/import" element={<ApiImportPage />} />
+          <Route path="/apis/:id/setup" element={<ApiSetupPage />} />
           <Route path="/tools" element={<ToolsPage />} />
           <Route path="/tools/new" element={<ToolNewPage />} />
           <Route path="/tools/mcp-servers/new" element={<McpServerNewPage />} />

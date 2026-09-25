@@ -13,6 +13,7 @@ import {
   TxtResolver,
 } from '../custom-domain.service';
 import { CustomDomainConfig, RECHECK_FAILURES_BEFORE_DEMOTION, VERIFICATION_VALUE_PREFIX } from '../custom-domain';
+import { snapshotEnv } from '../../../../test/env';
 
 /**
  * Custom domains for hosted chat: claim, publish TXT, verify, serve,
@@ -181,13 +182,13 @@ function harness(opts: { txt?: Record<string, string[]>; resolver?: TxtResolver 
 const block = (rows: Map<string, Row>, id: string): CustomDomainConfig => rows.get(id)!.customDomain!;
 
 describe('CustomDomainService', () => {
-  const OLD = { ...process.env };
+  const restore = snapshotEnv('HOSTED_CHAT_BASE_DOMAIN', 'HOSTED_CHAT_CUSTOM_DOMAIN_TARGET');
   beforeEach(() => {
     delete process.env.HOSTED_CHAT_CUSTOM_DOMAIN_TARGET;
     process.env.HOSTED_CHAT_BASE_DOMAIN = 'almyty.app';
   });
   afterAll(() => {
-    process.env = OLD;
+    restore();
   });
 
   it('claims a hostname unverified and shows the TXT and CNAME records to publish', async () => {

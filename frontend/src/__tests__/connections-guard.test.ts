@@ -114,7 +114,9 @@ describe('one Connections page', () => {
   it('nothing links to the old addresses, which only redirect', () => {
     const OLD = /['"`]\/(credentials|settings\/connections)(\/|['"`?])/
     const hits = sourceFiles(SRC)
-      .filter((f) => !f.endsWith('App.tsx') && !f.endsWith(join('pages', 'connection-pages.tsx')))
+      // lib/api.ts calls the backend's /credentials endpoints (apiGet('/credentials')),
+      // which are server paths, not page addresses a user is sent to.
+      .filter((f) => !f.endsWith('App.tsx') && !f.endsWith(join('pages', 'connection-pages.tsx')) && !f.endsWith(join('lib', 'api.ts')))
       .filter((f) => OLD.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')))
       .map((f) => relative(SRC, f))
     expect(hits).toEqual([])

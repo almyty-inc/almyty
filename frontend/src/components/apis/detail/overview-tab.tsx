@@ -21,6 +21,14 @@ import { useNotifications } from '@/store/app'
 import { Api, ApiOperation, Tool } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
 
+/** How the API's key is sent, as the overview's Key row says it. */
+const AUTH_WORDS: Record<string, string> = {
+  none: 'None',
+  api_key: 'API key',
+  bearer: 'Bearer token',
+  basic: 'Basic auth',
+  oauth2: 'OAuth 2.0',
+}
 interface OverviewTabProps {
   api: Api
   operations: ApiOperation[]
@@ -118,14 +126,14 @@ export function OverviewTab({
               <span className="text-sm">{api.version || '1.0.0'}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Authentication</span>
+              <span className="text-muted-foreground">Key</span>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-auto p-0 text-xs"
                 onClick={onOpenAuthConfig}
               >
-                {api.authentication?.type?.replace('_', ' ').toUpperCase() || 'NONE'}
+                {AUTH_WORDS[api.authentication?.type ?? 'none'] ?? api.authentication?.type}
                 <Edit className="h-3 w-3 ml-1" />
               </Button>
             </div>
@@ -137,7 +145,7 @@ export function OverviewTab({
       <div className="flex items-center gap-2">
         <Button variant="outline" onClick={onOpenSchemaImport}>
           <Upload className="mr-2 h-4 w-4" />
-          {api.schemas && api.schemas.length > 0 ? 'Update schema' : 'Import schema'}
+          {api.schemas && api.schemas.length > 0 ? 'Update the description' : 'Import a description'}
         </Button>
         {operations.length > 0 && (
           <Button

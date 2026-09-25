@@ -5,6 +5,7 @@ import {
   EXPIRY_REPEAT_JOB_ID,
   ROTATION_REPEAT_JOB_ID,
 } from '../connections-governance.processor';
+import { snapshotEnv } from '../../../../src/test/env';
 
 function build() {
   const queue = { add: jest.fn().mockResolvedValue(undefined), getRepeatableJobs: jest.fn().mockResolvedValue([]), removeRepeatableByKey: jest.fn().mockResolvedValue(undefined) };
@@ -19,9 +20,9 @@ function build() {
 }
 
 describe('ConnectionsGovernanceProcessor scheduling', () => {
-  const env = { ...process.env };
+  const restore = snapshotEnv('NODE_ENV', CRON_ENV);
   afterEach(() => {
-    process.env = { ...env };
+    restore();
   });
 
   it('is off under NODE_ENV=test and registers nothing', async () => {

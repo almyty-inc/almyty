@@ -167,7 +167,7 @@ export function ModelsPage() {
             <ConnectedCardGrid loading={providersQuery.isLoading}>
               {providers.map((p: any) => {
                 const own = cardsByProvider[p.id] ?? []
-                const check = providerCheck(p, own.some((c) => c.selectable))
+                const check = providerCheck(p)
                 return (
                   <ConnectedCard key={p.id} to={`/models/providers/${p.id}`} testId={`provider-card-${p.id}`} icon={providerLogos[p.type] || '⚙️'} name={p.name}>
                     <ProviderStatus check={check} />

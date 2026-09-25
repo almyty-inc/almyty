@@ -73,9 +73,9 @@ export const JOURNEYS: Journey[] = [
         key: 'api',
         title: 'Import an API',
         description: () =>
-          'Upload, link or paste an OpenAPI, GraphQL, SOAP or Protobuf schema. Every operation becomes a tool.',
+          'Paste a link to its OpenAPI, GraphQL, WSDL or proto description, or drop the file. Every operation becomes a tool.',
         cta: 'Import an API',
-        target: () => ({ to: '/apis/new', place: 'APIs › Connect API' }),
+        target: () => ({ to: '/apis/new', place: 'APIs › Connect an API' }),
       },
       {
         key: 'tools',

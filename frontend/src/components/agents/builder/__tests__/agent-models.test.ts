@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest'
 
 import type { AgentModelRole, AgentModels } from '@/types/agent-models'
 import {
+  missingSlotsAction,
   missingSlotsSentence,
   modelsFromAgent,
   modelsPayload,
@@ -37,6 +38,38 @@ describe('missing slots', () => {
       'Panel needs 1 more panelist',
     )
     expect(missingSlotsSentence({ strategy: 'single', roles: [main] })).toBeNull()
+  })
+
+  it('says only what is missing, as what to add', () => {
+    expect(missingSlotsAction({ strategy: 'cascade', roles: [main] })).toBe('Add a drafter and a checker')
+    expect(missingSlotsAction({ strategy: 'cascade', roles: [main, routed('drafter', 'drafter')] })).toBe('Add a checker')
+    expect(missingSlotsAction({ strategy: 'panel', roles: [main, routed('panelist_1', 'panelist')] })).toBe('Add 1 more panelist')
+    expect(missingSlotsAction({ strategy: 'single', roles: [main] })).toBeNull()
+  })
+
+  it('brings collaboration participants and the judge along as teammates, on either kind of agent, dropping none', () => {
+    const collaboration = {
+      participants: [
+        { kind: 'model', providerId: 'p2', model: 'small', role: 'Skeptic', instructions: 'Push back.' },
+        { kind: 'agent', agentId: 'critic' },
+        { kind: 'model', model: 'no-provider' },
+      ],
+      judge: { kind: 'model', routing: { objective: 'fastest' } },
+    }
+    const expected = [
+      { key: 'teammate_1', name: 'Skeptic', purpose: 'teammate', kind: 'model', providerId: 'p2', model: 'small', instructions: 'Push back.' },
+      { key: 'teammate_2', name: 'Teammate 2', purpose: 'teammate', kind: 'agent', agentId: 'critic' },
+      // Not callable as it is: kept, so the page asks for a model instead of losing it.
+      { key: 'teammate_3', name: 'Teammate 3', purpose: 'teammate', kind: 'model', model: 'no-provider' },
+      { key: 'teammate_4', name: 'Judge', purpose: 'teammate', kind: 'model', routing: { objective: 'fastest' } },
+    ]
+    expect(modelsFromAgent({ models: null, modelConfig: { providerId: 'p1', model: 'big' }, collaboration }).roles).toEqual([main, ...expected])
+    // An agent that already has roles, one of them teammate_1: keys never clash.
+    const withRoles = modelsFromAgent({ models: { strategy: 'single', roles: [main, routed('teammate_1', 'teammate')] }, collaboration })
+    expect(withRoles.roles.map((r) => r.key)).toEqual(['main', 'teammate_1', 'teammate_2', 'teammate_3', 'teammate_4', 'teammate_5'])
+    expect(modelsProblems(modelsFromAgent({ models: null, modelConfig: { providerId: 'p1', model: 'big' }, collaboration }))).toEqual([
+      'Teammate 3: pick a model, or route it by policy',
+    ])
   })
 
   it('blocks the save until the slots are filled', () => {

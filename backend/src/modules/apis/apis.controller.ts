@@ -28,8 +28,9 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateApiGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ApisService } from './apis.service';
+import { ApiConnectService } from './api-connect.service';
 import { CredentialService } from './credential.service';
-import { CreateApiDto, UpdateApiDto, ImportSchemaDto, CreateHttpApiDto, CreateSdkApiDto } from './dto/api.dto';
+import { ConnectApiDto, CreateApiDto, UpdateApiDto, ImportSchemaDto, CreateHttpApiDto, CreateSdkApiDto } from './dto/api.dto';
 import { ApiType, ApiStatus } from '../../entities/api.entity';
 
 @Controller('apis')
@@ -39,6 +40,7 @@ export class ApisController {
     private readonly apisService: ApisService,
     private readonly credentialService: CredentialService,
     @InjectQueue('schema-import') private readonly schemaImportQueue: Queue,
+    private readonly apiConnect: ApiConnectService,
   ) {}
 
   @Get()
@@ -69,6 +71,56 @@ export class ApisController {
     });
 
     return { success: true, data: result, message: 'APIs retrieved successfully' };
+  }
+
+  /**
+   * Connect an API from its description, in one step: a link (an
+   * OpenAPI/Swagger/WSDL/.proto/.graphql document, or a GraphQL endpoint),
+   * an uploaded file (`schema`) or pasted text. The format, name, version,
+   * description, address and sign-in scheme are read out of it; the
+   * import itself runs as the usual background job, tools on by default.
+   * `needs` says what is left for the person to give.
+   */
+  @Post('import')
+  @Roles('admin', 'owner')
+  @UseInterceptors(FileInterceptor('schema'))
+  async connect(@Request() req, @Body() dto: ConnectApiDto, @UploadedFile() file?: any) {
+    const organizationId = req.user.currentOrganizationId;
+    if (!organizationId) throw new BadRequestException('Organization context required');
+    const userId = req.user.id ?? req.user.sub;
+
+    const result = await this.apiConnect.connect({
+      organizationId,
+      userId,
+      file: file ? { buffer: file.buffer, originalname: file.originalname } : undefined,
+      url: dto.url,
+      content: dto.content,
+      name: dto.name,
+      baseUrl: dto.baseUrl,
+      authType: dto.authType,
+      visibility: dto.visibility,
+      teamId: dto.teamId,
+    });
+
+    let jobId: string | number;
+    try {
+      const job = await this.enqueueImport(result.api.id, result.api.organizationId, result.content, {
+        fileName: result.fileName,
+        generateTools: dto.generateTools ?? true,
+        createdBy: userId ?? null,
+      });
+      jobId = job.id;
+    } catch (error) {
+      // Nothing to import into later: take the empty API back out.
+      await this.apisService.remove(result.api.id, organizationId).catch(() => undefined);
+      throw error;
+    }
+
+    return {
+      success: true,
+      data: { api: result.api, jobId, detected: result.detected, needs: result.needs },
+      message: 'Import started',
+    };
   }
 
   @Post('http')
@@ -193,17 +245,24 @@ export class ApisController {
       throw new NotFoundException('API not found');
     }
 
-    let schemaContent: string;
-
-    if (file) {
-      schemaContent = file.buffer.toString('utf-8');
-    } else if (importSchemaDto.schemaUrl) {
-      schemaContent = await this.apisService.fetchSchemaFromUrl(importSchemaDto.schemaUrl);
-    } else if (importSchemaDto.schemaContent) {
-      schemaContent = importSchemaDto.schemaContent;
-    } else {
-      throw new BadRequestException('Schema content, file, or URL is required');
+    if (!file && !importSchemaDto.schemaUrl && !importSchemaDto.schemaContent) {
+      throw new BadRequestException('Paste a link, drop a file, or paste the description.');
     }
+
+    // Read and recognise it the way connecting an API does, so a GraphQL
+    // endpoint link works here too, and a description of another kind is
+    // refused in words before anything is queued.
+    const detected = await this.apiConnect.describe({
+      file: file ? { buffer: file.buffer, originalname: file.originalname } : undefined,
+      url: importSchemaDto.schemaUrl,
+      content: importSchemaDto.schemaContent,
+    });
+    if (detected.type !== api.type) {
+      throw new BadRequestException(
+        `This is ${API_TYPE_WORDS[detected.type] ?? detected.type} description, but ${api.name} is ${API_TYPE_WORDS[api.type] ?? api.type} API.`,
+      );
+    }
+    const schemaContent = detected.content;
 
     // Validate size BEFORE queueing. Previously the 10 MB cap was enforced
     // by apisService.importSchema, which runs inside the worker — meaning
@@ -226,37 +285,13 @@ export class ApisController {
       );
     }
 
-    // Queue the import job. The organizationId is included so the worker
-    // can fail closed if the job is somehow picked up against an api in
-    // another org (defence in depth — the api was already org-checked
-    // above).
-    const job = await this.schemaImportQueue.add(
-      'import',
-      {
-        apiId: id,
-        organizationId: api.organizationId,
-        schemaContent,
-        options: {
-          fileName: file?.originalname,
-          description: importSchemaDto.description,
-          generateTools: importSchemaDto.generateTools ?? true,
-          // The tools this import generates are recorded as this user's.
-          createdBy: req.user.id ?? null,
-        },
-      },
-      {
-        // Bound a runaway parse / generation: the parsers cap input size
-        // and have their own internal guards, but a hung downstream tool
-        // generation could otherwise hold a worker forever.
-        timeout: 5 * 60 * 1000, // 5 minutes
-        // Retry transient failures (brief DB/network blips) with backoff
-        // rather than permanently failing a large import on the first hiccup.
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5000 },
-        removeOnComplete: 100,
-        removeOnFail: 50,
-      },
-    );
+    const job = await this.enqueueImport(id, api.organizationId, schemaContent, {
+      fileName: file?.originalname,
+      description: importSchemaDto.description,
+      generateTools: importSchemaDto.generateTools ?? true,
+      // The tools this import generates are recorded as this user's.
+      createdBy: req.user.id ?? null,
+    });
 
     // Return immediately with job ID
     return {
@@ -535,4 +570,43 @@ export class ApisController {
     return { success: true, data: result, message: 'API status updated successfully' };
   }
 
+
+  /**
+   * Queue a schema import. The organizationId is included so the worker
+   * can fail closed if the job is somehow picked up against an api in
+   * another org (defence in depth: the api was already org-checked).
+   */
+  private enqueueImport(
+    apiId: string,
+    organizationId: string,
+    schemaContent: string,
+    options: { fileName?: string; description?: string; generateTools: boolean; createdBy: string | null },
+  ) {
+    return this.schemaImportQueue.add(
+      'import',
+      { apiId, organizationId, schemaContent, options },
+      {
+        // Bound a runaway parse / generation: the parsers cap input size
+        // and have their own internal guards, but a hung downstream tool
+        // generation could otherwise hold a worker forever.
+        timeout: 5 * 60 * 1000, // 5 minutes
+        // Retry transient failures (brief DB/network blips) with backoff
+        // rather than permanently failing a large import on the first hiccup.
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      },
+    );
+  }
 }
+
+/** How an error names each kind of description ("This is a GraphQL description"). */
+const API_TYPE_WORDS: Partial<Record<ApiType, string>> = {
+  [ApiType.OPENAPI]: 'an OpenAPI',
+  [ApiType.GRAPHQL]: 'a GraphQL',
+  [ApiType.SOAP]: 'a SOAP',
+  [ApiType.GRPC]: 'a gRPC',
+  [ApiType.HTTP]: 'an HTTP',
+  [ApiType.SDK]: 'an SDK',
+};

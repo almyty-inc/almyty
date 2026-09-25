@@ -77,6 +77,7 @@ export function splitInlineApiAuth(auth: InlineApiAuth | null | undefined): Spli
 export function inlineApiAuthView(auth: InlineApiAuth, resolvedConfig: Record<string, any>): InlineApiAuth {
   const config: Record<string, any> = { ...auth.config };
   delete config.credentialId;
+  delete config.connectionId;
   switch (auth.type) {
     case 'bearer':
       config.token = resolvedConfig.token;
@@ -96,4 +97,39 @@ export function inlineApiAuthView(auth: InlineApiAuth, resolvedConfig: Record<st
       break;
   }
   return { type: auth.type, config };
+}
+
+/**
+ * The fields a connection's key may be stored under, best first. A
+ * connection's config is named by its connector (`apiKey` for a pasted
+ * vendor key, `access_token` for a sign-in, `bot_token` for a channel), so
+ * an API that points at a connection reads whichever is there.
+ */
+const CONNECTION_SECRET_FIELDS = [
+  'apiKey', 'api_key', 'token', 'accessToken', 'access_token', 'bearerToken', 'bearer', 'key', 'bot_token', 'secret',
+];
+
+/** The key a connection carries, or null when it has none an API call could send. */
+export function connectionSecretOf(config: Record<string, any> | null | undefined): string | null {
+  for (const field of CONNECTION_SECRET_FIELDS) {
+    const value = config?.[field];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return null;
+}
+
+/**
+ * A connection's decrypted config in the shape `inlineApiAuthView` reads,
+ * whatever the API's scheme: the one key fills every slot, and a
+ * username/password pair is kept for basic auth.
+ */
+export function connectionAuthConfig(config: Record<string, any>): Record<string, any> {
+  const secret = connectionSecretOf(config);
+  return {
+    apiKey: secret,
+    token: secret,
+    accessToken: secret,
+    username: typeof config?.username === 'string' ? config.username : undefined,
+    password: typeof config?.password === 'string' ? config.password : secret,
+  };
 }

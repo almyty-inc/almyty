@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import { Tool } from '../../entities/tool.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
-import { servableOnGateway } from '../../common/authorization/private-visibility';
+import { servableToolsOnGateway } from '../gateways/gateway-servable';
 import {
   bashComment,
   bashSingleQuote,
@@ -93,13 +93,9 @@ export class CliGeneratorService {
       throw new NotFoundException(`Gateway not found: ${gatewayId}`);
     }
 
-    const gatewayTools = await this.gatewayToolRepository.find({
-      where: { gatewayId, isActive: true },
-      relations: { tool: { operation: true } },
-    });
-
-    // A private tool is served only on its owner's own private gateway.
-    const tools = servableOnGateway(gatewayTools.map(gt => gt.tool).filter(Boolean), gateway);
+    // What the gateway serves: attached, enabled, the tool active, and in
+    // the gateway's scope -- the same set its MCP/UTCP listing is built from.
+    const tools = await servableToolsOnGateway(this.gatewayToolRepository, gatewayId, { operation: true });
 
     const content = format === 'bash'
       ? this.renderBashBundle(gateway, tools)

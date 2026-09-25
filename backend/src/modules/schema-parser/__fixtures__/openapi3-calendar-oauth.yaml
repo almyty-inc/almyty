@@ -1,0 +1,27 @@
+openapi: 3.0.1
+info:
+  title: Calendar
+  version: 3.0.0
+servers:
+  - url: /calendar/v3
+paths:
+  /events:
+    get:
+      operationId: listEvents
+      summary: List events
+      responses:
+        '200':
+          description: Events
+security:
+  - calendarAuth: [events.read]
+components:
+  securitySchemes:
+    calendarAuth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.calendar.example.com/authorize
+          tokenUrl: https://auth.calendar.example.com/token
+          scopes:
+            events.read: Read your events
+            events.write: Change your events

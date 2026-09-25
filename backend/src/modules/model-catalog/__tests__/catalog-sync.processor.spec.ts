@@ -4,16 +4,17 @@ import { getQueueToken } from '@nestjs/bull';
 import { CatalogSyncProcessor, MODEL_CATALOG_BACKFILL_JOB, MODEL_CATALOG_SWEEP_JOB, MODEL_CATALOG_SYNC_QUEUE } from '../catalog-sync.processor';
 import { ModelCatalogService } from '../model-catalog.service';
 import { CatalogWarmupService } from '../catalog-warmup.service';
+import { snapshotEnv } from '../../../test/env';
 
 describe('CatalogSyncProcessor', () => {
   let processor: CatalogSyncProcessor;
   let queue: { add: jest.Mock; getRepeatableJobs: jest.Mock; removeRepeatableByKey: jest.Mock };
-  let catalog: { syncEveryProvider: jest.Mock };
+  let catalog: { syncEveryProvider: jest.Mock; reconcileReadiness: jest.Mock };
   let warmup: { syncNeverSynced: jest.Mock };
-  const originalEnv = { ...process.env };
+  const restore = snapshotEnv('MODEL_CATALOG_BACKFILL', 'MODEL_CATALOG_SYNC_CRON', 'NODE_ENV');
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    restore();
     jest.clearAllMocks();
   });
 
@@ -27,6 +28,7 @@ describe('CatalogSyncProcessor', () => {
     };
     catalog = {
       syncEveryProvider: jest.fn().mockResolvedValue({ providers: 3, synced: 2, failed: 1, keyRejected: 1 }),
+      reconcileReadiness: jest.fn().mockResolvedValue(0),
     };
     warmup = { syncNeverSynced: jest.fn().mockResolvedValue({ ran: true, providers: 3, vendors: 2, synced: 2, keyRejected: 1, failed: 0, skipped: 0 }) };
     const module: TestingModule = await Test.createTestingModule({
@@ -44,6 +46,22 @@ describe('CatalogSyncProcessor', () => {
     expect(processor.isEnabled()).toBe(false);
     await processor.onApplicationBootstrap();
     expect(queue.add).not.toHaveBeenCalled();
+    expect(catalog.reconcileReadiness).not.toHaveBeenCalled();
+  });
+
+  it('at boot, marks the waiting models of checked providers on this instance, without the queue', async () => {
+    process.env.NODE_ENV = 'development';
+    // Even with Redis down: a queued job could be taken by a replica of
+    // the previous release still draining during a rolling deploy.
+    queue.add.mockRejectedValue(new Error('redis down'));
+    queue.getRepeatableJobs.mockRejectedValue(new Error('redis down'));
+    await processor.onApplicationBootstrap();
+    expect(catalog.reconcileReadiness).toHaveBeenCalledWith();
+  });
+
+  it('a failing readiness pass is logged, not thrown', async () => {
+    catalog.reconcileReadiness.mockRejectedValue(new Error('db down'));
+    await expect(processor.reconcile('boot')).resolves.toBe(0);
   });
 
   it('queues one backfill with a stable job id outside test', async () => {
@@ -103,5 +121,8 @@ describe('CatalogSyncProcessor', () => {
     await expect(processor.handleSweep()).resolves.toEqual({ providers: 3, synced: 2, failed: 1, keyRejected: 1, neverSynced: expect.objectContaining({ ran: true }) });
     expect(warmup.syncNeverSynced).toHaveBeenLastCalledWith('sweep');
     expect(catalog.syncEveryProvider).toHaveBeenCalledTimes(1);
+    // The sweep marks waiting models of checked providers before it lists.
+    expect(catalog.reconcileReadiness).toHaveBeenCalledTimes(1);
+    expect(catalog.reconcileReadiness.mock.invocationCallOrder[0]).toBeLessThan(catalog.syncEveryProvider.mock.invocationCallOrder[0]);
   });
 });

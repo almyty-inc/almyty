@@ -6,6 +6,7 @@ import {
 } from '../email-templates';
 import { NOTIFICATION_EVENT_TYPES } from '../../notifications/notification-types';
 import { MailService } from '../mail.service';
+import { snapshotEnv } from '../../../test/env';
 
 describe('email templates', () => {
   it('has a dedicated template for every notification event type', () => {
@@ -108,17 +109,16 @@ describe('email templates', () => {
 });
 
 describe('MailService (template integration, dev mode: no RESEND_API_KEY)', () => {
-  const OLD_ENV = process.env;
+  const restore = snapshotEnv('RESEND_API_KEY', 'MAIL_FROM', 'EMAIL_FROM');
 
   beforeEach(() => {
-    process.env = { ...OLD_ENV };
     delete process.env.RESEND_API_KEY;
     delete process.env.MAIL_FROM;
     delete process.env.EMAIL_FROM;
   });
 
   afterAll(() => {
-    process.env = OLD_ENV;
+    restore();
   });
 
   it('defaults the sender to MAIL_FROM > EMAIL_FROM > notifications@almyty.com', () => {

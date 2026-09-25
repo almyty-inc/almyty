@@ -56,6 +56,10 @@ export class CatalogSyncProcessor implements OnApplicationBootstrap {
       this.logger.log('Model catalog backfill disabled (NODE_ENV=test or MODEL_CATALOG_BACKFILL=off)');
       return;
     }
+    // Readiness first, on this instance and without the queue: it is
+    // database work only, and a queued job can be taken by a replica of
+    // the previous release still draining during a rolling deploy.
+    void this.reconcile('boot');
     try {
       await this.queue.add(
         MODEL_CATALOG_BACKFILL_JOB,
@@ -100,12 +104,28 @@ export class CatalogSyncProcessor implements OnApplicationBootstrap {
   async handleSweep(_job?: Job): Promise<{ providers: number; synced: number; failed: number; keyRejected: number; neverSynced: BootSyncResult }> {
     // Providers still never synced (down at boot, or added while the key
     // check could not pass) get their key check and list first.
+    await this.reconcile('sweep');
     const neverSynced = await this.warmup.syncNeverSynced('sweep');
     const result = await this.catalog.syncEveryProvider();
     this.logger.log(
       `Model catalog sweep: ${result.synced} of ${result.providers} provider(s) synced, ${result.failed} failed (${result.keyRejected} refused the key)`,
     );
     return { ...result, neverSynced };
+  }
+
+  /**
+   * Mark the waiting cards of every provider whose key check has passed
+   * (ModelCatalogService.reconcileReadiness). Never throws.
+   */
+  async reconcile(reason: 'boot' | 'sweep'): Promise<number> {
+    try {
+      const changed = await this.catalog.reconcileReadiness();
+      if (changed > 0) this.logger.log(`Model catalog ${reason}: ${changed} model(s) usable under providers whose key check had passed`);
+      return changed;
+    } catch (error: any) {
+      this.logger.warn(`Model catalog ${reason} readiness pass failed: ${error?.message ?? error}`);
+      return 0;
+    }
   }
 
   @OnQueueFailed()

@@ -3,10 +3,10 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { ArrowLeft, ExternalLink, Loader2, Pencil, Play, RefreshCw } from 'lucide-react'
+import { Disclosure } from '@/components/ui/disclosure'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Disclosure } from '@/components/ui/disclosure'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { QueryError } from '@/components/ui/query-error'
@@ -159,7 +159,7 @@ export function ProviderPage() {
     )
   }
 
-  const status = providerCheck(provider, models.some((m) => m.selectable))
+  const status = providerCheck(provider)
   const visibility: VisibilityValue = { visibility: (provider.visibility as Visibility) ?? 'org', teamId: provider.teamId ?? null }
 
   return (

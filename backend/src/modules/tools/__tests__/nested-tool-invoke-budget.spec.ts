@@ -108,9 +108,7 @@ describe('nested tools.invoke - depth, fan-out and the pool', () => {
     process.env.SANDBOX_MAX_WORKERS_PER_ORG = '1';
     try {
       const { service } = buildHarness({
-        outer: jsTool('outer', "const r = await tools.invoke('inner', { x: 21 }); return r * 2;", {
-          configuration: { timeout: 6000 },
-        }),
+        outer: jsTool('outer', "const r = await tools.invoke('inner', { x: 21 }); return r * 2;"),
         inner: jsTool('inner', 'return parameters.x;'),
       });
 
