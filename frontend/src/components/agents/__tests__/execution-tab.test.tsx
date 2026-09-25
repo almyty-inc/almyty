@@ -9,6 +9,9 @@ import { api } from '@/lib/api'
 
 vi.mock('@/lib/api', () => ({
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
+  // The autonomous summary names providers and agents; the workflow tab reads neither.
+  llmProvidersApi: { getAll: vi.fn().mockResolvedValue([{ id: 'prov-1', name: 'OpenAI', type: 'openai' }]) },
+  agentsApi: { getAll: vi.fn().mockResolvedValue([{ id: 'a1', name: 'This one' }, { id: 'critic', name: 'Critic' }]) },
 }))
 
 /**
@@ -147,21 +150,58 @@ describe('the Execution tab saves what you choose', () => {
   })
 
   /**
-   * An autonomous agent runs the ReAct loop, which reads none of this, so
-   * the tab says so instead of offering a strategy that would do nothing.
+   * An autonomous agent runs its loop on its own models: roles and a
+   * strategy, set on its edit page. The tab shows that shape read-only,
+   * and none of the workflow controls, which act on a graph it has not got.
    */
-  it('offers no strategy, orchestrator or roles for an autonomous agent, and says why', async () => {
+  it('shows an autonomous agent its roles and strategy, with a way to edit them', async () => {
     wire({ roles: [role('principal')] })
-    render(<ExecutionTab agentId="a1" mode="autonomous" />)
-
-    expect(screen.getByTestId('execution-workflow-only')).toHaveTextContent(
-      'Strategies, roles and the orchestrator apply to workflow agents.',
+    render(
+      <ExecutionTab
+        agentId="a1"
+        mode="autonomous"
+        models={{
+          strategy: 'cascade',
+          roles: [
+            { key: 'main', name: 'Main', purpose: 'main', kind: 'model', providerId: 'prov-1', model: 'gpt-4o' },
+            { key: 'drafter', name: 'Cheap drafts', purpose: 'drafter', kind: 'model', routing: { objective: 'cheapest' } },
+            { key: 'checker', name: 'Checker', purpose: 'checker', kind: 'model', providerId: 'prov-1', model: 'gpt-4o-mini' },
+            { key: 'teammate_1', name: 'Critic', purpose: 'teammate', kind: 'agent', agentId: 'critic' },
+            { key: 'panelist_1', name: 'Panelist 1', purpose: 'panelist', kind: 'model', providerId: 'prov-1' },
+          ],
+        }}
+      />,
     )
+
+    const summary = screen.getByTestId('autonomous-models-summary')
+    expect(within(summary).getByTestId('summary-strategy')).toHaveTextContent('Cascade')
+    expect(summary).toHaveTextContent(/the drafter, a cheaper model, takes each step/i)
+    expect(await within(summary).findByText('OpenAI / gpt-4o')).toBeInTheDocument()
+    expect(within(summary).getByTestId('summary-role-drafter')).toHaveTextContent('Cheap drafts')
+    expect(within(summary).getByTestId('summary-role-drafter')).toHaveTextContent('Routed by policy (cheapest)')
+    expect(await within(summary).findByText('Agent: Critic')).toBeInTheDocument()
+    // A panelist is kept on the agent but cascade does not read it.
+    expect(within(summary).getByTestId('summary-role-panelist_1')).toHaveTextContent('not used by Cascade')
+    expect(within(summary).getByRole('link', { name: /edit models/i })).toHaveAttribute('href', '/agents/a1/edit')
+
+    // The old line that said none of this applied is gone.
+    expect(screen.queryByTestId('execution-workflow-only')).not.toBeInTheDocument()
+    expect(screen.queryByText(/apply to workflow agents/i)).not.toBeInTheDocument()
+    // No workflow controls, and nothing of theirs is fetched.
     expect(screen.queryByTestId('strategy-single')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Let a model choose the strategy')).not.toBeInTheDocument()
     expect(screen.queryByTestId('add-role')).not.toBeInTheDocument()
-    // Nothing is even fetched: there is nothing here that applies.
     expect(api.get).not.toHaveBeenCalled()
+  })
+
+  it('reads an autonomous agent saved before models as Single on its one model', async () => {
+    render(
+      <ExecutionTab agentId="a1" mode="autonomous" models={null} modelConfig={{ providerId: 'prov-1', model: 'gpt-4o' }} />,
+    )
+    const summary = screen.getByTestId('autonomous-models-summary')
+    expect(within(summary).getByTestId('summary-strategy')).toHaveTextContent('Single')
+    expect(within(summary).getByTestId('summary-role-main')).toHaveTextContent('Main')
+    expect(await within(summary).findByText('OpenAI / gpt-4o')).toBeInTheDocument()
   })
 
   it('still offers the strategy for a workflow agent', async () => {

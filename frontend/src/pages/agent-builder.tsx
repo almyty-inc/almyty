@@ -13,13 +13,7 @@ import { NextStepsBar } from '@/components/agents/builder/next-steps-bar'
 import { TestPanel } from '@/components/agents/builder/test-panel'
 import { CanvasArea } from '@/components/agents/builder/canvas-area'
 import { AutonomousConfig } from '@/components/agents/builder/autonomous-config'
-import {
-  EMPTY_COLLABORATION,
-  collaborationFromAgent,
-  collaborationPayload,
-  collaborationProblems,
-  type CollaborationState,
-} from '@/components/agents/builder/collaboration'
+import { modelsFromAgent, modelsPayload, modelsProblems, newAgentModels } from '@/components/agents/builder/agent-models'
 import { workflowIssues, type BuilderIssue, type GraphNode, type GraphEdge } from '@/components/agents/builder/validate-graph'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 
@@ -27,7 +21,7 @@ import { agentsApi, toolsApi } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
-import type { Agent, PipelineNode, PipelineEdge } from '@/types'
+import type { Agent, AgentModels, PipelineNode, PipelineEdge } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
 
 const DEFAULT_PIPELINE_NODES: PipelineNode[] = [
@@ -61,10 +55,11 @@ export function AgentBuilderPage() {
   const [agentInstructions, setAgentInstructions] = useState('')
   const [agentHeartbeat, setAgentHeartbeat] = useState<{ enabled: boolean; intervalMinutes: number; prompt: string }>({ enabled: false, intervalMinutes: 60, prompt: '' })
   const [agentToolIds, setAgentToolIds] = useState<string[]>([])
-  const [agentModelConfig, setAgentModelConfig] = useState<{ providerId?: string; model?: string; temperature?: number; maxTokens?: number }>({})
+  // An autonomous agent's roles and strategy. A new agent starts with one
+  // Main role, no model chosen yet, running Single.
+  const [agentModels, setAgentModels] = useState<AgentModels>(newAgentModels)
   const [agentMemoryConfig, setAgentMemoryConfig] = useState<{ enabled?: boolean; autoSave?: boolean }>({ enabled: false, autoSave: false })
   const [agentConfig, setAgentConfig] = useState<{ canCallAgents?: boolean; canCreateAgents?: boolean }>({ canCallAgents: false, canCreateAgents: false })
-  const [agentCollaboration, setAgentCollaboration] = useState<CollaborationState>(EMPTY_COLLABORATION)
 
   const [showTestPanel, setShowTestPanel] = useState(false)
   const [agentVisibility, setAgentVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
@@ -104,7 +99,7 @@ export function AgentBuilderPage() {
   })
   const availableTools = Array.isArray(rawTools) ? rawTools : (rawTools as any)?.tools || []
 
-  // Fetch available agents (for collaboration)
+  // Fetch available agents: a panelist or teammate role can be another agent
   const { data: rawAgents } = useQuery({
     queryKey: ['agents-list'],
     queryFn: () => agentsApi.getAll(),
@@ -135,13 +130,10 @@ export function AgentBuilderPage() {
       setAgentInstructions(agent.instructions || '')
       setAgentHeartbeat(agent.heartbeat || { enabled: false, intervalMinutes: 60, prompt: '' })
       setAgentToolIds(agent.toolIds || [])
-      setAgentModelConfig(agent.modelConfig || {})
+      setAgentModels(modelsFromAgent(agent))
       setAgentMemoryConfig(agent.memoryConfig || { enabled: false, autoSave: false })
       setAgentConfig(agent.agentConfig || { canCallAgents: false, canCreateAgents: false })
       setAgentVisibility({ visibility: agent.visibility ?? 'org', teamId: agent.teamId ?? null })
-      if (agent.collaboration) {
-        setAgentCollaboration(collaborationFromAgent(agent.collaboration))
-      }
       const pipelineNodes = (agent.pipeline?.nodes || []).map((n: PipelineNode) => ({
         id: n.id,
         type: n.type,
@@ -225,14 +217,11 @@ export function AgentBuilderPage() {
       if (!agentInstructions.trim()) {
         errors.push({ text: 'Write the instructions', nodeIds: [] })
       }
-      if (!agentModelConfig.providerId) {
-        errors.push({ text: 'Pick a model', nodeIds: [] })
-      }
-      errors.push(...collaborationProblems(agentCollaboration).map((text) => ({ text, nodeIds: [] })))
+      errors.push(...modelsProblems(agentModels).map((text) => ({ text, nodeIds: [] })))
     }
 
     return errors
-  }, [agentName, agentMode, agentInstructions, agentModelConfig, agentCollaboration, pipeline.nodes, pipeline.edges, currentOrganization?.settings?.defaultRouting])
+  }, [agentName, agentMode, agentInstructions, agentModels, pipeline.nodes, pipeline.edges, currentOrganization?.settings?.defaultRouting])
 
   const validationErrors = useMemo(() => validationIssues.map((issue) => issue.text), [validationIssues])
 
@@ -259,7 +248,10 @@ export function AgentBuilderPage() {
       agentDescription.trim() !== '',
       agentInstructions.trim() !== '',
       agentPersonality.trim() !== '',
-      Boolean(agentModelConfig.providerId),
+      // Anything beyond the starting Main role with no model chosen.
+      agentModels.strategy !== 'single' ||
+        agentModels.roles.length !== 1 ||
+        agentModels.roles.some((r) => Boolean(r.providerId || r.routing || r.agentId)),
       agentToolIds.length > 0,
       // The first history entry is the starting graph, so this only turns
       // true once a node or an edge has actually been changed.
@@ -271,7 +263,7 @@ export function AgentBuilderPage() {
     agentDescription,
     agentInstructions,
     agentPersonality,
-    agentModelConfig.providerId,
+    agentModels,
     agentToolIds.length,
     pipeline.canUndo,
   ])
@@ -353,15 +345,18 @@ export function AgentBuilderPage() {
       if (agentMode === 'workflow') {
         payload.pipeline = buildPipeline()
       } else {
-        // Autonomous mode -- save instructions + soul + heartbeat + tools + model config
+        // Autonomous mode -- save instructions + soul + heartbeat + tools + models
         payload.personality = agentPersonality || undefined
         payload.instructions = agentInstructions
         payload.heartbeat = agentHeartbeat.enabled ? agentHeartbeat : { enabled: false, intervalMinutes: agentHeartbeat.intervalMinutes, prompt: agentHeartbeat.prompt }
         payload.toolIds = agentToolIds
-        payload.modelConfig = agentModelConfig
         payload.memoryConfig = agentMemoryConfig
         payload.agentConfig = agentConfig
-        payload.collaboration = collaborationPayload(agentCollaboration)
+        // The roles and their strategy are the source of truth for which
+        // models run; the server mirrors the main role into modelConfig.
+        // Collaboration is what the roles replaced, so it is cleared.
+        payload.models = modelsPayload(agentModels)
+        payload.collaboration = null
         // Keep a minimal pipeline for backward compat
         payload.pipeline = payload.pipeline || { nodes: [], edges: [] }
       }
@@ -511,8 +506,8 @@ export function AgentBuilderPage() {
           onPersonalityChange={setAgentSoul}
           instructions={agentInstructions}
           onInstructionsChange={setAgentInstructions}
-          modelConfig={agentModelConfig}
-          onModelConfigChange={setAgentModelConfig}
+          models={agentModels}
+          onModelsChange={setAgentModels}
           toolIds={agentToolIds}
           onToolIdsChange={setAgentToolIds}
           tools={availableTools}
@@ -520,8 +515,6 @@ export function AgentBuilderPage() {
           onMemoryConfigChange={setAgentMemoryConfig}
           agentConfig={agentConfig}
           onAgentConfigChange={setAgentConfig}
-          collaboration={agentCollaboration}
-          onCollaborationChange={setAgentCollaboration}
           availableAgents={availableAgents}
           heartbeat={agentHeartbeat}
           onHeartbeatChange={setAgentHeartbeat}

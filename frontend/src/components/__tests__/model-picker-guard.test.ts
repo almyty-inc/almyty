@@ -102,7 +102,7 @@ describe('model selection goes through ModelPicker', () => {
 
   it('every provider-and-model screen renders the shared picker', () => {
     const sites = [
-      'components/agents/builder/autonomous-config.tsx',
+      'components/agents/builder/models-section.tsx',
       'components/agents/node-config-panel.tsx',
       'components/agents/detail/verify-config-editor.tsx',
       'components/tools/tool-form.tsx',
