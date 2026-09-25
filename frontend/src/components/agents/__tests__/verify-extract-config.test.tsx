@@ -59,6 +59,13 @@ function renderPanel(node: Node) {
   return { ...view, onUpdateNode }
 }
 
+/** Type into a step's text field (the chip editor) the way the browser reports it. */
+function typeInto(name: string, text: string) {
+  const field = screen.getByRole('textbox', { name })
+  field.textContent = text
+  fireEvent.input(field)
+}
+
 const node = (type: string, data: Record<string, unknown> = {}): Node => ({
   id: `${type}_1`,
   type,
@@ -110,7 +117,7 @@ describe('Verify node config', () => {
   it('says the node does not fail the run on a bad verdict', () => {
     renderPanel(node('verify', { checkers: [] }))
 
-    expect(screen.getByText(/never fails the run on a bad verdict/i)).toBeInTheDocument()
+    expect(screen.getByText(/The step never fails the run/i)).toBeInTheDocument()
   })
 })
 
@@ -118,15 +125,16 @@ describe('Extract Context node config', () => {
   it('writes the keys the executor reads', () => {
     const { onUpdateNode } = renderPanel(node('extract_context', {}))
 
-    fireEvent.change(screen.getByLabelText('Task'), { target: { value: 'fix the bug' } })
+    typeInto('What the brief is for', 'fix the bug')
     expect(onUpdateNode).toHaveBeenCalledWith('extract_context_1', expect.objectContaining({ task: 'fix the bug' }))
 
-    fireEvent.change(screen.getByLabelText('Sources'), { target: { value: '{{nodes.a.output}}' } })
+    typeInto('What to boil down', '{{nodes.a.output}}')
     expect(onUpdateNode).toHaveBeenCalledWith(
       'extract_context_1',
       expect.objectContaining({ sources: '{{nodes.a.output}}' }),
     )
 
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
     fireEvent.change(screen.getByLabelText('Instruction'), { target: { value: 'be terse' } })
     expect(onUpdateNode).toHaveBeenCalledWith(
       'extract_context_1',
@@ -157,7 +165,7 @@ describe('an unset template field stays unset', () => {
   it('clears the verify target back to undefined rather than an empty string', () => {
     const { onUpdateNode } = renderPanel(node('verify', { checkers: [], target: '{{nodes.a.output}}' }))
 
-    fireEvent.change(screen.getByLabelText('Target'), { target: { value: '' } })
+    typeInto('What to check', '')
 
     expect(onUpdateNode).toHaveBeenCalledWith('verify_1', expect.objectContaining({ target: undefined }))
   })
@@ -167,12 +175,13 @@ describe('an unset template field stays unset', () => {
       node('extract_context', { sources: '{{nodes.a.output}}', instruction: 'be terse' }),
     )
 
-    fireEvent.change(screen.getByLabelText('Sources'), { target: { value: '' } })
+    typeInto('What to boil down', '')
     expect(onUpdateNode).toHaveBeenCalledWith(
       'extract_context_1',
       expect.objectContaining({ sources: undefined }),
     )
 
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
     fireEvent.change(screen.getByLabelText('Instruction'), { target: { value: '' } })
     expect(onUpdateNode).toHaveBeenCalledWith(
       'extract_context_1',
