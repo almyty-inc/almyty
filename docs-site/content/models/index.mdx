@@ -56,7 +56,7 @@ The key check is one real call with the provider's key. When it passes, every mo
 
 Models stay current by themselves:
 
-- **New models appear.** The provider's list is read again when you connect it, when you change it, on every passing key check, and every six hours.
+- **New models appear.** The provider's list is read again when you connect it, when you change it, on every passing key check, and every six hours. A provider that has never been synced has its key checked and its list read when the API starts, and when the Models page or a model picker finds nothing usable to show.
 - **Retired models leave.** A model the provider stops listing is marked "no longer offered" (`status: inactive`, `metadata.retiredReason: "not listed by provider"`). It is never deleted, because past runs point at it, and it comes back if the provider lists it again.
 - **A model that stops answering leaves.** When a real call gets "model not found" from the provider, that model is marked unavailable at once, so nothing picks it again. Scheduled agents that used it pause and say which model to replace.
 - **A key the provider refuses takes its models out** until the key is replaced and a check passes. An outage does not: the router just skips the provider while it is down.
@@ -126,7 +126,7 @@ Connecting a provider over the API is one call, `POST /llm-providers/connect`; s
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time sync of providers that have no models, and the periodic sweep |
+| `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time sync of providers that have never been synced, and the periodic sweep |
 | `MODEL_CATALOG_SYNC_CRON` | `17 */6 * * *` | How often every provider's list is read again; `off` disables |
 | `MODEL_PRICE_FEED_CRON` | `0 4 * * *` | Price feed refresh; `off` disables |
 | `MODEL_RECONCILE_CRON` | `*/2 * * * *` | How often models on your cloud accounts are checked and brought to the state you asked for; `off` disables |
