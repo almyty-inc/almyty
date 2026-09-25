@@ -17,9 +17,9 @@ const SRC = join(__dirname, '..', '..')
 /** The picker itself owns the one free-text model field (its escape hatch). */
 const ALLOWED = new Set([
   'components/model-picker.tsx',
-  // Creating a Vertex AI provider: there is no provider to pick from yet,
+  // Connecting a Vertex AI provider: there is no provider to pick from yet,
   // and that surface serves no model list, so the model has to be typed.
-  'components/llm-providers/create-provider-form.tsx',
+  'components/llm-providers/connect-provider-form.tsx',
 ])
 
 /** Areas another change is still rewriting; empty once they are converted. */
@@ -107,8 +107,8 @@ describe('model selection goes through ModelPicker', () => {
       'components/agents/detail/verify-config-editor.tsx',
       'components/tools/tool-form.tsx',
       'pages/chat.tsx',
-      // A provider's default model, on /llm-providers/:id/edit.
-      'components/llm-providers/edit-provider-form.tsx',
+      // A provider's default model, on /models/providers/:id.
+      'pages/provider.tsx',
     ]
     for (const rel of sites) {
       const source = readFileSync(join(SRC, rel), 'utf8')
@@ -117,14 +117,22 @@ describe('model selection goes through ModelPicker', () => {
     }
   })
 
-  it("a provider's edit page picks among that provider's models only", () => {
-    // Its own select of the live list used to be here: an empty list read
-    // "No models available" whatever the reason. The picker is locked to
-    // the provider being edited, so no other provider can be chosen.
-    const source = readFileSync(join(SRC, 'components/llm-providers/edit-provider-form.tsx'), 'utf8')
+  it("a provider's page picks its default among that provider's models only", () => {
+    // The picker is locked to the provider on the page, so no other
+    // provider's model can become its default.
+    const source = readFileSync(join(SRC, 'pages/provider.tsx'), 'utf8')
     const picker = source.slice(source.indexOf('<ModelPicker'), source.indexOf('/>', source.indexOf('<ModelPicker')))
     expect(picker).toMatch(/\bproviderLocked\b/)
-    expect(picker).toMatch(/providerId: providerToEdit\.id/)
+    expect(picker).toMatch(/providerId: provider\.id/)
     expect(source).not.toMatch(/from '@\/components\/ui\/select'/)
+  })
+
+  it('is one searchable list, with no provider to pick first', () => {
+    // The provider-then-model two-step was a Select of providers next to a
+    // Select of models. The picker is one combobox over every model now.
+    const source = readFileSync(join(SRC, 'components/model-picker.tsx'), 'utf8')
+    expect(source).not.toMatch(/from '@\/components\/ui\/select'/)
+    expect(source).toMatch(/role="combobox"/)
+    expect(source).not.toMatch(/Choose a provider first|Select provider/)
   })
 })

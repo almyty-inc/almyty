@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,9 +11,9 @@ import { useHostedModels, useHostingActions } from '@/components/models/use-mode
 import { readableModelName } from '@/lib/model-hosting'
 
 /**
- * A model on your cloud that has no entry in the list yet (the backend
- * creates one with the request, so this is the rare leftover). Once it has
- * one, this page forwards to the model's own page.
+ * An open model almyty runs on your own cloud account: whether it is
+ * running, what it costs by the hour, and the controls to start, stop or
+ * shut it down. The cloud account's provider page lists the same models.
  */
 export function HostedModelPage() {
   const { deploymentId = '' } = useParams<{ deploymentId: string }>()
@@ -28,12 +28,11 @@ export function HostedModelPage() {
     </Link>
   )
 
-  if (d?.modelId) return <Navigate to={`/models/${d.modelId}`} replace />
   if (!d) {
     return (
       <div className="space-y-4">
         {back}
-        {hosted.deploymentsQuery.isLoading ? <Skeleton className="h-48 w-full" /> : <p className="text-muted-foreground">This model is not on any of your clouds.</p>}
+        {hosted.deploymentsQuery.isLoading ? <Skeleton className="h-48 w-full" /> : <p className="text-muted-foreground">This model is not running on any of your cloud accounts.</p>}
       </div>
     )
   }
@@ -42,8 +41,8 @@ export function HostedModelPage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
         {back}
-        <h1 className={cn("mt-1", DETAIL_TITLE_CLASSES)}>{readableModelName(d.modelRef)}</h1>
-        <p className="text-muted-foreground">Hosted on your cloud. It gets its full entry in the list once your cloud reports it running.</p>
+        <h1 className={cn('mt-1', DETAIL_TITLE_CLASSES)}>{readableModelName(d.modelRef)}</h1>
+        <p className="text-muted-foreground">Runs on your own cloud account. Agents can pick it like any other model once it is up.</p>
       </div>
       <Card>
         <CardContent className="pt-6">

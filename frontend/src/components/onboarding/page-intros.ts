@@ -38,7 +38,7 @@ export const PAGE_INTROS = {
   },
   models: {
     page: '/models',
-    text: 'Every model your agents can call, where it runs and what it costs. Connect an inference provider first (Inference providers, above); then add the models you want with Add model.',
+    text: 'Every model your agents can call and what it costs. Connect a provider once and all of its models show up here and in every model chooser.',
   },
   memories: {
     page: '/memories',

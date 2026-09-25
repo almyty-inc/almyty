@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient } from '@tanstack/react-query'
 import type { Node } from '@xyflow/react'
@@ -91,7 +91,14 @@ describe('LLM call node: model selection', () => {
 
   const llmNode = (data: Record<string, unknown>): Node => ({ id: 'llm_1', type: 'llm_call', position: { x: 0, y: 0 }, data })
 
-  it('switching to routed clears the pinned provider and writes config.routing', async () => {
+  const openPicker = async () => {
+    const trigger = await screen.findByTestId('node-model-trigger')
+    await waitFor(() => expect(trigger).not.toBeDisabled())
+    await userEvent.click(trigger)
+    return screen.getByRole('listbox')
+  }
+
+  it('choosing Automatic clears the pinned provider and writes config.routing', async () => {
     const onUpdateNode = vi.fn()
     render(
       <NodeConfigPanel
@@ -104,8 +111,8 @@ describe('LLM call node: model selection', () => {
       { queryClient },
     )
 
-    expect(screen.getByRole('radio', { name: 'Pinned provider' })).toHaveAttribute('aria-checked', 'true')
-    await userEvent.click(screen.getByRole('radio', { name: 'Routed by policy' }))
+    const list = await openPicker()
+    await userEvent.click(within(list).getByRole('option', { name: /Automatic: the cheapest model that fits/ }))
 
     expect(onUpdateNode).toHaveBeenCalledWith('llm_1', { systemPrompt: 'hi', temperature: 0.2, routing: { objective: 'cheapest' } })
     const written = onUpdateNode.mock.calls[0][1]
@@ -126,7 +133,8 @@ describe('LLM call node: model selection', () => {
       { queryClient },
     )
 
-    expect(screen.getByRole('radio', { name: 'Routed by policy' })).toHaveAttribute('aria-checked', 'true')
+    expect(await screen.findByTestId('node-model-value')).toHaveTextContent('Automatic: the cheapest model that fits')
+    await userEvent.click(screen.getByRole('button', { name: 'Automatic settings' }))
     expect(screen.getByTestId('routing-policy-editor')).toBeInTheDocument()
     expect(screen.queryByText('LLM Provider')).not.toBeInTheDocument()
     await waitFor(() => expect(modelsApi.list).toHaveBeenCalledWith({ selectable: true }))
@@ -138,7 +146,10 @@ describe('LLM call node: model selection', () => {
     })
   })
 
-  it('switching back to pinned removes routing', async () => {
+  it('picking a model removes routing', async () => {
+    vi.mocked(modelsApi.list).mockResolvedValue([
+      { id: 'c-gpt5', name: 'gpt-5', vendorModelId: 'gpt-5', providerId: 'p1', status: 'active', selectable: true },
+    ] as any)
     const onUpdateNode = vi.fn()
     render(
       <NodeConfigPanel
@@ -150,7 +161,9 @@ describe('LLM call node: model selection', () => {
       />,
       { queryClient },
     )
-    await userEvent.click(screen.getByRole('radio', { name: 'Pinned provider' }))
-    expect(onUpdateNode).toHaveBeenCalledWith('llm_1', { systemPrompt: 'hi' })
+    const list = await openPicker()
+    await userEvent.click(within(list).getByRole('option', { name: 'gpt-5' }))
+    expect(onUpdateNode).toHaveBeenCalledWith('llm_1', expect.objectContaining({ systemPrompt: 'hi', providerId: 'p1', model: 'gpt-5' }))
+    expect(onUpdateNode.mock.calls[0][1]).not.toHaveProperty('routing')
   })
 })

@@ -79,14 +79,14 @@ vi.mock('@/lib/api', () => {
 import { ApiDetailPage } from '../api-detail'
 import { ToolDetailPage } from '../tool-detail'
 import { GatewayDetailPage } from '../gateway-detail'
-import { LlmProviderDetailPage } from '../llm-provider-detail'
+import { ProviderPage } from '../provider'
 import { AgentDetailPage } from '../agent-detail'
 
 const PAGES: Array<{ name: string; Comp: React.ComponentType; notFound: RegExp }> = [
   { name: 'api-detail', Comp: ApiDetailPage, notFound: /API not found/i },
   { name: 'tool-detail', Comp: ToolDetailPage, notFound: /Tool not found/i },
   { name: 'gateway-detail', Comp: GatewayDetailPage, notFound: /Gateway not found/i },
-  { name: 'llm-provider-detail', Comp: LlmProviderDetailPage, notFound: /Provider not found/i },
+  { name: 'provider', Comp: ProviderPage, notFound: /Provider not found/i },
   { name: 'agent-detail', Comp: AgentDetailPage, notFound: /Agent not found/i },
 ]
 
