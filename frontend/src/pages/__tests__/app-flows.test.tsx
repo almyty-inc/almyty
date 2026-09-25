@@ -193,9 +193,9 @@ describe('the app page', () => {
     await waitFor(() => expect(where()).toBe('/apps/support/distributions/whatsapp_cloud'))
   })
 
-  it('links "Add distribution" to the picker page', async () => {
+  it('links "Add a place" to the picker page', async () => {
     renderAt('/apps/support')
-    fireEvent.click(await screen.findByRole('link', { name: /Add distribution/ }))
+    fireEvent.click(await screen.findByRole('link', { name: /Add a place/ }))
     await waitFor(() => expect(where()).toBe('/apps/support/distributions/new'))
   })
 
@@ -318,9 +318,9 @@ describe('/apps/:slug/distributions/whatsapp_cloud', () => {
     renderAt('/apps/support/distributions/whatsapp_cloud')
     fireEvent.click(await screen.findByRole('button', { name: /^Remove$/ }))
     const confirm = await screen.findByRole('alertdialog')
-    expect(confirm).toHaveTextContent('Remove distribution?')
+    expect(confirm).toHaveTextContent('Remove WhatsApp (Meta) from this app?')
     expect(api.removeDistribution).not.toHaveBeenCalled()
-    fireEvent.click(within(confirm).getByRole('button', { name: 'Remove distribution' }))
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(api.removeDistribution).toHaveBeenCalledWith('support', 'whatsapp_cloud'))
     await waitFor(() => expect(where()).toBe('/apps/support'))
   })
@@ -388,7 +388,7 @@ describe('other distribution pages', () => {
 
   it('says so when the app does not ship to the target in the URL', async () => {
     renderAt('/apps/support/distributions/slack')
-    expect(await screen.findByText(/does not ship to Slack/)).toBeInTheDocument()
+    expect(await screen.findByText(/is not on Slack/)).toBeInTheDocument()
   })
 })
 

@@ -126,7 +126,7 @@ export function AppDetailPage() {
         <Button asChild>
           <Link to={addPath}>
             <Plus className="mr-2 h-4 w-4" />
-            Add distribution
+            Add a place
           </Link>
         </Button>
       </div>
@@ -155,7 +155,7 @@ export function AppDetailPage() {
       <Tabs defaultValue="distributions" className="space-y-4">
         <TabsList>
           <TabsTrigger value="distributions">
-            Distributions ({distributions.length})
+            Where people use it ({distributions.length})
           </TabsTrigger>
           <TabsTrigger value="agents">Agents ({app.agentIds.length})</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -166,13 +166,13 @@ export function AppDetailPage() {
             <EmptyState
               variant="panel"
               icon={Package}
-              title="No distributions yet"
-              description="Publish this app as a web app, a terminal, a desktop app, or a messaging channel."
+              title="Not in front of anyone yet"
+              description="Put it on the web, in Slack or another chat app, or ship it as a terminal or desktop app."
               action={
                 <Button asChild>
                   <Link to={addPath}>
                     <Plus className="mr-2 h-4 w-4" />
-                    Add distribution
+                    Add a place
                   </Link>
                 </Button>
               }

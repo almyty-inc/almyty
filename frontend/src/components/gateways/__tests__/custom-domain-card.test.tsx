@@ -112,10 +112,12 @@ describe('CustomDomainCard', () => {
   })
 })
 
-describe('the card is on the hosted chat gateway page', () => {
-  it('is rendered inline for hosted_chat gateways', () => {
+describe('the card is on the app web page', () => {
+  it('is rendered inline on the web app page, keyed by its gateway, and on the gateway page only for a surface no app owns', () => {
+    const web = readFileSync(join(__dirname, '../../agent-apps/web-place.tsx'), 'utf8')
+    expect(web).toMatch(/<CustomDomainCard gatewayId=\{gatewayId\} \/>/)
     const page = readFileSync(join(__dirname, '../../../pages/gateway-detail.tsx'), 'utf8')
-    expect(page).toMatch(/gateway\.type === 'hosted_chat' && <CustomDomainCard gatewayId=\{gateway\.id\} \/>/)
+    expect(page).toMatch(/gateway\.type === 'hosted_chat' && !managedBy && <CustomDomainCard gatewayId=\{gateway\.id\} \/>/)
     const card = readFileSync(join(__dirname, '../custom-domain-card.tsx'), 'utf8')
     expect(card).not.toMatch(/Dialog/)
   })

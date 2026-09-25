@@ -17,19 +17,28 @@ export function WhoCanUse({ value, onChange, disabled }: { value: VisibilityValu
   const { currentOrganization } = useOrganizationStore()
   const [open, setOpen] = useState(false)
   if (!open) {
-    return (
-      <p className="text-sm" data-testid="who-can-use">
-        <span className="text-muted-foreground">Who can use it:</span> {SUMMARY[value.visibility]}
-        {' · '}
-        <button type="button" className="text-primary hover:underline disabled:opacity-50" onClick={() => setOpen(true)} disabled={disabled}>
-          Change
-        </button>
-      </p>
-    )
+    return <WhoCanUseLine summary={SUMMARY[value.visibility]} onChange={() => setOpen(true)} disabled={disabled} />
   }
   return (
     <div data-testid="who-can-use-picker">
       <VisibilityField organizationId={currentOrganization?.id ?? ''} value={value} onChange={onChange} disabled={disabled} noun="this provider and its models" />
     </div>
+  )
+}
+
+/**
+ * The one line itself: "Who can use it: <summary> · Change". Shared by
+ * everything that answers that question, whatever the choices behind it
+ * are (a provider's visibility, who may open an app).
+ */
+export function WhoCanUseLine({ summary, onChange, disabled, testId = 'who-can-use' }: { summary: string; onChange: () => void; disabled?: boolean; testId?: string }) {
+  return (
+    <p className="text-sm" data-testid={testId}>
+      <span className="text-muted-foreground">Who can use it:</span> {summary}
+      {' · '}
+      <button type="button" className="text-primary hover:underline disabled:opacity-50" onClick={onChange} disabled={disabled}>
+        Change
+      </button>
+    </p>
   )
 }

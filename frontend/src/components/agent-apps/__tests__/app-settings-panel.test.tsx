@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, fireEvent, waitFor } from '@testing-library/react'
+import type { ReactElement } from 'react'
 
 import { render } from '../../../test/setup'
 import { AppSettingsPanel } from '../app-settings-panel'
@@ -25,6 +26,63 @@ const app = (over: Partial<AgentApp> = {}): AgentApp =>
 
 const save = () => fireEvent.click(screen.getByRole('button', { name: /Save/ }))
 const sent = () => (agentAppsApi.update as any).mock.calls[0][1]
+/** Limits, visitor data and local access wait under Advanced. */
+const show = (ui: ReactElement) => {
+  const result = render(ui)
+  fireEvent.click(screen.getByRole('button', { name: /^Advanced/ }))
+  return result
+}
+
+describe('AppSettingsPanel look and Advanced', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    ;(agentAppsApi.update as any).mockResolvedValue({})
+  })
+
+  it('keeps limits, visitor data and local access folded, with the defaults in one line', () => {
+    render(<AppSettingsPanel app={app()} onSaved={vi.fn()} />)
+    expect(screen.queryByLabelText(/Spend limit per run/)).toBeNull()
+    expect(screen.getByRole('button', { name: /^Advanced/ })).toHaveTextContent(
+      'No spend limit · No visitor limit · visitor data kept per organization policy · no local access',
+    )
+  })
+
+  it('summarises what is set, not only the defaults', () => {
+    render(
+      <AppSettingsPanel
+        app={app({ limits: { costCapCents: 50, perUserRateLimit: 60 }, privacy: { retentionDays: 30 } })}
+        onSaved={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole('button', { name: /^Advanced/ })).toHaveTextContent(
+      'Spend limit 0.5 per run · 60 messages per visitor an hour · visitor data deleted after 30 days · no local access',
+    )
+  })
+
+  it('saves the whole look on the app: theme, prompts, disclosure', async () => {
+    render(<AppSettingsPanel app={app({ branding: { appName: 'Acme' } })} onSaved={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('Suggested prompts'), { target: { value: 'Track my order' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add suggested prompt' }))
+    fireEvent.change(screen.getByLabelText('Greeting'), { target: { value: 'Hi' } })
+    save()
+    await waitFor(() => expect(agentAppsApi.update).toHaveBeenCalled())
+    expect(sent().branding).toMatchObject({
+      appName: 'Acme',
+      theme: 'auto',
+      greeting: 'Hi',
+      suggestedPrompts: ['Track my order'],
+      aiDisclosure: null,
+      whiteLabel: false,
+    })
+    // Who can use it is its own one-line choice, not part of this save.
+    expect(sent()).not.toHaveProperty('authMode')
+  })
+
+  it('says who can use it in one line, above the look', () => {
+    render(<AppSettingsPanel app={app({ authMode: 'email_otp' })} onSaved={vi.fn()} />)
+    expect(screen.getByTestId('app-access')).toHaveTextContent('Who can use it: anyone who confirms their email · Change')
+  })
+})
 
 describe('AppSettingsPanel limits', () => {
   const onSaved = vi.fn()
@@ -36,7 +94,7 @@ describe('AppSettingsPanel limits', () => {
 
   it('stores a cost ceiling in cents, not in floating point currency', async () => {
     // A ceiling in floats is a rounding argument later.
-    render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
+    show(<AppSettingsPanel app={app()} onSaved={onSaved} />)
 
     fireEvent.change(screen.getByLabelText(/Spend limit per run/), { target: { value: '0.50' } })
     save()
@@ -46,7 +104,7 @@ describe('AppSettingsPanel limits', () => {
   })
 
   it('rounds rather than truncating a fractional cent', async () => {
-    render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
+    show(<AppSettingsPanel app={app()} onSaved={onSaved} />)
 
     fireEvent.change(screen.getByLabelText(/Spend limit per run/), { target: { value: '0.005' } })
     save()
@@ -56,14 +114,14 @@ describe('AppSettingsPanel limits', () => {
   })
 
   it('shows an existing ceiling back in whole currency', () => {
-    render(<AppSettingsPanel app={app({ limits: { costCapCents: 250 } })} onSaved={onSaved} />)
+    show(<AppSettingsPanel app={app({ limits: { costCapCents: 250 } })} onSaved={onSaved} />)
 
     expect(screen.getByLabelText(/Spend limit per run/)).toHaveValue('2.5')
   })
 
   it('sends null for a limit left empty, not a zero', async () => {
     // Zero would read as "no requests allowed" rather than "unset".
-    render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
+    show(<AppSettingsPanel app={app()} onSaved={onSaved} />)
 
     save()
 
@@ -77,7 +135,7 @@ describe('AppSettingsPanel limits', () => {
 
   it('keeps both rate ceilings separate', async () => {
     // The per-IP one covers surfaces where a visitor has no account.
-    render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
+    show(<AppSettingsPanel app={app()} onSaved={onSaved} />)
 
     fireEvent.change(screen.getByLabelText(/per visitor/i), { target: { value: '120' } })
     fireEvent.change(screen.getByLabelText(/per IP address/i), { target: { value: '30' } })
@@ -88,7 +146,7 @@ describe('AppSettingsPanel limits', () => {
   })
 
   it('explains that visitor limits are not one app-wide bucket', () => {
-    render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
+    show(<AppSettingsPanel app={app()} onSaved={onSaved} />)
 
     expect(screen.getByText(/identified by their sign-in or private chat cookie/i)).toBeInTheDocument()
     expect(screen.getByText(/not one shared bucket for the whole app/i)).toBeInTheDocument()
@@ -96,13 +154,13 @@ describe('AppSettingsPanel limits', () => {
   })
 
   it('explains why an open product needs them', async () => {
-    render(<AppSettingsPanel app={app({ authMode: 'public_link' })} onSaved={onSaved} />)
+    show(<AppSettingsPanel app={app({ authMode: 'public_link' })} onSaved={onSaved} />)
 
     expect(screen.getByText(/spends against your model keys/i)).toBeInTheDocument()
   })
 
   it('does not lecture a product that is not open to anyone', () => {
-    render(<AppSettingsPanel app={app({ authMode: 'sso' })} onSaved={onSaved} />)
+    show(<AppSettingsPanel app={app({ authMode: 'sso' })} onSaved={onSaved} />)
 
     expect(screen.queryByText(/spends against your model keys/i)).toBeNull()
     // The fields stay: a closed product may still want a ceiling.
@@ -110,7 +168,7 @@ describe('AppSettingsPanel limits', () => {
   })
 
   it('shows the safe privacy defaults for an existing app with no stored overrides', () => {
-    render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
+    show(<AppSettingsPanel app={app()} onSaved={onSaved} />)
 
     expect(screen.getByRole('switch', { name: /download their data/i })).toBeChecked()
     expect(screen.getByRole('switch', { name: /delete their data/i })).toBeChecked()
@@ -120,7 +178,7 @@ describe('AppSettingsPanel limits', () => {
   })
 
   it('saves per-app retention, visitor rights, and the shared-memory choice together', async () => {
-    render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
+    show(<AppSettingsPanel app={app()} onSaved={onSaved} />)
 
     fireEvent.change(screen.getByLabelText(/Delete visitor data after/i), {
       target: { value: '14' },
@@ -139,7 +197,7 @@ describe('AppSettingsPanel limits', () => {
   })
 
   it('refuses an invalid retention override before it reaches the API', () => {
-    render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
+    show(<AppSettingsPanel app={app()} onSaved={onSaved} />)
 
     fireEvent.change(screen.getByLabelText(/Delete visitor data after/i), {
       target: { value: '1.5' },

@@ -43,6 +43,23 @@ import { withGatewayQuota } from './gateway-quota';
  */
 export const HOSTED_CHAT_SLUG_INDEX = 'UQ_gateways_hosted_chat_slug';
 
+/**
+ * Configuration set on a published surface itself rather than on the
+ * distribution it came from, so republishing must carry it over: the
+ * sites allowed to embed a web app are set on the app's web page against
+ * this gateway (allowed-origins-card), and the distribution never holds
+ * them.
+ */
+export const KEPT_ON_REPUBLISH: readonly string[] = Object.freeze(['allowedOrigins']);
+
+export function keptOnRepublish(configuration: Record<string, any> | null | undefined): Record<string, any> {
+  const kept: Record<string, any> = {};
+  for (const key of KEPT_ON_REPUBLISH) {
+    if (configuration && configuration[key] !== undefined) kept[key] = configuration[key];
+  }
+  return kept;
+}
+
 export interface CreateGatewayDto {
   name: string;
   description?: string;
@@ -1139,7 +1156,9 @@ export class GatewaysService {
         // Repointed on every publish, so changing which agent an app
         // uses and republishing actually moves the surface.
         agentId: dto.agentId,
-        configuration: dto.configuration,
+        // Settings made on the surface itself survive: the distribution
+        // never carries them, so a plain replace would wipe them.
+        configuration: dto.configuration && { ...keptOnRepublish(existing.configuration), ...dto.configuration },
         rateLimitConfig: dto.rateLimitConfig,
         // The surface follows its agent's scope on every publish (a team
         // agent is served through a gateway scoped to its team).

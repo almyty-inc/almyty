@@ -16,7 +16,6 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 
 import { gatewaysApi } from '@/lib/api'
 import { toolsQuery } from '@/lib/list-queries'
-import { useEntitlements } from '@/hooks/use-entitlement'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { GatewayAuthSection } from '@/components/gateways/detail/gateway-auth-section'
@@ -32,7 +31,7 @@ import {
   isChannelType,
 } from '@/components/gateways/detail/channel-config-form'
 import { WidgetBuilder } from '@/components/gateways/widget-builder'
-import { HostedChatBuilder } from '@/components/gateways/hosted-chat-builder'
+import { ManagedByAppBanner, useManagedByApp } from '@/components/gateways/managed-by-app-banner'
 import { CustomDomainCard } from '@/components/gateways/custom-domain-card'
 import { VisitorOAuthCard } from '@/components/gateways/visitor-oauth-card'
 import { AllowedOriginsCard } from '@/components/gateways/allowed-origins-card'
@@ -50,7 +49,6 @@ export function initialGatewayTab(requested: string | null, isSystem: boolean): 
   return requested
 }
 export function GatewayDetailPage() {
-  const entitlements = useEntitlements()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -76,6 +74,9 @@ export function GatewayDetailPage() {
     queryFn: () => gatewaysApi.getById(id!),
     enabled: !!id,
   })
+
+  // The app this gateway was published from, if any: its settings live there.
+  const managedBy = useManagedByApp(id)
 
   useEffect(() => {
     const name = (gatewayData as any)?.name
@@ -388,6 +389,9 @@ export function GatewayDetailPage() {
         </div>
       )}
 
+      {/* An app's place: configured on the app, linked from here. */}
+      {managedBy && <ManagedByAppBanner managedBy={managedBy} />}
+
       {/* Gateway Configuration — type-specific */}
       <GatewayConfigurationCard
         gateway={gateway}
@@ -397,7 +401,7 @@ export function GatewayDetailPage() {
       />
 
       {/* Channel-type credential form (per-adapter token / webhook / OAuth fields) */}
-      {isChannelType(gateway.type) && (
+      {isChannelType(gateway.type) && !managedBy && (
         <ChannelConfigForm
           gateway={gateway}
           type={gateway.type}
@@ -419,48 +423,17 @@ export function GatewayDetailPage() {
       {/* Chat widget builder — customize + live-preview the embeddable widget */}
       {gateway.type === 'chat_widget' && <WidgetBuilder gateway={gateway} />}
 
-      {/* Hosted chat app — a standalone branded site on its own
-          subdomain. Its own surface rather than a widget setting: the
-          widget is a bubble in someone else's page, this is a site. They
-          share the branding vocabulary, not the gateway. */}
-      {gateway.type === 'hosted_chat' && (
-        <HostedChatBuilder
-          gateway={{
-            id: gateway.id,
-            configuration: gateway.configuration,
-          }}
-          /*
-            No costCapCents and no rateLimits here on purpose. Both were
-            read through `as any` off properties a Gateway has never had,
-            so both arrived undefined, the builder's public-link checks
-            could never pass, and Save stayed disabled for every hosted
-            chat app. The server does not judge those two either -- see
-            ENTITLEMENT_REFUSALS in gateways.service.ts.
-          */
-          /*
-            Without these the builder defaulted both to undefined, so the
-            white-label toggle was hard-disabled and the SSO auth mode
-            permanently refused -- for every organization, including the
-            ones that had bought them. The whole hosted-chat SSO
-            controller existed to serve a mode nothing could select.
-          */
-          entitlements={{
-            whiteLabel: entitlements.has('white_label'),
-            enterpriseAuth: entitlements.has('sso'),
-          }}
-        />
-      )}
-
-      {/* A domain the tenant owns: claim, publish DNS, verify, inline. */}
-      {gateway.type === 'hosted_chat' && <CustomDomainCard gatewayId={gateway.id} />}
-      {/* The identity provider visitors sign in with when access is OAuth. */}
-      {gateway.type === 'hosted_chat' && (
+      {/* A hosted chat is an app's web app: its look, who can use it, its
+          domain, sign-in and allowed sites are all on the app's web page.
+          Only a surface no app owns keeps these cards here. */}
+      {gateway.type === 'hosted_chat' && !managedBy && <CustomDomainCard gatewayId={gateway.id} />}
+      {gateway.type === 'hosted_chat' && !managedBy && (
         <VisitorOAuthCard gatewayId={gateway.id} authMode={gateway.configuration?.hostedChat?.authMode} />
       )}
       {/* Which third-party sites may call this public surface from the
           browser. Keyed on the gateway so the card resets when the saved
           list changes underneath it. */}
-      {(gateway.type === 'chat_widget' || gateway.type === 'hosted_chat') && (
+      {(gateway.type === 'chat_widget' || (gateway.type === 'hosted_chat' && !managedBy)) && (
         <AllowedOriginsCard
           key={`${gateway.id}:${JSON.stringify(gateway.configuration?.allowedOrigins ?? [])}`}
           gateway={{ id: gateway.id, type: gateway.type, configuration: gateway.configuration }}

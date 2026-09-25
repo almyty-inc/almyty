@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { ChoiceTile, ChoiceTiles } from '@/components/ui/choice-tile'
+import { Disclosure } from '@/components/ui/disclosure'
 import { gatewaysApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useCopy } from '@/lib/clipboard'
@@ -52,6 +54,16 @@ const PRESET_LABEL: Record<VisitorOAuthPreset, string> = {
   oidc: 'Other OpenID Connect provider',
   oauth2: 'Other OAuth 2.0 provider',
 }
+
+/** The tiles, well-known providers first. "Other" covers any OpenID Connect or OAuth 2.0 provider. */
+const PRESET_TILES: Array<{ preset: VisitorOAuthPreset; label: string; mark: string }> = [
+  { preset: 'google', label: 'Google', mark: 'G' },
+  { preset: 'microsoft', label: 'Microsoft', mark: 'M' },
+  { preset: 'github', label: 'GitHub', mark: 'GH' },
+  { preset: 'oidc', label: 'Other', mark: '…' },
+]
+
+const isOther = (preset: VisitorOAuthPreset) => preset === 'oidc' || preset === 'oauth2'
 
 interface Draft {
   preset: VisitorOAuthPreset
@@ -243,21 +255,20 @@ export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; a
                   save.mutate()
                 }}
               >
-                <div className="space-y-1.5">
-                  <Label htmlFor={id('preset')}>Provider</Label>
-                  <Select value={draft.preset} onValueChange={(v) => set({ preset: v as VisitorOAuthPreset })}>
-                    <SelectTrigger id={id('preset')}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(Object.keys(PRESET_LABEL) as VisitorOAuthPreset[]).map((p) => (
-                        <SelectItem key={p} value={p}>
-                          {PRESET_LABEL[p]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* The well-known providers first, as tiles; everything
+                    else is "Other", the only one that asks for a URL. */}
+                <ChoiceTiles label="Provider">
+                  {PRESET_TILES.map((tile) => (
+                    <ChoiceTile
+                      key={tile.preset}
+                      testId={`visitor-oauth-preset-${tile.preset}`}
+                      icon={<span className="text-xs font-semibold text-primary">{tile.mark}</span>}
+                      label={tile.label}
+                      selected={tile.preset === 'oidc' ? isOther(draft.preset) : draft.preset === tile.preset}
+                      onClick={() => set({ preset: tile.preset === 'oidc' && isOther(draft.preset) ? draft.preset : tile.preset })}
+                    />
+                  ))}
+                </ChoiceTiles>
 
                 {draft.preset === 'microsoft' && (
                   <div className="space-y-1.5">
@@ -271,43 +282,6 @@ export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; a
                   <div className="space-y-1.5">
                     <Label htmlFor={id('discovery')}>Issuer or discovery URL</Label>
                     <Input id={id('discovery')} value={draft.discoveryUrl} onChange={(e) => set({ discoveryUrl: e.target.value })} placeholder="https://login.example.com" />
-                    <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={() => setManual(true)}>
-                      Enter the endpoints by hand instead
-                    </Button>
-                  </div>
-                )}
-
-                {((draft.preset === 'oidc' && manual) || draft.preset === 'oauth2') && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {draft.preset === 'oidc' && (
-                      <div className="space-y-1.5">
-                        <Label htmlFor={id('issuer')}>Issuer</Label>
-                        <Input id={id('issuer')} value={draft.issuer} onChange={(e) => set({ issuer: e.target.value })} placeholder="https://login.example.com" />
-                      </div>
-                    )}
-                    <div className="space-y-1.5">
-                      <Label htmlFor={id('authorize')}>Authorization endpoint</Label>
-                      <Input id={id('authorize')} value={draft.authorizationEndpoint} onChange={(e) => set({ authorizationEndpoint: e.target.value })} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor={id('token')}>Token endpoint</Label>
-                      <Input id={id('token')} value={draft.tokenEndpoint} onChange={(e) => set({ tokenEndpoint: e.target.value })} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor={id('userinfo')}>User info endpoint</Label>
-                      <Input id={id('userinfo')} value={draft.userinfoEndpoint} onChange={(e) => set({ userinfoEndpoint: e.target.value })} />
-                    </div>
-                    {draft.preset === 'oidc' && (
-                      <div className="space-y-1.5">
-                        <Label htmlFor={id('jwks')}>JWKS URI</Label>
-                        <Input id={id('jwks')} value={draft.jwksUri} onChange={(e) => set({ jwksUri: e.target.value })} />
-                      </div>
-                    )}
-                    {draft.preset === 'oidc' && (
-                      <Button type="button" variant="link" className="h-auto justify-start p-0 text-xs" onClick={() => setManual(false)}>
-                        Use a discovery URL instead
-                      </Button>
-                    )}
                   </div>
                 )}
 
@@ -343,10 +317,61 @@ export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; a
                   </p>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor={id('scopes')}>Scopes</Label>
-                  <Input id={id('scopes')} value={draft.scopes} onChange={(e) => set({ scopes: e.target.value })} placeholder="Provider default" />
-                </div>
+                <Disclosure title="Advanced" summary={draft.scopes.trim() ? `Scopes: ${draft.scopes.trim()}` : 'Provider default scopes'}>
+                  {isOther(draft.preset) && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-4">
+                        <Label htmlFor={id('manual')}>Enter the endpoints by hand</Label>
+                        <Switch
+                          id={id('manual')}
+                          checked={manual || draft.preset === 'oauth2'}
+                          disabled={draft.preset === 'oauth2'}
+                          onCheckedChange={setManual}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <Label htmlFor={id('plain')}>Plain OAuth 2.0, without OpenID Connect</Label>
+                        <Switch
+                          id={id('plain')}
+                          checked={draft.preset === 'oauth2'}
+                          onCheckedChange={(plain) => set({ preset: plain ? 'oauth2' : 'oidc' })}
+                        />
+                      </div>
+                      {(manual || draft.preset === 'oauth2') && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {draft.preset === 'oidc' && (
+                            <div className="space-y-1.5">
+                              <Label htmlFor={id('issuer')}>Issuer</Label>
+                              <Input id={id('issuer')} value={draft.issuer} onChange={(e) => set({ issuer: e.target.value })} placeholder="https://login.example.com" />
+                            </div>
+                          )}
+                          <div className="space-y-1.5">
+                            <Label htmlFor={id('authorize')}>Authorization endpoint</Label>
+                            <Input id={id('authorize')} value={draft.authorizationEndpoint} onChange={(e) => set({ authorizationEndpoint: e.target.value })} />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor={id('token')}>Token endpoint</Label>
+                            <Input id={id('token')} value={draft.tokenEndpoint} onChange={(e) => set({ tokenEndpoint: e.target.value })} />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor={id('userinfo')}>User info endpoint</Label>
+                            <Input id={id('userinfo')} value={draft.userinfoEndpoint} onChange={(e) => set({ userinfoEndpoint: e.target.value })} />
+                          </div>
+                          {draft.preset === 'oidc' && (
+                            <div className="space-y-1.5">
+                              <Label htmlFor={id('jwks')}>JWKS URI</Label>
+                              <Input id={id('jwks')} value={draft.jwksUri} onChange={(e) => set({ jwksUri: e.target.value })} />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="space-y-1.5">
+                    <Label htmlFor={id('scopes')}>Scopes</Label>
+                    <Input id={id('scopes')} value={draft.scopes} onChange={(e) => set({ scopes: e.target.value })} placeholder="Provider default" />
+                  </div>
+                </Disclosure>
 
                 <div className="flex gap-2">
                   <Button type="submit" disabled={save.isPending || !draft.clientId.trim() || (needsSecret && !draft.clientSecret)}>
