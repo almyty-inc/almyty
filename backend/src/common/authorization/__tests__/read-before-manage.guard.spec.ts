@@ -103,3 +103,29 @@ describe('read before manage (source guard)', () => {
     expect(body.indexOf('assertReadable(')).toBeLessThan(body.indexOf("'manage'"));
   });
 });
+
+describe('dashboard gateway routes read the gateway as the caller (source guard)', () => {
+  const controllers = ROOTS.flatMap(sourceFiles).filter((file) => file.endsWith('.controller.ts'));
+
+  it('no controller loads a gateway by id without saying who is asking', () => {
+    const offenders: string[] = [];
+    for (const file of controllers) {
+      const source = fs.readFileSync(file, 'utf8');
+      for (const match of source.matchAll(/gatewaysService\.getGateway\(([^;]*?)\);/g)) {
+        // getGateway(id, organizationId, includeRelations, caller): a call
+        // with fewer than four arguments is the internal, no-caller form.
+        const args = match[1].split(',').filter((a) => a.trim()).length;
+        if (args < 4) offenders.push(`${rel(file)}: getGateway(${match[1]})`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('every gateway skills route starts from readableGateway', () => {
+    const source = read('modules/gateways/gateway-skills.controller.ts');
+    const handlers = [...source.matchAll(/\n  async (\w+)\(/g)].map((m) => m[1]);
+    expect(handlers.length).toBeGreaterThan(0);
+    const missing = handlers.filter((name) => !/this\.readableGateway\(/.test(methodBody(source, name) ?? ''));
+    expect(missing).toEqual([]);
+  });
+});
