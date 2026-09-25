@@ -225,7 +225,7 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
         { ensureSystemGateway: jest.fn().mockResolvedValue(undefined), validateGatewayConfiguration: jest.fn() } as any,
         policy,
       );
-      stats = new GatewaysStatsHelper(repo(Gateway), repo(Organization), repo(UsageMetric), service);
+      stats = new GatewaysStatsHelper(repo(Gateway), repo(Organization), repo(UsageMetric), service, policy);
       (service as any).statsHelper = stats;
     });
 
@@ -386,7 +386,7 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
 
     it('MCP skills/get naming the private gateway is not found for anyone else', async () => {
       const skills = { generateGatewaySkills: jest.fn().mockResolvedValue({ name: 'x', content: 'y' }) };
-      const handler = new McpContentHandler(repo(require('../../entities/tool.entity').Tool), repo(require('../../entities/resource.entity').Resource), repo(GatewayTool), skills as any, {} as any, {} as any);
+      const handler = new McpContentHandler(repo(require('../../entities/tool.entity').Tool), repo(require('../../entities/resource.entity').Resource), repo(GatewayTool), skills as any, {} as any, {} as any, policy);
       for (const who of others) {
         await expect(handler.handleSkillGet({ gatewayId: privateGateway.id }, organizationId, { id: users[who] }))
           .rejects.toMatchObject({ message: expect.stringMatching(/Gateway not found/) });

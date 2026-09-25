@@ -14,13 +14,13 @@ import {
   McpTextContent,
 } from '../types/mcp.types';
 
-import { Tool } from '../../../entities/tool.entity';
+import { Tool, ToolStatus } from '../../../entities/tool.entity';
 import { isOthersPrivate } from '../../../common/authorization/private-visibility';
+import { AccessPolicyService, type ResourceLike } from '../../../common/authorization/access-policy.service';
 import { Resource } from '../../../entities/resource.entity';
 import { GatewayTool } from '../../../entities/gateway-tool.entity';
 import { Gateway } from '../../../entities/gateway.entity';
-import { gatewayServableTo } from '../../gateways/private-gateway';
-import { servableToolsOnGateway } from '../../gateways/gateway-servable';
+import { findServableGatewayTool, servableToolsOnGateway } from '../../gateways/gateway-servable';
 import { SkillGeneratorService } from '../../tools/skill-generator.service';
 import { PromotedSkillsService } from '../../promoted-skills/promoted-skills.service';
 import { McpToolHandler } from './mcp-tool.handler';
@@ -40,6 +40,7 @@ export class McpContentHandler {
     private skillGeneratorService: SkillGeneratorService,
     private toolHandler: McpToolHandler,
     private promotedSkillsService: PromotedSkillsService,
+    private accessPolicy: AccessPolicyService,
   ) {}
 
   async handleResourcesList(
@@ -61,10 +62,13 @@ export class McpContentHandler {
             relations: { api: true },
           });
     } else {
-      resources = await this.resourceRepository.find({
+      // Off a gateway the caller sees the resources of the APIs they can
+      // see, by the rule tools/list applies.
+      const all = await this.resourceRepository.find({
         where: { api: { organizationId } },
         relations: { api: true },
       });
+      resources = await this.visibleResourcesOffGateway(organizationId, caller, all);
     }
 
     // Resources of another member's private API are not listed (with no
@@ -96,8 +100,10 @@ export class McpContentHandler {
   /**
    * resources/read answers from the set resources/list offered. Through a
    * gateway that is the resources of the APIs whose tools the gateway
-   * serves; a resource outside it, like another member's private API's
-   * resource or a malformed id, reads exactly like one that does not exist.
+   * serves; off a gateway, the resources of the APIs the caller can see.
+   * A resource outside it -- another member's private API's, a team API's
+   * outside the team, a malformed id -- reads exactly like one that does
+   * not exist.
    */
   async handleResourceRead(
     params: McpReadResourceRequest,
@@ -118,9 +124,15 @@ export class McpContentHandler {
         })
       : null;
 
+    // Through a gateway: the resources of the APIs it serves tools of. Off
+    // a gateway: the resources of the APIs the caller can see. Another
+    // member's private API's resource (any private API's when the caller
+    // is unknown) is outside both.
     const published = !!resource
       && !(resource.api && isOthersPrivate(resource.api, caller?.id ?? null))
-      && (!gatewayId || (await this.apiIdsServedOnGateway(gatewayId)).has(resource.apiId));
+      && (gatewayId
+        ? (await this.apiIdsServedOnGateway(gatewayId)).has(resource.apiId)
+        : (await this.visibleResourcesOffGateway(organizationId, caller, [resource])).length > 0);
     if (!resource || !published) {
       throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, 'Resource not found');
     }
@@ -145,6 +157,17 @@ export class McpContentHandler {
   private async apiIdsServedOnGateway(gatewayId: string): Promise<Set<string>> {
     const tools = await servableToolsOnGateway(this.gatewayToolRepository, gatewayId);
     return new Set(tools.map((t) => t.apiId).filter((id): id is string => !!id));
+  }
+
+  /** The resources whose API the caller may see off a gateway. A resource with no API has no scope and is left out. */
+  private async visibleResourcesOffGateway(
+    organizationId: string,
+    caller: { id: string } | undefined,
+    resources: Resource[],
+  ): Promise<Resource[]> {
+    const apis = resources.map((r) => r.api).filter((api): api is NonNullable<Resource['api']> => !!api);
+    const visible = new Set((await this.visibleOffGateway(organizationId, caller, apis)).map((api) => api.id));
+    return resources.filter((r) => !!r.api && visible.has(r.api.id));
   }
 
   async handlePromptsList(
@@ -261,6 +284,11 @@ export class McpContentHandler {
     };
   }
 
+  /**
+   * skills/list. Through a gateway: the bundle of what that gateway serves
+   * (the servable rule, gateway-servable.ts). Off a gateway: a skill per
+   * tool the caller's tools/list shows, plus the promoted skills they may see.
+   */
   async handleSkillsList(
     params: any,
     organizationId: string,
@@ -288,6 +316,18 @@ export class McpContentHandler {
     return { skills: [...skills.filter(Boolean), ...promoted] };
   }
 
+  /**
+   * skills/get answers from the set skills/list offered.
+   *
+   * Through a gateway (`servingGatewayId`) that is the gateway itself: a
+   * `toolId` resolves only among the tools it serves, and a `gatewayId`
+   * only when it names the gateway being served. Off a gateway, a tool or
+   * gateway resolves only when the caller could see it (org-wide, their
+   * teams', their own private ones), and a tool only while active, as
+   * tools/list shows it. Everything else -- another gateway's tool or
+   * bundle, a team's row outside the team, a malformed id -- is the same
+   * not-found a missing row gets.
+   */
   async handleSkillGet(
     params: any,
     organizationId: string,
@@ -304,26 +344,52 @@ export class McpContentHandler {
     }
 
     if (gatewayId) {
-      // `gatewayId` here is any gateway of the org, named in the request,
-      // not the one being served. Another user's private gateway answers
-      // like one that does not exist.
-      if (gatewayId !== servingGatewayId) {
-        const target = await this.gatewayToolRepository.manager?.findOne(Gateway, {
-          where: { id: gatewayId, organizationId },
-          select: { id: true, visibility: true, ownerUserId: true },
-        });
-        if (target && !gatewayServableTo(target, caller?.id)) {
-          throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, `Gateway not found: ${gatewayId}`);
+      const notFound = this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, `Gateway not found: ${gatewayId}`);
+      if (servingGatewayId) {
+        // A gateway publishes its own bundle, never another gateway's.
+        if (gatewayId !== servingGatewayId) throw notFound;
+      } else {
+        const target = typeof gatewayId === 'string' && isUUID(gatewayId)
+          ? await this.gatewayToolRepository.manager.getRepository(Gateway).findOne({
+              where: { id: gatewayId, organizationId },
+              select: { id: true, organizationId: true, visibility: true, teamId: true, ownerUserId: true },
+            })
+          : null;
+        if (!target || (await this.visibleOffGateway(organizationId, caller, [target])).length === 0) {
+          throw notFound;
         }
       }
       return this.skillGeneratorService.generateGatewaySkills(gatewayId, organizationId);
     }
 
     if (toolId) {
+      const notFound = this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, `Tool not found: ${toolId}`);
+      if (typeof toolId !== 'string' || !isUUID(toolId)) throw notFound;
+      if (servingGatewayId) {
+        if (!(await findServableGatewayTool(this.gatewayToolRepository, servingGatewayId, toolId))) throw notFound;
+      } else {
+        const tool = await this.toolRepository.findOne({ where: { id: toolId, organizationId, status: ToolStatus.ACTIVE } });
+        if (!tool || (await this.visibleOffGateway(organizationId, caller, [tool])).length === 0) throw notFound;
+      }
       return this.skillGeneratorService.generateToolSkill(toolId, organizationId, caller ?? null);
     }
 
     throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'toolId, gatewayId, or promotedSkillId is required');
+  }
+
+  /**
+   * Off a gateway, the rows the caller may see -- the rule tools/list
+   * applies (AccessPolicyService): org-wide rows, their teams' rows, their
+   * own private rows; an org admin every non-private row. With no known
+   * caller, org-wide rows only.
+   */
+  private async visibleOffGateway<T extends ResourceLike>(
+    organizationId: string,
+    caller: { id: string } | undefined,
+    rows: T[],
+  ): Promise<T[]> {
+    if (caller?.id) return this.accessPolicy.filterVisible(caller, organizationId, rows);
+    return rows.filter((row) => row.organizationId === organizationId && (row.visibility ?? 'org') === 'org');
   }
 
   private createError(code: JsonRpcErrorCode, message: string): any {

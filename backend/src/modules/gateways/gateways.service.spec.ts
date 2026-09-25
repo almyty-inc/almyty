@@ -16,6 +16,7 @@ import { OrganizationRole } from '../../entities/user-organization.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { fakeRepository } from '../../test/fake-repository';
+import { membershipFixture } from '../../test/execution-access.fixture';
 import {
   ExecutedQuery,
   RecordingQueryBuilder,
@@ -862,14 +863,11 @@ describe('GatewaysService', () => {
 
   describe('getOrganizationGatewayStats', () => {
     /**
-     * Both aggregates run in SQL. The chains that stood in for them here
-     * were `mockReturnThis()` with a canned answer, so the organization
-     * predicate on the status count or on the response-time average could
-     * be deleted -- handing one tenant another's numbers -- with this suite
-     * green. The builders now record the query that ran, and the gateway
-     * list behind the totals is a table that evaluates its `where`.
+     * Both aggregates run in SQL. The builders record the query that ran,
+     * the gateway list behind the totals is a table that evaluates its
+     * `where`, and the scope comes from the real access policy over a
+     * membership table: user-1 is a plain member of org-1 on team-a only.
      */
-    const PRIVATE_GATEWAY_CLAUSE = `(gateway.visibility <> 'private' OR gateway."ownerUserId" = :callerId)`;
     let builders: RecordingQueryBuilder[];
 
     const executed = (alias: string) => {
@@ -897,33 +895,44 @@ describe('GatewaysService', () => {
         return qb;
       });
       const gateways = fakeRepository<any>([
-        { id: 'gw-shared', organizationId: 'org-1', visibility: 'org', ownerUserId: 'user-2', totalRequests: 100, successfulRequests: 90 },
-        { id: 'gw-mine', organizationId: 'org-1', visibility: 'private', ownerUserId: 'user-1', totalRequests: 50, successfulRequests: 45 },
-        { id: 'gw-theirs', organizationId: 'org-1', visibility: 'private', ownerUserId: 'user-2', totalRequests: 7000, successfulRequests: 0 },
-        { id: 'gw-foreign', organizationId: 'org-2', visibility: 'org', ownerUserId: 'user-9', totalRequests: 9000, successfulRequests: 0 },
+        { id: 'gw-shared', organizationId: 'org-1', visibility: 'org', teamId: null, ownerUserId: 'user-2', totalRequests: 100, successfulRequests: 90 },
+        { id: 'gw-mine', organizationId: 'org-1', visibility: 'private', teamId: null, ownerUserId: 'user-1', totalRequests: 50, successfulRequests: 45 },
+        { id: 'gw-team-a', organizationId: 'org-1', visibility: 'team', teamId: 'team-a', ownerUserId: null, totalRequests: 20, successfulRequests: 20 },
+        { id: 'gw-theirs', organizationId: 'org-1', visibility: 'private', teamId: null, ownerUserId: 'user-2', totalRequests: 7000, successfulRequests: 0 },
+        { id: 'gw-team-b', organizationId: 'org-1', visibility: 'team', teamId: 'team-b', ownerUserId: null, totalRequests: 3000, successfulRequests: 0 },
+        { id: 'gw-foreign', organizationId: 'org-2', visibility: 'org', teamId: null, ownerUserId: 'user-9', totalRequests: 9000, successfulRequests: 0 },
       ]);
       gatewayRepository.find.mockImplementation(gateways.find);
+
+      const m = membershipFixture();
+      m.team('team-a', 'org-1');
+      m.team('team-b', 'org-1');
+      m.member('org-1', 'user-1');
+      m.teamMember('team-a', 'user-1');
+      accessPolicy.applyListFilter.mockImplementation((...args: any[]) => (m.accessPolicy.applyListFilter as any)(...args));
+      accessPolicy.visibleWhere = (...args: any[]) => (m.accessPolicy.visibleWhere as any)(...args);
     });
 
-    it('counts gateways by status in the caller organization, without others\' private ones', async () => {
+    it("counts gateways by status through the caller's list filter", async () => {
       const result = await service.getOrganizationGatewayStats('org-1', 'user-1');
 
       const counts = executed('gateway');
       expect(organizationScope(counts, 'gateway')).toBe('org-1');
-      expect(clause(counts, PRIVATE_GATEWAY_CLAUSE)?.params).toEqual({ callerId: 'user-1' });
+      // The real list filter ran on this builder: the caller's teams and
+      // their own private rows, nobody else's.
+      expect(counts.parameters).toMatchObject({ userTeamIds: ['team-a'], _privateOwnerId: 'user-1' });
+      expect(counts.clauses.some((c) => 'brackets' in c)).toBe(true);
       expect(result).toMatchObject({ totalGateways: 3, activeGateways: 2, inactiveGateways: 1 });
     });
 
-    it('averages response time over the caller organization metrics, in the database', async () => {
-      // One average, computed by the database. This used to load every
-      // usage_metrics row the org had ever written -- the interceptor
-      // writes two per request, so ~1.7M rows/day at 10 req/s -- into
-      // heap to produce a single mean.
+    it('averages response time in the database over the visible gateways only', async () => {
       const result = await service.getOrganizationGatewayStats('org-1', 'user-1');
 
       const average = executed('metric');
       expect(organizationScope(average, 'metric')).toBe('org-1');
       expect(clause(average, 'metric.type = :type')?.params).toEqual({ type: 'response_time' });
+      expect([...clause(average, 'metric.gatewayId IN (:...gatewayIds)')!.params.gatewayIds].sort())
+        .toEqual(['gw-mine', 'gw-shared', 'gw-team-a']);
       expect(result.averageResponseTime).toBe(120);
       expect(usageMetricRepository.find).not.toHaveBeenCalled();
     });
@@ -931,9 +940,9 @@ describe('GatewaysService', () => {
     it('totals requests over the gateways the caller may see and no others', async () => {
       const result = await service.getOrganizationGatewayStats('org-1', 'user-1');
 
-      expect(result.totalRequests).toBe(150);
-      expect(result.successRate).toBe(90);
-      expect(result.topGateways.map((t) => t.gateway.id)).toEqual(['gw-shared', 'gw-mine']);
+      expect(result.totalRequests).toBe(170);
+      expect(result.successRate).toBe(91.18);
+      expect(result.topGateways.map((t) => t.gateway.id)).toEqual(['gw-shared', 'gw-mine', 'gw-team-a']);
     });
   });
 
