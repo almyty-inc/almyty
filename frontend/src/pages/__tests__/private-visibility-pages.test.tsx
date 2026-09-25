@@ -21,7 +21,7 @@ vi.mock('../../lib/api', () => ({
   credentialsApi: { create: vi.fn(), getAll: vi.fn().mockResolvedValue([]) },
   agentsApi: { getAll: vi.fn().mockResolvedValue([]) },
   organizationsApi: { getTeams: vi.fn().mockResolvedValue([]) },
-  llmProvidersApi: { connect: vi.fn(), getModels: vi.fn().mockResolvedValue([]) },
+  llmProvidersApi: { connect: vi.fn(), providerTypes: vi.fn().mockResolvedValue([]), getModels: vi.fn().mockResolvedValue([]) },
 }))
 
 vi.mock('@/components/credential-picker', () => ({

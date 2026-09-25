@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { ExternalLink, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -13,7 +13,7 @@ import { llmProvidersApi } from '@/lib/api'
 import type { Connection } from '@/types/connections'
 import type { ModelCard } from '@/types/models'
 import { BASE_URL_PRIVATE_HOST_HINT, buildProviderCreateBody, createProviderSchema, structuralFieldsFor } from './schema'
-import { defaultProviderName, keyUrlFor, readConnectFailure, takesBaseUrl, type ConnectFailure } from './provider-catalog'
+import { defaultProviderName, keyUrlFor, needsModelName, providerTileLabel, readConnectFailure, takesBaseUrl, type ConnectFailure, type ProviderTypeInfo } from './provider-catalog'
 import { WhoCanUse } from './who-can-use'
 
 /** What POST /llm-providers/connect answers with once the key works. */
@@ -50,10 +50,24 @@ export function ConnectProviderForm({ type, onConnected }: { type: string; onCon
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [failure, setFailure] = useState<ConnectFailure | null>(null)
   const keyRef = useRef<HTMLInputElement>(null)
+  const modelRef = useRef<HTMLInputElement>(null)
 
   const ownServer = takesBaseUrl(type)
   const fields = structuralFieldsFor(type)
-  const needsModel = type === 'vertex_ai'
+  const typesQuery = useQuery({
+    queryKey: ['llm-provider-types'],
+    queryFn: async () => {
+      const rows = await llmProvidersApi.providerTypes()
+      return (Array.isArray(rows) ? rows : []) as ProviderTypeInfo[]
+    },
+    staleTime: 10 * 60_000,
+    retry: false,
+  })
+  // A refusal for a missing model belongs to the model field; anything
+  // else to the key.
+  const modelFailure = failure?.code === 'MODEL_REQUIRED' ? failure : null
+  const keyFailure = modelFailure ? null : failure
+  const needsModel = needsModelName(type, typesQuery.data) || !!modelFailure
   const keyUrl = failure?.keyUrl || keyUrlFor(type)
 
   const connect = useMutation({
@@ -63,9 +77,11 @@ export function ConnectProviderForm({ type, onConnected }: { type: string; onCon
       onConnected(result)
     },
     onError: (error) => {
-      setFailure(readConnectFailure(error))
-      // The key is what almost always needs fixing: put the cursor there.
-      window.setTimeout(() => keyRef.current?.focus(), 0)
+      const next = readConnectFailure(error)
+      setFailure(next)
+      // Put the cursor where the fix goes: the model when one is missing,
+      // otherwise the key, which is what almost always needs fixing.
+      window.setTimeout(() => (next.code === 'MODEL_REQUIRED' ? modelRef : keyRef).current?.focus(), 0)
     },
   })
 
@@ -90,6 +106,7 @@ export function ConnectProviderForm({ type, onConnected }: { type: string; onCon
       }
     }
     if (type === 'ollama' && apiUrl.trim() && !isHttpUrl(apiUrl)) next.apiUrl = 'Enter a URL starting with http:// or https://'
+    if (needsModel && !model.trim() && !next.model) next.model = 'Enter the model you want to use'
     setErrors(next)
     if (Object.keys(next).length > 0) return
     setFailure(null)
@@ -158,9 +175,25 @@ export function ConnectProviderForm({ type, onConnected }: { type: string; onCon
       {needsModel && (
         <div>
           <Label htmlFor="connect-model">Model</Label>
-          <Input id="connect-model" className="mt-1" value={model} onChange={(e) => setModel(e.target.value)} placeholder="google/gemini-3.5-flash" aria-invalid={!!errors.model} />
+          <Input
+            id="connect-model"
+            ref={modelRef}
+            className="mt-1"
+            value={model}
+            onChange={(e) => {
+              setModel(e.target.value)
+              setErrors((prev) => ({ ...prev, model: '' }))
+            }}
+            placeholder={type === 'vertex_ai' ? 'google/gemini-3.5-flash' : 'The model id, as the provider names it'}
+            aria-invalid={!!errors.model || !!modelFailure}
+          />
           {fieldError('model')}
-          <p className="mt-1 text-xs text-muted-foreground">Vertex AI does not list its models, so name the one to use.</p>
+          {modelFailure && (
+            <p className="mt-1 text-sm text-destructive" role="alert" data-testid="connect-model-failure">
+              {modelFailure.message}
+            </p>
+          )}
+          <p className="mt-1 text-xs text-muted-foreground">{providerTileLabel(type)} does not list its models, so name the one to use.</p>
         </div>
       )}
 
@@ -185,17 +218,17 @@ export function ConnectProviderForm({ type, onConnected }: { type: string; onCon
                 setErrors((prev) => ({ ...prev, apiKey: '' }))
               }}
               placeholder={ownServer ? 'Only if your server asks for one' : 'Paste your key'}
-              aria-invalid={!!errors.apiKey || !!failure}
-              aria-describedby={failure ? 'connect-failure' : undefined}
+              aria-invalid={!!errors.apiKey || !!keyFailure}
+              aria-describedby={keyFailure ? 'connect-failure' : undefined}
             />
             {fieldError('apiKey')}
-            {failure && (
+            {keyFailure && (
               <div id="connect-failure" role="alert" className="mt-1.5 space-y-1 text-sm text-destructive" data-testid="connect-failure">
-                <p>{failure.message}</p>
-                {failure.detail && (
+                <p>{keyFailure.message}</p>
+                {keyFailure.detail && (
                   <details className="text-xs text-muted-foreground">
                     <summary className="cursor-pointer">Details</summary>
-                    <span className="break-words">{failure.detail}</span>
+                    <span className="break-words">{keyFailure.detail}</span>
                   </details>
                 )}
               </div>
@@ -222,13 +255,13 @@ export function ConnectProviderForm({ type, onConnected }: { type: string; onCon
         </div>
       )}
 
-      {account && failure && (
+      {account && keyFailure && (
         <div role="alert" className="space-y-1 text-sm text-destructive" data-testid="connect-failure">
-          <p>{failure.message}</p>
-          {failure.detail && (
+          <p>{keyFailure.message}</p>
+          {keyFailure.detail && (
             <details className="text-xs text-muted-foreground">
               <summary className="cursor-pointer">Details</summary>
-              <span className="break-words">{failure.detail}</span>
+              <span className="break-words">{keyFailure.detail}</span>
             </details>
           )}
         </div>

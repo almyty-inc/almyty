@@ -11,7 +11,7 @@ import { LlmProviderType } from '@/types'
 
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 vi.mock('@/lib/api', () => ({
-  llmProvidersApi: { connect: vi.fn() },
+  llmProvidersApi: { connect: vi.fn(), providerTypes: vi.fn() },
   organizationsApi: { getTeams: vi.fn().mockResolvedValue([]) },
 }))
 
@@ -28,6 +28,7 @@ async function openTile(type: string) {
 describe('ConnectProviderPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(llmProvidersApi.providerTypes).mockResolvedValue([])
   })
 
   it('has a tile for every provider type', async () => {
@@ -198,5 +199,72 @@ describe('ConnectProviderPage', () => {
     at('/models/connect?type=ollama')
     fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
     await waitFor(() => expect(llmProvidersApi.connect).toHaveBeenCalledWith(expect.objectContaining({ type: 'ollama', configuration: {} })))
+  })
+
+  describe('providers that list no models', () => {
+    it('asks qwen for the model to use, and openai not, as provider-types says', async () => {
+      vi.mocked(llmProvidersApi.providerTypes).mockResolvedValue([
+        { type: 'qwen', listsModels: false },
+        { type: 'openai', listsModels: true },
+      ] as any)
+      at('/models/connect?type=qwen')
+      const form = await screen.findByRole('form', { name: /^Connect / })
+      expect(await within(form).findByLabelText('Model')).toBeInTheDocument()
+      expect(within(form).getByText(/does not list its models/)).toBeInTheDocument()
+      expect(llmProvidersApi.providerTypes).toHaveBeenCalled()
+    })
+
+    it('does not ask openai for a model', async () => {
+      vi.mocked(llmProvidersApi.providerTypes).mockResolvedValue([{ type: 'openai', listsModels: true }] as any)
+      at('/models/connect?type=openai')
+      const form = await screen.findByRole('form', { name: /^Connect / })
+      await waitFor(() => expect(llmProvidersApi.providerTypes).toHaveBeenCalled())
+      expect(within(form).queryByLabelText('Model')).not.toBeInTheDocument()
+    })
+
+    it('follows provider-types over the built-in list', async () => {
+      // The server is the source of truth: a type it says lists nothing gets the field.
+      vi.mocked(llmProvidersApi.providerTypes).mockResolvedValue([{ type: 'openai', listsModels: false }] as any)
+      at('/models/connect?type=openai')
+      expect(await screen.findByLabelText('Model')).toBeInTheDocument()
+    })
+
+    it('still asks before provider-types has answered', async () => {
+      vi.mocked(llmProvidersApi.providerTypes).mockReturnValue(new Promise(() => {}))
+      at('/models/connect?type=fireworks')
+      expect(await screen.findByLabelText('Model')).toBeInTheDocument()
+    })
+
+    it('requires the model, and sends it as configuration.model', async () => {
+      vi.mocked(llmProvidersApi.connect).mockResolvedValue({ provider: { id: 'p', name: 'Qwen', type: 'qwen' }, models: [] })
+      at('/models/connect?type=qwen')
+      fireEvent.change(await screen.findByLabelText('API key'), { target: { value: 'sk-qwen-1234567890' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+      expect(await screen.findByText('Enter the model you want to use')).toBeInTheDocument()
+      expect(llmProvidersApi.connect).not.toHaveBeenCalled()
+
+      fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'qwen3-max' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+      await waitFor(() => expect(llmProvidersApi.connect).toHaveBeenCalled())
+      expect(vi.mocked(llmProvidersApi.connect).mock.calls[0][0]).toMatchObject({ type: 'qwen', configuration: { apiKey: 'sk-qwen-1234567890', model: 'qwen3-max' } })
+    })
+
+    it('puts MODEL_REQUIRED next to the model field and the cursor in it', async () => {
+      vi.mocked(llmProvidersApi.providerTypes).mockResolvedValue([{ type: 'openai', listsModels: true }] as any)
+      vi.mocked(llmProvidersApi.connect).mockRejectedValue({
+        response: { status: 400, data: { success: false, error: 'MODEL_REQUIRED', message: 'OpenAI does not list its models. Enter the model you want to use.' } },
+      })
+      at('/models/connect?type=openai')
+      const key = await screen.findByLabelText('API key')
+      fireEvent.change(key, { target: { value: 'sk-test-1234567890' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+
+      expect(await screen.findByTestId('connect-model-failure')).toHaveTextContent('OpenAI does not list its models. Enter the model you want to use.')
+      const model = screen.getByLabelText('Model')
+      await waitFor(() => expect(model).toHaveFocus())
+      // It is about the model, not the key.
+      expect(screen.queryByTestId('connect-failure')).not.toBeInTheDocument()
+      expect(key).toHaveValue('sk-test-1234567890')
+    })
   })
 })

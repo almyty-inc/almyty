@@ -720,6 +720,9 @@ export const llmProvidersApi = {
    * message, detail?, keyUrl? } and nothing is saved.
    */
   connect: (data: any) => apiPost('/llm-providers/connect', data),
+
+  /** Every provider type with what it offers, including `listsModels` (false: a model must be named). */
+  providerTypes: () => apiGet('/llm-providers/provider-types'),
   
   update: (id: string, data: any) => apiPatch(`/llm-providers/${id}`, data),
   

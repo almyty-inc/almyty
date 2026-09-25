@@ -100,6 +100,33 @@ export function isProviderType(value: string | null | undefined): value is LlmPr
 /** Types reached at a server URL the person gives (your own server, Ollama); the key is optional for both. */
 export { baseUrlSupported as takesBaseUrl } from './schema'
 
+/**
+ * Types that serve no model list, so connecting one names the model to use.
+ * GET /llm-providers/provider-types says so per type (`listsModels: false`);
+ * this is the answer until that has loaded.
+ */
+export const NO_MODEL_LIST_TYPES: ReadonlySet<string> = new Set([
+  LlmProviderType.QWEN,
+  LlmProviderType.ZAI,
+  LlmProviderType.FIREWORKS,
+  LlmProviderType.SAMBANOVA,
+  LlmProviderType.VOLCENGINE,
+  LlmProviderType.SPARK,
+  LlmProviderType.VERTEX_AI,
+])
+
+export interface ProviderTypeInfo {
+  type: string
+  listsModels?: boolean
+}
+
+/** Whether connecting this type needs the model named up front. */
+export function needsModelName(type: string, types?: ProviderTypeInfo[] | null): boolean {
+  const known = Array.isArray(types) ? types.find((t) => t.type === type) : undefined
+  if (typeof known?.listsModels === 'boolean') return !known.listsModels
+  return NO_MODEL_LIST_TYPES.has(type)
+}
+
 export function keyUrlFor(type: string): string | undefined {
   return providerKeyUrls[type]
 }
