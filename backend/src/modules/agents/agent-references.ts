@@ -3,9 +3,11 @@ import type { AgentModels } from './autonomous-models';
 
 /**
  * Every tool and agent an agent definition points at: `toolIds`, the
- * `tool_call` and `sub_agent` nodes of its pipeline, and the
- * collaboration roster (members and judge). Used to decide whether the
- * agent may reference them (see assertAttachable).
+ * `tool_call` and `sub_agent` nodes of its pipeline, the tool list of its
+ * `llm_call` nodes, the collaboration roster (members and judge) and its
+ * autonomous agent roles. Used to decide whether the agent may reference
+ * them (see assertAttachable) and who loses a tool or agent whose scope
+ * narrows (see private-dependents).
  */
 type LegacyCollaboration = { agents?: Array<{ agentId: string }>; judgeAgentId?: string };
 type ParticipantLike = { kind?: string; agentId?: string } | null | undefined;
@@ -22,6 +24,10 @@ export function collectAgentReferences(agent: {
   for (const node of agent.pipeline?.nodes ?? []) {
     const data: Record<string, any> = (node as any).data || (node as any).config || {};
     if (node.type === 'tool_call' && typeof data.toolId === 'string' && data.toolId) toolIds.add(data.toolId);
+    // An llm_call step offers the model its own tool list.
+    if (node.type === 'llm_call' && Array.isArray(data.toolIds)) {
+      for (const id of data.toolIds) if (typeof id === 'string' && id) toolIds.add(id);
+    }
     if (node.type === 'sub_agent' && typeof data.agentId === 'string' && data.agentId) agentIds.add(data.agentId);
   }
   // Collaboration members are `participants` (agents or models) plus an

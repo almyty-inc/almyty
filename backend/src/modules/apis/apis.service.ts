@@ -22,7 +22,7 @@ import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssr
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
 import { nameTaken, resolveVisibilityWrite } from '../../common/authorization/private-visibility';
 import { assertManageable, assertReadable } from '../../common/authorization/read-rule';
-import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
+import { assertNoSharedDependents, narrowsScope } from '../../common/authorization/private-dependents';
 import { Credential } from '../../entities/credential.entity';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { connectionAuthConfig, hasInlineApiSecret, inlineApiAuthView, splitInlineApiAuth } from '../credentials/inline-api-auth.helper';
@@ -498,21 +498,29 @@ export class ApisService {
         })
       : null;
     const becomesPrivate = scope?.visibility === 'private' && api.visibility !== 'private';
-    // Going private takes the API's generated tools private too (below),
-    // which would detach them from the shared agents and gateways that use
-    // them. Refuse and say which, as making one of those tools private does.
-    if (becomesPrivate && userId && scope?.ownerId) {
-      const goingPrivate: Array<{ id: string }> = await this.dataSource.query(
+    // Narrowing the API -- to private, to a team, or to another team --
+    // takes its generated tools with it (below), and going private also the
+    // owner's own tools on it. That would detach them from the agents and
+    // gateways outside the new scope that use them, which then fail at run
+    // time. Refuse and say which, as narrowing one of those tools does.
+    if (scope && userId && narrowsScope(api, scope) && (!becomesPrivate || scope.ownerId)) {
+      const moving: Array<{ id: string }> = await this.dataSource.query(
         `SELECT id FROM tools
           WHERE "organizationId" = $1 AND status <> 'deleted'
             AND ("apiId" = $2 OR "operationId" IN (SELECT id FROM operations WHERE "apiId" = $2))
-            AND (generated = true OR "createdBy" IS NULL OR "createdBy" = $3::varchar)`,
-        [organizationId, api.id, scope.ownerId],
+            AND (generated = true
+                 OR ($4::boolean AND ("createdBy" IS NULL OR "createdBy" = $3::varchar)))`,
+        [organizationId, api.id, scope.ownerId ?? null, becomesPrivate],
       );
       await assertNoSharedDependents(
         this.dataSource.manager,
         this.accessPolicy,
-        { noun: 'API', organizationId, targets: goingPrivate.map((t) => ({ kind: 'tool' as const, id: t.id })) },
+        {
+          noun: 'API',
+          organizationId,
+          targets: moving.map((t) => ({ kind: 'tool' as const, id: t.id })),
+          into: { visibility: scope.visibility, teamId: scope.teamId },
+        },
         userId,
       );
     }
