@@ -31,6 +31,7 @@ import {
 import { ConnectionValidationService } from './connection-validation.service';
 import { ConnectorCatalogService } from './connector-catalog.service';
 import { GrantsService } from './grants/grants.service';
+import { connectionVisibleTo, GrantPrincipal } from './grants/grant-check';
 import { RotationService, RotateOutcome } from './rotation/rotation.service';
 import { CONNECTIONS_GOVERNANCE_HOOK, ConnectionsGovernanceHook } from '../../common/ee-hooks/ee-hooks';
 import { interpolate, schemaViolations, secretFieldsOf, splitSecrets } from './connector-schema';
@@ -266,14 +267,16 @@ export class ConnectionsService {
   async list(principal: ConnectionPrincipal, organizationId: string): Promise<ConnectionView[]> {
     this.assertMember(principal, organizationId, CONNECTIONS_READ);
     const rows = (await this.credentials.find({ where: { organizationId }, order: { createdAt: 'DESC' } })).filter((r) => !!r.connectorKey);
-    const visible = rows.filter((r) => this.canSee(principal, r));
+    const who = await this.grantPrincipal(principal, organizationId);
+    const visible = [];
+    for (const r of rows) if (await this.canSee(principal, r, who)) visible.push(r);
     const connectors = new Map((await this.catalog.list(organizationId)).map((c) => [c.key, c] as const));
     return visible.map((r) => this.view(r, connectors.get(r.connectorKey!)));
   }
 
   async get(principal: ConnectionPrincipal, organizationId: string, id: string): Promise<ConnectionView> {
     const row = await this.load(organizationId, id);
-    if (!this.canSee(principal, row)) {
+    if (!(await this.canSee(principal, row))) {
       // A connection the caller may not see is not found, not forbidden:
       // a 403 would confirm the id exists.
       throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
@@ -287,7 +290,7 @@ export class ConnectionsService {
 
   async validate(principal: ConnectionPrincipal, organizationId: string, id: string): Promise<ConnectionView> {
     const row = await this.load(organizationId, id);
-    this.assertCanManage(principal, row);
+    await this.assertCanManage(principal, row);
     const connector = await this.catalog.require(organizationId, row.connectorKey!);
     const config = await this.decryptConfig(row);
     const result = await this.validation.validate(connector, config, { organizationId });
@@ -306,7 +309,7 @@ export class ConnectionsService {
 
   async rotate(principal: ConnectionPrincipal, organizationId: string, id: string, body: { input?: Record<string, unknown>; mode?: 'browser' | 'headless' }, requestBase?: string): Promise<ConnectResult> {
     const row = await this.load(organizationId, id);
-    this.assertCanManage(principal, row);
+    await this.assertCanManage(principal, row);
     const connector = await this.catalog.require(organizationId, row.connectorKey!);
     const method = this.pickMethod(connector, (row.metadata?.connectMethod as ConnectMethodType | undefined));
     await this.governance?.beforeConnect(organizationId, connector.key, row.ownerUserId ? 'user' : 'org');
@@ -387,7 +390,7 @@ export class ConnectionsService {
 
   async disconnect(principal: ConnectionPrincipal, organizationId: string, id: string): Promise<{ revoked: boolean; revokeError?: string }> {
     const row = await this.load(organizationId, id);
-    this.assertCanManage(principal, row);
+    await this.assertCanManage(principal, row);
     const { revoked, error: revokeError } = await this.revokeAtProvider(row, principal.id);
     await this.credentials.remove(row);
     this.auditLog.log({
@@ -519,11 +522,33 @@ export class ConnectionsService {
     return row && row.connectorKey ? row : null;
   }
 
-  canSee(principal: ConnectionPrincipal, row: Credential): boolean {
-    // A private connection is its owner's alone; admins do not see it.
-    if (row.visibility === 'private') return !!row.ownerUserId && row.ownerUserId === principal.id;
-    if (!row.ownerUserId) return principalHasPermission(principal, row.organizationId, CONNECTIONS_READ);
-    return row.ownerUserId === principal.id || principalHasPermission(principal, row.organizationId, CONNECTIONS_MANAGE);
+  /**
+   * The read rule for connections (connectionVisibleTo): a private one is
+   * its owner's alone, admins included; a team one is its team's (and
+   * connections:manage's) alone; then an organization connection needs
+   * connections:read and a user-owned one is its owner's or
+   * connections:manage's to see. `who` is the principal already built for
+   * this organization, when the caller has one.
+   */
+  async canSee(principal: ConnectionPrincipal, row: Credential, who?: GrantPrincipal): Promise<boolean> {
+    return connectionVisibleTo(row, who ?? (await this.grantPrincipal(principal, row.organizationId)));
+  }
+
+  /**
+   * The caller as the grant rules see them: org role, membership
+   * permissions and, from the database, their teams. Without the grants
+   * service (unit wiring) nobody is on a team, so a team connection is
+   * hidden from everyone but its owner and connections:manage.
+   */
+  private async grantPrincipal(principal: ConnectionPrincipal, organizationId: string): Promise<GrantPrincipal> {
+    if (this.grants) return this.grants.principalFor(principal, organizationId);
+    const membership = membershipOf(principal, organizationId);
+    return {
+      userId: principal.id,
+      roles: membership ? [String(membership.role)] : [],
+      permissions: Array.isArray(membership?.permissions) ? [...membership!.permissions!] : [],
+      teamIds: [],
+    };
   }
 
   // ------------------------------------------------------------------
@@ -571,13 +596,14 @@ export class ConnectionsService {
     }
   }
 
-  private assertCanManage(principal: ConnectionPrincipal, row: Credential): void {
+  private async assertCanManage(principal: ConnectionPrincipal, row: Credential): Promise<void> {
     // The read rule first (read-rule.ts): a connection the caller may not
     // see -- another user's private one (connections:manage included), a
-    // user-owned one of someone else without connections:manage, any of
-    // the organization's without connections:read -- does not exist for
-    // them. A 403 here would confirm the id.
-    if (!this.canSee(principal, row)) {
+    // team one outside their team, a user-owned one of someone else
+    // without connections:manage, any of the organization's without
+    // connections:read -- does not exist for them. A 403 here would
+    // confirm the id.
+    if (!(await this.canSee(principal, row))) {
       throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
     }
     if (row.visibility === 'private') return; // canSee: the owner.

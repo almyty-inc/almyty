@@ -192,4 +192,87 @@ describe('agent cards are served only for an active agent the gateway may serve'
       },
     );
   });
+
+  /**
+   * The JSON-RPC side of the same gateways (A2A message/send, tasks/*;
+   * ACP session/*) runs, reads and cancels the agent's work. It used to
+   * load the agent by id and organization only, so a gateway whose agent
+   * is a draft, out of scope or gone still ran it. It answers with the
+   * card's rule and the card's not-found now.
+   */
+  describe('JSON-RPC (POST) answers only for an agent the gateway may serve', () => {
+    let rpc: UnifiedGatewayDelegation;
+    const a2aCalls: string[] = [];
+    const acpCalls: string[] = [];
+
+    beforeEach(() => {
+      a2aCalls.length = 0;
+      acpCalls.length = 0;
+      const agents = fakeRepository<Agent>({ seed: AGENTS, make: () => new Agent() });
+      const counterBump: any = { update: () => counterBump, set: () => counterBump, where: () => counterBump, execute: async () => ({ affected: 1 }) };
+      const answer = (calls: string[]) => ({
+        handleJsonRpc: jest.fn(async (gw: Gateway, _req: any, body: any, res: any) => {
+          calls.push(gw.agentId as string);
+          // `name` at the top level so `outcome` reads which agent answered.
+          res.json({ jsonrpc: '2.0', id: body.id, result: {}, name: gw.agentId });
+        }),
+      });
+      rpc = new UnifiedGatewayDelegation(
+        agents as any,
+        { createQueryBuilder: () => counterBump } as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        // The gateway's own auth has admitted the caller; not under test.
+        { resolveAndAuthenticate: async () => ({ auth: { authenticated: true } }) } as any,
+        answer(a2aCalls) as any,
+        new A2AAgentCardService(),
+        answer(acpCalls) as any,
+        new AcpDiscoveryService(),
+        config,
+        { check: async () => ({ limited: false }) } as any,
+        {} as any,
+      );
+    });
+
+    const post = (type: GatewayType, agentId: string, method: string) => {
+      const gw = gatewayFor(type, agentId);
+      const res = response();
+      const req: any = {
+        method: 'POST',
+        path: `/acme${gw.endpoint}`,
+        protocol: 'https',
+        get: () => 'api.example.com',
+        headers: {},
+        query: {},
+      };
+      const body = { jsonrpc: '2.0', id: 1, method, params: { message: { parts: [{ type: 'text', text: 'hi' }] } } };
+      return outcome(rpc.handleGatewayRequest(organization, gw, 'acme', agentId, req, res, body), res);
+    };
+
+    const RPC: Array<[string, GatewayType, string, string[]]> = [
+      ['A2A message/send', GatewayType.A2A, 'message/send', a2aCalls],
+      ['A2A tasks/get', GatewayType.A2A, 'tasks/get', a2aCalls],
+      ['ACP session/new', GatewayType.ACP, 'session/new', acpCalls],
+      ['ACP session/get', GatewayType.ACP, 'session/get', acpCalls],
+    ];
+
+    describe.each(RPC)('%s', (_label, type, method, calls) => {
+      it('reaches the server for an active agent the gateway publishes', async () => {
+        expect(await post(type, 'active', method)).toEqual({ status: 200, name: 'active' });
+        expect(calls).toEqual(['active']);
+      });
+
+      it.each([['draft'], ['inactive'], ['errored'], ['someones-private'], ['team-only'], ['other-org']])(
+        'a %s agent gets the not-found a missing agent gets, and nothing runs',
+        async (agentId) => {
+          const missing = await post(type, 'no-such-agent', method);
+          expect(missing).toEqual({ status: 404, name: null });
+          expect(await post(type, agentId, method)).toEqual(missing);
+          expect(calls).toEqual([]);
+        },
+      );
+    });
+  });
 });

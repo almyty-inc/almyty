@@ -97,4 +97,23 @@ describe('choosing a strategy per request', () => {
     const choice = await build({ chat: jest.fn().mockRejectedValue(new Error('boom')) as any }).choose(agent(on), 'x');
     expect(choice?.strategyKey).toBe('single');
   });
+
+  it('decides as the run user: roles, the provider lookup and the call all carry who the run acts as', async () => {
+    // The decision is part of the run. Made as nobody, a private or team
+    // provider behind the deciding role was refused even to its own team,
+    // and the role lookup skipped the run's scope.
+    const resolveRoles = jest.fn().mockResolvedValue([{ key: 'orchestrator', modelId: 'm1' }]);
+    const providerForModelId = jest.fn().mockResolvedValue({ provider: { id: 'p1' } });
+    const chat = jest.fn().mockResolvedValue({ message: { content: JSON.stringify({ strategy: 'single', roleBindings: {} }) } });
+    const service = new OrchestratorService(
+      { find: jest.fn().mockResolvedValue([]) } as any,
+      { resolveRoles } as any,
+      { providerForModelId } as any,
+      { chat } as any,
+    );
+    await service.choose(agent(on), 'x', 'user-7');
+    expect(resolveRoles).toHaveBeenCalledWith('org-1', 'a1', {}, { id: 'user-7' });
+    expect(providerForModelId).toHaveBeenCalledWith('org-1', 'm1', { id: 'user-7' });
+    expect(chat).toHaveBeenCalledWith('p1', expect.anything(), 'org-1', 'user-7');
+  });
 });

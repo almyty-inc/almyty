@@ -7,7 +7,8 @@ import { DataSource, IsNull, Repository } from 'typeorm';
 import { LlmProvider, LlmProviderStatus } from '../../entities/llm-provider.entity';
 import { Model } from '../../entities/model.entity';
 import { LlmProvidersService } from '../llm-providers/llm-providers.service';
-import { providerUsableBy } from '../llm-providers/private-provider';
+import { usableProviders } from '../llm-providers/private-provider';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { providerListsModels } from '../llm-providers/provider-profile';
 import { ModelCatalogService } from './model-catalog.service';
 
@@ -94,6 +95,7 @@ export class CatalogWarmupService {
     private readonly dataSource: DataSource,
     @InjectRedis() private readonly redis: Redis.Redis,
     @Optional() @Inject(CATALOG_WARMUP_OPTIONS) options?: Partial<CatalogWarmupOptions>,
+    @Optional() private readonly accessPolicy?: AccessPolicyService,
   ) {
     this.options = { ...DEFAULT_OPTIONS, ...(options ?? {}) };
   }
@@ -148,7 +150,7 @@ export class CatalogWarmupService {
     try {
       const where: Record<string, any> = { organizationId, status: LlmProviderStatus.ACTIVE };
       if (providerId) where.id = providerId;
-      const providers = (await this.providers.find({ where, order: { createdAt: 'ASC' } })).filter((p) => providerUsableBy(p, viewerId));
+      const providers = await usableProviders(this.accessPolicy, organizationId, viewerId, await this.providers.find({ where, order: { createdAt: 'ASC' } }));
       if (providers.length === 0) return false;
       const cards = await this.models.find({ where: providerId ? { organizationId, providerId } : { organizationId } });
       if (cards.some((c) => c.isSelectable())) return false;

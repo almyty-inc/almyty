@@ -27,7 +27,7 @@ import { ModelCatalogService } from '../model-catalog/model-catalog.service';
 
 import { AccessPolicyService, normaliseVisibility } from '../../common/authorization/access-policy.service';
 import { assertManageable } from '../../common/authorization/read-rule';
-import { assertProviderUsableBy } from './private-provider';
+import { ProviderNotUsableError, providerUsableByUser } from './private-provider';
 import { providerListsModels } from './provider-profile';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { Credential } from '../../entities/credential.entity';
@@ -548,11 +548,13 @@ export class LlmProvidersService {
   }
 
   /**
-   * Load a provider of the organization. `caller` is who is asking:
-   * another user's private provider is reported exactly like a missing
-   * one (org admins included). Pass null for a path with no known user --
-   * a private provider is then not found either. Omit it only on internal
-   * paths that act on a row already authorized upstream.
+   * Load a provider of the organization. `caller` is who is asking, or who
+   * a run acts as: another user's private provider, and a team provider
+   * whose team the caller is not on, are reported exactly like a missing
+   * one (ProviderNotUsableError, a 404 naming the caller). Pass null for a
+   * path with no known user -- only organization-wide providers are then
+   * found. Omit it only on internal paths that act on a row already
+   * authorized upstream.
    */
   async getProvider(
     providerId: string,
@@ -564,10 +566,14 @@ export class LlmProvidersService {
       where: { id: providerId, organizationId },
     });
 
-    if (!provider) {
+    if (caller !== undefined) {
+      // On someone's behalf, missing and not theirs to use are one answer.
+      if (!provider || !(await providerUsableByUser(this.accessPolicy, provider, caller?.id))) {
+        throw new ProviderNotUsableError(caller?.id);
+      }
+    } else if (!provider) {
       throw new NotFoundException('Provider not found');
     }
-    if (caller !== undefined) assertProviderUsableBy(provider, caller?.id);
 
     return includeSecrets ? provider : provider.maskSensitiveData() as LlmProvider;
   }

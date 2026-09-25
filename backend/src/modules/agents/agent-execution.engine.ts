@@ -272,7 +272,7 @@ export class AgentExecutionEngine {
             ? (options.input as any).message
             : JSON.stringify(options.input ?? {});
 
-      const compiled = await this.strategyPipelines?.pipelineFor(agent, requestText).catch((err) => {
+      const compiled = await this.strategyPipelines?.pipelineFor(agent, requestText, userId).catch((err) => {
         throw classifiedError(err?.message ?? 'Could not compile this strategy', ExecutionErrorType.VALIDATION_ERROR);
       });
       if (compiled) {

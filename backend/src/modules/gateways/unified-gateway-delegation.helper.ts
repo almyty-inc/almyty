@@ -410,9 +410,15 @@ export class UnifiedGatewayDelegation {
       throw new HttpException('A2A gateways only accept POST for JSON-RPC', HttpStatus.METHOD_NOT_ALLOWED);
     }
 
-    const agent = await this.agentRepository.findOne({
-      where: { id: gateway.agentId, organizationId: organization.id },
-    });
+    // JSON-RPC runs, reads and cancels the gateway's agent's tasks, so it
+    // answers only for an agent this gateway may serve (active, in scope):
+    // the same rule the card above follows, and the same not-found.
+    const agent = organization.id === gateway.organizationId
+      ? await findServableGatewayAgent(this.agentRepository, gateway)
+      : null;
+    if (!agent) {
+      throw new HttpException('Agent not found for this A2A gateway', HttpStatus.NOT_FOUND);
+    }
     const baseUrl =
       this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
     await this.a2aServerService.handleJsonRpc(gateway, req, body, res, {
@@ -450,6 +456,16 @@ export class UnifiedGatewayDelegation {
       throw new HttpException('ACP gateways only accept POST for JSON-RPC', HttpStatus.METHOD_NOT_ALLOWED);
     }
 
+    // Every session method runs or reads the gateway's agent, so it answers
+    // only for an agent this gateway may serve -- the rule the discovery
+    // document above follows. Anything else is the not-found a missing
+    // agent gets.
+    const agent = organization.id === gateway.organizationId
+      ? await findServableGatewayAgent(this.agentRepository, gateway)
+      : null;
+    if (!agent) {
+      throw new HttpException('Agent not found for this ACP gateway', HttpStatus.NOT_FOUND);
+    }
     await this.acpServerService.handleJsonRpc(gateway, req, body, res);
   }
 

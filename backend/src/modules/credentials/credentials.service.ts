@@ -20,7 +20,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AccessPolicyService, normaliseVisibility, type ResourceVisibility } from '../../common/authorization/access-policy.service';
 import { gatewayServableTo } from '../gateways/private-gateway';
-import { providerUsableBy } from '../llm-providers/private-provider';
+import { usableProviders } from '../llm-providers/private-provider';
 import { batchAsync } from '../../common/utils/batch-async';
 import { assertManageable, canRead } from '../../common/authorization/read-rule';
 
@@ -313,13 +313,14 @@ export class CredentialsService {
     }
 
     // Find LLM providers using this credential (not another user's
-    // private ones: those are not the caller's to know about).
-    const llmProviders = (await this.llmProviderRepository.find({
+    // private ones, nor a team's the caller is not on: those are not the
+    // caller's to know about).
+    const usingIt = await this.llmProviderRepository.find({
       where: { credentialId: id, organizationId },
-      select: { id: true, name: true, type: true, status: true, visibility: true, ownerUserId: true },
-    }))
-      .filter((p) => !caller || providerUsableBy(p, caller.id))
-      .map(({ visibility: _v, ownerUserId: _o, ...rest }) => rest);
+      select: { id: true, name: true, type: true, status: true, organizationId: true, visibility: true, ownerUserId: true, teamId: true },
+    });
+    const llmProviders = (caller ? await usableProviders(this.accessPolicy, organizationId, caller.id, usingIt) : usingIt)
+      .map(({ visibility: _v, ownerUserId: _o, teamId: _t, organizationId: _org, ...rest }) => rest);
 
     // Find APIs that have credentials with this id
     const apis = await this.apiRepository.find({

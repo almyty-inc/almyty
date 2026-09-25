@@ -109,6 +109,9 @@ describe('connect a provider', () => {
           useValue: {
             canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
             applyListFilter: jest.fn().mockResolvedValue({ bypass: true, teamIds: [] }),
+            // The team rule for using a provider: plain members, on the teams in teamsOf.
+            getOrgRole: jest.fn().mockResolvedValue('member'),
+            getTeamMemberships: jest.fn(async (userId: string) => new Map((teamsOf[userId] ?? []).map((t) => [t, 'member']))),
             assertCanScopeToTeam: jest.fn(async (userId: string, _org: string, visibility?: string, teamId?: string | null) => {
               if (visibility === 'team' && !(teamsOf[userId] ?? []).includes(teamId ?? '')) {
                 throw new ForbiddenException('You are not a member of that team');

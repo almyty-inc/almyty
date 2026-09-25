@@ -53,8 +53,9 @@ export class ChannelInstallationsController {
     @Param('installationId', ParseUUIDPipe) installationId: string,
   ) {
     const orgId = req.user.currentOrganizationId;
-    const gateway = await this.gatewaysService.getGateway(id, orgId, false, { id: req.user.sub || req.user.id });
-    if (!gateway) throw new NotFoundException('Gateway not found');
+    // Revoking changes the gateway: the per-gateway manage gate, 404 when
+    // the caller cannot read it, 403 when they can read but not manage it.
+    const gateway = await this.gatewaysService.findManageable(id, orgId, req.user.sub || req.user.id);
     const installation = await this.installationService.revoke(gateway.id, installationId);
     return { success: true, data: installation };
   }

@@ -65,8 +65,10 @@ export class ChannelEventsController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     const orgId = req.user.currentOrganizationId;
-    const gateway = await this.gatewaysService.getGateway(id, orgId, false, { id: req.user.sub || req.user.id });
-    if (!gateway) throw new NotFoundException('Gateway not found');
+    // The probe uses the gateway's stored credentials: the per-gateway
+    // manage gate, 404 when the caller cannot read it, 403 when they can
+    // read but not manage it.
+    const gateway = await this.gatewaysService.findManageable(id, orgId, req.user.sub || req.user.id);
     const result = await this.channelGatewayService.testConnection(gateway);
     return { success: true, data: result };
   }

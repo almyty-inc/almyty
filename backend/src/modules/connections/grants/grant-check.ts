@@ -1,5 +1,5 @@
 import { GrantPermission, GrantPrincipalType } from '../../../entities/connection-grant.entity';
-import { CONNECTIONS_MANAGE, roleHasConnectionPermission } from '../connections.permissions';
+import { CONNECTIONS_MANAGE, CONNECTIONS_READ, roleHasConnectionPermission } from '../connections.permissions';
 
 /**
  * Pure grant decisions for the Connections layer (gate 2). No I/O: the
@@ -136,6 +136,49 @@ function teamGate(connection: ConnectionLike, principal: GrantPrincipal): GrantD
 
 function describe(grant: GrantLike): string {
   return `${grant.permission} grant to ${grant.principalType} ${grant.principalId}`;
+}
+
+/** `connections:read` through the org role or a membership permission. */
+function hasReadPermission(principal: GrantPrincipal): boolean {
+  if (principal.roles.some((role) => roleHasConnectionPermission(role, CONNECTIONS_READ))) return true;
+  return (principal.permissions ?? []).includes(CONNECTIONS_READ);
+}
+
+/**
+ * May `principal` see the connection (list it, open it)? The read rule
+ * for connections, in the order read-rule.ts applies it everywhere:
+ *
+ * - private: its owner only (admins included in "not the owner").
+ * - team: its owner, or a member of its team, or `connections:manage`
+ *   (the same bypass teamGate gives the org owners and admins). Team only
+ *   is team only: nobody else sees it, grant or no grant.
+ * - then an organization connection needs `connections:read`, and a
+ *   user-scoped one is its owner's or `connections:manage`'s to see.
+ */
+export function connectionVisibleTo(connection: ConnectionLike, principal: GrantPrincipal): boolean {
+  if (isOwner(connection, principal)) return true;
+  if (privateGate(connection) || teamGate(connection, principal)) return false;
+  if (!connection.ownerUserId) return hasReadPermission(principal);
+  return hasManagePermission(principal);
+}
+
+/**
+ * Is the connection, for `principal`, indistinguishable from a missing
+ * one? True when they may not see it (connectionVisibleTo) and no grant
+ * names them either -- someone a user-scoped connection has been shared
+ * with knows it exists. A private connection, and a team connection
+ * outside the caller's team, stay hidden whatever grants say. A path
+ * that refuses a hidden connection answers 404, never 403.
+ */
+export function connectionHiddenFrom(
+  connection: ConnectionLike,
+  principal: GrantPrincipal,
+  grants: GrantLike[],
+  context: GrantContext = {},
+): boolean {
+  if (connectionVisibleTo(connection, principal)) return false;
+  if (!isOwner(connection, principal) && (privateGate(connection) || teamGate(connection, principal))) return true;
+  return matchingGrants(grants, principal, context).length === 0;
 }
 
 /**
