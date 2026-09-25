@@ -135,7 +135,7 @@ describe('buildHostBody', () => {
     })
   })
 
-  it('sends a connect-sheet connection as credentialId and no longer requires the schema secrets', () => {
+  it('sends a connect-flow connection as credentialId and no longer requires the schema secrets', () => {
     const r = buildHostBody({ ...base, adapter: hfAdapter, config: { namespace: 'acme' }, connectionId: 'conn-1' })
     expect(r).toEqual({
       ok: true,

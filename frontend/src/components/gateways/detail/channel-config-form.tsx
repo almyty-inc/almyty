@@ -22,7 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { ConnectAccountButton } from '@/components/connections/connect-sheet'
+import { ConnectAccountButton } from '@/components/connections/connect-flow'
 import { ConnectedChip } from '@/components/connections/connected-chip'
 import { ConnectionSelect, useConnectionOptions } from '@/components/connections/connection-select'
 import { ConnectionHealthBadge } from '@/components/connections/health-badge'

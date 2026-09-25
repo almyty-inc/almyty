@@ -7,14 +7,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { SecretInput } from '@/components/ui/secret-input'
 import type { VisibilityValue } from '@/components/ui/visibility-field'
-import { ConnectAccountButton } from '@/components/connections/connect-sheet'
+import { ConnectAccountButton } from '@/components/connections/connect-flow'
 import { ConnectedChip } from '@/components/connections/connected-chip'
 import { llmProvidersApi } from '@/lib/api'
 import type { Connection } from '@/types/connections'
 import type { ModelCard } from '@/types/models'
 import { BASE_URL_PRIVATE_HOST_HINT, buildProviderCreateBody, createProviderSchema, structuralFieldsFor } from './schema'
 import { defaultProviderName, keyUrlFor, needsModelName, providerTileLabel, readConnectFailure, takesBaseUrl, type ConnectFailure, type ProviderTypeInfo } from './provider-catalog'
-import { WhoCanUse } from './who-can-use'
+import { WhoCanUse } from '@/components/connect/who-can-use'
 
 /** What POST /llm-providers/connect answers with once the key works. */
 export interface ConnectResult {
@@ -267,7 +267,7 @@ export function ConnectProviderForm({ type, onConnected }: { type: string; onCon
         </div>
       )}
 
-      <WhoCanUse value={visibility} onChange={setVisibility} disabled={connect.isPending} />
+      <WhoCanUse value={visibility} onChange={setVisibility} disabled={connect.isPending} noun="this provider and its models" />
 
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={connect.isPending}>
