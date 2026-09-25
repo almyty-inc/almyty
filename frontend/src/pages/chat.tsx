@@ -17,7 +17,8 @@ import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ModelPicker } from '@/components/model-picker'
-import { llmProvidersApi, toolsApi } from '@/lib/api'
+import { llmProvidersApi } from '@/lib/api'
+import { toolsQuery } from '@/lib/list-queries'
 import { formatDate } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -78,17 +79,11 @@ export function ChatPage() {
   const providers = Array.isArray(providersRaw) ? providersRaw : []
 
   // Fetch tools
-  const { data: toolsRaw, isLoading: loadingTools } = useQuery({
-    queryKey: ['tools', currentOrganization?.id],
-    queryFn: async () => {
-      const response = await toolsApi.getAll(currentOrganization?.id)
-      const d = response
-      const result = d?.tools || (Array.isArray(d) ? d : [])
-      return Array.isArray(result) ? result : []
-    },
+  const { data: toolsPage, isLoading: loadingTools } = useQuery({
+    ...toolsQuery(currentOrganization?.id),
     enabled: !!currentOrganization,
   })
-  const tools = Array.isArray(toolsRaw) ? toolsRaw : []
+  const tools = toolsPage?.items ?? []
 
   const activeProviders = providers.filter((p: any) => p.status === 'active')
 

@@ -20,16 +20,7 @@ import { Field, InlineFormActions } from '@/components/layout/form-page'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 import { apisApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
@@ -55,7 +46,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
   const { success, error: errorNotif } = useNotifications()
   const [adding, setAdding] = useState(false)
   const [typeError, setTypeError] = useState<string | undefined>()
-  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const [newCredType, setNewCredType] = useState('')
   const [newCredName, setNewCredName] = useState('')
   const [newCredConfig, setNewCredConfig] = useState<Record<string, string>>({})
@@ -92,7 +83,6 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['api-credentials', apiId] })
       success('Credential deleted', 'Credential has been removed')
-      setDeleteId(null)
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
       errorNotif('Failed to delete', getApiErrorMessage(err, 'Please try again'))
@@ -311,7 +301,15 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
                     size="sm"
                     aria-label={`Delete credential ${cred.name}`}
                     className="text-destructive hover:text-destructive"
-                    onClick={() => setDeleteId(cred.id)}
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: 'Delete this credential?',
+                        description: 'Tools using this credential will no longer be able to authenticate with the API.',
+                        confirmLabel: 'Delete credential',
+                        destructive: true,
+                      })
+                      if (ok) deleteMutation.mutate(cred.id)
+                    }}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -322,26 +320,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
         )}
       </CardContent>
 
-      {/* Delete Confirmation */}
-      <AlertDialog open={!!deleteId} onOpenChange={open => !open && setDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this credential?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tools using this credential will no longer be able to authenticate with the API.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteId && deleteMutation.mutate(deleteId)}
-              variant="destructive"
-            >
-              {deleteMutation.isPending ? 'Deleting...' : 'Delete credential'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {confirmDialog}
       {guard.element}
     </Card>
   )
