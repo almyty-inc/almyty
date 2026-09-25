@@ -38,6 +38,8 @@ import {
   checkApp,
   appSlugError,
   defaultLimitsFor,
+  defaultBundleId,
+  isPackagedTarget,
 } from './agent-app.rules';
 
 import {
@@ -497,7 +499,12 @@ export class AgentAppsService {
         target,
         status: DistributionStatus.DRAFT,
         gatewayId,
-        configuration: incoming.publicConfig,
+        // A desktop or binary build starts with a bundle id made from the
+        // app's address, so the first build needs nothing typed in.
+        configuration:
+          isPackagedTarget(target) && !incoming.publicConfig.bundleId
+            ? { ...incoming.publicConfig, bundleId: defaultBundleId(app.slug) }
+            : incoming.publicConfig,
       }),
     );
     if (Object.keys(incoming.secrets).length === 0) return created;

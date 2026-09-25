@@ -23,6 +23,7 @@ import { BuildStatus } from '../../entities/app-build.entity';
 import { hostedChatUrl } from '../gateways/channels/hosted-chat.config';
 import { writeIcon } from './build-icon';
 import { resolveClientEntry } from './build-client-entry';
+import { defaultBundleId } from './agent-app.rules';
 
 interface BuildJob {
   buildId: string;
@@ -399,10 +400,9 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
     return match ? join(outputDir, match.name) : null;
   }
 
-  /** A bundle identifier every packager will accept. */
+  /** A bundle identifier every packager will accept; the same default a new distribution starts with. */
   private bundleIdFor(slug: string): string {
-    const namespace = process.env.APP_BUILD_BUNDLE_NAMESPACE ?? 'app.almyty';
-    return `${namespace}.${slug.replace(/[^a-z0-9]+/gi, '')}`;
+    return defaultBundleId(slug);
   }
 
   /**

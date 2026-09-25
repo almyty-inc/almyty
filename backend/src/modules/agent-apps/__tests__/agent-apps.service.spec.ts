@@ -261,6 +261,22 @@ describe('AgentAppsService', () => {
       expect(created.appId).toBe('h-1');
     });
 
+    it('gives a new desktop or binary place an app id made from the app address', async () => {
+      // Nobody has to invent a reverse-domain name before a first build;
+      // the check refuses a packaged place without one.
+      for (const target of [DistributionTarget.DESKTOP, DistributionTarget.BINARY]) {
+        const created = await service.addDistribution(ORG, 'acme-support', target);
+        expect(created.configuration).toEqual({ bundleId: 'app.almyty.acmesupport' });
+      }
+    });
+
+    it('keeps an app id the caller sent, and gives other places none', async () => {
+      const desktop = await service.addDistribution(ORG, 'acme-support', DistributionTarget.DESKTOP, { bundleId: 'com.acme.assistant' });
+      expect(desktop.configuration).toEqual({ bundleId: 'com.acme.assistant' });
+      const web = await service.addDistribution(ORG, 'acme-support', DistributionTarget.WEB);
+      expect(web.configuration).toEqual({});
+    });
+
     it('keeps one distribution per target rather than adding a second', async () => {
       // Naming the platform rather than lumping them under "channel" is
       // what makes this simple: slack and telegram are separate targets.

@@ -11,6 +11,9 @@ import { AppDistributionPage } from '../app-distribution'
 import { AppSigningNewPage } from '../app-signing-new'
 import { agentAppsApi, type AgentApp } from '@/lib/agent-apps'
 import { agentsApi, credentialsApi } from '@/lib/api'
+import { defaultBundleId } from '@/lib/agent-apps'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 
 // These tests are about routes, so they need the real router rather than
 // the stubs src/test/setup.tsx installs for every suite.
@@ -397,9 +400,21 @@ describe('other distribution pages', () => {
     expect(screen.queryByRole('button', { name: /copy callback url/i })).toBeNull()
   })
 
-  it('a desktop app asks for a valid bundle identifier and focuses it', async () => {
+  it('a desktop app keeps its app ID under Advanced, filled in from the app address', async () => {
     renderAt('/apps/support/distributions/desktop')
-    const field = await screen.findByLabelText(/^Bundle identifier/)
+    const advanced = await screen.findByTestId('dist-bundle-advanced')
+    expect(advanced).toHaveTextContent('App ID: app.almyty.support')
+    expect(screen.queryByLabelText(/^App ID/)).toBeNull()
+    expect(screen.queryByText(/bundle identifier/i)).toBeNull()
+    fireEvent.click(within(advanced).getByRole('button', { name: /Advanced/ }))
+    expect(screen.getByLabelText(/^App ID/)).toHaveValue('app.almyty.support')
+    expect(screen.getByLabelText(/^App ID/)).toHaveAccessibleDescription(/tell your app apart/)
+  })
+
+  it('a desktop app refuses an invalid app ID and focuses it', async () => {
+    renderAt('/apps/support/distributions/desktop')
+    fireEvent.click(within(await screen.findByTestId('dist-bundle-advanced')).getByRole('button', { name: /Advanced/ }))
+    const field = screen.getByLabelText(/^App ID/)
     fireEvent.change(field, { target: { value: 'not a bundle id' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(field).toHaveAttribute('aria-invalid', 'true'))
@@ -407,6 +422,17 @@ describe('other distribution pages', () => {
     expect(api.addDistribution).not.toHaveBeenCalled()
     // A file is not published.
     expect(screen.queryByRole('button', { name: 'Publish' })).toBeNull()
+  })
+
+  it('makes the same default app ID as the server', () => {
+    // Mirrors defaultBundleId in backend agent-app.rules.ts.
+    expect(defaultBundleId('support-bot')).toBe('app.almyty.supportbot')
+    const backend = readFileSync(
+      join(__dirname, '../../../../backend/src/modules/agent-apps/agent-app.rules.ts'),
+      'utf8',
+    )
+    expect(backend).toMatch(/'app\.almyty'/)
+    expect(backend).toMatch(/slug\.replace\(\/\[\^a-z0-9\]\+\/gi, ''\)\.toLowerCase\(\)/)
   })
 
   it('asks which agent answers when the app has more than one', async () => {
