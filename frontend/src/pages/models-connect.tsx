@@ -11,6 +11,7 @@ import { ConnectProviderForm, type ConnectResult } from '@/components/llm-provid
 import { PROVIDER_TILE_GROUPS, isProviderType, providerTileLabel } from '@/components/llm-providers/provider-catalog'
 import { providerLogos } from '@/components/llm-providers/provider-type-config'
 import { cn } from '@/lib/utils'
+import { safeReturnTo } from '@/lib/return-to'
 
 /** How many model names the success panel lists before "and N more". */
 const SHOWN_MODELS = 8
@@ -30,8 +31,7 @@ export function ConnectProviderPage() {
   const picked = searchParams.get('type')
   const type = isProviderType(picked) ? picked : null
   // Where Done goes: back to the guide or page that sent you, else Models.
-  const back = searchParams.get('returnTo')
-  const returnTo = back && back.startsWith('/') && !back.startsWith('//') ? back : '/models'
+  const returnTo = safeReturnTo(searchParams.get('returnTo')) ?? '/models'
 
   useEffect(() => {
     document.title = 'Connect a provider | almyty'

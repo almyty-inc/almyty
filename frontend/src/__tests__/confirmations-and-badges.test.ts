@@ -77,7 +77,6 @@ const ALERT_DIALOG_PENDING = new Set<string>([
   'components/connections/connection-detail.tsx',
   'components/connections/grants-editor.tsx',
   'components/models/hosting/hosting-panel.tsx',
-  'components/models/models-catalog.tsx',
   'components/settings/approval-policies-settings.tsx',
   'components/settings/rbac-settings.tsx',
   'components/tools/mcp-sources-panel.tsx',

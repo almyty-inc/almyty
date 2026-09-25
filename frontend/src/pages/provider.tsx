@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { QueryError } from '@/components/ui/query-error'
 import { SecretInput } from '@/components/ui/secret-input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import type { Visibility, VisibilityValue } from '@/components/ui/visibility-field'
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
@@ -29,13 +30,14 @@ import { BASE_URL_PRIVATE_HOST_HINT, buildProviderUpdateBody } from '@/component
 import { WhoCanUse } from '@/components/llm-providers/who-can-use'
 import { llmProvidersApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { adapterAccepts, modelAdaptersApi, modelDeploymentsApi, readAdapterRefusal } from '@/lib/deployments-api'
+import { modelAdaptersApi, modelDeploymentsApi, readAdapterRefusal } from '@/lib/deployments-api'
 import { modelsApi } from '@/lib/models-api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { AdapterRefusal, CreateModelDeploymentBody, ModelAdapter, ModelDeployment } from '@/types/deployments'
 import type { ModelCard, UpdateModelBody } from '@/types/models'
 import { cn } from '@/lib/utils'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 type CheckOutcome = { ok: true; models: number } | { ok: false; message: string }
 
@@ -142,10 +144,8 @@ export function ProviderPage() {
   }
   if (providerQuery.isLoading) {
     return (
-      <div className="space-y-4" aria-busy="true">
-        {back}
-        <Skeleton className="h-10 w-72" />
-        <Skeleton className="h-48 w-full" />
+      <div className="flex h-96 items-center justify-center" aria-busy="true">
+        <LoadingSpinner size="lg" />
       </div>
     )
   }
@@ -428,7 +428,7 @@ function Hosting({ provider, orgId }: { provider: any; orgId: string }) {
     },
   })
 
-  if (!adapter || !(adapterAccepts(adapter, 'hf') || adapter.capabilities.registrySources?.includes('hub'))) return null
+  if (!adapter) return null
 
   return (
     <section aria-labelledby="provider-hosting-heading" className="space-y-3">
@@ -461,7 +461,7 @@ function Hosting({ provider, orgId }: { provider: any; orgId: string }) {
         </Card>
       )}
       {running.length === 0 && !starting ? (
-        <p className="text-sm text-muted-foreground">Nothing running here. Start an open model from Hugging Face and it appears as a model once it is up.</p>
+        <p className="text-sm text-muted-foreground">Nothing running here. Start an open model and it appears as a model once it is up.</p>
       ) : (
         running.map((d) => (
           <Card key={d.id}>
@@ -519,12 +519,17 @@ function Advanced({ provider, models, onSaved }: { provider: any; models: ModelC
         }),
       )
     },
-    onSuccess: () => {
+    onSuccess: (_result, data) => {
+      // Saved is clean again, so leaving no longer asks.
+      form.reset({ ...data, usageApiKey: '', usageCredentialId: undefined })
       notifications.success('Saved', 'Provider settings saved.')
       onSaved()
     },
     onError: (error) => notifications.error('Could not save', getApiErrorMessage(error, 'The settings were not saved.')),
   })
+
+  // Unsaved settings ask before a navigation throws them away.
+  const guard = useLeaveGuard(form.formState.isDirty && !saveSettings.isPending)
 
   const saveModel = useMutation({
     mutationFn: ({ id, body }: { id: string; body: UpdateModelBody }) => modelsApi.update(id, body),
@@ -603,6 +608,7 @@ function Advanced({ provider, models, onSaved }: { provider: any; models: ModelC
         )}
         {picked && <EditModelForm key={picked.id} card={picked} onSubmit={(cardId, body) => saveModel.mutateAsync({ id: cardId, body }).catch(() => undefined)} submitting={saveModel.isPending} />}
       </div>
+      {guard.element}
     </Disclosure>
   )
 }

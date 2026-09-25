@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { JsonSchemaForm, schemaDefaults, type SchemaFormValues } from '@/components/ui/json-schema-form'
 import type { AdapterRefusal, CreateModelDeploymentBody, ModelAdapter } from '@/types/deployments'
+import { adapterAccepts } from '@/lib/deployments-api'
 import { EMPTY_DESIRED, buildHostBody, type DesiredFormValues } from './host-body'
 
 /**
@@ -45,11 +46,15 @@ export function StartModelForm({ adapter, credentialId, onSubmit, onCancel, subm
   const [advanced, setAdvanced] = useState(false)
 
   const regions = adapter.capabilities.regions ?? []
+  // Most clouds take a Hugging Face repository; the rest (Bedrock import,
+  // SageMaker, Fireworks) only read weights from a bucket, so the one
+  // question is where those are.
+  const takesHub = adapterAccepts(adapter, 'hf')
   const set = (key: keyof DesiredFormValues, value: string) => setDesired((prev) => ({ ...prev, [key]: value }))
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    const model = weights.trim() || huggingFaceRef(repo)
+    const model = takesHub ? weights.trim() || huggingFaceRef(repo) : repo.trim()
     const result = buildHostBody({ adapter, model, desired, config, credentialId: credentialId ?? '', budgetId: '' })
     if (!result.ok) {
       const next = { ...result.errors }
@@ -78,11 +83,13 @@ export function StartModelForm({ adapter, credentialId, onSubmit, onCancel, subm
             setRepo(e.target.value)
             setErrors((prev) => ({ ...prev, model: '' }))
           }}
-          placeholder="Qwen/Qwen3-0.6B"
-          disabled={!!weights.trim()}
+          placeholder={takesHub ? 'Qwen/Qwen3-0.6B' : 's3://bucket/path/to/weights'}
+          disabled={takesHub && !!weights.trim()}
           aria-invalid={!!errors.model}
         />
-        <p className="mt-1 text-xs text-muted-foreground">A Hugging Face repository. The newest revision is used and pinned.</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {takesHub ? 'A Hugging Face repository. The newest revision is used and pinned.' : 'This cloud reads the weights from a bucket: give their location.'}
+        </p>
         {errors.model && (
           <p className="mt-1 text-xs text-destructive" role="alert">
             {errors.model}
@@ -103,11 +110,13 @@ export function StartModelForm({ adapter, credentialId, onSubmit, onCancel, subm
         </button>
         {advanced && (
           <div className="space-y-4 px-3 pb-3">
-            <div>
-              <Label htmlFor="start-model-weights">Weights from a bucket instead</Label>
-              <Input id="start-model-weights" className="mt-1" value={weights} onChange={(e) => setWeights(e.target.value)} placeholder="s3://bucket/path@sha256:..., gs://..., file://..." />
-              <p className="mt-1 text-xs text-muted-foreground">Leave empty to use the Hugging Face repository above.</p>
-            </div>
+            {takesHub && (
+              <div>
+                <Label htmlFor="start-model-weights">Weights from a bucket instead</Label>
+                <Input id="start-model-weights" className="mt-1" value={weights} onChange={(e) => setWeights(e.target.value)} placeholder="s3://bucket/path@sha256:..., gs://..., file://..." />
+                <p className="mt-1 text-xs text-muted-foreground">Leave empty to use the Hugging Face repository above.</p>
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="start-model-region">Region</Label>
