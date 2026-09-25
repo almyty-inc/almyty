@@ -833,13 +833,14 @@ export class GatewaysService {
     });
     if (!(await readable(gateway))) gateway = null;
 
-    // Fallback: match by slugified name
+    // Fallback: match by the name as a slug (a-z0-9, single dashes), the
+    // form the dashboard and the skills CLI print when there is no endpoint.
     if (!gateway) {
       const gateways = await this.gatewayRepository.find({
         where: { organizationId: organization.id },
       });
       for (const g of gateways) {
-        if (g.name.toLowerCase().replace(/\s+/g, '-') === gatewayNameSlug && (await readable(g))) {
+        if (cleanSlug(g.name) === gatewayNameSlug && (await readable(g))) {
           gateway = g;
           break;
         }
@@ -1272,4 +1273,9 @@ export class GatewaysService {
   getAllUserGateways(...args: Parameters<GatewaysStatsHelper['getAllUserGateways']>) { return this.statsHelper.getAllUserGateways(...args); }
   getSkillContextOrganization(...args: Parameters<GatewaysStatsHelper['getSkillContextOrganization']>) { return this.statsHelper.getSkillContextOrganization(...args); }
   calculateRequestTrend(...args: Parameters<GatewaysStatsHelper['calculateRequestTrend']>) { return this.statsHelper.calculateRequestTrend(...args); }
+}
+
+/** A name as a URL slug: lowercase a-z and 0-9, single dashes, none at either end. */
+export function cleanSlug(name: string): string {
+  return (name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }

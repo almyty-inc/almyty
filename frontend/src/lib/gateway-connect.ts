@@ -10,9 +10,23 @@ export interface ConnectableGateway {
   endpoint?: string | null
 }
 
-/** The name a client registers the gateway under: lowercase, dashes for spaces. */
+/** Lowercase a-z and 0-9 with single dashes between words, none at either end. */
+export function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+/**
+ * The name a client registers the gateway under (`claude mcp add <name>`,
+ * the mcpServers key): the gateway's address slug when it has one, else its
+ * name, both slugified. "Acme Shop - OpenAPI 3.0" becomes
+ * "acme-shop-openapi-3-0".
+ */
 export function gatewayClientName(gateway: ConnectableGateway): string {
-  return (gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')
+  const fromEndpoint = slugify(gateway.endpoint?.replace(/^\/+/, '') ?? '')
+  return fromEndpoint || slugify(gateway.name ?? '') || 'gateway'
 }
 
 /** The API origin the gateway is served from. */
@@ -31,9 +45,9 @@ export function claudeCodeCommand(gateway: ConnectableGateway, orgSlug: string, 
   return `claude mcp add ${gatewayClientName(gateway)} --transport http ${mcpEndpointFor(gateway, orgSlug, backendUrl)}`
 }
 
-/** The install command for a Skills gateway. */
+/** The install command for a Skills gateway. The server resolves the ref by the gateway's address, so the address slug is what goes in it. */
 export function skillsInstallCommand(gateway: ConnectableGateway, orgSlug: string): string {
-  return `npx @almyty/skills install @${orgSlug}/${gatewayClientName(gateway)}`
+  return `npx @almyty/skills install @${orgSlug}/${gatewaySlugOf(gateway)}`
 }
 
 /**

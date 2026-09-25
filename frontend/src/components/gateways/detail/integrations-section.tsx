@@ -18,6 +18,7 @@ import { gatewaysApi } from '@/lib/api'
 import {
   claudeCodeCommand,
   gatewayClientName,
+  gatewaySlugOf,
   mcpEndpointFor,
   skillsInstallCommand,
 } from '@/lib/gateway-connect'
@@ -60,7 +61,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
 
   // Skills gateway
   if (gatewayType === 'skills') {
-    const gatewaySlug = gatewayClientName(gateway)
+    const gatewaySlug = gatewaySlugOf(gateway)
     const installCommand = skillsInstallCommand(gateway, orgSlug)
     const watchCommand = `npx @almyty/skills watch @${orgSlug}/${gatewaySlug}`
     const loginCommand = `npx @almyty/auth login`
@@ -212,7 +213,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <CodeBlock
                 value={JSON.stringify({
                   mcpServers: {
-                    [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
+                    [gatewayClientName(gateway)]: {
                       url: mcpEndpoint
                     }
                   }
@@ -241,7 +242,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <CodeBlock
                 value={JSON.stringify({
                   mcpServers: {
-                    [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
+                    [gatewayClientName(gateway)]: {
                       url: mcpEndpoint
                     }
                   }
@@ -368,7 +369,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
                 value={JSON.stringify({
                   agent: {
                     providers: {
-                      [(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')]: {
+                      [gatewayClientName(gateway)]: {
                         url: acpBase,
                         protocol: 'acp',
                       }
@@ -386,7 +387,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <CodeBlock
                 value={JSON.stringify({
                   agents: [{
-                    name: (gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-'),
+                    name: gatewayClientName(gateway),
                     url: acpBase,
                     protocol: 'acp',
                   }]
