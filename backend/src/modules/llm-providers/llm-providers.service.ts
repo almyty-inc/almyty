@@ -28,6 +28,7 @@ import { ModelCatalogService } from '../model-catalog/model-catalog.service';
 import { AccessPolicyService, normaliseVisibility } from '../../common/authorization/access-policy.service';
 import { assertManageable } from '../../common/authorization/read-rule';
 import { ProviderNotUsableError, providerUsableByUser } from './private-provider';
+import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import { providerListsModels } from './provider-profile';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { Credential } from '../../entities/credential.entity';
@@ -549,18 +550,19 @@ export class LlmProvidersService {
 
   /**
    * Load a provider of the organization. `caller` is who is asking, or who
-   * a run acts as: another user's private provider, and a team provider
-   * whose team the caller is not on, are reported exactly like a missing
-   * one (ProviderNotUsableError, a 404 naming the caller). Pass null for a
-   * path with no known user -- only organization-wide providers are then
-   * found. Omit it only on internal paths that act on a row already
-   * authorized upstream.
+   * a run acts as -- the run's ExecutionPrincipal, so a gateway run is
+   * judged by its gateway's scope: another user's private provider, and a
+   * team provider outside the caller's team (or the gateway's team), are
+   * reported exactly like a missing one (ProviderNotUsableError, a 404
+   * naming the caller). Pass null for a path with no known user -- only
+   * organization-wide providers are then found. Omit it only on internal
+   * paths that act on a row already authorized upstream.
    */
   async getProvider(
     providerId: string,
     organizationId: string,
     includeSecrets = false,
-    caller?: { id: string } | null,
+    caller?: { id: string } | ExecutionPrincipal | null,
   ): Promise<LlmProvider> {
     const provider = await this.llmProviderRepository.findOne({
       where: { id: providerId, organizationId },
@@ -568,8 +570,8 @@ export class LlmProvidersService {
 
     if (caller !== undefined) {
       // On someone's behalf, missing and not theirs to use are one answer.
-      if (!provider || !(await providerUsableByUser(this.accessPolicy, provider, caller?.id))) {
-        throw new ProviderNotUsableError(caller?.id);
+      if (!provider || !(await providerUsableByUser(this.accessPolicy, provider, caller))) {
+        throw new ProviderNotUsableError(caller);
       }
     } else if (!provider) {
       throw new NotFoundException('Provider not found');

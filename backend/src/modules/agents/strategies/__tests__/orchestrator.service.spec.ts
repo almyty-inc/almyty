@@ -112,8 +112,26 @@ describe('choosing a strategy per request', () => {
       { chat } as any,
     );
     await service.choose(agent(on), 'x', 'user-7');
-    expect(resolveRoles).toHaveBeenCalledWith('org-1', 'a1', {}, { id: 'user-7' });
-    expect(providerForModelId).toHaveBeenCalledWith('org-1', 'm1', { id: 'user-7' });
-    expect(chat).toHaveBeenCalledWith('p1', expect.anything(), 'org-1', 'user-7');
+    const asUser = { kind: 'user', userId: 'user-7', source: 'session' };
+    expect(resolveRoles).toHaveBeenCalledWith('org-1', 'a1', {}, asUser);
+    expect(providerForModelId).toHaveBeenCalledWith('org-1', 'm1', asUser);
+    expect(chat).toHaveBeenCalledWith('p1', expect.anything(), 'org-1', asUser);
+  });
+
+  it("decides as a gateway run's principal, not as the run row's (absent) user", async () => {
+    const resolveRoles = jest.fn().mockResolvedValue([{ key: 'orchestrator', modelId: 'm1' }]);
+    const providerForModelId = jest.fn().mockResolvedValue({ provider: { id: 'p1' } });
+    const chat = jest.fn().mockResolvedValue({ message: { content: JSON.stringify({ strategy: 'single', roleBindings: {} }) } });
+    const service = new OrchestratorService(
+      { find: jest.fn().mockResolvedValue([]) } as any,
+      { resolveRoles } as any,
+      { providerForModelId } as any,
+      { chat } as any,
+    );
+    const gateway = { kind: 'gateway' as const, gatewayId: 'g1', organizationId: 'org-1', visibility: 'team' as const, teamId: 't1', ownerUserId: null };
+    await service.choose(agent(on), 'x', gateway);
+    expect(resolveRoles).toHaveBeenCalledWith('org-1', 'a1', {}, gateway);
+    expect(providerForModelId).toHaveBeenCalledWith('org-1', 'm1', gateway);
+    expect(chat).toHaveBeenCalledWith('p1', expect.anything(), 'org-1', gateway);
   });
 });

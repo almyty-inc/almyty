@@ -272,7 +272,9 @@ export class AgentExecutionEngine {
             ? (options.input as any).message
             : JSON.stringify(options.input ?? {});
 
-      const compiled = await this.strategyPipelines?.pipelineFor(agent, requestText, userId).catch((err) => {
+      // As the run's principal, not its row's user: a gateway run decides
+      // (and later calls models) within its gateway's team.
+      const compiled = await this.strategyPipelines?.pipelineFor(agent, requestText, principal).catch((err) => {
         throw classifiedError(err?.message ?? 'Could not compile this strategy', ExecutionErrorType.VALIDATION_ERROR);
       });
       if (compiled) {
@@ -305,7 +307,7 @@ export class AgentExecutionEngine {
       let resolvedRoles: Array<{ key: string; modelId: string; via: 'pinned' | 'resolved'; rationale?: string }> | undefined;
       if (compiled && this.agentRoles) {
         try {
-          resolvedRoles = await this.agentRoles.resolveRoles(organizationId, agent.id, {}, userId ? { id: userId } : undefined);
+          resolvedRoles = await this.agentRoles.resolveRoles(organizationId, agent.id, {}, principal);
         } catch (err: any) {
           // A role that cannot be filled stops the run here, naming the
           // role, rather than surfacing as a confusing node error later.

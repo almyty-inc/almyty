@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { LlmProvidersService } from '../llm-providers/llm-providers.service';
+import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 
 /** Verdict-merge policy for a verify node's checker panel. */
@@ -75,7 +76,8 @@ export class AgentVerifierHelper {
       policy?: VerifyPolicy;
     },
     organizationId: string,
-    userId?: string,
+    /** Who the checker calls act as: the run's principal (see LlmChatHelper.chat). */
+    userId?: string | ExecutionPrincipal,
     signal?: AbortSignal,
   ): Promise<VerifyPanelResult> {
     const policy: VerifyPolicy = opts.policy || 'any_fail_blocks';
@@ -147,7 +149,7 @@ export class AgentVerifierHelper {
     targetText: string,
     spec: string,
     organizationId: string,
-    userId: string | undefined,
+    userId: string | ExecutionPrincipal | undefined,
     signal?: AbortSignal,
   ): Promise<CheckerResult> {
     const name = checker?.name || `checker_${index + 1}`;

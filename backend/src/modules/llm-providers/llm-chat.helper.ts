@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -20,6 +20,7 @@ import { ChatRequest, ChatResponse, StreamChunk } from './dto/llm-providers.dto'
 import { safeErrorBody, safeErrorMessage, extractUpstreamErrorMessage, LLM_HEALTH_GATE_MESSAGE } from './llm-providers.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { preferredBinding, providerProfile } from './provider-profile';
+import { ExecutionAccessService, type ExecutionPrincipal, asPrincipal } from '../../common/authorization/execution-access.service';
 
 @Injectable()
 export class LlmChatHelper {
@@ -46,23 +47,44 @@ export class LlmChatHelper {
     private readonly defaultModels: DefaultModelResolver,
 
     private readonly envelopeCrypto: EnvelopeCryptoService,
+    // Filters the tools a turn offers to what its principal may run.
+    // Optional for hand-built specs; the tool executor refuses the rest
+    // at call time either way.
+    @Optional() private readonly executionAccess?: ExecutionAccessService,
   ) {}
 
+  /** The tools of `tools` the principal may run; everything when the check is not wired. */
+  private async offeredTools(tools: Tool[], principal: ExecutionPrincipal): Promise<Tool[]> {
+    return this.executionAccess ? this.executionAccess.filterExecutable(principal, tools) : tools;
+  }
+
+  /**
+   * One chat turn. `caller` is who the call acts as: a user id, or a run's
+   * ExecutionPrincipal. A run passes its principal so that everything the
+   * turn reaches -- the provider, a routed candidate, the provider's keys,
+   * the tools the model calls -- is judged by the scope the run inherited
+   * (a gateway run by its gateway's team), never by the run row's user.
+   * Omitted, the call acts for nobody: organization rows only.
+   */
   async chat(
     providerId: string | null | undefined,
     request: ChatRequest,
     organizationId: string,
-    userId?: string
+    caller?: string | ExecutionPrincipal,
   ): Promise<ChatResponse> {
+    const principal = asPrincipal(caller);
+    // The user the conversation is recorded under; a gateway is none.
+    const userId = principal.kind === 'user' ? (principal.userId ?? undefined) : undefined;
     try {
       // With a routing policy the catalog chooses the model. The head of
       // the plan stands in as the session's provider; the runner walks the
       // whole chain and stamps the answering card on the response.
       const provider = providerId
         // Another user's private provider (or any private provider, for a
-        // call attributed to nobody) is not found.
-        ? await this.providers.getProvider(providerId, organizationId, true, userId ? { id: userId } : null)
-        : await this.runner.headProviderForRoute(organizationId, request, userId ? { id: userId } : undefined);
+        // call attributed to nobody), and a team provider outside the
+        // principal's team, are not found.
+        ? await this.providers.getProvider(providerId, organizationId, true, principal)
+        : await this.runner.headProviderForRoute(organizationId, request, principal);
 
       if (!provider.isHealthy && !request.routing) {
         throw new BadRequestException(LLM_HEALTH_GATE_MESSAGE);
@@ -101,17 +123,19 @@ export class LlmChatHelper {
 
       // Resolve toolIds to tool entities directly if provided
       let tools: Tool[] = [];
+      // Only tools the principal may run are offered to the model: a team
+      // tool's name, description and schema stay with its team.
       if (request.toolIds && request.toolIds.length > 0) {
-        tools = await this.toolRepository.find({
+        tools = await this.offeredTools(await this.toolRepository.find({
           where: request.toolIds.map(id => ({ id, organizationId })),
-        });
+        }), principal);
       } else {
         // Prepare tools from inline tool definitions
-        tools = await this.runner.prepareTools(request.tools || [], organizationId);
+        tools = await this.offeredTools(await this.runner.prepareTools(request.tools || [], organizationId), principal);
       }
 
       // Make API call to LLM provider
-      let response = await this.runner.callLlmProvider(provider, request, session, tools);
+      let response = await this.runner.callLlmProvider(provider, request, session, tools, principal);
 
       // Agentic tool call loop: execute tools and send results back until LLM is done
       let toolRound = 0;
@@ -128,6 +152,7 @@ export class LlmChatHelper {
           session,
           organizationId,
           request.signal,
+          principal,
         );
 
         // Save the assistant's tool-call message
@@ -166,7 +191,7 @@ export class LlmChatHelper {
 
         // Call LLM again with tool results
         const followUpRequest = { ...request, messages: currentMessages };
-        response = await this.runner.callLlmProvider(provider, followUpRequest, session, tools);
+        response = await this.runner.callLlmProvider(provider, followUpRequest, session, tools, principal);
       }
 
       // Save final message to database
@@ -275,13 +300,16 @@ export class LlmChatHelper {
     providerId: string | null | undefined,
     request: ChatRequest,
     organizationId: string,
-    userId?: string,
+    caller?: string | ExecutionPrincipal,
     onChunk?: (chunk: StreamChunk) => void,
   ): Promise<ChatResponse> {
+    // Who the call acts as; see chat().
+    const principal = asPrincipal(caller);
+    const userId = principal.kind === 'user' ? (principal.userId ?? undefined) : undefined;
     // If no chunk callback, or skipToolExecution is false (agentic loop),
     // fall through to the non-streaming path to avoid complexity.
     if (!onChunk) {
-      return this.chat(providerId, request, organizationId, userId);
+      return this.chat(providerId, request, organizationId, principal);
     }
 
     const startTime = Date.now();
@@ -291,11 +319,11 @@ export class LlmChatHelper {
       // A routing policy picks the head of the plan here: a stream cannot
       // move to the next candidate once tokens have gone out, so the walk
       // that the non-streaming path does is limited to this first choice.
-      const routed = request.routing ? await this.runner.planRouteHead(organizationId, request, userId ? { id: userId } : undefined) : null;
+      const routed = request.routing ? await this.runner.planRouteHead(organizationId, request, principal) : null;
       // The caller must be allowed to use this provider: another user's
       // private provider -- or any private one, when no user is known --
-      // is not found.
-      const provider = routed ? routed.provider : await this.providers.getProvider(providerId as string, organizationId, true, userId ? { id: userId } : null);
+      // is not found, and so is a team provider outside the principal's team.
+      const provider = routed ? routed.provider : await this.providers.getProvider(providerId as string, organizationId, true, principal);
       if (routed) {
         request = { ...request, model: routed.candidate.vendorModelId, routing: undefined };
       } else if (!provider.isHealthy) {
@@ -337,7 +365,7 @@ export class LlmChatHelper {
         // routing attribution on the response, the node result or the
         // audit log. Gemini and custom endpoints are the types that take
         // this branch.
-        return this.chat(providerId, originalRequest, organizationId, userId);
+        return this.chat(providerId, originalRequest, organizationId, principal);
       }
 
       // Get or create session
@@ -382,9 +410,9 @@ export class LlmChatHelper {
       // (the provider only reads .name / .description / .parameters).
       let tools: Tool[] = [];
       if (request.toolIds && request.toolIds.length > 0) {
-        tools = await this.toolRepository.find({
+        tools = await this.offeredTools(await this.toolRepository.find({
           where: request.toolIds.map(id => ({ id, organizationId })),
-        });
+        }), principal);
       } else if (request.skipToolExecution && Array.isArray(request.tools) && request.tools.length > 0) {
         tools = request.tools.map(t => ({
           name: t.name,
@@ -392,7 +420,7 @@ export class LlmChatHelper {
           parameters: (t as any).parameters ?? { type: 'object', properties: {} },
         })) as unknown as Tool[];
       } else {
-        tools = await this.runner.prepareTools(request.tools || [], organizationId);
+        tools = await this.offeredTools(await this.runner.prepareTools(request.tools || [], organizationId), principal);
       }
 
       // Price on the model that goes on the wire, not on the provider's
@@ -413,6 +441,10 @@ export class LlmChatHelper {
       // (bypassing runner.callLlmProvider), so warm the org's DEK here too
       // before the sync getAuthHeaders read. No-op for non-KMS orgs.
       await this.envelopeCrypto.warmOrg(provider.organizationId);
+      // And resolve its keys as the principal, as the runner does for a
+      // non-streaming call: a team or private connection behind the
+      // provider is used only for whom it is scoped to.
+      await this.runner.resolveProviderSecrets(provider, principal);
 
       if (profile && preferredBinding(profile).protocol === 'chat_completions') {
         response = await callOpenAIStream(provider, request, session, tools, startTime, costFn, onChunk);
@@ -435,7 +467,7 @@ export class LlmChatHelper {
           break;
         default:
           // Should not reach here due to supportsStreaming check, but safety net
-        return this.chat(providerId, originalRequest, organizationId, userId);
+        return this.chat(providerId, originalRequest, organizationId, principal);
       }
       }
 

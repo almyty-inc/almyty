@@ -209,6 +209,7 @@ describe('autonomous strategies drive the loop, role by role', () => {
       } as any,
       { bumpSessionStats: async () => undefined, bumpProviderStats: async () => undefined } as any,
       {
+        resolveProviderSecrets: async () => undefined,
         planRouteHead: async () => {
           throw new UnmodelledQueryError('these roles name a provider, not a routing policy');
         },
