@@ -4,6 +4,7 @@ import { config } from 'dotenv';
 import { versionsConfig } from 'typeorm-versions';
 
 import { redactQueryErrorsAtSource } from '../common/errors/redact-query-error';
+import { dbSslOption } from './db-ssl';
 import { RedactedParametersQueryLogger } from './query-logger';
 
 // Load environment variables
@@ -36,5 +37,5 @@ export const AppDataSource = redactQueryErrorsAtSource(new DataSource(versionsCo
   synchronize: false,
   logging: MIGRATION_LOG_LEVELS,
   logger: new RedactedParametersQueryLogger(MIGRATION_LOG_LEVELS),
-  ssl: configService.get('NODE_ENV') === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: dbSslOption((key) => configService.get<string>(key)),
 }) as any));
