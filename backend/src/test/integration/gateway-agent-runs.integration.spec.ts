@@ -712,4 +712,130 @@ if (!SKIP) useIsolatedSchema(SCHEMA);
     });
     });
   });
+
+  // ── Who a key or session is, now ────────────────────────────────
+  //
+  // The /v1 compat endpoints accept a key only while its user is active
+  // and still a member of the key's organization (compat-auth.helper.ts).
+  // This route took any active key hash in the organization, and a JWT's
+  // organization claim as signed: a removed member's key or session kept
+  // running the organization's agents.
+  describe('a key or session whose user is no longer in the organization', () => {
+    const { ApiKey } = require('../../entities/api-key.entity');
+    let member: User;
+    let membership: UserOrganization;
+    let ownerId: string;
+
+    async function mintKey(userId: string, extra: Record<string, unknown> = {}): Promise<string> {
+      const raw = `almyty_unified_${crypto.randomBytes(12).toString('hex')}`;
+      const repo = ds.getRepository(ApiKey);
+      await repo.save(repo.create({
+        name: `unified ${raw.slice(-6)}`,
+        keyHash: crypto.createHash('sha256').update(raw).digest('hex'),
+        keyPrefix: raw.slice(0, 8),
+        userId,
+        organizationId: org.id,
+        isActive: true,
+        ...extra,
+      }));
+      return raw;
+    }
+
+    function info(token: string) {
+      return request(app.getHttpServer())
+        .get(`/${ORG_SLUG}/${AGENT_SLUG}`)
+        .set('Authorization', `Bearer ${token}`);
+    }
+
+    beforeAll(async () => {
+      ownerId = (await ds.getRepository(User).findOneOrFail({ where: { email: TEST_EMAIL } })).id;
+      const users = ds.getRepository(User);
+      member = await users.save(users.create({
+        email: `gw-runs-member-${SUFFIX}@test.com`,
+        firstName: 'Former',
+        lastName: 'Member',
+        passwordHash: 'not-a-login',
+        isActive: true,
+      } as any)) as unknown as User;
+      const memberships = ds.getRepository(UserOrganization);
+      membership = await memberships.save(memberships.create({
+        userId: member.id,
+        organizationId: org.id,
+        role: OrganizationRole.MEMBER,
+      }));
+    });
+
+    afterEach(async () => {
+      await ds.getRepository(UserOrganization).update({ id: membership.id }, { isActive: true });
+      await ds.getRepository(User).update({ id: member.id }, { isActive: true });
+    });
+
+    it("runs the agent with a current member's key (the control)", async () => {
+      const key = await mintKey(member.id);
+      expect((await info(key)).status).toBe(200);
+    });
+
+    it('refuses the key of a member who was removed from the organization', async () => {
+      const key = await mintKey(member.id);
+      await ds.getRepository(UserOrganization).update({ id: membership.id }, { isActive: false });
+      const res = await info(key);
+      expect(res.status).toBe(401);
+      expect(res.body?.data?.id).toBeUndefined();
+    });
+
+    it('refuses the key of a deactivated user', async () => {
+      const key = await mintKey(member.id);
+      await ds.getRepository(User).update({ id: member.id }, { isActive: false });
+      expect((await info(key)).status).toBe(401);
+    });
+
+    it("refuses a removed member's key for the agent's own gateway too", async () => {
+      const { Gateway, GatewayType } = require('../../entities/gateway.entity');
+      const gateways = ds.getRepository(Gateway);
+      const gw = await gateways.save(gateways.create({
+        name: `Key Gateway ${SUFFIX}`,
+        type: GatewayType.A2A,
+        endpoint: `/key-gw-${SUFFIX}`,
+        agentId: agent.id,
+        organizationId: org.id,
+        status: 'active',
+        configuration: {},
+      }));
+      try {
+        const key = await mintKey(member.id, { gatewayId: gw.id });
+        expect((await info(key)).status).toBe(200);
+        await ds.getRepository(UserOrganization).update({ id: membership.id }, { isActive: false });
+        expect((await info(key)).status).toBe(401);
+      } finally {
+        await ds.getRepository(ApiKey).delete({ gatewayId: gw.id });
+        await gateways.delete({ id: gw.id });
+      }
+    });
+
+    it('answers a key minted for another agent as not found', async () => {
+      const key = await mintKey(ownerId, { agentId: crypto.randomUUID() });
+      expect((await info(key)).status).toBe(404);
+    });
+
+    it("refuses a removed member's session whose token still names the organization", async () => {
+      const jwt = app.get(JwtService).sign({
+        sub: member.id,
+        email: member.email,
+        organizations: [{ id: org.id, name: org.name, role: 'member' }],
+      });
+      expect((await info(jwt)).status).toBe(200);
+      await ds.getRepository(UserOrganization).update({ id: membership.id }, { isActive: false });
+      expect((await info(jwt)).status).toBe(403);
+    });
+
+    it('refuses a session revoked by a token-version bump', async () => {
+      const jwt = app.get(JwtService).sign({
+        sub: member.id,
+        email: member.email,
+        organizations: [{ id: org.id, name: org.name, role: 'member' }],
+      });
+      await ds.getRepository(User).increment({ id: member.id }, 'tokenVersion', 1);
+      expect((await info(jwt)).status).toBe(401);
+    });
+  });
 });

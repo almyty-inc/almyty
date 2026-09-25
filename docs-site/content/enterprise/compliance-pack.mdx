@@ -1,6 +1,6 @@
 # Compliance Pack
 
-Enterprise (`compliance_pack` entitlement). Make the guardrails mandatory across the whole org, and get a posture report you can hand to an auditor. The open-source platform ships the guardrail plugins (**pii-filter** and **security-scanner**), but each agent opts in individually. The compliance pack turns them into **org policy**: a central declaration of which guardrails are required and how strict they are.
+Requires the `compliance_pack` entitlement (Business or Enterprise on the hosted platform). Make the guardrails mandatory across the whole org, and get a posture report you can hand to an auditor. The open-source platform ships the guardrail plugins (**pii-filter** and **security-scanner**), but each agent opts in individually. The compliance pack turns them into **org policy**: a central declaration of which guardrails are required and how strict they are.
 
 ![An agent's guardrail constraints, which the org policy makes mandatory platform-wide](/screenshots/agent-constraints.png)
 
@@ -8,11 +8,11 @@ This is the operational half of the story told on the [Compliance](/compliance) 
 
 ## The org policy
 
-Without the `compliance_pack` entitlement, **Settings → Compliance** shows the locked view below, not an enabled organization-wide policy.
+With the entitlement enabled, **Settings → Compliance** shows the effective policy and posture report. This demo organization is using the secure default policy, not a custom configuration.
 
-![Compliance settings locked on a Pro demo organization](/screenshots/settings-compliance-locked.png)
+![Enabled compliance settings showing the default policy and posture report](/screenshots/settings-compliance-enabled.png)
 
-Set the policy under **Settings** (admin/owner only). It declares which built-in guardrails are enforced org-wide and how they behave:
+Set the policy under **Settings → Compliance** (admin/owner only). It declares which built-in guardrails are enforced org-wide and how they behave:
 
 ```json
 {

@@ -16,9 +16,12 @@ const MIGRATIONS = join(__dirname, '..');
 /**
  * Pairs that shipped before this guard existed. Both have already run on
  * staging and production, and renaming either would change its recorded
- * name, so TypeORM would run it again. They touch unrelated tables
- * (agent collaboration vs. resource visibility), so their order does not
- * matter. Never add to this list: pick the next free timestamp instead.
+ * name, so TypeORM would run it again. Their order does not matter: both
+ * touch `agents`, but CollaborationParticipants only rewrites the JSON in
+ * its `collaboration` column, and PrivateVisibility only swaps the
+ * visibility CHECK and adds an index on `createdBy` (the columns it adds go
+ * on apis, gateways and llm_providers). Neither reads what the other
+ * writes. Never add to this list: pick the next free timestamp instead.
  */
 const HISTORICAL_COLLISIONS: Record<string, string[]> = {
   '1750808000000': ['CollaborationParticipants1750808000000', 'PrivateVisibility1750808000000'],

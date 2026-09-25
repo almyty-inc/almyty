@@ -76,7 +76,14 @@ describe('org admin /users routes stay inside the organization', () => {
       count: jest.fn(async () => 0),
       find: jest.fn(async () => []),
     };
-    service = new UsersService(userRepo, membershipRepo, apiKeyRepo, { offboard: jest.fn(async () => undefined) } as any);
+    userRepo.manager = { transaction: async (work: (m: unknown) => unknown) => work({ getRepository: () => membershipRepo }) };
+    const handover = {
+      longestStandingOtherOwner: jest.fn(async () => ADMIN),
+      handOverPrivateResources: jest.fn(async () => []),
+      publishCommitted: jest.fn(),
+      revokeWipedConnectionsAtProviders: jest.fn(async () => undefined),
+    };
+    service = new UsersService(userRepo, membershipRepo, apiKeyRepo, { offboard: jest.fn(async () => undefined) } as any, handover as any);
     // No other account holds the new address.
     jest.spyOn(service, 'findByEmail').mockResolvedValue(null as any);
   });

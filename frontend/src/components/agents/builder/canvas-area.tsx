@@ -73,9 +73,13 @@ export function CanvasArea({
   const [showMobilePalette, setShowMobilePalette] = useState(false)
 
   return (
-    <div className="flex flex-1 overflow-hidden relative">
-      {/* Left: Palette -- visible on lg+, hidden on mobile */}
-      <div className="hidden lg:block">
+    // min-h-0: without it this row cannot shrink below the palette's full
+    // height, so under the toolbar and the next-steps line the bottom of the
+    // palette (the Output node) was cut off with nothing to scroll.
+    <div className="flex flex-1 min-h-0 overflow-hidden relative">
+      {/* Left: Palette -- visible on lg+, hidden on mobile. Height-bound so
+          the palette scrolls on its own. */}
+      <div className="hidden lg:flex min-h-0">
         <NodePalette />
       </div>
 

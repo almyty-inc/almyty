@@ -11,10 +11,10 @@ import { AgentRun } from '../../entities/agent-run.entity';
 import { AnalyticsExportHelper } from './analytics-export.helper';
 import { AnalyticsSummariesHelper } from './analytics-summaries.helper';
 import {
-  notOthersPrivateAgent,
-  notOthersPrivateGateway,
-  notOthersPrivateProvider,
-  notOthersPrivateTool,
+  inViewerScopeAgent,
+  inViewerScopeGateway,
+  inViewerScopeProvider,
+  inViewerScopeTool,
 } from './private-rows';
 
 export interface RequestLogQuery {
@@ -115,7 +115,7 @@ export class AnalyticsService {
         .where('exec.organizationId = :orgId', { orgId: organizationId })
         .andWhere('exec.createdAt >= :since', { since })
         .andWhere(
-          `${notOthersPrivateTool('exec."toolId"')} AND ${notOthersPrivateGateway('exec."gatewayId"')}`,
+          `${inViewerScopeTool('exec."toolId"')} AND ${inViewerScopeGateway('exec."gatewayId"')}`,
           viewer,
         );
     const sessions = (since: Date) =>
@@ -219,8 +219,8 @@ export class AnalyticsService {
     // back empty, the same as a tool that does not exist. No known caller
     // binds null, which leaves every private resource's rows out.
     const privateViewerId = query.callerId ?? null;
-    qb.andWhere(`(log.gatewayId IS NULL OR ${notOthersPrivateGateway('log."gatewayId"')})`, { privateViewerId });
-    qb.andWhere(`(log.toolId IS NULL OR ${notOthersPrivateTool('log."toolId"')})`, { privateViewerId });
+    qb.andWhere(`(log.gatewayId IS NULL OR ${inViewerScopeGateway('log."gatewayId"')})`, { privateViewerId });
+    qb.andWhere(`(log.toolId IS NULL OR ${inViewerScopeTool('log."toolId"')})`, { privateViewerId });
     if (query.gatewayId) {
       qb.andWhere('log.gatewayId = :gatewayId', { gatewayId: query.gatewayId });
     }
@@ -283,12 +283,10 @@ export class AnalyticsService {
       .addSelect('MAX(exec.createdAt)', 'lastUsed')
       .where('exec.organizationId = :orgId', { orgId: organizationId })
       .andWhere('exec.createdAt >= :since', { since })
-      // Another member's private tools are not in this caller's usage table
-      // (nor, fail closed, an ownerless private tool, nor any for no caller).
-      .andWhere(
-        `NOT EXISTS (SELECT 1 FROM tools pt WHERE pt.id = exec."toolId" AND pt.visibility = 'private' AND (pt."createdBy" = :_privateMe) IS NOT TRUE)`,
-        { _privateMe: callerId ?? null },
-      )
+      // Only tools the caller may see: not another member's private tool
+      // (nor, fail closed, an ownerless private tool, nor any for no
+      // caller), and not a team tool outside the caller's teams.
+      .andWhere(inViewerScopeTool('exec."toolId"'), { privateViewerId: callerId ?? null })
       .groupBy('exec.toolId')
       .orderBy('COUNT(*)', 'DESC')
       .getRawMany();
@@ -324,7 +322,7 @@ export class AnalyticsService {
       .where('metric.organizationId = :orgId', { orgId: organizationId })
       .andWhere('metric.type = :type', { type: MetricType.REQUEST_COUNT })
       .andWhere('metric.gatewayId IS NOT NULL')
-      .andWhere(notOthersPrivateGateway('metric."gatewayId"'), { privateViewerId: callerId })
+      .andWhere(inViewerScopeGateway('metric."gatewayId"'), { privateViewerId: callerId })
       .andWhere('metric.timestamp >= :since', { since })
       .groupBy('metric.gatewayId')
       .orderBy('COUNT(*)', 'DESC')
@@ -357,7 +355,7 @@ export class AnalyticsService {
       .addSelect('SUM(session.totalCost)', 'totalCostDollars')
       .addSelect('SUM(session.toolCalls)', 'totalToolCalls')
       .where('session.organizationId = :orgId', { orgId: organizationId })
-      .andWhere(`(session.providerId IS NULL OR ${notOthersPrivateProvider('session."providerId"')})`, { privateViewerId: callerId })
+      .andWhere(`(session.providerId IS NULL OR ${inViewerScopeProvider('session."providerId"')})`, { privateViewerId: callerId })
       .andWhere('session.createdAt >= :since', { since })
       .groupBy('session.providerId')
       .getRawMany();
@@ -440,16 +438,16 @@ export class AnalyticsService {
   }
 }
 
-/** A request log the viewer may count: not another member's private gateway or tool. */
+/** A request log the viewer may count: not another member's private gateway or tool, nor a team one outside the viewer's teams. */
 function visibleRequestLog(alias: string): string {
-  return `${notOthersPrivateGateway(`${alias}."gatewayId"`)} AND ${notOthersPrivateTool(`${alias}."toolId"`)}`;
+  return `${inViewerScopeGateway(`${alias}."gatewayId"`)} AND ${inViewerScopeTool(`${alias}."toolId"`)}`;
 }
 
-/** A session the viewer may count: not on another member's private provider, agent or gateway. */
+/** A session the viewer may count: not on a provider, agent or gateway outside the viewer's scope (private or team). */
 function visibleConversation(alias: string): string {
   return (
-    `${notOthersPrivateProvider(`${alias}."providerId"`)} AND ` +
-    `${notOthersPrivateAgent(`${alias}."agentId"`)} AND ` +
-    `${notOthersPrivateGateway(`${alias}."gatewayId"`)}`
+    `${inViewerScopeProvider(`${alias}."providerId"`)} AND ` +
+    `${inViewerScopeAgent(`${alias}."agentId"`)} AND ` +
+    `${inViewerScopeGateway(`${alias}."gatewayId"`)}`
   );
 }

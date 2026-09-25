@@ -265,6 +265,17 @@ describeOrSkip('PgCustomDomainStore (real Postgres, migrated schema)', () => {
       expect(due.map((d) => d.gatewayId)).toEqual([GW_B, GW_A]);
       expect(await store.dueForRecheck('2026-08-01T00:00:00.000Z', 10)).toHaveLength(1);
 
+      // Each claim says whose gateway it is, so a demotion notice reaches
+      // a private gateway's owner and not the org admins (resourceAudience).
+      const [owner] = await ds.query(
+        `INSERT INTO "users" ("email", "passwordHash", "firstName", "lastName") VALUES ('cd-owner@example.com', 'x', 'O', 'W') RETURNING "id"`,
+      );
+      await ds.query(`UPDATE "gateways" SET "visibility" = 'private', "ownerUserId" = $1 WHERE "id" = $2`, [owner.id, GW_A]);
+      const scoped = await store.dueForRecheck('2026-09-02T00:00:00.000Z', 10);
+      expect(scoped.find((d) => d.gatewayId === GW_A)).toMatchObject({ visibility: 'private', ownerUserId: owner.id });
+      expect(scoped.find((d) => d.gatewayId === GW_B)).toMatchObject({ visibility: 'org', ownerUserId: null });
+      await expect(store.activeHolder('a.example.com', GW_B)).resolves.toMatchObject({ visibility: 'private', ownerUserId: owner.id });
+
       const next = { ...a, lastCheckedAt: '2026-09-02T00:00:00.000Z', consecutiveFailures: 1 };
       await expect(store.recordRecheck(GW_A, a, next)).resolves.toBe('ok');
       // A second worker holding the same read is refused.
