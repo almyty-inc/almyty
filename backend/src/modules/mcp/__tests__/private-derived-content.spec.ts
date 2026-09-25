@@ -16,6 +16,9 @@ import { ToolsService } from '../../tools/tools.service';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
 import { SkillGeneratorService } from '../../tools/skill-generator.service';
 import { PromotedSkillsService } from '../../promoted-skills/promoted-skills.service';
+import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
+import { OrganizationRole } from '../../../entities/user-organization.entity';
+import { orgMembersPolicy } from '../../../test/execution-access.fixture';
 
 /**
  * MCP surfaces that serve content derived from a private resource:
@@ -51,6 +54,7 @@ describe('MCP content derived from private resources', () => {
       providers: [
         McpToolHandler,
         McpContentHandler,
+        { provide: AccessPolicyService, useValue: orgMembersPolicy('org-1', { admin: OrganizationRole.ADMIN, owner: OrganizationRole.MEMBER }) },
         McpServerRequestService,
         McpService,
         { provide: PromotedSkillsService, useValue: promoted },

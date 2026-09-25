@@ -15,6 +15,9 @@ import { ToolExecutorService } from '../tools/tool-executor.service';
 import { SkillGeneratorService } from '../tools/skill-generator.service';
 import { PromotedSkillsService } from '../promoted-skills/promoted-skills.service';
 import { fakeRepository } from '../../test/fake-repository';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { OrganizationRole } from '../../entities/user-organization.entity';
+import { orgMembersPolicy } from '../../test/execution-access.fixture';
 
 describe('MCP Gateway Scoping', () => {
   let mcpService: McpService;
@@ -59,6 +62,7 @@ describe('MCP Gateway Scoping', () => {
       providers: [
         McpToolHandler,
         McpContentHandler,
+        { provide: AccessPolicyService, useValue: orgMembersPolicy('org-1', { 'u-1': OrganizationRole.MEMBER }) },
         { provide: PromotedSkillsService, useValue: { listForServing: jest.fn().mockResolvedValue([]), get: jest.fn() } },
         McpServerRequestService,
         McpService,
