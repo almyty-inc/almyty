@@ -119,6 +119,7 @@ import { loadEeModules } from './ee-loader';
 // plain api image, so the module tree is unchanged when SERVE_FRONTEND is off.
 import { frontendStaticImports } from './common/frontend/frontend-static';
 import { appQueryLogging } from './config/query-logger';
+import { appDataSourceFactory } from './common/errors/redact-query-error';
 
 @Module({
   imports: [
@@ -176,6 +177,9 @@ import { appQueryLogging } from './config/query-logger';
           autoLoadEntities: true,
         } as any;
       },
+      // Failed queries are rethrown without their parameters (row
+      // contents), whoever logs or reports the error afterwards.
+      dataSourceFactory: async (options) => appDataSourceFactory(options),
     }),
 
     // Entities registration
