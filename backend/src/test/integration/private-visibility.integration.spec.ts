@@ -295,6 +295,8 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
         { name: 'Slack', type: GatewayType.SLACK, endpoint: '/slack-private', configuration: {}, visibility: 'private', agentId: 'x' } as any,
         organizationId,
         users.orgOwner,
+        // Made the way an app's publish makes one, so only the private rule is left to refuse it.
+        { forApp: { appId: 'app-1' } },
       );
       await expect(create).rejects.toThrow(/can be private/);
     });
