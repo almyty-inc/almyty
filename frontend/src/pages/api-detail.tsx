@@ -10,6 +10,7 @@ import {
   Globe,
   Pencil,
   Server,
+  Share2,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -160,6 +161,12 @@ export function ApiDetailPage() {
             <Link to={`/apis/${api.id}/edit`}>
               <Pencil className="mr-2 h-4 w-4" />
               Edit
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link to={`/gateways/new?api=${api.id}`}>
+              <Share2 className="mr-2 h-4 w-4" />
+              Share tools
             </Link>
           </Button>
         </div>

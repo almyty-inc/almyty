@@ -256,7 +256,7 @@ export function GatewaysPage() {
         actions={
           <Button onClick={() => navigate('/gateways/new')} disabled={!currentOrganization}>
             <Plus className="h-4 w-4 mr-2" />
-            Create gateway
+            Share tools
           </Button>
         }
       />
@@ -279,12 +279,12 @@ export function GatewaysPage() {
         <EmptyState
           variant="panel"
           icon={Zap}
-          title="No gateways yet"
-          description="A gateway serves a set of tools over MCP, A2A, UTCP, and Agent Skills — one endpoint, every protocol."
+          title="Nothing shared yet"
+          description="Pick tools and get one address that works in Claude Code, Cursor and any MCP, UTCP or Skills client."
           action={
             <Button onClick={() => navigate('/gateways/new')}>
               <Plus className="h-4 w-4 mr-2" />
-              Create gateway
+              Share tools
             </Button>
           }
         />
@@ -305,34 +305,28 @@ export function GatewaysPage() {
                 </div>
               </div>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Type" />
+                <SelectTrigger className="w-40" aria-label="Filter by kind">
+                  <SelectValue placeholder="Kind" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="all">All kinds</SelectItem>
+                  <SelectItem value="tools">Shared tools</SelectItem>
                   <SelectItem value="mcp">MCP</SelectItem>
-                  <SelectItem value="a2a">A2A</SelectItem>
-                  <SelectItem value="acp">ACP</SelectItem>
                   <SelectItem value="utcp">UTCP</SelectItem>
                   <SelectItem value="skills">Skills</SelectItem>
+                  <SelectItem value="a2a">A2A</SelectItem>
+                  <SelectItem value="acp">ACP</SelectItem>
                   <SelectItem value="openai_chat">OpenAI Chat</SelectItem>
-                  <SelectItem value="slack">Slack</SelectItem>
-                  <SelectItem value="discord">Discord</SelectItem>
-                  <SelectItem value="telegram">Telegram</SelectItem>
-                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                  <SelectItem value="email">Email</SelectItem>
-                  <SelectItem value="webhook">Webhook</SelectItem>
-                  <SelectItem value="chat_widget">Chat Widget</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-32" aria-label="Filter by status">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
+                  <SelectItem value="all">Live or paused</SelectItem>
+                  <SelectItem value="active">Live</SelectItem>
+                  <SelectItem value="inactive">Paused</SelectItem>
                 </SelectContent>
               </Select>
               <TeamFilter

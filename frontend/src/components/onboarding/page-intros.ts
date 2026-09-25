@@ -18,7 +18,7 @@ export const PAGE_INTROS = {
   },
   gateways: {
     page: '/gateways',
-    text: 'A gateway serves the tools you pick at one address, so Claude Code, Cursor or another agent can use them. Create one, then choose its tools.',
+    text: 'A gateway serves the tools you pick at one address, so Claude Code, Cursor or another agent can use them. Share tools to make one.',
   },
   agents: {
     page: '/agents',
