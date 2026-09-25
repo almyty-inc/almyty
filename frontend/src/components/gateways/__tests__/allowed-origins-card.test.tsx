@@ -85,10 +85,12 @@ describe('AllowedOriginsCard', () => {
   })
 })
 
-describe('the card is on the gateway page', () => {
-  it('gateway-detail renders it for both public chat surfaces, inline (no dialog)', () => {
+describe('where the card is', () => {
+  it('is on the web app page for a hosted chat, and on the gateway page for a widget, inline (no dialog)', () => {
+    const web = readFileSync(join(__dirname, '../../agent-apps/web-place.tsx'), 'utf8')
+    expect(web).toMatch(/<AllowedOriginsCard\s/)
     const page = readFileSync(join(__dirname, '../../../pages/gateway-detail.tsx'), 'utf8')
-    expect(page).toMatch(/gateway\.type === 'chat_widget' \|\| gateway\.type === 'hosted_chat'\) && \(\s*<AllowedOriginsCard/)
+    expect(page).toMatch(/gateway\.type === 'chat_widget' \|\| \(gateway\.type === 'hosted_chat' && !managedBy\)\) && \(\s*<AllowedOriginsCard/)
     const card = readFileSync(join(__dirname, '../allowed-origins-card.tsx'), 'utf8')
     expect(card).not.toMatch(/Dialog/)
   })

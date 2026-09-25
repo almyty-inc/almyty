@@ -1,18 +1,24 @@
-# Distributions
+# Where people use it
 
-A distribution is one place your product reaches people. You add a distribution to record *where* a product will ship; you **publish** it as the separate decision to let people actually reach it. There is exactly one distribution per target.
+An app is the one place an agent is put in front of people: on the web, in Slack or any other chat app, or in a terminal or desktop app. Each of those is a place on the app's **Where people use it** tab. You add a place to record *where* a product will ship; you **publish** it as the separate decision to let people actually reach it. There is exactly one of each per app.
+
+The agent's own **Interfaces** tab lists where it is used, read-only, with a link to each place ("Used in: Acme support > Slack"). A gateway an app stood up says **Managed in** that app on its page and links back to the place.
 
 ## Which agent answers
 
-An app can carry several agents, and each distribution chooses which one answers. A distribution uses the app's default agent unless you point it at a specific one, so a support product with a triage agent and a billing agent can put the billing agent on the billing channel.
+An app can carry several agents, and each place chooses which one answers. A place uses the app's default agent unless you point it at a specific one, so a support product with a triage agent and a billing agent can put the billing agent on the billing channel.
 
-If a distribution names an agent that has since been removed from the app, publishing is refused rather than going live with something you believe is no longer involved.
+If a place names an agent that has since been removed from the app, publishing is refused rather than going live with something you believe is no longer involved.
 
 ![The Agents tab, where the app's default agent is set](/screenshots/apps-agents.png)
 
-## Publishing a messaging channel
+## Slack: Add to Slack
 
-Channel distributions (Slack, Telegram, WhatsApp, and the rest) take their platform credentials on the distribution itself, so you stay on the app instead of being sent elsewhere to wire up a gateway. Fill in what the platform needs and publish.
+The Slack page leads with **Add to Slack**. Create a Slack app at api.slack.com/apps, paste its client ID, client secret and signing secret, and publish. The page then shows the redirect URL to add to your Slack app and the install link to share; every workspace that installs it is listed with a revoke action. A single workspace can use a bot token instead, under **Advanced**.
+
+## Publishing another messaging channel
+
+Other channels (Telegram, WhatsApp, and the rest) take their platform credentials on the place itself, so you stay on the app instead of being sent elsewhere to wire up a gateway. Fill in what the platform needs and publish.
 
 ![The Slack distribution with its Bot token and Signing secret fields](/screenshots/apps-slack-credentials.png)
 
@@ -24,9 +30,9 @@ Publishing is idempotent: publishing again re-syncs the existing channel rather 
 
 ## Publishing a hosted chat
 
-The **Web** distribution is a hosted chat app on its own address, carrying the product's name, greeting, colour, and AI disclosure rather than the dashboard chrome.
+The **Web app** is a hosted chat on its own address, carrying the product's name, greeting, colour, and AI disclosure rather than the dashboard chrome. Publishing shows the link straight away; who can use it, the sign-in provider, your own domain and the allowed sites are on the same page.
 
-![The published Web distribution](/screenshots/apps-web-published.png)
+![The published web app](/screenshots/apps-web-published.png)
 
 ![The branded hosted chat surface](/screenshots/apps-hosted-chat.png)
 

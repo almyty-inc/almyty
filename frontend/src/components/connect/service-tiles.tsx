@@ -70,24 +70,11 @@ export function ServiceTileGrid({ groups, search, onSearch, onPick, searchLabel,
           <h2 id={`tiles-${group.id}`} className="text-sm font-medium text-muted-foreground">
             {group.title}
           </h2>
-          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          <ChoiceTiles>
             {group.tiles.map((tile) => (
-              <li key={tile.key}>
-                <button
-                  type="button"
-                  data-testid={`${testIdPrefix}-${tile.key}`}
-                  onClick={() => onPick(tile.key)}
-                  className={cn(
-                    'flex w-full items-center gap-2.5 rounded-lg border bg-card px-3 py-2.5 text-left text-sm transition-colors',
-                    'hover:border-primary/50 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-                  )}
-                >
-                  <ServiceIcon>{tile.icon}</ServiceIcon>
-                  <span className="min-w-0 truncate font-medium">{tile.label}</span>
-                </button>
-              </li>
+              <ChoiceTile key={tile.key} testId={`${testIdPrefix}-${tile.key}`} icon={tile.icon} label={tile.label} onClick={() => onPick(tile.key)} />
             ))}
-          </ul>
+          </ChoiceTiles>
         </section>
       ))}
     </div>
@@ -126,5 +113,62 @@ export function PickedService({
         {children}
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * One tile in a grid of them: the connect pages' provider tiles, and any
+ * other pick-one list (a sign-in provider, who can open an app).
+ * `selected` marks the current choice; `hint` is one short line under the label.
+ */
+export function ChoiceTile({
+  icon,
+  label,
+  hint,
+  selected,
+  disabled = false,
+  onClick,
+  testId,
+}: {
+  icon?: ReactNode
+  label: string
+  hint?: string
+  /** Leave unset for a plain pick (a link onward); true/false for a choice. */
+  selected?: boolean
+  disabled?: boolean
+  onClick: () => void
+  testId?: string
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        data-testid={testId}
+        aria-pressed={selected}
+        disabled={disabled}
+        onClick={onClick}
+        className={cn(
+          'flex w-full items-center gap-2.5 rounded-lg border bg-card px-3 py-2.5 text-left text-sm transition-colors',
+          'hover:border-primary/50 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+          'disabled:cursor-not-allowed disabled:opacity-60',
+          selected && 'border-primary bg-primary/5',
+        )}
+      >
+        {icon && <ServiceIcon>{icon}</ServiceIcon>}
+        <span className="min-w-0">
+          <span className="block truncate font-medium">{label}</span>
+          {hint && <span className="block truncate text-xs text-muted-foreground">{hint}</span>}
+        </span>
+      </button>
+    </li>
+  )
+}
+
+/** The grid tiles sit in. */
+export function ChoiceTiles({ children, label }: { children: ReactNode; label?: string }) {
+  return (
+    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4" aria-label={label}>
+      {children}
+    </ul>
   )
 }

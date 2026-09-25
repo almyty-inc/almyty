@@ -415,7 +415,7 @@ describe('AgentAppsService', () => {
       expect(order).toEqual([`save:gw-1:${DistributionStatus.LIVE}`, 'activate']);
     });
 
-    it('gives the surface the product branding rather than a copy to keep in step', async () => {
+    it('leaves the branding on the app, where the hosted chat reads it', async () => {
       appRepository.findOne.mockResolvedValueOnce(
         app({ branding: { appName: 'Acme', primaryColor: '#123456' } }),
       );
@@ -428,9 +428,23 @@ describe('AgentAppsService', () => {
       await service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1');
 
       const dto = gateways.upsertForDistribution.mock.calls[0][0];
-      expect(dto.configuration.branding).toEqual({ appName: 'Acme', primaryColor: '#123456' });
-      // The credentials survive alongside the branding.
-      expect(dto.configuration).toMatchObject(SLACK_CREDS);
+      expect(dto.configuration.branding).toBeUndefined();
+      expect(dto.configuration).toMatchObject({ ...SLACK_CREDS, appId: 'h-1' });
+    });
+
+    it('re-syncs the gateway the place already answers on, whatever its endpoint', async () => {
+      // A surface an app took over keeps its own endpoint; republishing
+      // must not stand a second gateway up on the same address.
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'd-1',
+        appId: 'h-1',
+        gatewayId: 'gw-adopted',
+        configuration: SLACK_CREDS,
+      });
+
+      await service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1');
+
+      expect(gateways.upsertForDistribution.mock.calls[0][3]).toEqual({ activate: false, gatewayId: 'gw-adopted' });
     });
 
     it('refuses to publish in front of an agent that cannot hold a conversation', async () => {

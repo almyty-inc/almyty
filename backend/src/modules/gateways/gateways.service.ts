@@ -43,6 +43,23 @@ import { withGatewayQuota } from './gateway-quota';
  */
 export const HOSTED_CHAT_SLUG_INDEX = 'UQ_gateways_hosted_chat_slug';
 
+/**
+ * Configuration set on a published surface itself rather than on the
+ * distribution it came from, so republishing must carry it over: the
+ * sites allowed to embed a web app are set on the app's web page against
+ * this gateway (allowed-origins-card), and the distribution never holds
+ * them.
+ */
+export const KEPT_ON_REPUBLISH: readonly string[] = Object.freeze(['allowedOrigins']);
+
+export function keptOnRepublish(configuration: Record<string, any> | null | undefined): Record<string, any> {
+  const kept: Record<string, any> = {};
+  for (const key of KEPT_ON_REPUBLISH) {
+    if (configuration && configuration[key] !== undefined) kept[key] = configuration[key];
+  }
+  return kept;
+}
+
 export interface CreateGatewayDto {
   name: string;
   description?: string;
@@ -1109,18 +1126,27 @@ export class GatewaysService {
    * `activate: false` hands the caller a gateway that exists but does
    * not answer yet, for a publish that has its own bookkeeping to
    * finish before the surface goes live.
+   *
+   * `gatewayId` is the gateway the distribution already answers on. It
+   * wins over the endpoint, so a surface whose endpoint is not the
+   * distribution's (one an app took over rather than stood up) is
+   * re-synced rather than joined by a second gateway on the same address.
    */
   async upsertForDistribution(
     dto: CreateGatewayDto,
     organizationId: string,
     userId: string,
-    options: { activate?: boolean } = {},
+    options: { activate?: boolean; gatewayId?: string | null } = {},
   ): Promise<Gateway> {
     const activate = options.activate ?? true;
     const endpoint = dto.endpoint.startsWith('/') ? dto.endpoint : `/${dto.endpoint}`;
-    const existing = await this.gatewayRepository.findOne({
-      where: { endpoint, organizationId },
-    });
+    const existing =
+      (options.gatewayId
+        ? await this.gatewayRepository.findOne({ where: { id: options.gatewayId, organizationId } })
+        : null) ??
+      (await this.gatewayRepository.findOne({
+        where: { endpoint, organizationId },
+      }));
 
     if (!existing) {
       return this.createGateway(
@@ -1139,7 +1165,9 @@ export class GatewaysService {
         // Repointed on every publish, so changing which agent an app
         // uses and republishing actually moves the surface.
         agentId: dto.agentId,
-        configuration: dto.configuration,
+        // Settings made on the surface itself survive: the distribution
+        // never carries them, so a plain replace would wipe them.
+        configuration: dto.configuration && { ...keptOnRepublish(existing.configuration), ...dto.configuration },
         rateLimitConfig: dto.rateLimitConfig,
         // The surface follows its agent's scope on every publish (a team
         // agent is served through a gateway scoped to its team).

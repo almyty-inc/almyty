@@ -3,6 +3,8 @@ import { describe, it, expect } from 'vitest'
 import {
   CHANNEL_CREDENTIAL_FIELDS,
   CHANNEL_TARGETS,
+  CREDENTIAL_ALTERNATIVES,
+  missingChannelFields,
   DISTRIBUTION_INBOUND,
   appSlugError,
   distributionCallbackUrl,
@@ -33,8 +35,27 @@ const BACKEND_REQUIRED: Record<string, string[]> = {
 
 describe('channel settings', () => {
   it.each(CHANNEL_TARGETS)('%s asks for exactly what the backend requires', (target) => {
-    const required = (CHANNEL_CREDENTIAL_FIELDS[target] ?? []).filter((f) => f.required).map((f) => f.key)
+    // A field an alternative can stand in for (Slack's bot token) is still
+    // one the backend requires; it is just not the only way to meet it.
+    const replaceable = CREDENTIAL_ALTERNATIVES[target]?.instead ?? []
+    const required = (CHANNEL_CREDENTIAL_FIELDS[target] ?? [])
+      .filter((f) => f.required || replaceable.includes(f.key))
+      .map((f) => f.key)
     expect(required.sort()).toEqual([...BACKEND_REQUIRED[target]].sort())
+  })
+
+  it('leads Slack with Add to Slack and keeps the bot token under Advanced', () => {
+    const slack = CHANNEL_CREDENTIAL_FIELDS.slack ?? []
+    expect(slack.map((f) => f.key)).toEqual(['client_id', 'client_secret', 'signing_secret', 'bot_token'])
+    expect(slack.filter((f) => f.advanced).map((f) => f.key)).toEqual(['bot_token'])
+  })
+
+  it('counts the Slack app credentials in place of a bot token, as the backend does', () => {
+    const has = (keys: string[]) => (key: string) => keys.includes(key)
+    expect(missingChannelFields('slack', has(['client_id', 'client_secret', 'signing_secret']))).toEqual([])
+    expect(missingChannelFields('slack', has(['signing_secret', 'bot_token']))).toEqual([])
+    expect(missingChannelFields('slack', has(['client_id', 'signing_secret']))).toEqual(['bot_token'])
+    expect(missingChannelFields('discord', has(['client_id', 'client_secret']))).toEqual(['bot_token'])
   })
 
   it.each(CHANNEL_TARGETS)('%s says where to find every value', (target) => {

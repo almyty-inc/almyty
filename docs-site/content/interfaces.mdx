@@ -6,10 +6,10 @@ Agents are most useful where your users already are. Deploying an agent to a cha
 
 ## How a deployment works
 
-1. Open the agent's **Interfaces** tab, click **Deploy Channel**, and pick a platform.
+1. Open **Apps**, pick the app the agent belongs to, and on **Where people use it** select **Add a place** and pick a platform. An app is the one place an agent is put in front of people; the agent's own **Interfaces** tab lists where it is used and links there.
 2. Paste the platform credentials from the table below. They are encrypted at rest like every other credential.
-3. After deploying, the **Setup** panel shows your channel's inbound webhook URL (`https://<api-host>/<org>/<channel>`) with a copy button and a platform-specific checklist. Paste the URL into the platform's console where a manual step is needed; for Telegram and Twilio-backed channels the webhook is registered automatically where the platform supports it.
-4. Click **Test connection** in the setup panel. It performs a real authentication probe against the platform, so a bad token surfaces immediately instead of on the first missed message.
+3. Publish. The page shows your channel's inbound webhook URL with a copy button where the platform needs one pasted into its console; for Telegram and Twilio-backed channels the webhook is registered automatically where the platform supports it. Slack leads with **Add to Slack**: an install link any workspace can use.
+4. Send it a message from the platform. A bad token shows on the place's page as missing or refused, instead of on the first missed message.
 
 Messages then round-trip: platform, to adapter (verify, normalize), to agent run, back to adapter (format for the platform), to reply.
 

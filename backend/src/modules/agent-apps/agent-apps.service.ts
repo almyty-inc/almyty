@@ -25,6 +25,13 @@ export type AppHealth =
   | { state: 'ok' }
   | { state: 'failing'; agentId: string; agentName: string; at: Date; message: string };
 
+/** An app an agent is part of, and the places in it where that agent answers. */
+export interface AgentUsage {
+  slug: string;
+  name: string;
+  places: Array<{ target: DistributionTarget; status: DistributionStatus }>;
+}
+
 import {
   AppCheck,
   checkDistribution,
@@ -126,6 +133,33 @@ export class AgentAppsService {
     return apps.map((app) => ({
       ...app,
       health: this.healthFrom(app.agentIds ?? [], latest, names),
+    }));
+  }
+
+  /**
+   * Every app in this organization that carries the agent, with the
+   * places in each where it is the one answering (the place names it, or
+   * it is the app's default). An app that carries it but answers with
+   * another agent everywhere is still listed, with no places, so "used
+   * in" never hides a product the agent is part of.
+   */
+  async usedBy(organizationId: string, agentId: string): Promise<AgentUsage[]> {
+    const apps = await this.appRepository
+      .createQueryBuilder('app')
+      .leftJoinAndSelect('app.distributions', 'distribution')
+      .where('app.organizationId = :organizationId', { organizationId })
+      .andWhere(':agentId = ANY(app.agentIds)', { agentId })
+      .orderBy('app.name', 'ASC')
+      .take(MAX_APPS_PER_PAGE)
+      .getMany();
+
+    return apps.map((app) => ({
+      slug: app.slug,
+      name: app.branding?.appName || app.name,
+      places: (app.distributions ?? [])
+        .filter((d) => agentForDistribution(app, d.configuration) === agentId)
+        .map((d) => ({ target: d.target, status: d.status }))
+        .sort((a, b) => a.target.localeCompare(b.target)),
     }));
   }
 
@@ -621,7 +655,7 @@ export class AgentAppsService {
       },
       organizationId,
       userId,
-      { activate: false },
+      { activate: false, gatewayId: distribution.gatewayId },
     );
 
     distribution.gatewayId = gateway.id;

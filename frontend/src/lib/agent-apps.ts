@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiPatch, apiDel, getApiBaseUrl } from './api'
+import { hostedChatBaseDomain } from './tenant-host'
 
 /**
  * The agent factory client.
@@ -219,6 +220,22 @@ export const AUTH_MODE_LABELS: Record<AppAuthMode, string> = {
   sso: 'Enterprise SSO',
 }
 
+/** "Who can use it: ..." for an app, in the words of the one-line summary. */
+export const AUTH_MODE_SUMMARY: Record<AppAuthMode, string> = {
+  public_link: 'anyone with the link',
+  email_otp: 'anyone who confirms their email',
+  oauth: 'people who sign in with your provider',
+  sso: "people in your organization's SSO",
+}
+
+/** One short line under each choice. */
+export const AUTH_MODE_HINTS: Record<AppAuthMode, string> = {
+  public_link: 'No sign-in',
+  email_otp: 'A code by email',
+  oauth: 'Google, Microsoft, GitHub',
+  sso: 'Your own SSO',
+}
+
 export interface BuildPlatform {
   id: string
   label: string
@@ -289,6 +306,8 @@ export interface ChannelCredentialField {
    * insist on.
    */
   required?: boolean
+  /** Shown under Advanced: an alternative most people do not need. */
+  advanced?: boolean
 }
 
 const TWILIO_SID: ChannelCredentialField = {
@@ -330,21 +349,36 @@ const BRIDGE_INBOUND_TOKEN: ChannelCredentialField = {
  * extra or missing field, never a surface that ships unprotected.
  */
 export const CHANNEL_CREDENTIAL_FIELDS: Partial<Record<DistributionTarget, ChannelCredentialField[]>> = {
+  // "Add to Slack" first: with the Slack app's client id and secret any
+  // workspace can install it and brings its own token. A bot token is the
+  // one-workspace alternative (CREDENTIAL_ALTERNATIVES), under Advanced.
   slack: [
     {
-      key: 'bot_token',
-      label: 'Bot token',
-      hint: 'api.slack.com/apps → your app → OAuth & Permissions → Bot User OAuth Token.',
-      placeholder: 'xoxb-...',
+      key: 'client_id',
+      label: 'Client ID',
+      hint: 'api.slack.com/apps → your app → Basic Information → App Credentials.',
+      placeholder: '1234567890.1234567890',
+    },
+    {
+      key: 'client_secret',
+      label: 'Client secret',
+      hint: 'Next to the Client ID, under App Credentials.',
       secret: true,
-      required: true,
     },
     {
       key: 'signing_secret',
       label: 'Signing secret',
-      hint: 'api.slack.com/apps → your app → Basic Information → App Credentials.',
+      hint: 'Under App Credentials too. Used to check that events really come from Slack.',
       secret: true,
       required: true,
+    },
+    {
+      key: 'bot_token',
+      label: 'Bot token',
+      hint: 'Only for one workspace, instead of Add to Slack: OAuth & Permissions → Bot User OAuth Token.',
+      placeholder: 'xoxb-...',
+      secret: true,
+      advanced: true,
     },
   ],
   discord: [
@@ -633,7 +667,7 @@ export const DISTRIBUTION_INBOUND: Record<DistributionTarget, DistributionInboun
   email: {
     mode: 'manual',
     sharedEmailRoute: true,
-    where: 'resend.com → Webhooks → Add endpoint, for received email. One endpoint serves every email distribution; mail is matched to this one by its receiving address.',
+    where: 'resend.com → Webhooks → Add endpoint, for received email. One endpoint serves every app on email; mail is matched to this one by its receiving address.',
   },
   signal: {
     mode: 'manual',
@@ -893,4 +927,65 @@ export function slugify(name: string): string {
 /** Every target the API accepts, so a route param can be checked. */
 export function isDistributionTarget(value: string | undefined): value is DistributionTarget {
   return !!value && Object.prototype.hasOwnProperty.call(DISTRIBUTION_LABELS, value)
+}
+
+/**
+ * Credentials that stand in for others, mirroring CREDENTIAL_ALTERNATIVES
+ * in the backend (distribution-publish.ts). A Slack place carries either
+ * its Slack app's client id and secret, for "Add to Slack", or one bot
+ * token for a single workspace.
+ */
+export const CREDENTIAL_ALTERNATIVES: Partial<Record<DistributionTarget, { instead: string[]; all: string[] }>> = {
+  slack: { instead: ['bot_token'], all: ['client_id', 'client_secret'] },
+}
+
+/**
+ * The fields still needed before a place can go live: required ones
+ * neither stored nor typed, less any an alternative already covers.
+ */
+export function missingChannelFields(
+  target: DistributionTarget,
+  has: (key: string) => boolean,
+): string[] {
+  const fields = CHANNEL_CREDENTIAL_FIELDS[target] ?? []
+  const alternative = CREDENTIAL_ALTERNATIVES[target]
+  const replaced = alternative && alternative.all.every(has) ? alternative.instead : []
+  const replaceable = alternative ? alternative.instead : []
+  return fields
+    .filter((f) => (f.required || replaceable.includes(f.key)) && !replaced.includes(f.key))
+    .map((f) => f.key)
+    .filter((key) => !has(key))
+}
+
+/** The address a published web app answers on: its slug, as a subdomain. */
+export function appWebUrl(slug: string): string {
+  return `https://${slug}.${hostedChatBaseDomain()}`
+}
+
+/** The URL to register as the Slack app's redirect URL for "Add to Slack". */
+export function slackInstallRedirectUrl(apiBase: string, gatewayId: string): string {
+  return `${apiBase.replace(/\/+$/, '')}/gateways/${gatewayId}/install/slack/callback`
+}
+
+/** One app an agent is part of, and the places in it where that agent answers. */
+export interface AgentUsage {
+  slug: string
+  name: string
+  places: Array<{ target: DistributionTarget; status: DistributionStatus }>
+}
+
+/** The app a gateway was published from, and which of its places it is. */
+export interface GatewayManagedBy {
+  app: { id: string; slug: string; name: string }
+  target: DistributionTarget
+}
+
+export const appPlacesApi = {
+  /** Every app the agent is part of, with where it answers in each. */
+  usedBy: (agentId: string) =>
+    apiGet(`/apps/used-by/${agentId}`).then((r) => unwrap<AgentUsage[]>(r) ?? []),
+
+  /** The app that manages a gateway, or null for one no app owns. */
+  appForGateway: (gatewayId: string) =>
+    apiGet(`/gateways/${gatewayId}/app`).then((r: any) => (r?.data !== undefined ? r.data : r) as GatewayManagedBy | null),
 }

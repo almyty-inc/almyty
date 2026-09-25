@@ -7,6 +7,7 @@ import { Field, FormPage, FormSection } from '@/components/layout/form-page'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CopyField } from '@/components/ui/copy-field'
+import { Disclosure } from '@/components/ui/disclosure'
 import { Input } from '@/components/ui/input'
 import { SecretInput } from '@/components/ui/secret-input'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -32,12 +33,16 @@ import {
   distributionCallbackUrl,
   isBuildable,
   isChannelTarget,
+  missingChannelFields,
   servesOverGateway,
   type AgentApp,
   type AppDistribution,
+  type ChannelCredentialField,
   type DistributionStatus,
 } from '@/lib/agent-apps'
 import { BuildPanel } from './build-panel'
+import { SlackInstall } from './slack-install'
+import { WebAddress, WebPlaceSettings } from './web-place'
 
 /** Stands in for "the product's default", because a Select cannot take ''. */
 const DEFAULT_AGENT = 'default'
@@ -49,10 +54,10 @@ const BUNDLE_ID_PATTERN = /^[a-z0-9]+(\.[a-z0-9-]+)+$/
 const NEEDS_BUNDLE_ID = ['desktop', 'binary']
 
 /**
- * The two refusals that belong to a distribution. Everything else the
- * distribution check returns is about the app as a whole (no agents, no
- * cost cap, an entitlement), and is shown once, on the app's page, not
- * repeated inside every channel.
+ * The two refusals that belong to a place. Everything else the check
+ * returns is about the app as a whole (no agents, no cost cap, an
+ * entitlement), and is shown once, on the app's page, not repeated
+ * inside every place.
  */
 const DISTRIBUTION_REFUSALS = new Set(['MISSING_CREDENTIALS', 'BUNDLE_ID_INVALID'])
 
@@ -67,18 +72,22 @@ const STATUS: Record<DistributionStatus, { label: string; variant: 'success' | '
 export interface DistributionSettingsProps {
   app: AgentApp
   distribution: AppDistribution
-  /** Every agent in the org, so this surface can name one of the app's. */
+  /** Every agent in the org, so this place can name one of the app's. */
   agents?: Array<{ id: string; name: string }>
 }
 
 /**
- * One distribution on its own page: what the platform needs, where the
- * platform should call, and how to ship it.
+ * One place people use the app, on its own page: what the platform
+ * needs, where the platform should call, and how to ship it.
  *
  * The settings are one form with one Save. Publishing and building are
  * actions on what is saved, so they sit below it as buttons of their
  * own rather than as a second save. Branding is not repeated here: it
  * belongs to the app, so the product looks the same everywhere.
+ *
+ * The web app is the exception to the form: its settings are cards that
+ * save themselves (who can use it, sign-in, domain, allowed sites), so
+ * its page has no Save and "Answered by" applies when picked.
  */
 export function DistributionSettings({ app, distribution, agents = [] }: DistributionSettingsProps) {
   const { success, error: errorNotif } = useNotifications()
@@ -93,6 +102,7 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
   const packaged = PACKAGED_TARGETS.includes(target)
   const channel = isChannelTarget(target)
   const served = servesOverGateway(target)
+  const web = target === 'web'
   const fields = channel ? CHANNEL_CREDENTIAL_FIELDS[target] ?? [] : []
 
   // What is stored, updated locally on a successful save so the form is
@@ -119,12 +129,14 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
     f.secret ? values[f.key] !== '' : values[f.key] !== ((stored[f.key] as string) ?? ''),
   )
   const dirty =
-    (packaged && bundleId !== storedBundleId) || agentId !== storedAgent || changedFields.length > 0
+    (packaged && bundleId !== storedBundleId) ||
+    (!web && agentId !== storedAgent) ||
+    changedFields.length > 0
   const guard = useLeaveGuard(dirty)
 
   const appAgents = app.agentIds.map((id) => agents.find((a) => a.id === id) ?? { id, name: id })
   const choosesAgent = served && appAgents.length > 1
-  const hasForm = packaged || fields.length > 0 || choosesAgent
+  const hasForm = packaged || fields.length > 0 || (choosesAgent && !web)
 
   const { data: check } = useQuery({
     queryKey: ['agent-app-distribution-check', app.slug, target],
@@ -198,7 +210,7 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
   const remove = useMutation({
     mutationFn: () => agentAppsApi.removeDistribution(app.slug, target),
     onSuccess: () => {
-      success('Distribution removed', 'It is no longer on this app.')
+      success('Removed', `${label} is no longer on this app.`)
       queryClient.invalidateQueries({ queryKey: ['agent-app', app.slug] })
       queryClient.invalidateQueries({ queryKey: ['agent-app-check', app.slug] })
       guard.leave(appPath)
@@ -209,9 +221,9 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
 
   const askRemove = async () => {
     const ok = await confirm({
-      title: 'Remove distribution?',
-      description: `This removes the ${label} distribution and its configuration from this app. Builds already downloaded keep working.`,
-      confirmLabel: 'Remove distribution',
+      title: `Remove ${label} from this app?`,
+      description: 'Its settings go with it. Builds already downloaded keep working.',
+      confirmLabel: 'Remove',
       destructive: true,
     })
     if (ok) remove.mutate()
@@ -229,7 +241,7 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
     setBundleError(undefined)
     const patch: Record<string, unknown> = {}
     if (packaged && trimmed !== storedBundleId) patch.bundleId = trimmed
-    if (agentId !== storedAgent) patch.agentId = agentId
+    if (!web && agentId !== storedAgent) patch.agentId = agentId
     for (const f of changedFields) patch[f.key] = values[f.key].trim()
     if (Object.keys(patch).length === 0) return
     save.mutate(patch)
@@ -242,6 +254,76 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
   const inbound = DISTRIBUTION_INBOUND[target]
   const callbackUrl = distributionCallbackUrl(getApiBaseUrl(), orgSlug, app.slug, target)
   const status = STATUS[distribution.status] ?? STATUS.draft
+
+  const has = (key: string) =>
+    !!(stored[key] as string | undefined)?.toString().trim() ||
+    (Array.isArray(stored.credentialKeys) && stored.credentialKeys.includes(key)) ||
+    !!values[key]?.trim()
+  const missing = new Set(missingChannelFields(target, has))
+  const everyday = fields.filter((f) => !f.advanced)
+  const alternatives = fields.filter((f) => f.advanced)
+
+  const renderField = (field: ChannelCredentialField) => {
+    const saved = !!(stored[field.key] as string | undefined)?.toString().trim() ||
+      (Array.isArray(stored.credentialKeys) && stored.credentialKeys.includes(field.key))
+    return (
+      <Field
+        key={field.key}
+        id={`cred-${field.key}`}
+        label={field.label}
+        required={field.required}
+        hint={
+          <>
+            {field.hint}
+            {missing.has(field.key) && (
+              <span className="mt-0.5 block text-amber-700 dark:text-amber-300">
+                Needed before this can go live.
+              </span>
+            )}
+          </>
+        }
+      >
+        <SecretInput
+          masked={!!field.secret}
+          value={values[field.key] ?? ''}
+          onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
+          placeholder={
+            field.secret && saved ? 'Saved. Type a new value to replace it.' : field.placeholder
+          }
+        />
+      </Field>
+    )
+  }
+
+  const publishButton = (
+    <Button
+      type="button"
+      variant={hasForm ? 'outline' : 'default'}
+      disabled={publish.isPending}
+      onClick={() => publish.mutate()}
+    >
+      {publish.isPending
+        ? live
+          ? 'Unpublishing...'
+          : 'Publishing...'
+        : live
+          ? 'Unpublish'
+          : 'Publish'}
+    </Button>
+  )
+
+  const notReady = appNotReady && (
+    <p className="flex gap-2 text-sm text-amber-700 dark:text-amber-300">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <span>
+        The app itself is not ready to publish yet.{' '}
+        <Link to={appPath} className="underline underline-offset-2">
+          See what it needs
+        </Link>
+        .
+      </span>
+    </p>
+  )
 
   return (
     <FormPage
@@ -270,6 +352,22 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
         </div>
       }
     >
+      {/* The web app: publish, and the link is there. */}
+      {web && (
+        <FormSection
+          title={live ? 'Live' : 'Publish'}
+          description={
+            live
+              ? 'Unpublish stops it answering and keeps its address.'
+              : undefined
+          }
+        >
+          <WebAddress app={app} live={live} />
+          {notReady}
+          {publishButton}
+        </FormSection>
+      )}
+
       {packaged && (
         <FormSection title="Identity">
           <Field
@@ -291,43 +389,24 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
 
       {fields.length > 0 && (
         <FormSection
-          title="Platform settings"
-          description="From your own account on the platform. Stored encrypted; a saved secret is never shown again."
+          title={target === 'slack' ? 'Add to Slack' : 'Platform settings'}
+          description={
+            target === 'slack'
+              ? 'Create a Slack app at api.slack.com/apps and paste its credentials. Once it is published, anyone you send the install link to can add it to their workspace.'
+              : 'From your own account on the platform. Stored encrypted; a saved secret is never shown again.'
+          }
         >
-          <div className="space-y-4">
-            {fields.map((field) => {
-              const has = !!(stored[field.key] as string | undefined)?.toString().trim()
-              const missing = field.required && !has && !values[field.key]?.trim()
-              return (
-                <Field
-                  key={field.key}
-                  id={`cred-${field.key}`}
-                  label={field.label}
-                  required={field.required}
-                  hint={
-                    <>
-                      {field.hint}
-                      {missing && (
-                        <span className="mt-0.5 block text-amber-700 dark:text-amber-300">
-                          Needed before this can go live.
-                        </span>
-                      )}
-                    </>
-                  }
-                >
-                  <SecretInput
-                    masked={!!field.secret}
-                    value={values[field.key] ?? ''}
-                    onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
-                    placeholder={
-                      field.secret && has ? 'Saved. Type a new value to replace it.' : field.placeholder
-                    }
-                  />
-                </Field>
-              )
-            })}
-          </div>
+          <div className="space-y-4">{everyday.map(renderField)}</div>
+          {alternatives.length > 0 && (
+            <Disclosure title="Advanced" summary="One workspace with a bot token instead">
+              <div className="space-y-4">{alternatives.map(renderField)}</div>
+            </Disclosure>
+          )}
         </FormSection>
+      )}
+
+      {target === 'slack' && live && distribution.gatewayId && (
+        <SlackInstall gatewayId={distribution.gatewayId} />
       )}
 
       {callbackUrl && inbound && (
@@ -342,7 +421,7 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
       )}
 
       {/* A product can carry several agents, and which one answers is
-          per surface: a billing channel should be able to reach the
+          per place: a billing channel should be able to reach the
           billing agent. Only worth asking when there is a choice. */}
       {choosesAgent && (
         <FormSection>
@@ -353,7 +432,12 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
           >
             <Select
               value={agentId || DEFAULT_AGENT}
-              onValueChange={(value) => setAgentId(value === DEFAULT_AGENT ? '' : value)}
+              onValueChange={(value) => {
+                const next = value === DEFAULT_AGENT ? '' : value
+                setAgentId(next)
+                // No Save on the web page: the choice applies when picked.
+                if (web && next !== storedAgent) save.mutate({ agentId: next })
+              }}
             >
               <SelectTrigger id="dist-agent">
                 <SelectValue />
@@ -371,9 +455,11 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
         </FormSection>
       )}
 
-      {/* Adding a distribution records where a product will ship.
-          Publishing is the separate decision to let people reach it. */}
-      {served && (
+      {web && <WebPlaceSettings app={app} distribution={distribution} />}
+
+      {/* Adding a place records where a product will ship. Publishing
+          is the separate decision to let people reach it. */}
+      {served && !web && (
         <FormSection
           title={live ? 'Live' : 'Publish'}
           description={
@@ -382,32 +468,8 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
               : 'Publishing stands up the surface and points it at this app. It uses the saved settings.'
           }
         >
-          {appNotReady && (
-            <p className="flex gap-2 text-sm text-amber-700 dark:text-amber-300">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              <span>
-                The app itself is not ready to publish yet.{' '}
-                <Link to={appPath} className="underline underline-offset-2">
-                  See what it needs
-                </Link>
-                .
-              </span>
-            </p>
-          )}
-          <Button
-            type="button"
-            variant={hasForm ? 'outline' : 'default'}
-            disabled={publish.isPending}
-            onClick={() => publish.mutate()}
-          >
-            {publish.isPending
-              ? live
-                ? 'Unpublishing...'
-                : 'Publishing...'
-              : live
-                ? 'Unpublish'
-                : 'Publish'}
-          </Button>
+          {notReady}
+          {publishButton}
         </FormSection>
       )}
 

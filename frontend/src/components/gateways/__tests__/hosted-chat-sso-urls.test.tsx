@@ -4,12 +4,22 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { render } from '../../../test/setup'
 
-import { HostedChatBuilder } from '../hosted-chat-builder'
-import { hostedChatConfigFrom } from '../hosted-chat-config'
+import { WebPlaceSettings } from '../../agent-apps/web-place'
+import type { AgentApp, AppDistribution } from '@/lib/agent-apps'
 
 vi.mock('@/lib/api', () => ({
-  gatewaysApi: { update: vi.fn().mockResolvedValue({}), getHostedChatSso: vi.fn() },
+  gatewaysApi: {
+    update: vi.fn().mockResolvedValue({}),
+    getHostedChatSso: vi.fn(),
+    getById: vi.fn().mockResolvedValue({ id: 'gw', type: 'hosted_chat', configuration: {} }),
+    getCustomDomain: vi.fn().mockResolvedValue(null),
+  },
   getApiBaseUrl: () => '',
+}))
+
+let entitled: string[] = []
+vi.mock('@/hooks/use-entitlement', () => ({
+  useEntitlements: () => ({ has: (key: string) => entitled.includes(key) }),
 }))
 
 import { gatewaysApi } from '@/lib/api'
@@ -21,27 +31,27 @@ const ACS = 'https://acme.edge.example/tenant-api/public/chat/acme/auth/sso/saml
 const CUSTOM_ACS = 'https://chat.acme.example/tenant-api/public/chat/acme/auth/sso/saml/acs'
 const OIDC = 'https://acme.edge.example/tenant-api/public/chat/acme/auth/sso/callback'
 
-const gateway = (authMode = 'sso') => ({
-  id: GW,
-  configuration: { hostedChat: { ...hostedChatConfigFrom(null), slug: 'acme', appName: 'Acme', authMode } },
-})
+const app = (authMode = 'sso') => ({ slug: 'acme', name: 'Acme', authMode, agentIds: [], branding: {} }) as unknown as AgentApp
+const web = { id: 'd-1', appId: 'a-1', target: 'web', status: 'live', gatewayId: GW } as AppDistribution
+const renderWeb = (authMode = 'sso') => render(<WebPlaceSettings app={app(authMode)} distribution={web} />)
 
 let writeText: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   vi.mocked(gatewaysApi.getHostedChatSso).mockReset()
+  entitled = ['sso']
   writeText = vi.fn().mockResolvedValue(undefined)
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
 })
 
-describe('hosted chat SSO sign-in URLs on the gateway page', () => {
+describe('hosted chat SSO sign-in URLs on the web app page', () => {
   it('shows the ACS URLs the API answers, inline, each with a copy button', async () => {
     vi.mocked(gatewaysApi.getHostedChatSso).mockResolvedValue({
       protocol: 'saml',
       samlAcsUrls: [ACS, CUSTOM_ACS],
       oidcRedirectUri: OIDC,
     })
-    render(<HostedChatBuilder gateway={gateway()} entitlements={{ enterpriseAuth: true }} />)
+    renderWeb()
 
     expect(await screen.findByText(ACS)).toBeInTheDocument()
     expect(screen.getByText(CUSTOM_ACS)).toBeInTheDocument()
@@ -61,15 +71,16 @@ describe('hosted chat SSO sign-in URLs on the gateway page', () => {
       samlAcsUrls: [ACS],
       oidcRedirectUri: OIDC,
     })
-    render(<HostedChatBuilder gateway={gateway()} entitlements={{ enterpriseAuth: true }} />)
+    renderWeb()
 
     expect(await screen.findByText(OIDC)).toBeInTheDocument()
     expect(screen.queryByText(ACS)).not.toBeInTheDocument()
   })
 
   it('is not asked for when access is not SSO, or the org has no SSO entitlement', () => {
-    render(<HostedChatBuilder gateway={gateway('email_otp')} entitlements={{ enterpriseAuth: true }} />)
-    render(<HostedChatBuilder gateway={gateway('sso')} entitlements={{ enterpriseAuth: false }} />)
+    renderWeb('email_otp')
+    entitled = []
+    renderWeb('sso')
     expect(gatewaysApi.getHostedChatSso).not.toHaveBeenCalled()
   })
 

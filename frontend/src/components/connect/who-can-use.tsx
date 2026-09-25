@@ -29,23 +29,32 @@ export function WhoCanUse({ value, onChange, disabled, noun = 'it', options }: W
   const [open, setOpen] = useState(false)
   const changeable = !options || options.length > 1
   if (!open) {
-    return (
-      <p className="text-sm" data-testid="who-can-use">
-        <span className="text-muted-foreground">Who can use it:</span> {SUMMARY[value.visibility]}
-        {changeable && (
-          <>
-            {' · '}
-            <button type="button" className="text-primary hover:underline disabled:opacity-50" onClick={() => setOpen(true)} disabled={disabled}>
-              Change
-            </button>
-          </>
-        )}
-      </p>
-    )
+    return <WhoCanUseLine summary={SUMMARY[value.visibility]} onChange={changeable ? () => setOpen(true) : undefined} disabled={disabled} />
   }
   return (
     <div data-testid="who-can-use-picker">
       <VisibilityField organizationId={currentOrganization?.id ?? ''} value={value} onChange={onChange} disabled={disabled} noun={noun} options={options} />
     </div>
+  )
+}
+
+/**
+ * The one line itself: "Who can use it: <summary> · Change". Shared by
+ * everything that answers that question, whatever the choices behind it
+ * are (a provider's visibility, who may open an app). No onChange, no link.
+ */
+export function WhoCanUseLine({ summary, onChange, disabled, testId = 'who-can-use' }: { summary: string; onChange?: () => void; disabled?: boolean; testId?: string }) {
+  return (
+    <p className="text-sm" data-testid={testId}>
+      <span className="text-muted-foreground">Who can use it:</span> {summary}
+      {onChange && (
+        <>
+          {' · '}
+          <button type="button" className="text-primary hover:underline disabled:opacity-50" onClick={onChange} disabled={disabled}>
+            Change
+          </button>
+        </>
+      )}
+    </p>
   )
 }

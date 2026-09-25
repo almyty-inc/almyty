@@ -1,7 +1,6 @@
 import { GatewayType } from '../../entities/gateway.entity';
 import { DistributionTarget } from '../../entities/agent-app-distribution.entity';
 import type { AgentApp } from '../../entities/agent-app.entity';
-import { appPrivacyFrom } from '../../entities/agent-app.entity';
 import { credentialKeysOf } from '../gateways/channels/channel-config.helper';
 
 
@@ -83,20 +82,34 @@ export const REQUIRED_CREDENTIALS: Record<string, readonly string[]> = Object.fr
   [DistributionTarget.BINARY]: [],
 });
 
+/**
+ * Credentials that can stand in for others. A Slack surface carries
+ * either one bot token (one workspace) or its Slack app's client id and
+ * secret, which is what "Add to Slack" needs: each workspace that
+ * installs it brings its own token (slack-install.service.ts).
+ */
+export const CREDENTIAL_ALTERNATIVES: Record<string, { instead: readonly string[]; all: readonly string[] }> =
+  Object.freeze({
+    [DistributionTarget.SLACK]: { instead: ['bot_token'], all: ['client_id', 'client_secret'] },
+  });
+
 /** Which of a target's credentials this configuration is missing. */
 export function missingCredentials(
   target: DistributionTarget | string,
   configuration: Record<string, any> | null | undefined,
 ): string[] {
-  const required = REQUIRED_CREDENTIALS[target] ?? [];
   // A secret is present when its credential holds it (`credentialKeys`
   // names it) or, on a row not yet moved, when it is still inline.
   const held = credentialKeysOf(configuration);
-  return required.filter((field) => {
-    if (held.includes(field)) return false;
+  const present = (field: string) => {
+    if (held.includes(field)) return true;
     const value = configuration?.[field];
-    return typeof value !== 'string' ? !value : !value.trim();
-  });
+    return typeof value !== 'string' ? !!value : !!value.trim();
+  };
+  const alternative = CREDENTIAL_ALTERNATIVES[target];
+  const replaced = alternative && alternative.all.every(present) ? alternative.instead : [];
+  const required = (REQUIRED_CREDENTIALS[target] ?? []).filter((field) => !replaced.includes(field));
+  return required.filter((field) => !present(field));
 }
 
 /**
@@ -243,28 +256,26 @@ export function rateLimitFor(app: Pick<AgentApp, 'limits'>, target: Distribution
 /**
  * The configuration a published gateway is created with.
  *
- * Two things are merged: whatever the operator put on the distribution,
- * which is where the platform credentials live, and the product's own
- * presentation, so a surface does not carry a copy of the branding that
- * someone has to keep in step by hand.
+ * Whatever the operator put on the distribution, which is where the
+ * platform credentials live, plus which app it belongs to. Branding is
+ * deliberately not copied: it has one home, the app, and the hosted chat
+ * reads it from there on every request (hostedChatBlockFor), so there is
+ * no second copy for someone to keep in step by hand.
  *
  * The hosted chat is the one target that needs more than that. It is
  * looked up by `configuration -> 'hostedChat' ->> 'slug'`, so without
- * that block a published web app is a gateway nothing can find — which
- * is exactly what happened before this existed.
+ * that block a published web app is a gateway nothing can find. The
+ * block carries the address and nothing the app decides.
  */
 export function gatewayConfigurationFor(
   target: DistributionTarget,
-  app: Pick<AgentApp, 'id' | 'slug' | 'name' | 'branding' | 'authMode'> & { privacy?: AgentApp['privacy'] },
+  app: Pick<AgentApp, 'id' | 'slug' | 'authMode'>,
   configuration: Record<string, any> | null | undefined,
 ): Record<string, any> {
-  const branding = app.branding ?? {};
-  const privacy = appPrivacyFrom(app.privacy);
-
+  const { branding: _staleBranding, ...operator } = configuration ?? {};
 
   const base = {
-    ...(configuration ?? {}),
-    branding,
+    ...operator,
     authMode: app.authMode,
     appId: app.id,
   };
@@ -277,21 +288,10 @@ export function gatewayConfigurationFor(
       // The product's own name is the address. One surface per product
       // per deployment, which is what makes it findable.
       slug: app.slug,
-      appName: branding.appName || app.name,
-      primaryColor: branding.primaryColor ?? '#8b5cf6',
-      greeting: branding.greeting ?? '',
-      theme: branding.theme ?? 'auto',
-      logoUrl: branding.logoUrl ?? null,
-      suggestedPrompts: branding.suggestedPrompts ?? [],
+      // Mirrored so a reader without the app in hand (the custom-domain
+      // and sign-in URL builders) still sees the rule. The public page
+      // itself reads the app's.
       authMode: app.authMode,
-      aiDisclosure: branding.aiDisclosure ?? null,
-      whiteLabel: branding.whiteLabel ?? false,
-      // What visitors may do with their own data, so the public surface
-      // can answer without a join back to the app.
-      visitorCanDelete: privacy.visitorCanDelete,
-      visitorCanExport: privacy.visitorCanExport,
-      visitorMemory: privacy.visitorMemory,
-
     },
   };
 }
