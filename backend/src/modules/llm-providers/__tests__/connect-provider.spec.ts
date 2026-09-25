@@ -132,8 +132,6 @@ describe('connect a provider', () => {
     });
   });
 
-  afterEach(() => jest.useRealTimers());
-
   it('a key that checks out lists the provider models, every one of them usable', async () => {
     const result = await service.connectProvider({ type: LlmProviderType.OPENAI, configuration: { apiKey: GOOD_KEY } }, 'org-1', 'user-a');
 
