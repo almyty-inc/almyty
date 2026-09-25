@@ -10,6 +10,8 @@ import { Field, FormPage, FormSection } from '@/components/layout/form-page'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { Disclosure } from '@/components/ui/disclosure'
+import { MEMORY_TIER_HINTS, MEMORY_TIER_LABELS } from '@/components/memory/memory-words'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { memoriesApi, type MemoryMode, type MemoryTier } from '@/lib/api'
 import { useNotifications } from '@/store/app'
@@ -19,7 +21,9 @@ export const MEMORY_TIERS: MemoryTier[] = ['short', 'project', 'long', 'shared']
 
 const EMPTY_DRAFT = {
   content: '',
-  tier: 'short' as MemoryTier,
+  // A fact a person types is meant to last; short-term notes get folded
+  // into long-term facts by the hourly tidy-up.
+  tier: 'long' as MemoryTier,
   tags: '',
   mode: 'memory' as MemoryMode,
   source_uri: '',
@@ -73,59 +77,64 @@ export function AddMemoryForm() {
   return (
     <FormPage
       title="Add memory"
-      description="Writes to the canonical store. Routes to whichever backend the scope is configured for."
+      description="A fact your agents should know next time: a preference, a decision, a name. They look it up when it is relevant."
       back={{ to: '/memories', label: 'Memory' }}
       guard={guard}
       onSubmit={submit}
-      submitLabel="Store"
+      submitLabel="Save memory"
       submitting={putMut.isPending}
       width="narrow"
     >
       <FormSection>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field id="memory-mode" label="Mode" hint="A memory is a fact or preference; a document is a body of text with a source.">
-            <Select value={draft.mode} onValueChange={(v) => setDraft({ ...draft, mode: v as MemoryMode })}>
-              <SelectTrigger id="memory-mode"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="memory">memory</SelectItem>
-                <SelectItem value="document">document</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          {draft.mode === 'memory' ? (
-            <Field id="memory-tier" label="Scope">
-              <Select value={draft.tier} onValueChange={(v) => setDraft({ ...draft, tier: v as MemoryTier })}>
-                <SelectTrigger id="memory-tier"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {MEMORY_TIERS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </Field>
-          ) : (
-            <Field id="memory-source-uri" label="Source URI">
-              <Input
-                placeholder="https://… or almyty:file/…"
-                value={draft.source_uri}
-                onChange={(e) => setDraft({ ...draft, source_uri: e.target.value })}
-              />
-            </Field>
-          )}
-        </div>
-        <Field id="memory-content" label="Content" required error={errors.content}>
+        <Field id="memory-content" label="What should your agents remember?" required error={errors.content}>
           <Textarea
             rows={6}
-            placeholder="The fact, preference, decision, or document body."
+            placeholder="The customer prefers invoices in euros."
             value={draft.content}
             onChange={(e) => setDraft({ ...draft, content: e.target.value })}
           />
         </Field>
-        <Field id="memory-tags" label="Tags" hint="Comma-separated.">
+        <Field id="memory-tags" label="Tags" hint="Optional words to group it by, separated by commas.">
           <Input
-            placeholder="user-pref, infrastructure"
+            placeholder="billing, customer"
             value={draft.tags}
             onChange={(e) => setDraft({ ...draft, tags: e.target.value })}
           />
         </Field>
+        <Disclosure
+          title="Advanced"
+          summary={draft.mode === 'memory' ? `A fact, kept ${MEMORY_TIER_LABELS[draft.tier].toLowerCase()}` : 'A document'}
+        >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field id="memory-mode" label="Kind" hint="A fact is a short thing to remember; a document is a longer text with a source.">
+              <Select value={draft.mode} onValueChange={(v) => setDraft({ ...draft, mode: v as MemoryMode })}>
+                <SelectTrigger id="memory-mode"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="memory">Fact</SelectItem>
+                  <SelectItem value="document">Document</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            {draft.mode === 'memory' ? (
+              <Field id="memory-tier" label="How long to keep it" hint={MEMORY_TIER_HINTS[draft.tier]}>
+                <Select value={draft.tier} onValueChange={(v) => setDraft({ ...draft, tier: v as MemoryTier })}>
+                  <SelectTrigger id="memory-tier"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {MEMORY_TIERS.map((t) => <SelectItem key={t} value={t}>{MEMORY_TIER_LABELS[t]}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </Field>
+            ) : (
+              <Field id="memory-source-uri" label="Where it came from" hint="A link to the original, if there is one.">
+                <Input
+                  placeholder="https://…"
+                  value={draft.source_uri}
+                  onChange={(e) => setDraft({ ...draft, source_uri: e.target.value })}
+                />
+              </Field>
+            )}
+          </div>
+        </Disclosure>
       </FormSection>
     </FormPage>
   )

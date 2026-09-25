@@ -19,6 +19,7 @@ import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { memoriesApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
+import { memoryBackendName } from '@/components/memory/memory-words'
 
 type TransferResult = {
   succeeded?: number
@@ -87,8 +88,8 @@ export function TransferMemoryForm() {
 
   return (
     <FormPage
-      title="Transfer memory between backends"
-      description="Streams items from the source backend into the target. Capabilities the target lacks (bi_temporal, ttl, soft_delete, document mode) show up as warnings."
+      title="Move memories to another service"
+      description="Copies every memory from one storage service to another. Try it first to see what the new service cannot keep, such as history or expiry dates."
       back={{ to: '/memories', label: 'Memory' }}
       guard={guard}
       onSubmit={submit}
@@ -99,19 +100,19 @@ export function TransferMemoryForm() {
     >
       <FormSection>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field id="transfer-source" label="Source">
+          <Field id="transfer-source" label="From">
             <Select value={transfer.source} onValueChange={(v) => set({ source: v })}>
               <SelectTrigger id="transfer-source"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {backends.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                {backends.map((b) => <SelectItem key={b} value={b}>{memoryBackendName(b)}</SelectItem>)}
               </SelectContent>
             </Select>
           </Field>
-          <Field id="transfer-target" label="Target" error={error}>
+          <Field id="transfer-target" label="To" error={error}>
             <Select value={transfer.target} onValueChange={(v) => set({ target: v })}>
               <SelectTrigger id="transfer-target"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {backends.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                {backends.map((b) => <SelectItem key={b} value={b}>{memoryBackendName(b)}</SelectItem>)}
               </SelectContent>
             </Select>
           </Field>
@@ -122,7 +123,7 @@ export function TransferMemoryForm() {
             checked={transfer.dry_run}
             onCheckedChange={(v) => set({ dry_run: v === true })}
           />
-          <Label htmlFor="transfer-dry-run" className="font-normal">Dry run (preview warnings, no writes)</Label>
+          <Label htmlFor="transfer-dry-run" className="font-normal">Dry run (show what would happen, move nothing)</Label>
         </div>
       </FormSection>
       {dryRunResult && (

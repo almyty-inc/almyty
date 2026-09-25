@@ -5,7 +5,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Disclosure } from '@/components/ui/disclosure'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { PageIntro } from '@/components/onboarding/page-intro'
@@ -22,6 +23,20 @@ import { useOrganizationStore } from '@/store/organization'
 import { TeamFilter, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import { ConnectAccountButton } from '@/components/connections/connect-flow'
 import type { Connection } from '@/types/connections'
+import { MEMORY_TIER_LABELS, memoryBackendName } from '@/components/memory/memory-words'
+
+/**
+ * Memory, in plain words.
+ *
+ * The page used to open on "Memory mode", "All scopes", "embedding:
+ * ready" badges, a "Hybrid search (vector + FTS)" box and a Backends tab
+ * of raw ids, capability flags and soft-cap enums. A person looking at it
+ * wants to know what their agents remember and to fix a wrong fact. So:
+ * two tabs for that (Memories, Search), one for where memories are kept
+ * (Storage), and everything an operator tunes -- other storage services,
+ * size limits, tidying, the service health cards -- under the shared
+ * Advanced disclosure on Storage.
+ */
 
 type Item = {
   id: string
@@ -59,7 +74,7 @@ export function MemoriesPage() {
   const scope = orgId ? { scope_type: 'workspace' as const, scope_id: orgId } : null
 
   // ── tabs ────────────────────────────────────────────────────────────
-  const [tab, setTab] = useState<'browse' | 'search' | 'backends' | 'audit'>('browse')
+  const [tab, setTab] = useState<'browse' | 'search' | 'storage'>('browse')
 
   // ── browse + filters ────────────────────────────────────────────────
   const [tierFilter, setTierFilter] = useState<MemoryTier | 'all'>('all')
@@ -116,7 +131,7 @@ export function MemoriesPage() {
     },
   })
 
-  // ── backends + transfer ─────────────────────────────────────────────
+  // ── storage services ────────────────────────────────────────────────
   const backendsQ = useQuery({
     queryKey: ['memories', 'backends'],
     queryFn: () => memoriesApi.listBackends(),
@@ -124,7 +139,7 @@ export function MemoriesPage() {
   const healthQ = useQuery({
     queryKey: ['memories', 'backends', 'health'],
     queryFn: () => memoriesApi.backendsHealth(),
-    enabled: tab === 'backends',
+    enabled: tab === 'storage',
     refetchInterval: 30_000,
   })
 
@@ -132,7 +147,7 @@ export function MemoriesPage() {
   const configQ = useQuery({
     queryKey: ['memories', 'config', orgId],
     queryFn: () => memoriesApi.getConfig('workspace', orgId!),
-    enabled: !!orgId && tab === 'backends',
+    enabled: !!orgId && tab === 'storage',
   })
   const updateConfigMut = useMutation({
     mutationFn: (patch: Parameters<typeof memoriesApi.updateConfig>[0]) =>
@@ -153,7 +168,7 @@ export function MemoriesPage() {
       const list = (res?.data ?? res ?? []) as any[]
       return list.filter((c) => c?.type === 'memory_backend')
     },
-    enabled: tab === 'backends',
+    enabled: tab === 'storage',
   })
 
   // ── render ──────────────────────────────────────────────────────────
@@ -183,43 +198,37 @@ export function MemoriesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Memory"
-        description="What your agents remember across runs, per agent or shared, with full history."
+        description="Facts your agents keep between runs, so they do not start from scratch every time."
         actions={
-          <>
-            <Button variant="outline" asChild>
-              <Link to="/memories/transfer"><ArrowRightLeft className="h-4 w-4 mr-2" /> Transfer</Link>
-            </Button>
-            <Button asChild>
-              <Link to="/memories/new"><Plus className="h-4 w-4 mr-2" /> Add memory</Link>
-            </Button>
-          </>
+          <Button asChild>
+            <Link to="/memories/new"><Plus className="h-4 w-4 mr-2" /> Add memory</Link>
+          </Button>
         }
       />
       <PageIntro topic="memories" />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
         <TabsList>
-          <TabsTrigger value="browse">Browse</TabsTrigger>
+          <TabsTrigger value="browse">Memories</TabsTrigger>
           <TabsTrigger value="search">Search</TabsTrigger>
-          <TabsTrigger value="backends">Backends</TabsTrigger>
-          <TabsTrigger value="audit">Audit</TabsTrigger>
+          <TabsTrigger value="storage">Storage</TabsTrigger>
         </TabsList>
 
-        {/* ── Browse ─────────────────────────────────────────────── */}
+        {/* ── Memories ───────────────────────────────────────────── */}
         <TabsContent value="browse" className="space-y-4">
           <div className="flex flex-wrap gap-3">
             <Select value={modeFilter} onValueChange={(v) => setModeFilter(v as MemoryMode)}>
-              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-[160px]" aria-label="Kind"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="memory">Memory mode</SelectItem>
-                <SelectItem value="document">Document mode</SelectItem>
+                <SelectItem value="memory">Facts</SelectItem>
+                <SelectItem value="document">Documents</SelectItem>
               </SelectContent>
             </Select>
             <Select value={tierFilter} onValueChange={(v) => setTierFilter(v as any)}>
-              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-[200px]" aria-label="How long it is kept"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All scopes</SelectItem>
-                {TIERS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                <SelectItem value="all">Kept for any length</SelectItem>
+                {TIERS.map((t) => <SelectItem key={t} value={t}>{MEMORY_TIER_LABELS[t]}</SelectItem>)}
               </SelectContent>
             </Select>
             <TeamFilter
@@ -241,7 +250,7 @@ export function MemoriesPage() {
               variant="panel"
               icon={Brain}
               title="No memories yet"
-              description="Memory gives agents recall across runs — per-agent or shared, with bi-temporal history."
+              description="Agents with memory turned on save facts here as they work and look them up next time. You can add one yourself too."
               action={
                 <Button asChild>
                   <Link to="/memories/new"><Plus className="h-4 w-4 mr-2" /> Add memory</Link>
@@ -256,18 +265,19 @@ export function MemoriesPage() {
                     <div className="flex justify-between items-start gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex gap-2 items-center mb-2 flex-wrap">
-                          {m.tier && <Badge variant="outline">{m.tier}</Badge>}
-                          <Badge variant="secondary">{m.mode}</Badge>
-                          <Badge variant={m.embedding_status === 'ready' ? 'default' : 'outline'}>
-                            embedding: {m.embedding_status}
-                          </Badge>
+                          {m.tier && <Badge variant="outline">{MEMORY_TIER_LABELS[m.tier] ?? m.tier}</Badge>}
+                          {m.mode === 'document' && <Badge variant="secondary">Document</Badge>}
+                          {/* Only the case a person can act on: it will not come up in search. */}
+                          {(m.embedding_status === 'pending' || m.embedding_status === 'failed') && (
+                            <Badge variant="outline">{m.embedding_status === 'pending' ? 'Not in search yet' : 'Not searchable'}</Badge>
+                          )}
                           {(m.tags ?? []).slice(0, 6).map((t) => (
                             <Badge key={t} variant="outline" className="font-normal"><TagsIcon className="h-3 w-3 mr-1" />{t}</Badge>
                           ))}
                         </div>
                         <p className="text-sm whitespace-pre-wrap">{m.content}</p>
                         <p className="text-xs text-muted-foreground mt-2">
-                          {formatDateTime(m.created_at)} • id {m.id.slice(0, 8)}
+                          Saved {formatDateTime(m.created_at)}
                         </p>
                       </div>
                       <Button
@@ -276,13 +286,13 @@ export function MemoriesPage() {
                         onClick={async () => {
                           const ok = await confirm({
                             title: 'Delete memory?',
-                            description: `This removes the memory from search and retrieval for every agent in this workspace. It starts "${m.content.slice(0, 80)}${m.content.length > 80 ? '…' : ''}".`,
+                            description: `No agent will find this memory again. It starts "${m.content.slice(0, 80)}${m.content.length > 80 ? '…' : ''}".`,
                             confirmLabel: 'Delete memory',
                             destructive: true,
                           })
                           if (ok) removeMut.mutate({ id: m.id, mode: 'soft' })
                         }}
-                        title="Soft delete"
+                        title="Delete memory"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -300,7 +310,8 @@ export function MemoriesPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Hybrid search (vector + FTS)…"
+                placeholder="Search what your agents remember…"
+                aria-label="Search memories"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && runSearch()}
@@ -311,16 +322,17 @@ export function MemoriesPage() {
               {searching ? <LoadingSpinner /> : 'Search'}
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">Finds memories by meaning as well as by the exact words, best matches first.</p>
 
           <div className="grid gap-3">
             {searchResults.map((r) => (
               <Card key={r.item.id}>
                 <CardContent className="p-4">
-                  <div className="flex gap-2 items-center mb-2">
-                    <Badge variant="outline">{r.signal}</Badge>
-                    <Badge>score: {r.score.toFixed(3)}</Badge>
-                    {r.item.tier && <Badge variant="secondary">{r.item.tier}</Badge>}
-                  </div>
+                  {r.item.tier && (
+                    <div className="flex gap-2 items-center mb-2">
+                      <Badge variant="outline">{MEMORY_TIER_LABELS[r.item.tier] ?? r.item.tier}</Badge>
+                    </div>
+                  )}
                   <p className="text-sm whitespace-pre-wrap">{r.item.content}</p>
                 </CardContent>
               </Card>
@@ -331,8 +343,8 @@ export function MemoriesPage() {
           </div>
         </TabsContent>
 
-        {/* ── Backends ───────────────────────────────────────────── */}
-        <TabsContent value="backends" className="space-y-4">
+        {/* ── Storage ────────────────────────────────────────────── */}
+        <TabsContent value="storage" className="space-y-4">
           <ConfigCard
             config={configQ.data}
             backends={backends}
@@ -340,61 +352,62 @@ export function MemoriesPage() {
             saving={updateConfigMut.isPending}
             onSave={(patch) => updateConfigMut.mutate(patch)}
             orgId={orgId}
-          />
-          <p className="text-sm text-muted-foreground">
-            Per-backend capabilities and live health below. Pinning a backend without a wired credential id falls back to almyty-native.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {backends.map((b) => {
-              const h = health[b.id]
-              return (
-                <Card key={b.id}>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base font-mono">{b.id}</CardTitle>
-                      <Badge variant={h?.ok ? 'default' : 'outline'} className="flex items-center gap-1">
-                        <HeartPulse className="h-3 w-3" />
-                        {/*
-                          Three states, not two: a probe in flight and a
-                          backend that did not answer both used to read
-                          as "unconfigured", so almyty-native -- which is
-                          always configured -- showed a config error
-                          while its own health check was still running.
-                        */}
-                        {healthQ.isLoading ? 'checking…' : h?.ok ? `${h.latency_ms}ms` : h ? 'unreachable' : 'unconfigured'}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Modes</p>
-                      <div className="flex flex-wrap gap-1">
-                        {b.modes.map((m) => <Badge key={m} variant="secondary">{m}</Badge>)}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Capabilities</p>
-                      <div className="flex flex-wrap gap-1">
-                        {b.capabilities.map((c) => (
-                          <Badge key={c} variant="outline" className="font-mono text-xs">{c}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-        </TabsContent>
-
-        {/* ── Audit ──────────────────────────────────────────────── */}
-        <TabsContent value="audit" className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Per-scope soft-cap warnings logged when an agent wrote past the configured byte limit.
-            Behavior is set per scope under Backends → Soft-cap behavior.
-          </p>
-          <ConsolidationCard orgId={orgId} />
-          <SoftcapAuditList orgId={orgId} enabled={tab === 'audit'} />
+          >
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Storage services</p>
+              <p className="text-xs text-muted-foreground">
+                What each service can hold and whether it answers right now.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {backends.map((b) => {
+                  const h = health[b.id]
+                  return (
+                    <Card key={b.id}>
+                      <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-base">{memoryBackendName(b.id)}</CardTitle>
+                          <Badge variant={h?.ok ? 'default' : 'outline'} className="flex items-center gap-1">
+                            <HeartPulse className="h-3 w-3" />
+                            {/*
+                              Three states, not two: a probe in flight and a
+                              backend that did not answer both used to read
+                              as "unconfigured", so almyty-native -- which is
+                              always configured -- showed a config error
+                              while its own health check was still running.
+                            */}
+                            {healthQ.isLoading ? 'Checking…' : h?.ok ? `${h.latency_ms}ms` : h ? 'Unreachable' : 'Not set up'}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <div className="flex flex-wrap gap-1">
+                          {b.modes.map((m) => <Badge key={m} variant="secondary">{m === 'memory' ? 'Facts' : 'Documents'}</Badge>)}
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {b.capabilities.map((c) => (
+                            <Badge key={c} variant="outline" className="font-mono text-xs">{c}</Badge>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            </div>
+            <ConsolidationCard orgId={orgId} />
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Too-big memories</p>
+              <p className="text-xs text-muted-foreground">
+                Each time an agent saved more than the size limit. What happens then is set above.
+              </p>
+              <SoftcapAuditList orgId={orgId} enabled={tab === 'storage'} />
+            </div>
+            <div>
+              <Button variant="outline" asChild>
+                <Link to="/memories/transfer"><ArrowRightLeft className="h-4 w-4 mr-2" /> Move memories to another service</Link>
+              </Button>
+            </div>
+          </ConfigCard>
         </TabsContent>
       </Tabs>
       {/*
@@ -409,11 +422,11 @@ export function MemoriesPage() {
 
 // ── ConfigCard ──────────────────────────────────────────────────────
 //
-// Per-scope routing + softcap behavior + credentials wiring. Reads the
-// server-side workspace_config row and writes patches via /memory/canonical/config.
-// Each backend that needs credentials gets a Select tied to the org's
-// memory_backend credential rows; saving here is what makes the
-// per-org credentials work I built actually usable from the product.
+// Where this workspace keeps its memories, and the rest of the routing
+// under Advanced. Reads the server-side workspace_config row and writes
+// patches via /memory/canonical/config. Each external service that needs
+// credentials gets a picker tied to the org's memory_backend credential
+// rows.
 
 interface ConfigCardProps {
   config?: {
@@ -441,9 +454,11 @@ interface ConfigCardProps {
     softcap_behavior?: 'reject' | 'warn_log' | 'silent'
     overrides?: Record<string, unknown>
   }) => void
+  /** Operator detail rendered at the end of the Advanced section. */
+  children?: React.ReactNode
 }
 
-function ConfigCard({ config, backends, credentials, saving, orgId, onSave }: ConfigCardProps) {
+function ConfigCard({ config, backends, credentials, saving, orgId, onSave, children }: ConfigCardProps) {
   const routing = config?.overrides?.routing ?? {}
   const memBackend = routing.memory_backend ?? 'almyty-native'
   const docBackend = routing.document_backend ?? 'almyty-native'
@@ -475,108 +490,150 @@ function ConfigCard({ config, backends, credentials, saving, orgId, onSave }: Co
     })
   }
 
+  // The one choice most people ever make here: which service keeps the
+  // memories. An outside service needs an account, so it is picked next
+  // to where it is connected.
+  const needsAccount = memBackend !== 'almyty-native'
+
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Routing & credentials for this workspace</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid md:grid-cols-2 gap-3">
-          <div>
-            <Label className="text-xs">Memory-mode backend</Label>
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Where memories are kept</CardTitle>
+          <CardDescription>
+            almyty keeps them for you unless you pick another memory service. Most teams never change this.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="max-w-sm space-y-1.5">
+            <Label htmlFor="memory-backend">Memory service</Label>
             <Select value={memBackend} onValueChange={(v) => patch({ memory_backend: v })} disabled={saving}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="memory-backend"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {backends.filter((b) => b.modes.includes('memory')).map((b) => (
-                  <SelectItem key={b.id} value={b.id}>{b.id}</SelectItem>
+                  <SelectItem key={b.id} value={b.id}>{memoryBackendName(b.id)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label className="text-xs">Document-mode backend</Label>
+          {needsAccount && (
+            <AccountPicker
+              backendId={memBackend}
+              value={creds[memBackend]}
+              credentials={credentials}
+              connected={connected[memBackend]}
+              saving={saving}
+              onPick={(id) => patch({ credentials: { ...creds, [memBackend]: id } })}
+              onConnected={(connection) => {
+                setConnected((prev) => ({ ...prev, [memBackend]: connection }))
+                patch({ credentials: { ...creds, [memBackend]: connection.id } })
+              }}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      <Disclosure title="Advanced" summary="Documents, a backup copy, size limits, tidying up">
+        <div className="grid md:grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="document-backend">Where documents are kept</Label>
             <Select value={docBackend} onValueChange={(v) => patch({ document_backend: v })} disabled={saving}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="document-backend"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {backends.filter((b) => b.modes.includes('document')).map((b) => (
-                  <SelectItem key={b.id} value={b.id}>{b.id}</SelectItem>
+                  <SelectItem key={b.id} value={b.id}>{memoryBackendName(b.id)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label className="text-xs">Mirror backend (best-effort)</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="mirror-backend">Also copy memories to</Label>
             <Select value={mirror || '__none__'} onValueChange={(v) => patch({ mirror_backend: v === '__none__' ? undefined : v })} disabled={saving}>
-              <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+              <SelectTrigger id="mirror-backend"><SelectValue placeholder="Nowhere" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__">None</SelectItem>
+                <SelectItem value="__none__">Nowhere</SelectItem>
                 {externalBackends.filter((b) => b.modes.includes('memory')).map((b) => (
-                  <SelectItem key={b.id} value={b.id}>{b.id}</SelectItem>
+                  <SelectItem key={b.id} value={b.id}>{memoryBackendName(b.id)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">A best-effort second copy; a failed copy never blocks a save.</p>
           </div>
-          <div>
-            <Label className="text-xs">Soft-cap behavior</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="softcap-behavior">When a memory is over the size limit</Label>
             <Select value={softcap} onValueChange={(v) => patch({ softcap_behavior: v as any })} disabled={saving}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="softcap-behavior"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="warn_log">warn_log</SelectItem>
-                <SelectItem value="reject">reject</SelectItem>
-                <SelectItem value="silent">silent</SelectItem>
+                <SelectItem value="warn_log">Save it and note it below</SelectItem>
+                <SelectItem value="reject">Refuse to save it</SelectItem>
+                <SelectItem value="silent">Save it without a note</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
 
-        <div>
-          <Label className="text-xs">Connection per backend</Label>
-          <p className="text-xs text-muted-foreground mb-2">
-            Pick the connection each external backend signs in with, or connect one here. Native needs none.
-          </p>
-          <div className="grid md:grid-cols-2 gap-2">
-            {externalBackends.map((b) => (
-              <div key={b.id} className="flex items-center gap-2">
-                <span className="text-xs font-mono w-44 shrink-0">{b.id}</span>
-                <Select
-                  value={creds[b.id] ?? '__none__'}
-                  onValueChange={(v) =>
-                    patch({
-                      credentials: { ...creds, [b.id]: v === '__none__' ? '' : v },
-                    })
-                  }
-                  disabled={saving}
-                >
-                  <SelectTrigger className="flex-1"><SelectValue placeholder="(unconfigured)" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">(unconfigured)</SelectItem>
-                    {credentials.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                    {connected[b.id] && !credentials.some((c) => c.id === connected[b.id].id) && (
-                      <SelectItem value={connected[b.id].id}>{connected[b.id].name} (connected account)</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                <ConnectAccountButton
-                  kind="memory"
-                  label="Connect"
+        {externalBackends.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Accounts for other services</p>
+            <p className="text-xs text-muted-foreground">
+              The account each outside service signs in with. almyty's own storage needs none.
+            </p>
+            <div className="grid gap-2">
+              {externalBackends.map((b) => (
+                <AccountPicker
+                  key={b.id}
+                  backendId={b.id}
+                  value={creds[b.id]}
+                  credentials={credentials}
+                  connected={connected[b.id]}
+                  saving={saving}
+                  onPick={(id) => patch({ credentials: { ...creds, [b.id]: id } })}
                   onConnected={(connection) => {
                     setConnected((prev) => ({ ...prev, [b.id]: connection }))
                     patch({ credentials: { ...creds, [b.id]: connection.id } })
                   }}
                 />
-              </div>
-            ))}
-            {credentials.length === 0 && (
-              <p className="text-xs text-muted-foreground italic">
-                No memory connection yet. Use Connect next to a backend.
-              </p>
-            )}
+              ))}
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        )}
+
+        {children}
+      </Disclosure>
+    </div>
+  )
+}
+
+function AccountPicker({
+  backendId, value, credentials, connected, saving, onPick, onConnected,
+}: {
+  backendId: string
+  value?: string
+  credentials: Array<{ id: string; name: string }>
+  connected?: Connection
+  saving: boolean
+  onPick: (id: string) => void
+  onConnected: (connection: Connection) => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="w-44 shrink-0 text-sm">{memoryBackendName(backendId)} account</span>
+      <Select value={value || '__none__'} onValueChange={(v) => onPick(v === '__none__' ? '' : v)} disabled={saving}>
+        <SelectTrigger className="min-w-[12rem] flex-1" aria-label={`${memoryBackendName(backendId)} account`}>
+          <SelectValue placeholder="Not connected" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none__">Not connected</SelectItem>
+          {credentials.map((c) => (
+            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+          ))}
+          {connected && !credentials.some((c) => c.id === connected.id) && (
+            <SelectItem value={connected.id}>{connected.name} (just connected)</SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+      <ConnectAccountButton kind="memory" label="Connect" onConnected={onConnected} />
+    </div>
   )
 }
 
@@ -612,47 +669,43 @@ function ConsolidationCard({ orgId }: { orgId: string }) {
       const r = res?.data ?? res
       setLast(r)
       if (r.skipped) {
-        notify.info('Consolidation skipped', r.reason)
+        notify.info('Nothing to tidy', r.reason)
       } else {
         notify.success(
-          'Consolidation done',
-          `${r.consolidated_facts} fact(s) written, ${r.superseded} row(s) in short scope superseded`,
+          'Memories tidied',
+          `${r.consolidated_facts} lasting fact(s) written, ${r.superseded} short-term note(s) folded in`,
         )
       }
-      // The toast counts rows that Browse was still listing unchanged.
+      // The toast counts rows that the Memories tab was still listing unchanged.
       qc.invalidateQueries({ queryKey: ['memories', 'list', orgId] })
     },
-    onError: (err: any) => notify.error('Consolidation failed', err.message ?? String(err)),
+    onError: (err: any) => notify.error('Tidying failed', err.message ?? String(err)),
   })
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">Consolidation</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-xs text-muted-foreground">
-          Distills short-scope memories into durable long-scope facts via the org's LLM provider.
-          Runs hourly when enabled in Backends config; you can also trigger it now.
-        </p>
-        <div className="flex gap-2">
-          <Button size="sm" onClick={() => mut.mutate(false)} disabled={mut.isPending}>
-            {mut.isPending ? <LoadingSpinner /> : 'Run if eligible'}
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => mut.mutate(true)} disabled={mut.isPending}>
-            Force run
-          </Button>
+    <div className="space-y-2">
+      <p className="text-sm font-medium">Tidy up</p>
+      <p className="text-xs text-muted-foreground">
+        Turns short-term notes into a few lasting facts, using your organization's model. It runs by
+        itself every hour; you can also run it now.
+      </p>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={() => mut.mutate(false)} disabled={mut.isPending}>
+          {mut.isPending ? <LoadingSpinner /> : 'Tidy up now'}
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => mut.mutate(true)} disabled={mut.isPending}>
+          Tidy up even if it ran recently
+        </Button>
+      </div>
+      {last && (
+        <div className="text-xs text-muted-foreground">
+          Last run: {last.skipped
+            ? <>skipped: {last.reason}</>
+            : <>{last.consolidated_facts} facts written, {last.superseded} notes folded in</>
+          }
         </div>
-        {last && (
-          <div className="text-xs text-muted-foreground">
-            Last run: {last.skipped
-              ? <>skipped — <span className="font-mono">{last.reason}</span></>
-              : <><span className="font-mono">{last.consolidated_facts}</span> facts, <span className="font-mono">{last.superseded}</span> superseded</>
-            }
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      )}
+    </div>
   )
 }
 function SoftcapAuditList({ orgId, enabled }: { orgId: string; enabled: boolean }) {
@@ -667,7 +720,7 @@ function SoftcapAuditList({ orgId, enabled }: { orgId: string; enabled: boolean 
   const rows: SoftcapWarning[] = Array.isArray(q.data) ? (q.data as SoftcapWarning[]) : []
   if (q.isLoading) return <LoadingSpinner />
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">No soft-cap warnings recorded for this scope.</p>
+    return <p className="text-sm text-muted-foreground">None so far.</p>
   }
   return (
     <div className="grid gap-2">
@@ -676,13 +729,13 @@ function SoftcapAuditList({ orgId, enabled }: { orgId: string; enabled: boolean 
           <CardContent className="p-3 flex items-center justify-between gap-4">
             <div>
               <div className="flex gap-2 items-center mb-1">
-                <Badge variant="outline">{w.tier ?? w.mode}</Badge>
+                <Badge variant="outline">{(w.tier && MEMORY_TIER_LABELS[w.tier as MemoryTier]) || (w.mode === 'document' ? 'Document' : 'Fact')}</Badge>
                 <Badge variant="secondary" className="font-mono text-xs">
-                  {(w.sizeBytes / 1024).toFixed(1)} KB / {(w.softCap / 1024).toFixed(0)} KB
+                  {(w.sizeBytes / 1024).toFixed(1)} KB of {(w.softCap / 1024).toFixed(0)} KB
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                memory {w.memoryId.slice(0, 8)} • {formatDateTime(w.at)}
+                {formatDateTime(w.at)}
               </p>
             </div>
           </CardContent>
