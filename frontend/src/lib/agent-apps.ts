@@ -904,7 +904,7 @@ const APP_SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
 /** Why this name is unusable, or null. Same wording as the API. */
 export function appSlugError(slug: string): string | null {
   const value = (slug || '').trim().toLowerCase()
-  if (!value) return 'Pick a name for the product.'
+  if (!value) return 'Pick a name for the app.'
   if (value.length < 3) return 'Must be at least 3 characters.'
   if (value.length > 63) return 'Must be 63 characters or fewer.'
   if (!APP_SLUG_PATTERN.test(value)) {

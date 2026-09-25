@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowLeft, Check, ChevronRight, Package, Plus } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Bot, Check, ChevronRight, Package, Plus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
@@ -44,6 +45,9 @@ const STATUS: Record<DistributionStatus, { label: string; variant: 'success' | '
 export function AppDetailPage() {
   const { slug = '' } = useParams<{ slug: string }>()
   const queryClient = useQueryClient()
+  // Which tab is open. Until someone picks one, an app with no agent opens
+  // on Agents, because adding one is the only step that makes sense next.
+  const [tab, setTab] = useState<string | null>(null)
 
   const {
     data: app,
@@ -93,6 +97,9 @@ export function AppDetailPage() {
   const distributions = app.distributions ?? []
   const refusals = check?.refusals ?? []
   const addPath = `/apps/${app.slug}/distributions/new`
+  // With no agent there is nothing to put anywhere yet: adding one comes first.
+  const needsAgent = app.agentIds.length === 0
+  const activeTab = tab ?? (needsAgent ? 'agents' : 'distributions')
 
   return (
     <div className="space-y-8">
@@ -123,12 +130,19 @@ export function AppDetailPage() {
             </div>
           </div>
         </div>
-        <Button asChild>
-          <Link to={addPath}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add a place
-          </Link>
-        </Button>
+        {needsAgent ? (
+          <Button onClick={() => setTab('agents')}>
+            <Bot className="mr-2 h-4 w-4" />
+            Add an agent
+          </Button>
+        ) : (
+          <Button asChild>
+            <Link to={addPath}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add a place
+            </Link>
+          </Button>
+        )}
       </div>
 
       {refusals.length > 0 ? (
@@ -152,7 +166,7 @@ export function AppDetailPage() {
         </p>
       )}
 
-      <Tabs defaultValue="distributions" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="distributions">
             Where people use it ({distributions.length})
@@ -167,14 +181,25 @@ export function AppDetailPage() {
               variant="panel"
               icon={Package}
               title="Not in front of anyone yet"
-              description="Put it on the web, in Slack or another chat app, or ship it as a terminal or desktop app."
+              description={
+                needsAgent
+                  ? 'Add the agent people will talk to first. Then put it on the web, in Slack or another chat app, or ship it as a terminal or desktop app.'
+                  : 'Put it on the web, in Slack or another chat app, or ship it as a terminal or desktop app.'
+              }
               action={
-                <Button asChild>
-                  <Link to={addPath}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add a place
-                  </Link>
-                </Button>
+                needsAgent ? (
+                  <Button variant="outline" onClick={() => setTab('agents')}>
+                    <Bot className="mr-2 h-4 w-4" />
+                    Add an agent
+                  </Button>
+                ) : (
+                  <Button asChild>
+                    <Link to={addPath}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add a place
+                    </Link>
+                  </Button>
+                )
               }
             />
           ) : (
