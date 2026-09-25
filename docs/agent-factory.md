@@ -27,7 +27,7 @@ That is the part nobody else ships, so it is the part this subsystem is built ar
 
 The separation is load-bearing. One agent appears in an internal app and a customer-facing one at the same time, under different names, different auth and different limits, without being duplicated.
 
-An app is a normal detail page: a header, three tabs (Distributions, Agents, Settings), and a card per place the product ships. Each card carries a ProtocolBadge for the medium and a status badge (Live, Building, Draft). Clicking a card opens a centered dialog, not a canvas, not a drawer.
+An app is a normal detail page: a header, three tabs (Distributions, Agents, Settings), and a card per place the product ships. Each card carries a ProtocolBadge for the medium and a status badge (Live, Building, Draft). Create an app at `/apps/new`, add a distribution at `/apps/:slug/distributions/new`, and click a card to open its configuration page at `/apps/:slug/distributions/:target`. Signing credential creation has its own page beneath that route at `/signing/new`.
 
 ![An app detail page with Slack, Terminal, and Web distributions as cards](../docs-site/public/screenshots/apps-detail.png)
 
@@ -61,8 +61,6 @@ Publishing is idempotent: doing it twice re-syncs the existing gateway rather th
 Publishing refuses two things that would otherwise produce a surface that is live and useless. A platform whose credentials are absent (`REQUIRED_CREDENTIALS`, read off what each adapter actually uses, never invented) and a workflow agent behind a chat surface, which the runtime turns away at the first message with "not in autonomous mode".
 
 Channel distributions take those credentials on the distribution itself (Bot token and Signing secret for Slack) rather than sending the operator to Gateways. Publishing with them filled goes live. The values never sit on the distribution row: they go into one credential the distribution manages (`metadata.managedBy.kind = 'app_distribution'`), the row keeps `credentialId` and `credentialKeys` (names only), every read shows them masked, and publishing hands the gateway the reference rather than a copy. Removing the distribution deletes that credential.
-
-![Slack distribution dialog with platform credential fields](../docs-site/public/screenshots/apps-slack-credentials.png)
 
 ![Slack published and live, with Unpublish instead of a silent fail](../docs-site/public/screenshots/apps-slack-live.png)
 

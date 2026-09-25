@@ -22,11 +22,17 @@ import { AgentExecutionCancellationService } from '../agents/agent-execution-can
  */
 import { AgentNotActive, agentIsInvokable, runsOnAutonomousRuntime } from '../agents/agent-invocation';
 import { ExecutionPrincipal, userPrincipal } from '../../common/authorization/execution-access.service';
+import { hasEffectiveMembership } from '../../common/authorization/membership';
+import { User } from '../../entities/user.entity';
+import { keyUserIsMember } from '../agents/compat-auth.helper';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Whose scope a unified-endpoint agent request runs in: the key's or JWT's user. */
 export function unifiedPrincipal(apiKey: Pick<ApiKey, 'userId'>): ExecutionPrincipal {
   return userPrincipal(apiKey.userId ?? null, 'api_key');
 }
+
 @Injectable()
 export class UnifiedAgentHelper {
   private readonly logger = new Logger(UnifiedAgentHelper.name);
@@ -184,6 +190,7 @@ export class UnifiedAgentHelper {
     const keyHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const apiKey = await this.apiKeyRepository.findOne({
       where: { keyHash, organizationId: agent.organizationId, isActive: true },
+      relations: { user: { organizationMemberships: true } },
     });
 
     if (apiKey) {
@@ -193,33 +200,67 @@ export class UnifiedAgentHelper {
           HttpStatus.UNAUTHORIZED,
         );
       }
+      // The rule the /v1 compat endpoints apply (compat-auth.helper.ts): a
+      // key acts as its user, who must be active and still a member of the
+      // organization. Removing a member does not deactivate their keys;
+      // this is what stops them working here. Which agent a gateway or
+      // agent key may reach is keyReachesAgent's, above.
+      if (!keyUserIsMember(apiKey)) {
+        throw new HttpException(
+          { success: false, message: 'API key is not valid for this organization', error: 'AGENT_AUTH_INVALID' },
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
       return apiKey;
     }
 
+    let payload: any;
     try {
-      const payload = this.jwtService.verify(rawToken);
-      const userId = payload.sub;
-      const userOrgs: Array<{ id: string }> = payload.organizations || [];
-      const hasAccess = userOrgs.some(o => o.id === agent.organizationId);
-
-      if (!hasAccess) {
-        this.logger.warn(
-          `JWT org mismatch: agent.orgId=${agent.organizationId}, JWT orgs=${JSON.stringify(userOrgs.map(o => o.id))}`,
-        );
-        throw new HttpException(
-          { success: false, message: `No access to this agent's organization`, error: 'AGENT_AUTH_FORBIDDEN' },
-          HttpStatus.FORBIDDEN,
-        );
-      }
-
-      return { userId, organizationId: agent.organizationId } as ApiKey;
-    } catch (err) {
-      if (err instanceof HttpException) throw err;
+      payload = this.jwtService.verify(rawToken);
+    } catch {
       throw new HttpException(
         { success: false, message: 'Invalid API key or JWT', error: 'AGENT_AUTH_INVALID' },
         HttpStatus.UNAUTHORIZED,
       );
     }
+    const userId = payload?.sub;
+    const userOrgs: Array<{ id: string }> = payload?.organizations || [];
+    if (!userOrgs.some((o) => o.id === agent.organizationId)) {
+      this.logger.warn(
+        `JWT org mismatch: agent.orgId=${agent.organizationId}, JWT orgs=${JSON.stringify(userOrgs.map(o => o.id))}`,
+      );
+      throw new HttpException(
+        { success: false, message: `No access to this agent's organization`, error: 'AGENT_AUTH_FORBIDDEN' },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    // The claims are what was true when the token was signed. Whether the
+    // user is still active, still a member and has not revoked their
+    // sessions is read now, as JwtStrategy does on the platform API.
+    const user = typeof userId === 'string' && UUID_RE.test(userId)
+      ? await this.apiKeyRepository.manager.getRepository(User).findOne({
+          where: { id: userId },
+          relations: { organizationMemberships: true },
+        })
+      : null;
+    if (!user || !user.isActive || (payload.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+      throw new HttpException(
+        { success: false, message: 'Invalid API key or JWT', error: 'AGENT_AUTH_INVALID' },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    // An SSO session reaches only the organization whose IdP asserted it.
+    if (
+      (payload.sso && payload.sso !== agent.organizationId) ||
+      !hasEffectiveMembership(user.organizationMemberships, agent.organizationId)
+    ) {
+      throw new HttpException(
+        { success: false, message: `No access to this agent's organization`, error: 'AGENT_AUTH_FORBIDDEN' },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    return { userId, organizationId: agent.organizationId } as ApiKey;
   }
 
   private async invokeAgent(

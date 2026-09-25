@@ -93,3 +93,13 @@ describe('migration runner logging', () => {
     expect(out).not.toContain('sk-live-row-contents');
   });
 });
+
+describe('database.config.ts', () => {
+  // The app's DataSource is built in app.module.ts; this file is only the
+  // typeorm CLI's. A second, unused config here (it had its own `logging`
+  // and ssl rules) drifted from both without anything noticing.
+  it('exports the CLI data source and its log levels, nothing else', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    expect(Object.keys(require('./database.config')).sort()).toEqual(['AppDataSource', 'MIGRATION_LOG_LEVELS']);
+  });
+});

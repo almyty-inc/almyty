@@ -635,7 +635,7 @@ export class ToolsService {
   async createToolVersion(
     tool: Tool,
     changelog: string,
-    userId: string,
+    userId: string | null,
   ): Promise<ToolVersion> {
     const version = this.toolVersionRepository.create({
       toolId: tool.id,
