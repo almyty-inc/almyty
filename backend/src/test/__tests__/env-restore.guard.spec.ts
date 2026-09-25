@@ -55,6 +55,22 @@ function rawEnvRestores(source: string): number[] {
   return offenders;
 }
 
+/**
+ * Lines that replace process.env itself: `process.env = { ...saved }`.
+ * The copy is a plain object, not the process environment: it stops
+ * coercing values to strings (so `undefined` stays a key that reads as
+ * set-but-empty to `in` checks), and restoring a snapshot taken when the
+ * file loaded drops or rewinds whatever else changed since. Snapshot and
+ * restore only the keys a spec touches (snapshotEnv / restoreEnv).
+ */
+function envReplacements(source: string): number[] {
+  const offenders: number[] = [];
+  source.split('\n').forEach((line, i) => {
+    if (/\bprocess\.env\s*=(?!=)/.test(line)) offenders.push(i + 1);
+  });
+  return offenders;
+}
+
 describe('restoring environment variables in specs', () => {
   afterEach(() => {
     delete process.env[KEY];
@@ -102,6 +118,19 @@ describe('restoring environment variables in specs', () => {
   it('no spec restores a saved value with a raw assignment', () => {
     const offenders = [...specs(SRC_ROOT), ...specs(EE_ROOT)].flatMap((file) =>
       rawEnvRestores(readFileSync(file, 'utf8')).map((line) => `${relative(SRC_ROOT, file)}:${line}`),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('the scanner catches process.env being replaced, and passes key writes and comparisons', () => {
+    expect(envReplacements('process.env = { ...saved };')).toEqual([1]);
+    expect(envReplacements('  afterEach(() => { process.env = saved as any; });')).toEqual([1]);
+    expect(envReplacements("process.env.A = 'x';\nif (process.env === other) {}\nObject.assign(process.env, env);")).toEqual([]);
+  });
+
+  it('no spec replaces process.env with a copy', () => {
+    const offenders = [...specs(SRC_ROOT), ...specs(EE_ROOT)].flatMap((file) =>
+      envReplacements(readFileSync(file, 'utf8')).map((line) => `${relative(SRC_ROOT, file)}:${line}`),
     );
     expect(offenders).toEqual([]);
   });

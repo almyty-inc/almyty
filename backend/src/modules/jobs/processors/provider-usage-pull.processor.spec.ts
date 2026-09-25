@@ -9,6 +9,7 @@ import {
 } from './provider-usage-pull.processor';
 import { LlmProvider } from '../../../entities/llm-provider.entity';
 import { ProviderUsageService } from '../../provider-usage/provider-usage.service';
+import { snapshotEnv } from '../../../test/env';
 
 describe('ProviderUsagePullProcessor', () => {
   let processor: ProviderUsagePullProcessor;
@@ -20,10 +21,10 @@ describe('ProviderUsagePullProcessor', () => {
   let providerRepository: { find: jest.Mock };
   let usageService: { syncOrganization: jest.Mock };
 
-  const originalEnv = { ...process.env };
+  const restore = snapshotEnv('NODE_ENV', 'PROVIDER_USAGE_PULL_CRON', 'PROVIDER_USAGE_PULL_LOOKBACK_DAYS');
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    restore();
     jest.clearAllMocks();
   });
 

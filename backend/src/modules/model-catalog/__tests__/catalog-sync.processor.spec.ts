@@ -4,16 +4,17 @@ import { getQueueToken } from '@nestjs/bull';
 import { CatalogSyncProcessor, MODEL_CATALOG_BACKFILL_JOB, MODEL_CATALOG_SWEEP_JOB, MODEL_CATALOG_SYNC_QUEUE } from '../catalog-sync.processor';
 import { ModelCatalogService } from '../model-catalog.service';
 import { CatalogWarmupService } from '../catalog-warmup.service';
+import { snapshotEnv } from '../../../test/env';
 
 describe('CatalogSyncProcessor', () => {
   let processor: CatalogSyncProcessor;
   let queue: { add: jest.Mock; getRepeatableJobs: jest.Mock; removeRepeatableByKey: jest.Mock };
   let catalog: { syncEveryProvider: jest.Mock };
   let warmup: { syncNeverSynced: jest.Mock };
-  const originalEnv = { ...process.env };
+  const restore = snapshotEnv('MODEL_CATALOG_BACKFILL', 'MODEL_CATALOG_SYNC_CRON', 'NODE_ENV');
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    restore();
     jest.clearAllMocks();
   });
 

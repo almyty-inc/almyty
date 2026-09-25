@@ -12,6 +12,7 @@ import {
 import { Model } from '../../../../entities/model.entity';
 import { AuditAction, AuditResource } from '../../../../entities/audit-log.entity';
 import { AuditLogService } from '../../../audit-log/audit-log.service';
+import { snapshotEnv } from '../../../../test/env';
 
 // Same singleton pattern as llm-providers.service.spec: the application
 // code's `axios_1.default` and this spec's `require('axios').default` are
@@ -168,7 +169,7 @@ describe('PriceFeedService', () => {
   let redis: { get: jest.Mock; set: jest.Mock; setex: jest.Mock };
   let modelRepository: { find: jest.Mock; save: jest.Mock };
   let auditLog: { log: jest.Mock };
-  const originalEnv = { ...process.env };
+  const restore = snapshotEnv('MODEL_PRICE_FEED_DISABLED', 'MODEL_PRICE_FEED_LITELLM_URL', 'MODEL_PRICE_FEED_OPENROUTER_URL');
 
   async function build(): Promise<PriceFeedService> {
     const module = await Test.createTestingModule({
@@ -195,7 +196,7 @@ describe('PriceFeedService', () => {
   });
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    restore();
   });
 
   describe('snapshotAlias', () => {

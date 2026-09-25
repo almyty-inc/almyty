@@ -9,6 +9,7 @@ import {
 } from './provider-health.processor';
 import { LlmProvider, LlmProviderStatus } from '../../../entities/llm-provider.entity';
 import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
+import { snapshotEnv } from '../../../test/env';
 
 describe('ProviderHealthProcessor', () => {
   let processor: ProviderHealthProcessor;
@@ -16,10 +17,10 @@ describe('ProviderHealthProcessor', () => {
   let providerRepository: { find: jest.Mock };
   let llmProvidersService: { performHealthCheck: jest.Mock };
 
-  const originalEnv = { ...process.env };
+  const restore = snapshotEnv('NODE_ENV', 'PROVIDER_HEALTH_RECHECK_CRON', 'PROVIDER_HEALTH_RECHECK_DELAY_MS');
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    restore();
     jest.clearAllMocks();
   });
 
