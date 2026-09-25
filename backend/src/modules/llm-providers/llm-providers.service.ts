@@ -20,16 +20,19 @@ import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { LlmModelsHelper } from './llm-models.helper';
 import { DefaultModelResolver } from './default-model.resolver';
-import { findModelNotFound } from './model-errors';
+import { findModelNotFound, isKeyRejection } from './model-errors';
+import { getProviderDisplayName, getProviderKeyUrl } from './llm-provider-catalog';
+import type { Model } from '../../entities/model.entity';
 import { ModelCatalogService } from '../model-catalog/model-catalog.service';
 
 import { AccessPolicyService, normaliseVisibility } from '../../common/authorization/access-policy.service';
 import { assertProviderUsableBy } from './private-provider';
+import { providerListsModels } from './provider-profile';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { Credential } from '../../entities/credential.entity';
 import { LlmProviderSecretsHelper, MASKED_PROVIDER_KEY } from './llm-provider-secrets.helper';
 
-import { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters } from './dto/llm-providers.dto';
+import { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters, ConnectProviderInput } from './dto/llm-providers.dto';
 export type { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters };
 
 // Strip values that look like API keys / secrets / tokens from anywhere
@@ -153,7 +156,9 @@ export class LlmProvidersService {
   async createProvider(
     createDto: CreateLlmProviderDto,
     organizationId: string,
-    userId: string
+    userId: string,
+    /** checkInRequest: the caller runs the key check and the sync itself (connect). */
+    options: { checkInRequest?: boolean } = {},
   ): Promise<LlmProvider> {
     try {
       // Verify organization and user permissions
@@ -243,12 +248,14 @@ export class LlmProvidersService {
 
       // Perform initial health check. Pass the org we just created
       // under so the scoped lookup inside performHealthCheck finds
-      // the row.
-      setTimeout(
-        () => this.performHealthCheck(withKeys.id, organizationId),
-        1000,
-      );
-      this.scheduleCatalogSync(withKeys.id, organizationId, 'provider_created');
+      // the row. Connect runs the check itself, in the request.
+      if (!options.checkInRequest) {
+        setTimeout(
+          () => this.performHealthCheck(withKeys.id, organizationId),
+          1000,
+        );
+        this.scheduleCatalogSync(withKeys.id, organizationId, 'provider_created');
+      }
 
       this.logger.log(`LLM provider '${withKeys.name}' created for organization ${organizationId}`);
 
@@ -260,6 +267,83 @@ export class LlmProvidersService {
     } catch (error) {
       this.logger.error(`Failed to create LLM provider: ${error.message}`);
       throw error;
+    }
+  }
+
+  /**
+   * Connect a provider in one request: save it, check the key with a real
+   * call, and list its models. Every model it lists is usable at once,
+   * because the key check passed (the readiness rule, docs/models.md).
+   *
+   * A check that fails leaves nothing behind: the provider and the key
+   * row it made are removed, and the caller gets one plain sentence
+   * ("OpenAI rejected this key.") with the vendor's own words beside it.
+   * Keeping a provider whose key does not work would put a dead entry in
+   * every model list and leave its cleanup to the person who just failed.
+   */
+  async connectProvider(
+    input: ConnectProviderInput,
+    organizationId: string,
+    userId: string,
+  ): Promise<{ provider: LlmProvider; models: Model[]; check: { ok: true; responseTime?: number } }> {
+    const displayName = getProviderDisplayName(input.type);
+    // Nothing to find the models in, so the one to use has to be named.
+    // Said before anything is saved or called, in the words the form shows.
+    if (!providerListsModels(input.type) && !input.configuration?.model?.trim()) {
+      throw new BadRequestException({
+        code: 'MODEL_REQUIRED',
+        message: `${displayName} does not list its models. Enter the model you want to use.`,
+      });
+    }
+    const provider = await this.createProvider(
+      {
+        name: input.name?.trim() || displayName,
+        type: input.type,
+        configuration: input.configuration ?? {},
+        visibility: input.visibility,
+        teamId: input.teamId,
+        credentialId: input.credentialId ?? undefined,
+      } as CreateLlmProviderDto,
+      organizationId,
+      userId,
+      { checkInRequest: true },
+    );
+
+    const check = await this.performHealthCheck(provider.id, organizationId);
+    if (!check.isHealthy) {
+      await this.discardUncheckedProvider(provider, organizationId, userId);
+      throw new BadRequestException({
+        code: check.keyRejected ? 'KEY_REJECTED' : 'CHECK_FAILED',
+        message: check.keyRejected ? `${displayName} rejected this key.` : `Could not connect to ${displayName}.`,
+        detail: check.error,
+        keyUrl: getProviderKeyUrl(input.type) || undefined,
+      });
+    }
+
+    let models: Model[] = [];
+    if (this.catalog) {
+      try {
+        models = await this.catalog.syncAndListProvider(organizationId, provider.id);
+      } catch (error: any) {
+        // The key works (a real call just passed); a vendor whose list
+        // could not be read this once is read again by the periodic sweep.
+        // What is known already (the model the check called) still shows.
+        this.logger.warn(`Model list for provider ${provider.id} failed after a passing check: ${error?.message ?? error}`);
+        models = await this.catalog.list(organizationId, { providerId: provider.id });
+      }
+    }
+    const fresh = (await this.llmProviderRepository.findOne({ where: { id: provider.id, organizationId } })) ?? provider;
+    return { provider: fresh, models, check: { ok: true, responseTime: check.responseTime } };
+  }
+
+  /** Undo a connect whose check failed: the provider, and the key row it made (a shared connection stays). */
+  private async discardUncheckedProvider(provider: LlmProvider, organizationId: string, userId: string): Promise<void> {
+    try {
+      await this.secrets.release(provider);
+      await this.llmProviderRepository.remove(provider);
+      this.auditLogService.logDelete(organizationId, userId, AuditResource.LLM_PROVIDER, provider.id, provider.name);
+    } catch (error: any) {
+      this.logger.error(`Failed to remove provider ${provider.id} after a failed check: ${error?.message ?? error}`);
     }
   }
 
@@ -618,6 +702,10 @@ export class LlmProvidersService {
     responseTime?: number;
     error?: string;
     details?: Record<string, any>;
+    /** The vendor refused the key (401/403 or its wording), as opposed to an outage. */
+    keyRejected?: boolean;
+    /** The model the check called (configured, or the vendor's current default). */
+    probedModel?: string;
   }> {
     let provider: LlmProvider | null = null;
     try {
@@ -665,15 +753,20 @@ export class LlmProvidersService {
         { isHealthy: true, lastHealthCheckAt: new Date(), lastError: null },
       );
 
-      // The probe was a real call with a real model: that is a validation
-      // run for the matching card, and a good moment to refresh the list.
-      this.recordCatalogValidation(provider, healthCheckModel, { passed: true, latencyMs: responseTime });
+      // The probe was a real call with a real model and this key: every
+      // model the provider lists becomes usable (the readiness rule), the
+      // probed one records its latency, and the list is refreshed.
+      await this.applyCatalogCheck(provider, { passed: true });
+      // Awaited: a vendor with no model list (Vertex AI, Qwen, Ark) serves
+      // this model and nothing else anyone can see, and connect lists next.
+      await this.recordCatalogValidation(provider, healthCheckModel, { passed: true, latencyMs: responseTime });
       this.scheduleCatalogSync(provider.id, provider.organizationId, 'health_check');
       void this.secrets.recordHealth(provider, true);
 
       return {
         isHealthy: true,
         responseTime,
+        probedModel: healthCheckModel,
         details: {
           model: response.model,
           tokenUsage: response.usage.totalTokens,
@@ -712,6 +805,14 @@ export class LlmProvidersService {
         }
       }
 
+      // A key the vendor refuses takes every model of this provider out
+      // of the list until a check passes again. Other failures (outage,
+      // timeout) leave the models alone; the router skips the provider.
+      const keyRejected = !notFound && isKeyRejection(error);
+      if (keyRejected && provider) {
+        await this.applyCatalogCheck(provider, { passed: false, keyRejected: true, error: upstreamMessage });
+      }
+
       return {
         isHealthy: false,
         // The old shape had `Date.now() - Date.now()` which always
@@ -720,6 +821,7 @@ export class LlmProvidersService {
         // actually started, so leave it undefined on the error path.
         responseTime: undefined,
         error: upstreamMessage,
+        keyRejected,
       };
     }
   }
@@ -898,20 +1000,40 @@ export class LlmProvidersService {
   // and some specs build this service without it); every hook is
   // fire-and-forget and logs instead of throwing.
 
+  /** The readiness rule's writer (see ModelCatalogService.applyProviderCheck). Awaited, never throws. */
+  private async applyCatalogCheck(
+    provider: { id: string; organizationId: string },
+    outcome: { passed: boolean; keyRejected?: boolean; error?: string },
+  ): Promise<void> {
+    if (!this.catalog) return;
+    try {
+      await this.catalog.applyProviderCheck(provider.organizationId, provider.id, outcome);
+    } catch (err: any) {
+      this.logger.warn(`catalog readiness update for provider ${provider.id} failed: ${err?.message ?? err}`);
+    }
+  }
+
   private scheduleCatalogSync(providerId: string, organizationId: string, reason: string): void {
     if (!this.catalog) return;
     void this.catalog.syncInBackground(organizationId, providerId, reason);
   }
 
-  private recordCatalogValidation(
+  /**
+   * Record what a check learned about the model it called. Awaitable, so a
+   * caller that lists the provider's models next (connect) sees the card;
+   * never rejects.
+   */
+  private async recordCatalogValidation(
     provider: { id: string; organizationId: string },
     vendorModelId: string | undefined,
     outcome: { passed: boolean; latencyMs?: number; error?: string },
-  ): void {
+  ): Promise<void> {
     if (!this.catalog || !vendorModelId) return;
-    void this.catalog
-      .recordExternalValidation(provider.organizationId, provider.id, vendorModelId, { ...outcome, source: 'health_check' })
-      .catch((err) => this.logger.warn(`catalog validation record for ${vendorModelId} failed: ${err?.message ?? err}`));
+    try {
+      await this.catalog.recordExternalValidation(provider.organizationId, provider.id, vendorModelId, { ...outcome, source: 'health_check' });
+    } catch (err: any) {
+      this.logger.warn(`catalog validation record for ${vendorModelId} failed: ${err?.message ?? err}`);
+    }
   }
 
   // ── Delegations to LlmChatHelper ──

@@ -6,16 +6,26 @@ import { ModelCatalogService } from './model-catalog.service';
 
 export const MODEL_CATALOG_SYNC_QUEUE = 'model-catalog-sync';
 export const MODEL_CATALOG_BACKFILL_JOB = 'backfill';
+export const MODEL_CATALOG_SWEEP_JOB = 'sweep';
 
 /** Stable id so replicas booting together queue the backfill once. */
 const BACKFILL_JOB_ID = 'model-catalog-backfill';
+/** Stable id for the repeatable sweep, so a changed cron replaces the old schedule. */
+const SWEEP_JOB_ID = 'model-catalog-sweep';
+/** Every six hours, off the hour. */
+const DEFAULT_SWEEP_CRON = '17 */6 * * *';
 
 /**
- * One-shot catalog backfill at boot: every active LLM provider that has no
- * cards yet gets its model list imported, so organizations set up before
- * the catalog existed can route without anyone syncing by hand. From then
- * on the provider lifecycle hooks keep cards current. Off under
- * NODE_ENV=test and when MODEL_CATALOG_BACKFILL=off.
+ * Keeps every organization's model list in step with what its providers
+ * serve.
+ *
+ * At boot, a one-shot backfill imports the list of every active provider
+ * that has no models yet. After that a repeatable sweep lists every active
+ * provider again (MODEL_CATALOG_SYNC_CRON, default every six hours; `off`
+ * disables it), so new models appear and retired ones are marked
+ * unavailable on their own. Connecting a provider, changing it and every
+ * passing key check sync it too. Both jobs are off under NODE_ENV=test and
+ * when MODEL_CATALOG_BACKFILL=off.
  */
 @Processor(MODEL_CATALOG_SYNC_QUEUE)
 export class CatalogSyncProcessor implements OnApplicationBootstrap {
@@ -28,6 +38,13 @@ export class CatalogSyncProcessor implements OnApplicationBootstrap {
 
   isEnabled(): boolean {
     return process.env.NODE_ENV !== 'test' && process.env.MODEL_CATALOG_BACKFILL?.trim().toLowerCase() !== 'off';
+  }
+
+  /** The sweep's schedule, or undefined when it is switched off. */
+  sweepCron(): string | undefined {
+    const raw = process.env.MODEL_CATALOG_SYNC_CRON?.trim();
+    if (raw && raw.toLowerCase() === 'off') return undefined;
+    return raw && raw.length > 0 ? raw : DEFAULT_SWEEP_CRON;
   }
 
   async onApplicationBootstrap(): Promise<void> {
@@ -46,6 +63,28 @@ export class CatalogSyncProcessor implements OnApplicationBootstrap {
       // Best-effort: a Redis hiccup at bootstrap must not take the API down.
       this.logger.error(`Failed to queue model catalog backfill: ${error.message}`);
     }
+    await this.scheduleSweep();
+  }
+
+  private async scheduleSweep(): Promise<void> {
+    const cron = this.sweepCron();
+    try {
+      // A repeatable job is keyed by its repeat options: evict one left
+      // behind by an earlier cron (or by switching the sweep off).
+      for (const repeatable of await this.queue.getRepeatableJobs()) {
+        if (repeatable.id === SWEEP_JOB_ID && repeatable.cron !== cron) {
+          await this.queue.removeRepeatableByKey(repeatable.key);
+        }
+      }
+      if (!cron) {
+        this.logger.log('Model catalog sweep disabled (MODEL_CATALOG_SYNC_CRON=off)');
+        return;
+      }
+      await this.queue.add(MODEL_CATALOG_SWEEP_JOB, {}, { jobId: SWEEP_JOB_ID, repeat: { cron }, removeOnComplete: true, removeOnFail: true });
+      this.logger.log(`Model catalog sweep scheduled: "${cron}"`);
+    } catch (error: any) {
+      this.logger.error(`Failed to schedule the model catalog sweep: ${error.message}`);
+    }
   }
 
   @Process(MODEL_CATALOG_BACKFILL_JOB)
@@ -53,6 +92,15 @@ export class CatalogSyncProcessor implements OnApplicationBootstrap {
     const result = await this.catalog.backfill();
     this.logger.log(
       `Model catalog backfill: ${result.synced} of ${result.providers} provider(s) synced, ${result.created} card(s) created, ${result.failed} failed`,
+    );
+    return result;
+  }
+
+  @Process(MODEL_CATALOG_SWEEP_JOB)
+  async handleSweep(_job?: Job): Promise<{ providers: number; synced: number; failed: number; keyRejected: number }> {
+    const result = await this.catalog.syncEveryProvider();
+    this.logger.log(
+      `Model catalog sweep: ${result.synced} of ${result.providers} provider(s) synced, ${result.failed} failed (${result.keyRejected} refused the key)`,
     );
     return result;
   }
