@@ -33,8 +33,8 @@ export const PAGE_INTROS = {
     text: 'A runner connects a machine you control so agents can do work on it. Set one up; it shows here once it checks in.',
   },
   credentials: {
-    page: '/credentials',
-    text: 'Keys and passwords your tools use to reach other services, stored encrypted. Add one here, then pick it when you set up a tool or an API.',
+    page: '/connections',
+    text: 'The keys and accounts almyty uses for you, stored encrypted. Connect a service once, then pick it in any API, tool or agent.',
   },
   models: {
     page: '/models',

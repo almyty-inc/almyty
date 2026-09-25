@@ -13,7 +13,9 @@ almyty login
 
 ## 1. Turn an API into tools
 
-Open **APIs → Connect API** (`/apis/new`), give it a name, choose its type, and enter its base URL, authentication and visibility. For OpenAPI, GraphQL, SOAP or gRPC, **Continue to schema import** opens `/apis/:id/import`: import from a URL, file, or pasted content and keep **Generate tools** enabled. You can reopen **Import schema** from the API's detail page. SDK APIs instead take npm packages and start analyzing them after creation; custom HTTP APIs have no schema-import step.
+Open **APIs → Connect an API** (`/apis/new`). Paste a link to the API's description, drop the file, or paste its content, then click **Import**. almyty works out the format (OpenAPI 3, Swagger 2, GraphQL, WSDL or .proto) and reads the name, address and sign-in scheme from it. For GraphQL you can also paste the endpoint's own URL. The import runs in the background, and the next page asks only for what is missing: usually your key, and the address when the description has none. **Advanced** lets you set the name, address, sign-in type and who can use it yourself.
+
+To replace the description later, open the API and click **Update the description**. For an npm package, pick **Import an npm package** under **Other ways**. For a single HTTP call, create a [tool](/tools/http-tools) instead.
 
 Every operation in the schema becomes a typed, validated tool. No code.
 

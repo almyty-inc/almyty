@@ -157,10 +157,17 @@ describeIfDb('catalog boot sync across instances (real Postgres)', () => {
   it('the lock goes with the session: an instance that dies mid-run does not block the next one', async () => {
     const holder = new DataSource({ ...connection, extra: { max: 1 } });
     await holder.initialize();
-    const [{ locked }] = await holder.query('SELECT pg_try_advisory_lock(hashtext($1)) AS locked', [BOOT_SYNC_LOCK_KEY]);
+    const [{ locked, pid }] = await holder.query('SELECT pg_try_advisory_lock(hashtext($1)) AS locked, pg_backend_pid() AS pid', [BOOT_SYNC_LOCK_KEY]);
     expect(locked).toBe(true);
     expect(await instance(second).syncNeverSynced('boot')).toMatchObject({ ran: false });
     await holder.destroy();
+    // The client closing does not wait for the server to end the session;
+    // the lock goes when the backend does, so wait for that, not a fixed time.
+    for (let i = 0; i < 100; i++) {
+      const alive = await second.query('SELECT 1 FROM pg_stat_activity WHERE pid = $1', [pid]);
+      if (alive.length === 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
     expect(await instance(second).syncNeverSynced('boot')).toMatchObject({ ran: true });
   });
 });

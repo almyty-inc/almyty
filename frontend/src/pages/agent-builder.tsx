@@ -12,7 +12,7 @@ import { BuilderToolbar } from '@/components/agents/builder/builder-toolbar'
 import { NextStepsBar } from '@/components/agents/builder/next-steps-bar'
 import { TestPanel } from '@/components/agents/builder/test-panel'
 import { CanvasArea } from '@/components/agents/builder/canvas-area'
-import { AutonomousConfig } from '@/components/agents/builder/autonomous-config'
+import { AutonomousConfig, type AutonomousConfigProps } from '@/components/agents/builder/autonomous-config'
 import { modelsFromAgent, modelsPayload, modelsProblems, newAgentModels } from '@/components/agents/builder/agent-models'
 import { workflowIssues, type BuilderIssue, type GraphNode, type GraphEdge } from '@/components/agents/builder/validate-graph'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
@@ -59,7 +59,8 @@ export function AgentBuilderPage() {
   // Main role, no model chosen yet, running Single.
   const [agentModels, setAgentModels] = useState<AgentModels>(newAgentModels)
   const [agentMemoryConfig, setAgentMemoryConfig] = useState<{ enabled?: boolean; autoSave?: boolean }>({ enabled: false, autoSave: false })
-  const [agentConfig, setAgentConfig] = useState<{ canCallAgents?: boolean; canCreateAgents?: boolean }>({ canCallAgents: false, canCreateAgents: false })
+  // The whole agentConfig as loaded (verify, constraints, run limits): a save sends it back whole.
+  const [agentConfig, setAgentConfig] = useState<AutonomousConfigProps['agentConfig']>({ canCallAgents: false, canCreateAgents: false })
 
   const [showTestPanel, setShowTestPanel] = useState(false)
   const [agentVisibility, setAgentVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })

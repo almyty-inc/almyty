@@ -163,7 +163,7 @@ Both of these get guessed wrong:
 - `store/` — Zustand stores: auth, organization, app.
 - `types/` — shared types, including the enums mirrored from backend entities.
 
-The sidebar order in `components/layout/dashboard-layout.tsx` follows the pipeline narrative and then configuration, with a divider between: Dashboard → APIs → Tools → Gateways → Agents → Apps → Runners → Workspaces → Credentials → Approvals, then Models → Memory → Analytics → Settings. Apps sits directly after Agents deliberately — shipping an agent as a product is the last link of the chain, so it stays above the fold.
+The sidebar order in `components/layout/dashboard-layout.tsx` follows the pipeline narrative and then configuration, with a divider between: Dashboard → APIs → Tools → Gateways → Agents → Apps → Runners → Workspaces → Connections → Approvals, then Models → Memory → Analytics → Settings. Apps sits directly after Agents deliberately — shipping an agent as a product is the last link of the chain, so it stays above the fold.
 
 ## Request paths
 

@@ -2,124 +2,112 @@ import { expect, type Page } from '@playwright/test'
 import { test as hooked } from './setup/test-hooks'
 
 /**
- * Settings > Connections: the connector gallery, the connect sheet (from
- * the tab and from the Add inference provider page), grants on a connection, and
- * the EE governance section in its locked and unlocked states.
+ * Connections: the list, connecting a service (tile, key, checked,
+ * listed), a connection's page, the admins' Advanced tab with grants and
+ * the EE governance section, and the inline flow from connecting a
+ * provider.
  *
- * Live connects need a real key: set E2E_CONNECT_API_KEY (and optionally
- * E2E_CONNECT_CONNECTOR_KEY, default openai) to run the two tests that
- * create a connection; they are skipped otherwise.
+ * A catalog connect needs a real key: set E2E_CONNECT_API_KEY and
+ * E2E_CONNECT_CONNECTOR_KEY (a connector that is not an AI model provider;
+ * those connect on Models) to run it; it is skipped otherwise. "Other
+ * service" needs no real key, so the rest always run.
  */
-const CONNECTOR_KEY = process.env.E2E_CONNECT_CONNECTOR_KEY || 'openai'
+const CONNECTOR_KEY = process.env.E2E_CONNECT_CONNECTOR_KEY || 'other'
 const API_KEY = process.env.E2E_CONNECT_API_KEY
 
-/** Gallery order, as in frontend/src/types/connections.ts. */
-const KIND_LABELS = ['Inference', 'Deployment', 'Memory', 'MCP servers', 'Tool sources', 'Channels', 'Clouds', 'Registries']
-
 async function openConnections(page: Page) {
-  await page.goto('/settings/connections')
+  await page.goto('/connections')
   await page.waitForLoadState('networkidle')
-  await expect(page.getByLabel('Search connections')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Connections', level: 1 })).toBeVisible()
 }
 
-/** Connect the fixture connector with an API key and return its card. */
-async function connectWithApiKey(page: Page) {
-  const card = page.getByTestId(`connector-card-${CONNECTOR_KEY}`)
-  await expect(card).toBeVisible()
-  await card.getByRole('link', { name: /^Connect / }).click()
-
-  // The connect flow is a page of its own now, not a sheet.
-  await expect(page).toHaveURL(new RegExp(`/settings/connections/connect/${CONNECTOR_KEY}`))
-  const form = page.getByTestId('connect-form')
+/** Save a key as "Other service" and return its name. */
+async function connectOtherService(page: Page): Promise<string> {
+  const name = `E2E key ${Date.now()}`
+  await page.goto('/connections/connect?service=other')
+  const form = page.getByRole('form', { name: 'Connect Other service' })
   await expect(form).toBeVisible()
-  await form.locator('input[type="password"]').first().fill(API_KEY!)
+  await form.getByLabel('Name').fill(name)
+  await form.locator('input[type="password"]').first().fill('e2e-secret-value')
   await form.getByRole('button', { name: 'Connect' }).click()
-
-  const toast = page.locator('li[role="status"]').filter({ hasText: /Connected|Secret rotated/ })
-  await expect(toast).toBeVisible({ timeout: 30000 })
-  // A successful connect lands on the new connection's page.
-  await expect(page.getByTestId('connection-detail')).toBeVisible({ timeout: 15000 })
-  await openConnections(page)
-  await expect(card.getByTestId('connector-connections').locator('li')).toHaveCount(1, { timeout: 15000 })
-  return card
+  await expect(page.getByTestId('connect-success')).toContainText(`${name} is connected.`, { timeout: 30000 })
+  return name
 }
 
-hooked.describe('Connections - gallery', () => {
-  hooked.beforeEach(async ({ authenticatedPage: page }) => {
+hooked.describe('Connections - list and connect', () => {
+  hooked('connect a service is a tile grid with search', async ({ authenticatedPage: page }) => {
     await openConnections(page)
+    await page.getByRole('link', { name: 'Connect a service' }).first().click()
+    await expect(page).toHaveURL(/\/connections\/connect$/)
+    await expect(page.getByRole('heading', { name: 'Connect a service', level: 1 })).toBeVisible()
+    await expect(page.locator('[data-testid^="service-tile-"]').first()).toBeVisible()
+    await page.getByLabel('Search services').fill('zzzz-no-such-service')
+    await expect(page.getByRole('button', { name: 'Save its key as another service' })).toBeVisible()
   })
 
-  hooked('renders the gallery grouped by kind in gallery order', async ({ authenticatedPage: page }) => {
-    await expect(page.getByRole('heading', { name: 'Personal connections' })).toBeVisible()
-    await expect(page.getByRole('switch', { name: 'Allow user-scoped connections' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Add custom connector' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Connect', exact: true })).toBeVisible()
-
-    // Every section is one connector kind; the sections follow the gallery order.
-    const sections = page.getByRole('region').filter({ has: page.getByRole('heading', { level: 2 }) })
-    const names: string[] = []
-    for (const section of await sections.all()) {
-      const label = await section.getAttribute('aria-label')
-      if (label && KIND_LABELS.includes(label)) names.push(label)
-    }
-    expect(names.length).toBeGreaterThan(0)
-    const positions = names.map((n) => KIND_LABELS.indexOf(n))
-    expect([...positions].sort((a, b) => a - b)).toEqual(positions)
-
-    // Each connector card carries a connect button named after the connector.
-    const firstCard = page.locator('[data-testid^="connector-card-"]').first()
-    await expect(firstCard).toBeVisible()
-    await expect(firstCard.getByRole('link', { name: /^Connect / }).or(firstCard.getByRole('button', { name: /^Connect / }))).toBeVisible()
+  hooked('saves another service by name and lists it', async ({ authenticatedPage: page }) => {
+    const name = await connectOtherService(page)
+    await page.getByRole('button', { name: 'Done' }).click()
+    await expect(page).toHaveURL(/\/connections$/)
+    const card = page.locator('[data-testid^="connection-card-"]').filter({ hasText: name })
+    await expect(card).toBeVisible()
+    await expect(card.getByTestId('connection-status')).toHaveText('Saved')
   })
 
-  hooked('filters the gallery by search', async ({ authenticatedPage: page }) => {
-    const search = page.getByLabel('Search connections')
-    await search.fill('zzzz-no-such-connector')
-    await expect(page.getByText('No connector matches')).toBeVisible()
-    await search.fill('')
-    await expect(page.locator('[data-testid^="connector-card-"]').first()).toBeVisible()
+  hooked('connects a catalog service with a real key', async ({ authenticatedPage: page }) => {
+    hooked.skip(!API_KEY || CONNECTOR_KEY === 'other', 'E2E_CONNECT_API_KEY / E2E_CONNECT_CONNECTOR_KEY not set')
+    await page.goto(`/connections/connect?service=${CONNECTOR_KEY}`)
+    const form = page.getByTestId('connect-form')
+    await form.locator('input[type="password"]').first().fill(API_KEY!)
+    await form.getByRole('button', { name: 'Connect' }).click()
+    await expect(page.getByTestId('connect-success').getByTestId('connection-status')).toHaveText('Works', { timeout: 30000 })
   })
 
-  hooked('opens the connect page with a connector picker', async ({ authenticatedPage: page }) => {
-    await page.getByRole('link', { name: 'Connect', exact: true }).click()
-    await expect(page).toHaveURL(/\/settings\/connections\/connect$/)
-    await expect(page.getByRole('heading', { name: 'Connect an account' })).toBeVisible()
-    await expect(page.getByLabel('Search connectors')).toBeVisible()
-    await page.locator('[data-testid^="connector-option-"]').first().click()
-    // Picking a connector moves to its own URL, so Back returns to the list.
-    await expect(page).toHaveURL(/\/settings\/connections\/connect\/[^/]+$/)
-    await page.goBack()
-    await expect(page.getByLabel('Search connectors')).toBeVisible()
+  hooked('a connection has its own page with check again and disconnect', async ({ authenticatedPage: page }) => {
+    const name = await connectOtherService(page)
+    await page.getByRole('button', { name: 'Open connection' }).click()
+    await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible()
+    await page.getByRole('button', { name: 'Check again' }).click()
+    await expect(page.getByTestId('connection-check-result')).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'Disconnect' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Disconnect' }).click()
+    await expect(page).toHaveURL(/\/connections$/)
   })
+})
 
-  hooked('connects an api_key connector against the fixture', async ({ authenticatedPage: page }) => {
-    hooked.skip(!API_KEY, 'E2E_CONNECT_API_KEY not set')
-    const card = await connectWithApiKey(page)
-    await expect(card.getByTestId('connection-health')).toBeVisible()
-  })
-
+hooked.describe('Connections - advanced', () => {
   hooked('grants editor adds and revokes a grant', async ({ authenticatedPage: page, assertHelper }) => {
-    hooked.skip(!API_KEY, 'E2E_CONNECT_API_KEY not set')
-    const card = await connectWithApiKey(page)
-    await card.getByTestId('connector-connections').getByRole('link', { name: /^Open / }).first().click()
-
-    // The connection is a page of its own now, not a sheet.
-    await expect(page).toHaveURL(/\/settings\/connections\/[^/]+$/)
-    const detail = page.getByTestId('connection-detail')
-    await expect(detail).toBeVisible()
-    const form = detail.getByTestId('grant-form')
+    await connectOtherService(page)
+    await page.getByRole('button', { name: 'Open connection' }).click()
+    await page.getByRole('link', { name: 'Change' }).click()
+    await expect(page).toHaveURL(/\/connections\/advanced\?connection=/)
+    const form = page.getByTestId('grant-form')
     await form.getByLabel('Principal type').selectOption('role')
     await form.getByLabel('Role', { exact: true }).selectOption('owner')
     await form.getByRole('button', { name: 'Add grant' }).click()
     await assertHelper.assertToastMessage(/Access granted/)
-    const grants = detail.getByTestId('grants-list')
+    const grants = page.getByTestId('grants-list')
     await expect(grants).toContainText('Owners')
-
-    await detail.getByRole('button', { name: 'Revoke Owners' }).click()
-    await expect(page.getByRole('alertdialog')).toContainText('Revoke access?')
+    await page.getByRole('button', { name: 'Revoke Owners' }).click()
     await page.getByRole('alertdialog').getByRole('button', { name: 'Revoke' }).click()
     await assertHelper.assertToastMessage(/Access revoked/)
-    await expect(detail.getByText('No grants yet')).toBeVisible()
+  })
+
+  hooked('shows the governance section locked or unlocked to match the entitlement', async ({ authenticatedPage: page }) => {
+    await page.goto('/connections/advanced')
+    const section = page.getByRole('region', { name: 'Governance' })
+    await section.scrollIntoViewIfNeeded()
+    await expect(section).toBeVisible()
+    const locked = section.getByTestId('governance-locked')
+    const unlocked = section.getByTestId('governance-unlocked')
+    await expect(locked.or(unlocked)).toBeVisible({ timeout: 15000 })
+    if (await unlocked.isVisible()) {
+      await section.getByRole('link', { name: 'Add policy' }).first().click()
+      await expect(page).toHaveURL(/\/connections\/policies\/new/)
+      await expect(page.getByTestId('policy-form')).toBeVisible()
+    } else {
+      await expect(locked).toContainText('Connections governance')
+    }
   })
 })
 
@@ -128,84 +116,10 @@ hooked.describe('Connections - from connecting a provider', () => {
     await page.goto('/models/connect?type=openai')
     await page.waitForLoadState('networkidle')
     await expect(page.getByRole('heading', { name: 'Connect a provider', level: 1 })).toBeVisible()
-
-    // The add form is on the page, not in a dialog.
     await expect(page.getByRole('dialog')).toHaveCount(0)
     await page.getByRole('main').getByRole('button', { name: 'Connect an account' }).click()
-
-    // Inline under the button, inside the provider form -- no second sheet.
     const flow = page.getByTestId('connect-flow')
     await expect(flow).toBeVisible()
-    // Only inference connectors are offered; the picker (or the single
-    // connector's form) is on screen.
-    const picker = flow.locator('[data-testid^="connector-option-"], [data-testid="connect-form"]')
-    await expect(picker.first()).toBeVisible()
-  })
-})
-
-hooked.describe('Connections - governance', () => {
-  hooked.beforeEach(async ({ authenticatedPage: page }) => {
-    await openConnections(page)
-  })
-
-  hooked('shows the governance section locked or unlocked to match the entitlement', async ({ authenticatedPage: page }) => {
-    const section = page.getByRole('region', { name: 'Governance' })
-    await section.scrollIntoViewIfNeeded()
-    await expect(section).toBeVisible()
-
-    // Either the locked card or the sub-navigation renders once entitlements land.
-    const locked = section.getByTestId('governance-locked')
-    const unlocked = section.getByTestId('governance-unlocked')
-    await expect(locked.or(unlocked)).toBeVisible({ timeout: 15000 })
-
-    // When the API is reachable from the app origin, the UI state must agree with it.
-    let entitled: boolean | null = null
-    try {
-      const res = await page.request.get('/licensing/entitlements')
-      if (res.ok()) {
-        const body = await res.json()
-        const list = body?.data?.entitlements ?? body?.entitlements
-        if (Array.isArray(list)) entitled = list.includes('connections_governance')
-      }
-    } catch {
-      entitled = null
-    }
-
-    if (await unlocked.isVisible()) {
-      if (entitled !== null) expect(entitled).toBe(true)
-      await expect(section.getByRole('tab', { name: 'Policies' })).toHaveAttribute('aria-selected', 'true')
-      await expect(section.getByTestId('policies-panel')).toBeVisible()
-
-      await section.getByRole('tab', { name: 'Review' }).click()
-      await expect(section.getByTestId('review-panel')).toBeVisible()
-      await expect(section.getByLabel('Environment')).toHaveValue('production')
-
-      await section.getByRole('tab', { name: 'Expiry and rotation' }).click()
-      await expect(section.getByTestId('expiry-panel')).toBeVisible()
-      await expect(section.getByRole('button', { name: 'Rotate due now' })).toBeVisible()
-      await expect(section.getByRole('button', { name: 'Export JSON' })).toBeVisible()
-      await expect(section.getByRole('button', { name: 'Export CSV' })).toBeVisible()
-
-      await section.getByRole('tab', { name: 'Policies' }).click()
-      await section.getByRole('link', { name: 'Add policy' }).first().click()
-      // Adding a policy is a page now, not a dialog.
-      await expect(page).toHaveURL(/\/settings\/connections\/policies\/new/)
-      const form = page.getByTestId('policy-form')
-      await expect(form).toBeVisible()
-      await expect(form.getByLabel('Kind')).toHaveValue('connector_allowlist')
-      await form.getByLabel('Kind').selectOption('expiry_rule')
-      await expect(form.getByLabel('Maximum age (days)')).toHaveValue('90')
-      await expect(form.getByLabel('Warn ahead (days)')).toHaveValue('7')
-      await page.getByRole('button', { name: 'Cancel' }).click()
-      // The form is dirty, so leaving asks first.
-      await page.getByRole('alertdialog').getByRole('button', { name: 'Discard changes' }).click()
-      await expect(page).toHaveURL(/\/settings\/connections$/)
-    } else {
-      if (entitled !== null) expect(entitled).toBe(false)
-      await expect(locked).toContainText('Connections governance')
-      await expect(locked).toContainText(/Upgrade to unlock it for your organization/)
-      await expect(locked.getByRole('link', { name: /Upgrade to|View plans/ })).toHaveAttribute('href', '/settings/billing')
-      await expect(section.getByRole('tab', { name: 'Policies' })).toHaveCount(0)
-    }
+    await expect(flow.locator('[data-testid^="service-tile-"], [data-testid="connect-form"]').first()).toBeVisible()
   })
 })

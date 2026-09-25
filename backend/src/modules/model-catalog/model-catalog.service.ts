@@ -1,10 +1,10 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 
 import { Model, ModelCapabilities, ModelPricing, ModelPrivacyTier } from '../../entities/model.entity';
 import { ModelVersion } from '../../entities/model-version.entity';
-import { LlmProvider, LlmProviderStatus, LlmProviderType } from '../../entities/llm-provider.entity';
+import { LlmProvider, LlmProviderStatus, LlmProviderType, isSelfHostedOllama } from '../../entities/llm-provider.entity';
 import { Conversation } from '../../entities/conversation.entity';
 import { MessageRole } from '../../entities/message.entity';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
@@ -96,6 +96,8 @@ export class ModelCatalogService {
   /** Per provider id: the sync currently running, and when the last one finished (see syncInBackground). */
   private readonly syncInFlight = new Map<string, Promise<ProviderSyncResult | null>>();
   private readonly syncedAt = new Map<string, number>();
+  /** Per org: the background run pricing cards a sync created unpriced (see pricePendingCards). */
+  private readonly pricingInFlight = new Map<string, Promise<void>>();
 
   constructor(
     @InjectRepository(Model) private readonly models: Repository<Model>,
@@ -154,9 +156,11 @@ export class ModelCatalogService {
     }
     let providerType: string | null = null;
     let checkedProvider = false;
+    let providerRow: LlmProvider | null = null;
     if (input.providerId) {
       const provider = await this.providers.findOne({ where: { id: input.providerId, organizationId } });
       if (!provider) throw new NotFoundException('Provider not found');
+      providerRow = provider;
       providerType = provider.type;
       checkedProvider = providerChecked(provider);
     } else {
@@ -199,7 +203,7 @@ export class ModelCatalogService {
       lastValidatedAt: checkedProvider ? new Date() : null,
       metadata: checkedProvider ? { ...(input.metadata ?? {}), checkedBy: 'provider_check' } : input.metadata ?? null,
     });
-    this.applyFeedPrice(card);
+    this.applyFeedPrice(card, providerRow);
     let saved: Model;
     try {
       saved = await this.models.save(card);
@@ -283,6 +287,9 @@ export class ModelCatalogService {
     // An empty list means the vendor could not be asked, so only a list
     // with models in it counts as synced (see CatalogWarmupService).
     if (listed.length > 0) await this.markModelsSynced(organizationId, providerId);
+    // A model the feed could not price when its card was made: the feed may
+    // be empty on this replica or older than the model.
+    if (created.some((c) => !c.pricing && !c.pricingOverride)) this.pricePendingCards(organizationId);
     // A key check that finished while this sync was listing only marked
     // the cards that existed then; the ones just created missed it.
     if (created.some((c) => c.validationStatus === 'never')) {
@@ -452,15 +459,41 @@ export class ModelCatalogService {
       providerId: provider.id,
       providerType: provider.type,
       capabilities: {},
-      privacyTier: provider.type === LlmProviderType.OLLAMA ? 'local' : 'public',
+      // Local only for an Ollama server someone runs; Ollama Cloud is a public service.
+      privacyTier: isSelfHostedOllama(provider) ? 'local' : 'public',
       pricingSource: 'unpriced',
       status: 'active',
       validationStatus: checked ? 'passed' : 'never',
       lastValidatedAt: checked ? provider.lastHealthCheckAt ?? new Date() : null,
       metadata: checked ? { ...metadata, checkedBy: 'provider_check' } : metadata,
     });
-    this.applyFeedPrice(card);
+    this.applyFeedPrice(card, provider);
     return card;
+  }
+
+  /**
+   * Bring the cards in step with the readiness rule, with no vendor call:
+   * every card still waiting ('never') of a provider whose key check has
+   * passed is marked checked, as applyProviderCheck would have when that
+   * check passed. It covers the cards the check never saw: ones created
+   * before the rule existed, when a model was usable only after a check of
+   * its own, and ones a sync created while the provider read as unchecked.
+   * Without it those stay "Not available" under a provider that shows "Key
+   * works" until someone checks the key again.
+   *
+   * Run at boot, before each sweep, and by GET /models whenever it would
+   * show a waiting card. Returns how many cards changed.
+   */
+  async reconcileReadiness(organizationId?: string): Promise<number> {
+    const where: Record<string, any> = { status: LlmProviderStatus.ACTIVE, isHealthy: true, lastHealthCheckAt: Not(IsNull()) };
+    if (organizationId) where.organizationId = organizationId;
+    const providers = await this.providers.find({ where, order: { createdAt: 'ASC' } });
+    let changed = 0;
+    for (const provider of providers) {
+      if (!providerChecked(provider)) continue;
+      changed += await this.applyProviderCheck(provider.organizationId, provider.id, { passed: true });
+    }
+    return changed;
   }
 
   /**
@@ -613,10 +646,14 @@ export class ModelCatalogService {
     return { passed, model: saved, latencyMs, error: saved.lastValidationError ?? undefined };
   }
 
-  /** Feed price at registration time; the daily job keeps it fresh afterwards. */
-  private applyFeedPrice(card: Model): void {
+  /**
+   * Price a new card from the feed. `provider` is the row the card is
+   * served by: an Ollama server someone runs is free per token, Ollama
+   * Cloud is not, and only the row can tell them apart.
+   */
+  private applyFeedPrice(card: Model, provider?: Pick<LlmProvider, 'type' | 'configuration'> | null): void {
     if (card.pricingOverride || !this.priceFeed || !card.providerType) return;
-    const quote = this.priceFeed.lookup(card.providerType, card.vendorModelId);
+    const quote = this.priceFeed.lookup(card.providerType, card.vendorModelId, { selfHosted: provider ? isSelfHostedOllama(provider) : undefined });
     if (!quote) return;
     card.pricing = { inPerMTok: quote.inPerMTok, outPerMTok: quote.outPerMTok, currency: quote.currency ?? 'USD' };
     card.pricingSource = quote.source;
@@ -624,6 +661,33 @@ export class ModelCatalogService {
     if (!card.contextLength && quote.contextLength) card.contextLength = quote.contextLength;
 
     card.metadata = { ...(card.metadata ?? {}), pricingFeedSource: quote.source };
+  }
+
+  /**
+   * Cards a sync just created that the feed could not price: refresh the
+   * feed when it is empty or stale, then price the org's catalog, in the
+   * background (one run per org at a time). Without this a newly listed
+   * model stayed unpriced until the daily refresh.
+   */
+  private pricePendingCards(organizationId: string): void {
+    if (!this.priceFeed || this.pricingInFlight.has(organizationId)) return;
+    const feed = this.priceFeed;
+    const run = (async () => {
+      try {
+        await feed.ensureFresh();
+        await feed.applyToCatalog(organizationId);
+      } catch (err: any) {
+        this.logger.warn(`pricing new models for org ${organizationId} failed: ${err?.message ?? err}`);
+      } finally {
+        this.pricingInFlight.delete(organizationId);
+      }
+    })();
+    this.pricingInFlight.set(organizationId, run);
+  }
+
+  /** The background pricing run started for an org, if any (tests await it). */
+  pricingRun(organizationId: string): Promise<void> | undefined {
+    return this.pricingInFlight.get(organizationId);
   }
 
   private audit(card: Model, action: AuditAction, userId: string | undefined, details: Record<string, any>): void {
