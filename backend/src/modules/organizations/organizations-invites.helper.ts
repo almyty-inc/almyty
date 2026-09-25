@@ -168,6 +168,7 @@ export class OrganizationsInvitesHelper {
             type: 'invite.received',
             organizationId,
             userIds: [user.id],
+            toInvitees: true,
             title: `You're invited to ${org.name}`,
             body: `${inviterName} invited you to join ${org.name} as ${inviteUserDto.role}.`,
             link: `/invite/accept?token=${encodeURIComponent(inviteToken)}`,

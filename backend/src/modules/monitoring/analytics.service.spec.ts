@@ -56,7 +56,7 @@ class FakeRequestLogQueryBuilder {
   }
 
   private applyClause(clause: string, params: any) {
-    if (clause.includes('organizationId')) {
+    if (clause === 'log.organizationId = :orgId') {
       this.orgId = params.orgId;
     } else if (clause.includes('log.timestamp >= :since')) {
       this.since = params.since;
@@ -294,7 +294,9 @@ describe('AnalyticsService — request_logs org scope is index-shaped', () => {
 
     await service.getOverview('org-1', 'user-1');
 
-    const orgScopes = recorded.wheres.filter((c) => c.includes('organizationId'));
+    // The visibility fragments (NOT EXISTS ... on the resource tables)
+    // name organizationId too; they are not the row's org scope.
+    const orgScopes = recorded.wheres.filter((c) => c.includes('organizationId') && !c.startsWith('NOT EXISTS'));
     expect(orgScopes.length).toBeGreaterThanOrEqual(4);
     expect(orgScopes.every((c) => c === 'log.organizationId = :orgId' || c.startsWith('session.') || c.startsWith('exec.'))).toBe(
       true,
