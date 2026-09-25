@@ -12,7 +12,7 @@ import { AccessPolicyService, ResourceLike } from './access-policy.service';
  *
  * A private tool or agent may only be referenced by the same owner's own
  * private agents (assertAttachable), and gateways serve a private tool only
- * when the gateway is private to the same owner (servableOnGateway). So
+ * when the gateway is private to the same owner (gateway-servable). So
  * flipping a shared tool or agent to "just me" silently detaches it from
  * every org or team agent that uses it -- they fail at run time -- and from
  * every shared gateway that serves it.

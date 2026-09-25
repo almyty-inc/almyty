@@ -5,7 +5,6 @@ import {
   canReference,
   isOthersPrivate,
   resolveVisibilityWrite,
-  servableOnGateway,
   withoutOthersPrivate,
 } from '../private-visibility';
 import { PrivateAgentGuard } from '../private-resource.guard';
@@ -102,15 +101,6 @@ describe('private visibility helpers', () => {
         expect(e.message).toContain('t1');
         expect(e.message).not.toContain('mine');
       }
-    });
-  });
-
-  describe('servableOnGateway', () => {
-    it('serves a private tool only through a gateway private to the same owner', () => {
-      expect(servableOnGateway([privateTool, orgTool], { visibility: 'org', ownerUserId: OWNER })).toEqual([orgTool]);
-      expect(servableOnGateway([privateTool, orgTool], { visibility: 'private', ownerUserId: OTHER })).toEqual([orgTool]);
-      expect(servableOnGateway([privateTool, orgTool], { visibility: 'private', ownerUserId: OWNER })).toEqual([privateTool, orgTool]);
-      expect(servableOnGateway([privateTool], null)).toEqual([]);
     });
   });
 

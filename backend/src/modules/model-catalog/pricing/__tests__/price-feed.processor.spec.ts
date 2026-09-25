@@ -7,6 +7,7 @@ import {
   PriceFeedProcessor,
 } from '../price-feed.processor';
 import { PriceFeedService } from '../price-feed.service';
+import { snapshotEnv } from '../../../../test/env';
 
 describe('PriceFeedProcessor', () => {
   let processor: PriceFeedProcessor;
@@ -22,10 +23,10 @@ describe('PriceFeedProcessor', () => {
     isDisabled: jest.Mock;
   };
 
-  const originalEnv = { ...process.env };
+  const restore = snapshotEnv('MODEL_PRICE_FEED_CRON', 'MODEL_PRICE_FEED_DISABLED', 'NODE_ENV');
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    restore();
     jest.clearAllMocks();
   });
 

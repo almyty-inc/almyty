@@ -19,6 +19,20 @@ export interface Harness {
   executeSpy: jest.SpyInstance;
 }
 
+/**
+ * The timeout a harness tool runs under unless a spec is testing timeouts.
+ *
+ * A tool's timer covers every worker it waits on, and each worker here
+ * boots through ts-node (transpiling sandbox-worker.ts and its imports):
+ * about 350ms on an idle machine, several seconds when the suite shares
+ * the CPU with other runs. A tight budget made depth, fan-out and pool
+ * assertions -- none of which is about time -- race the machine's load:
+ * the self-invoking tool waits on four boots in a row, and under load it
+ * answered "timed out" instead of "depth". This budget is far above any
+ * boot, and still ends a genuine hang well inside the spec's own timeout.
+ */
+export const UNTIMED_TOOL_TIMEOUT_MS = 60_000;
+
 export function jsTool(id: string, code: string, extra: Record<string, any> = {}): any {
   return {
     id,
@@ -27,7 +41,7 @@ export function jsTool(id: string, code: string, extra: Record<string, any> = {}
     status: ToolStatus.ACTIVE,
     type: ToolType.FUNCTION,
     code,
-    configuration: { timeout: 8000 },
+    configuration: { timeout: UNTIMED_TOOL_TIMEOUT_MS },
     api: null,
     operation: null,
     ...extra,

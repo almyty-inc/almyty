@@ -7,6 +7,7 @@ import { InvalidRegistryUriError, parseRegistryUri } from '../registry-uri';
 import { InvalidManifestError, manifestSha, validateManifest } from '../manifest';
 import { MANIFEST_FILE, ModelRegistryService, RegistryObjectStore, RegistryPinMismatchError } from '../model-registry.service';
 import { Credential } from '../../../entities/credential.entity';
+import { snapshotEnv } from '../../../test/env';
 
 const manifest = () => ({
   schemaVersion: 1 as const,
@@ -219,9 +220,9 @@ describe('ModelRegistryService connections', () => {
 
   describe('single-tenant seed from the environment', () => {
     const env = { MODEL_REGISTRY_S3_BUCKET: 'selfhost', MODEL_REGISTRY_S3_ACCESS_KEY: 'AK', MODEL_REGISTRY_S3_SECRET_KEY: 'SK', MODEL_REGISTRY_S3_REGION: 'us-west-2' };
-    let saved: Record<string, string | undefined>;
-    beforeEach(() => { saved = { ...process.env }; Object.assign(process.env, env); });
-    afterEach(() => { process.env = saved as any; });
+    let restore: () => void;
+    beforeEach(() => { restore = snapshotEnv(...Object.keys(env)); Object.assign(process.env, env); });
+    afterEach(() => restore());
 
     it('creates one org-scoped connection when exactly one organization exists and has none', async () => {
       const encrypt = jest.spyOn(Credential.prototype, 'encryptSensitiveData');

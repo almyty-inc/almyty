@@ -1,10 +1,16 @@
 import { MetricsRetentionService } from './metrics-retention.service';
+import { restoreEnv, snapshotEnv } from '../../test/env';
 
 describe('MetricsRetentionService', () => {
-  const ORIG = { ...process.env };
+  const ENV_KEYS = ['METRICS_RETENTION_DAYS', 'METRICS_RETENTION_BATCH'];
+  const restore = snapshotEnv(...ENV_KEYS);
 
   function build(env: Record<string, string | undefined> = {}) {
-    process.env = { ...ORIG, ...env };
+    restore();
+    for (const [key, value] of Object.entries(env)) {
+      if (!ENV_KEYS.includes(key)) throw new Error(`build(): ${key} is not snapshotted`);
+      restoreEnv(key, value);
+    }
     const usageMetric: any = { query: jest.fn() };
     const requestLog: any = { query: jest.fn() };
     const redis: any = { set: jest.fn(), eval: jest.fn().mockResolvedValue(1) };
@@ -13,7 +19,7 @@ describe('MetricsRetentionService', () => {
   }
 
   afterEach(() => {
-    process.env = { ...ORIG };
+    restore();
     jest.clearAllMocks();
   });
 
