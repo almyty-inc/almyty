@@ -35,6 +35,16 @@ const DEFAULT_MAX_TIMEOUT_MS = 300_000;
  * wedged; either way the execution fails rather than hanging.
  */
 const DEFAULT_BOOT_TIMEOUT_MS = 30_000;
+/**
+ * The longest one execution may hold its pool slot, all phases together:
+ * installing its dependencies, booting the worker and running the tool,
+ * counted from the moment the slot is taken. The boot cap and the tool's
+ * timeout each bound one phase; without this the two added up (30s boot
+ * plus a 300s run held a slot for 330s) and installing dependencies was
+ * bounded by nothing. Defaults to the timeout ceiling, so a tool asking
+ * for the full 300s gets what remains of it after its own start-up.
+ */
+const DEFAULT_MAX_SLOT_MS = DEFAULT_MAX_TIMEOUT_MS;
 
 /**
  * Compiled files outside the worker's directory that the worker's net
@@ -195,6 +205,11 @@ export class NodeSandboxService {
     // How long a worker may take to boot before its budget starts. Not
     // charged to the tool, and not clamped by it either.
     const bootTimeoutMs = limits.bootTimeoutMs;
+    // The slot deadline: no phase below runs past it (see DEFAULT_MAX_SLOT_MS).
+    const slotMs = limits.maxSlotMs;
+    const slotDeadline = start + slotMs;
+    const slotLeft = () => Math.max(0, slotDeadline - Date.now());
+    const slotExceeded = () => `Sandbox execution exceeded its ${slotMs}ms slot`;
     const memoryLimitMb = request.memoryLimitMb ?? DEFAULT_MEMORY_LIMIT_MB;
     // Handed to nested `tools.invoke` calls instead of the outer request's
     // signal: aborted when this worker ends for any reason, and also when
@@ -202,12 +217,15 @@ export class NodeSandboxService {
     const nestedAbort = new AbortController();
 
     try {
-      // Resolve dependencies if any
+      // Resolve dependencies if any. Within the slot: an install that does
+      // not finish in time fails this execution and frees its slot. The
+      // install itself carries on and lands in the cache for the next run.
       const modulePaths: string[] = [];
       if (request.dependencies && Object.keys(request.dependencies).length > 0) {
-        const depResult = await this.depManager.ensureInstalled(
-          request.dependencies,
-          request.npmRegistry,
+        const depResult = await beforeDeadline(
+          this.depManager.ensureInstalled(request.dependencies, request.npmRegistry),
+          slotLeft(),
+          slotExceeded,
         );
         modulePaths.push(depResult.installDir);
       }
@@ -273,26 +291,32 @@ export class NodeSandboxService {
         // it was spawned: under load, starting a worker (isolate, permission
         // model, net guard, require hooks) can take a good part of a short
         // budget, and that time is the platform's, not the tool's. A worker
-        // that never gets that far is still stopped, by its own cap.
+        // that never gets that far is still stopped, by its own cap. Both
+        // timers end at the slot deadline at the latest, whichever comes
+        // first, and say which one it was.
+        const bootLeft = slotLeft();
         timer = setTimeout(() => {
           settle({
             success: false,
-            error: `Sandbox worker did not start within ${bootTimeoutMs}ms`,
+            error: bootTimeoutMs <= bootLeft
+              ? `Sandbox worker did not start within ${bootTimeoutMs}ms`
+              : slotExceeded(),
             executionTimeMs: Date.now() - start,
           });
-        }, bootTimeoutMs);
+        }, Math.min(bootTimeoutMs, bootLeft));
         const onReady = () => {
           // Only the first one counts: the budget is never restarted.
           if (ready || settled) return;
           ready = true;
           clearTimeout(timer);
+          const runLeft = slotLeft();
           timer = setTimeout(() => {
             settle({
               success: false,
-              error: `Execution timed out after ${timeoutMs}ms`,
+              error: timeoutMs <= runLeft ? `Execution timed out after ${timeoutMs}ms` : slotExceeded(),
               executionTimeMs: Date.now() - start,
             });
-          }, timeoutMs);
+          }, Math.min(timeoutMs, runLeft));
         };
 
         // Wire up the caller's AbortSignal. If it fires mid-flight,
@@ -616,6 +640,7 @@ export class NodeSandboxService {
     maxNestedWorkers: number;
     maxTimeoutMs: number;
     bootTimeoutMs: number;
+    maxSlotMs: number;
   } {
     const maxWorkers = positiveIntFromEnv('SANDBOX_MAX_WORKERS', DEFAULT_MAX_WORKERS);
     const maxQueueSize = positiveIntFromEnv('SANDBOX_MAX_QUEUE_SIZE', DEFAULT_MAX_QUEUE_SIZE);
@@ -635,6 +660,7 @@ export class NodeSandboxService {
       maxNestedWorkers: positiveIntFromEnv('SANDBOX_MAX_NESTED_WORKERS', maxWorkers * 4),
       maxTimeoutMs: positiveIntFromEnv('SANDBOX_MAX_TIMEOUT_MS', DEFAULT_MAX_TIMEOUT_MS),
       bootTimeoutMs: positiveIntFromEnv('SANDBOX_BOOT_TIMEOUT_MS', DEFAULT_BOOT_TIMEOUT_MS),
+      maxSlotMs: positiveIntFromEnv('SANDBOX_MAX_SLOT_MS', DEFAULT_MAX_SLOT_MS),
     };
   }
 }
@@ -655,4 +681,17 @@ export function effectiveSandboxTimeoutMs(requested: unknown, maxTimeoutMs: numb
       ? requested
       : DEFAULT_TIMEOUT_MS;
   return Math.min(wanted, maxTimeoutMs);
+}
+
+/**
+ * `work`, or a rejection once `ms` have passed, whichever settles first.
+ * The work is not cancelled -- nothing here can cancel it -- only no longer
+ * waited on.
+ */
+function beforeDeadline<T>(work: Promise<T>, ms: number, message: () => string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message())), ms);
+  });
+  return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
 }
