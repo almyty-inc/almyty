@@ -19,13 +19,16 @@ import { LlmModelsHelper } from './llm-models.helper';
 export class NoModelAvailableError extends BadRequestException {
   readonly code = 'NO_MODEL_CONFIGURED';
 
-  constructor(provider: Pick<LlmProvider, 'id' | 'name' | 'type'>, detail: string) {
+  constructor(provider: Pick<LlmProvider, 'id' | 'name' | 'type'>, detail: string, cause?: unknown) {
     super({
       code: 'NO_MODEL_CONFIGURED',
       message:
         `No model is configured for provider "${provider.name ?? provider.id}" (${provider.type}) and ${detail}. ` +
         'Set a model on the provider, or on the agent node that uses it.',
     });
+    // The vendor's own answer (a 401 on the listing call, say), so a caller
+    // can tell a refused key from a vendor with nothing to list.
+    if (cause !== undefined) (this as { cause?: unknown }).cause = cause;
   }
 }
 
@@ -151,7 +154,7 @@ export class DefaultModelResolver {
       models = await this.modelsHelper.fetchModelsFromProvider(provider);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      throw new NoModelAvailableError(provider, `the vendor could not list its models (${reason})`);
+      throw new NoModelAvailableError(provider, `the vendor could not list its models (${reason})`, error);
     }
     const ids = models.map((m) => m.id).filter((id): id is string => typeof id === 'string' && id.length > 0);
     if (ids.length === 0) {

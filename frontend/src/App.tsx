@@ -51,13 +51,9 @@ const ToolDetailPage = lazy(() => import('@/pages/tool-detail').then(m => ({ def
 const ToolNewPage = lazy(() => import('@/pages/tool-new').then(m => ({ default: m.ToolNewPage })))
 const ToolPublishPage = lazy(() => import('@/pages/tool-publish').then(m => ({ default: m.ToolPublishPage })))
 const McpServerNewPage = lazy(() => import('@/pages/mcp-server-new').then(m => ({ default: m.McpServerNewPage })))
-const LlmProvidersPage = lazy(() => import('@/pages/llm-providers').then(m => ({ default: m.LlmProvidersPage })))
-const LlmProviderDetailPage = lazy(() => import('@/pages/llm-provider-detail').then(m => ({ default: m.LlmProviderDetailPage })))
-const LlmProviderNewPage = lazy(() => import('@/pages/llm-provider-new').then(m => ({ default: m.LlmProviderNewPage })))
-const LlmProviderEditPage = lazy(() => import('@/pages/llm-provider-edit').then(m => ({ default: m.LlmProviderEditPage })))
 const ModelsPage = lazy(() => import('@/pages/models').then(m => ({ default: m.ModelsPage })))
-const ModelNewPage = lazy(() => import('@/pages/model-new').then(m => ({ default: m.ModelNewPage })))
-const ModelDetailPage = lazy(() => import('@/pages/model-detail').then(m => ({ default: m.ModelDetailPage })))
+const ConnectProviderPage = lazy(() => import('@/pages/models-connect').then(m => ({ default: m.ConnectProviderPage })))
+const ProviderPage = lazy(() => import('@/pages/provider').then(m => ({ default: m.ProviderPage })))
 const HostedModelPage = lazy(() => import('@/pages/hosted-model').then(m => ({ default: m.HostedModelPage })))
 const AnalyticsPage = lazy(() => import('@/pages/analytics').then(m => ({ default: m.AnalyticsPage })))
 const CredentialsPage = lazy(() => import('@/pages/credentials').then(m => ({ default: m.CredentialsPage })))
@@ -121,6 +117,7 @@ function ConnectionsRedirect() {
 }
 
 import { HostedChatPage } from '@/pages/hosted-chat'
+import { ConnectRedirect, ModelRedirect, ProviderRedirect, ProvidersRedirect } from '@/pages/models-redirects'
 import { AppsPage } from '@/pages/apps'
 import { AppDetailPage } from '@/pages/app-detail'
 import { currentTenantSlug } from '@/lib/tenant-host'
@@ -215,13 +212,16 @@ export function createAppRoutes() {
           <Route path="/workspaces/:id" element={<WorkspaceDetailPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/models" element={<ModelsPage />} />
-          <Route path="/models/new" element={<ModelNewPage />} />
+          <Route path="/models/connect" element={<ConnectProviderPage />} />
+          <Route path="/models/providers/:id" element={<ProviderPage />} />
           <Route path="/models/hosting/:deploymentId" element={<HostedModelPage />} />
-          <Route path="/models/:id" element={<ModelDetailPage />} />
-          <Route path="/llm-providers" element={<LlmProvidersPage />} />
-          <Route path="/llm-providers/new" element={<LlmProviderNewPage />} />
-          <Route path="/llm-providers/:id/edit" element={<LlmProviderEditPage />} />
-          <Route path="/llm-providers/:id" element={<LlmProviderDetailPage />} />
+          {/* Older addresses, each to the page that replaced it. */}
+          <Route path="/models/new" element={<ConnectRedirect />} />
+          <Route path="/models/:id" element={<ModelRedirect />} />
+          <Route path="/llm-providers" element={<ProvidersRedirect />} />
+          <Route path="/llm-providers/new" element={<ConnectRedirect />} />
+          <Route path="/llm-providers/:id/edit" element={<ProviderRedirect />} />
+          <Route path="/llm-providers/:id" element={<ProviderRedirect />} />
           <Route path="/analytics/budgets/new" element={<AnalyticsBudgetPage />} />
           <Route path="/analytics/budgets/:budgetId/edit" element={<AnalyticsBudgetPage />} />
           <Route path="/analytics/*" element={<AnalyticsPage />} />

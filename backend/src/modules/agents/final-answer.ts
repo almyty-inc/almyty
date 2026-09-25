@@ -1,5 +1,6 @@
 import type { Agent } from '../../entities/agent.entity';
 import type { AgentRun } from '../../entities/agent-run.entity';
+import { strategyWithholdsCandidates } from './autonomous-team';
 
 /**
  * The visitor-facing answer of a hosted chat run, written by a call that
@@ -40,18 +41,32 @@ export function verifiesFinalOutput(agentConfig: Agent['agentConfig'] | undefine
 }
 
 /**
+ * Whether a candidate answer of this agent's runs must be held back until
+ * it has been chosen or checked: a verify panel on the final output, or a
+ * multi-model strategy (cascade, best of N, panel, explore-extract-patch)
+ * that checks or judges before an answer is final. A surface shows such a
+ * run's answer only once it has one (hosted-chat.controller.ts).
+ */
+export function withholdsCandidateAnswers(
+  agent: Pick<Agent, 'agentConfig'> & Partial<Pick<Agent, 'models'>> | null | undefined,
+): boolean {
+  if (!agent) return false;
+  return verifiesFinalOutput(agent.agentConfig) || strategyWithholdsCandidates({ models: agent.models ?? null });
+}
+
+/**
  * Whether this run writes its answer with a separate no-tools call.
  *
  * Only a run whose surface asked for it: a streaming visitor surface. A
- * verify panel on the final output holds everything back until its
- * verdict anyway, so there the extra call would buy nothing and is not
- * made.
+ * verify panel on the final output, or a strategy that checks or judges
+ * candidates, holds everything back until the choice is made anyway, so
+ * there the extra call would buy nothing and is not made.
  */
 export function composesFinalAnswer(
   run: Pick<AgentRun, 'metadata'>,
-  agent: Pick<Agent, 'agentConfig'>,
+  agent: Pick<Agent, 'agentConfig'> & Partial<Pick<Agent, 'models'>>,
 ): boolean {
-  return run.metadata?.composeFinalAnswer === true && !verifiesFinalOutput(agent.agentConfig);
+  return run.metadata?.composeFinalAnswer === true && !withholdsCandidateAnswers(agent);
 }
 
 type ChatMessage = {

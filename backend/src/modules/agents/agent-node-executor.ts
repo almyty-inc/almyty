@@ -36,6 +36,7 @@ import { DEFAULT_SCORING_MODE, scoreOptions } from '../model-catalog/decide/opti
 import { InputSchemaViolation, schemaConstrainsAnything, schemaProblems } from './input-schema';
 import { describeLimitTrip } from './run-limits';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
+import { bestOfNJudgePrompt, consensusJudgePrompt, parseBestOfNPick, parseConsensus } from './strategies/judging';
 
 export interface NodeExecutionResult {
   output: any;
@@ -969,14 +970,11 @@ export class AgentNodeExecutor {
         const prompt =
           config.judgePrompt ||
           judgeConfig?.prompt ||
-          `You are a judge. Pick the best response from these options:\n\n${incomingOutputs.map((o: any, i: number) => `Option ${i + 1}: ${asText(o)}`).join('\n\n')}\n\nRespond with ONLY the number of the best option.`;
+          bestOfNJudgePrompt(incomingOutputs);
         const judged = await judgeCall([{ role: 'user' as any, content: prompt }]);
 
         const answer = typeof judged.output === 'string' ? judged.output : asText(judged.output);
-        const pick = parseInt(answer, 10);
-        const selectedIndex = Number.isNaN(pick)
-          ? 0
-          : Math.max(0, Math.min(pick - 1, incomingOutputs.length - 1));
+        const selectedIndex = parseBestOfNPick(answer, incomingOutputs.length).index;
 
         return {
           ...judged,
@@ -1008,55 +1006,21 @@ export class AgentNodeExecutor {
           };
         }
 
-        const prompt = [
-          'Several responses to the same question follow. Do two things.',
-          '',
-          '1. Count how many of them agree on the substance of the answer — the',
-          '   size of the largest group that says the same thing. Disagreement on',
-          '   wording is not disagreement.',
-          '2. Write the answer that group gives.',
-          '',
-          'Reply with a single JSON object and nothing else:',
-          '  {"agreeing": <integer>, "answer": "<the answer>"}',
-          '',
-          ...incomingOutputs.map((o: any, i: number) => `Response ${i + 1}: ${asText(o)}`),
-        ].join('\n');
-
-        const judged = await judgeCall([{ role: 'user' as any, content: prompt }]);
+        const judged = await judgeCall([{ role: 'user' as any, content: consensusJudgePrompt(incomingOutputs) }]);
         const raw = typeof judged.output === 'string' ? judged.output : asText(judged.output);
-
-        let agreeing: number | undefined;
-        let answer: string = raw;
-        const start = raw.indexOf('{');
-        const end = raw.lastIndexOf('}');
-        if (start !== -1 && end > start) {
-          try {
-            const parsed = JSON.parse(raw.slice(start, end + 1));
-            if (typeof parsed.agreeing === 'number') agreeing = parsed.agreeing;
-            if (typeof parsed.answer === 'string') answer = parsed.answer;
-          } catch {
-            // Keep the raw answer. A judge that did not return JSON still
-            // said something useful, and losing it to report a parse
-            // failure would be the worse trade — but the agreement is then
-            // genuinely unknown, and says so below rather than defaulting
-            // to a number nobody measured.
-          }
-        }
-
-        const agreement =
-          agreeing === undefined
-            ? undefined
-            : Math.max(0, Math.min(agreeing, incomingOutputs.length)) / incomingOutputs.length;
+        // A judge that did not return JSON still said something useful, so
+        // its text is kept -- but the agreement is then genuinely unknown,
+        // and unknown agreement is not consensus: a downstream condition
+        // node branching on this must not read "we could not tell" as
+        // "they agreed".
+        const { answer, agreement, consensusReached } = parseConsensus(raw, incomingOutputs.length, threshold);
 
         return {
           ...judged,
           output: {
             answer,
             agreement,
-            // Unknown agreement is not consensus. A downstream condition
-            // node branching on this must not read "we could not tell" as
-            // "they agreed".
-            consensusReached: agreement !== undefined && agreement >= threshold,
+            consensusReached,
             threshold,
             responses: incomingOutputs.length,
           },

@@ -1,30 +1,27 @@
 /**
  * The LLM node's Model field, now the shared ModelPicker.
  *
- * Radix renders a Select's placeholder whenever `value` matches no SelectItem,
- * and it does so silently. A saved model the provider's list does not return
- * -- a dated snapshot id, a fine-tune, a retired model -- used to read as
- * "Select model" while the node still held and executed the saved value.
- * The picker keeps such a value as its own option, so it stays on screen.
+ * A saved model the provider's list does not return -- a dated snapshot id,
+ * a fine-tune, a retired model -- once read as "Select model" while the
+ * node still held and executed the saved value. The picker keeps such a
+ * value on the field and in the list, so it stays on screen.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor, fireEvent } from '@testing-library/react'
+import { screen, waitFor, fireEvent, within } from '@testing-library/react'
 import type { Node } from '@xyflow/react'
 
 import { renderWithProviders } from '@/test/setup'
 import { NodeConfigPanel } from '../node-config-panel'
-import { llmProvidersApi } from '@/lib/api'
+import { modelsApi } from '@/lib/models-api'
 
 vi.mock('@/lib/api', () => ({
   llmProvidersApi: {
     getAll: vi.fn().mockResolvedValue([{ id: 'prov-1', name: 'OpenAI', type: 'openai' }]),
-    getModels: vi.fn(),
   },
   toolsApi: { getAll: vi.fn().mockResolvedValue([]) },
   agentsApi: { getAll: vi.fn().mockResolvedValue([]) },
 }))
-// No catalog cards, so the picker lists what the provider returns.
-vi.mock('@/lib/models-api', () => ({ modelsApi: { list: vi.fn().mockResolvedValue([]) } }))
+vi.mock('@/lib/models-api', () => ({ modelsApi: { list: vi.fn() } }))
 
 vi.mock('@/store/organization', () => ({
   useOrganizationStore: (selector?: (s: any) => unknown) => {
@@ -65,36 +62,40 @@ function renderPanel(model: string, onUpdateNode = vi.fn()) {
   return onUpdateNode
 }
 
+async function openPicker() {
+  const trigger = await screen.findByTestId('node-model-trigger')
+  await waitFor(() => expect(trigger).not.toBeDisabled())
+  fireEvent.click(trigger)
+  return screen.getByRole('listbox')
+}
+
 describe('LLM node model field', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(llmProvidersApi.getModels).mockResolvedValue([{ id: LISTED }] as any)
+    vi.mocked(modelsApi.list).mockResolvedValue([
+      { id: 'c1', name: LISTED, vendorModelId: LISTED, providerId: 'prov-1', status: 'active', selectable: true },
+    ] as any)
   })
 
   it('shows a saved model the provider does not list instead of a blank placeholder', async () => {
     renderPanel(SAVED_BUT_UNLISTED)
-
-    // The select only exists once the list has landed, so waiting for it is
-    // the signal that the loading state is over.
-    await screen.findByTestId('node-model-select')
-    await waitFor(() => expect(screen.getAllByText(SAVED_BUT_UNLISTED).length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getByTestId('node-model-value')).toHaveTextContent(SAVED_BUT_UNLISTED))
     expect(screen.queryByText('Select model')).not.toBeInTheDocument()
   })
 
-  it('selects from the provider list rather than asking for typed text', async () => {
-    renderPanel(LISTED)
-
-    await screen.findByTestId('node-model-select')
+  it('selects from the list rather than asking for typed text', async () => {
+    const onUpdateNode = renderPanel(SAVED_BUT_UNLISTED)
+    const list = await openPicker()
     expect(screen.queryByTestId('node-model-input')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Use a model id not in the list' })).toBeInTheDocument()
+    fireEvent.click(within(list).getByRole('option', { name: LISTED }))
+    expect(onUpdateNode).toHaveBeenLastCalledWith('llm_1', expect.objectContaining({ providerId: 'prov-1', model: LISTED }))
   })
 
-  it('writes a typed model id through the escape hatch, keeping the provider', async () => {
+  it('writes a model id that is not in the list, keeping the provider', async () => {
     const onUpdateNode = renderPanel(LISTED)
-    await screen.findByTestId('node-model-select')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Use a model id not in the list' }))
-    fireEvent.change(screen.getByTestId('node-model-input'), { target: { value: 'ft:gpt-4o:acme' } })
+    const list = await openPicker()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'ft:gpt-4o:acme' } })
+    fireEvent.click(within(list).getByRole('option', { name: /Use model id "ft:gpt-4o:acme"/ }))
 
     expect(onUpdateNode).toHaveBeenLastCalledWith('llm_1', expect.objectContaining({
       providerId: 'prov-1',

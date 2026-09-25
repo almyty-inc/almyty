@@ -1,9 +1,7 @@
 /**
- * LLM provider form schemas and shared types.
- *
- * Used by `pages/llm-providers.tsx` and the dialogs/columns under
- * `components/llm-providers/` to keep the create form, table, and detail
- * page in sync without re-declaring the entity shape in every file.
+ * Provider form rules and request bodies: what connecting a provider needs
+ * (checked before anything is sent) and the POST/PATCH bodies the connect
+ * form and a provider's page send.
  */
 import * as z from 'zod'
 
@@ -32,13 +30,13 @@ export const STRUCTURAL_FIELDS: Record<string, Array<{
   ],
   azure_openai: [
     { name: 'resourceName', label: 'Resource name', placeholder: 'my-openai-resource', required: true },
-    { name: 'deploymentName', label: 'Deployment name', placeholder: 'gpt-4o', required: true,
-      hint: 'The deployment name is what a call names as its model.' },
+    { name: 'deploymentName', label: 'Model name in Azure', placeholder: 'gpt-4o', required: true,
+      hint: 'The name you gave the model when you set it up in Azure. Calls use it as the model.' },
   ],
   azure_ai_foundry: [
     { name: 'resourceName', label: 'Resource name', placeholder: 'my-foundry-resource', required: true },
-    { name: 'deploymentName', label: 'Deployment name', placeholder: 'deepseek-v3', required: true,
-      hint: 'The deployment name is what a call names as its model.' },
+    { name: 'deploymentName', label: 'Model name in Azure', placeholder: 'deepseek-v3', required: true,
+      hint: 'The name you gave the model when you set it up in Azure. Calls use it as the model.' },
   ],
   vertex_ai: [
     { name: 'projectId', label: 'Google Cloud project id', placeholder: 'my-project-123', required: true },
@@ -47,7 +45,7 @@ export const STRUCTURAL_FIELDS: Record<string, Array<{
   ],
   runpod: [
     { name: 'endpointId', label: 'Endpoint', placeholder: 'gpt-oss-120b', required: true,
-      hint: 'A public model slug (nothing to deploy) or your own serverless endpoint id.' },
+      hint: 'A public model slug (ready to use as is) or your own serverless endpoint id.' },
   ],
 }
 
@@ -103,7 +101,7 @@ export const createProviderSchema = z.object({
   model: z.string().optional(),
 }).superRefine((data, ctx) => {
   if (data.type === 'custom' && !isHttpUrl(data.apiUrl)) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Base URL is required (http or https)', path: ['apiUrl'] })
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter the server URL, starting with http:// or https://', path: ['apiUrl'] })
   }
   // Every structural field the chosen type marks required. Without this the
   // form submits, the backend rejects it, and the user sees a bare 400.
@@ -115,12 +113,14 @@ export const createProviderSchema = z.object({
   if (data.type === 'vertex_ai' && !data.model?.trim()) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: 'Model is required: Vertex AI serves no model list to choose from',
+      message: 'Name the model to use: Vertex AI does not list its models',
       path: ['model'],
     })
   }
-  if (data.type === 'ollama') {
-    // Key optional; when provided it still has to look like a token.
+  if (data.type === 'ollama' || data.type === 'custom') {
+    // Your own server and Ollama: the key is optional (only a server behind
+    // an authenticating proxy asks for one); when given it still has to
+    // look like a token.
     if (data.apiKey && data.apiKey.length < 8) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'API key is too short', path: ['apiKey'] })
     }
@@ -129,7 +129,7 @@ export const createProviderSchema = z.object({
   // A connected account or an existing connection stands in for the key.
   if (data.connectionId || data.credentialId) return
   if (!data.apiKey) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'API key is required', path: ['apiKey'] })
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Paste your API key', path: ['apiKey'] })
   } else if (data.apiKey.length < 8) {
     // Just check it's not comically short — actual validation happens
     // when we test the connection.

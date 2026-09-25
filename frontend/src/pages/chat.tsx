@@ -227,11 +227,11 @@ export function ChatPage() {
         <Bot className="h-16 w-16 text-muted-foreground mb-4" />
         <h2 className="text-xl font-semibold mb-2">No models configured</h2>
         <p className="text-muted-foreground text-center max-w-md mb-4">
-          To start chatting, add at least one inference provider (OpenAI,
-          Anthropic, a server you run, and more).
+          To start chatting, connect a provider: OpenAI, Anthropic, a server
+          you run, and more.
         </p>
-        <Button onClick={() => navigate('/llm-providers/new')}>
-          Add an inference provider
+        <Button onClick={() => navigate('/models/connect')}>
+          Connect a provider
         </Button>
       </div>
     )

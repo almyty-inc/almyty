@@ -3,8 +3,8 @@
  * @almyty/models: the model catalog from the terminal.
  *
  * Support in almyty is registry data, never a code list: a model is usable
- * when its card exists, has something that can call it, is active, and has
- * one passed validation run. `list` and `get` say which of those is missing,
+ * when its card exists, has something that can call it, is active, and is
+ * checked (its provider's key check passed). `list` and `get` say which is missing,
  * and `route` answers the question a list cannot — what a routing policy
  * would pick right now, and why it rejected the rest. See docs/models.md.
  *
@@ -81,7 +81,8 @@ export function helpText(): string {
 @almyty/models v${VERSION}
 
 A model is usable when its card is active, has something that can call it,
-and has one passed validation run. Nothing else makes it selectable, so
+and is checked: its provider's key check passed (every model of a provider at
+once), or, for an endpoint with no provider, its own check. So
 \`list\` and \`get\` report which of those is missing rather than a name alone.
 
 Usage:
@@ -91,7 +92,7 @@ Catalog:
   list [--selectable] [--status active|inactive|error|deploying]
        [--tier public|private_cloud|local] [--provider <providerId>]
                                        List cards; each line says selectable, or why not
-  get <id>                             One card in full: capabilities, pricing, validation run
+  get <id>                             One card in full: capabilities, pricing, last check
   register --name <n> --provider <providerId> --model <vendorModelId>
            [--tier public|private_cloud|local] [--region <r>] [--context <n>]
                                        Register a card against a stored LLM provider.
@@ -102,10 +103,12 @@ Catalog:
            [--price-in <usdPerMTok> --price-out <usdPerMTok>] [--clear-price]
                                        Change a card. A price pair is an override that
                                        wins over the automatic feed; --clear-price drops it.
-  sync [providerId]                    Import what a provider lists as unvalidated cards.
+  sync [providerId]                    Import what a provider lists. Selectable at once when
+                                       the provider's key check has passed.
                                        With no id, every active provider of the organization.
-  validate <id>                        One real short call. Passing is what makes a card
-                                       selectable. Exits non-zero when it fails.
+  validate <id>                        One real short call through one model. A provider's
+                                       key check covers its models; use this for an endpoint.
+                                       Exits non-zero when it fails.
   delete <id>                          Remove a card
 
 Routing (nothing is called; this plans):
@@ -364,8 +367,11 @@ export function unselectableReason(c: any): string {
   if (!c.providerId && !c.endpointRef?.url) return 'nothing can call it: no provider row and no endpoint URL';
   if (c.validationStatus !== 'passed') {
     const err = c.lastValidationError ? `: ${c.lastValidationError}` : '';
-    const status = c.validationStatus ?? 'pending';
-    return `no passed validation run (${status}${err}) — run: almyty models validate ${c.id}`;
+    if (c.validationStatus === 'failed') return `the provider says this model is not available${err}`;
+    // A provider's models are usable once the provider's key check passes;
+    // an endpoint with no provider row is checked on its own.
+    if (c.providerId) return `waiting for its provider's key check${err} (check the provider on the Models page)`;
+    return `not checked yet${err} — run: almyty models validate ${c.id}`;
   }
   return 'the catalog does not consider it selectable';
 }
@@ -484,7 +490,7 @@ export function formatSync(data: any): string {
     }
   }
   if ((data.created?.length ?? 0) === 0 && (data.retired?.length ?? 0) === 0) {
-    lines.push('', 'Cards from a sync are unvalidated. Run `almyty models validate <id>` to make one selectable.');
+    lines.push("", "A provider's models are selectable once its key check passes; nothing is needed per model.");
   }
   return lines.join('\n');
 }
@@ -588,7 +594,7 @@ async function main(): Promise<void> {
       out(args, res.data, () => (res.data.length
         ? res.data.map(formatCard).join('\n')
         : args.flags.selectable
-          ? 'No selectable model cards. A card becomes selectable when one validation run passes: almyty models validate <id>'
+          ? "No selectable models. A provider's models become selectable once its key check passes: connect one on the Models page"
           : 'No model cards yet. Register one (almyty models register) or import a provider\'s list (almyty models sync).'));
       return;
     }
