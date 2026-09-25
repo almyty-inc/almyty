@@ -17,7 +17,7 @@ import { Response, Request } from 'express';
 import * as crypto from 'crypto';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway, GatewayStatus, GatewayType } from '../../entities/gateway.entity';
-import { Agent } from '../../entities/agent.entity';
+import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { setProtocolContext } from '../../common/interceptors/protocol-context';
 import { ApiKey } from '../../entities/api-key.entity';
 import { GatewayResolverService } from '../mcp/services/gateway-resolver.service';
@@ -25,7 +25,7 @@ import { A2AServerService } from '../a2a/a2a-server.service';
 import { A2AAgentCardService } from '../a2a/a2a-agent-card.service';
 import { UnifiedAgentHelper } from './unified-agent.helper';
 import { UnifiedGatewayDelegation } from './unified-gateway-delegation.helper';
-import { isPrivateGateway } from './private-gateway';
+import { isPrivateGateway, resourceServableThroughGateway } from './private-gateway';
 
 /**
  * Unified endpoint controller that provides GitHub-style URLs:
@@ -109,11 +109,20 @@ export class UnifiedEndpointController {
           })
         : null;
       if (defaultGw) {
-        const agent = await this.agentRepository.findOne({ where: { id: defaultGw.agentId } });
-        const org = await this.organizationRepository.findOne({ where: { id: defaultGw.organizationId } });
-        if (agent && org) {
+        // The gateway's own agent, in the gateway's own organization, and
+        // only while it is active: a card served to anyone never describes
+        // another tenant's agent (agentId is a bare column) or a draft /
+        // switched-off one. Nor one the gateway could not serve (a private
+        // or team agent behind a wider gateway). Anything else is the same
+        // 404 as no gateway at all.
+        const agent = await this.agentRepository.findOne({
+          where: { id: defaultGw.agentId, organizationId: defaultGw.organizationId, status: AgentStatus.ACTIVE },
+        });
+        const servable = agent && resourceServableThroughGateway(defaultGw, agent) ? agent : null;
+        const org = servable ? await this.organizationRepository.findOne({ where: { id: defaultGw.organizationId } }) : null;
+        if (servable && org) {
           const baseUrl = this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
-          const card = this.a2aAgentCardService.buildAgentCard(defaultGw, agent, org, baseUrl);
+          const card = this.a2aAgentCardService.buildAgentCard(defaultGw, servable, org, baseUrl);
           // Public card omits security details — clients get full card via authenticated request
           delete card.securitySchemes;
           delete card.security;
