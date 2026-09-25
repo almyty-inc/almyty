@@ -18,6 +18,7 @@ import { OrgLicenseResolver } from '../../licensing/org-license.resolver';
 import { EE_ENTITLEMENTS } from '../../licensing/license.constants';
 import { isPrivateGateway } from '../private-gateway';
 import { providerLabel, visitorOAuthConfigured } from './visitor-oauth';
+import { GatewayAppLinkService } from '../gateway-app-link.service';
 
 /**
  * The tenant-facing half of the hosted chat app.
@@ -73,7 +74,9 @@ export class HostedChatService {
     private readonly auditLogService?: AuditLogService,
     @Optional()
     private readonly orgLicense?: OrgLicenseResolver,
-
+    // Required: Nest must inject it, so a surface never serves branding
+    // from the gateway. Typed optional only for positional unit specs.
+    private readonly appLink?: GatewayAppLinkService,
   ) {}
 
   /**
@@ -114,7 +117,16 @@ export class HostedChatService {
     }
 
     if (active.length !== 1) throw new NotFoundException('Chat app not found');
-    return active[0];
+    return this.withAppSettings(active[0]);
+  }
+
+  /**
+   * The surface with its app's branding, sign-in rule and visitor rights.
+   * Every public read resolves through findBySlug or findByHost, so this
+   * is the one place the hosted chat learns what the app decided.
+   */
+  private async withAppSettings(gateway: Gateway): Promise<Gateway> {
+    return this.appLink ? this.appLink.withAppSettings(gateway) : gateway;
   }
 
   /**
@@ -533,7 +545,7 @@ export class HostedChatService {
       return null;
     }
 
-    return active[0] ?? null;
+    return active[0] ? this.withAppSettings(active[0]) : null;
   }
 
   /**

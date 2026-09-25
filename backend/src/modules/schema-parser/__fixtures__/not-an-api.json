@@ -1,0 +1,5 @@
+{
+  "status": "ok",
+  "items": [1, 2, 3],
+  "message": "This JSON is a normal response body, not an API description."
+}

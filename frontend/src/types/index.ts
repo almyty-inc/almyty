@@ -201,6 +201,8 @@ export enum GatewayType {
   ACP = 'acp',
   UTCP = 'utcp',
   SKILLS = 'skills',
+  /** One address serving shared tools over MCP, UTCP and Skills at once. */
+  TOOLS = 'tools',
   OPENAI_CHAT = 'openai_chat',
   SLACK = 'slack',
   DISCORD = 'discord',

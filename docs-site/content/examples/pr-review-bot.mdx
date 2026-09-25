@@ -7,7 +7,7 @@
 
 ## Build it
 
-1. **Connect GitHub** (REST/GraphQL via *Connect API*, or `@octokit/rest` as an SDK tool) for PR, diff, and review-comment access.
+1. **Connect GitHub** (REST/GraphQL via *Connect an API*, or `@octokit/rest` as an SDK tool) for PR, diff, and review-comment access.
 2. **Create the agent** with the instruction: *review this diff for correctness, test coverage, and policy; comment inline; do not approve or merge.*
 3. **Encode policy as constraints**: *flag any committed secret; block new dependencies outside the allowlist; require tests for new endpoints.*
 4. **Add a verify panel**: a second-vendor model re-checks each flagged issue so the bot doesn't spam false positives; only findings both models keep get posted.

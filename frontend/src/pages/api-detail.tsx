@@ -10,6 +10,7 @@ import {
   Globe,
   Pencil,
   Server,
+  Share2,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -19,11 +20,10 @@ import { ApiTypeBadge } from '@/components/ui/api-type-badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 
-import { CredentialsTab } from '@/components/apis/detail/credentials-tab'
+import { ApiKeyCard } from '@/components/apis/detail/key-card'
 import { OperationsTab } from '@/components/apis/detail/operations-tab'
 import { OverviewTab } from '@/components/apis/detail/overview-tab'
 import { SchemaTab } from '@/components/apis/detail/schema-tab'
-import { SecurityTab } from '@/components/apis/detail/security-tab'
 
 import { apisApi } from '@/lib/api'
 import { toolsQuery } from '@/lib/list-queries'
@@ -35,10 +35,11 @@ export function ApiDetailPage() {
   const navigate = useNavigate()
   const { currentOrganization } = useOrganizationStore()
 
-  // Both open in place on this page: the schema viewer, and the
-  // authentication section's edit form.
+  // Both open in place on this page: the schema viewer, and the Key
+  // card's form (the overview's Authentication row opens it too).
   const [schemaOpen, setSchemaOpen] = React.useState(false)
-  const [authEditing, setAuthEditing] = React.useState(false)
+  const [keyEditing, setKeyEditing] = React.useState(false)
+  const keyCardRef = React.useRef<HTMLDivElement>(null)
 
   const { data: apiData, isLoading, isError, error: apiError, refetch: refetchApi } = useQuery({
     queryKey: ['api', id],
@@ -162,6 +163,12 @@ export function ApiDetailPage() {
               Edit
             </Link>
           </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link to={`/gateways/new?api=${api.id}`}>
+              <Share2 className="mr-2 h-4 w-4" />
+              Share tools
+            </Link>
+          </Button>
         </div>
       </div>
 
@@ -170,15 +177,16 @@ export function ApiDetailPage() {
         operations={operations}
         apiTools={apiTools}
         onOpenSchemaViewer={() => setSchemaOpen(true)}
-        onOpenAuthConfig={() => setAuthEditing(true)}
+        onOpenAuthConfig={() => {
+          setKeyEditing(true)
+          keyCardRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+        }}
         onOpenSchemaImport={() => navigate(`/apis/${api.id}/import`)}
       />
 
       <SchemaTab api={api} open={schemaOpen} onOpenChange={setSchemaOpen} />
 
-      <SecurityTab api={api} editing={authEditing} onEditingChange={setAuthEditing} />
-
-      <CredentialsTab apiId={api.id} apiName={api.name} />
+      <ApiKeyCard ref={keyCardRef} apiId={api.id} apiName={api.name} editing={keyEditing} onEditingChange={setKeyEditing} />
 
       <OperationsTab
         api={api}

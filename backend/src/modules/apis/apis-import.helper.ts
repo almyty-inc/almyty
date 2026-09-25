@@ -8,6 +8,7 @@ import { Injectable, Logger, BadRequestException, Inject, forwardRef } from '@ne
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import axios from 'axios';
+import { getIntrospectionQuery } from 'graphql';
 
 import { Api, ApiStatus } from '../../entities/api.entity';
 import { ApiSchema } from '../../entities/api-schema.entity';
@@ -431,6 +432,42 @@ export class ApisImportHelper {
     } catch (error) {
       this.logger.error(`Failed to fetch schema from URL ${url}: ${error.message}`);
       throw new BadRequestException(`Failed to fetch schema from URL: ${error.message}`);
+    }
+  }
+
+  /**
+   * Ask a GraphQL endpoint to describe itself: the standard introspection
+   * query, POSTed. Connecting an API accepts the endpoint's own URL, which
+   * answers a plain GET with an error rather than a document.
+   *
+   * Same gate as `fetchSchemaFromUrl`, all three parts: the string check
+   * before the request, the pinned agents on the connection, and every
+   * redirect hop re-validated.
+   */
+  async fetchGraphQLIntrospection(url: string): Promise<string> {
+    let safeUrl: string;
+    try {
+      safeUrl = assertOutboundUrlAllowed(url);
+    } catch (error: any) {
+      throw new BadRequestException(`Refused to fetch schema URL: ${error.message}`);
+    }
+
+    try {
+      const response = await axios.post(
+        safeUrl,
+        { query: getIntrospectionQuery({ descriptions: true }) },
+        {
+          timeout: 30000,
+          maxContentLength: 15 * 1024 * 1024,
+          maxBodyLength: 1024 * 1024,
+          ...pinnedRedirects(),
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        },
+      );
+      return typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+    } catch (error) {
+      this.logger.warn(`GraphQL introspection of ${url} failed: ${error.message}`);
+      throw new BadRequestException(`Failed to introspect GraphQL endpoint: ${error.message}`);
     }
   }
 

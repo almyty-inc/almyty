@@ -1,0 +1,33 @@
+openapi: 3.1.0
+info:
+  title: Weather
+  description: Forecasts by city.
+  version: '1.4'
+servers:
+  - url: https://{region}.weather.example.com/api
+    variables:
+      region:
+        default: eu
+        enum: [eu, us]
+paths:
+  /forecast:
+    get:
+      operationId: getForecast
+      summary: Forecast for a city
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: city
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The forecast
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

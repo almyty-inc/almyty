@@ -44,7 +44,7 @@ export function CreateAppForm() {
         agentIds: [],
       }),
     onSuccess: (app) => {
-      success('App created', 'Add agents and a distribution.')
+      success('App created', 'Add its agents, then where people use it.')
       queryClient.invalidateQueries({ queryKey: ['agent-apps'] })
       guard.leave(`/apps/${app.slug}`)
     },

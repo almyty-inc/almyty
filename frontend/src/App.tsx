@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react'
-import { Routes, Route, Navigate, Outlet, createRoutesFromElements, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet, createRoutesFromElements } from 'react-router-dom'
 
 import { RouteErrorView } from '@/components/layout/route-error'
 
@@ -46,6 +46,8 @@ const ApiDetailPage = lazy(() => import('@/pages/api-detail').then(m => ({ defau
 const ApiNewPage = lazy(() => import('@/pages/api-new').then(m => ({ default: m.ApiNewPage })))
 const ApiEditPage = lazy(() => import('@/pages/api-edit').then(m => ({ default: m.ApiEditPage })))
 const ApiImportPage = lazy(() => import('@/pages/api-import').then(m => ({ default: m.ApiImportPage })))
+const ApiSetupPage = lazy(() => import('@/pages/api-setup').then(m => ({ default: m.ApiSetupPage })))
+const ApiNewSdkPage = lazy(() => import('@/pages/api-new-sdk').then(m => ({ default: m.ApiNewSdkPage })))
 const ToolsPage = lazy(() => import('@/pages/tools').then(m => ({ default: m.ToolsPage })))
 const ToolDetailPage = lazy(() => import('@/pages/tool-detail').then(m => ({ default: m.ToolDetailPage })))
 const ToolNewPage = lazy(() => import('@/pages/tool-new').then(m => ({ default: m.ToolNewPage })))
@@ -56,17 +58,17 @@ const ConnectProviderPage = lazy(() => import('@/pages/models-connect').then(m =
 const ProviderPage = lazy(() => import('@/pages/provider').then(m => ({ default: m.ProviderPage })))
 const HostedModelPage = lazy(() => import('@/pages/hosted-model').then(m => ({ default: m.HostedModelPage })))
 const AnalyticsPage = lazy(() => import('@/pages/analytics').then(m => ({ default: m.AnalyticsPage })))
-const CredentialsPage = lazy(() => import('@/pages/credentials').then(m => ({ default: m.CredentialsPage })))
-const CredentialNewPage = lazy(() => import('@/pages/credential-new').then(m => ({ default: m.CredentialNewPage })))
-const AccessKeyNewPage = lazy(() => import('@/pages/credential-new').then(m => ({ default: m.AccessKeyNewPage })))
+const ConnectionsPage = lazy(() => import('@/pages/connections').then(m => ({ default: m.ConnectionsPage })))
+const ConnectServicePage = lazy(() => import('@/pages/connections-connect').then(m => ({ default: m.ConnectServicePage })))
 const MemoryNewPage = lazy(() => import('@/pages/memory-new').then(m => ({ default: m.MemoryNewPage })))
 const MemoryTransferPage = lazy(() => import('@/pages/memory-new').then(m => ({ default: m.MemoryTransferPage })))
 const AnalyticsBudgetPage = lazy(() => import('@/pages/analytics-budget').then(m => ({ default: m.AnalyticsBudgetPage })))
 const ApprovalPolicyPage = lazy(() => import('@/pages/approval-policy').then(m => ({ default: m.ApprovalPolicyPage })))
-const ConnectionConnectPage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.ConnectionConnectPage })))
 const ConnectionDetailRoutePage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.ConnectionDetailRoutePage })))
 const CustomConnectorNewPage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.CustomConnectorNewPage })))
 const ConnectionPolicyPage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.ConnectionPolicyPage })))
+const SettingsConnectionsRedirect = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.SettingsConnectionsRedirect })))
+const CredentialsRedirect = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.CredentialsRedirect })))
 const OrganizationNewPage = lazy(() => import('@/pages/organization-pages').then(m => ({ default: m.OrganizationNewPage })))
 const OrganizationDetailPage = lazy(() => import('@/pages/organization-pages').then(m => ({ default: m.OrganizationDetailPage })))
 const SettingsPage = lazy(() => import('@/pages/settings').then(m => ({ default: m.SettingsPage })))
@@ -106,15 +108,6 @@ function DashboardLayoutOutlet() {
   )
 }
 
-// The OAuth callback for the Connections layer lands the browser on
-// /connections?connection=<id>&status=...; the connection has a page of its
-// own under Settings, and without an id the gallery is the place to look.
-function ConnectionsRedirect() {
-  const location = useLocation()
-  const id = new URLSearchParams(location.search).get('connection')
-  const to = id ? `/settings/connections/${encodeURIComponent(id)}` : '/settings/connections'
-  return <Navigate to={`${to}${location.search}`} replace />
-}
 
 import { HostedChatPage } from '@/pages/hosted-chat'
 import { ConnectRedirect, ModelRedirect, ProviderRedirect, ProvidersRedirect } from '@/pages/models-redirects'
@@ -184,9 +177,11 @@ export function createAppRoutes() {
           <Route path="/gateways/:id" element={<GatewayDetailPage />} />
           <Route path="/apis" element={<ApisPage />} />
           <Route path="/apis/new" element={<ApiNewPage />} />
+          <Route path="/apis/new/sdk" element={<ApiNewSdkPage />} />
           <Route path="/apis/:id" element={<ApiDetailPage />} />
           <Route path="/apis/:id/edit" element={<ApiEditPage />} />
           <Route path="/apis/:id/import" element={<ApiImportPage />} />
+          <Route path="/apis/:id/setup" element={<ApiSetupPage />} />
           <Route path="/tools" element={<ToolsPage />} />
           <Route path="/tools/new" element={<ToolNewPage />} />
           <Route path="/tools/mcp-servers/new" element={<McpServerNewPage />} />
@@ -228,19 +223,20 @@ export function createAppRoutes() {
           <Route path="/memories" element={<MemoriesPage />} />
           <Route path="/memories/new" element={<MemoryNewPage />} />
           <Route path="/memories/transfer" element={<MemoryTransferPage />} />
-          <Route path="/credentials/new" element={<CredentialNewPage />} />
-          <Route path="/credentials/access-keys/new" element={<AccessKeyNewPage />} />
-          <Route path="/credentials/*" element={<CredentialsPage />} />
+          {/* Credentials became Connections; access keys live on the gateway or agent they unlock. */}
+          <Route path="/credentials/*" element={<CredentialsRedirect />} />
           <Route path="/settings/approvals/policies/new" element={<ApprovalPolicyPage />} />
           <Route path="/settings/approvals/policies/:policyId" element={<ApprovalPolicyPage />} />
-          <Route path="/settings/connections/connect" element={<ConnectionConnectPage />} />
-          <Route path="/settings/connections/connect/:connectorKey" element={<ConnectionConnectPage />} />
-          <Route path="/settings/connections/custom/new" element={<CustomConnectorNewPage />} />
-          <Route path="/settings/connections/policies/new" element={<ConnectionPolicyPage />} />
-          <Route path="/settings/connections/policies/:policyId" element={<ConnectionPolicyPage />} />
-          <Route path="/settings/connections/:id" element={<ConnectionDetailRoutePage />} />
+          <Route path="/settings/connections/*" element={<SettingsConnectionsRedirect />} />
           <Route path="/settings/*" element={<SettingsPage />} />
-          <Route path="/connections" element={<ConnectionsRedirect />} />
+          {/* /connections?connection=<id> is where a sign-in at a service comes back. */}
+          <Route path="/connections" element={<ConnectionsPage />} />
+          <Route path="/connections/advanced" element={<ConnectionsPage />} />
+          <Route path="/connections/connect" element={<ConnectServicePage />} />
+          <Route path="/connections/custom/new" element={<CustomConnectorNewPage />} />
+          <Route path="/connections/policies/new" element={<ConnectionPolicyPage />} />
+          <Route path="/connections/policies/:policyId" element={<ConnectionPolicyPage />} />
+          <Route path="/connections/:id" element={<ConnectionDetailRoutePage />} />
           <Route path="/organizations" element={<OrganizationsPage />} />
           <Route path="/organizations/new" element={<OrganizationNewPage />} />
           <Route path="/organizations/:id" element={<OrganizationDetailPage />} />

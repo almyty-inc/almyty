@@ -1,0 +1,28 @@
+"""
+Countries, continents and languages.
+"""
+type Query {
+  "Every country"
+  countries(filter: CountryFilter): [Country!]!
+  "One country by its code"
+  country(code: ID!): Country
+  continents: [Continent!]!
+}
+
+input CountryFilter {
+  code: String
+  continent: String
+}
+
+type Country {
+  code: ID!
+  name: String!
+  capital: String
+  continent: Continent!
+}
+
+type Continent {
+  code: ID!
+  name: String!
+  countries: [Country!]!
+}

@@ -16,7 +16,6 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 
 import { gatewaysApi } from '@/lib/api'
 import { toolsQuery } from '@/lib/list-queries'
-import { useEntitlements } from '@/hooks/use-entitlement'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { GatewayAuthSection } from '@/components/gateways/detail/gateway-auth-section'
@@ -32,11 +31,15 @@ import {
   isChannelType,
 } from '@/components/gateways/detail/channel-config-form'
 import { WidgetBuilder } from '@/components/gateways/widget-builder'
-import { HostedChatBuilder } from '@/components/gateways/hosted-chat-builder'
+import { ManagedByAppBanner, useManagedByApp } from '@/components/gateways/managed-by-app-banner'
 import { CustomDomainCard } from '@/components/gateways/custom-domain-card'
 import { VisitorOAuthCard } from '@/components/gateways/visitor-oauth-card'
 import { AllowedOriginsCard } from '@/components/gateways/allowed-origins-card'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { orgSlugOf } from '@/lib/gateway-connect'
+import { ConnectSnippets } from '@/components/gateways/connect-snippets'
+import { GatewayStatusSwitch } from '@/components/gateways/detail/gateway-status-switch'
+import { Disclosure } from '@/components/ui/disclosure'
 
 /** The tabs `?tab=` may open. */
 export const GATEWAY_TABS = ['tools', 'metrics', 'integrations', 'events'] as const
@@ -50,7 +53,6 @@ export function initialGatewayTab(requested: string | null, isSystem: boolean): 
   return requested
 }
 export function GatewayDetailPage() {
-  const entitlements = useEntitlements()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -76,6 +78,9 @@ export function GatewayDetailPage() {
     queryFn: () => gatewaysApi.getById(id!),
     enabled: !!id,
   })
+
+  // The app this gateway was published from, if any: its settings live there.
+  const managedBy = useManagedByApp(id)
 
   useEffect(() => {
     const name = (gatewayData as any)?.name
@@ -292,6 +297,78 @@ export function GatewayDetailPage() {
     )
   }
 
+  const isSharedTools = gateway.type === 'tools'
+  const orgSlug = orgSlugOf(currentOrganization)
+  // What the Share tools page could not attach, handed over with the key.
+  const skippedTools: Array<{ toolId: string; reason: string }> =
+    (location.state as { sharedTools?: { skipped?: Array<{ toolId: string; reason: string }> } } | null)?.sharedTools?.skipped ?? []
+
+  const toolsTab = (
+    <GatewayToolsTab
+      gatewayTools={gatewayTools}
+      allTools={allTools}
+      isLoadingGatewayTools={isLoadingGatewayTools}
+      isLoadingAllTools={isLoadingAllTools}
+      bulkAssignPending={bulkAssignToolsMutation.isPending}
+      assignPending={assignToolMutation.isPending}
+      removePending={removeToolMutation.isPending}
+      onApplyPreset={applyScopingPreset}
+      onRequestRemoveAll={async () => {
+        const ok = await confirm({
+          title: 'Remove all tools from this gateway?',
+          description: 'This will remove all tools from the gateway. The gateway will not be able to serve any requests until tools are assigned again.',
+          confirmLabel: 'Remove all tools',
+          destructive: true,
+        })
+        if (ok) applyScopingPreset('none')
+      }}
+      onAssign={(toolId) => assignToolMutation.mutate({ toolId })}
+      onRemove={(toolId) => removeToolMutation.mutate({ toolId })}
+      securitySaving={updateToolConfigMutation.isPending}
+      hidePresets={isSharedTools}
+      onSaveSecurity={(target) =>
+        updateToolConfigMutation.mutateAsync({
+          gatewayToolId: target.gatewayToolId,
+          data: { securityPolicy: target.policy },
+        })
+      }
+    />
+  )
+
+  const metricsCard = (
+    <Card>
+      <CardHeader>
+        <CardTitle>Performance metrics</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-2xl font-bold">{gateway.totalRequests || 0}</div>
+              <div className="text-sm text-muted-foreground">Total Requests</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-green-600">
+                {gateway.successfulRequests || 0}
+              </div>
+              <div className="text-sm text-muted-foreground">Successful</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-red-600">
+                {gateway.failedRequests || 0}
+              </div>
+              <div className="text-sm text-muted-foreground">Failed</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold">{gatewayTools.length}</div>
+              <div className="text-sm text-muted-foreground">Assigned Tools</div>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+
   return (
     <div className="space-y-8">
       {/* Breadcrumbs */}
@@ -314,7 +391,7 @@ export function GatewayDetailPage() {
             </div>
             <div>
               <h1 className={DETAIL_TITLE_CLASSES}>{gateway.name}</h1>
-              <p className="text-muted-foreground">{gateway.description || 'API Gateway'}</p>
+              <p className="text-muted-foreground">{gateway.description || (isSharedTools ? 'One address for MCP, UTCP and Skills' : 'API Gateway')}</p>
             </div>
           </div>
         </div>
@@ -323,9 +400,7 @@ export function GatewayDetailPage() {
             <Settings className="h-4 w-4 mr-2" />
             Edit gateway
           </Button>
-          <Badge variant={gateway.status === 'active' ? 'success' : 'secondary'}>
-            {gateway.status === 'active' ? 'Active' : gateway.status}
-          </Badge>
+          {!gateway.isSystem && <GatewayStatusSwitch gateway={gateway} />}
           {gateway.type && <ProtocolBadge protocol={gateway.type} />}
           {gateway.isSystem && (
             <Badge className="border-transparent bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">System</Badge>
@@ -340,14 +415,29 @@ export function GatewayDetailPage() {
         >
           <p className="flex items-center gap-2 font-medium">
             <KeyRound className="h-4 w-4" aria-hidden="true" />
-            Your gateway's first API key
+            {isSharedTools ? 'Your access key' : "Your gateway's first API key"}
           </p>
-          <CopyField value={initialApiKey} label="API key" />
+          <CopyField value={initialApiKey} label={isSharedTools ? 'Access key' : 'API key'} />
           <p className="text-sm text-amber-800 dark:text-amber-300">
             Copy it now. You won't see it again: once you leave this page, only its first characters are shown.
           </p>
         </div>
       )}
+
+      {skippedTools.length > 0 && (
+        <div data-testid="shared-tools-skipped" className="space-y-1 rounded-lg border border-amber-400/60 bg-amber-50 p-4 text-sm dark:bg-amber-950/30">
+          <p className="font-medium">
+            {skippedTools.length} tool{skippedTools.length === 1 ? " wasn't" : "s weren't"} shared
+          </p>
+          <ul className="list-inside list-disc text-amber-800 dark:text-amber-300">
+            {[...new Set(skippedTools.map((s) => s.reason))].slice(0, 3).map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {isSharedTools && <ConnectSnippets gateway={gateway} orgSlug={orgSlug} accessKey={initialApiKey} />}
 
       {/*
         Webhook registration failed and nothing said so.
@@ -388,6 +478,9 @@ export function GatewayDetailPage() {
         </div>
       )}
 
+      {/* An app's place: configured on the app, linked from here. */}
+      {managedBy && <ManagedByAppBanner managedBy={managedBy} />}
+
       {/* Gateway Configuration — type-specific */}
       <GatewayConfigurationCard
         gateway={gateway}
@@ -397,7 +490,7 @@ export function GatewayDetailPage() {
       />
 
       {/* Channel-type credential form (per-adapter token / webhook / OAuth fields) */}
-      {isChannelType(gateway.type) && (
+      {isChannelType(gateway.type) && !managedBy && (
         <ChannelConfigForm
           gateway={gateway}
           type={gateway.type}
@@ -419,54 +512,43 @@ export function GatewayDetailPage() {
       {/* Chat widget builder — customize + live-preview the embeddable widget */}
       {gateway.type === 'chat_widget' && <WidgetBuilder gateway={gateway} />}
 
-      {/* Hosted chat app — a standalone branded site on its own
-          subdomain. Its own surface rather than a widget setting: the
-          widget is a bubble in someone else's page, this is a site. They
-          share the branding vocabulary, not the gateway. */}
-      {gateway.type === 'hosted_chat' && (
-        <HostedChatBuilder
-          gateway={{
-            id: gateway.id,
-            configuration: gateway.configuration,
-          }}
-          /*
-            No costCapCents and no rateLimits here on purpose. Both were
-            read through `as any` off properties a Gateway has never had,
-            so both arrived undefined, the builder's public-link checks
-            could never pass, and Save stayed disabled for every hosted
-            chat app. The server does not judge those two either -- see
-            ENTITLEMENT_REFUSALS in gateways.service.ts.
-          */
-          /*
-            Without these the builder defaulted both to undefined, so the
-            white-label toggle was hard-disabled and the SSO auth mode
-            permanently refused -- for every organization, including the
-            ones that had bought them. The whole hosted-chat SSO
-            controller existed to serve a mode nothing could select.
-          */
-          entitlements={{
-            whiteLabel: entitlements.has('white_label'),
-            enterpriseAuth: entitlements.has('sso'),
-          }}
-        />
-      )}
-
-      {/* A domain the tenant owns: claim, publish DNS, verify, inline. */}
-      {gateway.type === 'hosted_chat' && <CustomDomainCard gatewayId={gateway.id} />}
-      {/* The identity provider visitors sign in with when access is OAuth. */}
-      {gateway.type === 'hosted_chat' && (
+      {/* A hosted chat is an app's web app: its look, who can use it, its
+          domain, sign-in and allowed sites are all on the app's web page.
+          Only a surface no app owns keeps these cards here. */}
+      {gateway.type === 'hosted_chat' && !managedBy && <CustomDomainCard gatewayId={gateway.id} />}
+      {gateway.type === 'hosted_chat' && !managedBy && (
         <VisitorOAuthCard gatewayId={gateway.id} authMode={gateway.configuration?.hostedChat?.authMode} />
       )}
       {/* Which third-party sites may call this public surface from the
           browser. Keyed on the gateway so the card resets when the saved
           list changes underneath it. */}
-      {(gateway.type === 'chat_widget' || gateway.type === 'hosted_chat') && (
+      {(gateway.type === 'chat_widget' || (gateway.type === 'hosted_chat' && !managedBy)) && (
         <AllowedOriginsCard
           key={`${gateway.id}:${JSON.stringify(gateway.configuration?.allowedOrigins ?? [])}`}
           gateway={{ id: gateway.id, type: gateway.type, configuration: gateway.configuration }}
         />
       )}
 
+      {isSharedTools ? (
+        <>
+          {/* Shared tools: what is shared, then everything else folded
+              away. Keys, extra sign-in methods, usage and events are
+              there for whoever needs them; the address and snippets
+              above are all a first visit needs. */}
+          <section aria-labelledby="shared-tools-heading" className="space-y-3">
+            <h2 id="shared-tools-heading" className="text-lg font-semibold">
+              Shared tools <span className="text-sm font-normal text-muted-foreground">({gatewayTools.length})</span>
+            </h2>
+            {toolsTab}
+          </section>
+          <Disclosure title="Advanced" summary="Access keys, sign-in methods, usage and events">
+            <GatewayAuthSection gatewayId={gateway.id} gatewayName={gateway.name} />
+            {metricsCard}
+            <GatewayEventsTab gatewayId={id!} />
+          </Disclosure>
+        </>
+      ) : (
+        <>
       {/* Authentication */}
       {gateway.type !== 'skills' && (
         <GatewayAuthSection gatewayId={gateway.id} gatewayName={gateway.name} />
@@ -486,79 +568,24 @@ export function GatewayDetailPage() {
 
         {!gateway.isSystem && (
         <TabsContent value="tools" className="space-y-6">
-          <GatewayToolsTab
-            gatewayTools={gatewayTools}
-            allTools={allTools}
-            isLoadingGatewayTools={isLoadingGatewayTools}
-            isLoadingAllTools={isLoadingAllTools}
-            bulkAssignPending={bulkAssignToolsMutation.isPending}
-            assignPending={assignToolMutation.isPending}
-            removePending={removeToolMutation.isPending}
-            onApplyPreset={applyScopingPreset}
-            onRequestRemoveAll={async () => {
-              const ok = await confirm({
-                title: 'Remove all tools from this gateway?',
-                description: 'This will remove all tools from the gateway. The gateway will not be able to serve any requests until tools are assigned again.',
-                confirmLabel: 'Remove all tools',
-                destructive: true,
-              })
-              if (ok) applyScopingPreset('none')
-            }}
-            onAssign={(toolId) => assignToolMutation.mutate({ toolId })}
-            onRemove={(toolId) => removeToolMutation.mutate({ toolId })}
-            securitySaving={updateToolConfigMutation.isPending}
-            onSaveSecurity={(target) =>
-              updateToolConfigMutation.mutateAsync({
-                gatewayToolId: target.gatewayToolId,
-                data: { securityPolicy: target.policy },
-              })
-            }
-          />
+          {toolsTab}
         </TabsContent>
         )}
 
         <TabsContent value="metrics" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Performance metrics</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-2xl font-bold">{gateway.totalRequests || 0}</div>
-                    <div className="text-sm text-muted-foreground">Total Requests</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold text-green-600">
-                      {gateway.successfulRequests || 0}
-                    </div>
-                    <div className="text-sm text-muted-foreground">Successful</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold text-red-600">
-                      {gateway.failedRequests || 0}
-                    </div>
-                    <div className="text-sm text-muted-foreground">Failed</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">{gatewayTools.length}</div>
-                    <div className="text-sm text-muted-foreground">Assigned Tools</div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {metricsCard}
         </TabsContent>
 
         <TabsContent value="integrations" className="space-y-6">
-          <IntegrationsSection gatewayId={id!} gateway={gateway} orgSlug={currentOrganization?.slug || currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'} />
+          <IntegrationsSection gatewayId={id!} gateway={gateway} orgSlug={orgSlug} />
         </TabsContent>
 
         <TabsContent value="events" className="space-y-4">
           <GatewayEventsTab gatewayId={id!} />
         </TabsContent>
       </Tabs>
+        </>
+      )}
 
       {confirmDialog}
 

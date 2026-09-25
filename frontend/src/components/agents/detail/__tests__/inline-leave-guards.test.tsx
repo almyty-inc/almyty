@@ -15,7 +15,6 @@ import { AddRoleForm } from '@/components/agents/add-role-form'
 import { MemoryTab } from '../memory-tab'
 import { PromoteRunSection } from '../promote-run-section'
 import { RunPanel } from '../run-panel'
-import { InterfacesTab } from '../interfaces-tab'
 import { ConstraintsTab } from '../constraints-tab'
 import { VerifyConfigEditor } from '../verify-config-editor'
 import { OverviewTab } from '../overview-tab'
@@ -49,7 +48,6 @@ vi.mock('@/components/ui/code-editor', () => ({
     <textarea aria-label="Code" value={value} onChange={(e) => onChange(e.target.value)} />
   ),
 }))
-vi.mock('@/components/agents/surfaces/surfaces-canvas', () => ({ SurfacesCanvas: () => null }))
 vi.mock('../integration-snippets', () => ({ IntegrationSnippets: () => null }))
 vi.mock('../agent-config-panel', () => ({ AgentConfigPanel: () => null }))
 vi.mock('@/components/model-picker', () => ({
@@ -157,29 +155,6 @@ describe('run panel', () => {
     fireEvent.change(screen.getByLabelText('Code'), { target: { value: '{"message":"Hi"}' } })
     fireEvent.click(screen.getByRole('button', { name: 'Run agent' }))
     await screen.findByTestId('invoke-output-text')
-    await expectLeavesWithoutAsking(router)
-  })
-})
-
-describe('deploy channel', () => {
-  beforeEach(async () => {
-    const { gatewaysApi } = await import('@/lib/api')
-    vi.mocked(gatewaysApi.listSurfaces).mockResolvedValue([] as any)
-    vi.mocked(gatewaysApi.getAll).mockResolvedValue({ gateways: [] } as any)
-  })
-
-  it('asks when a channel name is typed into the deploy form', async () => {
-    const { router } = at(<InterfacesTab agentId="a1" />)
-    fireEvent.click(screen.getByRole('button', { name: /Deploy channel/ }))
-    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Support A2A' } })
-    await expectLeaveAsks(router)
-  })
-
-  it('does not ask for a form that was only opened, or was cancelled', async () => {
-    const { router } = at(<InterfacesTab agentId="a1" />)
-    fireEvent.click(screen.getByRole('button', { name: /Deploy channel/ }))
-    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Support A2A' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await expectLeavesWithoutAsking(router)
   })
 })

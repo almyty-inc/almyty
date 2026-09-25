@@ -8,10 +8,10 @@ The **Apps** screen takes an agent you have already built and turns it into a pr
 
 Most ways to ship an agent keep your users tethered to the vendor: a hosted widget, a messaging channel, an API. A signed binary you hand to your own users does not. It carries your name, your identifier, and your signature, and when the operating system asks who published it, the answer is you. That is what the Agent Factory is built around.
 
-## Agents, apps, and distributions
+## Agents, apps, and where people use them
 
 ```
-   Agent(s)              App                    Distributions
+   Agent(s)              App                    Where people use it
    capability     ->     product          ->    where it reaches people
    ---------             ---------              ---------
    what it knows         what it is called      web       (hosted chat)
@@ -23,17 +23,17 @@ Most ways to ship an agent keep your users tethered to the vendor: a hosted widg
 
 - An **agent** is a capability: what it knows, which models and tools it uses, how its loop runs.
 - An **app** is a product decision: a name, a set of agents, branding, an auth mode, and spending limits.
-- A **distribution** is one place that product reaches people. There is exactly one per target.
+- A **place** (a distribution, in the API) is where that product reaches people. There is exactly one per target. The app is the only place an agent is put in front of people.
 
 The separation is deliberate. The same agent can appear in an internal app and a customer-facing one at once, under different names, different auth, and different limits, without being duplicated.
 
 ## The app detail page
 
-Create an app from **Apps → Create app** (`/apps/new`). Its detail page has a header, three tabs (**Distributions**, **Agents**, **Settings**), and a card for each place the product ships. Every card shows a badge for the medium and a status (Live, Building, Draft). Clicking a card opens its configuration page at `/apps/:slug/distributions/:target`.
+Create an app from **Apps → Create app** (`/apps/new`). Its detail page has a header, three tabs (**Where people use it**, **Agents**, **Settings**), and a card for each place the product ships. Every card shows a badge for the medium and a status (Live, Building, Draft). Clicking a card opens its page at `/apps/:slug/distributions/:target`.
 
-![An app detail page with its distributions as cards](/screenshots/apps-detail.png)
+![An app detail page with its places as cards](/screenshots/apps-detail.png)
 
-A product with no distributions yet shows an empty state on the Distributions tab, with the same **Add distribution** action as the header. That action opens `/apps/:slug/distributions/new`; publishing or building happens separately on the resulting distribution page.
+A product that is not in front of anyone yet shows an empty state on that tab, with the same **Add a place** action as the header. That action opens `/apps/:slug/distributions/new`; publishing or building happens separately on the place's own page.
 
 ![An app that is not shipping anywhere yet](/screenshots/apps-empty.png)
 
@@ -43,6 +43,6 @@ Everything is addressed by name: `/apps/acme-support`, `/apps/acme-support/distr
 
 ## Where to go next
 
-- **[Distributions](/apps/distributions)**: publish your product to a hosted chat or a messaging channel.
+- **[Where people use it](/apps/distributions)**: put your product on the web, in Slack, or in another chat app.
 - **[Downloadable Apps](/apps/builds)**: compile a terminal, desktop, or binary app on our machines.
 - **[Signing](/apps/signing)**: ship builds signed with your own certificate.

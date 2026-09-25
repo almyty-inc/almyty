@@ -8,17 +8,30 @@ The page carries your app's name, colour, greeting, and AI disclosure. Visitors 
 
 ## Publish from Apps
 
+An app is the one place an agent is put in front of people, so the hosted chat is set up there and nowhere else.
+
 1. Open **Apps** and create an app, or select one you already have.
 2. On **Agents**, attach at least one autonomous agent and choose the default agent that answers.
-3. On **Settings**, set the name and colour visitors see, the greeting, the access mode, spending limits, and the privacy and visitor-data choices.
-4. On **Distributions**, select **Add distribution**, then choose **Web app**.
-5. Open the Web app card. Resolve any listed blockers, then select **Publish**.
+3. On **Settings**, set the look visitors see once: name, colour, theme, greeting, suggested prompts and AI disclosure. Limits and visitor-data choices wait under **Advanced**, with their current values in one line.
+4. On **Where people use it**, select **Add a place**, then choose **Web app**.
+5. Select **Publish**. The link appears straight away: the app's name is the address.
 
-The distribution changes to **Live** when the hosted chat is answering. Open `https://<app-slug>.almyty.app` to test it as a visitor.
+The place changes to **Live** when the hosted chat is answering. Open `https://<app-slug>.almyty.app` to test it as a visitor.
 
-![The Web app distribution after publication](/screenshots/apps-web-published.png)
+![The web app page after publishing](/screenshots/apps-web-published.png)
 
 The address comes from the app slug. It must be 3 to 63 characters, using lowercase letters, numbers, and hyphens without a hyphen at either end. Reserved service names cannot be used.
+
+### On the web app page
+
+Everything else about the web app is on the same page, each part saving as you go:
+
+- **Who can use it**: one line, with the choices as tiles (anyone with the link, email verification, sign in with a provider, your SSO). The pick applies to the whole app.
+- **Sign-in provider**, when people sign in with a provider: Google, Microsoft and GitHub first; **Other** asks for a discovery URL, and hand-entered endpoints, keys and scopes wait under **Advanced**.
+- **Custom domain**: claim a hostname you own, publish the two DNS records shown, then verify.
+- **Allowed sites**: the websites whose pages may call the chat from the browser.
+
+A published web app is served by a gateway, and that gateway's page says **Managed in** the app, with a link back here, rather than carrying a second set of these settings. The hosted chat reads its look from the app on every request, so a change on **Settings** shows without publishing again.
 
 ## What a visitor gets
 
@@ -134,7 +147,7 @@ Public links, email verification, and OAuth remain in the core edition.
 
 ## Related
 
-- [Agent Factory](/apps): turn agents into products and distributions
-- [Distributions](/apps/distributions): publish to Web, Slack, and other channels
+- [Agent Factory](/apps): turn agents into products and put them where people are
+- [Where people use it](/apps/distributions): the web, Slack, and other channels
 - [Chat interfaces](/interfaces): embed a widget or connect a messaging platform
 - [Run limits](/run-limits): stop runs at explicit ceilings

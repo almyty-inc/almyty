@@ -7,7 +7,7 @@
 
 ## Build it
 
-1. **Connect the warehouse.** *Connect API* to a query endpoint over your warehouse (or a metrics API) for the checks you care about.
+1. **Connect the warehouse.** *Connect an API* to a query endpoint over your warehouse (or a metrics API) for the checks you care about: paste its spec link and click **Import**. A single query call can be an [HTTP tool](/tools/http-tools) instead.
 2. **Create the agent** with: *run the freshness and anomaly checks, group failures by table, and write a short digest; if nothing's wrong, say so.*
 3. **Turn on memory** so it can say "third night in a row for `orders_fct`" instead of reporting each night in isolation.
 4. **Put it on a schedule**: on the agent's *Schedule* panel, enable it and set the interval (nightly, or hourly for tighter loops). almyty triggers it with no external cron.
