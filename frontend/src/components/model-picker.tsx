@@ -1,36 +1,27 @@
 /**
- * ModelPicker: the one way a provider and a model are chosen.
+ * ModelPicker: the one way a model is chosen, everywhere.
  *
- * Screens that asked for a model used to put a free-text box next to a
- * provider select, so picking a provider still left you typing a model id
- * from memory and finding out at run time that it was wrong. Here the
- * model depends on the provider:
+ * One searchable list of every model your connected providers offer,
+ * grouped by provider. There is no "pick a provider first" step: picking a
+ * model picks its provider. On top, when the screen allows it, "Automatic"
+ * (the cheapest model that fits, chosen per call) and "Provider default";
+ * at the bottom a link to connect another provider, in a new tab so the
+ * work here survives, with the list refetched on return.
  *
- *   - No provider yet: the model field is disabled and says why.
- *   - Provider chosen: a select of that provider's models, taken from the
- *     org's catalog cards for it when there are any (each marked validated
- *     or not, per `selectable`), otherwise from the provider's live list.
- *   - Free text only where it makes sense: a `custom` (self-hosted)
- *     provider, a provider whose list could not be read or lists nothing,
- *     or when the user explicitly asks for a model id not in the list.
- *   - No providers at all: a link to connect one, opened in a new tab so
- *     the work on this screen survives; the list refetches on return.
- *
- * With `allowRouting`, a second mode lets the catalog's router choose the
- * model per call from a policy instead of pinning one.
+ * Free text stays possible where it has to: a model id a provider serves
+ * but does not list (your own server) is offered as "Use model id ..."
+ * when the search matches nothing, and a saved id that is no longer listed
+ * is still shown, marked.
  *
  * `__tests__/model-picker-guard.test.ts` fails when a bare model text
  * input appears anywhere else in the app.
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ExternalLink, Loader2, RefreshCw } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, ExternalLink, Loader2, Search, Sparkles } from 'lucide-react'
 
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { RoutingPolicyField } from '@/components/models/routing-policy-editor'
-import { llmProvidersApi } from '@/lib/api'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
 import { modelsApi } from '@/lib/models-api'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -57,48 +48,36 @@ export interface ModelPickerProps {
   onChange: (next: ModelSelection, provider?: ProviderOption) => void
   /** Prefix for element ids, so two pickers on one screen stay distinct. */
   idPrefix: string
-  /** Adds a "Provider default" choice; the saved model is then empty. */
+  /** Adds "Provider default" to each provider: the saved model is then empty. */
   modelOptional?: boolean
   /**
-   * Makes the provider optional: an extra first choice with this label
-   * (for example "Organization default routing policy") clears it.
+   * An extra first choice with this label (for example "Organization
+   * default routing policy") that clears the value.
    */
   providerOptionalLabel?: string
-  /** Offers "Routed by policy" next to a pinned provider and model. */
+  /** Adds "Automatic": the router picks the cheapest model that fits, per call. */
   allowRouting?: boolean
   /** Only providers whose status is active. */
   activeOnly?: boolean
   /** Leaves out providers this returns true for (the raw provider row is passed). */
   excludeProvider?: (provider: ProviderOption & Record<string, any>) => boolean
-  /** Side by side on wide screens, or stacked. */
+  /** Accepted for older callers; the picker is one field now. */
   layout?: 'grid' | 'stack'
   /** Smaller type, for rows inside a list (checkers, participants). */
   compact?: boolean
-  /**
-   * The screen already fixes the provider (a provider's own edit page):
-   * no provider field, only that provider's models. `value.providerId`
-   * must be set.
-   */
+  /** Only the models of `value.providerId` (a provider's own page). */
   providerLocked?: boolean
+  /** Accepted for older callers; there is no separate provider field. */
   providerLabel?: string
   modelLabel?: string
   className?: string
 }
 
-/** Radix Select cannot carry an empty value, so "no model" needs a name. */
-const PROVIDER_DEFAULT = '__provider_default__'
-/** Likewise for "no provider", on pickers where the provider is optional. */
-const NO_PROVIDER = '__no_provider__'
+/** The model list every picker and the Models page share. */
+export const PICKER_MODELS_KEY = ['models', 'catalog'] as const
 
-/** Provider types that serve whatever they were started with. */
-const FREE_TEXT_PROVIDER_TYPES = new Set(['custom'])
-
-interface ModelOption {
-  id: string
-  label: string
-  /** Undefined for a live-list entry, which carries no validation state. */
-  validated?: boolean
-}
+/** Provider types that serve whatever they were started with, and may list nothing. */
+const FREE_TEXT_PROVIDER_TYPES = new Set(['custom', 'ollama'])
 
 /** The providers endpoint has answered in three shapes over time. */
 export function asProviderList(raw: unknown): ProviderOption[] {
@@ -107,12 +86,11 @@ export function asProviderList(raw: unknown): ProviderOption[] {
 }
 
 /**
- * Whether listing a provider's models failed because the vendor refused
- * the key. The backend passes the vendor's message through as a 502
- * (axios's "Request failed with status code 401", an SDK's "401 Incorrect
- * API key provided", Anthropic's authentication_error), so this reads the
- * text. A 401 or 403 from almyty itself is a session or permission
- * problem, not the provider's key, and is left alone.
+ * Whether a provider call failed because the vendor refused the key. The
+ * backend passes the vendor's message through (axios's "Request failed with
+ * status code 401", an SDK's "401 Incorrect API key provided", Anthropic's
+ * authentication_error), so this reads the text. A 401 or 403 from almyty
+ * itself is a session or permission problem, not the provider's key.
  */
 export function keyRejected(error: unknown): boolean {
   const ownStatus = (error as { response?: { status?: number } } | undefined)?.response?.status
@@ -129,11 +107,37 @@ function isActive(p: ProviderOption): boolean {
 /** The org's providers, shared with every other reader of `['llm-providers']`. */
 export function useProviderList() {
   return useQuery({
-    // The shared definition, so this cache entry has one shape everywhere.
     ...llmProvidersQuery,
-    // "Connect one" opens a new tab; coming back should show the result.
+    // "Connect a provider" opens a new tab; coming back should show the result.
     refetchOnWindowFocus: true,
   })
+}
+
+type Item =
+  | { key: string; kind: 'auto'; label: string }
+  | { key: string; kind: 'clear'; label: string }
+  | { key: string; kind: 'default'; label: string; provider: ProviderOption }
+  | { key: string; kind: 'model'; label: string; sub: string; provider: ProviderOption; model: string; unavailable?: boolean; saved?: boolean }
+  | { key: string; kind: 'free'; label: string; provider: ProviderOption; model: string }
+
+interface Group {
+  key: string
+  heading?: string
+  items: Item[]
+  /** A line in place of items, for a provider that lists nothing. */
+  note?: string
+}
+
+const AUTO_LABEL = 'Automatic: the cheapest model that fits'
+
+function autoLabel(routing: RoutingPolicy): string {
+  if (routing.objective === 'fastest') return 'Automatic: the fastest model that fits'
+  if (routing.objective === 'pinned') return 'Automatic, with a fixed first choice'
+  return AUTO_LABEL
+}
+
+function cardLabel(c: ModelCard): string {
+  return c.name && c.name !== c.vendorModelId ? c.name : c.vendorModelId
 }
 
 export function ModelPicker({
@@ -145,337 +149,314 @@ export function ModelPicker({
   allowRouting = false,
   activeOnly = false,
   excludeProvider,
-  layout = 'grid',
   compact = false,
   providerLocked = false,
-  providerLabel = 'Provider',
   modelLabel = 'Model',
   className,
 }: ModelPickerProps) {
   const routed = allowRouting && !!value.routing
   const providersQuery = useProviderList()
   const allProviders = asProviderList(providersQuery.data)
-  const listed = excludeProvider ? allProviders.filter((p) => !excludeProvider(p)) : allProviders
-  const providers = activeOnly ? listed.filter(isActive) : listed
-  const provider = allProviders.find((p) => p.id === value.providerId)
-  const providerId = routed ? undefined : value.providerId || undefined
-  const freeTextProvider = !!provider && FREE_TEXT_PROVIDER_TYPES.has(provider.type)
-  // Whether a provider is self-hosted is only known once the providers are
-  // in, so nothing is listed before then.
-  const listable = !!providerId && !providersQuery.isLoading && !freeTextProvider
+  const providers = useMemo(() => {
+    if (providerLocked) return allProviders.filter((p) => p.id === value.providerId)
+    const listed = excludeProvider ? allProviders.filter((p) => !excludeProvider(p)) : allProviders
+    return activeOnly ? listed.filter(isActive) : listed
+  }, [allProviders, providerLocked, value.providerId, excludeProvider, activeOnly])
 
   const cardsQuery = useQuery({
-    queryKey: ['models', 'by-provider', providerId],
+    queryKey: PICKER_MODELS_KEY,
     queryFn: async () => {
-      const rows = await modelsApi.list({ providerId })
+      const rows = await modelsApi.list()
       return Array.isArray(rows) ? rows : []
     },
-    enabled: listable,
     staleTime: 30_000,
-    retry: false,
+    refetchOnWindowFocus: true,
   })
-  const cards = useMemo(
-    () => (cardsQuery.data ?? []).filter((c: ModelCard) => c.status !== 'inactive'),
-    [cardsQuery.data],
-  )
-  // Cards win; the live list is only asked for when the catalog has none.
-  // A catalog that cannot be read falls through to the live list too.
-  const needLiveList = listable && (cardsQuery.isError || (cardsQuery.isSuccess && cards.length === 0))
+  const cards: ModelCard[] = useMemo(() => cardsQuery.data ?? [], [cardsQuery.data])
 
-  const liveQuery = useQuery({
-    queryKey: ['provider-model-list', providerId],
-    queryFn: async () => {
-      const res = await llmProvidersApi.getModels(providerId as string)
-      const rows: any[] = Array.isArray(res) ? res : []
-      return rows
-        .map((m) => (typeof m === 'string' ? { id: m, name: m } : { id: m?.id || m?.name, name: m?.name || m?.id }))
-        .filter((m): m is { id: string; name: string } => typeof m.id === 'string' && m.id.length > 0)
-    },
-    enabled: needLiveList,
-    staleTime: 60_000,
-    retry: false,
-  })
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [active, setActive] = useState(0)
+  const [autoSettings, setAutoSettings] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const listId = useId()
 
-  const options: ModelOption[] = useMemo(() => {
-    if (cards.length > 0) {
-      return [...cards]
-        .sort((a, b) => Number(b.selectable) - Number(a.selectable) || a.vendorModelId.localeCompare(b.vendorModelId))
-        .map((c) => ({
-          id: c.vendorModelId,
-          label: c.name && c.name !== c.vendorModelId ? `${c.name} (${c.vendorModelId})` : c.vendorModelId,
-          validated: !!c.selectable,
-        }))
+  const provider = allProviders.find((p) => p.id === value.providerId)
+  const savedModel = !routed ? value.model || '' : ''
+  const savedCard = savedModel ? cards.find((c) => c.providerId === value.providerId && c.vendorModelId === savedModel) : undefined
+
+  const groups: Group[] = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const matches = (...texts: Array<string | null | undefined>) => !q || texts.some((t) => (t || '').toLowerCase().includes(q))
+    const out: Group[] = []
+
+    const top: Item[] = []
+    if (allowRouting && matches(AUTO_LABEL, 'automatic', 'cheapest')) top.push({ key: 'auto', kind: 'auto', label: AUTO_LABEL })
+    if (providerOptionalLabel && matches(providerOptionalLabel)) top.push({ key: 'clear', kind: 'clear', label: providerOptionalLabel })
+    if (top.length > 0) out.push({ key: 'top', items: top })
+
+    let modelHits = 0
+    for (const p of providers) {
+      const items: Item[] = []
+      if (modelOptional && matches('Provider default', p.name)) items.push({ key: `${p.id}::default`, kind: 'default', label: 'Provider default', provider: p })
+      const own = cards
+        .filter((c) => c.providerId === p.id)
+        .filter((c) => (c.selectable && c.status !== 'inactive') || (c.providerId === value.providerId && c.vendorModelId === savedModel))
+        .sort((a, b) => cardLabel(a).localeCompare(cardLabel(b)))
+      for (const c of own) {
+        if (!matches(c.name, c.vendorModelId, p.name)) continue
+        const unavailable = !c.selectable || c.status === 'inactive'
+        items.push({ key: `${p.id}::${c.vendorModelId}`, kind: 'model', label: cardLabel(c), sub: c.vendorModelId, provider: p, model: c.vendorModelId, unavailable })
+        modelHits += 1
+      }
+      // A saved id this provider no longer lists still reads as chosen.
+      if (p.id === value.providerId && savedModel && !savedCard && matches(savedModel, p.name)) {
+        items.push({ key: `${p.id}::${savedModel}`, kind: 'model', label: savedModel, sub: 'Saved, not in the list', provider: p, model: savedModel, saved: true, unavailable: true })
+        modelHits += 1
+      }
+      const note = own.length === 0 && !q ? (FREE_TEXT_PROVIDER_TYPES.has(p.type) ? 'Type the model id your server runs.' : 'No models yet. Check the provider again on its page.') : undefined
+      if (items.length > 0 || note) out.push({ key: p.id, heading: p.name, items, note })
     }
-    return (liveQuery.data ?? []).map((m) => ({ id: m.id, label: m.name && m.name !== m.id ? `${m.name} (${m.id})` : m.id }))
-  }, [cards, liveQuery.data])
 
-  const loading =
-    (!!providerId && providersQuery.isLoading) ||
-    (listable && (cardsQuery.isLoading || (needLiveList && liveQuery.isLoading)))
-  const listError = !loading && needLiveList && liveQuery.isError ? liveQuery.error : null
-  const listedNothing = listable && !loading && !listError && needLiveList && liveQuery.isSuccess && options.length === 0
+    if (q && modelHits === 0 && providers.length > 0) {
+      const raw = search.trim()
+      const targets = value.providerId && providers.some((p) => p.id === value.providerId) ? providers.filter((p) => p.id === value.providerId) : providers
+      out.push({
+        key: 'free',
+        heading: 'Not in the list',
+        items: targets.map((p) => ({ key: `free::${p.id}`, kind: 'free' as const, label: `Use model id "${raw}"`, provider: p, model: raw })),
+      })
+    }
+    return out
+  }, [search, allowRouting, providerOptionalLabel, providers, modelOptional, cards, value.providerId, savedModel, savedCard])
 
-  const savedModel = value.model || ''
-  const savedIsUnlisted = !!savedModel && !options.some((o) => o.id === savedModel)
+  const flat = useMemo(() => groups.flatMap((g) => g.items), [groups])
 
-  // Typing an id is the escape hatch, never the default: it starts off and
-  // resets whenever the provider changes.
-  const [manual, setManual] = useState(false)
   useEffect(() => {
-    setManual(false)
-  }, [providerId])
+    setActive(0)
+  }, [search, open])
 
-  const freeText = freeTextProvider || !!listError || listedNothing || manual
-
-  const pickProvider = (id: string) => {
-    if (id === NO_PROVIDER) {
-      onChange({})
-      return
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
     }
-    onChange({ providerId: id, model: '' }, allProviders.find((p) => p.id === id))
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  const choose = (item: Item) => {
+    setOpen(false)
+    setSearch('')
+    switch (item.kind) {
+      case 'auto':
+        onChange({ routing: value.routing ?? { objective: 'cheapest' } })
+        return
+      case 'clear':
+        onChange({})
+        return
+      case 'default':
+        onChange({ providerId: item.provider.id, model: '' }, item.provider)
+        return
+      default:
+        onChange({ providerId: item.provider.id, model: item.model }, item.provider)
+    }
   }
-  const pickModel = (model: string) => {
-    onChange({ providerId: value.providerId, model: model === PROVIDER_DEFAULT ? '' : model }, provider)
+
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActive((i) => Math.min(i + 1, flat.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActive((i) => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      const item = flat[active]
+      if (item) choose(item)
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setOpen(false)
+    }
   }
+
+  const isSelected = (item: Item): boolean => {
+    switch (item.kind) {
+      case 'auto':
+        return routed
+      case 'clear':
+        return !routed && !value.providerId
+      case 'default':
+        return !routed && value.providerId === item.provider.id && !savedModel
+      case 'model':
+        return !routed && value.providerId === item.provider.id && savedModel === item.model
+      default:
+        return false
+    }
+  }
+
+  let current: string
+  let currentSub: string | undefined
+  if (routed) {
+    current = autoLabel(value.routing!)
+  } else if (value.providerId && savedModel) {
+    current = savedCard ? cardLabel(savedCard) : savedModel
+    currentSub = provider?.name
+  } else if (value.providerId) {
+    current = modelOptional ? 'Provider default' : 'Choose a model'
+    currentSub = provider?.name
+  } else if (providerOptionalLabel) {
+    current = providerOptionalLabel
+  } else {
+    current = 'Choose a model'
+  }
+  const empty = !routed && !value.providerId && !providerOptionalLabel
+  const savedUnavailable = !routed && !!savedCard && (!savedCard.selectable || savedCard.status === 'inactive')
 
   const text = compact ? 'text-xs' : 'text-sm'
   const hint = compact ? 'text-[11px]' : 'text-xs'
-  const trigger = compact ? 'h-8 text-xs' : undefined
-  const providerFieldId = `${idPrefix}-provider`
-  const modelFieldId = `${idPrefix}-model`
+  const triggerId = `${idPrefix}-model`
+  const loading = providersQuery.isLoading || cardsQuery.isLoading
+  const noProviders = !providersQuery.isLoading && providers.length === 0 && !providerLocked
 
-  const providerField = (
-    <div className="space-y-1.5 min-w-0">
-      {/* Same row height as the Model label, which carries a toggle. */}
-      <div className="flex h-5 items-center">
-        <Label htmlFor={providerFieldId} className={text}>{providerLabel}</Label>
-      </div>
-      {providersQuery.isLoading ? (
-        <div className={cn('flex h-9 items-center gap-2 text-muted-foreground', hint)} data-testid={`${idPrefix}-providers-loading`}>
-          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Loading providers
-        </div>
-      ) : providers.length === 0 ? (
-        // A required field with nothing in it is a dead end. Say what is
-        // missing and where to fix it; a new tab keeps this screen's
-        // unsaved work, and the list refetches when the tab regains focus.
-        <div
-          data-testid="no-providers"
-          className={cn('rounded-md border border-dashed border-border px-3 py-2 text-muted-foreground', hint)}
-        >
-          No model providers connected yet.{' '}
-          <a
-            href="/llm-providers/new"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
-          >
-            Connect one
-            <ExternalLink className="h-3 w-3" aria-hidden />
-          </a>
-          <span className="block mt-0.5">It opens in a new tab and appears here when you come back.</span>
-        </div>
-      ) : (
-        <Select value={value.providerId || (providerOptionalLabel ? NO_PROVIDER : '')} onValueChange={pickProvider}>
-          <SelectTrigger id={providerFieldId} className={trigger} aria-label={providerLabel}>
-            <SelectValue placeholder="Select provider" />
-          </SelectTrigger>
-          <SelectContent>
-            {providerOptionalLabel && <SelectItem value={NO_PROVIDER}>{providerOptionalLabel}</SelectItem>}
-            {providers.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name} <span className="text-muted-foreground ml-1">({p.type})</span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-    </div>
-  )
-
-  let modelControl: ReactNode
-  if (!providerId) {
-    modelControl = (
-      <Select disabled value="">
-        <SelectTrigger id={modelFieldId} className={trigger} aria-label={modelLabel} data-testid={`${idPrefix}-model-disabled`}>
-          <SelectValue placeholder="Choose a provider first" />
-        </SelectTrigger>
-        <SelectContent />
-      </Select>
-    )
-  } else if (loading) {
-    modelControl = (
-      <div
-        className={cn('flex h-9 items-center gap-2 rounded-md border border-input px-3 text-muted-foreground', hint)}
-        data-testid={`${idPrefix}-model-loading`}
-        role="status"
-      >
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Loading models
-      </div>
-    )
-  } else if (freeText) {
-    modelControl = (
-      <Input
-        id={modelFieldId}
-        data-testid={`${idPrefix}-model-input`}
-        className={trigger}
-        aria-label={modelLabel}
-        value={savedModel}
-        onChange={(e) => onChange({ providerId: value.providerId, model: e.target.value }, provider)}
-        placeholder={modelOptional ? 'Model id, blank for the provider default' : 'Model id, as the provider names it'}
-      />
-    )
-  } else {
-    modelControl = (
-      <Select value={savedModel || (modelOptional ? PROVIDER_DEFAULT : '')} onValueChange={pickModel}>
-        <SelectTrigger id={modelFieldId} className={trigger} aria-label={modelLabel} data-testid={`${idPrefix}-model-select`}>
-          <SelectValue placeholder="Select model" />
-        </SelectTrigger>
-        <SelectContent>
-          {modelOptional && <SelectItem value={PROVIDER_DEFAULT}>Provider default</SelectItem>}
-          {savedIsUnlisted && (
-            <SelectItem value={savedModel}>
-              {savedModel} <span className="text-muted-foreground ml-1">(saved, not in the list)</span>
-            </SelectItem>
-          )}
-          {options.map((o) => (
-            <SelectItem key={o.id} value={o.id}>
-              {o.label}
-              {o.validated === true && <span className="ml-1.5 text-emerald-600 dark:text-emerald-400">Validated</span>}
-              {o.validated === false && <span className="ml-1.5 text-muted-foreground">Not validated</span>}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    )
-  }
-
-  const canToggleManual = listable && !loading && !listError && !listedNothing
-
-  const modelField = (
-    <div className="space-y-1.5 min-w-0">
-      <div className="flex h-5 items-center justify-between gap-2">
-        <Label htmlFor={modelFieldId} className={text}>{modelLabel}</Label>
-        {canToggleManual && (
-          <button
-            type="button"
-            className={cn('text-muted-foreground hover:text-foreground transition-colors', hint)}
-            onClick={() => setManual(!manual)}
-          >
-            {manual ? 'Choose from the list' : 'Use a model id not in the list'}
-          </button>
-        )}
-      </div>
-      {modelControl}
-      {!providerId && (
-        <p className={cn('text-muted-foreground', hint)}>
-          {providerOptionalLabel && !routed
-            ? `With no provider: ${providerOptionalLabel.charAt(0).toLowerCase()}${providerOptionalLabel.slice(1)}.`
-            : 'The models on offer depend on the provider.'}
-        </p>
-      )}
-      {freeTextProvider && (
-        <p className={cn('text-muted-foreground', hint)}>This provider is self-hosted, so type the model id it serves.</p>
-      )}
-      {listError && (
-        <div className={cn('text-amber-700 dark:text-amber-400', hint)} data-testid={`${idPrefix}-model-error`}>
-          {keyRejected(listError) && providerLocked ? (
-            // On the provider's own edit page the key is right here.
-            <>This provider&apos;s key was rejected — check the key on this page. Type the model id, or </>
-          ) : keyRejected(listError) ? (
-            // The vendor's own words ("Request failed with status code
-            // 401") say what happened on the wire, not what to do. The
-            // fix is always the same place, so say that and link to it.
-            <>
-              This provider&apos;s key was rejected — check it on the{' '}
-              <a
-                href={`/llm-providers/${providerId}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-0.5 underline underline-offset-2"
-              >
-                provider&apos;s page
-                <ExternalLink className="h-3 w-3" aria-hidden />
-              </a>
-              . Type the model id, or{' '}
-            </>
-          ) : (
-            <>Could not load this provider&apos;s models ({getApiErrorMessage(listError, 'request failed')}). Type the model id, or </>
-          )}
-          <button
-            type="button"
-            className="inline-flex items-center gap-0.5 underline underline-offset-2"
-            onClick={() => {
-              void cardsQuery.refetch()
-              void liveQuery.refetch()
-            }}
-          >
-            <RefreshCw className="h-3 w-3" aria-hidden />
-            try again
-          </button>
-          .
-          {keyRejected(listError) && (
-            <details className="mt-1 text-muted-foreground">
-              <summary className="cursor-pointer">Details</summary>
-              <span data-testid={`${idPrefix}-model-error-detail`}>{getApiErrorMessage(listError, 'request failed')}</span>
-            </details>
-          )}
-        </div>
-      )}
-      {listedNothing && (
-        <p className={cn('text-muted-foreground', hint)} data-testid={`${idPrefix}-model-empty`}>
-          This provider lists no models. Type the model id it serves.
-        </p>
-      )}
-      {!freeText && !loading && cards.length > 0 && (
-        <p className={cn('text-muted-foreground', hint)}>From your model catalog. Validated models passed a real test call.</p>
-      )}
-    </div>
+  const connectLink = (
+    <a
+      href="/models/connect"
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
+    >
+      Connect a provider
+      <ExternalLink className="h-3 w-3" aria-hidden />
+    </a>
   )
 
   return (
-    <div className={cn('space-y-3', className)}>
-      {allowRouting && (
-        <div>
-          <Label className={text}>Model selection</Label>
-          <div className="mt-1 grid grid-cols-2 gap-1 rounded-md bg-muted p-1" role="radiogroup" aria-label="Model selection">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={!routed}
-              className={cn('rounded px-2 py-1 text-xs transition-colors', !routed ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground')}
-              onClick={() => {
-                if (routed) onChange({})
-              }}
-            >
-              Pinned provider
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={routed}
-              className={cn('rounded px-2 py-1 text-xs transition-colors', routed ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground')}
-              onClick={() => {
-                if (!routed) onChange({ routing: { objective: 'cheapest' } })
-              }}
-            >
-              Routed by policy
-            </button>
-          </div>
-          <p className={cn('text-muted-foreground mt-1', hint)}>
-            {routed
-              ? 'The router picks a validated card from the catalog on every call and records which one answered.'
-              : 'Always this provider and model.'}
-          </p>
+    <div className={cn('space-y-1.5', className)} ref={rootRef}>
+      <Label htmlFor={triggerId} className={text}>
+        {modelLabel}
+      </Label>
+      {noProviders ? (
+        // A required field with nothing in it is a dead end. Say what is
+        // missing and where to fix it; a new tab keeps this screen's work,
+        // and the list refetches when the tab regains focus.
+        <div data-testid="no-providers" className={cn('rounded-md border border-dashed border-border px-3 py-2 text-muted-foreground', hint)}>
+          No providers connected yet. {connectLink}
+          <span className="mt-0.5 block">It opens in a new tab and its models appear here when you come back.</span>
         </div>
-      )}
-      {routed ? (
-        <RoutingPolicyField value={value.routing || {}} onChange={(routing) => onChange({ routing })} />
-      ) : providerLocked ? (
-        modelField
       ) : (
-        <div className={cn(layout === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : 'space-y-3')}>
-          {providerField}
-          {modelField}
+        <>
+          <button
+            type="button"
+            id={triggerId}
+            role="combobox"
+            aria-label={modelLabel}
+            aria-expanded={open}
+            aria-haspopup="listbox"
+            aria-controls={open ? listId : undefined}
+            data-testid={`${idPrefix}-model-trigger`}
+            disabled={loading}
+            onClick={() => {
+              setOpen((v) => !v)
+              window.setTimeout(() => searchRef.current?.focus(), 0)
+            }}
+            className={cn(
+              'flex w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-left shadow-sm',
+              'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60',
+              compact ? 'h-8 text-xs' : 'h-9 text-sm',
+            )}
+          >
+            {loading ? (
+              <span className="flex items-center gap-2 text-muted-foreground" data-testid={`${idPrefix}-model-loading`}>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Loading models
+              </span>
+            ) : (
+              <span className={cn('flex min-w-0 items-center gap-1.5', empty && 'text-muted-foreground')}>
+                {routed && <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />}
+                <span className="truncate" data-testid={`${idPrefix}-model-value`}>
+                  {current}
+                </span>
+                {currentSub && <span className="shrink-0 truncate text-muted-foreground">· {currentSub}</span>}
+              </span>
+            )}
+            <ChevronDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden />
+          </button>
+
+          {open && (
+            <div className="rounded-md border bg-popover text-popover-foreground shadow-md" data-testid={`${idPrefix}-model-panel`}>
+              <div className="flex items-center border-b px-2.5">
+                <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" aria-hidden />
+                <input
+                  ref={searchRef}
+                  type="search"
+                  aria-label="Search models"
+                  aria-controls={listId}
+                  aria-activedescendant={flat[active] ? `${listId}-${flat[active].key}` : undefined}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  placeholder="Search models"
+                  className={cn('h-9 w-full bg-transparent outline-none placeholder:text-muted-foreground', text)}
+                />
+              </div>
+              <div id={listId} role="listbox" aria-label={modelLabel} className="max-h-72 overflow-y-auto p-1">
+                {groups.length === 0 && <p className={cn('px-2 py-3 text-center text-muted-foreground', hint)}>No models match.</p>}
+                {groups.map((g) => (
+                  <div key={g.key} role="group" aria-label={g.heading ?? 'Choices'} className="py-0.5">
+                    {g.heading && <div className={cn('px-2 pb-0.5 pt-1.5 font-medium text-muted-foreground', hint)}>{g.heading}</div>}
+                    {g.items.map((item) => {
+                      const idx = flat.indexOf(item)
+                      const selected = isSelected(item)
+                      return (
+                        <div
+                          key={item.key}
+                          id={`${listId}-${item.key}`}
+                          role="option"
+                          aria-selected={selected}
+                          data-active={idx === active || undefined}
+                          onMouseEnter={() => setActive(idx)}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => choose(item)}
+                          className={cn('flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5', text, idx === active && 'bg-accent text-accent-foreground')}
+                        >
+                          <Check className={cn('h-3.5 w-3.5 shrink-0', selected ? 'opacity-100' : 'opacity-0')} aria-hidden />
+                          <span className="min-w-0 flex-1 truncate">
+                            {item.label}
+                            {item.kind === 'model' && item.sub !== item.label && <span className="ml-1.5 font-mono text-muted-foreground">{item.sub}</span>}
+                            {item.kind === 'free' && <span className="ml-1.5 text-muted-foreground">with {item.provider.name}</span>}
+                          </span>
+                          {item.kind === 'model' && item.unavailable && !item.saved && <span className={cn('shrink-0 text-amber-700 dark:text-amber-400', hint)}>Not available</span>}
+                        </div>
+                      )
+                    })}
+                    {g.note && <p className={cn('px-2 py-1 text-muted-foreground', hint)}>{g.note}</p>}
+                  </div>
+                ))}
+              </div>
+              {!providerLocked && <div className={cn('border-t px-3 py-2', hint)}>{connectLink}</div>}
+            </div>
+          )}
+        </>
+      )}
+
+      {savedUnavailable && (
+        <p className={cn('text-amber-700 dark:text-amber-400', hint)} data-testid={`${idPrefix}-model-unavailable`}>
+          This model is not available right now. Pick another, or check its provider again.
+        </p>
+      )}
+
+      {routed && (
+        <div>
+          <button type="button" className={cn('inline-flex items-center gap-1 text-muted-foreground hover:text-foreground', hint)} aria-expanded={autoSettings} onClick={() => setAutoSettings((v) => !v)}>
+            {autoSettings ? <ChevronDown className="h-3 w-3" aria-hidden /> : <ChevronRight className="h-3 w-3" aria-hidden />}
+            Automatic settings
+          </button>
+          {autoSettings && (
+            <div className="mt-2">
+              <RoutingPolicyField value={value.routing || {}} onChange={(routing) => onChange({ routing })} />
+            </div>
+          )}
         </div>
       )}
     </div>

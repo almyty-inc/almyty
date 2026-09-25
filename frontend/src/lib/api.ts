@@ -712,6 +712,14 @@ export const llmProvidersApi = {
   getById: (id: string) => apiGet(`/llm-providers/${id}`),
   
   create: (data: any) => apiPost('/llm-providers', data),
+
+  /**
+   * Save a provider only if its key works: checks the key, lists the
+   * models and returns them with the provider. A refused key is a 400 with
+   * { error: 'KEY_REJECTED' | 'CHECK_FAILED' | 'INVALID_CONFIGURATION',
+   * message, detail?, keyUrl? } and nothing is saved.
+   */
+  connect: (data: any) => apiPost('/llm-providers/connect', data),
   
   update: (id: string, data: any) => apiPatch(`/llm-providers/${id}`, data),
   

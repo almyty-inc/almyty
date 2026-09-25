@@ -120,13 +120,13 @@ export const JOURNEYS: Journey[] = [
     steps: [
       {
         key: 'provider',
-        title: 'Connect an inference provider',
+        title: 'Connect a provider',
         description: () =>
-          'Add a key for OpenAI, Anthropic, Gemini, Mistral, a local Ollama or another provider. Done once one is active and its last health check did not fail.',
-        cta: 'Add a provider',
+          'Paste a key for OpenAI, Anthropic, Gemini, Mistral or another provider, or point almyty at a local Ollama. Done once one is connected and its last check did not fail.',
+        cta: 'Connect a provider',
         target: () => ({
-          to: '/llm-providers/new?returnTo=%2Fguide',
-          place: 'Inference providers › Add inference provider',
+          to: '/models/connect?returnTo=%2Fguide',
+          place: 'Models › Connect a provider',
         }),
       },
       {
