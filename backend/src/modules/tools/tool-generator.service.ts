@@ -18,6 +18,7 @@ import {
   withToolQuota,
   writeToolBatch,
 } from './tool-quota';
+import { applyGeneratedToolScope, generatedToolScope } from './generated-tool-scope';
 
 export interface ToolGenerationOptions {
   includeOperations?: string[]; // Specific operation IDs to include
@@ -146,6 +147,8 @@ export class ToolGeneratorService {
               existingTool.inputSchemaId = inputSchema?.id;
               existingTool.outputSchemaId = outputSchema?.id;
               existingTool.description = this.generateToolDescription(operation, api);
+              // Regenerating keeps it in the API's scope, whatever it was written with.
+              if (existingTool.generated) applyGeneratedToolScope(existingTool, api);
 
               // Recompute integrity hash on update
               const { hash } = computeToolHash(existingTool);
@@ -291,10 +294,9 @@ export class ToolGeneratorService {
         // is what marks it generated.
         createdBy: options.createdBy ?? null,
         generated: true,
-        // A private API's tools are private to the API's owner.
-        ...(api.visibility === 'private' && api.ownerUserId
-          ? { visibility: 'private' as const, teamId: null, createdBy: api.ownerUserId }
-          : {}),
+        // The API's scope: a team API's tools are its team's, a private
+        // API's its owner's (generatedToolScope).
+        ...generatedToolScope(api),
         name: toolName,
         description: this.generateToolDescription(operation, api),
         type: toolType,
@@ -593,6 +595,7 @@ export class ToolGeneratorService {
     tool.outputSchemaId = outputSchema?.id;
     tool.parameters = inputSchema ? inputSchema.schema : this.createFallbackParameters(operation);
     tool.description = this.generateToolDescription(operation, api);
+    if (tool.generated) applyGeneratedToolScope(tool, api);
 
     // Increment version
     const currentVersion = tool.version.split('.').map(Number);

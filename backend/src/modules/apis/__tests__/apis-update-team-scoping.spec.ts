@@ -28,8 +28,10 @@ describe('ApisService.update team-scoping sanitize', () => {
   let service: ApisService
   let apiRepository: any
   let accessPolicy: { canAccess: jest.Mock; assertCanScopeToTeam: jest.Mock }
+  let dataSource: { transaction: jest.Mock; query: jest.Mock }
 
   beforeEach(async () => {
+    dataSource = { transaction: jest.fn(), query: jest.fn().mockResolvedValue([]) }
     apiRepository = {
       findOne: jest.fn(),
       find: jest.fn(),
@@ -50,7 +52,7 @@ describe('ApisService.update team-scoping sanitize', () => {
         { provide: SchemaParserService, useValue: { parseApiSchema: jest.fn() } },
         { provide: ToolsService, useValue: {} },
         { provide: AuditLogService, useValue: { log: jest.fn(), logUpdate: jest.fn(), logCreate: jest.fn(), logDelete: jest.fn() } },
-        { provide: DataSource, useValue: { transaction: jest.fn() } },
+        { provide: DataSource, useValue: dataSource },
         { provide: ApisImportHelper, useValue: {} },
         { provide: ApisToolGeneratorHelper, useValue: { generateToolsFromApi: jest.fn() } },
         { provide: AccessPolicyService, useValue: accessPolicy },
@@ -81,6 +83,10 @@ describe('ApisService.update team-scoping sanitize', () => {
 
     expect(existing.visibility).toBe('team')
     expect(existing.teamId).toBe('team-uuid')
+    // Its generated tools follow it into the team.
+    const [sql, params] = dataSource.query.mock.calls[0]
+    expect(sql).toContain('UPDATE tools SET visibility')
+    expect(params.slice(0, 4)).toEqual(['org-1', 'api-1', 'team', 'team-uuid'])
   })
 
   it('rejects update when assertCanScopeToTeam throws (regression bait: if the call is removed, this fails)', async () => {
