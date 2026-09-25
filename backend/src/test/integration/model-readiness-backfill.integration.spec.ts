@@ -16,7 +16,7 @@
  *
  * Gated behind RUN_DB_INTEGRATION=1 with the standard DATABASE_* env vars.
  */
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 
 import { Organization } from '../../entities/organization.entity';
 import { LlmProvider, LlmProviderStatus, LlmProviderType } from '../../entities/llm-provider.entity';
@@ -24,9 +24,7 @@ import { Model } from '../../entities/model.entity';
 import { ModelVersion } from '../../entities/model-version.entity';
 import { ModelCatalogService } from '../../modules/model-catalog/model-catalog.service';
 import { ModelCatalogController } from '../../modules/model-catalog/model-catalog.controller';
-import { CatalogWarmupService } from '../../modules/model-catalog/catalog-warmup.service';
 import { ModelReadinessBackfill1750812500000 } from '../../migrations/1750812500000-ModelReadinessBackfill';
-import { FakeRedis } from '../fake-redis';
 import { ensureSchema } from './isolated-schema.helper';
 
 const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
@@ -141,28 +139,23 @@ describeIfDb('model readiness on cards made before the rule (real Postgres)', ()
     const listed = { OpenAI: ['gpt-4o', 'gpt-4o-mini', 'o1', 'gpt-5'], Mistral: ['mistral-large', 'mistral-small'] };
     const catalog = catalogOver(listed);
     const checks: string[] = [];
-    const warmup = new CatalogWarmupService(
-      ds.getRepository(LlmProvider),
-      ds.getRepository(Model),
-      catalog,
-      {
-        // What performHealthCheck writes when the key check passes.
-        performHealthCheck: async (providerId: string, organizationId: string) => {
-          checks.push(providerId);
-          await ds.getRepository(LlmProvider).update({ id: providerId, organizationId }, { isHealthy: true, lastHealthCheckAt: new Date() });
-          await catalog.applyProviderCheck(organizationId, providerId, { passed: true });
-          return { isHealthy: true };
-        },
-      } as any,
-      ds,
-      new FakeRedis() as any,
-      { concurrency: 2, vendorGapMs: 0, debounceMs: 60_000, loadWaitMs: 1_000 },
-    );
+    // What performHealthCheck writes when the key check passes.
+    const keyCheck = async (providerId: string, organizationId: string) => {
+      checks.push(providerId);
+      await ds.getRepository(LlmProvider).update({ id: providerId, organizationId }, { isHealthy: true, lastHealthCheckAt: new Date() });
+      await catalog.applyProviderCheck(organizationId, providerId, { passed: true });
+    };
 
     // Boot: the readiness pass (CatalogSyncProcessor.onApplicationBootstrap),
-    // then the queued boot sync of never-synced providers.
+    // then what the boot sync does for each never-synced provider
+    // (CatalogWarmupService.warmProvider: the key check, then the list).
+    // Called directly: the job itself takes a database-wide advisory lock
+    // that catalog-boot-sync.integration.spec.ts asserts on in parallel.
     await catalog.reconcileReadiness();
-    await warmup.syncNeverSynced('boot');
+    for (const p of await ds.getRepository(LlmProvider).find({ where: { organizationId: orgId, status: LlmProviderStatus.ACTIVE, modelsSyncedAt: IsNull() } })) {
+      await keyCheck(p.id, orgId);
+      await catalog.syncFromProvider(orgId, p.id);
+    }
 
     expect(await usableOf(openai)).toEqual(['gpt-4o', 'gpt-4o-mini', 'gpt-5', 'o1']);
     expect(await usableOf(mistral)).toEqual(['mistral-large', 'mistral-small']);
