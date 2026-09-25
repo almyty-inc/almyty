@@ -18,7 +18,8 @@ import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
 import { withApiQuota } from './api-quota';
 import { AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
-import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
+import { egressAxiosConfig } from '../../common/security/pinned-redirects';
+import { outboundFailureDetail } from '../../common/security/safe-fetch';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
 import { nameTaken, resolveVisibilityWrite } from '../../common/authorization/private-visibility';
 import { assertManageable, assertReadable } from '../../common/authorization/read-rule';
@@ -720,15 +721,8 @@ export class ApisService {
       const startTime = Date.now();
 
       const config: any = {
-        timeout: api.timeoutMs || 30000,
         validateStatus: () => true, // Accept any status code
-        maxContentLength: 256 * 1024,
         maxBodyLength: 256 * 1024,
-        maxRedirects: 0,
-        // The string check above does not see what the name resolves to;
-        // the pinned agents refuse a private address at connect time.
-        httpAgent: ssrfSafeHttpAgent,
-        httpsAgent: ssrfSafeHttpsAgent,
       };
 
       // Add authentication if configured. The secret comes from the
@@ -746,7 +740,13 @@ export class ApisService {
         config.headers = { ...config.headers, ...api.headers };
       }
 
-      const response = await axios.get(api.baseUrl, config);
+      // The string check above does not see what the name resolves to, so
+      // the connection is pinned; redirects are refused, the body capped,
+      // and the deadline is for the whole exchange. Spread last.
+      const response = await axios.get(api.baseUrl, {
+        ...config,
+        ...egressAxiosConfig({ timeoutMs: api.timeoutMs || 30000, maxBytes: 256 * 1024 }),
+      });
       const responseTime = Date.now() - startTime;
 
       return {
@@ -755,9 +755,10 @@ export class ApisService {
         responseTime,
       };
     } catch (error) {
+      // Never the errno: "ECONNREFUSED" vs a timeout says which ports answer.
       return {
         success: false,
-        error: error.message,
+        error: outboundFailureDetail(error),
       };
     }
   }

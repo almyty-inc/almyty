@@ -69,15 +69,17 @@ describe('every schema fetch goes through the guarded helper', () => {
     // #696's mechanism moved in here: same string check underneath, plus
     // the uniform refusal that does not leak whether a host or port exists.
     expect(body).toContain('assertOutboundUrlAllowed(url)');
-    expect(body).toContain('maxContentLength');
     // The string gate is not enough on its own. A public name whose A
     // record answers 169.254.169.254 passes it, so the connection is
     // pinned too -- this is the half #696 found and the REST door lacked.
-    // pinnedRedirects() carries the pinned agents onto every hop and runs
-    // each hop's Location back through validateUrl; a schema URL that 301s
-    // to https is followed, one that 302s to an internal host is refused.
-    expect(body).toContain('...pinnedRedirects()');
+    // egressAxiosConfig({ maxRedirects }) is pinnedRedirects() -- the pinned
+    // agents on every hop, each hop's Location back through validateUrl --
+    // plus the size cap and a total deadline (axios's `timeout` alone is an
+    // idle timer a slow-drip server resets forever).
+    expect(body).toMatch(/\.\.\.egressAxiosConfig\(\{ timeoutMs: 30_000, maxBytes: 15 \* 1024 \* 1024, maxRedirects: DEFAULT_REDIRECT_HOPS \}\)/);
     // The refusal must come before the request, not after it.
     expect(body.indexOf('assertOutboundUrlAllowed(url)')).toBeLessThan(body.indexOf('axios.get('));
+    // And a failure never echoes the errno or the upstream status.
+    expect(body).toContain('outboundFailureDetail(error)');
   });
 });
