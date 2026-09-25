@@ -24,7 +24,7 @@ import { assertManageable, canRead } from '../../common/authorization/read-rule'
 import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { collectAgentReferences, collectProviderReferences } from './agent-references';
 import { LlmProvider } from '../../entities/llm-provider.entity';
-import { providerUsableBy } from '../llm-providers/private-provider';
+import { usableProviders } from '../llm-providers/private-provider';
 
 export interface AgentSearchFilters {
   search?: string;
@@ -348,9 +348,9 @@ export class AgentsService {
     if (added.length === 0) return;
     const found = await this.agentRepository.manager.getRepository(LlmProvider).find({
       where: { id: In(added), organizationId },
-      select: { id: true, visibility: true, ownerUserId: true },
+      select: { id: true, organizationId: true, visibility: true, ownerUserId: true, teamId: true },
     });
-    const usable = new Set(found.filter((p) => providerUsableBy(p, userId)).map((p) => p.id));
+    const usable = new Set((await usableProviders(this.accessPolicy, organizationId, userId, found)).map((p) => p.id));
     const refused = added.filter((id) => !usable.has(id));
     if (refused.length) {
       throw new BadRequestException(

@@ -41,11 +41,15 @@ export class StrategyPipelineResolver {
     @Optional() private readonly orchestrator?: OrchestratorService,
   ) {}
 
-  /** The chosen shape compiled, or null when the agent runs its own graph. */
-  async pipelineFor(agent: Agent, request = ''): Promise<CompiledStrategy | null> {
+  /**
+   * The chosen shape compiled, or null when the agent runs its own graph.
+   * `userId` is who the run acts as; the orchestrator's model call is made
+   * as them, so it reaches only providers they may use.
+   */
+  async pipelineFor(agent: Agent, request = '', userId?: string | null): Promise<CompiledStrategy | null> {
     // A model picking the shape per request overrides the standing
     // choice, which is the whole point of switching it on.
-    const choice = (await this.orchestrator?.choose(agent, request)) ?? null;
+    const choice = (await this.orchestrator?.choose(agent, request, userId)) ?? null;
     const strategyKey = choice?.strategyKey ?? ((agent.settings as any)?.execution?.strategyKey as string | undefined | null);
     if (!strategyKey) return null;
 

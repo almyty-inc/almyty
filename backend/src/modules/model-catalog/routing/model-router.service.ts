@@ -10,7 +10,8 @@ import { AuditLogService } from '../../audit-log/audit-log.service';
 import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
 import { RouteCandidate, RoutingPolicy, selectCandidates } from './model-router';
 import { getRequestContext } from '../../../common/request-context';
-import { providerUsableBy } from '../../llm-providers/private-provider';
+import { providerUsableByUser } from '../../llm-providers/private-provider';
+import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
 
 /** Weight of a new sample in the p50 average. */
 const LATENCY_P50_ALPHA = 0.2;
@@ -91,6 +92,7 @@ export class ModelRouterService {
     @InjectRepository(ModelDeployment) private readonly deployments: Repository<ModelDeployment>,
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly credentialRefs?: CredentialRefResolver,
+    @Optional() private readonly accessPolicy?: AccessPolicyService,
   ) {}
 
   async plan(organizationId: string, policy: RoutingPolicy = {}, principal?: { id: string }): Promise<RoutePlan> {
@@ -177,9 +179,10 @@ export class ModelRouterService {
     if (!card.providerId) return null;
     const provider = await this.providers.findOne({ where: { id: card.providerId, organizationId: card.organizationId } });
     if (!provider) return null;
-    // Another user's private provider is never a candidate, and neither is
-    // any private provider for a call attributed to nobody.
-    if (!providerUsableBy(provider, principal?.id)) return null;
+    // Another user's private provider is never a candidate, nor a team
+    // provider for a principal outside its team; a call attributed to
+    // nobody gets organization-wide providers only.
+    if (!(await providerUsableByUser(this.accessPolicy, provider, principal?.id))) return null;
     if (this.credentialRefs && provider.credentialId) {
       // The row references a connection: it must still resolve for this
       // caller, or the candidate drops out of the plan.

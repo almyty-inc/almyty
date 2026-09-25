@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
@@ -13,7 +13,8 @@ import { AgentsService } from './agents.service';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
 import { BUILT_IN_TOOLS } from './agent-runtime.service';
 import { isOthersPrivate } from '../../common/authorization/private-visibility';
-import { providerUsableBy } from '../llm-providers/private-provider';
+import { usableProviders } from '../llm-providers/private-provider';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 // ── Document shape ──
 
@@ -170,6 +171,7 @@ export class AgentTechDocHelper {
     private readonly approvalRepository: Repository<ApprovalRequest>,
     @InjectRepository(AgentFile)
     private readonly fileRepository: Repository<AgentFile>,
+    @Optional() private readonly accessPolicy?: AccessPolicyService,
   ) {}
 
   /**
@@ -579,9 +581,10 @@ export class AgentTechDocHelper {
     const providers = await this.llmProviderRepository.find({
       where: { id: In(ids), organizationId },
     });
-    // Another member's private provider is not named: its entry keeps the
-    // id the agent config already shows and nothing else, like a deleted one.
-    const byId = new Map(providers.filter((p) => providerUsableBy(p, viewerId)).map((p) => [p.id, p]));
+    // A provider the viewer may not use (another member's private one, a
+    // team's they are not on) is not named: its entry keeps the id the
+    // agent config already shows and nothing else, like a deleted one.
+    const byId = new Map((await usableProviders(this.accessPolicy, organizationId, viewerId, providers)).map((p) => [p.id, p]));
     for (const entry of entries) {
       const provider = entry.providerId ? byId.get(entry.providerId) : undefined;
       if (provider) {
