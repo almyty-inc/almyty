@@ -5,7 +5,7 @@ import * as Redis from 'ioredis';
 import { Repository } from 'typeorm';
 
 import { Model, ModelPricing } from '../../../entities/model.entity';
-import { LlmProviderType } from '../../../entities/llm-provider.entity';
+import { LlmProviderType, isSelfHostedOllama } from '../../../entities/llm-provider.entity';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { callLlmProviderHttp } from '../../llm-providers/providers/safe-request';
@@ -34,6 +34,8 @@ export const PRICE_FEED_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60;
 export const PRICE_DISAGREEMENT_THRESHOLD = 0.25;
 
 const FEED_TIMEOUT_MS = 20_000;
+/** Older than this, the feed is refreshed before new cards are priced (ensureFresh), and at boot. */
+export const PRICE_FEED_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const MICRO = 1_000_000;
 
 export type PriceFeedSource = 'feed:litellm' | 'feed:openrouter';
@@ -50,7 +52,7 @@ export interface PriceQuote {
   inPerMTok: number;
   outPerMTok: number;
   currency: 'USD';
-  /** 'native' is only ever returned for local (Ollama) models, which are free. */
+  /** 'native' is only ever returned for an Ollama server someone runs, which is free per token. */
   source: PriceFeedSource | 'native';
   contextLength?: number;
   fetchedAt: Date;
@@ -229,6 +231,8 @@ export class PriceFeedService implements OnModuleInit {
   private litellm = new Map<string, FeedPrice>();
   private openrouter = new Map<string, FeedPrice>();
   private fetchedAt: Date | null = null;
+  /** The refresh ensureFresh started, shared by concurrent callers. */
+  private refreshing: Promise<void> | null = null;
   /** Distinct models per source, as opposed to index entries (bare, stripped and alias keys). */
   private sourceCounts = { litellm: 0, openrouter: 0 };
 
@@ -302,15 +306,47 @@ export class PriceFeedService implements OnModuleInit {
   }
 
   /**
+   * Refresh when there is nothing loaded or what is loaded is older than
+   * `maxAgeMs`, and otherwise leave it. Used when a sync created cards the
+   * feed could not price, so a model listed after the last refresh gets a
+   * price now instead of at the next daily run. Concurrent callers share
+   * one refresh. Never throws when something was loaded before.
+   */
+  async ensureFresh(maxAgeMs = PRICE_FEED_MAX_AGE_MS): Promise<void> {
+    if (this.isDisabled()) return;
+    const fresh = this.hasData() && this.fetchedAt && Date.now() - this.fetchedAt.getTime() < maxAgeMs;
+    if (fresh) return;
+    this.refreshing ??= this.refresh()
+      .then(() => undefined)
+      .finally(() => {
+        this.refreshing = null;
+      });
+    try {
+      await this.refreshing;
+    } catch (error) {
+      if (!this.hasData()) throw error;
+    }
+  }
+
+  /** How old the loaded feed is, in ms; null when nothing has been loaded. */
+  ageMs(): number | null {
+    return this.hasData() && this.fetchedAt ? Date.now() - this.fetchedAt.getTime() : null;
+  }
+
+  /**
    * LiteLLM first; when OpenRouter also prices the model and either side
    * differs by more than the threshold, the quote carries a disagreement
    * but still returns LiteLLM's numbers.
    */
-  lookup(providerType: string, vendorModelId: string): PriceQuote | null {
+  lookup(providerType: string, vendorModelId: string, opts: { selfHosted?: boolean } = {}): PriceQuote | null {
     if (!providerType || !vendorModelId) return null;
     const fetchedAt = this.fetchedAt ?? new Date(0);
 
     if (providerType === LlmProviderType.OLLAMA) {
+      // Free only on a server someone runs. Ollama Cloud bills by plan and
+      // is in neither feed, so its price is unknown, never zero. Callers
+      // that do not know the host (cost estimates) keep the old zero.
+      if (opts.selfHosted === false) return null;
       return { inPerMTok: 0, outPerMTok: 0, currency: 'USD', source: 'native', fetchedAt };
     }
 
@@ -339,8 +375,11 @@ export class PriceFeedService implements OnModuleInit {
    * missing price is visible, never a silent zero.
    */
   async applyToCatalog(organizationId?: string): Promise<ApplyToCatalogResult> {
+    // With the provider row: an Ollama card is free only on a server
+    // someone runs, and only the row says where it points.
     const rows = await this.modelRepository.find({
       where: organizationId ? { organizationId } : {},
+      relations: { provider: true },
     });
 
     const totals: ApplyToCatalogResult = { priced: 0, unpriced: 0, flagged: 0 };
@@ -354,7 +393,7 @@ export class PriceFeedService implements OnModuleInit {
       const orgCounts = perOrg.get(row.organizationId) ?? { priced: 0, unpriced: 0, flagged: 0 };
       perOrg.set(row.organizationId, orgCounts);
 
-      const quote = this.lookup(row.providerType, row.vendorModelId);
+      const quote = this.lookup(row.providerType, row.vendorModelId, { selfHosted: row.provider ? isSelfHostedOllama(row.provider) : undefined });
       const next: Partial<Model> = {};
 
       if (quote) {
@@ -392,6 +431,8 @@ export class PriceFeedService implements OnModuleInit {
 
       if (this.cardChanged(row, next)) {
         Object.assign(row, next);
+        // The provider was loaded to read its host; the save writes the card only.
+        (row as { provider?: unknown }).provider = undefined;
         await this.modelRepository.save(row);
       }
     }
