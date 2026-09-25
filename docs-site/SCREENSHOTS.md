@@ -10,6 +10,13 @@ Every image has its own capture time and SHA-256. Unknown legacy capture times
 are `null`, never a Git commit time or a made-up shared date. `needs-recapture`
 explicitly records the outstanding #675 backlog. It does not mean verified.
 
+Keep only images referenced by published documentation, the README or a QA
+report. The manifest is an inventory, not a reason to retain an unused image.
+When a screenshot is no longer used, remove the image and its manifest entry
+together; Git history retains the earlier evidence. Check references across the
+repository, not just `docs-site/content`, before removing anything. Only capture
+an additional view when a specific guide or report will use it.
+
 ## September 23 UI refresh checkpoint
 
 The revised shared headers, navigation and empty states (#737), Models flow
@@ -23,9 +30,9 @@ Published CLI evidence is separate and is not relabeled by this UI refresh.
 
 The September 24 pass targets the v0.2.8 UI, including page-based creation,
 inline configuration, Private visibility and the platform guide. Obsolete
-dialog images have been removed from the updated instructions; their manifest
-entries remain pending until replaced or deliberately retired. Source-verified
-prose changes alone do not mark screenshot evidence current.
+dialog images have been removed from the updated instructions. The September 25
+reference audit also removed unused images and their manifest entries.
+Source-verified prose changes alone do not mark screenshot evidence current.
 
 Register a reviewed browser capture with its observed capture time:
 
@@ -66,9 +73,9 @@ it with an unrelated successful screen.
 The authorized Business demo fixture now has reviewed captures of Roles, the
 inline custom-role and access-policy forms, approval policy list and editor,
 compliance policy and report, audit-stream target configuration, and SSO/SCIM
-controls. These use
-separate `*-enabled.png` or form-specific paths, preserving the earlier locked
-states. Each new record has its own observed capture time, image hash and source
+controls. These use separate `*-enabled.png` or form-specific paths; superseded
+locked-state images are retained only where a guide still references them.
+Each new record has its own observed capture time, image hash and source
 fingerprint. No roles, policies, stream targets, IdP configuration or provisioning
 tokens were created during this capture pass; visible controls are not evidence
 of a completed external integration.
@@ -80,7 +87,7 @@ the underlying browser failure.
 
 ## Enabled-feature evidence still needed
 
-The `*-locked.png` captures record a Pro organization's actual entitlement
+The remaining `*-locked.png` captures record a Pro organization's entitlement
 gates during the earlier capture pass; they also need recapturing after the UI
 refresh. They do **not** verify the enabled feature, its editor, or a successful
 configuration. The following views still need captures or end-to-end evidence
@@ -95,11 +102,11 @@ from an authorized, seeded organization with the corresponding entitlements:
 No entitled staging fixture was available during the September 23 capture pass.
 An authorized Business-plan demo fixture is available for the September 24 pass;
 Enterprise-only features still require an authorized fixture. Do not change
-billing, mint a license, or bypass a gate to obtain these images. Retain
-locked-state images as separate evidence from enabled-feature captures.
+billing, mint a license, or bypass a gate to obtain these images. Keep a referenced
+locked-state image distinct from evidence of the enabled feature.
 
 Runner list/detail also need a publishable demo fixture without private hostnames.
-The runner label-description correction (#717, fixed in #718) and dashboard
-inventory-label correction (#719, fixed in #720) are merged. Recapture those
-views after verifying the revised staging UI; do not publish the old routing
-or running-agent claims as current documentation.
+The runner label-description correction (#717, fixed in #718) is merged.
+Recapture the referenced runner views after verifying the revised staging UI;
+do not publish the old routing claims as current documentation. Unreferenced
+dashboard captures have been retired rather than added to the recapture backlog.
