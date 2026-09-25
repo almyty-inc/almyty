@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 
 import { render } from '../../test/setup'
 import { RunnerNewPage } from '../runner-new'
+import { suggestRunnerName } from '../runners-shared'
 
 vi.mock('../../lib/api', () => ({
   runnersApi: { getAll: vi.fn(), getById: vi.fn(), create: vi.fn(), update: vi.fn(), unregister: vi.fn() },
@@ -40,8 +41,15 @@ const pendingRunner = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
+// The form starts with a suggested name; typing replaces it.
+async function typeName(user: ReturnType<typeof userEvent.setup>, name: string) {
+  const field = await screen.findByLabelText(/^name$/i)
+  await waitFor(() => expect(field).not.toHaveValue(''))
+  await user.clear(field)
+  await user.type(field, name)
+}
 async function generate(user: ReturnType<typeof userEvent.setup>, name = 'my-laptop') {
-  await user.type(await screen.findByLabelText(/^name$/i), name)
+  await typeName(user, name)
   await user.click(screen.getByRole('button', { name: /generate command/i }))
   await screen.findByText(/Run these on the target machine/i)
 }
@@ -67,7 +75,7 @@ describe('RunnerNewPage', () => {
     getAll.mockResolvedValue([{ id: 'r1', name: 'taken-name', state: 'online', ownerUserId: 'someone', lastHeartbeatAt: new Date().toISOString() }])
     const user = userEvent.setup()
     render(<RunnerNewPage />)
-    await user.type(await screen.findByLabelText(/^name$/i), 'taken-name')
+    await typeName(user, 'taken-name')
     await waitFor(() => {
       expect(screen.getByText(/already exists in this organization/i)).toBeInTheDocument()
     })
@@ -76,7 +84,7 @@ describe('RunnerNewPage', () => {
   it('rejects invalid name characters via zod regex', async () => {
     const user = userEvent.setup()
     render(<RunnerNewPage />)
-    await user.type(await screen.findByLabelText(/^name$/i), 'has spaces')
+    await typeName(user, 'has spaces')
     await user.click(screen.getByRole('button', { name: /generate command/i }))
     await waitFor(() => {
       expect(screen.getByText(/letters, numbers/i)).toBeInTheDocument()
@@ -87,8 +95,9 @@ describe('RunnerNewPage', () => {
   it('creates the runner record with name, labels and visibility, and shows one install path', async () => {
     const user = userEvent.setup()
     render(<RunnerNewPage />)
-    expect(screen.getByText(/labels do not affect where work is dispatched yet/i)).toBeInTheDocument()
-    await user.type(await screen.findByLabelText(/^name$/i), 'my-laptop')
+    expect(screen.getByTestId('runner-labels-hint')).toHaveTextContent(/sending work to a machine that matches/)
+    expect(screen.getByTestId('runner-labels-hint')).toHaveTextContent(/os=mac/)
+    await typeName(user, 'my-laptop')
     await user.click(screen.getByRole('button', { name: /add label/i }))
     await user.type(screen.getByPlaceholderText('key'), 'env')
     await user.type(screen.getByPlaceholderText('value'), 'dev')
@@ -149,7 +158,7 @@ describe('RunnerNewPage', () => {
     create.mockRejectedValue({ response: { status: 409, data: { message: "the runner name 'franemb' is already used in this organization; pick another name" } } })
     const user = userEvent.setup()
     render(<RunnerNewPage />)
-    await user.type(await screen.findByLabelText(/^name$/i), 'franemb')
+    await typeName(user, 'franemb')
     await user.click(screen.getByRole('button', { name: /generate command/i }))
     expect(await screen.findByText(/already used in this organization/i)).toBeInTheDocument()
   })
@@ -164,5 +173,38 @@ describe('RunnerNewPage', () => {
       () => expect(mockNavigate).toHaveBeenCalledWith('/runners/r-new'),
       { timeout: 6_000 },
     )
+  })
+
+  it('starts with a name filled in, one nobody in the organization has', async () => {
+    getAll.mockResolvedValue([{ id: 'r1', name: 'my-machine', state: 'online', ownerUserId: 'someone', lastHeartbeatAt: null }])
+    render(<RunnerNewPage />)
+    const name = await screen.findByLabelText(/^name$/i)
+    await waitFor(() => expect(name).toHaveValue('my-machine-2'))
+    expect(name).toHaveAccessibleDescription(/What to call this machine/)
+  })
+
+  it('does not overwrite a name the person typed before the list loaded', async () => {
+    let resolve: (v: unknown[]) => void = () => {}
+    getAll.mockReturnValue(new Promise((r) => { resolve = r }))
+    const user = userEvent.setup()
+    render(<RunnerNewPage />)
+    const name = await screen.findByLabelText(/^name$/i)
+    await user.type(name, 'build-box')
+    resolve([])
+    await waitFor(() => expect(getAll).toHaveBeenCalled())
+    expect(name).toHaveValue('build-box')
+  })
+})
+
+describe('suggestRunnerName', () => {
+  it('uses the first name and the kind of computer, and numbers a taken one', () => {
+    expect(suggestRunnerName({ firstName: 'Frane' }, new Set(), 'MacIntel')).toBe('frane-mac')
+    expect(suggestRunnerName({ email: 'ops.team@x.io' }, new Set(), 'Win32')).toBe('ops-team-windows')
+    expect(suggestRunnerName(null, new Set(['my-linux']), 'Linux x86_64')).toBe('my-linux-2')
+  })
+
+  it('always fits the name rule the form enforces', () => {
+    const name = suggestRunnerName({ firstName: 'Zoë Ann-Marie O\'Neil the Third of Somewhere Far' }, new Set(), '')
+    expect(name).toMatch(/^[a-zA-Z0-9_-]{1,64}$/)
   })
 })

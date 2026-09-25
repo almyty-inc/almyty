@@ -280,10 +280,10 @@ export function RunnerDetailPage() {
           <CardContent>
             {Object.keys(runner.labels ?? {}).length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No labels set. Labels are descriptive tags configured on the runner side via{' '}
-                <code>--label k=v</code> or in <code>~/.almyty/config.json</code>. They do not
-                affect where work is dispatched yet — routing by label ships with the
-                multi-runner scheduler.
+                No labels. Labels are short tags that say what this machine has, such as{' '}
+                <code>os=mac</code> or <code>gpu=yes</code>, set when the runner starts with{' '}
+                <code>--label os=mac</code>. They are meant for sending work to a matching machine;
+                for now they only help you tell runners apart.
               </p>
             ) : (
               <div className="flex flex-wrap gap-1">
