@@ -22,6 +22,7 @@ import { AccessPolicyService, normaliseVisibility, type ResourceVisibility } fro
 import { ExecutionAccessService, gatewayPrincipal } from '../../common/authorization/execution-access.service';
 import { Agent } from '../../entities/agent.entity';
 import { GATEWAY_NOT_FOUND, PRIVATE_CAPABLE_GATEWAY_TYPES, assertGatewayReadable, gatewayReadableBy } from './private-gateway';
+import { assertManageable } from '../../common/authorization/read-rule';
 import {
   encryptChannelConfigSecrets,
   hasInlineChannelSecret,
@@ -832,13 +833,14 @@ export class GatewaysService {
     });
     if (!(await readable(gateway))) gateway = null;
 
-    // Fallback: match by slugified name
+    // Fallback: match by the name as a slug (a-z0-9, single dashes), the
+    // form the dashboard and the skills CLI print when there is no endpoint.
     if (!gateway) {
       const gateways = await this.gatewayRepository.find({
         where: { organizationId: organization.id },
       });
       for (const g of gateways) {
-        if (g.name.toLowerCase().replace(/\s+/g, '-') === gatewayNameSlug && (await readable(g))) {
+        if (cleanSlug(g.name) === gatewayNameSlug && (await readable(g))) {
           gateway = g;
           break;
         }
@@ -908,11 +910,7 @@ export class GatewaysService {
    * nothing about it.
    */
   private async assertCanManage(gateway: Gateway, userId: string): Promise<void> {
-    await assertGatewayReadable(this.accessPolicy, gateway, userId);
-    const decision = await this.accessPolicy.canAccess({ id: userId }, gateway, 'manage');
-    if (!decision.allowed) {
-      throw new ForbiddenException(decision.reason);
-    }
+    await assertManageable(this.accessPolicy, userId, gateway, 'Gateway');
   }
 
   /**
@@ -1229,12 +1227,14 @@ export class GatewaysService {
   ): Promise<void> {
     const gateway = await this.getGateway(gatewayId, organizationId, false);
 
+    // Authorization first: a gateway the caller may not read is the 404 a
+    // missing one gets, whatever kind it is. Org owner/admin always,
+    // team-scoped requires team lead.
+    await this.assertCanManage(gateway, userId);
+
     if (gateway.isSystem) {
       throw new BadRequestException('System gateways cannot be deleted');
     }
-
-    // Authorization: org owner/admin always, team-scoped requires team lead
-    await this.assertCanManage(gateway, userId);
 
     await this.releaseChannelCredential(gateway);
     await this.gatewayRepository.remove(gateway);
@@ -1273,4 +1273,9 @@ export class GatewaysService {
   getAllUserGateways(...args: Parameters<GatewaysStatsHelper['getAllUserGateways']>) { return this.statsHelper.getAllUserGateways(...args); }
   getSkillContextOrganization(...args: Parameters<GatewaysStatsHelper['getSkillContextOrganization']>) { return this.statsHelper.getSkillContextOrganization(...args); }
   calculateRequestTrend(...args: Parameters<GatewaysStatsHelper['calculateRequestTrend']>) { return this.statsHelper.calculateRequestTrend(...args); }
+}
+
+/** A name as a URL slug: lowercase a-z and 0-9, single dashes, none at either end. */
+export function cleanSlug(name: string): string {
+  return (name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }

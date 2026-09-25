@@ -119,6 +119,13 @@ export function scopeToOrganizationId(scopeType: ScopeType, scopeId: string): st
   return scopeId;
 }
 
+/** The member a `user` scope belongs to, or null for every other scope. */
+export function scopeToUserId(scopeType: ScopeType, scopeId: string): string | null {
+  if (scopeType !== 'user') return null;
+  const at = scopeId.indexOf(USER_SCOPE_SEPARATOR);
+  return at >= 0 ? scopeId.slice(at + USER_SCOPE_SEPARATOR.length) || null : null;
+}
+
 const USER_SCOPE_SEPARATOR = ':user:';
 
 /**

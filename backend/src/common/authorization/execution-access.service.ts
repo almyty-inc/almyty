@@ -132,6 +132,39 @@ export function describePrincipal(principal: ExecutionPrincipal): string {
   return `user ${principal.userId}`;
 }
 
+/**
+ * Who a lower layer is asked to act as. Older signatures carry a user id
+ * or `{ id }`; a run passes its ExecutionPrincipal so a gateway run keeps
+ * its gateway's scope all the way down. null or undefined is nobody.
+ */
+export type ActingAs = string | { id: string } | ExecutionPrincipal | null | undefined;
+
+export function isExecutionPrincipal(value: unknown): value is ExecutionPrincipal {
+  const kind = (value as { kind?: unknown } | null | undefined)?.kind;
+  return kind === 'user' || kind === 'gateway';
+}
+
+/**
+ * The principal behind `who`. A user id is taken as given: it comes from
+ * a session or a run row, not from the wire (userPrincipal() is the one
+ * that vets untrusted input).
+ */
+export function asPrincipal(who: ActingAs): ExecutionPrincipal {
+  if (isExecutionPrincipal(who)) return who;
+  const userId = typeof who === 'string' ? who : (who?.id ?? null);
+  return { kind: 'user', userId: userId || null, source: 'session' };
+}
+
+/**
+ * The user a principal is judged as. A user principal is that user. A
+ * gateway private to its owner acts as that owner (canGatewayExecute
+ * decides the same way); any other gateway is no user at all.
+ */
+export function actingUserId(principal: ExecutionPrincipal): string | null {
+  if (principal.kind === 'user') return principal.userId;
+  return principal.visibility === 'private' ? principal.ownerUserId : null;
+}
+
 export type ExecutableKind = 'Agent' | 'Tool';
 
 @Injectable()

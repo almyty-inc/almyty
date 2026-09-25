@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Boxes, Search, Wrench } from 'lucide-react'
+import { Boxes, Search } from 'lucide-react'
 
 import { Field, FormPage, FormSection } from '@/components/layout/form-page'
+import { ChoiceTile, ChoiceTiles } from '@/components/connect/service-tiles'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Disclosure } from '@/components/ui/disclosure'
@@ -18,6 +19,7 @@ import { captureEvent } from '@/lib/analytics'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { gatewayBackendUrl, orgSlugOf } from '@/lib/gateway-connect'
 import { toolsQuery } from '@/lib/list-queries'
+import { readableToolName } from '@/lib/tool-names'
 import { cn } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
@@ -34,7 +36,8 @@ export interface ShareableTool {
   teamId?: string | null
   apiId?: string | null
   api?: { id: string; name: string } | null
-  operation?: { api?: { id: string; name: string } | null } | null
+  /** The operation a spec-imported tool came from; its name is the spec's summary when there is one. */
+  operation?: { name?: string | null; api?: { id: string; name: string } | null } | null
 }
 
 export interface ToolSource {
@@ -96,7 +99,8 @@ export function defaultShareName(picked: ShareableTool[]): string {
     const source = sourceOf(picked[0])
     if (source) return source.name
   }
-  return picked.length === 1 ? picked[0].name : `${picked[0].name} and ${picked.length - 1} more`
+  const first = readableToolName(picked[0])
+  return picked.length === 1 ? first : `${first} and ${picked.length - 1} more`
 }
 
 /**
@@ -154,9 +158,14 @@ export function ShareToolsForm() {
   const q = search.trim().toLowerCase()
   const shownSources = q ? sources.filter((s) => s.name.toLowerCase().includes(q)) : sources
   const matchingTools = q
-    ? tools.filter((t) => t.name.toLowerCase().includes(q) || (t.description ?? '').toLowerCase().includes(q) || (sourceOf(t)?.name ?? '').toLowerCase().includes(q))
+    ? tools.filter((t) => [t.name, readableToolName(t), t.description ?? '', sourceOf(t)?.name ?? ''].some((s) => s.toLowerCase().includes(q)))
     : tools
   const shownTools = matchingTools.slice(0, SHOWN_TOOLS)
+  const pickedIn = (source: ToolSource) => source.tools.filter((t) => picked.has(t.id)).length
+  // A picked API shows as one line that opens into its tools, not as a list of all of them.
+  const pickedSources = sources.filter((s) => pickedIn(s) > 0)
+  // Tools that came from no API (written by hand) have no API to pick, so they are listed.
+  const looseTools = tools.filter((t) => !sourceOf(t))
 
   const toggleTool = (id: string) => {
     setPickError(undefined)
@@ -238,7 +247,7 @@ export function ShareToolsForm() {
       submitting={share.isPending}
       onSubmit={onSubmit}
     >
-      <FormSection title="What to share" description="A whole API, or single tools. Drafts can't be shared until they are active.">
+      <FormSection title="What to share" description="A whole API, or single tools: search to find one. Drafts can't be shared until they are active.">
         <div className="relative max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search APIs and tools" aria-label="Search APIs and tools" />
@@ -257,75 +266,82 @@ export function ShareToolsForm() {
                 <h3 id="share-apis" className="text-sm font-medium text-muted-foreground">
                   APIs
                 </h3>
-                <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <ChoiceTiles>
                   {shownSources.map((source) => {
                     const state = sourceState(source)
                     const ready = source.tools.filter(isShareable).length
+                    const n = pickedIn(source)
                     return (
-                      <li key={source.id}>
-                        <button
-                          type="button"
-                          data-testid={`share-api-${source.id}`}
-                          aria-pressed={state === 'all'}
-                          disabled={ready === 0}
-                          onClick={() => toggleSource(source)}
-                          className={cn(
-                            'flex w-full items-center gap-2.5 rounded-lg border bg-card px-3 py-2.5 text-left text-sm transition-colors',
-                            'hover:border-primary/50 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50',
-                            state === 'all' && 'border-primary bg-primary/5 ring-1 ring-primary',
-                            state === 'some' && 'border-primary/50',
-                          )}
-                        >
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10" aria-hidden>
-                            <Boxes className="h-4 w-4 text-primary" />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-medium">{source.name}</span>
-                            <span className="block text-xs text-muted-foreground">
-                              {ready === source.tools.length
-                                ? `${ready} tool${ready === 1 ? '' : 's'}`
-                                : `${ready} of ${source.tools.length} tools ready`}
-                            </span>
-                          </span>
-                        </button>
-                      </li>
+                      <ChoiceTile
+                        key={source.id}
+                        testId={`share-api-${source.id}`}
+                        icon={<Boxes className="h-4 w-4 text-primary" />}
+                        label={source.name}
+                        hint={
+                          state === 'some'
+                            ? `${n} of ${ready} picked`
+                            : ready === source.tools.length
+                              ? `${ready} tool${ready === 1 ? '' : 's'}`
+                              : `${ready} of ${source.tools.length} tools ready`
+                        }
+                        selected={state === 'all'}
+                        disabled={ready === 0}
+                        onClick={() => toggleSource(source)}
+                      />
                     )
                   })}
-                </ul>
+                </ChoiceTiles>
               </section>
             )}
 
-            <section aria-labelledby="share-tools" className="space-y-2">
-              <h3 id="share-tools" className="text-sm font-medium text-muted-foreground">
-                Tools
-              </h3>
-              {shownTools.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No tool matches &ldquo;{search}&rdquo;.</p>
-              ) : (
-                <ul className="divide-y rounded-lg border">
-                  {shownTools.map((tool) => {
-                    const ready = isShareable(tool)
-                    const id = `share-tool-${tool.id}`
-                    return (
-                      <li key={tool.id} className="flex items-center gap-3 px-3 py-2.5">
-                        <Checkbox id={id} checked={picked.has(tool.id)} disabled={!ready} onCheckedChange={() => toggleTool(tool.id)} />
-                        <label htmlFor={id} className={cn('flex min-w-0 flex-1 items-center gap-2 text-sm', ready ? 'cursor-pointer' : 'text-muted-foreground')}>
-                          <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                          <span className="truncate font-medium">{tool.name}</span>
-                          {sourceOf(tool) && <span className="hidden truncate text-xs text-muted-foreground sm:inline">{sourceOf(tool)!.name}</span>}
-                        </label>
-                        {!ready && <Badge variant="secondary">{tool.status === 'draft' ? 'Draft' : tool.status}</Badge>}
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-              {matchingTools.length > shownTools.length && (
-                <p className="text-xs text-muted-foreground">
-                  Showing {shownTools.length} of {matchingTools.length}. Search to find the rest.
-                </p>
-              )}
-            </section>
+            {q ? (
+              <section aria-labelledby="share-tools" className="space-y-2">
+                <h3 id="share-tools" className="text-sm font-medium text-muted-foreground">
+                  Tools
+                </h3>
+                {shownTools.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No tool matches &ldquo;{search}&rdquo;.</p>
+                ) : (
+                  <ToolRows tools={shownTools} picked={picked} onToggle={toggleTool} showSource />
+                )}
+                {matchingTools.length > shownTools.length && (
+                  <p className="text-xs text-muted-foreground">
+                    Showing {shownTools.length} of {matchingTools.length}. Search for more to narrow it down.
+                  </p>
+                )}
+              </section>
+            ) : (
+              <>
+                {pickedSources.map((source) => {
+                  const ready = source.tools.filter(isShareable).length
+                  const n = pickedIn(source)
+                  return (
+                    <Disclosure
+                      key={source.id}
+                      testId={`share-picked-${source.id}`}
+                      title={source.name}
+                      summary={`${n === ready ? n : `${n} of ${ready}`} tool${ready === 1 ? '' : 's'} · Choose which`}
+                      bodyClassName="p-0"
+                    >
+                      <ToolRows tools={source.tools} picked={picked} onToggle={toggleTool} bare />
+                    </Disclosure>
+                  )
+                })}
+                {looseTools.length > 0 && (
+                  <section aria-labelledby="share-tools" className="space-y-2">
+                    <h3 id="share-tools" className="text-sm font-medium text-muted-foreground">
+                      {sources.length > 0 ? 'Other tools' : 'Tools'}
+                    </h3>
+                    <ToolRows tools={looseTools.slice(0, SHOWN_TOOLS)} picked={picked} onToggle={toggleTool} />
+                    {looseTools.length > SHOWN_TOOLS && (
+                      <p className="text-xs text-muted-foreground">
+                        Showing {SHOWN_TOOLS} of {looseTools.length}. Search to find the rest.
+                      </p>
+                    )}
+                  </section>
+                )}
+              </>
+            )}
           </>
         )}
         {pickError && (
@@ -378,5 +394,52 @@ export function ShareToolsForm() {
         </p>
       </Disclosure>
     </FormPage>
+  )
+}
+
+/**
+ * Tools to tick, by the name people read, with the name agents call it by
+ * underneath in mono. `showSource` adds the API, for a list that mixes
+ * APIs (search results); `bare` drops the border inside a fold.
+ */
+function ToolRows({
+  tools,
+  picked,
+  onToggle,
+  showSource = false,
+  bare = false,
+}: {
+  tools: ShareableTool[]
+  picked: Set<string>
+  onToggle: (id: string) => void
+  showSource?: boolean
+  bare?: boolean
+}) {
+  return (
+    <ul className={cn('divide-y', !bare && 'rounded-lg border')}>
+      {tools.map((tool) => {
+        const ready = isShareable(tool)
+        const id = `share-tool-${tool.id}`
+        const readable = readableToolName(tool)
+        const source = showSource ? sourceOf(tool) : null
+        const machine = readable !== tool.name ? tool.name : null
+        return (
+          <li key={tool.id} className="flex items-center gap-3 px-3 py-2.5">
+            <Checkbox id={id} checked={picked.has(tool.id)} disabled={!ready} onCheckedChange={() => onToggle(tool.id)} />
+            <label htmlFor={id} className={cn('min-w-0 flex-1 text-sm', ready ? 'cursor-pointer' : 'text-muted-foreground')}>
+              <span className="block truncate font-medium">{readable}</span>
+              {(source || machine) && (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {source?.name}
+                  {source && machine && ' · '}
+                  {machine && <span className="font-mono">{machine}</span>}
+                </span>
+              )}
+            </label>
+            {!ready && <Badge variant="secondary">{tool.status === 'draft' ? 'Draft' : tool.status}</Badge>}
+          </li>
+        )
+      })}
+    </ul>
   )
 }

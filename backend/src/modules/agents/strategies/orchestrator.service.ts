@@ -9,6 +9,7 @@ import { AgentRolesService } from '../agent-roles.service';
 import { ModelRouterService } from '../../model-catalog/routing/model-router.service';
 import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
 import { STRATEGY_SEEDS } from './strategy-seeds';
+import { type ExecutionPrincipal, asPrincipal } from '../../../common/authorization/execution-access.service';
 import {
   fallbackChoice,
   orchestratorPrompt,
@@ -44,8 +45,8 @@ export class OrchestratorService {
     @Optional() private readonly llm?: LlmProvidersService,
   ) {}
 
-  /** The shape to run, or null when this agent does not orchestrate. */
-  async choose(agent: Agent, request: string): Promise<OrchestratorChoice | null> {
+  /** The shape to run, or null when this agent does not orchestrate. `caller` is who the run acts as: its principal. */
+  async choose(agent: Agent, request: string, caller?: string | ExecutionPrincipal | null): Promise<OrchestratorChoice | null> {
     const config = this.configFor(agent);
     if (!config?.enabled) return null;
 
@@ -63,7 +64,7 @@ export class OrchestratorService {
     }
 
     try {
-      const answer = await this.ask(agent, config, offered, request);
+      const answer = await this.ask(agent, config, offered, request, caller);
       const read = readOrchestratorAnswer(answer, all, config.allowedStrategyKeys);
       if (read.ok === false) return fallbackChoice(config, read.reason);
       return { strategyKey: read.strategyKey, roleBindings: read.roleBindings, reasoning: read.reasoning, via: 'orchestrator' };
@@ -96,16 +97,21 @@ export class OrchestratorService {
     config: OrchestratorConfig,
     available: Array<Pick<Strategy, 'key' | 'displayName' | 'roleSlots' | 'shape'>>,
     request: string,
+    caller?: string | ExecutionPrincipal | null,
   ): Promise<string> {
     if (!this.router || !this.llm) throw new Error('no model is wired to decide with');
 
-    const resolved = await this.roles.resolveRoles(agent.organizationId, agent.id);
+    // The decision is part of the run, so it is made as the run's
+    // principal: a private or team provider is reachable only when that
+    // principal may use it (a gateway run: its gateway's team).
+    const principal = asPrincipal(caller);
+    const resolved = await this.roles.resolveRoles(agent.organizationId, agent.id, {}, principal);
     const decider = resolved.find((r) => r.key === config.roleKey);
     if (!decider) {
       throw new Error(`this agent has no role called "${config.roleKey}" to decide with`);
     }
 
-    const { provider } = await this.router.providerForModelId(agent.organizationId, decider.modelId);
+    const { provider } = await this.router.providerForModelId(agent.organizationId, decider.modelId, principal);
     const roleKeys = resolved.map((r) => r.key);
 
     const call = this.llm.chat(
@@ -116,6 +122,7 @@ export class OrchestratorService {
         messages: [{ role: MessageRole.USER, content: orchestratorPrompt(request, available, roleKeys) }],
       } as any,
       agent.organizationId,
+      principal,
     );
 
     // A decision that takes longer than the work it is deciding about is

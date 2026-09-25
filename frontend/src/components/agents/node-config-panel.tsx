@@ -10,6 +10,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
+import { readableToolName } from '@/lib/tool-names'
 import { Disclosure } from '@/components/ui/disclosure'
 import { CodeEditor } from '@/components/ui/code-editor'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
@@ -24,6 +26,7 @@ import type { RoutingPolicy } from '@/types/models'
 import { STEP_NAMES, earlierSteps } from './step-values'
 import { StepCatalog, StepTextMode, StepValueField, StepValueSelect } from './step-value-field'
 import { OtherValues, ToolStepInputs, mappingEntries, toMapping, toolParameters, type MappingEntry } from './tool-step-inputs'
+import { AgentSelect } from './agent-select'
 
 // ─── Shared types ────────────────────────────────────────────────────────────
 
@@ -372,80 +375,73 @@ function LlmCallConfig({ node, tools, updateData, onUpdateNode }: { node: Node; 
                 <p className="text-xs text-muted-foreground mt-1">No tools yet. Make some under Tools.</p>
               ) : (
                 <>
-                  <div className="flex gap-1 mt-1 mb-2">
-                    <button type="button" className="text-[10px] px-2 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors" onClick={() => updateData('toolIds', allIds)}>
+                  <div className="mt-1 mb-2 flex items-center gap-1">
+                    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => updateData('toolIds', allIds)}>
                       All
-                    </button>
-                    <button type="button" className="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors" onClick={() => updateData('toolIds', [])}>
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => updateData('toolIds', [])}>
                       None
-                    </button>
-                    {groups.map(([source, groupTools]) => (
-                      <button
-                        key={source}
-                        type="button"
-                        className="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors truncate max-w-[80px]"
-                        onClick={() => {
-                          const groupIds = (groupTools as any[]).map((t) => t.id)
-                          const otherIds = selectedTools.filter((id) => !groupIds.includes(id))
-                          const allGroupSelected = groupIds.every((id) => selectedTools.includes(id))
-                          updateData('toolIds', allGroupSelected ? otherIds : [...otherIds, ...groupIds])
-                        }}
-                        title={source}
-                      >
-                        {source}
-                      </button>
-                    ))}
+                    </Button>
                   </div>
 
                   <Input
                     placeholder="Filter tools"
+                    aria-label="Filter tools"
                     value={toolSearch}
                     onChange={(e) => {
                       setToolSearch(e.target.value)
                       setShowAllTools(false)
                     }}
-                    className="mb-1 text-xs h-7"
+                    className="mb-2"
                   />
 
-                  <div className="space-y-0.5 max-h-[180px] overflow-y-auto border rounded-md p-1.5">
+                  <div className="max-h-[240px] space-y-1 overflow-y-auto rounded-md border p-2" data-testid="llm-step-tools">
                     {groups.map(([source, groupTools]) => {
-                      const filtered = toolSearch ? (groupTools as any[]).filter((t) => t.name?.toLowerCase().includes(toolSearch.toLowerCase())) : (groupTools as any[])
+                      const q = toolSearch.toLowerCase()
+                      const filtered = toolSearch
+                        ? (groupTools as any[]).filter((t) => t.name?.toLowerCase().includes(q) || readableToolName(t).toLowerCase().includes(q))
+                        : (groupTools as any[])
                       if (filtered.length === 0) return null
                       const groupIds = (groupTools as any[]).map((t) => t.id)
                       const allSelected = groupIds.every((id) => selectedTools.includes(id))
+                      const groupId = `llm-tools-${source.replace(/[^a-z0-9]+/gi, '-')}`
                       return (
-                        <div key={source}>
-                          <button
-                            type="button"
-                            className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground py-1 w-full hover:text-foreground"
-                            onClick={() => {
-                              const otherIds = selectedTools.filter((id) => !groupIds.includes(id))
-                              updateData('toolIds', allSelected ? otherIds : [...otherIds, ...groupIds])
-                            }}
-                          >
-                            <input type="checkbox" checked={allSelected} readOnly className="rounded" />
-                            {source} ({filtered.length})
-                          </button>
+                        <div key={source} className="space-y-0.5">
+                          <div className="flex items-center gap-2 py-1">
+                            <Checkbox
+                              id={groupId}
+                              checked={allSelected}
+                              onCheckedChange={() => {
+                                const otherIds = selectedTools.filter((id) => !groupIds.includes(id))
+                                updateData('toolIds', allSelected ? otherIds : [...otherIds, ...groupIds])
+                              }}
+                            />
+                            <label htmlFor={groupId} className="min-w-0 cursor-pointer truncate text-xs font-medium text-muted-foreground">
+                              {source} ({filtered.length})
+                            </label>
+                          </div>
                           {(!showAllTools && filtered.length > 5 ? filtered.slice(0, 5) : filtered).map((tool: any) => {
                             const isSelected = selectedTools.includes(tool.id)
+                            const id = `llm-tool-${tool.id}`
                             return (
-                              <label key={tool.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-accent/10 rounded px-1 py-0.5 ml-3">
-                                <input
-                                  type="checkbox"
+                              <div key={tool.id} className="ml-3 flex items-center gap-2 rounded px-1 py-1 hover:bg-muted/50">
+                                <Checkbox
+                                  id={id}
                                   checked={isSelected}
-                                  onChange={(e) => {
-                                    updateData('toolIds', e.target.checked ? [...selectedTools, tool.id] : selectedTools.filter((id) => id !== tool.id))
+                                  onCheckedChange={(checked) => {
+                                    updateData('toolIds', checked ? [...selectedTools, tool.id] : selectedTools.filter((x) => x !== tool.id))
                                   }}
-                                  className="rounded"
                                 />
-                                <span className="truncate">{tool.name}</span>
-                              </label>
+                                <label htmlFor={id} className="min-w-0 cursor-pointer truncate text-sm" title={tool.name}>
+                                  {readableToolName(tool)}
+                                </label>
+                              </div>
                             )
                           })}
                           {!showAllTools && filtered.length > 5 && (
-                            <button type="button" className="text-[10px] text-muted-foreground hover:text-foreground ml-3 py-0.5" onClick={() => setShowAllTools(true)}>
-                              +{filtered.length - 5} more
-                            </button>
+                            <Button type="button" variant="link" size="sm" className="ml-3 h-auto px-1 py-0.5 text-xs" onClick={() => setShowAllTools(true)}>
+                              Show {filtered.length - 5} more
+                            </Button>
                           )}
                         </div>
                       )
@@ -482,7 +478,7 @@ function LlmCallConfig({ node, tools, updateData, onUpdateNode }: { node: Node; 
 
 // --- Tool call ---
 function ToolCallConfig({ node, nodes, tools, onUpdateNode }: { node: Node; nodes: Node[]; tools: any[]; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
-  const toolList = tools as Array<Pick<Tool, 'id' | 'name'>>
+  const toolList = tools as Array<Pick<Tool, 'id' | 'name'> & { operation?: { name?: string | null } | null }>
   const tool = tools.find((t) => t.id === node.data.toolId)
   const params = toolParameters(tool)
   const mapping = node.data.parameterMapping
@@ -501,10 +497,12 @@ function ToolCallConfig({ node, nodes, tools, onUpdateNode }: { node: Node; node
               ...node.data,
               toolId: v,
               toolName: picked?.name || '',
+              // What the step shows on the canvas; toolName stays the name agents call.
+              toolLabel: picked ? readableToolName(picked) : '',
             })
           }}
         >
-          <SelectTrigger id="tool-step-tool" className="mt-1">
+          <SelectTrigger id="tool-step-tool" className="mt-1 [&>span]:truncate">
             <SelectValue placeholder="Pick a tool" />
           </SelectTrigger>
           <SelectContent>
@@ -515,8 +513,8 @@ function ToolCallConfig({ node, nodes, tools, onUpdateNode }: { node: Node; node
             */}
             {toolList.length === 0 && <div className="px-3 py-2 text-sm text-muted-foreground">No tools yet. Make some from an API, or under Tools.</div>}
             {toolList.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.name}
+              <SelectItem key={t.id} value={t.id} title={t.name}>
+                {readableToolName(t)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -824,31 +822,18 @@ function SubAgentConfig({ node, updateData, onUpdateNode }: { node: Node; update
     <div className="space-y-3">
       <div>
         <Label htmlFor="sub-agent-agent">Agent</Label>
-        <Select
+        <AgentSelect
+          id="sub-agent-agent"
+          className="mt-1"
+          agents={agentList}
           value={(node.data.agentId as string) || ''}
-          onValueChange={(v) => {
-            const agent = agentList.find((a) => a.id === v)
+          emptyText="No other agents to call yet."
+          onChange={(agent) =>
             // One write, not two: onUpdateNode replaces `data` wholesale, so
             // writing the name second used to drop the id written first.
-            onUpdateNode(node.id, {
-              ...node.data,
-              agentId: v,
-              agentName: agent?.name || '',
-            })
-          }}
-        >
-          <SelectTrigger id="sub-agent-agent" className="mt-1">
-            <SelectValue placeholder="Pick an agent" />
-          </SelectTrigger>
-          <SelectContent>
-            {agentList.length === 0 && <div className="px-3 py-2 text-sm text-muted-foreground">No other agents to call yet.</div>}
-            {agentList.map((a) => (
-              <SelectItem key={a.id} value={a.id}>
-                {a.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            onUpdateNode(node.id, { ...node.data, agentId: agent.id, agentName: agent.name || '' })
+          }
+        />
       </div>
 
       <div className="space-y-2">

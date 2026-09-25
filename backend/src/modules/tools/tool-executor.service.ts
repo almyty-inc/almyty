@@ -164,6 +164,16 @@ export class ToolExecutorService {
       options = { ...options, principal: options.principal ?? userPrincipal(options.userId) };
       try {
         await this.executionAccess.assertCanExecute(options.principal!, tool, 'Tool');
+        // The API behind the tool is part of what runs: its base URL and the
+        // credentials bound to it. A tool generated from a team or private
+        // API is created org-wide unless the API is private, so the tool's
+        // own scope alone would hand the team's API to the whole org. The
+        // principal must be able to use the API too; refused as a missing
+        // tool, like the tool itself.
+        const api = tool.api ?? tool.operation?.api;
+        if (api && (api.visibility ?? 'org') !== 'org') {
+          await this.executionAccess.assertCanExecute(options.principal!, api, 'Tool');
+        }
       } catch {
         notFound = true;
         throw new Error('Tool not found');
@@ -678,8 +688,9 @@ export class ToolExecutorService {
         callParams,
         workspaceId,
         // The caller rides along so the runner's own visibility is checked
-        // at dispatch too, not only the tool row's.
-        { signal: options.signal, timeoutMs: tool.configuration?.timeout, callerUserId: options.userId ?? null },
+        // at dispatch too, not only the tool row's -- as the run's principal,
+        // so a gateway run is judged by its gateway's scope.
+        { signal: options.signal, timeoutMs: tool.configuration?.timeout, callerUserId: options.userId ?? null, principal: options.principal },
       );
       if (!response.ok) {
         return {
@@ -826,7 +837,8 @@ export class ToolExecutorService {
         tool.organizationId,
         cfg,
         parameters,
-        { timeoutMs: tool.configuration?.timeout, signal: options.signal },
+        // The source's connection is resolved as the run's principal.
+        { timeoutMs: tool.configuration?.timeout, signal: options.signal, principal: options.principal ?? userPrincipal(options.userId) },
       );
       return {
         success: mapped.success,

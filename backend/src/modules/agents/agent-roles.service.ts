@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { AgentRole, RoleBinding } from '../../entities/agent-role.entity';
 import { ModelRouterService } from '../model-catalog/routing/model-router.service';
 import { RoutingPolicy } from '../model-catalog/routing/model-router';
+import type { ActingAs } from '../../common/authorization/execution-access.service';
 
 /**
  * Resolving an agent's roles to concrete models for one run.
@@ -63,7 +64,7 @@ export class AgentRolesService {
     organizationId: string,
     agentId: string,
     overrides: Record<string, string> = {},
-    principal?: { id: string },
+    principal?: ActingAs,
   ): Promise<ResolvedRole[]> {
     const roles = await this.list(organizationId, agentId);
     const out: ResolvedRole[] = [];
@@ -81,7 +82,7 @@ export class AgentRolesService {
   private async resolveOne(
     organizationId: string,
     role: AgentRole,
-    principal?: { id: string },
+    principal?: ActingAs,
   ): Promise<ResolvedRole> {
     const binding: RoleBinding = role.binding;
     if (binding?.mode === 'pinned') {

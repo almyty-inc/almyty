@@ -26,7 +26,9 @@ import type { Model } from '../../entities/model.entity';
 import { ModelCatalogService } from '../model-catalog/model-catalog.service';
 
 import { AccessPolicyService, normaliseVisibility } from '../../common/authorization/access-policy.service';
-import { assertProviderUsableBy } from './private-provider';
+import { assertManageable } from '../../common/authorization/read-rule';
+import { ProviderNotUsableError, providerUsableByUser } from './private-provider';
+import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import { providerListsModels } from './provider-profile';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { Credential } from '../../entities/credential.entity';
@@ -421,14 +423,10 @@ export class LlmProvidersService {
         throw new NotFoundException('Provider not found');
       }
 
-      // Another user's private provider does not exist for this caller.
-      assertProviderUsableBy(provider, userId);
-
-      // Authorization: org owner/admin always, team-scoped requires team lead
-      const decision = await this.accessPolicy.canAccess({ id: userId }, provider, 'manage');
-      if (!decision.allowed) {
-        throw new ForbiddenException(decision.reason);
-      }
+      // A provider the caller may not read (another member's private one,
+      // a team's they are not on) does not exist for them: 404. Can read it
+      // but not manage it: 403.
+      await assertManageable(this.accessPolicy, userId, provider, 'Provider');
 
       // Re-validate team scoping if it's being changed.
       const updateAnyEarly = updateDto as any;
@@ -551,26 +549,33 @@ export class LlmProvidersService {
   }
 
   /**
-   * Load a provider of the organization. `caller` is who is asking:
-   * another user's private provider is reported exactly like a missing
-   * one (org admins included). Pass null for a path with no known user --
-   * a private provider is then not found either. Omit it only on internal
+   * Load a provider of the organization. `caller` is who is asking, or who
+   * a run acts as -- the run's ExecutionPrincipal, so a gateway run is
+   * judged by its gateway's scope: another user's private provider, and a
+   * team provider outside the caller's team (or the gateway's team), are
+   * reported exactly like a missing one (ProviderNotUsableError, a 404
+   * naming the caller). Pass null for a path with no known user -- only
+   * organization-wide providers are then found. Omit it only on internal
    * paths that act on a row already authorized upstream.
    */
   async getProvider(
     providerId: string,
     organizationId: string,
     includeSecrets = false,
-    caller?: { id: string } | null,
+    caller?: { id: string } | ExecutionPrincipal | null,
   ): Promise<LlmProvider> {
     const provider = await this.llmProviderRepository.findOne({
       where: { id: providerId, organizationId },
     });
 
-    if (!provider) {
+    if (caller !== undefined) {
+      // On someone's behalf, missing and not theirs to use are one answer.
+      if (!provider || !(await providerUsableByUser(this.accessPolicy, provider, caller))) {
+        throw new ProviderNotUsableError(caller);
+      }
+    } else if (!provider) {
       throw new NotFoundException('Provider not found');
     }
-    if (caller !== undefined) assertProviderUsableBy(provider, caller?.id);
 
     return includeSecrets ? provider : provider.maskSensitiveData() as LlmProvider;
   }
@@ -649,14 +654,12 @@ export class LlmProvidersService {
     organizationId: string,
     userId: string
   ): Promise<void> {
-    // Another user's private provider is not found, not forbidden.
     const provider = await this.getProvider(providerId, organizationId, false, { id: userId });
 
-    // Authorization: org owner/admin always, team-scoped requires team lead
-    const decision = await this.accessPolicy.canAccess({ id: userId }, provider, 'manage');
-    if (!decision.allowed) {
-      throw new ForbiddenException(decision.reason);
-    }
+    // A provider the caller may not read (another member's private one, a
+    // team's they are not on) is not found, not forbidden. Can read it but
+    // not manage it: 403.
+    await assertManageable(this.accessPolicy, userId, provider, 'Provider');
 
     // Retire the cards while they can still be found by providerId; the
     // FK nulls it on delete. Kept, not deleted: runs reference card ids.

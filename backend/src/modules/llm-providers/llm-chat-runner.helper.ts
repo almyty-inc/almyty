@@ -39,7 +39,7 @@ import {
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
 import { preferredBinding, providerProfile } from './provider-profile';
-import { userPrincipal } from '../../common/authorization/execution-access.service';
+import { type ActingAs, type ExecutionPrincipal, asPrincipal, userPrincipal } from '../../common/authorization/execution-access.service';
 
 /**
  * Provider-call mechanics extracted from LlmChatHelper:
@@ -63,18 +63,21 @@ export class LlmChatRunnerHelper {
     @Optional() private readonly secrets?: LlmProviderSecretsHelper,
   ) {}
 
-
-
+  /**
+   * `principal` is who the call acts as (a run's own, inherited). Omitted,
+   * the conversation's user stands in, as it always did for a plain chat.
+   */
   async callLlmProvider(
     provider: LlmProvider,
     request: ChatRequest,
     session: Conversation,
-    tools: Tool[]
+    tools: Tool[],
+    principal?: ExecutionPrincipal,
   ): Promise<ChatResponse> {
     if (request.routing) {
-      return this.callRouted(provider?.organizationId ?? session.organizationId, request, session, tools);
+      return this.callRouted(provider?.organizationId ?? session.organizationId, request, session, tools, principal);
     }
-    return this.callWithRetries(provider, request, session, tools);
+    return this.callWithRetries(provider, request, session, tools, principal);
   }
 
   /**
@@ -87,12 +90,14 @@ export class LlmChatRunnerHelper {
     request: ChatRequest,
     session: Conversation,
     tools: Tool[],
+    principal?: ExecutionPrincipal,
   ): Promise<ChatResponse> {
     if (!this.router) {
       throw new BadRequestException({ code: 'ROUTING_UNAVAILABLE', message: 'Model routing is not available in this deployment' });
     }
     const { routing, ...plain } = request;
-    const plan = await this.router.plan(organizationId, routing, session.userId ? { id: session.userId } : undefined);
+    const acting = principal ?? asPrincipal(session.userId ?? null);
+    const plan = await this.router.plan(organizationId, routing, acting);
     if (plan.candidates.length === 0) throw new NoRouteError(plan.rejected);
 
     const tried: Array<{ modelId: string; reason: string }> = [];
@@ -100,7 +105,7 @@ export class LlmChatRunnerHelper {
     for (let i = 0; i < plan.candidates.length; i++) {
       const candidate = plan.candidates[i];
       try {
-        const response = await this.callWithRetries(candidate.provider, { ...plain, model: candidate.vendorModelId }, session, tools);
+        const response = await this.callWithRetries(candidate.provider, { ...plain, model: candidate.vendorModelId }, session, tools, acting);
         response.routing = {
           modelId: candidate.modelId,
           modelVersionId: candidate.modelVersionId,
@@ -132,7 +137,7 @@ export class LlmChatRunnerHelper {
 
   /** The provider at the head of the plan; chat() uses it for the session when no provider id was given. */
   /** The head of the plan with its provider; the streaming path uses it since a stream cannot walk the chain mid-answer. */
-  async planRouteHead(organizationId: string, request: ChatRequest, principal?: { id: string }): Promise<{ provider: LlmProvider; candidate: ResolvedCandidate; rejected: Array<{ modelId: string; reason: string }> }> {
+  async planRouteHead(organizationId: string, request: ChatRequest, principal?: ActingAs): Promise<{ provider: LlmProvider; candidate: ResolvedCandidate; rejected: Array<{ modelId: string; reason: string }> }> {
     if (!this.router) {
       throw new BadRequestException({ code: 'ROUTING_UNAVAILABLE', message: 'Model routing is not available in this deployment' });
     }
@@ -141,7 +146,7 @@ export class LlmChatRunnerHelper {
     return { provider: plan.candidates[0].provider, candidate: plan.candidates[0], rejected: plan.rejected };
   }
 
-  async headProviderForRoute(organizationId: string, request: ChatRequest, principal?: { id: string }): Promise<LlmProvider> {
+  async headProviderForRoute(organizationId: string, request: ChatRequest, principal?: ActingAs): Promise<LlmProvider> {
     return (await this.planRouteHead(organizationId, request, principal)).provider;
   }
 
@@ -167,26 +172,35 @@ export class LlmChatRunnerHelper {
     return ![400, 413, 422].includes(status);
   }
 
+  /**
+   * The credential reference: policy check (grants seam), the team and
+   * private rules, and a fresh read of the row before the sync getters
+   * run -- resolved as the principal the call acts as (a run's own, so a
+   * gateway run is judged by its gateway). Undefined is the system acting
+   * for the provider itself (a health check). Optional only for specs that
+   * build the runner by hand; the module always wires it.
+   */
+  async resolveProviderSecrets(provider: LlmProvider, principal: ExecutionPrincipal | { id: string } | undefined): Promise<void> {
+    if (!this.secrets) return;
+    await this.secrets.withResolvedSecrets(provider, {
+      principal,
+      context: { purpose: 'llm_call', resourceType: 'llm_provider', resourceId: provider.id },
+    });
+  }
+
   async callWithRetries(
     provider: LlmProvider,
     request: ChatRequest,
     session: Conversation,
-    tools: Tool[]
+    tools: Tool[],
+    principal?: ExecutionPrincipal,
   ): Promise<ChatResponse> {
     // Warm the org's DEK cache before any sync key read (getAuthHeaders /
     // getDecryptedApiKey). No-op for non-KMS orgs. This is the single choke
     // point for outbound provider calls, so it covers chat, streaming, and the
     // health check path.
     await this.envelopeCrypto.warmOrg(provider.organizationId);
-    // The credential reference: policy check (grants seam) and a fresh
-    // read of the row before the sync getters run. Optional only for
-    // specs that build the runner by hand; the module always wires it.
-    if (this.secrets) {
-      await this.secrets.withResolvedSecrets(provider, {
-        principal: session?.userId ? { id: session.userId } : undefined,
-        context: { purpose: 'llm_call', resourceType: 'llm_provider', resourceId: provider.id },
-      });
-    }
+    await this.resolveProviderSecrets(provider, principal ?? (session?.userId ? { id: session.userId } : undefined));
 
     // Settle the model once, up front. Provider implementations never
     // guess: when neither the request nor the provider names one, the
@@ -376,6 +390,7 @@ export class LlmChatRunnerHelper {
     session: Conversation,
     organizationId: string,
     signal?: AbortSignal,
+    principal?: ExecutionPrincipal,
   ): Promise<void> {
     if (!toolCalls.length) return;
 
@@ -418,10 +433,11 @@ export class LlmChatRunnerHelper {
         // follow-up both, not just one.
         const executionOptions: ToolExecutionOptions = {
           userId: session.userId ?? undefined,
-          // A chat's tool loop runs as the chat's user: a team tool only for
-          // its team, a private one only for its owner, nothing but org
-          // tools for a chat with no user.
-          principal: userPrincipal(session.userId ?? null),
+          // A chat's tool loop runs as the principal the chat was given (a
+          // run passes its own, inherited), else as the chat's user: a team
+          // tool only for its team, a private one only for its owner,
+          // nothing but org tools for a chat with no one behind it.
+          principal: principal ?? userPrincipal(session.userId ?? null),
           organizationId,
           signal,
         };

@@ -23,12 +23,15 @@ export class ConnectorCatalogService {
     @Optional() private readonly adapters?: AdapterRegistry,
   ) {}
 
-  /** Built-in plus adapter-derived connectors; no org data. */
+  /**
+   * Built-in plus adapter-derived connectors; no org data. A test double
+   * such as the stub adapter never becomes a connector, whatever the install.
+   */
   builtIn(): ConnectorDefinition[] {
     const out = [...BUILTIN_CONNECTORS];
     const covered = new Set(out.map((c) => c.adapterKey).filter(Boolean));
     for (const adapter of this.adapters?.describe() ?? []) {
-      if (covered.has(adapter.key)) continue;
+      if (covered.has(adapter.key) || this.adapters?.get(adapter.key)?.internal) continue;
       const derived = connectorFromAdapter(adapter);
       if (derived) out.push(derived);
     }

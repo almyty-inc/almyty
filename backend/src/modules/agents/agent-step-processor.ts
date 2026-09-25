@@ -331,7 +331,7 @@ export class AgentStepProcessor {
           run,
           { ...compaction, providerId: compaction.providerId ?? agent.modelConfig?.providerId },
           run.organizationId,
-          run.userId,
+          principalOfRun(run),
         );
         messages = compacted.messages;
         run.totalCost += compacted.cost;
@@ -467,7 +467,9 @@ export class AgentStepProcessor {
         providerId,
         chatRequest,
         run.organizationId,
-        run.userId,
+        // As the run's principal, inherited: a gateway run reaches its
+        // gateway team's providers and keys, never the run row's user's.
+        principalOfRun(run),
         (chunk) => emitStreamChunk((type, data) => this.s.emitEvent(runId, type, data), run.currentStep, chunk),
       );
 
@@ -1437,7 +1439,7 @@ export class AgentStepProcessor {
         providerId,
         answerRequest,
         run.organizationId,
-        run.userId,
+        principalOfRun(run),
         (chunk) => emitStreamChunk((type, data) => this.s.emitEvent(runId, type, data), step, chunk),
       );
     } catch (err: any) {
@@ -1596,7 +1598,7 @@ export class AgentStepProcessor {
     const panel = await this.verifier.runPanel(
       { target: finalContent, spec: cfg.spec, checkers: cfg.checkers!, policy: cfg.policy },
       run.organizationId,
-      run.userId,
+      principalOfRun(run),
     );
     run.totalCost += panel.cost;
     run.totalTokens += panel.tokens;
@@ -1650,7 +1652,7 @@ export class AgentStepProcessor {
     const panel = await this.verifier.runPanel(
       { target, spec: cfg.spec, checkers: cfg.checkers, policy: cfg.policy },
       run.organizationId,
-      run.userId,
+      principalOfRun(run),
     );
     run.totalCost += panel.cost;
     run.totalTokens += panel.tokens;

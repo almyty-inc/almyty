@@ -1,18 +1,43 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Brain, CheckCircle2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/layout/page-header'
-import { PickedService, ServiceTileGrid } from '@/components/connect/service-tiles'
+import { PickedService, ServiceTileGrid, type ServiceTileGroup } from '@/components/connect/service-tiles'
 import { StatusLabel } from '@/components/connect/status-label'
 import { isProviderType } from '@/components/llm-providers/provider-catalog'
 import { ConnectServiceForm, OTHER_SERVICE_KEY, connectorIcon, connectorTileGroups, useConnectors } from '@/components/connections/connect-flow'
 import { connectionCheck } from '@/components/connections/connection-status'
 import { CONNECTIONS_PATH, CONNECTIONS_QUERY_KEY, connectionPath } from '@/components/connections/paths'
+import { matchesConnectorSearch } from '@/lib/connections-api'
 import { safeReturnTo } from '@/lib/return-to'
-import type { Connection, Connector } from '@/types/connections'
+import type { Connection, Connector, ConnectorKind } from '@/types/connections'
+
+/** AI providers and model hosting have one home: Models. */
+const MODELS_KINDS: ConnectorKind[] = ['inference', 'deployment']
+const MODELS_CONNECT_PATH = '/models/connect'
+/** The one tile that stands in for every AI provider. */
+const AI_MODELS_TILE = 'ai-models'
+
+/**
+ * Every service but AI models, which are connected on Models where their
+ * models come with them: here they are one tile that leads there. It stays
+ * visible while a search matches an AI provider, so "openai" still finds it.
+ */
+function serviceTileGroups(connectors: Connector[], search: string): ServiceTileGroup[] {
+  const services = connectorTileGroups(connectors.filter((c) => !MODELS_KINDS.includes(c.kind)), search)
+  const query = search.trim().toLowerCase()
+  const showModels = !query || 'ai models'.includes(query) || connectors.some((c) => MODELS_KINDS.includes(c.kind) && matchesConnectorSearch(c, search))
+  if (!showModels) return services
+  const models: ServiceTileGroup = {
+    id: AI_MODELS_TILE,
+    title: 'AI models',
+    tiles: [{ key: AI_MODELS_TILE, label: 'Connect on Models', hint: 'OpenAI, Anthropic and more', icon: <Brain className="h-4 w-4 text-primary" /> }],
+  }
+  return [models, ...services]
+}
 
 /**
  * Connect a service: pick its tile, give it its key or sign in, done. The
@@ -41,6 +66,10 @@ export function ConnectServicePage() {
   }, [])
 
   const pick = (next: string | null) => {
+    if (next === AI_MODELS_TILE) {
+      navigate(MODELS_CONNECT_PATH)
+      return
+    }
     setConnected(null)
     const params = new URLSearchParams(searchParams)
     if (next) params.set('service', next)
@@ -48,7 +77,7 @@ export function ConnectServicePage() {
     setSearchParams(params)
   }
 
-  const groups = connectorTileGroups(connectors, search)
+  const groups = serviceTileGroups(connectors, search)
   const modelsRoute = connector ? providerRoute(connector) : null
   if (modelsRoute) return <Navigate to={modelsRoute} replace />
 
@@ -114,11 +143,12 @@ export function ConnectServicePage() {
   )
 }
 
-/** An AI model provider is connected on Models, where its models come with it. */
+/** AI providers and model hosting are connected on Models, where their models come with them. */
 function providerRoute(connector: Connector): string | null {
+  if (connector.kind === 'deployment') return '/models'
   if (connector.kind !== 'inference') return null
   const type = connector.providerType ?? connector.key
-  return isProviderType(type) ? `/models/connect?type=${encodeURIComponent(type)}` : null
+  return isProviderType(type) ? `${MODELS_CONNECT_PATH}?type=${encodeURIComponent(type)}` : MODELS_CONNECT_PATH
 }
 
 function Connected({ connection, connector, onDone, onOpen }: { connection: Connection; connector: Connector; onDone: () => void; onOpen: () => void }) {

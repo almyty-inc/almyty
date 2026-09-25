@@ -634,7 +634,9 @@ describe('LlmProvidersService', () => {
       Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       userRepository.findOne.mockResolvedValue(mockUser);
-      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
+      // Readable, not manageable: the manage decision is the one that says no.
+      accessPolicy.canAccess.mockImplementation(async (_u: any, _r: any, action: string) =>
+        action === 'manage' ? { allowed: false, reason: 'denied' } : { allowed: true, reason: 'ok' });
 
       await expect(service.updateProvider('provider-1', updateDto, 'org-1', 'user-1'))
         .rejects
@@ -827,7 +829,9 @@ describe('LlmProvidersService', () => {
       Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
       llmProviderRepository.findOne.mockResolvedValue(mockProvider);
       userRepository.findOne.mockResolvedValue(mockUser);
-      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
+      // Readable, not manageable: the manage decision is the one that says no.
+      accessPolicy.canAccess.mockImplementation(async (_u: any, _r: any, action: string) =>
+        action === 'manage' ? { allowed: false, reason: 'denied' } : { allowed: true, reason: 'ok' });
 
       await expect(service.deleteProvider('provider-1', 'org-1', 'user-1'))
         .rejects

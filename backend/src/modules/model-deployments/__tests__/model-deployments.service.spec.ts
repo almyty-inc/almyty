@@ -154,7 +154,7 @@ describe('ModelDeploymentsService', () => {
     const d = Object.assign(new ModelDeployment(), { id: 'dep-1', organizationId: 'org-1', providerConfig: { credentialId: 'c-1', image: 'x' } });
     d.encryptSensitiveData();
     expect(await withRefs.credentialsFor(d)).toEqual({ token: 'from-store', region: 'eu' });
-    expect(credentialRefs.resolve).toHaveBeenCalledWith('org-1', 'c-1', { context: { purpose: 'deploy', resourceType: 'model_deployment', resourceId: 'dep-1' } });
+    expect(credentialRefs.resolve).toHaveBeenCalledWith('org-1', 'c-1', { principal: null, context: { purpose: 'deploy', resourceType: 'model_deployment', resourceId: 'dep-1' } });
     expect(credentials.findOne).not.toHaveBeenCalled();
 
     credentialRefs.resolve.mockRejectedValueOnce(Object.assign(new Error('inactive'), { code: 'CREDENTIAL_INACTIVE' }));

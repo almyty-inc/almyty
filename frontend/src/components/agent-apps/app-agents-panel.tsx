@@ -1,15 +1,10 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, X } from 'lucide-react'
 
+import { AgentSelect } from '@/components/agents/agent-select'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { agentAppsApi, type AgentApp } from '@/lib/agent-apps'
@@ -56,7 +51,7 @@ export function AppAgentsPanel({ app, agents, onSaved }: AppAgentsPanelProps) {
     <div className="mt-6 space-y-4">
       {selected.length === 0 ? (
         <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-          No agents yet. An app with none has nothing for a user to talk to, so it cannot be published.
+          No agents yet. Add the one people will talk to; until then the app can't be published.
         </p>
       ) : (
         <ol className="space-y-2">
@@ -110,18 +105,18 @@ export function AppAgentsPanel({ app, agents, onSaved }: AppAgentsPanelProps) {
       )}
 
       {available.length > 0 && (
-        <Select value="" onValueChange={(id) => setSelected([...selected, id])}>
-          <SelectTrigger aria-label="Add an agent">
-            <SelectValue placeholder="Add an agent" />
-          </SelectTrigger>
-          <SelectContent>
-            {available.map((agent) => (
-              <SelectItem key={agent.id} value={agent.id}>
-                {agent.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <AgentSelect
+          agents={available}
+          value=""
+          ariaLabel="Add an agent"
+          placeholder="Add an agent"
+          onChange={(agent) => setSelected([...selected, agent.id])}
+        />
+      )}
+      {agents.length === 0 && (
+        <p className="text-sm text-muted-foreground" data-testid="app-agents-none">
+          You have no agents yet. <Link to="/agents/new" className="text-primary hover:underline">Create an agent</Link>, then add it here.
+        </p>
       )}
 
       <div className="flex justify-end">

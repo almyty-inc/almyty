@@ -443,7 +443,7 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={DEFAULT_AGENT}>{appAgents[0].name} (the product default)</SelectItem>
+                <SelectItem value={DEFAULT_AGENT}>{appAgents[0].name} (the app default)</SelectItem>
                 {appAgents.slice(1).map((agent) => (
                   <SelectItem key={agent.id} value={agent.id}>
                     {agent.name}

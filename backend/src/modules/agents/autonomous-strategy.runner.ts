@@ -146,7 +146,7 @@ export class AutonomousStrategyRunner {
         role.providerId,
         requestFor(role, request),
         run.organizationId,
-        run.userId,
+        principalOfRun(run),
         () => undefined,
       );
       const cost = response.cost || 0;
@@ -200,7 +200,7 @@ export class AutonomousStrategyRunner {
     const panel = await this.verifier.runPanel(
       { target, spec, checkers: [checkerOf(checker)], policy: 'any_fail_blocks' },
       run.organizationId,
-      run.userId,
+      principalOfRun(run),
     );
     run.totalCost += panel.cost;
     run.totalTokens += panel.tokens;

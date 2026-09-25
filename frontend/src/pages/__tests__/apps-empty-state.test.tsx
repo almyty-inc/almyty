@@ -24,7 +24,8 @@ describe('Apps empty state matches every other list page', () => {
     expect(empty.querySelector('[data-testid="empty-state-icon"]')).not.toBeNull()
 
     expect(screen.getByRole('heading', { level: 1, name: 'Apps' })).toBeInTheDocument()
-    expect(screen.getByText('0 apps')).toBeInTheDocument()
+    // A count of nothing says nothing the empty state doesn't.
+    expect(screen.queryByText('0 apps')).not.toBeInTheDocument()
   })
 
   it('labels the header action and the empty-state action identically', async () => {

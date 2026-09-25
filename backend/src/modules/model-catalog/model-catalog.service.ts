@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Not, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 
 import { Model, ModelCapabilities, ModelPricing, ModelPrivacyTier } from '../../entities/model.entity';
 import { ModelVersion } from '../../entities/model-version.entity';
@@ -16,7 +16,8 @@ import { LlmModelsHelper } from '../llm-providers/llm-models.helper';
 import { PriceFeedService } from './pricing/price-feed.service';
 import { ModelRouterService } from './routing/model-router.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
-import { providerUsableBy } from '../llm-providers/private-provider';
+import { providerUsableByUser, usableProviders } from '../llm-providers/private-provider';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { providerChecked } from './readiness';
 import { isKeyRejection } from '../llm-providers/model-errors';
 
@@ -109,11 +110,13 @@ export class ModelCatalogService {
     @Optional() private readonly priceFeed?: PriceFeedService,
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
     @Optional() private readonly auditLog?: AuditLogService,
+    @Optional() private readonly accessPolicy?: AccessPolicyService,
   ) {}
 
   /**
    * The org's cards. With `viewerId` (a person asking; null for nobody),
-   * cards served by another user's private provider are left out: the
+   * cards served by a provider the viewer may not use -- another user's
+   * private one, a team one outside their teams -- are left out: the
    * provider is not theirs to see, and neither is what it serves.
    */
   async list(
@@ -141,13 +144,18 @@ export class ModelCatalogService {
     return card;
   }
 
-  /** Ids of the org's private providers that `viewerId` may not see. */
+  /**
+   * Ids of the org's scoped providers that `viewerId` may not use: another
+   * user's private ones, and team ones whose team the viewer is not on
+   * (every team one, for nobody). What a provider serves is scoped with it.
+   */
   private async hiddenProviderIds(organizationId: string, viewerId: string | null): Promise<Set<string>> {
     const rows = await this.providers.find({
-      where: { organizationId, visibility: 'private' },
-      select: { id: true, visibility: true, ownerUserId: true },
+      where: { organizationId, visibility: In(['private', 'team']) },
+      select: { id: true, organizationId: true, visibility: true, ownerUserId: true, teamId: true },
     });
-    return new Set(rows.filter((p) => !providerUsableBy(p, viewerId)).map((p) => p.id));
+    const usable = new Set((await usableProviders(this.accessPolicy, organizationId, viewerId, rows)).map((p) => p.id));
+    return new Set(rows.filter((p) => !usable.has(p.id)).map((p) => p.id));
   }
 
   async register(organizationId: string, input: RegisterModelInput, userId?: string): Promise<Model> {
@@ -159,7 +167,10 @@ export class ModelCatalogService {
     let providerRow: LlmProvider | null = null;
     if (input.providerId) {
       const provider = await this.providers.findOne({ where: { id: input.providerId, organizationId } });
-      if (!provider) throw new NotFoundException('Provider not found');
+      // A person registering a card on another member's private provider, or
+      // on a team provider outside their teams, is told it does not exist,
+      // like everywhere else that provider is named.
+      if (!provider || (userId && !(await providerUsableByUser(this.accessPolicy, provider, userId)))) throw new NotFoundException('Provider not found');
       providerRow = provider;
       providerType = provider.type;
       checkedProvider = providerChecked(provider);
@@ -236,8 +247,9 @@ export class ModelCatalogService {
   async syncFromProvider(organizationId: string, providerId: string, userId?: string): Promise<ProviderSyncResult> {
     const provider = await this.providers.findOne({ where: { id: providerId, organizationId } });
     // A person asking (userId given) is told another user's private
-    // provider does not exist; lifecycle syncs run with no user.
-    if (!provider || (userId && !providerUsableBy(provider, userId))) throw new NotFoundException('Provider not found');
+    // provider, or a team provider outside their teams, does not exist;
+    // lifecycle syncs run with no user.
+    if (!provider || (userId && !(await providerUsableByUser(this.accessPolicy, provider, userId)))) throw new NotFoundException('Provider not found');
     const listed = await this.modelsHelper.fetchModelsFromProvider(provider);
     const existing = await this.models.find({ where: { organizationId, providerId } });
     const byVendorId = new Map(existing.map((m) => [m.vendorModelId, m]));
@@ -305,8 +317,9 @@ export class ModelCatalogService {
     const summary: CatalogSyncSummary = { created: [], skipped: 0, retired: [], reinstated: [], providers: [] };
     for (const provider of providers) {
       // A person syncing the org's catalog never reaches another user's
-      // private provider (its key is not theirs to spend).
-      if (userId && !providerUsableBy(provider, userId)) continue;
+      // private provider, nor a team's they are not on (its key is not
+      // theirs to spend).
+      if (userId && !(await providerUsableByUser(this.accessPolicy, provider, userId))) continue;
       try {
         const r = await this.syncFromProvider(organizationId, provider.id, userId);
         summary.created.push(...r.created);
@@ -563,7 +576,10 @@ export class ModelCatalogService {
   }
 
   async update(organizationId: string, id: string, input: UpdateModelInput, userId?: string): Promise<Model> {
-    const card = await this.get(organizationId, id);
+    // A person (userId) acting on a card served by another member's private
+    // provider gets the not-found a missing card gets; internal callers
+    // (the deployment auto-validation) pass no user.
+    const card = await this.get(organizationId, id, userId);
     const before = { privacyTier: card.privacyTier, region: card.region, status: card.status, pricingOverride: card.pricingOverride };
     if (input.name !== undefined) card.name = input.name;
     if (input.capabilities !== undefined) card.capabilities = input.capabilities ?? {};
@@ -594,7 +610,10 @@ export class ModelCatalogService {
   }
 
   async remove(organizationId: string, id: string, userId?: string): Promise<void> {
-    const card = await this.get(organizationId, id);
+    // A person (userId) acting on a card served by another member's private
+    // provider gets the not-found a missing card gets; internal callers
+    // (the deployment auto-validation) pass no user.
+    const card = await this.get(organizationId, id, userId);
     await this.models.remove(card);
     this.audit(Object.assign(card, { id }), AuditAction.DELETE, userId, {});
   }
@@ -606,8 +625,12 @@ export class ModelCatalogService {
    * says in the audit row who asked, when it was not a person.
    */
   async validate(organizationId: string, id: string, userId?: string, source?: string): Promise<ValidationOutcome> {
-    const card = await this.get(organizationId, id);
-    const provider = await this.router.providerFor(card);
+    // A person (userId) acting on a card served by another member's private
+    // provider, or a team provider whose team they are not on, gets the
+    // not-found a missing card gets; the call itself is made as that person.
+    // Internal callers (the deployment auto-validation) pass no user.
+    const card = await this.get(organizationId, id, userId);
+    const provider = await this.router.providerFor(card, userId ? { id: userId } : undefined);
     if (!provider) {
       return this.recordValidation(card, false, 'This model has no callable provider', userId, undefined, source);
     }

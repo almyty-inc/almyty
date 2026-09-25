@@ -97,4 +97,41 @@ describe('choosing a strategy per request', () => {
     const choice = await build({ chat: jest.fn().mockRejectedValue(new Error('boom')) as any }).choose(agent(on), 'x');
     expect(choice?.strategyKey).toBe('single');
   });
+
+  it('decides as the run user: roles, the provider lookup and the call all carry who the run acts as', async () => {
+    // The decision is part of the run. Made as nobody, a private or team
+    // provider behind the deciding role was refused even to its own team,
+    // and the role lookup skipped the run's scope.
+    const resolveRoles = jest.fn().mockResolvedValue([{ key: 'orchestrator', modelId: 'm1' }]);
+    const providerForModelId = jest.fn().mockResolvedValue({ provider: { id: 'p1' } });
+    const chat = jest.fn().mockResolvedValue({ message: { content: JSON.stringify({ strategy: 'single', roleBindings: {} }) } });
+    const service = new OrchestratorService(
+      { find: jest.fn().mockResolvedValue([]) } as any,
+      { resolveRoles } as any,
+      { providerForModelId } as any,
+      { chat } as any,
+    );
+    await service.choose(agent(on), 'x', 'user-7');
+    const asUser = { kind: 'user', userId: 'user-7', source: 'session' };
+    expect(resolveRoles).toHaveBeenCalledWith('org-1', 'a1', {}, asUser);
+    expect(providerForModelId).toHaveBeenCalledWith('org-1', 'm1', asUser);
+    expect(chat).toHaveBeenCalledWith('p1', expect.anything(), 'org-1', asUser);
+  });
+
+  it("decides as a gateway run's principal, not as the run row's (absent) user", async () => {
+    const resolveRoles = jest.fn().mockResolvedValue([{ key: 'orchestrator', modelId: 'm1' }]);
+    const providerForModelId = jest.fn().mockResolvedValue({ provider: { id: 'p1' } });
+    const chat = jest.fn().mockResolvedValue({ message: { content: JSON.stringify({ strategy: 'single', roleBindings: {} }) } });
+    const service = new OrchestratorService(
+      { find: jest.fn().mockResolvedValue([]) } as any,
+      { resolveRoles } as any,
+      { providerForModelId } as any,
+      { chat } as any,
+    );
+    const gateway = { kind: 'gateway' as const, gatewayId: 'g1', organizationId: 'org-1', visibility: 'team' as const, teamId: 't1', ownerUserId: null };
+    await service.choose(agent(on), 'x', gateway);
+    expect(resolveRoles).toHaveBeenCalledWith('org-1', 'a1', {}, gateway);
+    expect(providerForModelId).toHaveBeenCalledWith('org-1', 'm1', gateway);
+    expect(chat).toHaveBeenCalledWith('p1', expect.anything(), 'org-1', gateway);
+  });
 });

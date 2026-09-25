@@ -12,7 +12,7 @@ import { McpSource, McpSourceStatus, McpSourceAuthType } from '../../entities/mc
 import { Tool, ToolType, ToolStatus } from '../../entities/tool.entity';
 import { CredentialType } from '../../entities/credential.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
-import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
+import { CredentialRefResolver, type ResolveOptions } from '../credentials/credential-ref.resolver';
 import { computeToolHash } from '../../common/security/tool-integrity';
 import { assertWithinPerSchemaCap, capGeneratedDescription, withToolQuota } from '../tools/tool-quota';
 import {
@@ -45,6 +45,12 @@ export interface McpSyncSummary {
 export interface McpExecuteOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
+  /**
+   * Who the call acts as: the run's principal for a tool call, the person
+   * for a sync. The source's connection is resolved as them, so a team
+   * connection reaches the server only for its team.
+   */
+  principal?: ResolveOptions['principal'];
 }
 
 /** API-safe view: auth secrets never leave the service. */
@@ -108,6 +114,14 @@ export class McpSourcesService {
       throw new ConflictException(`An MCP source named '${name}' already exists in this organization`);
     }
 
+    // A connection is attached only by someone who may use it: another
+    // team's or another user's row is "not found" here, not at first sync.
+    if (input.credentialId && userId) {
+      await this.credentialRefs.resolve(organizationId, input.credentialId, {
+        principal: { id: userId },
+        context: { purpose: 'mcp_call', resourceType: 'mcp_source' },
+      });
+    }
     const authType = await this.resolveAuthType(organizationId, input);
     const source = this.sourceRepository.create({
       name,
@@ -135,7 +149,7 @@ export class McpSourcesService {
     let sync: McpSyncSummary | null = null;
     let syncError: string | null = null;
     try {
-      sync = await this.sync(saved.id, organizationId);
+      sync = await this.sync(saved.id, organizationId, userId);
     } catch (err: any) {
       syncError = err?.message ?? String(err);
     }
@@ -180,12 +194,14 @@ export class McpSourcesService {
    * removed remote tools inactive. Failures are recorded on the
    * source (status=error, lastError) and rethrown for the caller.
    */
-  async sync(id: string, organizationId: string): Promise<McpSyncSummary> {
+  async sync(id: string, organizationId: string, userId?: string): Promise<McpSyncSummary> {
     const source = await this.getOwned(id, organizationId);
 
     try {
+      // Discovery calls the server as the person who asked for it: a team
+      // or private connection they may not use is not sent for them.
       const { tools: remoteTools, init } = await this.mcpClient.listTools(
-        await this.connectionConfig(source),
+        await this.connectionConfig(source, { principal: userId ? { id: userId } : null }),
       );
 
       const mine = await this.findMaterializedTools(source);
@@ -385,7 +401,7 @@ export class McpSourcesService {
   private async connectionConfig(source: McpSource, options: McpExecuteOptions = {}): Promise<McpConnectionConfig> {
     return {
       url: source.url,
-      headers: await this.authHeaders(source),
+      headers: await this.authHeaders(source, options.principal),
       timeoutMs: options.timeoutMs,
       signal: options.signal,
     };
@@ -445,9 +461,10 @@ export class McpSourcesService {
    * truth; `authConfig` is the read-through shim for rows the startup
    * backfill has not moved yet.
    */
-  private async authHeaders(source: McpSource): Promise<Record<string, string>> {
+  private async authHeaders(source: McpSource, principal: McpExecuteOptions['principal']): Promise<Record<string, string>> {
     if (source.credentialId) {
       const resolved = await this.credentialRefs.resolve(source.organizationId, source.credentialId, {
+        principal: principal ?? null,
         context: { purpose: 'mcp_call', resourceType: 'mcp_source', resourceId: source.id },
       });
       const headers: Record<string, string> = { ...resolved.credential.getAuthHeaders() };

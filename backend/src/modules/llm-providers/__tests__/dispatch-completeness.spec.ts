@@ -168,6 +168,7 @@ describe('streaming reaches a real implementation for every type it claims to st
       { bumpSessionStats: jest.fn().mockResolvedValue(undefined), bumpProviderStats: jest.fn().mockResolvedValue(undefined) } as any,
       {
         prepareTools: jest.fn().mockResolvedValue([]),
+        resolveProviderSecrets: jest.fn().mockResolvedValue(undefined),
         recordRoute: jest.fn(),
         // The non-streaming fallback runs through the real dispatch, which
         // is exactly what we want to observe for a type that does not

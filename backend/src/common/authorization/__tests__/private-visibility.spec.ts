@@ -9,6 +9,10 @@ import {
 } from '../private-visibility';
 import { PrivateAgentGuard } from '../private-resource.guard';
 import { collectAgentReferences } from '../../../modules/agents/agent-references';
+import { Agent } from '../../../entities/agent.entity';
+import { UserOrganization, OrganizationRole } from '../../../entities/user-organization.entity';
+import { UserTeam } from '../../../entities/user-team.entity';
+import { fakeRepository } from '../../../test/fake-repository';
 
 const ORG = 'org-1';
 const OWNER = 'user-owner';
@@ -126,18 +130,38 @@ describe('private visibility helpers', () => {
   describe('PrivateResourceGuard', () => {
     const ctx = (userId: string, params: Record<string, string>) =>
       ({ switchToHttp: () => ({ getRequest: () => ({ user: { id: userId }, params }) }) }) as any;
-    const repoWith = (row: any) => ({ getRepository: () => ({ findOne: jest.fn().mockResolvedValue(row) }) }) as any;
     const ID = '11111111-1111-4111-8111-111111111111';
+    const ORG_ROW = '22222222-2222-4222-8222-222222222222';
+    const STRANGER = 'user-of-another-org';
+    // Truthful tables behind the DataSource the guard reads: the agents,
+    // and the memberships the real access policy decides with.
+    const dataSource = (agents: any[]) => {
+      const tables = new Map<unknown, any>([
+        [Agent, fakeRepository<any>(agents)],
+        [UserOrganization, fakeRepository<any>([
+          { id: 'uo-1', userId: OWNER, organizationId: ORG, role: OrganizationRole.MEMBER, isActive: true, inviteAccepted: true, inviteToken: null },
+          { id: 'uo-2', userId: OTHER, organizationId: ORG, role: OrganizationRole.ADMIN, isActive: true, inviteAccepted: true, inviteToken: null },
+          { id: 'uo-3', userId: STRANGER, organizationId: 'org-2', role: OrganizationRole.OWNER, isActive: true, inviteAccepted: true, inviteToken: null },
+        ])],
+        [UserTeam, fakeRepository<any>([])],
+      ]);
+      return { getRepository: (entity: unknown) => tables.get(entity) } as any;
+    };
 
-    it('404s another user\'s private row and passes the owner', async () => {
-      const guard = new PrivateAgentGuard(repoWith({ id: ID, organizationId: ORG, visibility: 'private', createdBy: OWNER }));
+    it('404s another user\'s private row, to an org admin too, and passes the owner', async () => {
+      const guard = new PrivateAgentGuard(dataSource([{ id: ID, organizationId: ORG, visibility: 'private', createdBy: OWNER }]));
       await expect(guard.canActivate(ctx(OTHER, { id: ID }))).rejects.toBeInstanceOf(NotFoundException);
       await expect(guard.canActivate(ctx(OWNER, { id: ID }))).resolves.toBe(true);
     });
 
+    it('404s a row of an organization the caller is not a member of', async () => {
+      const guard = new PrivateAgentGuard(dataSource([{ id: ORG_ROW, organizationId: ORG, visibility: 'org', createdBy: OWNER }]));
+      await expect(guard.canActivate(ctx(STRANGER, { id: ORG_ROW }))).rejects.toBeInstanceOf(NotFoundException);
+      await expect(guard.canActivate(ctx(OTHER, { id: ORG_ROW }))).resolves.toBe(true);
+    });
+
     it('leaves literal sub-routes and missing rows to the handler', async () => {
-      const ds = repoWith(null);
-      const guard = new PrivateAgentGuard(ds);
+      const guard = new PrivateAgentGuard(dataSource([]));
       await expect(guard.canActivate(ctx(OTHER, { id: 'templates' }))).resolves.toBe(true);
       await expect(guard.canActivate(ctx(OTHER, { id: ID }))).resolves.toBe(true);
     });

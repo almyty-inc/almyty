@@ -16,6 +16,8 @@ export interface ServiceTile {
   key: string
   label: string
   icon: ReactNode
+  /** One short line under the label, e.g. where a tile leads. */
+  hint?: string
 }
 
 export interface ServiceTileGroup {
@@ -72,7 +74,7 @@ export function ServiceTileGrid({ groups, search, onSearch, onPick, searchLabel,
           </h2>
           <ChoiceTiles>
             {group.tiles.map((tile) => (
-              <ChoiceTile key={tile.key} testId={`${testIdPrefix}-${tile.key}`} icon={tile.icon} label={tile.label} onClick={() => onPick(tile.key)} />
+              <ChoiceTile key={tile.key} testId={`${testIdPrefix}-${tile.key}`} icon={tile.icon} label={tile.label} hint={tile.hint} onClick={() => onPick(tile.key)} />
             ))}
           </ChoiceTiles>
         </section>

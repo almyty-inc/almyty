@@ -1,5 +1,5 @@
 import { Inject, forwardRef } from '@nestjs/common';
-import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import axios from 'axios';
@@ -20,7 +20,8 @@ import { AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
 import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
-import { assertNotOthersPrivate, nameTaken, resolveVisibilityWrite } from '../../common/authorization/private-visibility';
+import { nameTaken, resolveVisibilityWrite } from '../../common/authorization/private-visibility';
+import { assertManageable, assertReadable } from '../../common/authorization/read-rule';
 import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { Credential } from '../../entities/credential.entity';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
@@ -100,13 +101,14 @@ export class ApisService {
    * in from the credential the API points at. Rows not yet moved still
    * carry the secret inline (shim).
    */
-  private async authenticationForRequest(api: Api): Promise<Api['authentication'] | null> {
+  private async authenticationForRequest(api: Api, principal: { id: string } | null): Promise<Api['authentication'] | null> {
     const auth = api.authentication;
     if (!auth || auth.type === 'none') return null;
     const connectionId = auth.config?.connectionId as string | undefined;
     if (connectionId) {
       // A connection's fields are named by its connector; read its key out.
       const resolved = await this.credentialRefs.resolve(api.organizationId, connectionId, {
+        principal,
         context: { purpose: 'api_test', resourceType: 'api', resourceId: api.id },
       });
       return inlineApiAuthView(auth, connectionAuthConfig(resolved.config)) as Api['authentication'];
@@ -114,6 +116,7 @@ export class ApisService {
     const credentialId = auth.config?.credentialId as string | undefined;
     if (!credentialId) return auth;
     const resolved = await this.credentialRefs.resolve(api.organizationId, credentialId, {
+      principal,
       context: { purpose: 'api_test', resourceType: 'api', resourceId: api.id },
     });
     return inlineApiAuthView(auth, resolved.config) as Api['authentication'];
@@ -213,7 +216,7 @@ export class ApisService {
    * implicitly trusting the id. Defence in depth now lives at
    * this layer.
    *
-   * With a `caller`, another member's private API is "not found".
+   * With a `caller`, an API they may not read (read-rule.ts) is "not found".
    */
   async findOne(id: string, organizationId: string, caller?: { id: string }): Promise<Api | null> {
     // Only eager-load `operations` — that's the one relation any
@@ -233,7 +236,7 @@ export class ApisService {
       where: { id, organizationId },
       relations: { operations: true },
     });
-    if (api && caller) await assertNotOthersPrivate(this.accessPolicy, caller, api, 'API');
+    if (api && caller) await assertReadable(this.accessPolicy, caller, api, 'API');
     return api;
   }
 
@@ -411,20 +414,17 @@ export class ApisService {
     organizationId: string,
     userId?: string,
   ): Promise<Api> {
-    const api = await this.findOne(id, organizationId, userId ? { id: userId } : undefined);
+    const api = await this.findOne(id, organizationId);
 
     if (!api) {
       throw new NotFoundException('API not found');
     }
 
-    // Authorization: org owner/admin always, team-scoped requires team lead.
-    // The owner of a private API manages it (canAccess passes the owner).
-    if (userId) {
-      const decision = await this.accessPolicy.canAccess({ id: userId }, api, 'manage');
-      if (!decision.allowed) {
-        throw new ForbiddenException(decision.reason);
-      }
-    }
+    // Cannot read it (a private API of another member, a team API the
+    // caller is not on): 404. Can read it but not manage it: 403. The owner
+    // of a private API manages it (canAccess passes the owner). Internal
+    // callers with no user skip the gate.
+    if (userId) await assertManageable(this.accessPolicy, userId, api, 'API');
 
     // A rename is held to the same organization-wide uniqueness as create
     // (see nameTaken): the API's name seeds its generated tool names.
@@ -518,15 +518,9 @@ export class ApisService {
     if (!existing) {
       throw new NotFoundException('API not found');
     }
-    if (userId) await assertNotOthersPrivate(this.accessPolicy, { id: userId }, existing, 'API');
-
-    // Authorization: org owner/admin always, team-scoped requires team lead.
-    if (userId) {
-      const decision = await this.accessPolicy.canAccess({ id: userId }, existing, 'manage');
-      if (!decision.allowed) {
-        throw new ForbiddenException(decision.reason);
-      }
-    }
+    // Cannot read it: 404, like a missing API. Can read it but not manage
+    // it: 403. Internal callers with no user skip the gate.
+    if (userId) await assertManageable(this.accessPolicy, userId, existing, 'API');
 
     const result = await this.apiRepository.delete({ id, organizationId });
 
@@ -650,8 +644,9 @@ export class ApisService {
   async testApiConnection(
     apiId: string,
     organizationId: string,
+    userId?: string,
   ): Promise<{ success: boolean; statusCode?: number; responseTime?: number; error?: string }> {
-    const api = await this.findOne(apiId, organizationId);
+    const api = await this.findOne(apiId, organizationId, userId ? { id: userId } : undefined);
 
     if (!api) {
       throw new NotFoundException('API not found');
@@ -690,7 +685,9 @@ export class ApisService {
       // Add authentication if configured. The secret comes from the
       // credential store; the inline config is the shim for rows the
       // startup backfill has not moved yet.
-      const auth = await this.authenticationForRequest(api);
+      // Resolved as the person testing: a team or private credential they
+      // may not use is not sent on their behalf.
+      const auth = await this.authenticationForRequest(api, userId ? { id: userId } : null);
       if (auth && auth.type !== 'none') {
         this.toolGen.applyAuthentication(config, auth);
       }

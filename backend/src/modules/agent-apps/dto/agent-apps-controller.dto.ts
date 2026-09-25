@@ -34,7 +34,7 @@ import type { MacPackaging } from '../build-targets';
  * currently stored.
  */
 export class CreateAppBodyDto {
-  @ApiProperty({ description: 'Product name shown to end users' })
+  @ApiProperty({ description: 'App name shown to end users' })
   @IsString()
   @MaxLength(255)
   name: string;
