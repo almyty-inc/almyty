@@ -81,7 +81,6 @@ const ALERT_DIALOG_PENDING = new Set<string>([
   'components/settings/rbac-settings.tsx',
   'components/tools/mcp-sources-panel.tsx',
   'pages/hosted-chat.tsx',
-  'pages/model-detail.tsx',
   'pages/tool-hub.tsx',
 ])
 

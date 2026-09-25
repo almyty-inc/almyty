@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useForm } from 'react-hook-form'
 
 import { render } from '../../test/setup'
 import { GatewayNewPage } from '../gateway-new'
