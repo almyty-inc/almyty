@@ -194,10 +194,13 @@ describe('@almyty/models', () => {
       .toBe('status is inactive (not listed by provider)');
     expect(unselectableReason({ id: 'c1', status: 'active', validationStatus: 'passed' }))
       .toBe('nothing can call it: no provider row and no endpoint URL');
-    expect(unselectableReason({ id: 'c1', status: 'active', providerId: 'p1', validationStatus: 'pending' }))
+    // A provider's model waits on the provider's key check; an endpoint on its own.
+    expect(unselectableReason({ id: 'c1', status: 'active', providerId: 'p1', validationStatus: 'never' }))
+      .toContain("waiting for its provider's key check");
+    expect(unselectableReason({ id: 'c1', status: 'active', endpointRef: { url: 'https://x/v1' }, validationStatus: 'never' }))
       .toContain('almyty models validate c1');
     expect(unselectableReason({ id: 'c1', status: 'active', endpointRef: { url: 'https://x/v1' }, validationStatus: 'failed', lastValidationError: 'MODEL_NOT_FOUND' }))
-      .toContain('MODEL_NOT_FOUND');
+      .toBe('the provider says this model is not available: MODEL_NOT_FOUND');
   });
 
   it('formats a card with its selectability and price source', () => {
@@ -205,7 +208,7 @@ describe('@almyty/models', () => {
     expect(line).toContain('llama-3-8b');
     expect(line).toContain('private_cloud/eu');
     expect(line).toContain('$0.1/$0.2 per M (adapter)');
-    expect(line).toContain('not selectable: no passed validation run (failed: timeout)');
+    expect(line).toContain('not selectable: the provider says this model is not available: timeout');
     expect(formatCard({ id: 'c2', name: 'X', vendorModelId: 'x', privacyTier: 'public', selectable: true })).toContain('selectable');
   });
 

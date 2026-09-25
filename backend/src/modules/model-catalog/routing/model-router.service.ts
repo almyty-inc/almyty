@@ -21,6 +21,8 @@ const LATENCY_WRITE_INTERVAL_MS = 60_000;
 /** In-memory state is pruned past this many cards, dropping those idle for an hour. */
 const LATENCY_STATE_CAP = 5000;
 const LATENCY_STATE_TTL_MS = 3_600_000;
+/** A stored provider id; a transient endpoint provider's id is endpoint:<card id>. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface LatencyState {
   p50: number;
@@ -287,5 +289,40 @@ export class ModelRouterService {
         },
       })
       .catch((err) => this.logger.warn(`route audit failed: ${err?.message ?? err}`));
+  }
+
+  /**
+   * A real call came back MODEL_NOT_FOUND: the vendor no longer serves
+   * this model (retired, or never offered to this key). Its card is marked
+   * failed so it leaves every model list and every plan, rather than being
+   * offered again and failing the next run the same way. The card stays
+   * (runs reference it); a passing check of that model brings it back.
+   * Never rejects.
+   */
+  async markModelNotFound(organizationId: string, providerId: string, vendorModelId: string, error: string): Promise<void> {
+    // A model on the customer's cloud is called through a transient
+    // `endpoint:` provider; its card is kept current by the reconcile loop.
+    if (!organizationId || !UUID_PATTERN.test(providerId ?? '') || !vendorModelId) return;
+    try {
+      const card = await this.models.findOne({ where: { organizationId, providerId, vendorModelId } });
+      if (!card || card.validationStatus === 'failed') return;
+      const lastValidationError = error.slice(0, 1000);
+      const status = card.status === 'active' ? 'error' : card.status;
+      await this.models.update({ id: card.id }, { validationStatus: 'failed', lastValidatedAt: new Date(), lastValidationError, status });
+      if (this.auditLog) {
+        void this.auditLog
+          .log({
+            organizationId,
+            action: AuditAction.MODEL_VALIDATED,
+            resourceType: AuditResource.MODEL,
+            resourceId: card.id,
+            resourceName: card.name,
+            details: { passed: false, error: lastValidationError, source: 'call', providerId },
+          })
+          .catch((err) => this.logger.warn(`model-not-found audit failed: ${err?.message ?? err}`));
+      }
+    } catch (err: any) {
+      this.logger.warn(`marking ${vendorModelId} unavailable failed: ${err?.message ?? err}`);
+    }
   }
 }
