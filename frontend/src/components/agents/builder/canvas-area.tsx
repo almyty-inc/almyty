@@ -164,6 +164,7 @@ export function CanvasArea({
           <NodeConfigPanel
             node={selectedNode}
             nodes={nodes}
+            edges={edges}
             onUpdateNode={onUpdateNode}
             onDeleteNode={onDeleteNode}
             onClose={() => setSelectedNode(null)}
