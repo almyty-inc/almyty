@@ -19,6 +19,7 @@ export const PRIVATE_CAPABLE_GATEWAY_TYPES: ReadonlySet<GatewayType> = new Set([
   GatewayType.MCP,
   GatewayType.UTCP,
   GatewayType.SKILLS,
+  GatewayType.TOOLS,
   GatewayType.A2A,
   GatewayType.ACP,
   GatewayType.OPENAI_CHAT,

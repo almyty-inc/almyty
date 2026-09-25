@@ -1000,7 +1000,7 @@ export class GatewaysService {
     }
 
     if (filters.kind) {
-      const toolTypes = [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS];
+      const toolTypes = [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS, GatewayType.TOOLS];
       if (filters.kind === GatewayKind.TOOL) {
         queryBuilder.andWhere('gateway.type IN (:...toolTypes)', { toolTypes });
       } else {
