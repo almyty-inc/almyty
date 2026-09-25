@@ -298,7 +298,7 @@ describe('GatewaysService — channel secrets go to the credential store', () =>
     expect(store.rows[0].connectorKey).toBe('channel-telegram');
     expect(store.rows[0].metadata.managedBy).toEqual({ kind: 'gateway_channel', id: `${created.id}:telegram` });
     expect(created.configuration).toEqual({ aiDisclosure: true, credentialId: store.rows[0].id, credentialKeys: ['bot_token'] });
-    expect((await store.resolver.resolve('org-1', store.rows[0].id)).config.bot_token).toBe('123456:plain-token');
+    expect((await store.resolver.resolve('org-1', store.rows[0].id, { principal: null })).config.bot_token).toBe('123456:plain-token');
   });
 
   it('createGateway with a chosen connection references it and saves no secret', async () => {
@@ -326,7 +326,7 @@ describe('GatewaysService — channel secrets go to the credential store', () =>
 
     expect(updated.configuration).toEqual({ aiDisclosure: false, credentialId: store.rows[0].id, credentialKeys: ['bot_token'] });
     expect(JSON.stringify(gatewayRepository.save.mock.calls[0][0].configuration)).not.toContain('stored-token');
-    expect((await store.resolver.resolve('org-1', store.rows[0].id)).config.bot_token).toBe('123456:stored-token');
+    expect((await store.resolver.resolve('org-1', store.rows[0].id, { principal: null })).config.bot_token).toBe('123456:stored-token');
   });
 
   it('updateGateway with credentialId null releases the managed row', async () => {

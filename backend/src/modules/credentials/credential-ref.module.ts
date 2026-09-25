@@ -7,6 +7,7 @@ import { Credential } from '../../entities/credential.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { McpSource } from '../../entities/mcp-source.entity';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 import { ConsumerSecretBackfillService } from './consumer-secret-backfill.service';
 import {
   AllowAllConnectionUsePolicy,
@@ -27,7 +28,8 @@ import {
  */
 @Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([Credential, LlmProvider, McpSource, ChannelInstallation, Api, Gateway])],
+  // AuthorizationModule: the team rule the resolver applies on every resolve.
+  imports: [TypeOrmModule.forFeature([Credential, LlmProvider, McpSource, ChannelInstallation, Api, Gateway]), AuthorizationModule],
   providers: [
     { provide: CONNECTION_USE_POLICY, useClass: AllowAllConnectionUsePolicy },
     CredentialRefResolver,

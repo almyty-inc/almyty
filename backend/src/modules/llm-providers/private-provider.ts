@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 
 import { type AccessPolicyService, type ResourceVisibility } from '../../common/authorization/access-policy.service';
 import { OrganizationRole } from '../../entities/user-organization.entity';
+import { type ActingAs, asPrincipal, describePrincipal } from '../../common/authorization/execution-access.service';
 
 interface ProviderVisibilityLike {
   visibility?: ResourceVisibility | null;
@@ -49,12 +50,19 @@ export function assertProviderUsableBy(
 }
 
 /**
- * The providers of `rows` that `userId` may use: the private rule above,
+ * The providers of `rows` that `who` may use: the private rule above,
  * plus the team rule. Team only is team only: a team provider is usable by
  * members of its team (and by the org owners and admins who pass
- * AccessPolicyService.canAccess everywhere else), and by nobody else. A
- * run uses a provider as its inherited principal, so a run whose user is
- * outside the team -- or a run attributed to nobody -- cannot reach it.
+ * AccessPolicyService.canAccess everywhere else), and by nobody else.
+ *
+ * A run uses a provider as its inherited principal (ExecutionPrincipal),
+ * never as whoever is attributed on the run row:
+ * - a user principal is judged as that user;
+ * - a gateway principal gets the organization's providers plus, for a
+ *   gateway scoped to a team, that team's providers. A gateway private to
+ *   its owner is judged as its owner. This is the rule
+ *   ExecutionAccessService.canGatewayExecute applies to agents and tools;
+ * - nobody (null) gets organization-wide providers only.
  *
  * The caller's org role and teams are looked up once, and only when a
  * team provider is among the rows. With no policy wired a team provider
@@ -63,9 +71,24 @@ export function assertProviderUsableBy(
 export async function usableProviders<T extends ProviderScopeLike>(
   accessPolicy: ProviderAccessPolicy | null | undefined,
   organizationId: string,
-  userId: string | null | undefined,
+  who: ActingAs,
   rows: T[],
 ): Promise<T[]> {
+  const principal = asPrincipal(who);
+  if (principal.kind === 'gateway') {
+    const own = rows.filter((p) => p.organizationId === principal.organizationId);
+    if (principal.visibility === 'private') {
+      return principal.ownerUserId
+        ? usableProviders(accessPolicy, organizationId, principal.ownerUserId, own)
+        : own.filter(isOrgWide);
+    }
+    return own.filter(
+      (p) =>
+        isOrgWide(p) ||
+        (p.visibility === 'team' && principal.visibility === 'team' && !!principal.teamId && p.teamId === principal.teamId),
+    );
+  }
+  const userId = principal.userId;
   const privateOk = rows.filter((p) => providerUsableBy(p, userId));
   if (!privateOk.some((p) => p.visibility === 'team')) return privateOk;
   let inTeam: (teamId: string) => boolean = () => false;
@@ -84,13 +107,17 @@ export async function usableProviders<T extends ProviderScopeLike>(
   });
 }
 
+function isOrgWide(p: ProviderVisibilityLike): boolean {
+  return !p.visibility || p.visibility === 'org';
+}
+
 /** One provider through usableProviders. */
 export async function providerUsableByUser(
   accessPolicy: ProviderAccessPolicy | null | undefined,
   provider: ProviderScopeLike,
-  userId: string | null | undefined,
+  who: ActingAs,
 ): Promise<boolean> {
-  return (await usableProviders(accessPolicy, provider.organizationId, userId, [provider])).length === 1;
+  return (await usableProviders(accessPolicy, provider.organizationId, who, [provider])).length === 1;
 }
 
 /**
@@ -105,12 +132,14 @@ export async function providerUsableByUser(
 export class ProviderNotUsableError extends NotFoundException {
   readonly code = 'PROVIDER_NOT_USABLE';
 
-  constructor(userId: string | null | undefined) {
-    const who = userId ? `user ${userId}` : 'no user: an anonymous or system call';
+  constructor(who: ActingAs) {
+    const principal = asPrincipal(who);
+    const described =
+      principal.kind === 'user' && !principal.userId ? 'no user: an anonymous or system call' : describePrincipal(principal);
     super({
       code: 'PROVIDER_NOT_USABLE',
       message:
-        `Provider not found for the user this call acts as (${who}). ` +
+        `Provider not found for the ${principal.kind === 'gateway' ? 'gateway' : 'user'} this call acts as (${described}). ` +
         'A private provider is usable by its owner only, and a team provider by members of its team only.',
       error: 'Not Found',
       statusCode: 404,

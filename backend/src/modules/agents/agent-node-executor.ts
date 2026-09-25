@@ -500,6 +500,8 @@ export class AgentNodeExecutor {
   ): Promise<NodeExecutionResult> {
     const startTime = Date.now();
     const which = `${node.type} node '${node.id}'`;
+    // Who every model call of this node acts as: the run's principal.
+    const caller = options?.principal ?? userId;
 
     // A node may name a role instead of a provider or a policy. The role
     // was filled once for the whole run (L4), so this is a lookup, not a
@@ -545,7 +547,7 @@ export class AgentNodeExecutor {
           `The ${which} names role '${filledRole.key}', but the model catalog is not available on this install`,
         );
       }
-      const { card, provider } = await this.modelRouter.providerForModelId(organizationId, filledRole.modelId, userId ? { id: userId } : undefined);
+      const { card, provider } = await this.modelRouter.providerForModelId(organizationId, filledRole.modelId, caller);
       roleProviderId = provider.id;
       roleModel = card.vendorModelId;
     }
@@ -565,12 +567,15 @@ export class AgentNodeExecutor {
 
     let response: ChatResponse;
     try {
-      // The chat() method handles the full agentic tool call loop internally
+      // The chat() method handles the full agentic tool call loop internally.
+      // As the run's principal, inherited: a gateway run reaches the
+      // providers, keys and tools of its gateway's team, whoever the run
+      // row names.
       response = await this.llmProvidersService.chat(
         roleProviderId ?? providerId,
         chatRequest,
         organizationId,
-        userId,
+        caller,
       );
     } catch (err: any) {
       // A provider error body can echo the request back, Authorization
@@ -1170,7 +1175,7 @@ export class AgentNodeExecutor {
         const { card, provider } = await this.modelRouter.providerForModelId(
           organizationId,
           filled.modelId,
-          userId ? { id: userId } : undefined,
+          options?.principal ?? userId,
         );
         return { ...checker, providerId: provider.id, model: checker.model ?? card.vendorModelId };
       }),
@@ -1182,7 +1187,7 @@ export class AgentNodeExecutor {
     const panel = await this.verifier.runPanel(
       { target, spec, checkers: resolvedCheckers, policy },
       organizationId,
-      userId,
+      options?.principal ?? userId,
       options?.signal,
     );
 

@@ -13,6 +13,13 @@ import { Credential, CredentialType } from '../../entities/credential.entity';
 import { CONNECTIONS_GOVERNANCE_HOOK, ConnectionsGovernanceHook } from '../../common/ee-hooks/ee-hooks';
 import { decryptField, isEncrypted } from '../../common/security/field-crypto';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import type { ResourceVisibility } from '../../common/authorization/access-policy.service';
+import {
+  ExecutionAccessService,
+  type ExecutionPrincipal,
+  actingUserId,
+  isExecutionPrincipal,
+} from '../../common/authorization/execution-access.service';
 
 /**
  * The one way a consumer reads a secret out of the credential store.
@@ -79,8 +86,32 @@ export class AllowAllConnectionUsePolicy implements ConnectionUsePolicy {
 }
 
 export interface ResolveOptions {
-  principal?: ConnectionUsePrincipal;
+  /**
+   * Who the secret is used for, named at every call site
+   * (credential-resolve-principal-guard.spec.ts holds new ones to it):
+   * a user (`{ id }`), a run's ExecutionPrincipal -- so a gateway run is
+   * judged by its gateway's scope -- or null for a path with nobody
+   * behind it. null reaches organization rows only: a private or team
+   * row is refused unless `systemFor` covers it.
+   */
+  principal: ConnectionUsePrincipal | ExecutionPrincipal | null;
+  /**
+   * Explicitly the system acting for the resource that owns this use (a
+   * provider's health check, a deployment's reconcile). Read only when
+   * `principal` is null. A team row passes when that resource is scoped
+   * to the same team, a private row when it is private to the same owner;
+   * nothing else is opened by it.
+   */
+  systemFor?: SystemActor;
   context?: ConnectionUseContext;
+}
+
+/** The scope of the resource the system acts for (see ResolveOptions.systemFor). */
+export interface SystemActor {
+  organizationId: string;
+  visibility?: ResourceVisibility | null;
+  teamId?: string | null;
+  ownerUserId?: string | null;
 }
 
 export interface ResolvedCredential {
@@ -142,6 +173,9 @@ export class CredentialRefResolver {
     private readonly envelopeCrypto: EnvelopeCryptoService,
     @Optional() @Inject(CONNECTION_USE_POLICY) policy?: ConnectionUsePolicy,
     @Optional() @Inject(CONNECTIONS_GOVERNANCE_HOOK) private readonly governance?: ConnectionsGovernanceHook,
+    // The team rule at resolve time. Optional only for specs that build the
+    // resolver by hand; without it a team row is refused (fail closed).
+    @Optional() private readonly executionAccess?: ExecutionAccessService,
   ) {
     this.policy = policy ?? new AllowAllConnectionUsePolicy();
   }
@@ -160,7 +194,7 @@ export class CredentialRefResolver {
   async resolve(
     organizationId: string,
     credentialId: string,
-    opts: ResolveOptions = {},
+    opts: ResolveOptions,
   ): Promise<ResolvedCredential> {
     const credential = await this.load(organizationId, credentialId);
     if (!credential.isActive) {
@@ -169,8 +203,15 @@ export class CredentialRefResolver {
     if (credential.isExpired()) {
       throw new ForbiddenException({ code: 'CREDENTIAL_EXPIRED', message: 'credential has expired' });
     }
-    CredentialRefResolver.assertPrivateUse(credential, opts.principal, opts.context);
-    await this.policy.assertCanUse({ organizationId, credential, principal: opts.principal, context: opts.context });
+    const execution = CredentialRefResolver.executionPrincipalOf(opts.principal);
+    await this.assertScopedUse(credential, execution, opts);
+    // The grants policy and org governance judge a user. A gateway private
+    // to its owner is that owner; any other gateway, and nobody, is none.
+    const actingId = execution ? actingUserId(execution) : null;
+    const principal: ConnectionUsePrincipal | undefined = isExecutionPrincipal(opts.principal)
+      ? (actingId ? { id: actingId } : undefined)
+      : (opts.principal ?? undefined);
+    await this.policy.assertCanUse({ organizationId, credential, principal, context: opts.context });
     // Org policy (EE) has the last word, on every consumer path and not
     // just the connections API: a connector the organization forbade, or
     // a scope rule about who may use what, applies here too.
@@ -178,7 +219,7 @@ export class CredentialRefResolver {
       await this.governance.beforeUse(
         organizationId,
         credential as unknown as { id: string; organizationId: string; connectorKey?: string | null; ownerUserId?: string | null },
-        { userId: opts.principal?.id, ...(opts.context?.resourceType === 'agent' ? { agentId: opts.context.resourceId } : {}), ...(opts.context?.resourceType === 'workspace' ? { workspaceId: opts.context.resourceId } : {}) },
+        { userId: principal?.id, ...(opts.context?.resourceType === 'agent' ? { agentId: opts.context.resourceId } : {}), ...(opts.context?.resourceType === 'workspace' ? { workspaceId: opts.context.resourceId } : {}) },
         { purpose: opts.context?.purpose, resourceType: opts.context?.resourceType, resourceId: opts.context?.resourceId },
       );
     }
@@ -191,7 +232,7 @@ export class CredentialRefResolver {
   async tryResolve(
     organizationId: string,
     credentialId: string | null | undefined,
-    opts: ResolveOptions = {},
+    opts: ResolveOptions,
   ): Promise<ResolvedCredential | null> {
     if (!credentialId) return null;
     try {
@@ -204,6 +245,13 @@ export class CredentialRefResolver {
       }
       throw err;
     }
+  }
+
+  /** The principal a resolve acts as: a run's own, a `{ id }` user, or nobody. */
+  static executionPrincipalOf(principal: ResolveOptions['principal'] | undefined): ExecutionPrincipal | null {
+    if (!principal) return null;
+    if (isExecutionPrincipal(principal)) return principal;
+    return principal.id ? { kind: 'user', userId: principal.id, source: 'session' } : null;
   }
 
   /** The well-known secret fields of a decrypted config. */
@@ -221,28 +269,76 @@ export class CredentialRefResolver {
   }
 
   /**
-   * A private ("just me") credential is usable by its owner only: not by
-   * another member, not by an org admin, and not by a path that acts for
-   * nobody (a scheduler with no attributed user). Everyone else is told
-   * it does not exist. This holds for plain credentials too, which the
-   * grants policy never sees because they carry no connectorKey.
-   *
-   * A row a consumer manages for itself (an LLM provider's pasted key)
-   * follows its consumer instead: the consumer's own scope decides who
-   * reaches it, and syncManagedScope keeps the two in step.
+   * The scope half of resolve(), for a row the caller loaded and applies
+   * itself (an API's bound credential, refreshed in place when its OAuth2
+   * token has expired): the private and team rules below, nothing else.
+   * Throws CREDENTIAL_NOT_FOUND when `opts.principal` may not use it.
    */
-  static assertPrivateUse(
+  async assertScope(credential: Credential, opts: ResolveOptions): Promise<void> {
+    await this.assertScopedUse(credential, CredentialRefResolver.executionPrincipalOf(opts.principal), opts);
+  }
+
+  /**
+   * Private and team scope, applied at resolve time for every credential,
+   * plain rows included (the grants policy only ever sees rows that carry
+   * a connectorKey). Organization rows pass; the use policy decides them.
+   *
+   * - private ("just me"): its owner only -- not another member, not an
+   *   org admin, not a path that acts for nobody. A gateway private to the
+   *   owner acts as the owner.
+   * - team: team only is team only. Whoever the call acts as must be able
+   *   to use the row by the rule every executor applies
+   *   (ExecutionAccessService.canExecute): a member of the team, an org
+   *   owner or admin, or a gateway scoped to that team. A call that acts
+   *   for nobody is refused, however the credential is attached.
+   * - A null principal passes a scoped row only when the caller says it is
+   *   the system acting for a resource (`systemFor`) whose own scope covers
+   *   the row: a team resource for its team's rows, a private resource for
+   *   its owner's.
+   *
+   * Everyone refused is told the row does not exist. A row a consumer
+   * manages for itself (an LLM provider's pasted key) follows its consumer
+   * instead: the consumer's own scope decides who reaches it, and
+   * syncManagedScope keeps the two in step.
+   */
+  private async assertScopedUse(
     credential: Credential,
-    principal?: ConnectionUsePrincipal,
-    context?: ConnectionUseContext,
-  ): void {
-    if (credential.visibility !== 'private') return;
-    if (credential.ownerUserId && principal?.id && principal.id === credential.ownerUserId) return;
+    principal: ExecutionPrincipal | null,
+    opts: Pick<ResolveOptions, 'systemFor' | 'context'>,
+  ): Promise<void> {
+    const visibility = credential.visibility ?? 'org';
+    if (visibility === 'org') return;
     // Its own consumer, and only its own consumer, reaches a managed row
-    // without naming the owner (a health check, a background sync).
+    // without naming a user (a health check, a background sync).
     const managedBy = (credential.metadata as Record<string, any> | null | undefined)?.managedBy;
-    if (managedBy?.id && context?.resourceId === managedBy.id) return;
+    if (managedBy?.id && opts.context?.resourceId === managedBy.id) return;
+    if (principal) {
+      if (visibility === 'private') {
+        const userId = actingUserId(principal);
+        if (credential.ownerUserId && userId && userId === credential.ownerUserId) return;
+      } else if (this.executionAccess && (await this.executionAccess.canExecute(principal, credential)).allowed) {
+        return;
+      }
+    } else if (opts.systemFor && (await this.systemScopeCovers(opts.systemFor, credential))) {
+      return;
+    }
     throw new NotFoundException({ code: 'CREDENTIAL_NOT_FOUND', message: 'credential not found' });
+  }
+
+  /** Does the scope of the resource the system acts for cover `credential`? */
+  private async systemScopeCovers(actor: SystemActor, credential: Credential): Promise<boolean> {
+    if (actor.organizationId !== credential.organizationId) return false;
+    const actorVisibility = actor.visibility ?? 'org';
+    if (credential.visibility === 'private') {
+      return actorVisibility === 'private' && !!actor.ownerUserId && actor.ownerUserId === credential.ownerUserId;
+    }
+    if (!credential.teamId) return false;
+    if (actorVisibility === 'team') return actor.teamId === credential.teamId;
+    if (actorVisibility === 'private' && actor.ownerUserId && this.executionAccess) {
+      const owner: ExecutionPrincipal = { kind: 'user', userId: actor.ownerUserId, source: 'session' };
+      return (await this.executionAccess.canExecute(owner, credential)).allowed;
+    }
+    return false;
   }
 
   /** Whether `credential` was created by `managedBy` (same kind, and same id when one is given). */

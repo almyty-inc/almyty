@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ConflictException, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, EntityManager } from 'typeorm';
 
@@ -14,6 +14,11 @@ import {
 } from '../../common/authorization/access-policy.service';
 import { nameTaken } from '../../common/authorization/private-visibility';
 import { assertManageable } from '../../common/authorization/read-rule';
+import {
+  ExecutionAccessService,
+  type ExecutionPrincipal,
+  isExecutionPrincipal,
+} from '../../common/authorization/execution-access.service';
 
 /**
  * Runner ids are uuids. Checked before an id that arrived over the wire
@@ -107,6 +112,9 @@ export class RunnerService {
     private readonly workspaces: Repository<Workspace>,
     private readonly capabilities: RunnerCapabilityPublisher,
     private readonly accessPolicy: AccessPolicyService,
+    // The gateway rule for a dispatch made by a gateway run. Optional only
+    // for hand-built specs; without it a gateway reaches org runners only.
+    @Optional() private readonly executionAccess?: ExecutionAccessService,
   ) {}
 
   /**
@@ -441,7 +449,8 @@ export class RunnerService {
 
   /**
    * Look up the runner that should receive a dispatch, on behalf of
-   * `callerUserId`. Returns the runner if the caller may use it and it
+   * `caller` -- a user id, or the ExecutionPrincipal of the run the
+   * dispatch belongs to. Returns the runner if the caller may use it and it
    * can accept work, or throws a structured error the caller can convert
    * to a HTTP/RPC response.
    *
@@ -452,18 +461,28 @@ export class RunnerService {
    *   - team: a caller the access policy lets use it; no caller, refused.
    *   - org: any member of the organization; a dispatch with no known
    *     caller is allowed, as it was before visibility existed.
+   *   - a run through a gateway is judged by the gateway's scope
+   *     (ExecutionAccessService's gateway rule): a gateway of the runner's
+   *     team reaches a team runner, a gateway private to the runner's
+   *     owner reaches a private one, nothing else does.
    * A caller who may not use the runner gets the same 404 as a runner
    * that does not exist, so its existence does not leak.
    */
-  async resolveForDispatch(runnerId: string, callerUserId?: string | null): Promise<Runner> {
+  async resolveForDispatch(runnerId: string, caller?: string | ExecutionPrincipal | null): Promise<Runner> {
     const runner = await this.runners.findOne({ where: { id: runnerId } });
     if (!runner) throw new NotFoundException('runner not found');
     const visibility = runner.visibility ?? 'org';
-    if (callerUserId) {
-      const decision = await this.accessPolicy.canAccess({ id: callerUserId }, runner, 'use');
-      if (!decision.allowed) throw new NotFoundException('runner not found');
-    } else if (visibility !== 'org') {
-      throw new NotFoundException('runner not found');
+    if (isExecutionPrincipal(caller) && caller.kind === 'gateway') {
+      const decision = this.executionAccess ? await this.executionAccess.canExecute(caller, runner) : null;
+      if (!(decision?.allowed ?? visibility === 'org')) throw new NotFoundException('runner not found');
+    } else {
+      const callerUserId = isExecutionPrincipal(caller) ? caller.userId : caller;
+      if (callerUserId) {
+        const decision = await this.accessPolicy.canAccess({ id: callerUserId }, runner, 'use');
+        if (!decision.allowed) throw new NotFoundException('runner not found');
+      } else if (visibility !== 'org') {
+        throw new NotFoundException('runner not found');
+      }
     }
     // A runner is its registering member's machine acting in this org.
     // While that membership is not in effect (deactivated in the org, SCIM

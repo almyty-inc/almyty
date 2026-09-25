@@ -127,7 +127,11 @@ export class ChannelInstallationService {
     });
     if (!installation) return null;
     if (installation.credentialId) {
+      // No principal: an inbound platform event acts for nobody. The row is
+      // the one this installation manages for itself (the resolver lets its
+      // own consumer through); a shared team or private row is refused.
       const resolved = await this.credentialRefs.resolve(installation.organizationId, installation.credentialId, {
+        principal: null,
         context: { purpose: 'channel_inbound', resourceType: 'channel_installation', resourceId: installation.id },
       });
       return resolved.config;

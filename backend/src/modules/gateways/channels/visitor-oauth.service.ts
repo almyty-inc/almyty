@@ -7,6 +7,7 @@ import type { Gateway, VisitorOAuthConfig } from '../../../entities/gateway.enti
 import { safeFetch } from '../../../common/security/safe-fetch';
 import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
 import { hostedChatConfigFrom } from './hosted-chat.config';
+import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
 import {
   OutboundFetch,
   VISITOR_OAUTH_FETCH,
@@ -182,6 +183,8 @@ export class VisitorOAuthService {
   private async client(gateway: Gateway, config: VisitorOAuthConfig): Promise<oidc.Configuration> {
     const resolved = await this.credentialRefs
       .resolve(gateway.organizationId, config.credentialId!, {
+        // Used as the gateway it signs visitors into.
+        principal: gatewayPrincipal(gateway),
         context: { purpose: 'hosted_chat_visitor_sign_in', resourceType: 'gateway', resourceId: gateway.id },
       })
       .catch((err) => {

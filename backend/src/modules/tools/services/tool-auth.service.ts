@@ -8,8 +8,9 @@
  * Resolution order for an API-backed tool:
  *   0. A connection the API points at (api.authentication.config.connectionId),
  *      resolved through CredentialRefResolver as the caller.
- *   1. Load the most recent active Credential row for (api, org)
- *      and apply its auth headers + query params.
+ *   1. The most recent active Credential row bound to (api, org) that
+ *      the call's principal may use (team and private rows keep their
+ *      scope), with its auth headers + query params.
  *   2. If no credential exists, fall back to api.authentication
  *      (legacy inline config on the Api entity).
  *
@@ -19,7 +20,7 @@
  * Applying a credential also refreshes expired OAuth2 tokens
  * transparently via the credential service.
  */
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -28,6 +29,7 @@ import { Api } from '../../../entities/api.entity';
 import { Credential, CredentialType } from '../../../entities/credential.entity';
 import { ToolExecutionOptions } from '../tool-execution.types';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
+import { type ExecutionPrincipal, userPrincipal } from '../../../common/authorization/execution-access.service';
 import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
 import { connectionAuthConfig, inlineApiAuthView } from '../../credentials/inline-api-auth.helper';
 
@@ -56,21 +58,29 @@ export class ToolAuthService {
     options: ToolExecutionOptions,
   ): Promise<void> {
     // 0. A connection the API points at (its Key card's "Connect an
-    // account"). Resolved as the caller, through grants and the audit
-    // trail, like every other consumer of a connection. A connection that
-    // cannot be used fails the call rather than sending it unsigned.
+    // account"). Resolved as the call's principal -- the run's, inherited,
+    // so a gateway run is judged by its gateway -- through grants and the
+    // audit trail, like every other consumer of a connection. A connection
+    // that cannot be used fails the call rather than sending it unsigned.
+    const principal = options.principal ?? userPrincipal(options.userId);
     const connectionId = api.authentication?.config?.connectionId as string | undefined;
     if (connectionId && this.credentialRefs) {
       const resolved = await this.credentialRefs.resolve(options.organizationId, connectionId, {
-        principal: options.userId ? { id: options.userId } : undefined,
+        principal,
         context: { purpose: 'api_call', resourceType: 'api', resourceId: api.id },
       });
       this.applyInlineApiAuth(config, inlineApiAuthView(api.authentication as any, connectionAuthConfig(resolved.config)) as Api['authentication']);
       return;
     }
 
-    // 1. Prefer proper Credential entity.
-    const credential = await this.credentialRepository.findOne({
+    // 1. Prefer proper Credential entity: the newest active row bound to
+    // this API that the principal may use. A row is bound to the API, not
+    // to its scope: a team row on an org-wide API is still its team's
+    // alone, and a private row its owner's, so it is sent only for them.
+    // When rows are bound but none is usable the call fails as "not
+    // found" rather than falling back to another secret or going out
+    // unsigned.
+    const bound = await this.credentialRepository.find({
       where: {
         apiId: api.id,
         organizationId: options.organizationId,
@@ -79,7 +89,11 @@ export class ToolAuthService {
       order: { createdAt: 'DESC' },
     });
 
-    if (credential) {
+    if (bound.length > 0) {
+      const credential = await this.firstUsable(bound, principal, api);
+      if (!credential) {
+        throw new NotFoundException({ code: 'CREDENTIAL_NOT_FOUND', message: 'credential not found' });
+      }
       await this.applyCredential(config, credential);
       return;
     }
@@ -157,6 +171,31 @@ export class ToolAuthService {
       const pair = `${authConfig.config.username}:${authConfig.config.password ?? ''}`;
       headers.Authorization = `Basic ${Buffer.from(pair).toString('base64')}`;
     }
+  }
+
+  /**
+   * The newest of `rows` the principal may use. The API's own managed row
+   * follows the API (the resolver lets its consumer through); a team or
+   * private row someone bound to the API is held to its own scope. Without
+   * the resolver (hand-built specs) only organization rows are usable.
+   */
+  private async firstUsable(rows: Credential[], principal: ExecutionPrincipal, api: Api): Promise<Credential | null> {
+    for (const row of rows) {
+      if (!this.credentialRefs) {
+        if ((row.visibility ?? 'org') === 'org') return row;
+        continue;
+      }
+      try {
+        await this.credentialRefs.assertScope(row, {
+          principal,
+          context: { purpose: 'api_call', resourceType: 'api', resourceId: api.id },
+        });
+        return row;
+      } catch {
+        // Not this principal's to use: try the next row.
+      }
+    }
+    return null;
   }
 
   /**

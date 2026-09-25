@@ -10,6 +10,7 @@ import {
 import { RunnerService } from './runner.service';
 import { WorkspaceService } from '../workspace/workspace.service';
 import { RunnerState } from '../../entities/runner.entity';
+import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 
 export interface RunnerRequestPayload {
   method: string;
@@ -59,6 +60,13 @@ export interface DispatchOptions {
    * from its team, and neither takes work from an unknown caller.
    */
   callerUserId?: string | null;
+  /**
+   * The principal of the run this dispatch belongs to. When set it decides
+   * instead of callerUserId, so a gateway run is judged by its gateway's
+   * scope (see resolveForDispatch). The workspace check still reads
+   * callerUserId: a workspace belongs to a person.
+   */
+  principal?: ExecutionPrincipal;
 }
 
 interface PendingCall {
@@ -166,7 +174,7 @@ export class RunnerCallService implements OnModuleDestroy {
     workspaceId?: string,
     options: DispatchOptions = {},
   ): Promise<RunnerResponsePayload> {
-    const runner = await this.runners.resolveForDispatch(runnerId, options.callerUserId).catch((err) => {
+    const runner = await this.runners.resolveForDispatch(runnerId, options.principal ?? options.callerUserId).catch((err) => {
       if (err?.status === 404) {
         throw new RunnerCallError(RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND, err.message);
       }

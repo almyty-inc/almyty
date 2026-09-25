@@ -513,7 +513,7 @@ export class AgentCollaborationHelper {
           signal: controller.signal,
         },
         run.organizationId,
-        run.userId,
+        principalOfRun(run),
       );
     } finally {
       clearTimeout(timer);

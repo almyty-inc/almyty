@@ -22,6 +22,7 @@ describe('LlmChatHelper.chatStream with a routing policy', () => {
     const savedMessage = { id: 'msg-1' };
     const session = { id: 'conv-1', organizationId: 'org', userId: 'u', context: {} };
     const runner = {
+      resolveProviderSecrets: jest.fn().mockResolvedValue(undefined),
       planRouteHead: jest.fn().mockResolvedValue({ provider, candidate, rejected: [{ modelId: 'card-2', reason: 'lacks tools' }] }),
       recordRoute: jest.fn(),
       prepareTools: jest.fn().mockResolvedValue([]),
@@ -48,7 +49,7 @@ describe('LlmChatHelper.chatStream with a routing policy', () => {
     const { helper, runner, providers } = build();
     callOpenAIStream.mockResolvedValue({ message: { role: 'assistant', content: 'hi' }, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, cost: 0, model: 'gpt-cheap', responseTime: 5 });
     const res = await helper.chatStream(undefined, { messages: [], routing: { objective: 'cheapest' } } as any, 'org', 'u', () => undefined);
-    expect(runner.planRouteHead).toHaveBeenCalledWith('org', expect.objectContaining({ routing: { objective: 'cheapest' } }), { id: 'u' });
+    expect(runner.planRouteHead).toHaveBeenCalledWith('org', expect.objectContaining({ routing: { objective: 'cheapest' } }), { kind: 'user', userId: 'u', source: 'session' });
     expect(providers.getProvider).not.toHaveBeenCalled();
     const [calledProvider, calledRequest] = callOpenAIStream.mock.calls[0];
     expect(calledProvider.id).toBe('p-head');
