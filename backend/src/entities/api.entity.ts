@@ -150,6 +150,9 @@ export class Api {
   // table can show an operation count without loading the heavy relation.
   operationCount?: number;
 
+  // Virtual — live tools generated from or attached to this API (list queries).
+  toolCount?: number;
+
   @OneToMany(() => Resource, resource => resource.api, {
     cascade: true,
   })

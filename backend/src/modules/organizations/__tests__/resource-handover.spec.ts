@@ -80,7 +80,10 @@ describe('ResourceHandoverHelper', () => {
       const t = build({});
       await t.helper.handOverPrivateResources(t.manager, args);
 
-      expect(transfers(t)).toHaveLength(OWNED_RESOURCE_TABLES.length);
+      // Every private-tier table, plus the approvals the leaver's private
+      // agents asked for, which follow the agents.
+      expect(transfers(t)).toHaveLength(OWNED_RESOURCE_TABLES.length + 1);
+      expect(transfers(t).map(([sql]: [string]) => /UPDATE (\w+)/.exec(sql)![1])).toContain('approval_requests');
       for (const [sql, params] of transfers(t)) {
         expect(sql).toMatch(/WHERE "organizationId" = \$2 AND visibility = 'private' AND "(createdBy|ownerUserId)" = \$3/);
         expect(sql).not.toMatch(/SET[^W]*visibility/);

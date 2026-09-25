@@ -51,6 +51,10 @@ The plan selects the entitlement set; the **token** is what any running almyty c
 
 ## BYO-KMS
 
+Without the `byo_kms` entitlement, **Settings → Encryption** shows this locked view; no customer-managed key is configured by this screen:
+
+![Customer-managed encryption keys locked on a Pro demo organization](/screenshots/settings-encryption-locked.png)
+
 With the `byo_kms` entitlement an organization encrypts its secrets under its own AWS KMS customer-managed key instead of the platform key. almyty generates a 256-bit data encryption key, wraps it with your CMK (KMS `Encrypt`), and stores only the wrapped blob. The plaintext key is never written down, and almyty never stores your AWS access keys: credentials come from the SDK's default provider chain (env, IRSA, or instance profile). Revoke almyty's access to the CMK and the sealed values stop being readable.
 
 Manage it under **Settings** (owner/admin only), or over the API: read the status, attach a CMK, rotate, and enable or disable the envelope path. Nothing ever returns key material, only whether a key is provisioned, the CMK ARN and region, and the key ids, which are fingerprints of blobs already at rest.
@@ -58,5 +62,9 @@ Manage it under **Settings** (owner/admin only), or over the API: read the statu
 Rotation is cheap and non-destructive. Each sealed value names the key that sealed it, so rotating mints a fresh data key, retains the outgoing wrapped one, and re-encrypts nothing: old values stay readable. Values written before a CMK was attached stay on the platform path and keep working, because the two ciphertext formats are distinguished by prefix and can coexist in one column. Attaching a CMK when one is already attached is refused with 409, because replacing a key is a rotation, not an attach.
 
 ## Chargeback
+
+Without the `chargeback` entitlement, **Analytics → Chargeback** shows an upgrade prompt rather than a cost-attribution report:
+
+![Chargeback locked on a Pro demo organization](/screenshots/analytics-chargeback-locked.png)
 
 With the `chargeback` entitlement, one report turns the open-source spend data into an internal billing statement: total spend for a window, **per-team** and per-agent attribution, a spend timeseries, and a linear forecast for the next period(s). Admin/owner only. It layers on the same spend pipeline as [cost governance](/cost-governance) with no separate metering. The report endpoint (period, granularity, and forecast parameters) is documented in the [API reference](/api-reference).

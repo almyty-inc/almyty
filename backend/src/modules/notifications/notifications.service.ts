@@ -8,6 +8,7 @@ import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
 import { UserTeam, TeamRole } from '../../entities/user-team.entity';
 import { MailService } from '../mail/mail.service';
+import { isEffectiveMembership } from '../../common/authorization/membership';
 import {
   ChannelPrefs,
   EMAIL_RATE_CAP_MS,
@@ -53,6 +54,12 @@ export interface EmitNotificationInput {
   };
   /** Skip creating an in-app row for these users (e.g. the actor). */
   excludeUserIds?: string[];
+  /**
+   * The explicit recipients are people invited to the organization, not
+   * members of it yet (invite.received). Everything else is delivered
+   * only to current members: see resolveTargets.
+   */
+  toInvitees?: boolean;
 }
 
 export interface NotificationListResult {
@@ -227,7 +234,21 @@ export class NotificationsService {
     for (const excluded of input.excludeUserIds ?? []) ids.delete(excluded);
     ids.delete(null as any);
     ids.delete(undefined as any);
-    return [...ids];
+    if (ids.size === 0) return [];
+    if (input.toInvitees) return [...ids];
+
+    // Everyone on the list must be a member of the organization right now
+    // (active, invite accepted -- common/authorization/membership.ts). An
+    // explicit recipient is named by id from a row written earlier (a
+    // run's initiator, a resource's owner) and a team lead by a team row
+    // that outlives the org membership; either may have been deactivated
+    // or removed since, and what the event names is the organization's.
+    const members = await this.userOrgs.find({
+      where: { organizationId: input.organizationId, userId: In([...ids]), isActive: true },
+      select: { userId: true, isActive: true, inviteAccepted: true, inviteToken: true },
+    });
+    const current = new Set(members.filter((m) => isEffectiveMembership(m)).map((m) => m.userId));
+    return [...ids].filter((id) => current.has(id));
   }
 
   /**

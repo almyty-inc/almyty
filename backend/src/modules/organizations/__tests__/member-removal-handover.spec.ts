@@ -3,6 +3,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { OrganizationsService } from '../organizations.service';
 import { OrganizationRole, UserOrganization } from '../../../entities/user-organization.entity';
 import { Team } from '../../../entities/team.entity';
+import { ResourceHandoverHelper } from '../resource-handover.helper';
 
 /**
  * Member removal hands the departed member's private resources over, and
@@ -58,6 +59,9 @@ describe('OrganizationsService: resource handover', () => {
       }),
       revokeWipedConnectionsAtProviders: jest.fn(async () => { calls.push('provider revoke'); }),
       demoteTeamResources: jest.fn(async () => { calls.push('demote'); return auditRows; }),
+      // The real lookup, against the transaction's membership repository.
+      longestStandingOtherOwner: jest.fn((m: any, orgId: string, exclude: string) =>
+        ResourceHandoverHelper.prototype.longestStandingOtherOwner.call(null, m, orgId, exclude)),
     };
     const audit = { publishCommitted: jest.fn(() => { calls.push('publish'); }) };
     const service = new OrganizationsService(

@@ -17,20 +17,20 @@ A role is a named job in the agent, like `principal` or `verifier`, and a bindin
 | `Strategy "cascade" needs role slots that are not bound: drafter, verifier.` | Add a role for each named slot, using exactly that name as the key. |
 | `Role "principal" could not be filled: ...` | Either the role is pinned to nothing, or routing found no model. See [when a role cannot be filled](#when-a-role-cannot-be-filled). |
 | `Model node "x" needs role "principal". Add it on the Execution tab.` | A node in the graph names a role the agent does not define. Add that role. |
-| `role "principal" has no available model/provider` | The role is pinned to a model whose provider is gone or inactive. Repin it, or fix the provider under Models. |
-| `the provider for role "principal" is inactive` | The pinned model's provider exists but is switched off. Reactivate it under Models. |
+| `role "principal" has no available model/provider` | The role is pinned to a model whose provider is gone or inactive. Repin it, or open **Models → Inference providers** and fix the provider. |
+| `the provider for role "principal" is inactive` | The pinned model's provider exists but is switched off. Reactivate it under **Models → Inference providers**. |
 | `Save this agent as a draft, then configure its model roles before activation.` | Roles are stored per agent, so the agent has to exist first. Save, then come back. |
 
 The check is skipped entirely for autonomous agents, which choose models a different way, so this error only appears on workflow agents.
 
 ## Add a role
 
-On the **Roles** card, click **Add role**. The dialog asks for two things:
+On the **Roles** card, click **Add role**. An inline form on the Execution tab asks for two things:
 
 - **Key**: lowercase letters, digits and underscores, starting with a letter. This is what strategies match slots by, and what nodes reference, so renaming it later breaks those references.
 - **Name (optional)**: a human label. Left blank, it falls back to the key.
 
-The dialog suggests keys for you. When a strategy is already selected, its unbound slots are offered first under **Slots your strategies need**; otherwise you get the common ones: `principal`, `drafter`, `verifier`, `explorer`, `summariser`, `orchestrator`, `panelist_one`, `panelist_two`, `panelist_three`.
+The form suggests keys for you. When a strategy is already selected, its unbound slots are offered first under **Slots your strategies need**; otherwise you get the common ones: `principal`, `drafter`, `verifier`, `explorer`, `summariser`, `orchestrator`, `panelist_one`, `panelist_two`, `panelist_three`.
 
 A new role is created **routed**, with the cheapest model that fits. Adding, rebinding and removing roles is admin or owner only; members can see the tab and read what it resolves to.
 

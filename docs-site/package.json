@@ -10,7 +10,9 @@
     "build": "next build --webpack",
     "postbuild": "pagefind --site .next/server/app --output-path public/_pagefind",
     "start": "next start",
-    "check-copy": "node scripts/check-copy.mjs"
+    "check-copy": "node scripts/check-copy.mjs",
+    "check-screenshots": "node scripts/check-screenshots.mjs",
+    "test-screenshots": "node --test scripts/check-screenshots.test.mjs"
   },
   "dependencies": {
     "next": "^16.3.5",

@@ -5,6 +5,7 @@ import { EventEmitter } from 'events';
 
 import { ApprovalRequest, ApprovalStatus } from '../../entities/approval-request.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
+import { Agent } from '../../entities/agent.entity';
 import { ApprovalPolicyApprovalRecord } from '../../entities/approval-policy-approval.entity';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
@@ -132,13 +133,13 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     }
 
     const policy = await this.resolveGoverningPolicy(input);
+    const scope = await this.scopeOfRequestingAgent(input);
 
     const ttl = Math.min(input.ttlSeconds ?? DEFAULT_TTL_SECONDS, MAX_TTL_SECONDS);
     const expiresAt = new Date(Date.now() + ttl * 1000);
     const row = this.approvals.create({
       organizationId: input.organizationId,
-      teamId: input.teamId,
-      visibility: input.teamId ? 'team' : 'org',
+      ...scope,
       runId: input.runId,
       agentId: input.agentId,
       toolCallId: input.toolCallId ?? null,
@@ -213,6 +214,10 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     const row = await this.approvals.findOne({ where: { id, organizationId } });
     if (!row) throw new NotFoundException('approval request not found');
 
+    // One the caller may not even see (another member's private request,
+    // another team's) is not found; one they see but may not decide, 403.
+    const read = await this.accessPolicy.canAccess(caller, row, 'read');
+    if (!read.allowed) throw new NotFoundException('approval request not found');
     const can = await this.accessPolicy.canAccess(caller, row, 'manage');
     if (!can.allowed) throw new ForbiddenException(can.reason);
 
@@ -268,6 +273,28 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     this.emit('approval.decided', saved);
     this.notifyDecided(saved).catch(() => {});
     return saved;
+  }
+
+  /**
+   * The request's scope, read from the agent that asked rather than taken
+   * from the caller: a private agent's request is its owner's alone
+   * (it carries what the agent is about to do, with the arguments), a team
+   * agent's is its team's, anything else org-wide. The agent is read in
+   * the request's organization; a private agent with no recorded owner
+   * cannot ask on nobody's behalf.
+   */
+  private async scopeOfRequestingAgent(
+    input: CreateApprovalInput,
+  ): Promise<Pick<ApprovalRequest, 'visibility' | 'teamId' | 'ownerUserId'>> {
+    const agent = await this.approvals.manager.getRepository(Agent).findOne({
+      where: { id: input.agentId, organizationId: input.organizationId },
+      select: { id: true, visibility: true, createdBy: true },
+    });
+    if (agent?.visibility === 'private') {
+      if (!agent.createdBy) throw new BadRequestException('a private agent with no owner cannot request approval');
+      return { visibility: 'private', teamId: null, ownerUserId: agent.createdBy };
+    }
+    return { visibility: input.teamId ? 'team' : 'org', teamId: input.teamId, ownerUserId: null };
   }
 
   /**
@@ -459,7 +486,8 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     const row = await this.approvals.findOne({ where: { id, organizationId } });
     if (!row) throw new NotFoundException('approval request not found');
     const can = await this.accessPolicy.canAccess(caller, row, 'read');
-    if (!can.allowed) throw new ForbiddenException(can.reason);
+    // A request the caller may not see reads like one that does not exist.
+    if (!can.allowed) throw new NotFoundException('approval request not found');
     return row;
   }
 
@@ -467,7 +495,7 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     const qb = this.approvals
       .createQueryBuilder('a')
       .where('a.status = :status', { status: 'pending' });
-    await this.accessPolicy.applyListFilter(qb, args.caller, args.organizationId, 'a');
+    await this.accessPolicy.applyListFilter(qb, args.caller, args.organizationId, 'a', { ownerColumn: 'ownerUserId' });
     return qb.orderBy('a."createdAt"', 'DESC').take(200).getMany();
   }
 
@@ -524,10 +552,16 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     await this.notifications.emit({
       type: 'approval.pending',
       organizationId: row.organizationId,
-      roleTarget: {
-        orgRoles: [OrganizationRole.OWNER, OrganizationRole.ADMIN],
-        teamLeadOfTeamId: row.teamId,
-      },
+      // A private agent's request is its owner's alone; anything else goes
+      // to the org owners/admins and, for a team request, the team leads.
+      ...(row.visibility === 'private'
+        ? { userIds: row.ownerUserId ? [row.ownerUserId] : [] }
+        : {
+            roleTarget: {
+              orgRoles: [OrganizationRole.OWNER, OrganizationRole.ADMIN],
+              teamLeadOfTeamId: row.teamId,
+            },
+          }),
       title: 'Approval requested',
       body: row.reason,
       link: `/approvals/${row.id}`,

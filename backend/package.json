@@ -200,6 +200,7 @@
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
     "globalSetup": "<rootDir>/test/integration-global-setup.ts",
+    "globalTeardown": "<rootDir>/test/integration-global-teardown.ts",
     "setupFilesAfterEnv": [
       "<rootDir>/test/setup.ts"
     ],

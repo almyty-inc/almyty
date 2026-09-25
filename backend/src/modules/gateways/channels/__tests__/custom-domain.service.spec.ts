@@ -35,6 +35,8 @@ interface Row {
   name: string;
   configuration: Record<string, any>;
   customDomain: CustomDomainConfig | null;
+  visibility?: 'org' | 'team' | 'private';
+  ownerUserId?: string | null;
 }
 
 const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -78,7 +80,7 @@ class MemoryStore implements CustomDomainStore {
   async activeHolder(hostname: string, exceptGatewayId: string): Promise<ActiveHolder | null> {
     await turn();
     const row = this.activeOn(hostname, exceptGatewayId);
-    return row ? { gatewayId: row.id, organizationId: row.organizationId, name: row.name, block: copy(row.customDomain!) } : null;
+    return row ? { gatewayId: row.id, organizationId: row.organizationId, name: row.name, visibility: row.visibility ?? 'org', ownerUserId: row.ownerUserId ?? null, block: copy(row.customDomain!) } : null;
   }
 
   async takeOver(
@@ -113,7 +115,7 @@ class MemoryStore implements CustomDomainStore {
       .filter((r) => r.type === 'hosted_chat' && r.customDomain?.status === 'active')
       .filter((r) => !r.customDomain!.lastCheckedAt || r.customDomain!.lastCheckedAt < checkedBefore)
       .slice(0, limit)
-      .map((r) => ({ gatewayId: r.id, organizationId: r.organizationId, name: r.name, block: copy(r.customDomain!) }));
+      .map((r) => ({ gatewayId: r.id, organizationId: r.organizationId, name: r.name, visibility: r.visibility ?? 'org', ownerUserId: r.ownerUserId ?? null, block: copy(r.customDomain!) }));
   }
 
   async recordRecheck(gatewayId: string, current: Pick<CustomDomainConfig, 'hostname' | 'verificationToken' | 'lastCheckedAt'>, next: CustomDomainConfig) {
@@ -306,6 +308,18 @@ describe('CustomDomainService', () => {
       });
     });
 
+    it('a private holder\'s loss of the name is told to its owner alone', async () => {
+      const h = await heldByA();
+      Object.assign(h.rows.get('gw-a')!, { visibility: 'private', ownerUserId: 'u1' });
+      h.unpublish('_almyty-verify.chat.shared.com', block(h.rows, 'gw-a').verificationToken);
+      h.publish('_almyty-verify.chat.shared.com', block(h.rows, 'gw-b').verificationToken);
+
+      await expect(h.service.verify('gw-b', 'org-b', 'u2')).resolves.toMatchObject({ status: 'active' });
+      expect(h.notifications.sent).toHaveLength(1);
+      expect(h.notifications.sent[0]).toMatchObject({ type: 'domains.unverified', organizationId: 'org-a', userIds: ['u1'] });
+      expect(h.notifications.sent[0].roleTarget).toBeUndefined();
+    });
+
     it('does not take over while the holder record still resolves', async () => {
       const { service, rows, publish } = await heldByA();
       publish('_almyty-verify.chat.shared.com', block(rows, 'gw-b').verificationToken);
@@ -482,6 +496,28 @@ describe('the daily re-check of live domains', () => {
     // A demoted domain is no longer live, so later ticks leave it alone.
     await expect(service.recheckDue(at(RECHECK_FAILURES_BEFORE_DEMOTION + 1))).resolves.toEqual({ checked: 0, demoted: 0 });
     expect(notifications.sent).toHaveLength(1);
+  });
+
+  it('a private gateway\'s demoted domain is told to its owner alone, not the org admins', async () => {
+    const h = await live();
+    Object.assign(h.rows.get('gw-a')!, { visibility: 'private', ownerUserId: 'u1' });
+    delete h.txt['_almyty-verify.chat.acme.com'];
+    for (let day = 1; day <= RECHECK_FAILURES_BEFORE_DEMOTION; day++) await h.service.recheckDue(at(day));
+
+    expect(block(h.rows, 'gw-a').status).toBe('failed');
+    expect(h.notifications.sent).toHaveLength(1);
+    expect(h.notifications.sent[0]).toMatchObject({ type: 'domains.unverified', userIds: ['u1'], link: '/gateways/gw-a' });
+    expect(h.notifications.sent[0].roleTarget).toBeUndefined();
+  });
+
+  it('a private gateway with no recorded owner: its demotion is told to nobody', async () => {
+    const h = await live();
+    Object.assign(h.rows.get('gw-a')!, { visibility: 'private', ownerUserId: null });
+    delete h.txt['_almyty-verify.chat.acme.com'];
+    for (let day = 1; day <= RECHECK_FAILURES_BEFORE_DEMOTION; day++) await h.service.recheckDue(at(day));
+
+    expect(block(h.rows, 'gw-a').status).toBe('failed');
+    expect(h.notifications.sent).toEqual([]);
   });
 
   it('a record that comes back resets the count', async () => {

@@ -57,8 +57,27 @@ export function parseArgs(argv: string[]): ParsedArgs {
   return result;
 }
 
+/**
+ * Other names the hosting commands answer to, matching the API's
+ * /model-deployments routes. They work but stay out of --help, which speaks
+ * of hosting. `deployment <id>` is `hosted <id>`.
+ */
+export const COMMAND_ALIASES: Readonly<Record<string, string>> = {
+  deploy: 'host',
+  deployments: 'hosted',
+  deployment: 'hosted',
+};
+
+export function resolveCommand(command: string | undefined): string | undefined {
+  return command && Object.prototype.hasOwnProperty.call(COMMAND_ALIASES, command) ? COMMAND_ALIASES[command] : command;
+}
+
 function printHelp(): void {
-  console.log(`
+  console.log(helpText());
+}
+
+export function helpText(): string {
+  return `
 @almyty/models v${VERSION}
 
 A model is usable when its card is active, has something that can call it,
@@ -104,12 +123,12 @@ Versions (optional: register an artifact only for lineage and evals on it):
                                        hf://org/repo@sha | s3://bucket/key@etag
                                        gs://bucket/key@gen | file:///path@sha
 
-Deployments:
+Hosting:
   adapters                             Registered adapters: what each can run (modelSchemes),
                                        its capabilities, and which config fields are secret
-  deploy <model> --adapter <key> [--base <b>] [--config-file <path>] [--config-stdin]
-         [--desired '<json>'] [--credential <connectionId>] [--budget <id>] [--card <cardId>]
-  deploy --model-version <id> --adapter <key> [...]
+  host <model> --adapter <key> [--base <b>] [--config-file <path>] [--config-stdin]
+       [--desired '<json>'] [--credential <connectionId>] [--budget <id>] [--card <cardId>]
+  host --model-version <id> --adapter <key> [...]
                                        <model> is where the model lives:
                                          hf://org/repo[@rev]     a Hugging Face repository; a
                                                                  branch, tag or nothing is
@@ -123,10 +142,10 @@ Deployments:
                                        cannot read your source is refused before anything runs.
                                        Prefer --credential (a connection made with
                                        \`almyty connections connect\`) over pasting a key.
-  deployments                          List deployments: desired vs actual, state, spend
-  deployment <id>                      One deployment in full
-  scale <deploymentId> <replicas>      Set desired replicas; 0 scales to zero
-  teardown <deploymentId>              Tear the endpoint down; weights stay in the registry
+  hosted                               List hosted models: desired vs actual, state, spend
+  hosted <id>                          One hosted model in full
+  scale <hostedId> <replicas>          Set desired replicas; 0 scales to zero
+  teardown <hostedId>                  Tear the endpoint down; weights stay in the registry
 
 Options:
   --json                               Undecorated JSON on stdout, for scripts
@@ -140,7 +159,7 @@ Environment:
 
 Exit codes:
 ${EXIT_CODE_HELP}
-`);
+`;
 }
 
 function str(flags: ParsedArgs['flags'], key: string): string | undefined {
@@ -291,7 +310,7 @@ export function routePolicy(flags: ParsedArgs['flags']): Record<string, unknown>
 
 /**
  * Naming the model is configuration, so the model reference is the
- * positional argument: `deploy hf://org/repo@sha --adapter huggingface-endpoints`.
+ * positional argument: `host hf://org/repo@sha --adapter huggingface-endpoints`.
  * `--model-version` is the other way in, for people who registered an
  * artifact to get lineage and evaluation history with it.
  */
@@ -303,7 +322,7 @@ export function deployBody(
   const model = positional[0] ?? str(flags, 'model');
   const modelVersion = str(flags, 'model-version');
   if (!model && !modelVersion) {
-    throw new UsageError('Name the model to run (deploy hf://org/repo@sha --adapter <key>), or pass --model-version <id>.');
+    throw new UsageError('Name the model to run (host hf://org/repo@sha --adapter <key>), or pass --model-version <id>.');
   }
   const body: Record<string, unknown> = { providerType: need(flags, 'adapter') };
   if (modelVersion) body.modelVersionId = modelVersion;
@@ -379,7 +398,7 @@ export function formatCardDetail(c: any): string {
   lines.push(`  validation    ${c.validationStatus ?? 'pending'}${c.lastValidatedAt ? `, last ${c.lastValidatedAt}` : ', never run'}`);
   if (c.lastValidationError) lines.push(`  last error    ${c.lastValidationError}`);
   if (c.measuredLatencyMs) lines.push(`  latency       p50 ${c.measuredLatencyMs.p50 ?? '?'} ms, p95 ${c.measuredLatencyMs.p95 ?? '?'} ms`);
-  if (c.deploymentId) lines.push(`  deployment    ${c.deploymentId}`);
+  if (c.deploymentId) lines.push(`  hosted as     ${c.deploymentId}`);
   if (c.modelVersionId) lines.push(`  version       ${c.modelVersionId}`);
   if (!c.selectable) lines.push('', `Not a routing candidate yet. ${unselectableReason(c)}`);
   return lines.join('\n');
@@ -488,7 +507,7 @@ export function assertStdinIsPiped(flag: string): void {
   if (!process.stdin.isTTY) return;
   throw new UsageError(
     `${flag} reads stdin, and stdin is your terminal, so it would wait forever.\n` +
-    `  Pipe it in:  cat config.json | almyty models deploy ... ${flag}`,
+    `  Pipe it in:  cat config.json | almyty models host ... ${flag}`,
   );
 }
 
@@ -516,7 +535,7 @@ const CONFIG_ALTERNATIVES = [
  * than sent blind: failing open here would make an unreachable catalog the
  * way to get a secret onto the command line.
  */
-async function deployConfig(
+async function hostConfig(
   flags: ParsedArgs['flags'],
   adapterSchema: any,
   schemaKnown: boolean,
@@ -563,7 +582,7 @@ async function main(): Promise<void> {
   const q = (path: string, init?: RequestInit) => client.request(path, init);
   const post = (path: string, body: unknown) => q(path, { method: 'POST', body: JSON.stringify(body) });
 
-  switch (args.command) {
+  switch (resolveCommand(args.command)) {
     case 'list': {
       const res = await q(`/models${listQuery(args.flags)}`);
       out(args, res.data, () => (res.data.length
@@ -634,7 +653,7 @@ async function main(): Promise<void> {
       out(args, res.data, () => (res.data.length ? res.data.map(formatAdapter).join('\n') : 'No adapters registered.'));
       return;
     }
-    case 'deploy': {
+    case 'host': {
       // The adapter's schema says which config fields are secret, so the
       // check happens before anything is sent.
       const adapterKey = need(args.flags, 'adapter');
@@ -653,27 +672,27 @@ async function main(): Promise<void> {
       } catch (err) {
         if (err instanceof UsageError) throw err;
         // The catalog could not be read. The API still validates the body,
-        // but --config can no longer be screened, so deployConfig refuses it.
+        // but --config can no longer be screened, so hostConfig refuses it.
       }
-      const providerConfig = await deployConfig(args.flags, adapterSchema, schemaKnown);
+      const providerConfig = await hostConfig(args.flags, adapterSchema, schemaKnown);
       const res = await post('/model-deployments', deployBody(args.flags, args.positional, providerConfig));
       out(args, res.data, () => `Queued. Reconcile picks it up within a couple of minutes.\n${formatDeployment(res.data)}`);
       return;
     }
-    case 'deployments': {
+    case 'hosted': {
+      const id = args.positional[0];
+      if (id) {
+        const res = await q(`/model-deployments/${id}`);
+        out(args, res.data, () => formatDeploymentDetail(res.data));
+        return;
+      }
       const res = await q('/model-deployments');
-      out(args, res.data, () => (res.data.length ? res.data.map(formatDeployment).join('\n') : 'No deployments.'));
-      return;
-    }
-    case 'deployment': {
-      const id = needArg(args.positional, 0, 'deployment id', 'deployment <id>');
-      const res = await q(`/model-deployments/${id}`);
-      out(args, res.data, () => formatDeploymentDetail(res.data));
+      out(args, res.data, () => (res.data.length ? res.data.map(formatDeployment).join('\n') : 'No hosted models.'));
       return;
     }
     case 'scale': {
-      const id = needArg(args.positional, 0, 'deployment id', 'scale <deploymentId> <replicas>');
-      const raw = needArg(args.positional, 1, 'replica count', 'scale <deploymentId> <replicas>');
+      const id = needArg(args.positional, 0, 'hosted model id', 'scale <hostedId> <replicas>');
+      const raw = needArg(args.positional, 1, 'replica count', 'scale <hostedId> <replicas>');
       const replicas = Number(raw);
       if (!Number.isInteger(replicas) || replicas < 0) throw new UsageError(`replicas must be a whole number of zero or more, got ${raw}`);
       const res = await post(`/model-deployments/${id}/scale`, { replicas });
@@ -681,7 +700,7 @@ async function main(): Promise<void> {
       return;
     }
     case 'teardown': {
-      const id = needArg(args.positional, 0, 'deployment id', 'teardown <deploymentId>');
+      const id = needArg(args.positional, 0, 'hosted model id', 'teardown <hostedId>');
       const res = await post(`/model-deployments/${id}/teardown`, {});
       out(args, res.data, () => formatDeployment(res.data));
       return;

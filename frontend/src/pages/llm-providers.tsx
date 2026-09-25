@@ -29,6 +29,7 @@ import { buildProviderColumns } from '@/components/llm-providers/columns'
 import { providerTypeOptions } from '@/components/llm-providers/provider-type-config'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
+import { isHostedModelPlumbing } from '@/components/models/provider-model-form'
 
 /**
  * Inference providers: the APIs models are called through, with their keys.
@@ -61,7 +62,9 @@ export function LlmProvidersPage() {
     // providers that were still there, with no retry.
     ...llmProvidersQuery,
   })
-  const providers = Array.isArray(providersRaw) ? providersRaw : []
+  // A hosted model's provider row is written by the reconcile loop as that
+  // model's plumbing; it is managed on the model, not listed here.
+  const providers = (Array.isArray(providersRaw) ? providersRaw : []).filter((p: any) => !isHostedModelPlumbing(p))
 
   // Provider metrics now live on the detail page (/llm-providers/:id)
 

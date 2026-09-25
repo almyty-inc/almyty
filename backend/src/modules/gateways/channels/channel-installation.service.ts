@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import { ChannelInstallation } from '../../../entities/channel-installation.entity';
 import { CredentialType } from '../../../entities/credential.entity';
 import { Gateway } from '../../../entities/gateway.entity';
-import { OrganizationRole } from '../../../entities/user-organization.entity';
+import { resourceAudience } from '../../notifications/resource-audience';
 import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -84,7 +84,9 @@ export class ChannelInstallationService {
     // security.sso_install — new external-workspace installs grant an
     // outside tenant access through this gateway; org admins should
     // know. First install only (reinstall/refresh is routine churn).
-    if (isNew && this.notifications) {
+    // Org admins as a rule; a private gateway's owner alone (resourceAudience).
+    const audience = resourceAudience(gateway);
+    if (isNew && this.notifications && audience) {
       const detail =
         (input.metadata as any)?.teamName ||
         (input.metadata as any)?.workspaceName ||
@@ -93,7 +95,7 @@ export class ChannelInstallationService {
         .emit({
           type: 'security.sso_install',
           organizationId: gateway.organizationId,
-          roleTarget: { orgRoles: [OrganizationRole.OWNER, OrganizationRole.ADMIN] },
+          ...audience,
           title: 'New channel installation',
           body: `A channel integration was installed into an external workspace (${detail}).`,
           link: `/gateways/${gateway.id}`,

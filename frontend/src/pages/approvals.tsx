@@ -23,7 +23,7 @@ interface ApprovalRequest {
   id: string
   organizationId: string
   teamId: string | null
-  visibility: 'org' | 'team'
+  visibility: 'org' | 'team' | 'private'
   runId: string
   agentId: string
   toolCallId: string | null
@@ -127,11 +127,7 @@ export function ApprovalsPage() {
                         <Clock className="h-3 w-3 mr-1" />
                         pending
                       </Badge>
-                      {row.visibility === 'team' ? (
-                        <Badge variant="outline">team</Badge>
-                      ) : (
-                        <Badge variant="outline">org</Badge>
-                      )}
+                      <Badge variant="outline">{row.visibility === 'private' ? 'private' : row.visibility === 'team' ? 'team' : 'org'}</Badge>
                     </CardTitle>
                     <CardDescription className="mt-2 text-foreground">{row.reason}</CardDescription>
                   </div>

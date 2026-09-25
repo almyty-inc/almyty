@@ -311,6 +311,7 @@ export class ApisImportHelper {
             onProgress
               ? async (done, total) => onProgress(50 + Math.floor((done / Math.max(total, 1)) * 50))
               : undefined,
+            options.createdBy ?? null,
           ));
         } catch (toolErr: any) {
           this.logger.error(

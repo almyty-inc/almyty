@@ -2,13 +2,14 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import '@xyflow/react/dist/style.css'
-import { AlertTriangle, ListChecks } from 'lucide-react'
+
 
 import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 import { useAgentPipeline } from '@/components/agents/builder/use-agent-pipeline'
 import { BuilderToolbar } from '@/components/agents/builder/builder-toolbar'
+import { NextStepsBar } from '@/components/agents/builder/next-steps-bar'
 import { TestPanel } from '@/components/agents/builder/test-panel'
 import { CanvasArea } from '@/components/agents/builder/canvas-area'
 import { AutonomousConfig } from '@/components/agents/builder/autonomous-config'
@@ -46,7 +47,7 @@ export function AgentBuilderPage() {
   const templateId = searchParams.get('template')
 
   // ── Agent metadata state ───────────────────────────────────────────────
-  const [agentName, setAgentName] = useState('New Agent')
+  const [agentName, setAgentName] = useState('New agent')
   const [agentDescription, setAgentDescription] = useState('')
   const [agentStatus, setAgentStatus] = useState<string>('draft')
   const [agentMode, setAgentMode] = useState<'workflow' | 'autonomous'>('workflow')
@@ -243,7 +244,7 @@ export function AgentBuilderPage() {
   // with it is wrong with saved data, and worth saying plainly at once.
   const draftTouched = useMemo(() => {
     const signals = [
-      agentName !== 'New Agent',
+      agentName !== 'New agent',
       agentDescription.trim() !== '',
       agentInstructions.trim() !== '',
       agentPersonality.trim() !== '',
@@ -475,68 +476,7 @@ export function AgentBuilderPage() {
         way and Save is gated by canSave in both.
       */}
       {validationErrors.length > 0 && (
-        showValidationErrors ? (
-          <div
-            data-testid="builder-validation-errors"
-            role="alert"
-            className="px-4 py-2 bg-destructive/10 border-b border-destructive/20 shrink-0"
-          >
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-              {/* Capped: mirroring the server means a badly wired graph can
-                  report several problems at once, and an uncapped list pushed
-                  the canvas off the screen. */}
-              <ul className="text-xs text-destructive space-y-0.5 max-h-24 overflow-y-auto">
-                {validationIssues.map((issue, i) => (
-                  <li key={i}>
-                    {issue.nodeIds.length ? (
-                      <button
-                        type="button"
-                        onClick={() => goToIssue(issue)}
-                        className="text-left underline-offset-2 hover:underline"
-                      >
-                        {issue.text}
-                      </button>
-                    ) : (
-                      issue.text
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        ) : (
-          <div
-            data-testid="builder-next-steps"
-            className="px-4 py-2 bg-muted/50 border-b border-border shrink-0"
-          >
-            <div className="flex items-start gap-2">
-              <ListChecks className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-foreground">
-                  To finish this agent
-                </p>
-                <ul className="text-xs text-muted-foreground space-y-0.5 max-h-24 overflow-y-auto mt-0.5">
-                  {validationIssues.map((issue, i) => (
-                  <li key={i}>
-                    {issue.nodeIds.length ? (
-                      <button
-                        type="button"
-                        onClick={() => goToIssue(issue)}
-                        className="text-left underline-offset-2 hover:underline"
-                      >
-                        {issue.text}
-                      </button>
-                    ) : (
-                      issue.text
-                    )}
-                  </li>
-                ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        )
+        <NextStepsBar issues={validationIssues} asErrors={showValidationErrors} onGoTo={goToIssue} />
       )}
 
       {/*

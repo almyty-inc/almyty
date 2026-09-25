@@ -4,8 +4,9 @@
 
 **Who it's for**: support teams drowning in L1 tickets who can't let an agent send a wrong answer.
 
-This recipe is a **real, running agent**: the *Customer Support Orchestrator* below has handled 8
-runs at 87.5% success for ~$0.07 total. Everything shown is its actual configuration and history.
+This recipe uses a **seeded demo agent**, the *Customer Support Orchestrator*.
+The screenshots show its current configuration and recorded test-run history,
+not a connected customer support account or a production reliability benchmark.
 
 ![The Customer Support Orchestrator: primary GPT-4o plus a cross-vendor verifier panel](/screenshots/support-agent-overview.png)
 
@@ -21,7 +22,7 @@ checks the draft before it ships. Two real runs from its history:
   refund-escalation rule and stopped at **`waiting approval`** for a human, instead of
   promising something it shouldn't.
 
-![Real runs, a completed order-status reply, an enterprise ticket paused at waiting-approval, a failed run](/screenshots/support-agent-runs.png)
+![Seeded demo run history with completed, cancelled, and failed outcomes](/screenshots/support-agent-runs.png)
 
 ## Build it
 

@@ -355,7 +355,7 @@ export class AlmytyMcpService {
           apiId: args.apiId,
           organizationId: orgId,
           schemaContent: content,
-          options: { generateTools: args.generateTools !== false },
+          options: { generateTools: args.generateTools !== false, createdBy: userId ?? null },
         }, { timeout: 5 * 60 * 1000, removeOnComplete: 100, removeOnFail: 50 });
         return { jobId: job.id, status: 'queued', message: `Schema import queued (job ${job.id}). Tools will be generated in the background.` };
       }

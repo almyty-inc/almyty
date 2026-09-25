@@ -106,14 +106,14 @@ export class ModelDeploymentsService {
 
   async get(organizationId: string, id: string): Promise<ModelDeployment> {
     const d = await this.deployments.findOne({ where: { id, organizationId } });
-    if (!d) throw new NotFoundException('Deployment not found');
+    if (!d) throw new NotFoundException('Hosted model not found');
     return d;
   }
 
   /** Validate against the adapter's capabilities and schema, persist desired state, enqueue a reconcile. */
   async create(organizationId: string, userId: string | null, dto: CreateDeploymentDto): Promise<ModelDeployment> {
     const adapter = this.adapters.get(dto.providerType);
-    if (!adapter) throw new BadRequestException({ code: 'ADAPTER_UNKNOWN', message: `Unknown deployment provider: ${dto.providerType}` });
+    if (!adapter) throw new BadRequestException({ code: 'ADAPTER_UNKNOWN', message: `Unknown hosting provider: ${dto.providerType}` });
     // A registered version is optional. Naming the model is configuration.
     const version = dto.modelVersionId
       ? await this.versions.findOne({ where: { id: dto.modelVersionId, organizationId } })
