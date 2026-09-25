@@ -1,7 +1,7 @@
 /**
  * Create or edit one connection policy, as a page:
- * /settings/connections/policies/new (optionally `?kind=<kind>`) and
- * /settings/connections/policies/:policyId.
+ * /connections/policies/new (optionally `?kind=<kind>`) and
+ * /connections/policies/:policyId.
  *
  * A kind picker (fixed when editing) switches the per-kind form:
  * connectors for allow and deny lists and rotation, principal kinds and
@@ -52,7 +52,7 @@ const SELECT_CLASS =
 const ENVIRONMENT_SUGGESTIONS = ['production', 'staging', 'development']
 
 /** Where the policies table lives; the form returns there. */
-export const CONNECTIONS_SETTINGS_PATH = '/settings/connections'
+export const CONNECTIONS_SETTINGS_PATH = '/connections/advanced'
 
 export interface PolicyFormProps {
   /** Editing this policy; absent means create. */
@@ -109,7 +109,7 @@ export function PolicyForm({ policy, initialKind, onSaved }: PolicyFormProps) {
     <FormPage
       title={editing ? 'Edit policy' : 'Add policy'}
       description={POLICY_KIND_DESCRIPTIONS[values.kind]}
-      back={{ to: CONNECTIONS_SETTINGS_PATH, label: 'Connections' }}
+      back={{ to: CONNECTIONS_SETTINGS_PATH, label: 'Advanced' }}
       guard={guard}
       onSubmit={submit}
       submitLabel={editing ? 'Save policy' : 'Add policy'}
@@ -256,7 +256,7 @@ export function ConnectionPolicyFormPage() {
         variant="panel"
         icon={ShieldCheck}
         title="Policy not found"
-        description="It may have been deleted. Settings > Connections lists the policies that exist."
+        description="It may have been deleted. Connections > Advanced lists the rules that exist."
       />
     )
   }

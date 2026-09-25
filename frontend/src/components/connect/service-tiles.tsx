@@ -50,11 +50,13 @@ export interface ServiceTileGridProps {
   searchLabel: string
   /** Shown when no group is left after the search. */
   empty?: ReactNode
+  /** Shown under the search box, above the tiles (e.g. "nothing matched, but..."). */
+  notice?: ReactNode
   /** Each tile's data-testid is `${testIdPrefix}-${key}`. */
   testIdPrefix: string
 }
 
-export function ServiceTileGrid({ groups, search, onSearch, onPick, searchLabel, empty, testIdPrefix }: ServiceTileGridProps) {
+export function ServiceTileGrid({ groups, search, onSearch, onPick, searchLabel, empty, notice, testIdPrefix }: ServiceTileGridProps) {
   return (
     <div className="space-y-6">
       <div className="relative max-w-sm">
@@ -62,6 +64,7 @@ export function ServiceTileGrid({ groups, search, onSearch, onPick, searchLabel,
         <Input className="pl-9" value={search} onChange={(e) => onSearch(e.target.value)} placeholder={searchLabel} aria-label={searchLabel} />
       </div>
       {groups.length === 0 && empty}
+      {groups.length > 0 && notice}
       {groups.map((group) => (
         <section key={group.id} aria-labelledby={`tiles-${group.id}`} className="space-y-2">
           <h2 id={`tiles-${group.id}`} className="text-sm font-medium text-muted-foreground">

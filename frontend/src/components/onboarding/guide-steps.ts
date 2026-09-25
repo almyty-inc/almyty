@@ -217,10 +217,10 @@ export const JOURNEYS: Journey[] = [
 /** The rest of the platform, for when you need it. Links, not steps. */
 export const SUPPORTING: GuideLink[] = [
   {
-    title: 'Credentials',
-    description: 'Keys and accounts your tools use to reach other services, stored encrypted.',
-    to: '/credentials',
-    place: 'Credentials',
+    title: 'Connections',
+    description: 'The keys and accounts almyty uses for you, stored encrypted.',
+    to: '/connections',
+    place: 'Connections',
   },
   {
     title: 'Models',

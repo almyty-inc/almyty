@@ -31,14 +31,14 @@ export const CONNECTOR_KINDS: ConnectorKind[] = [
 ]
 
 export const CONNECTOR_KIND_LABELS: Record<ConnectorKind, string> = {
-  inference: 'Inference',
-  deployment: 'Deployment',
+  inference: 'AI models',
+  deployment: 'GPU hosting',
   memory: 'Memory',
   mcp: 'MCP servers',
-  tool_source: 'Tool sources',
-  channel: 'Channels',
+  tool_source: 'Tools and APIs',
+  channel: 'Chat apps',
   cloud: 'Clouds',
-  registry: 'Registries',
+  registry: 'Model storage',
 }
 
 export type ConnectMethodType =

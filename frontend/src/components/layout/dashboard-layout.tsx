@@ -19,7 +19,7 @@ import {
   Sun,
   Moon,
   Monitor,
-  Key,
+  Plug,
   Database,
   Cpu,
   FolderGit2,
@@ -101,7 +101,7 @@ const navigation: { name: string; href: string; icon: any }[] = [
   { name: 'Apps', href: '/apps', icon: Package },
   { name: 'Runners', href: '/runners', icon: Cpu },
   { name: 'Workspaces', href: '/workspaces', icon: FolderGit2 },
-  { name: 'Credentials', href: '/credentials', icon: Key },
+  { name: 'Connections', href: '/connections', icon: Plug },
   { name: 'Approvals', href: '/approvals', icon: Shield },
   // Configuration
   { name: 'divider', href: '', icon: null as any },
