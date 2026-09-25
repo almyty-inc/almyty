@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PageHeader } from '@/components/layout/page-header'
 import { PageIntro } from '@/components/onboarding/page-intro'
 import { ModelRow } from '@/components/models/model-row'
+import { ConnectedCard, ConnectedCardGrid } from '@/components/connect/connected-card'
 import { useHostedModels } from '@/components/models/use-model-data'
 import { ProviderStatus, providerCheck } from '@/components/llm-providers/provider-status'
 import { isHostedModelPlumbing, providerTileLabel } from '@/components/llm-providers/provider-catalog'
@@ -163,42 +164,20 @@ export function ModelsPage() {
             <h2 id="connected-heading" className="text-lg font-semibold">
               Connected
             </h2>
-            {providersQuery.isLoading ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {[0, 1, 2].map((i) => (
-                  <Skeleton key={i} className="h-20 w-full" />
-                ))}
-              </div>
-            ) : (
-              <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {providers.map((p: any) => {
-                  const own = cardsByProvider[p.id] ?? []
-                  const check = providerCheck(p, own.some((c) => c.selectable))
-                  return (
-                    <li key={p.id}>
-                      <Link
-                        to={`/models/providers/${p.id}`}
-                        data-testid={`provider-card-${p.id}`}
-                        className="flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors hover:border-primary/50 hover:bg-muted/40"
-                      >
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xl" aria-hidden>
-                          {providerLogos[p.type] || '⚙️'}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-medium">{p.name}</span>
-                          <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                            <ProviderStatus check={check} />
-                            <span data-testid="provider-model-count">
-                              {cardsQuery.isLoading ? 'Models loading' : `${own.length} model${own.length === 1 ? '' : 's'}`}
-                            </span>
-                          </span>
-                        </span>
-                      </Link>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
+            <ConnectedCardGrid loading={providersQuery.isLoading}>
+              {providers.map((p: any) => {
+                const own = cardsByProvider[p.id] ?? []
+                const check = providerCheck(p, own.some((c) => c.selectable))
+                return (
+                  <ConnectedCard key={p.id} to={`/models/providers/${p.id}`} testId={`provider-card-${p.id}`} icon={providerLogos[p.type] || '⚙️'} name={p.name}>
+                    <ProviderStatus check={check} />
+                    <span data-testid="provider-model-count">
+                      {cardsQuery.isLoading ? 'Models loading' : `${own.length} model${own.length === 1 ? '' : 's'}`}
+                    </span>
+                  </ConnectedCard>
+                )
+              })}
+            </ConnectedCardGrid>
           </section>
 
           <section aria-labelledby="all-models-heading" className="space-y-3">
