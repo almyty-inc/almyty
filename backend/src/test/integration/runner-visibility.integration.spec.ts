@@ -8,8 +8,10 @@ import { Tool } from '../../entities/tool.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
-import { UserTeam } from '../../entities/user-team.entity';
+import { UserTeam, TeamRole } from '../../entities/user-team.entity';
+import { Team } from '../../entities/team.entity';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { ExecutionAccessService, gatewayPrincipal, userPrincipal } from '../../common/authorization/execution-access.service';
 import { RunnerService } from '../../modules/runner/runner.service';
 import { RunnerCapabilityPublisher } from '../../modules/runner/runner-capability.publisher';
 
@@ -198,5 +200,40 @@ describeIfDb('Runner visibility (real Postgres)', () => {
       `INSERT INTO tools (name, "organizationId", visibility, "createdBy") VALUES ('orphan', $1, 'private', NULL)`,
       [organizationId],
     )).rejects.toThrow(/visibility_team_chk/);
+  });
+
+  it("dispatch from a gateway run is judged by the gateway's scope: a team runner takes work from its team's gateway only", async () => {
+    // The gateway run has no user; before, it was judged as nobody, so a
+    // team runner refused its own team's gateway while the tool it serves
+    // was allowed (ExecutionAccessService's gateway rule).
+    const team = await ds.getRepository(Team).save(ds.getRepository(Team).create({ name: 'Build', organizationId } as any));
+    const teamId = (team as any).id as string;
+    const otherTeam = await ds.getRepository(Team).save(ds.getRepository(Team).create({ name: 'Ops', organizationId } as any));
+    await ds.getRepository(UserTeam).save(ds.getRepository(UserTeam).create({ userId: alice, teamId, role: TeamRole.MEMBER, isActive: true }));
+    const gated = new RunnerService(
+      ds.getRepository(Runner),
+      ds.getRepository(RunnerSession),
+      ds.getRepository(Workspace),
+      new RunnerCapabilityPublisher(ds.getRepository(Tool)),
+      policy,
+      new ExecutionAccessService(policy),
+    );
+    const { runner } = await gated.register({ ...input('build-box'), visibility: 'team', teamId }, alice, organizationId);
+    await ds.getRepository(Runner).update({ id: runner.id }, { state: RunnerState.ONLINE });
+    const viaGateway = (visibility: 'org' | 'team' | 'private', over: Record<string, any> = {}) =>
+      gatewayPrincipal({ id: '00000000-0000-4000-8000-0000000000aa', organizationId, visibility, ...over });
+
+    await expect(gated.resolveForDispatch(runner.id, viaGateway('team', { teamId }))).resolves.toMatchObject({ id: runner.id });
+    await expect(gated.resolveForDispatch(runner.id, viaGateway('private', { ownerUserId: alice }))).resolves.toMatchObject({ id: runner.id });
+    for (const principal of [
+      viaGateway('org'),
+      viaGateway('team', { teamId: (otherTeam as any).id }),
+      viaGateway('private', { ownerUserId: bob }),
+    ]) {
+      await expect(gated.resolveForDispatch(runner.id, principal)).rejects.toBeInstanceOf(NotFoundException);
+    }
+    // A user principal is still that user.
+    await expect(gated.resolveForDispatch(runner.id, userPrincipal(alice))).resolves.toMatchObject({ id: runner.id });
+    await expect(gated.resolveForDispatch(runner.id, userPrincipal(bob))).rejects.toBeInstanceOf(NotFoundException);
   });
 });
