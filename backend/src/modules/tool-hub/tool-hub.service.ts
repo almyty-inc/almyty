@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -13,6 +14,7 @@ import { Tool, ToolStatus, ToolType, ToolExecutionMethod } from '../../entities/
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { isOthersPrivate } from '../../common/authorization/private-visibility';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { AuditResource } from '../../entities/audit-log.entity';
 import {
   sanitizeConfiguration,
@@ -70,6 +72,7 @@ export class ToolHubService {
     @InjectRepository(Api)
     private apiRepository: Repository<Api>,
     private readonly auditLogService: AuditLogService,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async listTemplates(
@@ -346,6 +349,21 @@ export class ToolHubService {
    * or memory tool would round-trip into a tool that cannot execute.
    * Refusing is the honest answer; a template that installs broken is
    * worse than no template.
+   *
+   * Scope. A template is read by every member of the organization
+   * (listTemplates / getTemplate filter on organizationId only) and
+   * installs into an org-wide tool, so publishing is widening the tool to
+   * the whole organization. Three rules follow, in this order:
+   *   - a tool the caller may not read (another member's private tool, a
+   *     team's tool they are not on) is "not found", as everywhere else;
+   *   - the caller must be able to manage the tool, by the rule editing it
+   *     uses (its creator, or canAccess 'manage': an org owner/admin, the
+   *     team's lead); anyone else is refused;
+   *   - only an org-visible tool publishes. A private or team tool is
+   *     refused even for its owner or lead, the way a gateway refuses to
+   *     serve one beyond its scope (assertToolAttachable): making it
+   *     org-wide first is the explicit step that widens it, and it is
+   *     gated by the same manage rule.
    */
   async publishTool(
     orgId: string,
@@ -356,12 +374,28 @@ export class ToolHubService {
       where: { id: dto.toolId, organizationId: orgId },
       relations: { api: true },
     });
-    // Another member's private tool is "not found" here too: publishing it
-    // to the hub would hand it to every tenant.
+    // 404 rather than 403 for a tool of another organization, and for one
+    // the caller may not read: a 403 would confirm the id exists.
     if (!tool || isOthersPrivate(tool, userId)) {
-      // 404 rather than 403: a 403 would confirm the id exists in some
-      // other organization.
       throw new NotFoundException('Tool not found');
+    }
+    const read = await this.accessPolicy.canAccess({ id: userId }, tool, 'read');
+    if (!read.allowed) {
+      throw new NotFoundException('Tool not found');
+    }
+    if (tool.createdBy !== userId) {
+      const manage = await this.accessPolicy.canAccess({ id: userId }, tool, 'manage');
+      if (!manage.allowed) {
+        throw new ForbiddenException(`You cannot publish '${tool.name}': ${manage.reason}`);
+      }
+    }
+    const visibility = tool.visibility ?? 'org';
+    if (visibility !== 'org') {
+      throw new BadRequestException(
+        visibility === 'team'
+          ? `'${tool.name}' is visible to its team only. Make it visible to the organization before publishing it.`
+          : `'${tool.name}' is private. Make it visible to the organization before publishing it.`,
+      );
     }
 
     if (tool.executionMethod !== ToolExecutionMethod.HTTP) {
