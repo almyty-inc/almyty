@@ -155,7 +155,7 @@ export class FilesService {
   async getDownloadUrl(id: string, organizationId: string): Promise<string | null> {
     const file = await this.findById(id, organizationId);
     if (!this.storageService.canPresign) return null;
-    return this.storageService.getSignedUrl(file.storageKey);
+    return this.storageService.getSignedUrl(file.storageKey, undefined, file.name);
   }
 
   async download(id: string, organizationId: string): Promise<{ buffer: Buffer; file: AgentFile }> {
