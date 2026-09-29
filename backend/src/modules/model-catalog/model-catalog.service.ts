@@ -157,7 +157,7 @@ export class ModelCatalogService {
   async markAllowed(organizationId: string, cards: Model[]): Promise<void> {
     const ids = [...new Set(cards.map((c) => c.providerId).filter((id): id is string => !!id))];
     if (ids.length === 0) return;
-    const rows = await this.providers.find({ where: { organizationId, id: In(ids) }, select: { id: true, allowNewModels: true, hiddenModels: true, allowedModels: true } });
+    const rows = await this.providers.find({ where: { organizationId, id: In(ids) }, select: { id: true, allowNewModels: true, hiddenModels: true, allowedModels: true }, loadEagerRelations: false });
     const byId = new Map(rows.map((p) => [p.id, p]));
     for (const card of cards) {
       card.allowed = card.providerId ? providerAllowsModel(byId.get(card.providerId), card.vendorModelId) : true;

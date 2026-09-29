@@ -197,7 +197,7 @@ export class ModelRouterService {
     const ids = [...new Set(cards.map((c) => c.providerId).filter((id): id is string => !!id))];
     const out = new Map<string, string>();
     if (ids.length === 0) return out;
-    const rows = await this.providers.find({ where: { organizationId, id: In(ids) }, select: { id: true, name: true, allowNewModels: true, hiddenModels: true, allowedModels: true } });
+    const rows = await this.providers.find({ where: { organizationId, id: In(ids) }, select: { id: true, name: true, allowNewModels: true, hiddenModels: true, allowedModels: true }, loadEagerRelations: false });
     const byId = new Map(rows.map((p) => [p.id, p]));
     for (const card of cards) {
       const provider = card.providerId ? byId.get(card.providerId) : undefined;
