@@ -120,6 +120,20 @@ export function renderConversation(
   };
 }
 
+/**
+ * The output-token ceiling an OpenAI request asked for.
+ *
+ * OpenAI deprecated `max_tokens` for `max_completion_tokens`, and current
+ * SDK examples and the reasoning models only send the new name, so reading
+ * `max_tokens` alone silently dropped the cap for exactly the callers
+ * following the current docs. The new name wins when both are sent, as it
+ * does upstream.
+ */
+export function requestedMaxTokens(body: any): number | undefined {
+  if (typeof body?.max_completion_tokens === 'number') return body.max_completion_tokens;
+  if (typeof body?.max_tokens === 'number') return body.max_tokens;
+  return undefined;
+}
 /** Per-request sampling a compat caller asked for. */
 export interface SamplingOverrides {
   temperature?: number;

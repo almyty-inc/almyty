@@ -43,6 +43,16 @@ export async function authenticateCompatKey(apiKeys: Repository<ApiKey>, token: 
     throw new UnauthorizedException('This is a gateway API key. Use it against the gateway endpoint.');
   }
 
+  // A platform key with scopes is refused by ApiKeyStrategy, because no
+  // route enforces them and a ['read'] key would otherwise act with its
+  // user's full role. Running an agent is not a read either, so the same
+  // row is refused here rather than being the one surface it still works on.
+  if (apiKey.scopes?.length) {
+    throw new UnauthorizedException(
+      'Per-key scopes are not enforced on platform API keys. Mint a key without scopes, or use a gateway key.',
+    );
+  }
+
   // Every agent lookup below is scoped to the key's organization; a key
   // with none has nothing it may run.
   if (!apiKey.organizationId) {
