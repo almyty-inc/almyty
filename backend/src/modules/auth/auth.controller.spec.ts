@@ -4,6 +4,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { ThrottlerStorage } from '@nestjs/throttler';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -41,6 +42,7 @@ describe('AuthController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
       providers: [
+        { provide: ThrottlerStorage, useValue: { increment: jest.fn(async () => ({ isBlocked: false })) } },
         {
           provide: AuthService,
           useValue: mockAuthService,

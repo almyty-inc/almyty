@@ -30,11 +30,11 @@ describe('JwtStrategy', () => {
           provide: getRepositoryToken(User),
           useValue: mockUserRepository,
         },
-      ],
         {
           provide: getRepositoryToken(AuthSession),
           useValue: { count: jest.fn().mockResolvedValue(1) },
         },
+      ],
     }).compile();
 
     strategy = module.get<JwtStrategy>(JwtStrategy);
