@@ -22,6 +22,7 @@ import type { LucideIcon } from 'lucide-react'
 import { Bot, Cpu, Globe, Package } from 'lucide-react'
 
 import type { OnboardingState } from '@/lib/api'
+import { connectProviderPath } from '@/components/llm-providers/paths'
 
 export type StepKey = keyof OnboardingState['steps']
 
@@ -125,8 +126,8 @@ export const JOURNEYS: Journey[] = [
           'Paste a key for OpenAI, Anthropic, Gemini, Mistral or another provider, or point almyty at a local Ollama. Done once one is connected and its last check did not fail.',
         cta: 'Connect a provider',
         target: () => ({
-          to: '/models/connect?returnTo=%2Fguide',
-          place: 'Models › Connect a provider',
+          to: connectProviderPath(null, '/guide'),
+          place: 'Credentials › Connect a provider',
         }),
       },
       {

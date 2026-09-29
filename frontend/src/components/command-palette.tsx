@@ -44,6 +44,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
+import { connectProviderPath } from '@/components/llm-providers/paths'
 
 interface Entry {
   id: string
@@ -114,7 +115,7 @@ export function CommandPalette() {
     { id: 'act-new-mcp-server', label: 'Add MCP server', hint: 'Use the tools of a remote MCP server', icon: Plus, action: () => go('/tools/mcp-servers/new') },
     { id: 'act-new-api', label: 'Connect an API', hint: 'Paste a link, drop a file: OpenAPI, GraphQL, WSDL, proto', icon: Plus, action: () => go('/apis/new') },
     { id: 'act-new-sdk-api', label: 'Import an npm package', hint: 'Its functions become tools', icon: Plus, action: () => go('/apis/new/sdk') },
-    { id: 'act-connect-provider', label: 'Connect a provider', hint: 'OpenAI, Anthropic, Gemini, your own server', icon: Plus, action: () => go('/models/connect') },
+    { id: 'act-connect-provider', label: 'Connect a provider', hint: 'OpenAI, Anthropic, Gemini, your own server', icon: Plus, action: () => go(connectProviderPath()) },
     { id: 'act-new-runner', label: 'Register runner', hint: 'Run agents on your own machine', icon: Plus, action: () => go('/runners/new') },
     { id: 'act-connect-service', label: 'Connect a service', hint: 'Its key or a sign-in, kept in one place', icon: Plus, action: () => go('/connections/connect') },
     { id: 'act-new-custom-connector', label: 'Add a custom service', hint: 'Any service that takes a key or a sign-in', icon: Plus, action: () => go('/connections/custom/new') },

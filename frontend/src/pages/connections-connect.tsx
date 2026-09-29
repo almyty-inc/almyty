@@ -14,10 +14,11 @@ import { CONNECTIONS_PATH, CONNECTIONS_QUERY_KEY, connectionPath } from '@/compo
 import { matchesConnectorSearch } from '@/lib/connections-api'
 import { safeReturnTo } from '@/lib/return-to'
 import type { Connection, Connector, ConnectorKind } from '@/types/connections'
+import { connectProviderPath } from '@/components/llm-providers/paths'
 
 /** AI providers and model hosting have one home: Models. */
 const MODELS_KINDS: ConnectorKind[] = ['inference', 'deployment']
-const MODELS_CONNECT_PATH = '/models/connect'
+const MODELS_CONNECT_PATH = connectProviderPath()
 /** The one tile that stands in for every AI provider. */
 const AI_MODELS_TILE = 'ai-models'
 

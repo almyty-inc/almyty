@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import { modelsApi, type AgentModelIssue } from '@/lib/models-api'
+import { providerPath } from '@/components/llm-providers/paths'
 
 /**
  * Shown on an agent when a model it names cannot be used now: the
@@ -35,7 +36,7 @@ export function ModelAvailabilityBanner({ agentId }: { agentId: string }) {
               <p className="font-medium">
                 <span className="font-mono">{issue.modelName}</span> is no longer available from{' '}
                 {issue.connectionName ? (
-                  <Link className="underline" to={`/models/providers/${issue.providerId}`}>
+                  <Link className="underline" to={providerPath(issue.providerId)}>
                     {issue.connectionName}
                   </Link>
                 ) : (

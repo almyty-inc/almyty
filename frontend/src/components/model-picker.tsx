@@ -29,6 +29,7 @@ import { Label } from '@/components/ui/label'
 import { RoutingPolicyField } from '@/components/models/routing-policy-editor'
 import { availability, effectivePrice, formatPrice, isFree } from '@/components/models/model-row'
 import { ProviderConnectionCreate } from '@/components/llm-providers/provider-connection-create'
+import { connectProviderPath } from '@/components/llm-providers/paths'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
 import { modelsApi } from '@/lib/models-api'
 import { MODEL_RANK, modelSearchScorer, rankBy, textMatchesSearch } from '@/lib/model-search'
@@ -417,7 +418,7 @@ export function ModelPicker({
         // the work on this screen stays as it is.
         !adding && (
           <div data-testid="no-providers" className={cn('rounded-md border border-dashed border-border px-3 py-2 text-muted-foreground', hint)}>
-            No provider connections yet. {canCreate ? addButton : <Link to="/models/connect" className="text-primary hover:underline">Connect a provider</Link>}
+            No provider connections yet. {canCreate ? addButton : <Link to={connectProviderPath()} className="text-primary hover:underline">Connect a provider</Link>}
           </div>
         )
       ) : (
@@ -518,8 +519,8 @@ export function ModelPicker({
               {!providerLocked && (
                 <div className={cn('flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2', hint)}>
                   {canCreate ? addButton : <span />}
-                  <Link to="/models" className="text-muted-foreground hover:text-foreground hover:underline">
-                    Manage connections
+                  <Link to="/credentials" className="text-muted-foreground hover:text-foreground hover:underline">
+                    Manage provider keys
                   </Link>
                 </div>
               )}

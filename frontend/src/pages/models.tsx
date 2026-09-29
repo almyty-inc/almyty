@@ -18,6 +18,7 @@ import { AvailabilityBadge, availability, effectivePrice, formatContext, formatP
 import { useHostedModels } from '@/components/models/use-model-data'
 import { isHostedModelPlumbing } from '@/components/llm-providers/provider-catalog'
 import { providerLogos } from '@/components/llm-providers/provider-type-config'
+import { connectProviderPath, providerPath } from '@/components/llm-providers/paths'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
 import { deploymentForCard, readableModelName, unlistedDeployments } from '@/lib/model-hosting'
 import { HostedStatusBadge } from '@/components/models/hosting/hosted-status-badge'
@@ -155,7 +156,7 @@ export function ModelsPage() {
             )
           }
           return (
-            <Link to={`/models/providers/${provider.id}`} className="inline-flex items-center gap-1.5 text-sm hover:underline" data-testid="catalog-connection">
+            <Link to={providerPath(provider.id)} className="inline-flex items-center gap-1.5 text-sm hover:underline" data-testid="catalog-connection">
               <span aria-hidden>{providerLogos[provider.type] || '⚙️'}</span>
               {connection}
             </Link>
@@ -190,7 +191,7 @@ export function ModelsPage() {
 
   // Links from before this page was redesigned.
   const legacyTab = searchParams.get('tab')
-  if (legacyTab === 'providers' || searchParams.get('new') === '1') return <Navigate to="/models/connect" replace />
+  if (legacyTab === 'providers' || searchParams.get('new') === '1') return <Navigate to={connectProviderPath()} replace />
   if (legacyTab) return <Navigate to="/models" replace />
 
   const loading = providersQuery.isLoading || cardsQuery.isLoading
@@ -199,7 +200,7 @@ export function ModelsPage() {
   const openRow = (row: Row) => {
     const { card } = row
     if (card.providerId && !plumbing.has(card.providerId)) {
-      navigate(`/models/providers/${card.providerId}#model-${card.id}`)
+      navigate(providerPath(card.providerId, card.id))
       return
     }
     const hosted = deploymentForCard(card, deployments)
@@ -209,7 +210,7 @@ export function ModelsPage() {
   const usable = rows.filter((r) => r.card.selectable).length
   const connectButton = (
     <Button asChild className="gap-2">
-      <Link to="/models/connect">
+      <Link to={connectProviderPath()}>
         <Plug className="h-4 w-4" aria-hidden />
         Connect a provider
       </Link>
