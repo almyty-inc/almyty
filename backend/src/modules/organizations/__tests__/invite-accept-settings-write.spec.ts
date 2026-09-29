@@ -7,7 +7,7 @@ import { User } from '../../../entities/user.entity';
 import { UserOrganization } from '../../../entities/user-organization.entity';
 import { MailService } from '../../mail/mail.service';
 import { GatewaysService } from '../../gateways/gateways.service';
-import { OrganizationsInvitesHelper } from '../organizations-invites.helper';
+import { OrganizationsInvitesHelper, hashInviteToken } from '../organizations-invites.helper';
 import { TeamMembershipHelper } from '../team-membership.helper';
 
 /**
@@ -26,8 +26,10 @@ describe('OrganizationsInvitesHelper - accepting an invite', () => {
   let helper: OrganizationsInvitesHelper;
   let organizationRepository: any;
   let userOrganizationRepository: any;
+  let claimQuery: jest.Mock;
 
   const TOKEN = 'invite-token-1';
+  const TOKEN_HASH = hashInviteToken(TOKEN);
   const EMAIL = 'newcomer@example.com';
   const futureExpiry = new Date(Date.now() + 7 * 86_400_000).toISOString();
 
@@ -39,13 +41,22 @@ describe('OrganizationsInvitesHelper - accepting an invite', () => {
       // which a whole-column rewrite would carry along from a stale read.
       maxApis: 25,
       pendingInvites: [
-        { email: EMAIL, role: 'member', inviteToken: TOKEN, inviteExpiresAt: futureExpiry, invitedBy: 'inviter-1' },
-        { email: 'other@example.com', role: 'admin', inviteToken: 'invite-token-2', inviteExpiresAt: futureExpiry },
+        { email: EMAIL, role: 'member', inviteToken: TOKEN_HASH, inviteExpiresAt: futureExpiry, invitedBy: 'inviter-1' },
+        { email: 'other@example.com', role: 'admin', inviteToken: hashInviteToken('invite-token-2'), inviteExpiresAt: futureExpiry },
       ],
     },
   });
 
   beforeEach(async () => {
+    // UPDATE ... RETURNING through TypeORM: [rows, count]. One row: the
+    // invite was still there and this accept claimed it.
+    claimQuery = jest.fn().mockResolvedValue([[{ id: 'org-1' }], 1]);
+    userOrganizationRepository = {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((dto: any) => ({ ...dto })),
+      save: jest.fn(async (m: any) => m),
+    };
+    const em = { query: claimQuery, getRepository: () => userOrganizationRepository };
     organizationRepository = {
       findOne: jest.fn(),
       update: jest.fn().mockResolvedValue(undefined),
@@ -54,11 +65,7 @@ describe('OrganizationsInvitesHelper - accepting an invite', () => {
         where: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([org()]),
       })),
-    };
-    userOrganizationRepository = {
-      findOne: jest.fn().mockResolvedValue(null),
-      create: jest.fn((dto: any) => ({ ...dto })),
-      save: jest.fn(async (m: any) => m),
+      manager: { transaction: jest.fn(async (work: any) => work(em)), query: claimQuery },
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -85,17 +92,24 @@ describe('OrganizationsInvitesHelper - accepting an invite', () => {
     // Never a whole-column write from the snapshot.
     expect(organizationRepository.update).not.toHaveBeenCalled();
 
-    const [sql, params] = organizationRepository.query.mock.calls[0];
+    const [sql, params] = claimQuery.mock.calls[0];
     expect(sql).toMatch(/UPDATE organizations/);
     // Scoped to the pendingInvites path, so a concurrent settings edit
-    // survives, and matched on the token, so a concurrent accept of a
-    // different invite is not undone.
+    // survives, and matched on the token hash, so a concurrent accept of
+    // a different invite is not undone.
     expect(sql).toMatch(/'\{pendingInvites\}'/);
     expect(sql).toMatch(/inviteToken/);
-    expect(params).toEqual(['org-1', TOKEN]);
+    expect(params.slice(0, 2)).toEqual(['org-1', TOKEN_HASH]);
   });
 
-  it('reports a second accept of the same invite as a conflict, not a 500', async () => {
+  it('creates no membership when another accept already claimed the invite', async () => {
+    claimQuery.mockResolvedValueOnce([[], 0]);
+
+    await expect(accept()).rejects.toBeInstanceOf(ConflictException);
+    expect(userOrganizationRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('reports an accept by an existing member as a conflict, not a 500', async () => {
     userOrganizationRepository.save.mockRejectedValueOnce(
       Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' }),
     );

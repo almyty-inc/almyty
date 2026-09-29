@@ -1042,7 +1042,7 @@
       ],
       "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
       "notes": "Observed and visually reviewed SAML configuration and SCIM provisioning controls in the authorized seeded Business organization. SSO remains disabled, fields are defaults/placeholders, and no SCIM token was generated. The displayed SCIM address belongs to the staging capture environment, not the public documentation base URL.",
-      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
+      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx), and the page now has an Email domains card (verified domains for SSO provisioning) between the SSO and SCIM cards; recapture on staging."
     },
     {
       "id": "settings-teams",

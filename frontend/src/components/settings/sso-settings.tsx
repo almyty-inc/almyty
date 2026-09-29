@@ -23,6 +23,7 @@ import { ssoApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
+import { SsoDomains } from './sso-domains'
 
 type Protocol = 'saml' | 'oidc'
 
@@ -180,8 +181,9 @@ function SsoSettingsForm() {
             <div>
               <Label>Just-in-time provisioning</Label>
               <p className="text-xs text-muted-foreground">
-                Auto-create members on first successful login (otherwise the
-                user must already exist / be provisioned via SCIM).
+                Create members on their first sign-in, for addresses on a
+                verified email domain (below). Anyone else must be invited or
+                provisioned through SCIM.
               </p>
             </div>
             <Switch
@@ -270,6 +272,8 @@ function SsoSettingsForm() {
           </Button>
         </CardContent>
       </Card>
+
+      <SsoDomains />
 
       <Card>
         <CardHeader>

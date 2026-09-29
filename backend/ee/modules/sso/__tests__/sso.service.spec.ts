@@ -21,9 +21,15 @@ function makeService() {
     membershipRepo as any,
     configService,
     new SamlReplayCache(new FakeRedis()),
+    undefined,
+    undefined,
+    // Addresses on a domain the org has verified (see provisioning-needs-a-verified-domain.spec.ts).
+    { coversEmail: async () => true } as any,
   );
   return { service, userRepo, membershipRepo, configService };
 }
+
+const ACS = 'https://api/sso/org-1/saml/callback';
 
 /** The profile node-saml hands back for a validated, signed assertion. */
 function samlProfile(email: string, id = `_a-${email}`) {
@@ -32,9 +38,15 @@ function samlProfile(email: string, id = `_a-${email}`) {
     issuer: 'https://idp.corp.com',
     nameID: email,
     email,
+    inResponseTo: '_req-1',
     getAssertion: () => ({
-      Assertion: { $: { ID: id }, Conditions: [{ $: { NotOnOrAfter: notOnOrAfter } }] },
+      Assertion: {
+        $: { ID: id },
+        Conditions: [{ $: { NotOnOrAfter: notOnOrAfter } }],
+        Subject: [{ SubjectConfirmation: [{ SubjectConfirmationData: [{ $: { Recipient: ACS } }] }] }],
+      },
     }),
+    getSamlResponseXml: () => `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" Destination="${ACS}"/>`,
   };
 }
 
@@ -62,6 +74,9 @@ const oidcConfig = {
 } as any;
 
 describe('SsoService — SAML', () => {
+  const signIn = async (service: SsoService, response: string) =>
+    service.completeSsoLogin('org-1', await service.resolveSamlLogin('org-1', response, ACS, '_req-1'));
+
   it('maps a valid assertion to an existing member and returns the user', async () => {
     const { service, userRepo, membershipRepo, configService } = makeService();
     configService.getDecrypted.mockResolvedValue(samlConfig);
@@ -78,7 +93,7 @@ describe('SsoService — SAML', () => {
     userRepo.findOne.mockResolvedValue(existingUser);
     membershipRepo.findOne.mockResolvedValue({ userId: 'u-1', organizationId: 'org-1', isActive: true });
 
-    const user = await service.handleSamlCallback('org-1', 'BASE64', 'https://api');
+    const user = await signIn(service, 'BASE64');
     expect(user).toBe(existingUser);
   });
 
@@ -92,9 +107,7 @@ describe('SsoService — SAML', () => {
         .mockRejectedValue(new Error('Invalid signature')),
     } as any);
 
-    await expect(
-      service.handleSamlCallback('org-1', 'TAMPERED', 'https://api'),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(signIn(service, 'TAMPERED')).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('refuses a non-member when JIT provisioning is off', async () => {
@@ -109,9 +122,7 @@ describe('SsoService — SAML', () => {
     userRepo.findOne.mockResolvedValue({ id: 'u-2', email: 'stranger@corp.com' });
     membershipRepo.findOne.mockResolvedValue(null);
 
-    await expect(
-      service.handleSamlCallback('org-1', 'BASE64', 'https://api'),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(signIn(service, 'BASE64')).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });
 

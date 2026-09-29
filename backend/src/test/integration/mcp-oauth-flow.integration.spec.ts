@@ -533,6 +533,50 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     });
   });
 
+  // OAuth 2.1 section 4.1.3: a code redeemed twice is treated as stolen,
+  // and what it was exchanged for is revoked. Several redemptions sent at
+  // once must not leave one of them holding a live token.
+  describe('one authorization code redeemed concurrently', () => {
+    it('leaves no working token behind', async () => {
+      const reg = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/register`)
+        .send({ client_name: 'code-race', redirect_uris: ['http://localhost:12345/callback'], token_endpoint_auth_method: 'none' })
+        .expect(201);
+      const verifier = crypto.randomBytes(32).toString('base64url');
+      const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+      const code = await app.get(McpOAuthService).createAuthorizationCode(reg.body.client_id, user.id, gateway.id, org.id, {
+        redirectUri: 'http://localhost:12345/callback',
+        codeChallenge: challenge,
+        codeChallengeMethod: 'S256',
+        scope: 'mcp:tools',
+      });
+      const redeem = () =>
+        request(app.getHttpServer()).post(`/${ORG_SLUG}/almyty/token`).send({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'http://localhost:12345/callback',
+          client_id: reg.body.client_id,
+          code_verifier: verifier,
+        });
+
+      const responses = await Promise.all([redeem(), redeem(), redeem(), redeem()]);
+
+      expect(responses.filter((r) => r.status !== 200).length).toBeGreaterThanOrEqual(1);
+      for (const res of responses.filter((r) => r.status === 200)) {
+        await request(app.getHttpServer())
+          .post(`/${ORG_SLUG}/almyty`)
+          .set('Authorization', `Bearer ${res.body.access_token}`)
+          .send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
+          .expect(401);
+      }
+      const live = await ds.query(
+        `SELECT count(*)::int AS n FROM oauth_access_tokens WHERE "clientId" = $1 AND "isRevoked" = false`,
+        [reg.body.client_id],
+      );
+      expect(live[0].n).toBe(0);
+    });
+  });
+
   // Registration is anonymous. Filling a gateway's 500 client slots with
   // throwaway registrations used to lock every real client out of it for
   // good; unused registrations now make room, authorized ones never do.
