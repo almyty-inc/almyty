@@ -759,8 +759,6 @@ export const agentAppsApi = {
   update: (id: string, data: Partial<AgentApp>) =>
     apiPatch(`/apps/${id}`, data).then((r) => unwrap<AgentApp>(r)),
 
-  remove: (id: string) => apiDel(`/apps/${id}`),
-
   addDistribution: (
     id: string,
     target: DistributionTarget,
@@ -833,15 +831,6 @@ export const agentAppsApi = {
       const url = unwrap<{ url: string }>(r).url
       return /^https?:\/\//.test(url) ? url : `${getApiBaseUrl()}${url}`
     }),
-
-  recordBuild: (
-    slug: string,
-    target: DistributionTarget,
-    build: { version?: string; platform?: string; checksum?: string; signed?: boolean; error?: string },
-  ) =>
-    apiPost(`/apps/${slug}/distributions/${target}/build`, build).then((r) =>
-      unwrap<AppDistribution>(r),
-    ),
 }
 
 /** True when the product grants any access to the machine it runs on. */

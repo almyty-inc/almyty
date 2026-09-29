@@ -52,13 +52,13 @@ function productionFiles(dir: string, out: string[] = []): string[] {
 }
 
 /** What proves the connection is pinned to a checked address. */
-const PINS_DNS = /ssrfSafeHttpsAgent|ssrfSafeDispatcher|agentsExempting\(|dispatcherExempting\(|pinnedRedirects\(|pinDns: true/;
+const PINS_DNS = /ssrfSafeHttpsAgent|ssrfSafeDispatcher|agentsExempting\(|dispatcherExempting\(|pinnedRedirects\(|egressAxiosConfig\(|pinDns: true/;
 /**
  * What proves a 3xx cannot take the request somewhere unchecked. The AWS
  * SDK's NodeHttpHandler (`requestHandler: { httpAgent, httpsAgent }`) and
  * gRPC never follow an HTTP redirect, so their pin is the whole story.
  */
-const LIMITS_REDIRECTS = /maxRedirects: 0|pinnedRedirects\(|redirect: '(error|manual)'|pinDns: true|requestHandler: \{ httpAgent: ssrfSafeHttpAgent/;
+const LIMITS_REDIRECTS = /maxRedirects: 0|pinnedRedirects\(|egressAxiosConfig\(|redirect: '(error|manual)'|pinDns: true|requestHandler: \{ httpAgent: ssrfSafeHttpAgent/;
 
 /** A string gate call, not the import of one. */
 const CALLS_THE_GATE = /\b(validateUrl|validateUrlAllowingPrivate|assertOutboundUrlAllowed)\(/;

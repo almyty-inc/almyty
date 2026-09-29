@@ -5,8 +5,14 @@
 
 import {
   assertOutboundUrlAllowed,
+  readCappedText,
   ssrfSafeDispatcher,
 } from '../../../../common/security/safe-fetch';
+
+/** A platform's answer to a send is a status document; anything bigger is not read. */
+const MAX_REPLY_BYTES = 1024 * 1024;
+/** A send to a configured URL, start to finish. */
+const SEND_TIMEOUT_MS = 30_000;
 export interface NormalizedMessage {
   text: string;
   userId: string;
@@ -68,11 +74,17 @@ export abstract class BaseAdapter {
 
   /**
    * The fetch init every gated adapter send shares: DNS pinned at connect
-   * through undici (`httpAgent` does nothing for `fetch`), and a redirect
-   * refused rather than followed.
+   * through undici (`httpAgent` does nothing for `fetch`), a redirect
+   * refused rather than followed, and a deadline for the whole exchange
+   * (undici's own timers are idle timers, reset by every byte).
    */
   protected egressInit<T extends Record<string, any>>(init: T): T {
-    return { ...init, redirect: 'error', dispatcher: ssrfSafeDispatcher };
+    return {
+      ...init,
+      signal: init.signal ?? AbortSignal.timeout(SEND_TIMEOUT_MS),
+      redirect: 'error',
+      dispatcher: ssrfSafeDispatcher,
+    };
   }
 
   /**
@@ -196,6 +208,9 @@ export abstract class BaseAdapter {
   protected async readJsonBody(res: any): Promise<any> {
     if (typeof res?.json !== 'function') return null;
     try {
+      // A real response is read through the cap: the other end of a
+      // configured URL decides how much it sends.
+      if (res instanceof Response) return JSON.parse(await readCappedText(res, MAX_REPLY_BYTES)) ?? null;
       return (await res.json()) ?? null;
     } catch {
       return null;
@@ -212,7 +227,7 @@ export abstract class BaseAdapter {
   protected async readTextBody(res: any, limit = 300): Promise<string> {
     if (typeof res?.text !== 'function') return '';
     try {
-      const text = await res.text();
+      const text = res instanceof Response ? await readCappedText(res, MAX_REPLY_BYTES) : await res.text();
       return typeof text === 'string' ? text.trim().slice(0, limit) : '';
     } catch {
       return '';

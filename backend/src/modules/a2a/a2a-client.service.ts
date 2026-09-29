@@ -8,7 +8,7 @@ import { ExternalAgent } from '../../entities/external-agent.entity';
 import { CredentialsService } from '../credentials/credentials.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { assertOutboundUrlAllowed } from '../../common/security/safe-fetch';
-import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
+import { egressAxiosConfig } from '../../common/security/pinned-redirects';
 
 @Injectable()
 export class A2AClientService {
@@ -41,10 +41,11 @@ export class A2AClientService {
     const url = assertOutboundUrlAllowed(rpcUrl);
     return axios.post(url, payload, {
       headers,
-      timeout: 30_000,
-      maxRedirects: 0,
-      httpAgent: ssrfSafeHttpAgent,
-      httpsAgent: ssrfSafeHttpsAgent,
+      // Pinned, redirects refused, and -- missing until now -- a cap on
+      // the reply, which becomes a node result: axios buffers any size by
+      // default. A remote agent may think for a while, so the whole
+      // exchange gets two minutes, but a silent socket still fails at 30 s.
+      ...egressAxiosConfig({ timeoutMs: 120_000, idleTimeoutMs: 30_000, maxBytes: 10 * 1024 * 1024 }),
     });
   }
 

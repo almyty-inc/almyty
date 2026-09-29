@@ -42,8 +42,6 @@ function unwrapConnection(result: unknown): Connection {
 export const connectionsApi = {
   list: () => apiGet<Connection[]>('/connections'),
 
-  get: (id: string) => apiGet<Connection>(`/connections/${id}`),
-
   /**
    * api_key / service_account / cloud_iam: validated live, resolves with
    * `{ pending: false, connection }`; a failed validation rejects with HTTP 422

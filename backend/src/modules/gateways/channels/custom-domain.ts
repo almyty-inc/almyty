@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 
 /**
  * Tier 2 of the hosted chat app: a tenant serves their chat on a domain
@@ -109,24 +109,6 @@ export function isVerified(
   if (!records?.length) return false;
   const expected = `${VERIFICATION_VALUE_PREFIX}${config.verificationToken}`;
   return records.some((record) => (record ?? '').trim().replace(/^"|"$/g, '') === expected);
-}
-
-/**
- * A stable, DNS-safe name for the Kubernetes objects backing a custom
- * domain, derived from the hostname. Hostnames can contain characters
- * and lengths a resource name cannot, so this hashes rather than
- * sanitises: two different hostnames must never collide onto one
- * certificate.
- */
-export function resourceNameFor(hostname: string): string {
-  const digest = createHash('sha256').update(hostname.trim().toLowerCase()).digest('hex').slice(0, 10);
-  const readable = hostname
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40);
-  return `chat-${readable}-${digest}`;
 }
 
 /**

@@ -75,10 +75,11 @@ describe('tenant-supplied outbound URLs are gated at every call site', () => {
     ['modules/gateways/channels/adapters/google-chat.adapter.ts', /egressInit/],
     ['modules/gateways/channels/adapters/irc.adapter.ts', /egressInit/],
     ['modules/gateways/channels/adapters/microsoft-teams.adapter.ts', /egressInit/],
-    ['modules/a2a/a2a-client.service.ts', /maxRedirects: 0/],
+    // egressAxiosConfig() with no maxRedirects is maxRedirects: 0 + the pinned agents.
+    ['modules/a2a/a2a-client.service.ts', /egressAxiosConfig\(\{ timeoutMs/],
     // Follows a few hops, each re-validated (pinned-redirects.ts): a spec URL
     // that 301s to https is the ordinary case, a 302 to 169.254.169.254 is not.
-    ['modules/apis/apis-import.helper.ts', /pinnedRedirects\(\)/],
+    ['modules/apis/apis-import.helper.ts', /egressAxiosConfig\(\{[^}]*maxRedirects: DEFAULT_REDIRECT_HOPS/],
     ['modules/tools/executors/tool-grpc.executor.ts', /maxRedirects: 0/],
     ['modules/model-deployments/adapters/ollama.adapter.ts', /maxRedirects: 0/],
     ['modules/model-deployments/adapters/custom-endpoint.adapter.ts', /maxRedirects: 0/],
@@ -128,10 +129,11 @@ describe('tenant-supplied outbound URLs are gated at every call site', () => {
    * one level up. So: one helper, and the tool must not dial for itself.
    */
   it('the schema helper pins DNS, not just the string', () => {
-    // pinnedRedirects() carries the pinned agents and swaps in the one
-    // matching each hop's protocol; its own spec proves both.
+    // egressAxiosConfig({ maxRedirects }) is pinnedRedirects() plus the cap
+    // and the total deadline; pinnedRedirects carries the pinned agents and
+    // swaps in the one matching each hop's protocol; their specs prove both.
     const helper = read(join(SRC, 'modules/apis/apis-import.helper.ts'));
-    expect(helper).toMatch(/\.\.\.pinnedRedirects\(\)/);
+    expect(helper).toMatch(/\.\.\.egressAxiosConfig\(\{[^}]*maxRedirects: DEFAULT_REDIRECT_HOPS/);
   });
 
   it('the MCP import_schema tool delegates instead of opening its own connection', () => {

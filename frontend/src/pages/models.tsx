@@ -21,6 +21,7 @@ import { llmProvidersQuery } from '@/lib/llm-providers-query'
 import { deploymentForCard, readableModelName, unlistedDeployments } from '@/lib/model-hosting'
 import { HostedStatusBadge } from '@/components/models/hosting/hosted-status-badge'
 import { modelsApi } from '@/lib/models-api'
+import { modelSearchScorer, rankBy } from '@/lib/model-search'
 import type { ModelCard } from '@/types/models'
 
 /** Shared with every other reader of the full model list (the model chooser too). */
@@ -83,16 +84,16 @@ export function ModelsPage() {
   }, [cards, byId, plumbing])
 
   const groups = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    const keys = [...providers.map((p: any) => p.id as string), HOSTED]
+    const keys = [...providers.map((p: any) => p.id as string), HOSTED].filter((key) => providerFilter === 'all' || providerFilter === key)
+    const groupName = (key: string): string => (key === HOSTED ? 'Hosted on your cloud' : byId[key]?.name ?? '')
+    const shown = keys.flatMap((key) => (cardsByProvider[key] ?? []).map((card) => ({ key, card })))
+    // Decided over every shown model: a provider name counts only when no model id or name matches.
+    const score = modelSearchScorer(shown, search, ({ key, card }) => ({ id: card.vendorModelId, name: card.name, providerName: groupName(key), providerType: byId[key]?.type }))
     return keys
-      .filter((key) => providerFilter === 'all' || providerFilter === key)
       .map((key) => {
-        const name = key === HOSTED ? 'Hosted on your cloud' : byId[key]?.name ?? ''
-        const rows = (cardsByProvider[key] ?? [])
-          .filter((c) => !q || c.name.toLowerCase().includes(q) || c.vendorModelId.toLowerCase().includes(q) || name.toLowerCase().includes(q))
-          .sort((a, b) => Number(b.selectable) - Number(a.selectable) || a.name.localeCompare(b.name))
-        return { key, name, rows }
+        const ordered = (cardsByProvider[key] ?? []).slice().sort((a, b) => Number(b.selectable) - Number(a.selectable) || a.name.localeCompare(b.name))
+        const rows = rankBy(ordered, (card) => score({ key, card }))
+        return { key, name: groupName(key), rows }
       })
       .filter((g) => g.rows.length > 0)
   }, [providers, byId, cardsByProvider, search, providerFilter])

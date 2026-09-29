@@ -132,13 +132,33 @@ export class NebiusAdapter implements ModelProviderAdapter {
     );
   }
 
+  /**
+   * `apiHost` and `dataPlaneHost` are providerConfig, i.e. tenant-written,
+   * and the control-plane calls carry the Nebius key. They may only name a
+   * Nebius host over https; anything else would make this adapter an
+   * authenticated request to whatever address an org admin typed.
+   */
+  static nebiusOrigin(value: string, field: string): string {
+    let parsed: URL;
+    try {
+      parsed = new URL(value);
+    } catch {
+      throw Object.assign(new Error(`${field} is not a URL`), { code: 'ADAPTER_CONFIG_INVALID' });
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password || !(host === 'nebius.com' || host.endsWith('.nebius.com'))) {
+      throw Object.assign(new Error(`${field} must be an https://*.nebius.com address`), { code: 'ADAPTER_CONFIG_INVALID' });
+    }
+    return value.replace(/\/+$/, '');
+  }
+
   private static host(source: { apiHost?: string; [key: string]: any }): string {
-    return String(source.apiHost ?? DEFAULT_API_HOST).replace(/\/+$/, '');
+    return NebiusAdapter.nebiusOrigin(String(source.apiHost ?? DEFAULT_API_HOST), 'apiHost');
   }
 
   private static dataPlane(source: { dataPlaneHost?: string; region?: string; [key: string]: any }): string {
     const explicit = source.dataPlaneHost ? String(source.dataPlaneHost) : `https://api.tokenfactory.${source.region ?? DEFAULT_REGION}.nebius.com`;
-    return `${explicit.replace(/\/+$/, '')}/v1`;
+    return `${NebiusAdapter.nebiusOrigin(explicit, 'dataPlaneHost')}/v1`;
   }
 
   private static endpointOf(data: any): any {

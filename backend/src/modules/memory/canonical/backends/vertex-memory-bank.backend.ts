@@ -3,6 +3,8 @@ import axios, { AxiosInstance } from 'axios';
 import { GoogleAuth, JWT, OAuth2Client } from 'google-auth-library';
 import { v7 as uuidv7 } from 'uuid';
 
+import { assertGcpLocation } from '../../../../common/security/vendor-region';
+
 import {
   BatchResult,
   Capability,
@@ -213,7 +215,9 @@ export class VertexMemoryBankBackend implements MemoryBackend {
     if (!creds?.engine) return null;
     const bearer = await this.resolveBearer(creds);
     if (!bearer) return null;
-    const location = creds.location || 'us-central1';
+    // Credential-store input spliced into the hostname below: checked, so it
+    // names a region and cannot choose where the bearer token is sent.
+    const location = assertGcpLocation(creds.location || 'us-central1');
     const cacheKey = `${location}|${bearer.slice(-12)}`;
     let http = this.clientCache.get(cacheKey);
     if (!http) {

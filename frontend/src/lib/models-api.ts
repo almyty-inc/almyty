@@ -1,11 +1,9 @@
-import { apiGet, apiPost, apiPatch, apiDel } from './api'
+import { apiGet, apiPost, apiPatch } from './api'
 import type {
   ListModelsQuery,
   ModelCard,
-  RegisterModelBody,
   SyncModelsResult,
   UpdateModelBody,
-  ValidateModelResult,
 } from '@/types/models'
 
 /**
@@ -18,8 +16,6 @@ export const modelsApi = {
 
   get: (id: string) => apiGet<ModelCard>(`/models/${id}`),
 
-  register: (body: RegisterModelBody) => apiPost<ModelCard>('/models', body),
-
   /** One provider when given; every configured provider when omitted. */
   sync: (providerId?: string) =>
     providerId
@@ -27,11 +23,6 @@ export const modelsApi = {
       : apiPost<SyncModelsResult>('/models/sync'),
 
   update: (id: string, body: UpdateModelBody) => apiPatch<ModelCard>(`/models/${id}`, body),
-
-  remove: (id: string) => apiDel<void>(`/models/${id}`),
-
-  /** Runs one real call through the card. `passed` is the verdict; a failed run is not an HTTP error. */
-  validate: (id: string) => apiPost<ValidateModelResult>(`/models/${id}/validate`),
 }
 
 /** Formats a per-million-token price pair for a table cell. */

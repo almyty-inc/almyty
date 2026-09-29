@@ -93,21 +93,6 @@ export interface ListModelsQuery {
   providerId?: string
 }
 
-export interface RegisterModelBody {
-  name: string
-  vendorModelId: string
-  providerId?: string
-  endpointRef?: Record<string, any>
-  modelVersionId?: string
-  capabilities?: ModelCapabilities
-  contextLength?: number
-  privacyTier?: ModelPrivacyTier
-  region?: string
-  pricingOverride?: ModelPricing
-  base?: string
-  metadata?: Record<string, any>
-}
-
 export interface UpdateModelBody {
   name?: string
   capabilities?: ModelCapabilities
@@ -118,13 +103,6 @@ export interface UpdateModelBody {
   /** null clears the override so the feed price applies again. */
   pricingOverride?: ModelPricing | null
   modelVersionId?: string | null
-}
-
-export interface ValidateModelResult {
-  passed: boolean
-  latencyMs: number
-  error?: string
-  model: ModelCard
 }
 
 export interface SyncModelsResult {
