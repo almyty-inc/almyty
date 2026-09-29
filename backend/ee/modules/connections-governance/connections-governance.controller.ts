@@ -77,7 +77,8 @@ export class RevokeGrantsDto {
  */
 @ApiTags('Connections Governance (EE)')
 @ApiBearerAuth()
-@Controller('ee/connections')
+// /ee/credentials is the name; /ee/connections the older alias.
+@Controller(['ee/credentials', 'ee/connections'])
 @UseGuards(JwtAuthGuard, RolesGuard, EntitlementGuard)
 @RequiresEntitlement(EE_ENTITLEMENTS.CONNECTIONS_GOVERNANCE)
 @Roles('owner', 'admin')

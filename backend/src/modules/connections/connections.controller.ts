@@ -51,6 +51,7 @@ function requestBase(req: any): string | undefined {
 
 @ApiTags('Connections')
 @ApiBearerAuth()
+// The older name of GET/POST /credentials/services, kept as an alias.
 @Controller('connectors')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ConnectorsController {
@@ -79,6 +80,11 @@ export class ConnectorsController {
   }
 }
 
+/**
+ * The older `/connections` routes, kept answering as aliases of the
+ * `/credentials` ones (CredentialsController). The sign-in callback stays
+ * here: services have this address registered as their redirect URI.
+ */
 @ApiTags('Connections')
 @Controller('connections')
 export class ConnectionsController {

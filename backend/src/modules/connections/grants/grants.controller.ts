@@ -43,7 +43,8 @@ function requireOrg(req: any): string {
  */
 @ApiTags('Connections')
 @ApiBearerAuth()
-@Controller('connections/:id/grants')
+// /credentials/:id/grants is the name; /connections/:id/grants the older alias.
+@Controller(['credentials/:id/grants', 'connections/:id/grants'])
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class GrantsController {
   constructor(private readonly grants: GrantsService) {}
