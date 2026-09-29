@@ -42,7 +42,7 @@ export function TestPanel({ agentId, onClose }: TestPanelProps) {
   return (
     <div className="border-t bg-muted/30 shrink-0">
       <div className="flex items-center justify-between px-4 py-2 border-b">
-        <span className="text-sm font-semibold">Test Agent</span>
+        <span className="text-sm font-semibold">Test agent</span>
         <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Close test panel" onClick={onClose}>
           <X className="h-4 w-4" />
         </Button>

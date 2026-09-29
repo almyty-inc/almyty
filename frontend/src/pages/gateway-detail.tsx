@@ -39,6 +39,7 @@ import { orgSlugOf } from '@/lib/gateway-connect'
 import { ConnectSnippets } from '@/components/gateways/connect-snippets'
 import { GatewayStatusSwitch } from '@/components/gateways/detail/gateway-status-switch'
 import { Disclosure } from '@/components/ui/disclosure'
+import { pluralized } from '@/lib/utils'
 
 /** The tabs `?tab=` may open. */
 export const GATEWAY_TABS = ['tools', 'metrics', 'integrations', 'events'] as const
@@ -151,7 +152,7 @@ export function GatewayDetailPage() {
       if (skipped.length === 0) {
         success(
           'Tools assigned',
-          `${assigned.length} tool${assigned.length === 1 ? '' : 's'} assigned to the gateway.`,
+          `${pluralized(assigned.length, 'tool')} assigned to the gateway.`,
         )
         return
       }
@@ -167,7 +168,7 @@ export function GatewayDetailPage() {
       if (assigned.length === 0) {
         errorNotif('No tools were assigned', detail)
       } else {
-        warning(`${assigned.length} of ${assigned.length + skipped.length} tools assigned`, detail)
+        warning(`${assigned.length} of ${pluralized(assigned.length + skipped.length, 'tool')} assigned`, detail)
       }
     },
     onError: (err: any) => {
@@ -344,7 +345,7 @@ export function GatewayDetailPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="text-2xl font-bold">{gateway.totalRequests || 0}</div>
-              <div className="text-sm text-muted-foreground">Total Requests</div>
+              <div className="text-sm text-muted-foreground">Total requests</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-green-600">
@@ -360,7 +361,7 @@ export function GatewayDetailPage() {
             </div>
             <div>
               <div className="text-2xl font-bold">{gatewayTools.length}</div>
-              <div className="text-sm text-muted-foreground">Assigned Tools</div>
+              <div className="text-sm text-muted-foreground">Assigned tools</div>
             </div>
           </div>
         </div>

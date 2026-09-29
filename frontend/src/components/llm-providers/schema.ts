@@ -39,7 +39,7 @@ export const STRUCTURAL_FIELDS: Record<string, Array<{
       hint: 'The name you gave the model when you set it up in Azure. Calls use it as the model.' },
   ],
   vertex_ai: [
-    { name: 'projectId', label: 'Google Cloud project id', placeholder: 'my-project-123', required: true },
+    { name: 'projectId', label: 'Google Cloud project ID', placeholder: 'my-project-123', required: true },
     { name: 'location', label: 'Location', placeholder: 'global', required: false,
       hint: 'global (default) or a region such as us-central1.' },
   ],

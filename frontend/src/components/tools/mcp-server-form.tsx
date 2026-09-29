@@ -20,6 +20,7 @@ import { mcpSourcesApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import type { Connection } from '@/types/connections'
+import { pluralized } from '@/lib/utils'
 
 function isHttpUrl(value: string) {
   try {
@@ -66,7 +67,7 @@ export function McpServerForm({ organizationId }: { organizationId?: string }) {
         )
       } else {
         const count = result?.sync?.total ?? 0
-        notifications.success('MCP server added', `Discovered ${count} tool${count !== 1 ? 's' : ''}`)
+        notifications.success('MCP server added', `Discovered ${pluralized(count, 'tool')}`)
       }
       guard.leave('/tools')
     },

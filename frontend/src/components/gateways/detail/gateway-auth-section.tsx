@@ -31,6 +31,7 @@ import {
 import { gatewaysApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { formatDate } from '@/lib/utils'
 
 const AUTH_TYPE_LABELS: Record<string, string> = {
   api_key: 'API Key',
@@ -505,11 +506,11 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
                     <div className="flex items-center gap-3">
                       {key.lastUsedAt && (
                         <span className="text-xs text-muted-foreground">
-                          Last used {new Date(key.lastUsedAt).toLocaleDateString()}
+                          Last used {formatDate(key.lastUsedAt)}
                         </span>
                       )}
                       <span className="text-xs text-muted-foreground">
-                        Created {new Date(key.createdAt).toLocaleDateString()}
+                        Created {formatDate(key.createdAt)}
                       </span>
                       <Button
                         variant="ghost"

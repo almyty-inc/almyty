@@ -26,7 +26,7 @@ import { llmProvidersQuery } from '@/lib/llm-providers-query'
 import { modelsApi } from '@/lib/models-api'
 import { MODEL_RANK, modelSearchScorer, rankBy, textMatchesSearch } from '@/lib/model-search'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { cn } from '@/lib/utils'
+import { cn, pluralized } from '@/lib/utils'
 import type { ModelCard, RoutingPolicy } from '@/types/models'
 
 export interface ModelSelection {
@@ -236,7 +236,7 @@ export function ModelPicker({
       const note =
         (own.get(p.id) ?? []).length === 0 && !q
           ? listed > 0
-            ? `${listed} model${listed === 1 ? '' : 's'} listed, none usable yet. Check the provider again on its page.`
+            ? `${pluralized(listed, 'model')} listed, none usable yet. Check the provider again on its page.`
             : FREE_TEXT_PROVIDER_TYPES.has(p.type)
               ? 'Type the model id your server runs.'
               : 'No models yet. Check the provider again on its page.'

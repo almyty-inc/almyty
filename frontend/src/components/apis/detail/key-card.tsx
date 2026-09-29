@@ -18,13 +18,14 @@ import { useNotifications } from '@/store/app'
 import type { ApiKeyView } from '@/types/api-connect'
 
 import { ApiKeyForm, keySentAs } from '../api-key-form'
+import { formatDate as calendarDate } from '@/lib/utils'
 
 export const apiKeyQueryKey = (apiId: string) => ['api-key', apiId] as const
 
 function formatDate(value: string | null | undefined): string | null {
   if (!value) return null
   const d = new Date(value)
-  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString()
+  return Number.isNaN(d.getTime()) ? null : calendarDate(d)
 }
 
 /** Where the key comes from, in words. */

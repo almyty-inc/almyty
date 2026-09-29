@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { pluralized } from '@/lib/utils'
 
 /**
  * An agent's run limits: one plain line up front, the fields under
@@ -80,11 +81,11 @@ export const formatDollars = (cents: number) =>
 
 export const formatDuration = (ms: number) => {
   const seconds = Math.round(ms / 1000)
-  if (seconds < 60) return `${seconds} second${seconds === 1 ? '' : 's'}`
+  if (seconds < 60) return pluralized(seconds, 'second')
   const minutes = Math.round(seconds / 60)
-  if (minutes < 60 || minutes % 60 !== 0) return `${minutes} minute${minutes === 1 ? '' : 's'}`
+  if (minutes < 60 || minutes % 60 !== 0) return pluralized(minutes, 'minute')
   const hours = minutes / 60
-  return `${hours} hour${hours === 1 ? '' : 's'}`
+  return pluralized(hours, 'hour')
 }
 
 type Headline = 'maxSteps' | 'maxCostCents' | 'maxDurationMs'
@@ -104,7 +105,7 @@ export function runLimitsSummary(value: RunLimitsConfig, inherited?: RunLimitsSe
   const steps = effectiveLimit('maxSteps', value, inherited)
   const cost = effectiveLimit('maxCostCents', value, inherited)
   const time = effectiveLimit('maxDurationMs', value, inherited)
-  return `Stops after ${steps} step${steps === 1 ? '' : 's'}, ${formatDollars(cost)} or ${formatDuration(time)}, whichever comes first.`
+  return `Stops after ${pluralized(steps, 'step')}, ${formatDollars(cost)} or ${formatDuration(time)}, whichever comes first.`
 }
 
 export function RunLimitsSection({ value, onChange, inherited }: RunLimitsSectionProps) {

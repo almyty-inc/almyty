@@ -1,6 +1,7 @@
 import React from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { Scale } from 'lucide-react'
+import { pluralized } from '@/lib/utils'
 
 /**
  * A typed question over a declared option set.
@@ -58,7 +59,7 @@ export function DecisionNode({ data, selected }: NodeProps) {
         </div>
         <div className="text-xs text-muted-foreground truncate mt-0.5">
           {(question.type as string) || 'choice'}
-          {` · ${outcomes.length} option${outcomes.length === 1 ? '' : 's'}`}
+          {` · ${pluralized(outcomes.length, 'option')}`}
         </div>
         {isBoolean && (
           <div className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">

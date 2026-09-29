@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatDuration } from './constants'
 import type { AgentRun, AgentRunStep } from '@/types'
 import { StepRoleLine } from './run-roles'
+import { pluralized } from '@/lib/utils'
 
 interface VerifyFailure {
   rule?: string
@@ -92,7 +93,7 @@ export function VerifySummary({ run }: { run: AgentRun }) {
       <span className="font-medium">Verification {passed ? 'passed' : 'failed'}</span>
       {revisions > 0 && (
         <span>
-          · {revisions} revision{revisions !== 1 ? 's' : ''}
+          · {pluralized(revisions, 'revision')}
         </span>
       )}
       {v.exhausted && <span>· budget exhausted</span>}

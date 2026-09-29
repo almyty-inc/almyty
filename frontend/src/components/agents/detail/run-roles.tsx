@@ -15,6 +15,7 @@ import type { AgentRun, AgentRunStep } from '@/types'
 import type { AutonomousStrategyKey, RoleCost, RolePurpose } from '@/types/agent-models'
 import type { RouteAttribution } from '@/types/models'
 import { RoutingAttribution } from './routing-attribution'
+import { pluralized } from '@/lib/utils'
 
 function purposeLabel(purpose: string): string {
   return PURPOSE_LABELS[purpose as RolePurpose] ?? purpose
@@ -77,7 +78,7 @@ export function stepSummary(step: AgentRunStep): string | null {
         return parts.join(', ')
       }
       if (typeof out.picked === 'number') return `Picked candidate ${out.picked}${n ? ` of ${n}` : ''}`
-      return n ? `Compared ${n} candidates` : 'Judged the candidates'
+      return n ? `Compared ${pluralized(n, 'candidate')}` : 'Judged the candidates'
     }
     case 'explore': {
       const run = typeof input.childRunId === 'string' ? ` ${input.childRunId.slice(0, 8)}` : ''

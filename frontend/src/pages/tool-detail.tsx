@@ -20,7 +20,7 @@ import { CodeBlock } from '@/components/ui/code-block'
 import { toolsApi, workspacesApi } from '@/lib/api'
 import { toolQuery } from '@/lib/list-queries'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { formatDateTime } from '@/lib/utils'
+import { formatDateTime, pluralized } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { GatewayToolAssociation } from '@/types'
@@ -242,7 +242,7 @@ export function ToolDetailPage() {
             {tool.parameters?.properties && Object.keys(tool.parameters.properties).length > 0 ? (
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground mb-3">
-                  {Object.keys(tool.parameters.properties).length} parameter(s)
+                  {pluralized(Object.keys(tool.parameters.properties).length, 'parameter')}
                   {tool.parameters.required?.length > 0 && ` • ${tool.parameters.required.length} required`}
                 </p>
                 <div className="space-y-2">
@@ -323,7 +323,7 @@ export function ToolDetailPage() {
             {tool.executionMethod === 'custom' ? (
               <>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Execution Method</span>
+                  <span className="text-muted-foreground">Execution method</span>
                   <Badge>Custom JavaScript</Badge>
                 </div>
                 <div className="mt-2">
@@ -348,7 +348,7 @@ export function ToolDetailPage() {
             ) : tool.executionMethod === 'http' ? (
               <>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Execution Method</span>
+                  <span className="text-muted-foreground">Execution method</span>
                   <Badge>HTTP REST</Badge>
                 </div>
                 {tool.metadata?.httpConfig && (
@@ -363,7 +363,7 @@ export function ToolDetailPage() {
             ) : tool.executionMethod === 'graphql' ? (
               <>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Execution Method</span>
+                  <span className="text-muted-foreground">Execution method</span>
                   <ApiTypeBadge type="graphql" />
                 </div>
                 {tool.metadata?.graphqlConfig && (
@@ -380,7 +380,7 @@ export function ToolDetailPage() {
                   <code className="text-sm font-mono">{tool.operation.endpoint}</code>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">API Source</span>
+                  <span className="text-muted-foreground">API source</span>
                   <span>{tool.operation.api?.name}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
@@ -540,7 +540,7 @@ export function ToolDetailPage() {
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        <p className="text-sm text-destructive font-medium">Execution Failed</p>
+                        <p className="text-sm text-destructive font-medium">Execution failed</p>
                         <div className="space-y-3 text-xs">
                           <div className="bg-background/50 p-3 rounded space-y-2">
                             <p className="text-destructive"><strong>Error:</strong> {executionResult.error || executionResult.message || 'Unknown error'}</p>
@@ -641,15 +641,15 @@ export function ToolDetailPage() {
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
                   <div className="text-2xl font-bold">{tool.usageCount || 0}</div>
-                  <div className="text-sm text-muted-foreground">Total Executions</div>
+                  <div className="text-sm text-muted-foreground">Total executions</div>
                 </div>
                 <div>
                   <div className="text-2xl font-bold">{tool.successRate || 0}%</div>
-                  <div className="text-sm text-muted-foreground">Success Rate</div>
+                  <div className="text-sm text-muted-foreground">Success rate</div>
                 </div>
                 <div>
                   <div className="text-2xl font-bold">{tool.averageResponseTime || 0}ms</div>
-                  <div className="text-sm text-muted-foreground">Avg Response Time</div>
+                  <div className="text-sm text-muted-foreground">Avg response time</div>
                 </div>
               </div>
               {tool.lastUsedAt && (

@@ -3,7 +3,7 @@ import { Check, X } from 'lucide-react'
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { cn, pluralized } from '@/lib/utils'
 import type { OnboardingState } from '@/lib/api'
 import { ALL_STEPS, journeyProgress, nextStep, stepsDone } from './guide-steps'
 import { NextStep } from './next-step'
@@ -31,7 +31,7 @@ export function GuideCard({ state, onDismiss }: GuideCardProps) {
           <div className="min-w-0">
             <h2 className="font-heading text-lg font-semibold">Guide</h2>
             <p className="text-sm text-muted-foreground">
-              {done} of {total} steps done across the platform.{' '}
+              {done} of {pluralized(total, 'step')} done across the platform.{' '}
               <Link
                 to="/guide"
                 className="font-medium text-violet-600 hover:underline dark:text-violet-400"

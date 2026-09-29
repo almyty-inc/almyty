@@ -17,6 +17,7 @@ import { CopyField } from '@/components/ui/copy-field'
 import { Input } from '@/components/ui/input'
 
 import { Api, ApiOperation, Tool } from '@/types'
+import { pluralized } from '@/lib/utils'
 
 interface OperationsTabProps {
   api: Api
@@ -48,7 +49,7 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
             <div>
               <CardTitle>API operations</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                {operations.length} operations parsed from schema
+                {pluralized(operations.length, 'operation')} parsed from schema
               </p>
             </div>
             {api.schema && (
@@ -142,7 +143,7 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
                   <div className="flex items-center space-x-2">
                     {operation.parameters && operation.parameters.length > 0 && (
                       <Badge variant="outline" className="text-xs">
-                        {operation.parameters.length} params
+                        {pluralized(operation.parameters.length, 'param')}
                       </Badge>
                     )}
                   </div>

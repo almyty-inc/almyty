@@ -25,6 +25,7 @@ import { Textarea } from '@/components/ui/textarea'
 import type { AgentModels } from '@/types/agent-models'
 import type { Agent } from '@/types'
 import { useOrganizationStore } from '@/store/organization'
+import { pluralized } from '@/lib/utils'
 
 export interface AutonomousConfigProps {
   agentId?: string
@@ -130,7 +131,7 @@ export function AutonomousConfig({
           <p className="text-xs text-muted-foreground mb-3">Select which tools this agent can use during execution.</p>
           {toolIds.length > 0 && (
             <div className="mb-3">
-              <p className="text-xs font-medium text-muted-foreground mb-1.5">{toolIds.length} tool{toolIds.length !== 1 ? 's' : ''} selected</p>
+              <p className="text-xs font-medium text-muted-foreground mb-1.5">{pluralized(toolIds.length, 'tool')} selected</p>
               <div className="flex flex-wrap gap-1.5">
                 {toolIds.map((tid) => {
                   const tool = tools.find((t: any) => t.id === tid)
@@ -296,7 +297,7 @@ function ToolGroupList({ tools, toolSearch, selectedIds, onSelectedIdsChange, ex
             >
               {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
               <span className="text-sm font-medium flex-1">{groupName}</span>
-              <span className="text-xs text-muted-foreground">{groupTools.length} tool{groupTools.length !== 1 ? 's' : ''}{selectedInGroup > 0 ? `, ${selectedInGroup} selected` : ''}</span>
+              <span className="text-xs text-muted-foreground">{pluralized(groupTools.length, 'tool')}{selectedInGroup > 0 ? `, ${selectedInGroup} selected` : ''}</span>
               <Button type="button" variant="ghost" size="sm" className="h-6 text-xs px-2"
                 onClick={(e) => { e.stopPropagation(); allSelectedInGroup ? deselectAll() : selectAll() }}>
                 {allSelectedInGroup ? 'Deselect all' : 'Select all'}
