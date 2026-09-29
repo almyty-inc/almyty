@@ -7,6 +7,7 @@ import { ChatRequest, ChatResponse, StreamChunk } from '../llm-providers.service
 import { stepKindSignal } from '../dto/llm-providers.dto';
 import { callLlmProviderHttp, callLlmProviderHttpStream, llmCallOptionsFor } from './safe-request';
 import { requireModel } from '../model-errors';
+import { customChatUrl } from './google.provider';
 
 
 /**
@@ -40,7 +41,10 @@ export interface OpenAiAuthOverride {
  */
 export function chatCompletionsUrl(provider: LlmProvider): string {
   const base = provider.getApiUrl();
-  return provider.type === LlmProviderType.WRITER ? `${base}/chat` : `${base}/chat/completions`;
+  if (provider.type === LlmProviderType.WRITER) return `${base}/chat`;
+  // Your own server's address may be its base or already the chat endpoint.
+  if (provider.type === LlmProviderType.CUSTOM) return customChatUrl(base, 'openai');
+  return `${base}/chat/completions`;
 }
 
 export async function callOpenAI(
@@ -120,7 +124,8 @@ export async function callOpenAI(
   const responseTime = Date.now() - startTime;
 
   const choice = response.data.choices[0];
-  const usage = response.data.usage;
+  // A server that reports no usage (some self-hosted ones) counts as zero, not a crash.
+  const usage = response.data.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
 
   const cost = calculateProviderCost(provider, usage.prompt_tokens, usage.completion_tokens);
 

@@ -742,6 +742,12 @@ export const ssoApi = {
   getConfig: () => apiGet('/sso/settings'),
   saveConfig: (data: any) => apiPut('/sso/settings', data),
   rotateScimToken: () => apiPost('/sso/settings/scim-token'),
+  // Email domains the organization has proven with a DNS TXT record; SSO
+  // creates accounts only for addresses on a verified one.
+  listDomains: () => apiGet('/sso/settings/domains'),
+  addDomain: (domain: string) => apiPost('/sso/settings/domains', { domain }),
+  verifyDomain: (id: string) => apiPost(`/sso/settings/domains/${id}/verify`),
+  removeDomain: (id: string) => apiDel(`/sso/settings/domains/${id}`),
 }
 
 // Advanced RBAC API (EE — gated by the `advanced_rbac` entitlement).
@@ -917,6 +923,7 @@ export const agentsApi = {
     apiPatch(`/agents/${id}/heartbeat`, body),
   // Runs (autonomous mode)
   listRuns: (id: string, params?: any) => apiGet(`/agents/${id}/runs`, { params }),
+  getRun: (id: string, runId: string) => apiGet(`/agents/${id}/runs/${runId}`),
 }
 
 // Promoted Skills API (run -> skill)

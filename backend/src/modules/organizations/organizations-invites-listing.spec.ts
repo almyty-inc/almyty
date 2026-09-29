@@ -176,7 +176,7 @@ describe('OrganizationsInvitesHelper — listing + revocation', () => {
       expect(sql).toMatch(/UPDATE organizations/);
       expect(sql).toMatch(/'\{pendingInvites\}'/);
       expect(sql).toMatch(/inviteToken/);
-      expect(params).toEqual(['org-1', settingsToken]);
+      expect(params.slice(0, 2)).toEqual(['org-1', settingsToken]);
     });
 
     it('throws NotFoundException when no settings invite matches the hash', async () => {

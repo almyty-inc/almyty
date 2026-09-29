@@ -110,19 +110,7 @@ export class McpOAuthTokensHelper {
       this.logger.warn(
         `Authorization code replay detected for client ${clientId} — revoking issued tokens for this user+gateway`,
       );
-      try {
-        await this.oauthTokenRepository.update(
-          {
-            clientId: authCode.clientId,
-            userId: authCode.userId,
-            gatewayId: authCode.gatewayId,
-            isRevoked: false,
-          },
-          { isRevoked: true },
-        );
-      } catch (err: any) {
-        this.logger.error(`Failed to revoke tokens on replay detection: ${err.message}`);
-      }
+      await this.revokeForReusedCode(authCode);
       throw new UnauthorizedException('Authorization code has already been used');
     }
 
@@ -154,7 +142,11 @@ export class McpOAuthTokensHelper {
       { isUsed: true },
     );
     if (claim.affected !== 1) {
-      this.logger.warn(`Lost race on authorization code consumption for client ${clientId}`);
+      // Two redemptions of one code raced and this one lost. A code
+      // presented twice is treated as stolen (OAuth 2.1 section 4.1.3):
+      // what the winner was issued is revoked too, not only this attempt.
+      this.logger.warn(`Lost race on authorization code consumption for client ${clientId} — revoking issued tokens`);
+      await this.revokeForReusedCode(authCode);
       throw new UnauthorizedException('Authorization code has already been used');
     }
 
@@ -175,8 +167,47 @@ export class McpOAuthTokensHelper {
       authCode.resource ?? undefined,
     );
 
+    // A losing redemption can finish its revocation before this pair was
+    // written. It marks the code first, so a mark found here after the
+    // write means this pair was minted from a reused code: revoke it. If
+    // the mark lands after this read, the loser's revocation runs after
+    // the pair exists and catches it. Either way no pair survives.
+    const after = await this.oauthCodeRepository.findOne({ where: { id: authCode.id } });
+    if (after?.reuseDetectedAt) {
+      this.logger.warn(`Authorization code for client ${clientId} was reused during the exchange — revoking the pair`);
+      await this.revokeIssuedFrom(authCode);
+      throw new UnauthorizedException('Authorization code has already been used');
+    }
+
     this.logger.log(`Token exchanged for client ${clientId}`);
     return tokens;
+  }
+
+  /** Mark the code reused, then revoke what was issued from it. */
+  private async revokeForReusedCode(authCode: OAuthAuthorizationCode): Promise<void> {
+    try {
+      await this.oauthCodeRepository.update({ id: authCode.id }, { reuseDetectedAt: new Date() });
+    } catch (err: any) {
+      this.logger.error(`Failed to mark reused authorization code: ${err.message}`);
+    }
+    await this.revokeIssuedFrom(authCode);
+  }
+
+  /** Every live token for the code's client, user and gateway. */
+  private async revokeIssuedFrom(authCode: OAuthAuthorizationCode): Promise<void> {
+    try {
+      await this.oauthTokenRepository.update(
+        {
+          clientId: authCode.clientId,
+          userId: authCode.userId,
+          gatewayId: authCode.gatewayId,
+          isRevoked: false,
+        },
+        { isRevoked: true },
+      );
+    } catch (err: any) {
+      this.logger.error(`Failed to revoke tokens on authorization code reuse: ${err.message}`);
+    }
   }
 
   async refreshToken(

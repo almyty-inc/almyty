@@ -37,6 +37,25 @@ export class VersionsController {
     return orgId;
   }
 
+  @Get('detail/:versionId')
+  @Roles('viewer', 'member', 'admin', 'owner')
+  async getVersion(@Param('versionId') versionId: string, @Request() req: any) {
+    try {
+      const orgId = this.requireOrg(req);
+      const version = await this.versionsService.getVersion(parseInt(versionId, 10), orgId, req.user?.sub || req.user?.id);
+      if (!version) {
+        throw new HttpException({ success: false, message: 'Version not found' }, HttpStatus.NOT_FOUND);
+      }
+      return { success: true, data: version };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        { success: false, message: error.message },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Get(':entityType/:entityId')
   @Roles('viewer', 'member', 'admin', 'owner')
   async getVersions(
@@ -54,25 +73,6 @@ export class VersionsController {
         callerId: req.user?.sub || req.user?.id,
       });
       return { success: true, data: versions };
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      throw new HttpException(
-        { success: false, message: error.message },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-
-  @Get('detail/:versionId')
-  @Roles('viewer', 'member', 'admin', 'owner')
-  async getVersion(@Param('versionId') versionId: string, @Request() req: any) {
-    try {
-      const orgId = this.requireOrg(req);
-      const version = await this.versionsService.getVersion(parseInt(versionId, 10), orgId, req.user?.sub || req.user?.id);
-      if (!version) {
-        throw new HttpException({ success: false, message: 'Version not found' }, HttpStatus.NOT_FOUND);
-      }
-      return { success: true, data: version };
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new HttpException(

@@ -59,6 +59,7 @@ import { IntegrationSnippets } from './integration-snippets'
 import { AgentConfigPanel } from './agent-config-panel'
 import { ExecutionRouting } from './routing-attribution'
 import { modelsApi } from '@/lib/models-api'
+import { invokeAndSettle, runOutcome } from '@/lib/agent-run'
 import type { Agent, AgentExecution, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
 
 interface OverviewTabProps {
@@ -163,10 +164,12 @@ export function OverviewTab({
     setTestLoading(true)
     setTestOutput(null)
     setTestError(null)
-    agentsApi.invoke(agent.id, { message: testInput })
-      .then((res: any) => {
-        const output = res?.output || JSON.stringify(res)
-        setTestOutput(typeof output === 'string' ? output : JSON.stringify(output, null, 2))
+    // An autonomous run is answered while it is still going; wait for it.
+    invokeAndSettle(agent.id, { message: testInput })
+      .then((run: any) => {
+        const outcome = runOutcome(run)
+        if (outcome.error) setTestError(outcome.error)
+        else setTestOutput(outcome.output ?? '')
         setTestInput('')
       })
       .catch((err: unknown) => {

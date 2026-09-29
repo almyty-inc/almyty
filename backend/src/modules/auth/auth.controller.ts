@@ -25,7 +25,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { Request as ExpressRequest, Response } from 'express';
 
-import { AuthService } from './auth.service';
+import { AuthService, AuthTokens } from './auth.service';
 import { assertMayChangeLoginEmail } from './sso-session';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { AccountThrottle, AccountThrottleGuard } from './guards/account-throttle.guard';
@@ -50,6 +50,29 @@ const ACCESS_TOKEN_COOKIE_OPTIONS = {
   maxAge: 24 * 60 * 60 * 1000, // 24 hours
 };
 
+/**
+ * What a browser login or registration returns in the body: nothing that
+ * authenticates. Tokens are httpOnly-cookie only in the browser, so a
+ * script on the page (an XSS, an extension) has no token to read from the
+ * response it did or did not make. Non-browser clients use /auth/token.
+ */
+export function browserSession(tokens: AuthTokens): { expiresIn: number } {
+  return { expiresIn: tokens.expiresIn };
+}
+
+/**
+ * /auth/token and /auth/refresh answer with tokens in the body, so a page
+ * must not be able to call them. Browsers send `Origin` on every POST
+ * (fetch, XHR and form alike); a CLI, SDK or server does not.
+ */
+function refuseBrowserCaller(req: { headers?: Record<string, unknown> }): void {
+  if (req?.headers?.origin !== undefined) {
+    throw new BadRequestException({
+      code: 'BROWSER_USE_LOGIN',
+      message: 'This endpoint is for non-browser clients. Browsers sign in with /auth/login.',
+    });
+  }
+}
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
@@ -104,22 +127,11 @@ export class AuthController {
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({
     status: 201,
-    description: 'User successfully registered',
+    description: 'User registered; the session is the httpOnly cookie, the body carries no token',
     schema: {
       type: 'object',
       properties: {
-        accessToken: { type: 'string' },
-        refreshToken: { type: 'string' },
         expiresIn: { type: 'number' },
-        user: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            email: { type: 'string' },
-            firstName: { type: 'string' },
-            lastName: { type: 'string' },
-          },
-        },
       },
     },
   })
@@ -143,12 +155,12 @@ export class AuthController {
       res.clearCookie(REFERRAL_COOKIE, { path: '/' });
     }
 
-    // Set httpOnly cookie for web UI security
+    // The session is the httpOnly cookie, and only the cookie.
     res.cookie('access_token', tokens.accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);
 
     return {
       success: true,
-      data: tokens,
+      data: browserSession(tokens),
       message: 'Registration successful',
     };
   }
@@ -168,7 +180,46 @@ export class AuthController {
   @UseGuards(AccountThrottleGuard, LocalAuthGuard)
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login with email and password' })
+  @ApiOperation({ summary: 'Browser login: sets the httpOnly session cookie; the body carries no token' })
+  @ApiBody({ type: LoginDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Successfully authenticated',
+    schema: {
+      type: 'object',
+      properties: {
+        expiresIn: { type: 'number' },
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  async login(
+    @Request() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const tokens = await this.authService.completeLogin(req.user);
+
+    // The session is the httpOnly cookie, and only the cookie: a token in
+    // the body is readable by any script on the page.
+    res.cookie('access_token', tokens.accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);
+
+    return {
+      success: true,
+      data: browserSession(tokens),
+      message: 'Login successful',
+    };
+  }
+
+  @Public()
+  // Same limits as the browser login: it is the same password check.
+  @Throttle({ default: { limit: 10, ttl: 5 * 60 * 1000 } })
+  @AccountThrottle({ name: 'login', limit: 10, ttlMs: 15 * 60 * 1000 })
+  @UseGuards(AccountThrottleGuard, LocalAuthGuard)
+  @Post('token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Non-browser login: returns an access and a refresh token in the body and sets no cookie',
+  })
   @ApiBody({ type: LoginDto })
   @ApiResponse({
     status: 200,
@@ -182,16 +233,10 @@ export class AuthController {
       },
     },
   })
-  @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  async login(
-    @Request() req: any,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  @ApiResponse({ status: 400, description: 'Called from a browser page; use /auth/login' })
+  async token(@Request() req: any) {
+    refuseBrowserCaller(req);
     const tokens = await this.authService.completeLogin(req.user);
-
-    // Set httpOnly cookie for web UI security
-    res.cookie('access_token', tokens.accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);
-
     return {
       success: true,
       data: tokens,
@@ -203,13 +248,13 @@ export class AuthController {
   // Rate limit the refresh endpoint — without this, an attacker
   // with a stolen refresh token could pipeline refresh attempts
   // at the global 100/60s limit, trying variants until one
-  // verifies. 20 per 5 minutes is still headroom for the web UI
-  // (which refreshes every ~23 hours) and for mobile apps that
-  // go offline and reconnect repeatedly.
+  // verifies.
   @Throttle({ default: { limit: 20, ttl: 5 * 60 * 1000 } })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Refresh access token using refresh token' })
+  @ApiOperation({
+    summary: 'Redeem a refresh token from /auth/token for a new pair (non-browser clients)',
+  })
   @ApiBody({
     schema: {
       type: 'object',
@@ -226,16 +271,16 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
   async refresh(
     @Body('refreshToken') refreshToken: string,
-    @Res({ passthrough: true }) res: Response,
+    @Req() req: ExpressRequest,
   ) {
+    // Only /auth/token hands out a refresh token, and never to a page, so
+    // a page has no business here either.
+    refuseBrowserCaller(req);
     if (!refreshToken) {
       throw new BadRequestException('Refresh token is required');
     }
 
     const tokens = await this.authService.refreshToken(refreshToken);
-
-    // Update httpOnly cookie with new access token
-    res.cookie('access_token', tokens.accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);
 
     return {
       success: true,

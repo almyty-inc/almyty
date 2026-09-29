@@ -38,6 +38,8 @@ describe('SSO/SCIM provisioning never mints an owner', () => {
     expect(saved.defaultRole).toBe(role);
   });
 
+  // new@idp.test is on a domain the org has verified: what is under test is the role.
+  const verifiedDomain = { coversEmail: async () => true } as any;
   it('JIT provisions a member even when a stored config still says owner', async () => {
     const saved: any[] = [];
     const service = new SsoService(
@@ -53,6 +55,9 @@ describe('SSO/SCIM provisioning never mints an owner', () => {
       } as any,
       {} as any,
       new SamlReplayCache(new FakeRedis()),
+      undefined,
+      undefined,
+      verifiedDomain,
     );
     await service.resolveUser(
       'org-1',
@@ -81,6 +86,9 @@ describe('SSO/SCIM provisioning never mints an owner', () => {
       {} as any,
       {} as any,
       { get: jest.fn(async () => ({ defaultRole: 'owner' })) } as any,
+      undefined,
+      undefined,
+      verifiedDomain,
     );
     await scim.createUser('org-1', { userName: 'new@idp.test' });
     expect(saved[0].role).toBe(OrganizationRole.MEMBER);

@@ -82,29 +82,27 @@ export class APIHelper {
     lastName: string
     organizationName: string
   }) {
+    // Registration answers with the session cookie and no token.
     const response = await this.client.post('/auth/register', data)
-    if (response.status === 201 && response.data.accessToken) {
-      this.setToken(response.data.accessToken)
-      // Extract organizationId from JWT token
-      const tokenPayload = JSON.parse(Buffer.from(response.data.accessToken.split('.')[1], 'base64').toString())
-      if (tokenPayload.organizations?.[0]?.id) {
-        this.organizationId = tokenPayload.organizations[0].id
-      }
-    }
-    return response.data
+    return response.data?.data ?? response.data
   }
 
-  async login(email: string, password: string) {
-    const response = await this.client.post('/auth/login', { email, password })
-    if (response.status === 200 && response.data.accessToken) {
-      this.setToken(response.data.accessToken)
+  /**
+   * The non-browser login: /auth/token returns an access and a refresh
+   * token in the body (the browser login, /auth/login, returns none).
+   */
+  async login(email: string, password: string): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
+    const response = await this.client.post('/auth/token', { email, password })
+    const tokens = response.data?.data ?? response.data
+    if (response.status === 200 && tokens?.accessToken) {
+      this.setToken(tokens.accessToken)
       // Extract organizationId from JWT token
-      const tokenPayload = JSON.parse(Buffer.from(response.data.accessToken.split('.')[1], 'base64').toString())
+      const tokenPayload = JSON.parse(Buffer.from(tokens.accessToken.split('.')[1], 'base64').toString())
       if (tokenPayload.organizations?.[0]?.id) {
         this.organizationId = tokenPayload.organizations[0].id
       }
     }
-    return response.data
+    return tokens
   }
 
   async getProfile() {

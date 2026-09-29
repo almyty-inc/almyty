@@ -342,12 +342,14 @@ export class LlmProvidersService {
 
   /** Undo a connect whose check failed: the provider, and the key row it made (a shared connection stays). */
   private async discardUncheckedProvider(provider: LlmProvider, organizationId: string, userId: string): Promise<void> {
+    // Read before the remove: TypeORM clears the id on the entity it removed.
+    const { id, name } = provider;
     try {
       await this.secrets.release(provider);
       await this.llmProviderRepository.remove(provider);
-      this.auditLogService.logDelete(organizationId, userId, AuditResource.LLM_PROVIDER, provider.id, provider.name);
+      this.auditLogService.logDelete(organizationId, userId, AuditResource.LLM_PROVIDER, id, name);
     } catch (error: any) {
-      this.logger.error(`Failed to remove provider ${provider.id} after a failed check: ${error?.message ?? error}`);
+      this.logger.error(`Failed to remove provider ${id} after a failed check: ${error?.message ?? error}`);
     }
   }
 
