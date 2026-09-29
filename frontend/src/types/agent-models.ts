@@ -7,7 +7,7 @@ import type { RoutingPolicy } from './models'
  */
 export type AutonomousStrategyKey = 'single' | 'cascade' | 'best_of_n' | 'panel' | 'explore_extract_patch'
 
-export type RolePurpose = 'main' | 'drafter' | 'checker' | 'panelist' | 'explorer' | 'summariser' | 'teammate'
+export type RolePurpose = 'main' | 'drafter' | 'checker' | 'panelist' | 'judge' | 'explorer' | 'summariser' | 'teammate'
 
 export interface AgentModelRole {
   /** Stable id within the agent; steps and cost lines name it. */

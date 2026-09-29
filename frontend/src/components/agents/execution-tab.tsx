@@ -183,7 +183,9 @@ function WorkflowExecutionTab({ agentId }: { agentId: string }) {
   // Cheap enough to derive on every render; memoising it on a joined key
   // string only hid the dependency from the linter.
   const selected = strategies.find((s) => s.key === selectedStrategy)
-  const wanted = selected ? selected.roleSlots : strategies.flatMap((s) => s.roleSlots)
+  // Optional slots are offered too (the panel's judge), after the required ones.
+  const slotsOf = (s: StrategyView) => [...s.roleSlots, ...(s.optionalRoleSlots ?? [])]
+  const wanted = selected ? slotsOf(selected) : strategies.flatMap(slotsOf)
   const neededSlots = [...new Set(wanted)].filter((slot) => !roleKeys.includes(slot))
 
   return (

@@ -13,6 +13,7 @@ import { NextStepsBar } from '@/components/agents/builder/next-steps-bar'
 import { TestPanel } from '@/components/agents/builder/test-panel'
 import { CanvasArea } from '@/components/agents/builder/canvas-area'
 import { AutonomousConfig, type AutonomousConfigProps } from '@/components/agents/builder/autonomous-config'
+import { RunLimitsSection, useOrgRunLimits } from '@/components/agents/builder/run-limits-section'
 import { modelsFromAgent, modelsPayload, modelsProblems, newAgentModels } from '@/components/agents/builder/agent-models'
 import { workflowIssues, type BuilderIssue, type GraphNode, type GraphEdge } from '@/components/agents/builder/validate-graph'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
@@ -65,6 +66,8 @@ export function AgentBuilderPage() {
   const [showTestPanel, setShowTestPanel] = useState(false)
   const [agentVisibility, setAgentVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [showVisibility, setShowVisibility] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const orgRunLimits = useOrgRunLimits()
 
   // ── Pipeline state (nodes, edges, undo/redo, CRUD) ─────────────────────
   const pipeline = useAgentPipeline()
@@ -345,6 +348,8 @@ export function AgentBuilderPage() {
 
       if (agentMode === 'workflow') {
         payload.pipeline = buildPipeline()
+        // Run limits and the rest of agentConfig, saved back whole.
+        payload.agentConfig = agentConfig
       } else {
         // Autonomous mode -- save instructions + soul + heartbeat + tools + models
         payload.personality = agentPersonality || undefined
@@ -467,6 +472,8 @@ export function AgentBuilderPage() {
         visibility={agentVisibility.visibility}
         visibilityOpen={showVisibility}
         onVisibilityClick={() => setShowVisibility((open) => !open)}
+        settingsOpen={showSettings}
+        onSettingsClick={agentMode === 'workflow' ? () => setShowSettings((open) => !open) : undefined}
       />
 
       {/*
@@ -497,6 +504,29 @@ export function AgentBuilderPage() {
             onChange={setAgentVisibility}
             noun="this agent"
           />
+        </div>
+      )}
+      {/*
+        A workflow agent's own settings: the same Run limits card the
+        autonomous page shows in its body (summary first, fields under
+        Advanced), inline under the toolbar so the canvas stays in view.
+        Workflow runs honour these limits; without this they could only be
+        set through the API.
+      */}
+      {agentMode === 'workflow' && showSettings && (
+        <div
+          id="agent-settings-panel"
+          role="region"
+          aria-label="Agent settings"
+          className="px-4 py-3 border-b bg-background shrink-0 max-h-[60vh] overflow-y-auto"
+        >
+          <div className="max-w-4xl mx-auto">
+            <RunLimitsSection
+              value={agentConfig.runLimits ?? {}}
+              onChange={(runLimits) => setAgentConfig({ ...agentConfig, runLimits })}
+              inherited={orgRunLimits}
+            />
+          </div>
         </div>
       )}
       {/* Main content: Workflow pipeline or Autonomous config */}

@@ -16,6 +16,8 @@ import {
   newRole,
   nextRoleKey,
   roleIsUsed,
+  PURPOSE_LABELS,
+  ROLE_PURPOSES,
 } from '../agent-models'
 
 const main: AgentModelRole = { key: 'main', name: 'Main', purpose: 'main', kind: 'model', providerId: 'p1', model: 'big' }
@@ -145,8 +147,23 @@ describe('roles', () => {
   it('says a role is unused only when the strategy does not read its purpose; teammates always are', () => {
     expect(roleIsUsed('single', { purpose: 'drafter' })).toBe(false)
     expect(roleIsUsed('cascade', { purpose: 'drafter' })).toBe(true)
-    expect(roleIsUsed('panel', { purpose: 'checker' })).toBe(true)
+    // The panel is judged by its judge role (or the main role without one), not a checker.
+    expect(roleIsUsed('panel', { purpose: 'judge' })).toBe(true)
+    expect(roleIsUsed('panel', { purpose: 'checker' })).toBe(false)
+    expect(roleIsUsed('cascade', { purpose: 'judge' })).toBe(false)
     expect(roleIsUsed('single', { purpose: 'teammate' })).toBe(true)
+  })
+
+  it('offers a judge, called plainly Judge, that is optional for the panel and has to be a model', () => {
+    expect(ROLE_PURPOSES).toContain('judge')
+    expect(PURPOSE_LABELS.judge).toBe('Judge')
+    expect(newRole([main], 'judge')).toEqual({ key: 'judge', name: 'Judge', purpose: 'judge', kind: 'model' })
+    const panelists = [routed('panelist_1', 'panelist'), routed('panelist_2', 'panelist')]
+    expect(modelsProblems({ strategy: 'panel', roles: [main, ...panelists] })).toEqual([])
+    expect(modelsProblems({ strategy: 'panel', roles: [main, ...panelists, routed('judge', 'judge', 'Judge')] })).toEqual([])
+    expect(
+      modelsProblems({ strategy: 'panel', roles: [main, ...panelists, { key: 'judge', name: 'Judge', purpose: 'judge', kind: 'agent', agentId: 'a2' }] }),
+    ).toEqual(['Judge is another agent, and a judge has to be a model: only panelists and teammates can be agents'])
   })
 })
 

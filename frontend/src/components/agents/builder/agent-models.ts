@@ -29,6 +29,7 @@ export const ROLE_PURPOSES: readonly RolePurpose[] = [
   'drafter',
   'checker',
   'panelist',
+  'judge',
   'explorer',
   'summariser',
   'teammate',
@@ -58,7 +59,7 @@ export const STRATEGY_OPTIONAL: Record<AutonomousStrategyKey, RolePurpose[]> = {
   single: [],
   cascade: [],
   best_of_n: [],
-  panel: ['checker'],
+  panel: ['judge'],
   explore_extract_patch: [],
 }
 
@@ -75,7 +76,7 @@ export const STRATEGY_DESCRIPTIONS: Record<AutonomousStrategyKey, string> = {
   single: 'One model does everything.',
   cascade: 'A cheaper model answers first and a checker double-checks it. The main model steps in only when the check fails.',
   best_of_n: 'The main model writes several answers and the checker picks the best.',
-  panel: 'Other models or agents answer too, and one answer is written from all of them.',
+  panel: 'Other models or agents answer too, and a judge writes one answer from all of them. Without a judge, the main model does.',
   explore_extract_patch: 'Helpers look around first and their findings are summed up. The main model works from that, and a checker checks the answer.',
 }
 
@@ -87,6 +88,7 @@ export const PURPOSE_LABELS: Record<RolePurpose, string> = {
   drafter: 'Drafter',
   checker: 'Checker',
   panelist: 'Panelist',
+  judge: 'Judge',
   explorer: 'Explorer',
   summariser: 'Summariser',
   teammate: 'Teammate',
@@ -97,6 +99,7 @@ export const PURPOSE_DESCRIPTIONS: Record<RolePurpose, string> = {
   drafter: 'A cheaper model that answers first.',
   checker: 'Double-checks an answer, or picks the best one.',
   panelist: 'Answers the same question too.',
+  judge: 'Writes one answer from what the panel said. Without a judge, the main model does.',
   explorer: 'Looks around with the tools first.',
   summariser: 'Sums up what the explorers found.',
   teammate: 'The main model can hand it work.',

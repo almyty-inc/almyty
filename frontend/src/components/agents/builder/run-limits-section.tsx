@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { pluralized } from '@/lib/utils'
+import { useOrganizationStore } from '@/store/organization'
 
 /**
  * An agent's run limits: one plain line up front, the fields under
@@ -108,6 +109,18 @@ export function runLimitsSummary(value: RunLimitsConfig, inherited?: RunLimitsSe
   return `Stops after ${pluralized(steps, 'step')}, ${formatDollars(cost)} or ${formatDuration(time)}, whichever comes first.`
 }
 
+/**
+ * The organization's defaults, as the ceilings above an agent's own. The
+ * line counts them in, so it says what a run will really get. Shared by
+ * every page that shows this card, so they cannot disagree.
+ */
+export function useOrgRunLimits(): NonNullable<RunLimitsSectionProps['inherited']> {
+  const orgDefaults = useOrganizationStore((s) => s.currentOrganization?.agentDefaults)
+  return {
+    maxSteps: orgDefaults?.maxStepsPerRun || undefined,
+    maxCostCents: orgDefaults?.maxCostPerRun ? Math.floor(orgDefaults.maxCostPerRun * 100) : undefined,
+  }
+}
 export function RunLimitsSection({ value, onChange, inherited }: RunLimitsSectionProps) {
   const set = <K extends keyof RunLimitsConfig>(key: K, next: RunLimitsConfig[K]) =>
     onChange({ ...value, [key]: next })

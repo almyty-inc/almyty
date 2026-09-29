@@ -54,7 +54,7 @@ const FLOWS: Record<AutonomousStrategyKey, Box[]> = {
   panel: [
     { purpose: 'main', text: 'Main model answers' },
     { purpose: 'panelist', text: 'Others answer too' },
-    { purpose: 'checker', text: 'One answer is written from all' },
+    { purpose: 'judge', text: 'Judge writes one answer from all' },
   ],
   explore_extract_patch: [
     { purpose: 'explorer', text: 'Helpers look around' },

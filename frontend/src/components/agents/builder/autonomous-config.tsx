@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { VerifierPanelList } from '@/components/agents/verifier-panel'
-import { RunLimitsSection, type RunLimitsConfig } from '@/components/agents/builder/run-limits-section'
+import { RunLimitsSection, useOrgRunLimits, type RunLimitsConfig } from '@/components/agents/builder/run-limits-section'
 import { ModelsSection } from '@/components/agents/builder/models-section'
 import { RunnerLabelsField } from '@/components/agents/builder/runner-labels-field'
 import { StrategyChoice } from '@/components/agents/builder/strategy-choice'
@@ -24,7 +24,6 @@ import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import type { AgentModels } from '@/types/agent-models'
 import type { Agent } from '@/types'
-import { useOrganizationStore } from '@/store/organization'
 import { pluralized } from '@/lib/utils'
 
 export interface AutonomousConfigProps {
@@ -70,11 +69,7 @@ export function AutonomousConfig({
 }: AutonomousConfigProps) {
   // The organization's defaults sit above this agent's limits; the run
   // limits line counts them in, so it says what a run will really get.
-  const orgDefaults = useOrganizationStore((s) => s.currentOrganization?.agentDefaults)
-  const orgRunLimits = {
-    maxSteps: orgDefaults?.maxStepsPerRun || undefined,
-    maxCostCents: orgDefaults?.maxCostPerRun ? Math.floor(orgDefaults.maxCostPerRun * 100) : undefined,
-  }
+  const orgRunLimits = useOrgRunLimits()
   const [toolSearch, setToolSearch] = useState('')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 

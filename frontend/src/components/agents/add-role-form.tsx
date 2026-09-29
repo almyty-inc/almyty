@@ -15,7 +15,7 @@ import { useLeaveGuard } from '@/hooks/use-leave-guard'
  * the key is offered from the slots the built-in shapes actually ask for
  * rather than left as free text nobody can guess right.
  */
-const SUGGESTED = ['principal', 'drafter', 'verifier', 'explorer', 'summariser', 'orchestrator', 'panelist_one', 'panelist_two', 'panelist_three']
+const SUGGESTED = ['principal', 'drafter', 'verifier', 'explorer', 'summariser', 'orchestrator', 'panelist_one', 'panelist_two', 'panelist_three', 'judge']
 
 export interface AddRoleFormProps {
   /** Keys already taken on this agent, so a duplicate is refused before the request. */

@@ -27,6 +27,7 @@ vi.mock('@/lib/api', () => ({
 const strategies = [
   { key: 'single', displayName: 'Single call', description: 'One call.', roleSlots: ['principal'], steps: 1, costBand: 'low' as const, latencyBand: 'low' as const, builtIn: true },
   { key: 'cascade', displayName: 'Cascade', description: 'Cheap first.', roleSlots: ['drafter', 'verifier', 'principal'], steps: 3, costBand: 'medium' as const, latencyBand: 'medium' as const, builtIn: true },
+  { key: 'panel', displayName: 'Panel', description: 'Three answer, a judge agrees.', roleSlots: ['panelist_one', 'panelist_two', 'panelist_three'], optionalRoleSlots: ['judge'], steps: 5, costBand: 'medium' as const, latencyBand: 'medium' as const, builtIn: true },
 ]
 
 // A row as GET actually returns it, entity columns and all. The thin
@@ -218,6 +219,35 @@ describe('the Execution tab saves what you choose', () => {
 
     fireEvent.click(await screen.findByTestId('strategy-cascade'))
     expect(await screen.findByTestId('execution-error')).toHaveTextContent('No strategy named')
+  })
+
+  it('shows the panel judge as an optional role, and offers it when adding one', async () => {
+    wire({ roles: [role('panelist_one'), role('panelist_two'), role('panelist_three')], execution: { strategyKey: 'panel' } })
+    render(<ExecutionTab agentId="a1" />)
+
+    const card = await screen.findByTestId('strategy-panel')
+    expect(within(card).getByTestId('optional-slot-judge')).toHaveTextContent('judge (optional)')
+    // Optional: its absence is not a reason to call the shape unusable.
+    expect(within(card).queryByTestId('strategy-unfillable-panel')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('add-role'))
+    const form = await screen.findByTestId('add-role-form')
+    fireEvent.click(within(form).getByTestId('suggest-judge'))
+    fireEvent.click(within(form).getByRole('button', { name: 'Add role' }))
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/agents/a1/roles', expect.objectContaining({ key: 'judge' })),
+    )
+  })
+
+  it('says in words why a panel nothing can judge was refused', async () => {
+    wire({ roles: [role('panelist_one'), role('panelist_two'), role('panelist_three')] })
+    const message =
+      'Panel needs a judge to write one answer from what the panelists said. Add a judge role (a principal role also works), or set a default routing policy for your organization.'
+    ;(api.put as any).mockRejectedValue({ response: { data: { error: { message } } } })
+    render(<ExecutionTab agentId="a1" />)
+
+    fireEvent.click(await screen.findByTestId('strategy-panel'))
+    expect(await screen.findByTestId('execution-error')).toHaveTextContent(message)
   })
 
   it('shows what to do when a role cannot be filled, not a generic failure', async () => {

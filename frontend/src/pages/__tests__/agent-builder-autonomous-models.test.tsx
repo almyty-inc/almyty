@@ -228,6 +228,32 @@ describe('the autonomous page', () => {
     expect((vi.mocked(agentsApi.update).mock.calls[0][1] as any).models).toMatchObject({ strategy: 'best_of_n', candidates: 4 })
   })
 
+  it('adds a Judge to a panel with the same role picker, and saves it', async () => {
+    const user = userEvent.setup()
+    const panelist = (n: number) => ({ key: `panelist_${n}`, name: `Panelist ${n}`, purpose: 'panelist', kind: 'model', providerId: 'prov-openai', model: 'gpt-4o-mini' })
+    openAgent({ strategy: 'panel', roles: [MAIN, panelist(1), panelist(2)] })
+
+    // A panel without a judge is complete: the main model judges.
+    await waitFor(() => expect(saveButton()).toBeEnabled())
+    expect(screen.queryByTestId('missing-slots')).not.toBeInTheDocument()
+
+    await user.click(await screen.findByRole('button', { name: 'Add role' }))
+    await user.click(within(screen.getByTestId('add-role-choices')).getByRole('button', { name: /^Judge/ }))
+    const judge = screen.getByTestId('role-judge')
+    expect(within(judge).getByLabelText('Role 4 name')).toHaveValue('Judge')
+    expect(within(judge).queryByTestId('role-judge-unused')).not.toBeInTheDocument()
+    expect(screen.getByTestId('role-judge-purpose-hint')).toHaveTextContent('Without a judge, the main model does.')
+    // A judge is a model, never another agent.
+    expect(within(judge).getByRole('radio', { name: 'Another agent' })).toBeDisabled()
+    await pickModel(judge, /gpt-4o-mini/)
+
+    await waitFor(() => expect(saveButton()).toBeEnabled())
+    await user.click(saveButton())
+    await waitFor(() => expect(agentsApi.update).toHaveBeenCalled())
+    const roles = (vi.mocked(agentsApi.update).mock.calls[0][1] as any).models.roles
+    expect(roles.find((r: any) => r.purpose === 'judge')).toMatchObject({ key: 'judge', name: 'Judge', kind: 'model', providerId: 'prov-openai', model: 'gpt-4o-mini' })
+  })
+
   it('lets only panelists and teammates be another agent', async () => {
     const user = userEvent.setup()
     openAgent({ strategy: 'single', roles: [MAIN] })
