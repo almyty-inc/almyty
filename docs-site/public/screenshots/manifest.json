@@ -323,7 +323,7 @@
       "path": "screenshots/apps-detail.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Legacy image predates the UI refresh, and the app page now shows what the app spent today and this month against its spend limits (or a notice that it reached one). Tracked for #675, not verified current.",
       "sha256": "95b14e9928eddd271f9fa47d3960cee055507ddc689a440c36d66904b4bc88a2"
     },
     {
@@ -377,7 +377,7 @@
       "path": "screenshots/apps-settings.png",
       "capturedAt": "2026-09-08T07:59:28.902Z",
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Settings > Advanced now has Spend limit per day and per month for the whole app (defaults 5 and 50), an App limit part in the Advanced summary line, and reworded visitor-data switches. Recapture on staging with Advanced open.",
       "sha256": "61aeb5b71e0b969ab6367e30ef369f0fb38cfa9424488dfaef0bcf7087ba74ba"
     },
     {
@@ -1219,7 +1219,7 @@
       "path": "screenshots/widget-builder.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Shows the old widget builder on the gateway page. The widget is now the On your website place on an app: the embed line, position and launcher icon with a live preview (its look comes from the app), and allowed sites. Recapture from /apps/<app>/distributions/widget once published.",
+      "reason": "Shows the old widget builder on the gateway page. The widget is now the On your website place on an app: the embed line, position and launcher icon with a live preview (its look comes from the app), and allowed sites; the widget also shows Download my chat and Delete my chat when the app lets visitors. Recapture from /apps/<app>/distributions/widget once published.",
       "sha256": "3e007ef828b2789531a98aa22d9ba9f573f0fbc419ec4fea57d99accf938a991"
     }
   ]

@@ -46,11 +46,11 @@ See **[Hosted Chat App](/hosted-chat)** for addressing, custom domains, and self
 <script src="https://<api-host>/gateways/<gateway-id>/widget.js" async></script>
 ```
 
-The widget takes its colour, name, greeting, theme and AI disclosure from the app's settings, so it looks the same as the web app. On its page you choose where it sits (bottom right or left) and its launcher icon, with a live preview of the real widget, and list the sites allowed to show it. The widget has no sign-in: anyone on an allowed site can use it, within the app's cost and rate limits, so it only goes on an app anyone can use.
+The widget takes its colour, name, greeting, theme and AI disclosure from the app's settings, so it looks the same as the web app. On its page you choose where it sits (bottom right or left) and its launcher icon, with a live preview of the real widget, and list the sites allowed to show it. The widget has no sign-in: anyone on an allowed site can use it, within the app's cost and rate limits (each conversation is a visitor), so it only goes on an app anyone can use. When the app lets visitors, the widget offers *Download my chat* and *Delete my chat*.
 
 ## Other agents (A2A)
 
-**Other agents (A2A)** lets agents elsewhere call the app's agent over Google's Agent-to-Agent protocol. Publish it, and its page shows the Agent Card URL and the JSON-RPC endpoint, `https://<api-host>/<org>/apps/<app>/a2a`. Under **How other agents sign in**, make a key for each caller; each call sends it in the `x-api-key` header. The card and the endpoint answer only while the place is published and its agent is active. See **[A2A](/gateways/a2a)** for the methods and the card.
+**Other agents (A2A)** lets agents elsewhere call the app's agent over Google's Agent-to-Agent protocol. Publish it, and its page shows the Agent Card URL and the JSON-RPC endpoint, `https://<api-host>/<org>/apps/<app>/a2a`. Under **How other agents sign in**, make a key for each caller; each call sends it in the `x-api-key` header. Each key has its own share of the app's per-visitor limit, and each task runs under the app's per-run and spend limits. The card and the endpoint answer only while the place is published and its agent is active. See **[A2A](/gateways/a2a)** for the methods and the card.
 
 ## What publishing refuses
 
@@ -68,6 +68,10 @@ While you are still editing, the app tells you the unmet requirements continuous
 - **Rate limits.** One user must not be able to exhaust the product for everyone else. Per-user and per-IP ceilings are separate, because a hosted-chat visitor has no account.
 - **No local access on a public artifact.** A downloadable app that touches the machine it lands on cannot also be open to anyone.
 
-An unset auth mode reads as open, not as unset; the permissive reading of missing configuration is the one that gets someone billed. These limits live on the **Settings** tab, next to branding and who may use the product. A limit left empty is stored as unset, not as zero.
+An unset auth mode reads as open, not as unset; the permissive reading of missing configuration is the one that gets someone billed. These limits live on the **Settings** tab, under **Advanced**, next to branding and who may use the product. A per-run or rate limit left empty is stored as unset, not as zero.
 
-![The Settings tab with visitor privacy controls, a cost ceiling, and per-user / per-IP rate limits](/screenshots/apps-settings.png)
+## What the whole app may spend
+
+On top of the per-run and per-visitor limits, an app has a **spend limit per day** and **per month** for everything it answers, across all of its places and visitors. An app open to anyone starts at 5 a day and 50 a month (UTC days and months); change or clear them on **Settings**, under **Advanced**, where the summary line shows what is set. When a limit is reached, every place tells visitors **This app has reached its limit for today** (or *for this month*) instead of answering, the app's page says so with what it spent, and owners and admins get a notification. See [Protect model spend](/hosted-chat#protect-model-spend) for how each place counts visitors.
+
+![The Settings tab with visitor privacy controls, spend limits, and per-user / per-IP rate limits](/screenshots/apps-settings.png)
