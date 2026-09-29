@@ -26,6 +26,10 @@ export interface SamlResponseOptions {
   /** Minutes the assertion stays valid from `now`. */
   validForMinutes?: number;
   now?: number;
+  /** SubjectConfirmationData Recipient, when it should differ from acsUrl (null: omitted). */
+  recipient?: string | null;
+  /** Response Destination, when it should differ from acsUrl (null: omitted). */
+  destination?: string | null;
   /** Sign with a key the SP does not trust. */
   foreignKey?: boolean;
 }
@@ -69,6 +73,10 @@ export class FakeSamlIdp {
     const assertionId = opts.assertionId ?? `_a${randomBytes(12).toString('hex')}`;
     const responseIrt = opts.inResponseTo ? ` InResponseTo="${esc(opts.inResponseTo)}"` : '';
     const subjectIrtValue = opts.subjectInResponseTo === undefined ? opts.inResponseTo : opts.subjectInResponseTo;
+    const recipientValue = opts.recipient === undefined ? opts.acsUrl : opts.recipient;
+    const recipient = recipientValue === null ? '' : ` Recipient="${esc(recipientValue)}"`;
+    const destinationValue = opts.destination === undefined ? opts.acsUrl : opts.destination;
+    const destination = destinationValue === null ? '' : ` Destination="${esc(destinationValue)}"`;
     const subjectIrt = subjectIrtValue ? ` InResponseTo="${esc(subjectIrtValue)}"` : '';
 
     const assertion =
@@ -77,7 +85,7 @@ export class FakeSamlIdp {
       `<saml:Subject>` +
       `<saml:NameID Format="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress">${esc(nameId)}</saml:NameID>` +
       `<saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">` +
-      `<saml:SubjectConfirmationData${subjectIrt} NotOnOrAfter="${iso(until)}" Recipient="${esc(opts.acsUrl)}"/>` +
+      `<saml:SubjectConfirmationData${subjectIrt} NotOnOrAfter="${iso(until)}"${recipient}/>` +
       `</saml:SubjectConfirmation>` +
       `</saml:Subject>` +
       `<saml:Conditions NotBefore="${iso(now - 60_000)}" NotOnOrAfter="${iso(until)}">` +
@@ -108,7 +116,7 @@ export class FakeSamlIdp {
 
     const response =
       `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ` +
-      `ID="_r${randomBytes(12).toString('hex')}" Version="2.0" IssueInstant="${iso(now)}" Destination="${esc(opts.acsUrl)}"${responseIrt}>` +
+      `ID="_r${randomBytes(12).toString('hex')}" Version="2.0" IssueInstant="${iso(now)}"${destination}${responseIrt}>` +
       `<saml:Issuer>${esc(this.issuer)}</saml:Issuer>` +
       `<samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>` +
       signedAssertion +

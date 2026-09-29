@@ -118,6 +118,8 @@ describe('SSO OIDC — real authorization-code flow vs oauth2-mock-server', () =
       new SamlReplayCache(new FakeRedis()),
       undefined,
       store,
+      // The IdP's addresses are on a domain the org has verified.
+      { coversEmail: async () => true } as any,
     );
   });
 

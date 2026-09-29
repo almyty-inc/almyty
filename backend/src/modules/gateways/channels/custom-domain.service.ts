@@ -21,10 +21,11 @@ import {
   CUSTOM_DOMAIN_REFUSALS,
   CustomDomainConfig,
   RECHECK_FAILURES_BEFORE_DEMOTION,
-  VERIFICATION_RECORD_PREFIX,
+  TXT_RESOLVER,
+  TxtResolver,
+  checkVerificationTxt,
   customDomainError,
   isReservedDomain,
-  isVerified,
   newCustomDomain,
   verificationRecord,
 } from './custom-domain';
@@ -50,8 +51,8 @@ import {
  */
 
 /** Looks up TXT records; injectable so specs do not touch real DNS. */
-export const TXT_RESOLVER = Symbol('TXT_RESOLVER');
-export type TxtResolver = (name: string) => Promise<string[][]>;
+export { TXT_RESOLVER } from './custom-domain';
+export type { TxtResolver } from './custom-domain';
 
 /** Where the claim that currently serves a hostname sits. */
 export interface ActiveHolder {
@@ -524,26 +525,11 @@ export class CustomDomainService implements OnModuleInit, OnModuleDestroy {
     return new ConflictException({ code: 'DOMAIN_CHANGED', message: 'The domain changed while it was being checked. Check again.' });
   }
 
-  /**
-   * Look for the tenant's verification TXT record. "Not published yet" is
-   * the expected state for most of a domain's life, so it is an outcome,
-   * not an error.
-   */
+  /** Look for the tenant's verification TXT record (checkVerificationTxt). */
   async checkTxt(
     domain: Pick<CustomDomainConfig, 'hostname' | 'verificationToken'>,
   ): Promise<{ verified: boolean; error: string | null; transient?: boolean }> {
-    const name = `${VERIFICATION_RECORD_PREFIX}.${domain.hostname}`;
-    try {
-      // A long TXT value arrives split into chunks; join each record.
-      const records = (await this.resolveTxt(name)).map((chunks) => chunks.join(''));
-      if (isVerified(records, domain)) return { verified: true, error: null };
-      return { verified: false, error: 'The TXT record was found but did not match. Check you copied the whole value.' };
-    } catch (err: any) {
-      if (err?.code === 'ENOTFOUND' || err?.code === 'ENODATA') {
-        return { verified: false, error: 'No TXT record found at that name yet.' };
-      }
-      return { verified: false, error: 'Could not read DNS right now. Try again in a minute.', transient: true };
-    }
+    return checkVerificationTxt(this.resolveTxt, domain);
   }
 
   private async hostedChatSurface(gatewayId: string, organizationId: string, userId: string): Promise<Gateway> {

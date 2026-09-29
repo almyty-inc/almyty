@@ -59,6 +59,13 @@ export class OAuthAuthorizationCode {
   @Column({ default: false })
   isUsed: boolean;
 
+  /**
+   * Set when a second redemption of this code was attempted. Everything
+   * issued from the code is then revoked, including a pair the first
+   * redemption mints after the second one lost (McpOAuthTokensHelper).
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  reuseDetectedAt: Date | null;
   @CreateDateColumn()
   createdAt: Date;
 

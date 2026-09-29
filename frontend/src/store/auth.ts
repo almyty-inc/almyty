@@ -20,7 +20,6 @@ function identifyForAnalytics(user: User) {
 
 interface AuthState {
   user: User | null
-  token: string | null
   isAuthenticated: boolean
   isLoading: boolean
   hasHydrated: boolean
@@ -38,7 +37,6 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-      token: null,
       isAuthenticated: false,
       isLoading: false,
       hasHydrated: false,
@@ -63,18 +61,13 @@ export const useAuthStore = create<AuthState>()(
         // in can rearm it, so it cannot spin.
         armOrganizationContextRecovery()
         try {
-          const response = await authApi.login({ email, password })
-          const { accessToken } = response
+          await authApi.login({ email, password })
 
-          // Token is set as an httpOnly cookie by the backend.
-          // We do NOT copy it into localStorage — any XSS (stored
-          // XSS from a user-provided string rendered somewhere, a
-          // compromised npm package, a malicious browser extension)
-          // can read localStorage. The whole point of the httpOnly
-          // cookie is that JavaScript can't touch the token; writing
-          // it back into localStorage defeats the protection. Keep
-          // the token in the Zustand in-memory state only — that
-          // memory is gone on page reload, and re-auth happens via
+          // The session is the httpOnly cookie the backend set, and the
+          // response body carries no token: JavaScript on this page never
+          // holds one, so there is nothing to copy into localStorage or
+          // into this store for an XSS, a compromised npm package or a
+          // browser extension to read. Re-auth after a reload happens via
           // the still-valid cookie through `checkAuth`.
 
           // Fetch user profile to populate organization data
@@ -93,7 +86,6 @@ export const useAuthStore = create<AuthState>()(
 
           set({
             user,
-            token: accessToken,
             isAuthenticated: true,
             isLoading: false,
           })
@@ -111,11 +103,10 @@ export const useAuthStore = create<AuthState>()(
         clearOrganizationSelection()
         armOrganizationContextRecovery()
         try {
-          const response = await authApi.register({ email, password, firstName, lastName, organizationName, captchaToken })
-          const { accessToken } = response
+          await authApi.register({ email, password, firstName, lastName, organizationName, captchaToken })
 
-          // httpOnly cookie is set by the backend; no localStorage copy
-          // (see the login() comment for the threat model).
+          // The session is the httpOnly cookie the backend set; the body
+          // carries no token (see the login() comment).
 
           // Fetch user profile to populate organization data
           const profileResponse = await authApi.getProfile()
@@ -132,7 +123,6 @@ export const useAuthStore = create<AuthState>()(
 
           set({
             user,
-            token: accessToken,
             isAuthenticated: true,
             isLoading: false,
           })
@@ -167,7 +157,6 @@ export const useAuthStore = create<AuthState>()(
 
         set({
           user: null,
-          token: null,
           isAuthenticated: false,
         })
 
@@ -226,7 +215,6 @@ export const useAuthStore = create<AuthState>()(
           localStorage.removeItem('user')
           set({
             user: null,
-            token: null,
             isAuthenticated: false,
             authChecked: true,
           })
@@ -249,7 +237,6 @@ export const useAuthStore = create<AuthState>()(
 
         set({
           user,
-          token: null,
           isAuthenticated: true,
           authChecked: true,
         })
@@ -257,16 +244,24 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      // Do NOT persist `token` to localStorage — the Zustand
-      // persist middleware would otherwise write it to
-      // `auth-storage.state.token`, defeating the whole point of
-      // the httpOnly cookie. Persist only the minimal display
-      // state (user profile + auth flag) so the UI can render
-      // without a round trip on page refresh.
+      // The store holds no token at all: the session is the httpOnly
+      // cookie. Persist only the minimal display state (user profile +
+      // auth flag) so the UI can render without a round trip on page
+      // refresh, and read back only those two keys, so a stale blob
+      // carrying anything else (an old build's `token`) never lands in
+      // memory.
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<AuthState>
+        return {
+          ...current,
+          user: saved.user ?? current.user,
+          isAuthenticated: saved.isAuthenticated ?? current.isAuthenticated,
+        }
+      },
       onRehydrateStorage: () => (state) => {
         state?.hasHydrated && (state.hasHydrated = true)
         if (!state) return
