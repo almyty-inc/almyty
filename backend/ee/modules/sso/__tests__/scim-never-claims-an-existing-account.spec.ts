@@ -46,6 +46,11 @@ describe('SCIM does not claim accounts it did not create', () => {
       { findOne: jest.fn(async () => null) } as any,
       { findOne: jest.fn(async () => null), create: (p: any) => p, save: jest.fn(async (r: any) => r) } as any,
       { get: jest.fn(async () => null) } as any,
+      undefined,
+      undefined,
+      // Every address counts as on a verified domain: what is under test
+      // here is claiming an existing account, which no domain permits.
+      { coversEmail: async () => true } as any,
     );
     return { service, userRepo, membershipRepo };
   }

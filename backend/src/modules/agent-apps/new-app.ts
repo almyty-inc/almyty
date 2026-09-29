@@ -58,9 +58,9 @@ export function appSlugFromName(name: string, taken: (slug: string) => boolean):
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(/^-+|(?<!-)-+$/g, '')
     .slice(0, 50)
-    .replace(/-+$/, '');
+    .replace(/(?<!-)-+$/, '');
   if (appSlugError(base)) base = base ? `${base}-app` : 'app';
   if (appSlugError(base)) base = 'agent-app';
   if (!taken(base)) return base;

@@ -11,6 +11,7 @@ import {
   Query,
   Req,
   Res,
+  Optional,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -26,6 +27,7 @@ import { hostedChatConfigFrom, slugFromHost } from './hosted-chat.config';
 import { trustedClientIp } from '../../../common/security/client-ip';
 import { withholdsCandidateAnswers } from '../../agents/final-answer';
 import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
+import { AppPlacePolicyService, withPlace } from '../app-place-policy.service';
 
 /**
  * The public API behind {slug}.almyty.app.
@@ -47,6 +49,11 @@ export class HostedChatController {
     private readonly hostedChat: HostedChatService,
     private readonly gatewayRateLimit: GatewayRateLimitService,
     private readonly agentRuntimeService: AgentRuntimeService,
+    // The app this chat is a place of: its per-run cost cap, its spend cap
+    // and whether visitor conversations may reach shared memory. Optional
+    // only so positional unit specs construct the controller; Nest always
+    // injects it (app-place-policy.guard.spec.ts).
+    @Optional() private readonly places?: AppPlacePolicyService,
   ) {}
 
   /**
@@ -320,6 +327,11 @@ export class HostedChatController {
       );
     }
 
+    // The app's own allowance, across every place and every visitor. A
+    // visitor inside their share is still refused once the app has spent
+    // its day (or month), with a sentence rather than a number.
+    const place = this.places ? await this.places.admit(gateway) : null;
+
     const conversation = body?.conversationId
       ? await this.hostedChat.findConversation(endUser, body.conversationId)
       : await this.hostedChat.startConversation(gateway, endUser, message);
@@ -334,8 +346,9 @@ export class HostedChatController {
       null,
       message,
       // Still traceable back to whoever actually sent it, in the column
-      // that means a visitor.
-      {
+      // that means a visitor. The place adds the app's per-run cost cap and
+      // stamps the run with its app for the spend cap.
+      withPlace(place, {
         conversationId: conversation.id,
         endUserId: endUser.id,
         metadata: {
@@ -350,8 +363,7 @@ export class HostedChatController {
         // Runs in the gateway's scope: the surface serves its agent only
         // while the gateway's own visibility covers it, on every message.
         principal: gatewayPrincipal(gateway),
-      },
-
+      }),
     );
 
     return {

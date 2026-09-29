@@ -100,7 +100,7 @@ export class AgentAnthropicCompatController {
       // client can branch on it.
       const rateLimit = await this.rateLimiter.track(apiKey.id);
       this.rateLimiter.setHeaders(res, rateLimit);
-      if (rateLimit.remaining <= 0) {
+      if (rateLimit.limited) {
         return res
           .status(429)
           .json(

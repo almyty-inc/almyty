@@ -41,6 +41,14 @@ describe('evaluateConditions', () => {
     ).toBe(false);
   });
 
+  it('regex: refuses a nested quantifier instead of running it on request data', () => {
+    const started = Date.now();
+    expect(
+      evaluateConditions([{ type: 'regex', field: 'body', value: '(a+)+$' }], ctx({ body: 'a'.repeat(40) + 'b' })),
+    ).toBe(false);
+    expect(Date.now() - started).toBeLessThan(250);
+  });
+
   it('AND by default, OR when any condition declares operator:or', () => {
     const data = ctx({ role: 'admin', plan: 'free' });
     const and: PluginCondition[] = [

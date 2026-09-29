@@ -5,6 +5,7 @@ import {
   PluginResult,
 } from '../types/plugin.types';
 import { compileSafeRegex, boundRegexInput } from '../../../common/security/regex-safety';
+import { matchEmailAddresses } from './pii-filter.matchers';
 
 /**
  * Categorised PII patterns. Each entry is matched against string values only
@@ -14,7 +15,8 @@ import { compileSafeRegex, boundRegexInput } from '../../../common/security/rege
  */
 interface PatternEntry {
   setting: keyof DetectSettings;
-  pattern: RegExp;
+  /** A regex, or a linear matcher returning what `text.match(regex)` would. */
+  pattern: RegExp | ((text: string) => string[] | null);
   name: string;
 }
 
@@ -37,7 +39,9 @@ export class PiiFilterPlugin {
   private readonly piiPatterns: PatternEntry[] = [
     { setting: 'detectCreditCards',  name: 'credit_card', pattern: /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g },
     { setting: 'detectSSN',          name: 'ssn',         pattern: /\b\d{3}-\d{2}-\d{4}\b/g },
-    { setting: 'detectEmails',       name: 'email',       pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g },
+    // Linear matcher for the regex /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
+    // which took seconds on 100 KB of `a.a.a.` (pii-filter.matchers.ts).
+    { setting: 'detectEmails',       name: 'email',       pattern: matchEmailAddresses },
     { setting: 'detectPhoneNumbers', name: 'phone',       pattern: /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g },
     { setting: 'detectIPAddresses',  name: 'ip',          pattern: /\b(?:\d{1,3}\.){3}\d{1,3}\b/g },
   ];
@@ -273,7 +277,7 @@ export class PiiFilterPlugin {
     for (const entry of this.piiPatterns) {
       if (settings && settings[entry.setting] === false) continue;
 
-      const matches = filteredText.match(entry.pattern);
+      const matches = entry.pattern instanceof RegExp ? filteredText.match(entry.pattern) : entry.pattern(filteredText);
       if (!matches) continue;
 
       for (const match of matches) {

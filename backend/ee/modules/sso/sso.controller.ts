@@ -8,21 +8,39 @@ import {
   Req,
   Res,
   Header,
+  ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 
 import { Public } from '../../../src/common/decorators/public.decorator';
 import { AuthService } from '../../../src/modules/auth/auth.service';
-import { SsoService } from './sso.service';
+import { SsoService, SsoUserProfile } from './sso.service';
 import { SsoConfigService } from './sso-config.service';
+import { ParkedSamlSignIn, PendingSamlSignIn, SamlSignInStore } from './saml-sign-in.store';
 import {
   publicBaseUrl,
   ssoSuccessRedirect,
   SSO_ACCESS_TOKEN_COOKIE_OPTIONS,
+  SSO_SAML_STATE_COOKIE,
   SSO_STATE_COOKIE,
   SSO_STATE_COOKIE_OPTIONS,
 } from './sso.util';
+
+interface PendingDashboardSignIn extends PendingSamlSignIn {
+  organizationId: string;
+}
+
+interface ParkedDashboardSignIn extends ParkedSamlSignIn {
+  organizationId: string;
+  profile: SsoUserProfile;
+}
+
+/** Keeps dashboard sign-ins apart from hosted-chat ones in SamlSignInStore. */
+const SCOPE = 'sso';
+
+const SIGN_IN_EXPIRED = 'Sign-in session expired or did not match. Start again.';
 
 /**
  * SP-initiated SAML + OIDC login (T4.1). These endpoints are `@Public` (the
@@ -32,6 +50,15 @@ import {
  * On a verified assertion we issue the app's normal JWT httpOnly cookie via
  * AuthService — the exact same cookie password login sets — and redirect to the
  * frontend. No new session mechanism is introduced.
+ *
+ * SAML is SP-initiated only and goes through the relay-state hand-off in
+ * SamlSignInStore (shared with hosted-chat visitors): login stores the
+ * AuthnRequest ID under a relay state that the browser also holds in a
+ * cookie; the assertion consumer accepts only a response to that request,
+ * addressed to this ACS, and parks the identity; the session is issued on
+ * the follow-up GET, in the browser holding the cookie. An IdP-initiated
+ * (unsolicited) response, or one captured and posted into someone else's
+ * browser, signs nobody in.
  */
 @ApiTags('SSO')
 @Controller('sso')
@@ -47,6 +74,7 @@ export class SsoController {
     private readonly ssoService: SsoService,
     private readonly authService: AuthService,
     private readonly configService: SsoConfigService,
+    private readonly signIns: SamlSignInStore,
   ) {}
 
   /**
@@ -69,23 +97,59 @@ export class SsoController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const url = await this.ssoService.getSamlLoginUrl(orgId, publicBaseUrl(req));
+    const acsUrl = SsoService.samlCallbackUrl(publicBaseUrl(req), orgId);
+    const relayState = SamlSignInStore.newRelayState();
+    const { url, requestId } = await this.ssoService.startSamlRequest(orgId, acsUrl, relayState);
+    const pending: PendingDashboardSignIn = { organizationId: orgId, requestId, acsUrl };
+    if (!(await this.signIns.remember(SCOPE, relayState, pending))) {
+      throw new ServiceUnavailableException('Single sign-on is temporarily unavailable. Try again shortly.');
+    }
+    res.cookie(SSO_SAML_STATE_COOKIE, relayState, SSO_STATE_COOKIE_OPTIONS);
     return res.redirect(url);
   }
 
   @Post(':orgId/saml/callback')
-  @ApiOperation({ summary: 'SAML assertion consumer service (ACS)' })
+  @ApiOperation({ summary: 'SAML assertion consumer service (ACS); accepts only responses to our own requests' })
   async samlCallback(
     @Param('orgId') orgId: string,
-    @Body('SAMLResponse') samlResponse: string,
+    @Body() body: { SAMLResponse?: unknown; RelayState?: unknown },
+    @Res() res: Response,
+  ) {
+    const relayState = typeof body?.RelayState === 'string' ? body.RelayState : '';
+    const samlResponse = typeof body?.SAMLResponse === 'string' ? body.SAMLResponse : '';
+    const pending = await this.signIns.takePending<PendingDashboardSignIn>(SCOPE, relayState);
+    if (!pending || pending.organizationId !== orgId || !samlResponse) {
+      throw new UnauthorizedException(SIGN_IN_EXPIRED);
+    }
+    const profile = await this.ssoService.resolveSamlLogin(orgId, samlResponse, pending.acsUrl, pending.requestId);
+
+    const handoff = await this.signIns.park<ParkedDashboardSignIn>(SCOPE, { relayState, organizationId: orgId, profile });
+    if (!handoff) {
+      throw new ServiceUnavailableException('Single sign-on is temporarily unavailable. Try again shortly.');
+    }
+    // Relative, so it resolves against wherever the ACS is served: the
+    // completion sits next to it, on the host that set the state cookie.
+    return res.redirect(303, `complete?handoff=${handoff}`);
+  }
+
+  @Get(':orgId/saml/complete')
+  @ApiOperation({ summary: 'Finish a SAML login in the browser that started it' })
+  async samlComplete(
+    @Param('orgId') orgId: string,
+    @Query('handoff') handoff: string,
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const user = await this.ssoService.handleSamlCallback(
-      orgId,
-      samlResponse,
-      publicBaseUrl(req),
+    const record = await this.signIns.takeHandoff<ParkedDashboardSignIn>(
+      SCOPE,
+      handoff,
+      (req as any).cookies?.[SSO_SAML_STATE_COOKIE],
     );
+    if (!record || record.organizationId !== orgId) {
+      throw new UnauthorizedException(SIGN_IN_EXPIRED);
+    }
+    res.clearCookie(SSO_SAML_STATE_COOKIE, { path: '/' });
+    const user = await this.ssoService.completeSsoLogin(orgId, record.profile, 'saml');
     await this.issueSession(res, user, orgId);
     return res.redirect(ssoSuccessRedirect());
   }
@@ -102,10 +166,7 @@ export class SsoController {
     if (!config) {
       return res.status(404).send('<error>SSO not configured</error>');
     }
-    const saml = this.ssoService.buildSaml(
-      config,
-      `${publicBaseUrl(req)}/sso/${orgId}/saml/callback`,
-    );
+    const saml = this.ssoService.buildSaml(config, SsoService.samlCallbackUrl(publicBaseUrl(req), orgId));
     return res.send(saml.generateServiceProviderMetadata(null));
   }
 

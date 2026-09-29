@@ -66,7 +66,11 @@ function setup(opts: { maxApis?: number } = {}) {
   return { apis, controller, queue, queued, req };
 }
 
-const file = (name: string) => ({ buffer: Buffer.from(fixture(name)), originalname: name });
+// An upload arrives as the file multer spooled to disk (files/temp-upload.ts).
+const file = (name: string) => ({
+  path: join(__dirname, '..', '..', 'schema-parser', '__fixtures__', name),
+  originalname: name,
+});
 
 afterEach(() => jest.restoreAllMocks());
 

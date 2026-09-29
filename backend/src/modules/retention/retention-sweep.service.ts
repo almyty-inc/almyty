@@ -22,6 +22,7 @@ import { AppDistribution } from '../../entities/agent-app-distribution.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ChannelEvent } from '../../entities/channel-event.entity';
 
 const SWEEP_INTERVAL_MS =
   Number(process.env.RETENTION_SWEEP_INTERVAL_MS) || 60 * 60_000; // hourly
@@ -123,7 +124,11 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     @Optional()
     @InjectRepository(AppDistribution)
     private readonly distributionRepository?: Repository<AppDistribution>,
-
+    // Stored widget replies and channel deliveries, swept with an app's
+    // conversations. Registered in RetentionModule's forFeature.
+    @Optional()
+    @InjectRepository(ChannelEvent)
+    private readonly channelEventRepository?: Repository<ChannelEvent>,
   ) {}
 
   onModuleInit(): void {
@@ -351,7 +356,9 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
    * survive their conversation.
    */
   /**
-   * Per-app retention for hosted-chat and widget visitors.
+   * Per-app retention for visitors on every place of an app (web chat,
+   * widget, messaging channels, A2A): each place files its conversations
+   * under its gateway (AppPlacePolicyService run options).
    *
    * Scoped through the app's published gateways, the way request logs
    * are. Runs have no gateway column, so they go through the
@@ -361,8 +368,8 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
   async sweepApps(
     organizationId: string,
     orgConversationDays: number | null,
-  ): Promise<{ conversations: number; messages: number; runs: number }> {
-    const out = { conversations: 0, messages: 0, runs: 0 };
+  ): Promise<{ conversations: number; messages: number; runs: number; channelEvents: number }> {
+    const out = { conversations: 0, messages: 0, runs: 0, channelEvents: 0 };
     if (!this.appRepository || !this.distributionRepository) return out;
     const apps = await this.appRepository.find({ where: { organizationId } });
     for (const app of apps) {
@@ -388,6 +395,16 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
         const conversations = await this.conversationRepository.delete({ id: In(ids) });
         out.conversations += conversations.affected ?? ids.length;
         if (rows.length < SWEEP_BATCH) break;
+      }
+      // Stored widget replies and channel deliveries carry visitor words
+      // too, and nothing else ever removed them.
+      if (this.channelEventRepository) {
+        const events = await this.channelEventRepository.delete({
+          organizationId,
+          gatewayId: In(gatewayIds),
+          createdAt: LessThan(cutoff),
+        });
+        out.channelEvents += events.affected ?? 0;
       }
     }
     return out;

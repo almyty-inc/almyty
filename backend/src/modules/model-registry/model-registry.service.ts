@@ -314,7 +314,7 @@ export class ModelRegistryService implements OnModuleInit {
     const valid = validateManifest(manifest);
     const store = await this.objectStore(organizationId);
     const bucket = await this.bucketFor(organizationId);
-    const fullPrefix = [await this.prefixFor(organizationId), prefix].filter(Boolean).join('/').replace(/\/+$/, '');
+    const fullPrefix = [await this.prefixFor(organizationId), prefix].filter(Boolean).join('/').replace(/(?<!\/)\/+$/, '');
     const body = Buffer.from(JSON.stringify(valid, null, 2));
     const key = fullPrefix ? `${fullPrefix}/${MANIFEST_FILE}` : MANIFEST_FILE;
     const { etag } = await store.putObject(bucket, key, body, 'application/json');

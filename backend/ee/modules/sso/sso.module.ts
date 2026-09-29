@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { OrgSsoConfig } from '../../../src/entities/org-sso-config.entity';
+import { OrgDomain } from '../../../src/entities/org-domain.entity';
 import { User } from '../../../src/entities/user.entity';
 import { UserOrganization } from '../../../src/entities/user-organization.entity';
 import { Team } from '../../../src/entities/team.entity';
@@ -12,6 +13,8 @@ import { SsoConfigService } from './sso-config.service';
 import { SsoService } from './sso.service';
 import { OidcLoginStateStoreFactory } from './oidc-login-state.store';
 import { SamlReplayCache } from './saml-replay-cache';
+import { SamlSignInStore } from './saml-sign-in.store';
+import { OrgDomainService } from './org-domain.service';
 import { ScimService } from './scim.service';
 import { ScimAuthGuard } from './guards/scim-auth.guard';
 import { SsoController } from './sso.controller';
@@ -31,14 +34,14 @@ import { ConnectionsModule } from '../../../src/modules/connections/connections.
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([OrgSsoConfig, User, UserOrganization, Team, UserTeam]),
+    TypeOrmModule.forFeature([OrgSsoConfig, OrgDomain, User, UserOrganization, Team, UserTeam]),
     AuthModule,
     GatewaysModule,
     // SCIM deprovisioning wipes and provider-revokes the member's own connections.
     ConnectionsModule,
   ],
 
-  providers: [SsoConfigService, SsoService, SamlReplayCache, OidcLoginStateStoreFactory, ScimService, ScimAuthGuard],
+  providers: [SsoConfigService, SsoService, SamlReplayCache, SamlSignInStore, OrgDomainService, OidcLoginStateStoreFactory, ScimService, ScimAuthGuard],
   controllers: [SsoConfigController, SsoController, ScimController, HostedChatSsoController, HostedChatSsoSettingsController],
   exports: [SsoConfigService, ScimService],
 })

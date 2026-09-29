@@ -1292,5 +1292,5 @@ export class GatewaysService {
 
 /** A name as a URL slug: lowercase a-z and 0-9, single dashes, none at either end. */
 export function cleanSlug(name: string): string {
-  return (name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return (name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|(?<!-)-+$/g, '');
 }

@@ -22,6 +22,25 @@ import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { ToolInvocationBudget } from './tool-invocation-budget';
 import { sandboxHostPolicy } from '../../../common/security/gateway-tool-policy';
 
+/**
+ * `text.match(/\{[\s\S]*\}|\[[\s\S]*\]/)?.[0] ?? null`: from the first
+ * `{` (or `[`) that has a closer after it to the last closer.
+ *
+ * The regex retried from every `{` or `[`, each scanning to the end for
+ * a closer; an LLM reply of 100 KB of `{` took five seconds. A first
+ * opener with no closer after it means no later one has one either, so
+ * one look per kind is the same answer.
+ */
+export function outermostJsonSpan(text: string): string | null {
+  let best: [number, number] | null = null;
+  for (const [open, close] of [['{', '}'], ['[', ']']] as const) {
+    const start = text.indexOf(open);
+    const end = text.lastIndexOf(close);
+    if (start !== -1 && end > start && (!best || start < best[0])) best = [start, end];
+  }
+  return best ? text.slice(best[0], best[1] + 1) : null;
+}
+
 @Injectable()
 export class ToolScriptExecutor {
   private readonly logger = new Logger(ToolScriptExecutor.name);
@@ -44,10 +63,13 @@ export class ToolScriptExecutor {
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
     try {
-      // Interpolate prompt template with parameters
+      // Interpolate prompt template with parameters. Split and joined rather
+      // than a RegExp built from the key: the keys come from whoever calls
+      // the tool, so a key was a pattern of their choosing (and a `$&` in a
+      // value was expanded by replace()).
       let prompt = tool.llmConfig!.promptTemplate!;
       for (const [key, value] of Object.entries(parameters)) {
-        prompt = prompt.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(value));
+        prompt = prompt.split(`{{${key}}}`).join(String(value));
       }
 
       const messages: any[] = [];
@@ -92,9 +114,9 @@ export class ToolScriptExecutor {
 
       if (tool.llmConfig!.outputMode === 'json' && typeof responseData === 'string') {
         try {
-          const jsonMatch = responseData.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-          if (jsonMatch) {
-            responseData = JSON.parse(jsonMatch[0]);
+          const json = outermostJsonSpan(responseData);
+          if (json !== null) {
+            responseData = JSON.parse(json);
           }
         } catch {
           responseData = { raw: responseData, parseError: 'Could not parse as JSON' };

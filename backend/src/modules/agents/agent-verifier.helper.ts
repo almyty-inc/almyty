@@ -61,6 +61,19 @@ export interface VerifyPanelResult {
 }
 
 /**
+ * `text.replace(/\s*```$/i, '')`: a closing code fence and the space
+ * before it. The regex retried from every character of a run of spaces
+ * that did not end in a fence, which on a checker reply (an LLM chose
+ * it) of 100 KB of spaces took seven seconds.
+ */
+export function stripClosingFence(text: string): string {
+  if (!text.endsWith('```')) return text;
+  let end = text.length - 3;
+  while (end > 0 && /\s/.test(text[end - 1])) end--;
+  return text.slice(0, end);
+}
+
+/**
  * Shared verifier: a refute-only checker panel that judges an OUTPUT against a
  * SPEC. Each checker runs in its own bounded context with its own provider/model
  * (multi-vendor = checkers pointed at different-vendor provider entities), in
@@ -278,10 +291,7 @@ export class AgentVerifierHelper {
     raw: string,
   ): { verdict?: string; failures?: any[]; passed_rules?: any[] } | null {
     if (!raw) return null;
-    const text = raw
-      .trim()
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/i, '');
+    const text = stripClosingFence(raw.trim().replace(/^```(?:json)?\s*/i, ''));
     try {
       return JSON.parse(text);
     } catch {

@@ -149,7 +149,7 @@ export class NebiusAdapter implements ModelProviderAdapter {
     if (parsed.protocol !== 'https:' || parsed.username || parsed.password || !(host === 'nebius.com' || host.endsWith('.nebius.com'))) {
       throw Object.assign(new Error(`${field} must be an https://*.nebius.com address`), { code: 'ADAPTER_CONFIG_INVALID' });
     }
-    return value.replace(/\/+$/, '');
+    return value.replace(/(?<!\/)\/+$/, '');
   }
 
   private static host(source: { apiHost?: string; [key: string]: any }): string {

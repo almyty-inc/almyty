@@ -76,11 +76,18 @@ describeIfDb('account lifecycle (real HTTP, real Postgres)', () => {
     return { email, user };
   }
 
+  /** The browser login: the session is the cookie, whose value is the access token. */
   async function login(email: string, password = PASSWORD) {
     const res = await request(app.getHttpServer()).post('/auth/login').send({ email, password }).expect(200);
     const setCookie = res.headers['set-cookie'] as unknown as string[] | string;
     const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie).split(';')[0];
-    return { cookie, accessToken: res.body.data.accessToken as string, refreshToken: res.body.data.refreshToken as string };
+    return { cookie, accessToken: cookie.slice('access_token='.length) };
+  }
+
+  /** The non-browser login: both tokens in the body, no cookie. */
+  async function tokenLogin(email: string, password = PASSWORD) {
+    const res = await request(app.getHttpServer()).post('/auth/token').send({ email, password }).expect(200);
+    return { accessToken: res.body.data.accessToken as string, refreshToken: res.body.data.refreshToken as string };
   }
 
   const profileWithBearer = (token: string) =>
@@ -134,7 +141,7 @@ describeIfDb('account lifecycle (real HTTP, real Postgres)', () => {
 
     it('the refresh token does not open a protected route', async () => {
       const { email } = await newVerifiedUser();
-      const { accessToken, refreshToken } = await login(email);
+      const { accessToken, refreshToken } = await tokenLogin(email);
 
       await profileWithBearer(accessToken).expect(200);
       await profileWithBearer(refreshToken).expect(401);
@@ -173,17 +180,66 @@ describeIfDb('account lifecycle (real HTTP, real Postgres)', () => {
 
     it('also ends the session its refresh token belongs to', async () => {
       const { email } = await newVerifiedUser();
-      const { cookie, refreshToken } = await login(email);
-      await request(app.getHttpServer()).post('/auth/logout').set('Cookie', cookie).expect(200);
+      const { accessToken, refreshToken } = await tokenLogin(email);
+      await request(app.getHttpServer()).post('/auth/logout').set('Authorization', `Bearer ${accessToken}`).expect(200);
 
       await request(app.getHttpServer()).post('/auth/refresh').send({ refreshToken }).expect(401);
+    });
+  });
+
+  describe('where tokens are delivered', () => {
+    it('the browser login answers with the cookie and no token in the body', async () => {
+      const { email } = await newVerifiedUser();
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .set('Origin', 'http://localhost:3002')
+        .send({ email, password: PASSWORD })
+        .expect(200);
+
+      expect(res.headers['set-cookie']).toBeDefined();
+      expect(res.body.data).toEqual({ expiresIn: expect.any(Number) });
+      expect(JSON.stringify(res.body)).not.toMatch(/eyJ[\w-]+\.[\w-]+\.[\w-]+/);
+    });
+
+    it('registration answers the same way', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          email: `register-body-${SUFFIX}@test.com`,
+          password: PASSWORD,
+          firstName: 'R',
+          lastName: 'B',
+          organizationName: `register-body-${SUFFIX}`,
+        })
+        .expect(201);
+
+      expect(res.body.data).not.toHaveProperty('accessToken');
+      expect(res.body.data).not.toHaveProperty('refreshToken');
+    });
+
+    it('the non-browser login returns tokens and sets no cookie, and refuses a page', async () => {
+      const { email } = await newVerifiedUser();
+      const res = await request(app.getHttpServer()).post('/auth/token').send({ email, password: PASSWORD }).expect(200);
+      expect(res.headers['set-cookie']).toBeUndefined();
+      await profileWithBearer(res.body.data.accessToken).expect(200);
+
+      await request(app.getHttpServer())
+        .post('/auth/token')
+        .set('Origin', 'http://localhost:3002')
+        .send({ email, password: PASSWORD })
+        .expect(400);
+      await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Origin', 'http://localhost:3002')
+        .send({ refreshToken: res.body.data.refreshToken })
+        .expect(400);
     });
   });
 
   describe('refresh', () => {
     it('redeems a refresh token once, and a replay revokes the whole session', async () => {
       const { email, user } = await newVerifiedUser();
-      const first = await login(email);
+      const first = await tokenLogin(email);
 
       const rotated = await request(app.getHttpServer())
         .post('/auth/refresh')
@@ -206,7 +262,7 @@ describeIfDb('account lifecycle (real HTTP, real Postgres)', () => {
 
     it('lets exactly one of two simultaneous redemptions through', async () => {
       const { email } = await newVerifiedUser();
-      const { refreshToken } = await login(email);
+      const { refreshToken } = await tokenLogin(email);
 
       const results = await Promise.all([
         request(app.getHttpServer()).post('/auth/refresh').send({ refreshToken }),

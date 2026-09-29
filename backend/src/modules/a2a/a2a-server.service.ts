@@ -15,6 +15,7 @@ import { A2AMessageHandler } from './a2a-message.handler';
 import { A2ATaskHandler } from './a2a-task.handler';
 import { findGatewayRun } from '../gateways/gateway-servable';
 import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
+import type { AppPlace } from '../gateways/app-place-policy.service';
 import { MetricType } from '../../entities/usage-metric.entity';
 import type {
   JsonRpcRequest,
@@ -27,6 +28,18 @@ import { A2A_ERROR_CODES } from './types/a2a-spec.types';
 /** Default poll timeout for message/send (ms). */
 const SEND_POLL_TIMEOUT_MS = 30_000;
 const SEND_POLL_INTERVAL_MS = 500;
+
+/**
+ * The JSON-RPC methods that start or continue a task, and so spend: the
+ * v0.2.x names and the v1.0 ones. Reads, cancels and resubscribes do not.
+ */
+export const A2A_RUN_METHODS: ReadonlySet<string> = new Set([
+  'message/send',
+  'SendMessage',
+  'message/stream',
+  'StreamMessage',
+  'SendStreamingMessage',
+]);
 
 @Injectable()
 export class A2AServerService {
@@ -76,7 +89,18 @@ export class A2AServerService {
     req: Request,
     body: any,
     res: Response,
-    context?: { agent?: any; org?: any; baseUrl?: string },
+    context?: {
+      agent?: any;
+      org?: any;
+      baseUrl?: string;
+      /**
+       * The app place this A2A gateway is: the options a task's run starts
+       * with (per-run cost cap, app stamp, visitor memory rule). Resolved
+       * by the caller, which has already applied the caller's own rate
+       * limit and the app's spend cap.
+       */
+      place?: AppPlace | null;
+    },
   ): Promise<void> {
     // Malformed / empty body
     if (!body || typeof body !== 'object') {
@@ -125,7 +149,7 @@ export class A2AServerService {
             organizationId: gateway.organizationId,
             dimensions: { agentId: gateway.agentId },
           });
-          const task = await this.messageHandler.handleMessageSend(gateway, rpcReq.params, rpcReq.id);
+          const task = await this.messageHandler.handleMessageSend(gateway, rpcReq.params, rpcReq.id, context?.place);
           // v1.0 (PascalCase) wraps in { task }, v0.2.x returns task directly
           const result = method === 'SendMessage' ? { task } : task;
           res.json(this.jsonRpcSuccess(rpcReq.id, result));
@@ -139,7 +163,7 @@ export class A2AServerService {
             organizationId: gateway.organizationId,
             dimensions: { agentId: gateway.agentId },
           });
-          await this.messageHandler.handleMessageStream(gateway, rpcReq.params, rpcReq.id, req, res);
+          await this.messageHandler.handleMessageStream(gateway, rpcReq.params, rpcReq.id, req, res, context?.place);
           return;
         }
 

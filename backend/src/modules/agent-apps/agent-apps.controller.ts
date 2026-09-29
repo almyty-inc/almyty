@@ -22,6 +22,7 @@ import { AgentAppsService, CreateAppDto, UpdateAppDto } from './agent-apps.servi
 import { AppBuildsService, RequestBuildDto } from './app-builds.service';
 import {
   CreateAppBodyDto,
+  RecordBuildBodyDto,
   RequestBuildBodyDto,
   UpdateAppBodyDto,
 } from './dto/agent-apps-controller.dto';
@@ -135,6 +136,16 @@ export class AgentAppsController {
    * continuously while someone is still editing, rather than letting
    * them discover the list when a publish is rejected.
    */
+  /**
+   * What the app has spent today and this month against its spend caps,
+   * and whether visitors are being told it has reached its limit.
+   */
+  @Get(':slug/spend')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'What this app has spent against its spend limits' })
+  async spend(@Param('slug') slug: string, @Request() req: any) {
+    return { success: true, data: await this.apps.spend(this.org(req), slug) };
+  }
   @Get(':slug/check')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'What is stopping this app from shipping' })
@@ -215,21 +226,18 @@ export class AgentAppsController {
   async recordBuild(
     @Param('slug') slug: string,
     @Param('target') target: DistributionTarget,
-    @Body()
-    body: {
-      version?: string;
-      platform?: string;
-      checksum?: string;
-      signed?: boolean;
-      error?: string;
-    },
+    @Body() body: RecordBuildBodyDto,
     @Request() req: any,
   ) {
     return {
       success: true,
       data: publicDistribution(
         await this.apps.recordBuild(this.org(req), slug, target, {
-          ...body,
+          version: body.version,
+          platform: body.platform,
+          checksum: body.checksum,
+          signed: body.signed,
+          error: body.error,
           builtBy: req.user?.email ?? req.user?.id,
         }),
       ),

@@ -12,6 +12,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { SAML, Profile, ValidateInResponseTo } from '@node-saml/passport-saml';
 import * as oidc from 'openid-client';
+import { parseStringPromise, processors } from 'xml2js';
 
 import { safeFetch } from '../../../src/common/security/safe-fetch';
 
@@ -20,6 +21,7 @@ import { UserOrganization } from '../../../src/entities/user-organization.entity
 import { isEffectiveMembership } from '../../../src/common/authorization/membership';
 import { DecryptedSsoConfig, SsoConfigService, provisioningRole } from './sso-config.service';
 import { SamlReplayCache, assertionReplayFacts } from './saml-replay-cache';
+import { OrgDomainService } from './org-domain.service';
 import {
   MemoryOidcLoginStateStore,
   OIDC_LOGIN_TTL_SECONDS,
@@ -61,6 +63,8 @@ export class SsoService {
     // the service bare; they get a per-instance memory store.
     @Optional() loginStateFactory?: OidcLoginStateStoreFactory,
     @Optional() @Inject(OIDC_LOGIN_STATE_STORE) loginStates?: OidcLoginStateStore,
+    // Absent (a spec constructing the service bare), JIT creates nobody.
+    @Optional() private readonly domains?: OrgDomainService,
   ) {
     this.loginStates = loginStates ?? loginStateFactory?.create() ?? new MemoryOidcLoginStateStore();
   }
@@ -87,48 +91,123 @@ export class SsoService {
     });
   }
 
-  private samlCallbackUrl(baseUrl: string, orgId: string): string {
+  /** The dashboard's SAML assertion consumer URL for an organization. */
+  static samlCallbackUrl(baseUrl: string, orgId: string): string {
     return `${baseUrl}/sso/${orgId}/saml/callback`;
   }
 
-  async getSamlLoginUrl(orgId: string, baseUrl: string): Promise<string> {
+  /**
+   * Start an SP-initiated SAML sign-in against the organization's IdP.
+   * Returns the IdP URL and the AuthnRequest ID, which the caller keeps
+   * (SamlSignInStore): a response is accepted only if it answers exactly
+   * this request (validateSolicitedSamlResponse). There is no
+   * IdP-initiated mode: a response that answers no request of ours
+   * cannot sign anyone in, which is what stops login CSRF.
+   */
+  async startSamlRequest(orgId: string, acsUrl: string, relayState: string): Promise<{ url: string; requestId: string }> {
     const config = await this.loadEnabledConfig(orgId, 'saml');
-    const saml = this.buildSaml(config, this.samlCallbackUrl(baseUrl, orgId));
-    return saml.getAuthorizeUrlAsync('', undefined, {});
+    let requestId: string | null = null;
+    const saml = this.buildSaml(config, acsUrl, {
+      // node-saml hands the request ID to the cache only when it will
+      // later validate InResponseTo; that is how it is captured here.
+      validateInResponseTo: ValidateInResponseTo.always,
+      cacheProvider: {
+        async saveAsync(key: string, value: string) {
+          requestId = key;
+          return { value, createdAt: Date.now() };
+        },
+        async getAsync() {
+          return null;
+        },
+        async removeAsync() {
+          return null;
+        },
+      },
+    });
+    const url = await saml.getAuthorizeUrlAsync(relayState, undefined, {});
+    if (!requestId) throw new BadRequestException('SAML request could not be prepared');
+    return { url, requestId };
   }
 
-  async handleSamlCallback(
+  /**
+   * Validate a SAML response to one sign-in we started. Besides what
+   * node-saml checks (signature, timestamps, audience), it must:
+   *  - answer `expectedRequestId` (InResponseTo, in the envelope and in the
+   *    signed assertion), so it is not unsolicited or someone else's;
+   *  - be addressed to `acsUrl`: every bearer SubjectConfirmationData
+   *    Recipient in the signed assertion, and the Response's Destination
+   *    when it carries one, so a response issued for another service
+   *    provider's endpoint (or another of ours) is refused;
+   *  - be new: its assertion is claimed in the replay cache before
+   *    anything else happens.
+   */
+  private async validateSolicitedSamlResponse(
     orgId: string,
     samlResponse: string,
-    baseUrl: string,
-  ): Promise<User> {
+    acsUrl: string,
+    expectedRequestId: string,
+  ): Promise<{ profile: Profile; facts: ReturnType<typeof assertionReplayFacts> }> {
     const config = await this.loadEnabledConfig(orgId, 'saml');
-    const saml = this.buildSaml(config, this.samlCallbackUrl(baseUrl, orgId));
+    if (!expectedRequestId || !samlResponse) {
+      throw new UnauthorizedException('SAML response does not answer this sign-in');
+    }
+    const saml = this.buildSaml(config, acsUrl, {
+      validateInResponseTo: ValidateInResponseTo.always,
+      // Knows exactly one outstanding request: the one this browser started.
+      cacheProvider: {
+        async saveAsync() {
+          return null;
+        },
+        async getAsync(key: string) {
+          return key === expectedRequestId ? new Date().toISOString() : null;
+        },
+        async removeAsync() {
+          return null;
+        },
+      },
+    });
 
     let profile: Profile | null;
     try {
-      const result = await saml.validatePostResponseAsync({
-        SAMLResponse: samlResponse,
-      });
-      profile = result.profile;
+      profile = (await saml.validatePostResponseAsync({ SAMLResponse: samlResponse })).profile;
     } catch (err) {
       this.logger.warn(`SAML assertion rejected for org ${orgId}: ${err}`);
       throw new UnauthorizedException('Invalid SAML assertion');
     }
-
-    if (!profile) {
-      throw new UnauthorizedException('SAML response contained no assertion');
+    if (!profile) throw new UnauthorizedException('SAML response contained no assertion');
+    if (profile.inResponseTo !== expectedRequestId) {
+      throw new UnauthorizedException('SAML response does not answer this sign-in');
+    }
+    if (!(await samlAddressedTo(profile, acsUrl))) {
+      this.logger.warn(`SAML response for org ${orgId} was not addressed to ${acsUrl}`);
+      throw new UnauthorizedException('SAML response was not addressed to this sign-in');
     }
 
-    // Claimed before the user is resolved, so of two concurrent posts of
-    // one captured response only the first ever reaches a session.
+    // Claimed before the identity is used, so of two concurrent posts of
+    // one captured response only the first gets anywhere.
     const facts = assertionReplayFacts(profile);
     if (!(await this.samlReplay.consume(facts))) {
       this.logger.warn(`Replayed SAML assertion refused for org ${orgId}`);
       throw new UnauthorizedException('This sign-in response has already been used. Start again.');
     }
+    return { profile, facts };
+  }
 
-    return this.resolveUser(orgId, this.profileFromSaml(profile), config);
+  /**
+   * The dashboard login's assertion consumer: the identity a response to
+   * our own request asserts. It signs nobody in by itself; the caller
+   * parks it until the browser that started the sign-in collects it
+   * (SamlSignInStore), then calls completeSsoLogin.
+   */
+  async resolveSamlLogin(orgId: string, samlResponse: string, acsUrl: string, expectedRequestId: string): Promise<SsoUserProfile> {
+    const { profile } = await this.validateSolicitedSamlResponse(orgId, samlResponse, acsUrl, expectedRequestId);
+    return this.profileFromSaml(profile);
+  }
+
+  /** Turn a verified SSO identity into the member it signs in (resolveUser). */
+  async completeSsoLogin(orgId: string, profile: SsoUserProfile, protocol: 'saml' | 'oidc' = 'saml'): Promise<User> {
+    const config = await this.loadEnabledConfig(orgId, protocol);
+    return this.resolveUser(orgId, profile, config);
   }
 
   /** Extract email + name from a validated SAML profile. */
@@ -164,43 +243,8 @@ export class SsoService {
   }
 
   /**
-   * An SP-initiated SAML request for a hosted chat visitor, against the
-   * organization's own SAML configuration. Returns the IdP URL and the
-   * AuthnRequest ID, which the caller keeps: the response is accepted
-   * only if it answers exactly this request (InResponseTo), so an
-   * unsolicited or someone-else's response cannot sign a visitor in.
-   */
-  async hostedChatSamlLogin(orgId: string, acsUrl: string, relayState: string): Promise<{ url: string; requestId: string }> {
-    const config = await this.loadEnabledConfig(orgId, 'saml');
-    let requestId: string | null = null;
-    const saml = this.buildSaml(config, acsUrl, {
-      // node-saml hands the request ID to the cache only when it will
-      // later validate InResponseTo; that is how it is captured here.
-      validateInResponseTo: ValidateInResponseTo.always,
-      cacheProvider: {
-        async saveAsync(key: string, value: string) {
-          requestId = key;
-          return { value, createdAt: Date.now() };
-        },
-        async getAsync() {
-          return null;
-        },
-        async removeAsync() {
-          return null;
-        },
-      },
-    });
-    const url = await saml.getAuthorizeUrlAsync(relayState, undefined, {});
-    if (!requestId) throw new BadRequestException('SAML request could not be prepared');
-    return { url, requestId };
-  }
-
-  /**
-   * Validate a hosted chat visitor's SAML response with the same checks as
-   * the dashboard login (signature, timestamps, audience via node-saml),
-   * plus: it must answer `expectedRequestId`, and its assertion is claimed
-   * in the replay cache before anything else happens. Returns the identity
-   * only; binding it to a visitor is the caller's job.
+   * Resolve a hosted chat visitor's SAML response (validateSolicitedSamlResponse)
+   * to an identity only; binding it to a visitor is the caller's job.
    */
   async resolveHostedChatSamlVisitor(
     orgId: string,
@@ -208,40 +252,7 @@ export class SsoService {
     acsUrl: string,
     expectedRequestId: string,
   ): Promise<{ externalId: string; email: string | null; displayName: string | null }> {
-    const config = await this.loadEnabledConfig(orgId, 'saml');
-    const saml = this.buildSaml(config, acsUrl, {
-      validateInResponseTo: ValidateInResponseTo.always,
-      // Knows exactly one outstanding request: the one this browser started.
-      cacheProvider: {
-        async saveAsync() {
-          return null;
-        },
-        async getAsync(key: string) {
-          return key === expectedRequestId ? new Date().toISOString() : null;
-        },
-        async removeAsync() {
-          return null;
-        },
-      },
-    });
-
-    let profile: Profile | null;
-    try {
-      profile = (await saml.validatePostResponseAsync({ SAMLResponse: samlResponse })).profile;
-    } catch (err) {
-      this.logger.warn(`Hosted chat SAML assertion rejected for org ${orgId}: ${err}`);
-      throw new UnauthorizedException('Invalid SAML assertion');
-    }
-    if (!profile) throw new UnauthorizedException('SAML response contained no assertion');
-    if (profile.inResponseTo !== expectedRequestId) {
-      throw new UnauthorizedException('SAML response does not answer this sign-in');
-    }
-
-    const facts = assertionReplayFacts(profile);
-    if (!(await this.samlReplay.consume(facts))) {
-      this.logger.warn(`Replayed hosted chat SAML assertion refused for org ${orgId}`);
-      throw new UnauthorizedException('This sign-in response has already been used. Start again.');
-    }
+    const { profile, facts } = await this.validateSolicitedSamlResponse(orgId, samlResponse, acsUrl, expectedRequestId);
 
     const nameId = typeof profile.nameID === 'string' ? profile.nameID : '';
     if (!nameId) throw new UnauthorizedException('SAML assertion did not include a subject');
@@ -494,8 +505,9 @@ export class SsoService {
 
   /**
    * Map an asserted identity to an existing org member by email. When the user
-   * is not a member: JIT-provision if the config allows it, otherwise reject
-   * (deferring provisioning to SCIM / manual invite).
+   * is not a member: JIT-provision if the config allows it and the address
+   * is on one of the org's verified domains, otherwise reject (deferring
+   * provisioning to SCIM / manual invite).
    *
    * JIT may only CREATE a user, never adopt one.
    *
@@ -504,10 +516,10 @@ export class SsoService {
    * globally and then handing the row to `issueSession` meant any org
    * owner could self-sign an assertion for someone else's address and
    * receive a full dashboard session as that person -- with a token
-   * carrying every organization the victim belongs to. Nothing binds an
-   * asserted email to the asserting organization: there is no verified
-   * domain here, so an IdP is not entitled to name an identity that
-   * already exists outside its own membership.
+   * carrying every organization the victim belongs to. A verified domain
+   * vouches for addresses nobody holds an account for yet; it never lets
+   * an IdP name an identity that already exists outside its own
+   * membership.
    *
    * The legitimate version of "this person already has an almyty account"
    * is an invite or a SCIM assignment, both of which the account holder
@@ -553,6 +565,16 @@ export class SsoService {
         'No account exists for this identity in this organization',
       );
     }
+    // Only for an address on a domain this organization has proven it
+    // controls. The org owner configures the IdP and can have it assert
+    // any address; without this, an owner could mint an account for a
+    // mailbox they do not hold (and, on an existing-account-free address,
+    // pre-empt its real owner) and sign into it at will.
+    if (!this.domains || !(await this.domains.coversEmail(orgId, email))) {
+      throw new UnauthorizedException(
+        'This address is not on a domain your organization has verified, so no account is created for it. Ask an admin to verify the domain or to invite you.',
+      );
+    }
     user = await this.provisionUser(profile);
     await this.provisionMembership(user.id, orgId, config.defaultRole);
     return user;
@@ -591,8 +613,18 @@ export class SsoService {
   }
 }
 
-function isEmail(value: unknown): value is string {
-  return typeof value === 'string' && /.+@.+\..+/.test(value);
+/**
+ * `/.+@.+\..+/.test(value)`: on one line, something, `@`, something, `.`,
+ * something. The regex tried every way of sharing a line out between its
+ * three `.+`, so a claim of 100 KB of `@` did not finish in thirty
+ * seconds; the earliest `@` and the last `.` of each line decide it.
+ */
+export function isEmail(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  return (value.match(/.+/g) ?? []).some((line) => {
+    const at = line.indexOf('@', 1);
+    return at !== -1 && line.lastIndexOf('.', line.length - 2) >= at + 2;
+  });
 }
 
 /** What the OIDC client adapter checks on the callback. */
@@ -611,4 +643,33 @@ function timingSafeEqualText(a: string, b: string): boolean {
   const left = Buffer.from(a);
   const right = Buffer.from(b);
   return left.length === right.length && timingSafeEqual(left, right);
+}
+
+/**
+ * Is a validated SAML response addressed to `acsUrl`?
+ *
+ * Every SubjectConfirmationData in the signed assertion must name it as
+ * Recipient (the SAML Web SSO profile requires one on a bearer
+ * confirmation, so a missing Recipient is a refusal), and the Response
+ * envelope's Destination, when present, must name it too. node-saml
+ * checks neither.
+ */
+export async function samlAddressedTo(profile: Profile, acsUrl: string): Promise<boolean> {
+  const assertion: any = (profile as any).getAssertion?.()?.Assertion;
+  const confirmations: any[] = assertion?.Subject?.[0]?.SubjectConfirmation ?? [];
+  const recipients = confirmations.flatMap((c) => (c?.SubjectConfirmationData ?? []).map((d: any) => d?.$?.Recipient));
+  if (!recipients.length || !recipients.every((r) => r === acsUrl)) return false;
+
+  const responseXml: unknown = (profile as any).getSamlResponseXml?.();
+  if (typeof responseXml !== 'string' || !responseXml) return false;
+  let root: any;
+  try {
+    const parsed = await parseStringPromise(responseXml, { tagNameProcessors: [processors.stripPrefix] });
+    root = parsed?.Response;
+  } catch {
+    return false;
+  }
+  if (!root) return false;
+  const destination = root.$?.Destination;
+  return destination === undefined || destination === acsUrl;
 }

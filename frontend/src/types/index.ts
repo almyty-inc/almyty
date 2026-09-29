@@ -22,12 +22,6 @@ export enum UserRole {
   USER = 'user',
 }
 
-export interface AuthResponse {
-  user: User
-  token: string
-  refreshToken: string
-}
-
 // Organization Types
 export interface OrganizationAgentDefaults {
   personality?: string

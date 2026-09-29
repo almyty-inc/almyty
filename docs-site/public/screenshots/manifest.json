@@ -323,7 +323,7 @@
       "path": "screenshots/apps-detail.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Legacy image predates the UI refresh, and the app page now shows what the app spent today and this month against its spend limits (or a notice that it reached one). Tracked for #675, not verified current.",
       "sha256": "95b14e9928eddd271f9fa47d3960cee055507ddc689a440c36d66904b4bc88a2"
     },
     {
@@ -377,7 +377,7 @@
       "path": "screenshots/apps-settings.png",
       "capturedAt": "2026-09-08T07:59:28.902Z",
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Settings > Advanced now has Spend limit per day and per month for the whole app (defaults 5 and 50), an App limit part in the Advanced summary line, and reworded visitor-data switches. Recapture on staging with Advanced open.",
       "sha256": "61aeb5b71e0b969ab6367e30ef369f0fb38cfa9424488dfaef0bcf7087ba74ba"
     },
     {
@@ -479,7 +479,7 @@
       "title": "Chat CLI 1.5.0 help",
       "path": "screenshots/cli/chat-help.png",
       "capturedAt": "2026-09-22T13:42:14.000Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7bd2f9304e5fd0b835700609dd4fc65a2e1875070670e879c411b13507da17e4",
       "source": {
         "kind": "published-cli",
@@ -491,7 +491,8 @@
         "packages/chat-cli/package.json"
       ],
       "sourceDigest": "88395f17b7d2b46ab8ae4344a1dea58a9aa632b9ab7d7e4d77764a26d83426ba",
-      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
+      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved.",
+      "reason": "chat-cli source changed (linear trailing-newline trim, #853); help text likely unchanged, recapture from the next published @almyty/chat"
     },
     {
       "id": "cli-mcp-server-help",
@@ -1042,7 +1043,7 @@
       ],
       "sourceDigest": "0a1a8df5e9cc75f297f160b0a7fdc112b00ee89c7034361fc32b0320f3c4ac17",
       "notes": "Observed and visually reviewed SAML configuration and SCIM provisioning controls in the authorized seeded Business organization. SSO remains disabled, fields are defaults/placeholders, and no SCIM token was generated. The displayed SCIM address belongs to the staging capture environment, not the public documentation base URL.",
-      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx); recapture on staging."
+      "reason": "The shared Advanced disclosure these Settings pages use changed in #815 (moved to components/ui/disclosure.tsx), and the page now has an Email domains card (verified domains for SSO provisioning) between the SSO and SCIM cards; recapture on staging."
     },
     {
       "id": "settings-teams",
@@ -1219,7 +1220,7 @@
       "path": "screenshots/widget-builder.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Shows the old widget builder on the gateway page. The widget is now the On your website place on an app: the embed line, position and launcher icon with a live preview (its look comes from the app), and allowed sites. Recapture from /apps/<app>/distributions/widget once published.",
+      "reason": "Shows the old widget builder on the gateway page. The widget is now the On your website place on an app: the embed line, position and launcher icon with a live preview (its look comes from the app), and allowed sites; the widget also shows Download my chat and Delete my chat when the app lets visitors. Recapture from /apps/<app>/distributions/widget once published.",
       "sha256": "3e007ef828b2789531a98aa22d9ba9f573f0fbc419ec4fea57d99accf938a991"
     }
   ]

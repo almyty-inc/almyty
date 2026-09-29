@@ -11,9 +11,8 @@ import {
   Res,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { InjectRedis } from '@nestjs-modules/ioredis';
 import type { Request, Response } from 'express';
-import { randomBytes, timingSafeEqual } from 'crypto';
+import { randomBytes } from 'crypto';
 
 import { Public } from '../../../src/common/decorators/public.decorator';
 import { trustedClientIp } from '../../../src/common/security/client-ip';
@@ -23,31 +22,23 @@ import { hostedChatConfigFrom, hostedChatUrl } from '../../../src/modules/gatewa
 import { OrgLicenseResolver } from '../../../src/modules/licensing/org-license.resolver';
 import { EE_ENTITLEMENTS } from '../../../src/modules/licensing/license.constants';
 import { SsoService } from './sso.service';
+import { ParkedSamlSignIn, PendingSamlSignIn, SamlSignInStore } from './saml-sign-in.store';
 
-/** The Redis commands the SAML hand-off needs. ioredis has both. */
-export interface SamlHandoffStore {
-  set(key: string, value: string, px: 'PX', ttlMs: number, nx: 'NX'): Promise<string | null>;
-  getdel(key: string): Promise<string | null>;
-}
+export { SAML_HANDOFF_TTL_MS, SAML_SIGN_IN_TTL_MS } from './saml-sign-in.store';
 
-interface PendingSamlSignIn {
+interface PendingVisitorSignIn extends PendingSamlSignIn {
   gatewayId: string;
   endUserId: string;
-  requestId: string;
-  acsUrl: string;
 }
 
-interface SamlHandoff {
-  relayState: string;
+interface ParkedVisitorSignIn extends ParkedSamlSignIn {
   gatewayId: string;
   endUserId: string;
   identity: { externalId: string; email: string | null; displayName: string | null };
 }
 
-const RELAY_PREFIX = 'hc:saml:relay:';
-const HANDOFF_PREFIX = 'hc:saml:handoff:';
-export const SAML_SIGN_IN_TTL_MS = 10 * 60 * 1000;
-export const SAML_HANDOFF_TTL_MS = 2 * 60 * 1000;
+/** Keeps visitor sign-ins apart from dashboard ones in SamlSignInStore. */
+const SCOPE = 'hc';
 
 /**
  * Sign a hosted-chat visitor in through the tenant organization's own
@@ -58,16 +49,12 @@ export const SAML_HANDOFF_TTL_MS = 2 * 60 * 1000;
  * on the tenant host (where the session cookie is scoped) through the
  * existing `/api` route, with no extra ingress.
  *
- * SAML takes one extra step. The IdP delivers the response as a
- * cross-site form POST, which does not carry the visitor's SameSite=Lax
- * cookies, so the assertion consumer cannot see whose browser it is. It
- * validates the response (signature, timestamps, InResponseTo against the
- * request this sign-in made, and the replay cache), parks the identity
- * under a one-time hand-off for two minutes, and redirects the browser to
- * a GET on the same host. That GET does carry the cookies: it binds the
- * identity only if the browser holds the state cookie set when the
- * sign-in began and is the same visitor that began it. A response posted
- * into someone else's browser (login CSRF) therefore binds nothing.
+ * SAML goes through the relay-state hand-off in SamlSignInStore (shared
+ * with the dashboard login): the response must answer the request this
+ * sign-in made, and the identity is bound only on the follow-up GET, in
+ * the browser that holds the state cookie and is the visitor that began
+ * the sign-in. A response posted into someone else's browser (login CSRF)
+ * binds nothing.
  */
 @ApiTags('Hosted chat')
 @Controller('public/chat')
@@ -80,7 +67,7 @@ export class HostedChatSsoController {
     private readonly hostedChat: HostedChatService,
     private readonly sso: SsoService,
     private readonly orgLicense: OrgLicenseResolver,
-    @InjectRedis() private readonly redis: SamlHandoffStore,
+    private readonly signIns: SamlSignInStore,
   ) {}
 
   @Get(':slug/auth/sso/login')
@@ -142,12 +129,11 @@ export class HostedChatSsoController {
     if (issuedSessionKey) {
       res.cookie(HostedChatService.SESSION_COOKIE, issuedSessionKey, HostedChatService.sessionCookieOptions());
     }
-    const relayState = randomBytes(32).toString('hex');
+    const relayState = SamlSignInStore.newRelayState();
     const acsUrl = HostedChatSsoController.samlAcsUrl(gateway, slug, req.headers.host);
-    const { url, requestId } = await this.sso.hostedChatSamlLogin(gateway.organizationId, acsUrl, relayState);
-    const pending: PendingSamlSignIn = { gatewayId: gateway.id, endUserId: endUser.id, requestId, acsUrl };
-    const stored = await this.redis.set(RELAY_PREFIX + relayState, JSON.stringify(pending), 'PX', SAML_SIGN_IN_TTL_MS, 'NX');
-    if (stored !== 'OK') return res.redirect(302, '/?signin_error=SIGN_IN_UNAVAILABLE');
+    const { url, requestId } = await this.sso.startSamlRequest(gateway.organizationId, acsUrl, relayState);
+    const pending: PendingVisitorSignIn = { gatewayId: gateway.id, endUserId: endUser.id, requestId, acsUrl };
+    if (!(await this.signIns.remember(SCOPE, relayState, pending))) return res.redirect(302, '/?signin_error=SIGN_IN_UNAVAILABLE');
     res.cookie(HostedChatSsoController.SAML_STATE_COOKIE, relayState, HostedChatSsoController.stateCookieOptions());
     res.redirect(302, url);
   }
@@ -162,24 +148,20 @@ export class HostedChatSsoController {
     const gateway = await this.surface(slug);
     const relayState = typeof body?.RelayState === 'string' ? body.RelayState : '';
     const samlResponse = typeof body?.SAMLResponse === 'string' ? body.SAMLResponse : '';
-    // Taken, not read: a relay state answers one response, whatever it says.
-    const raw = relayState ? await this.redis.getdel(RELAY_PREFIX + relayState) : null;
-    const pending = raw ? (JSON.parse(raw) as PendingSamlSignIn) : null;
+    const pending = await this.signIns.takePending<PendingVisitorSignIn>(SCOPE, relayState);
     if (!pending || pending.gatewayId !== gateway.id || !samlResponse) {
       return res.redirect(303, '/?signin_error=SIGN_IN_EXPIRED');
     }
 
-    let identity: SamlHandoff['identity'];
+    let identity: ParkedVisitorSignIn['identity'];
     try {
       identity = await this.sso.resolveHostedChatSamlVisitor(gateway.organizationId, samlResponse, pending.acsUrl, pending.requestId);
     } catch {
       return res.redirect(303, '/?signin_error=SIGN_IN_FAILED');
     }
 
-    const handoff = randomBytes(32).toString('hex');
-    const record: SamlHandoff = { relayState, gatewayId: gateway.id, endUserId: pending.endUserId, identity };
-    const stored = await this.redis.set(HANDOFF_PREFIX + handoff, JSON.stringify(record), 'PX', SAML_HANDOFF_TTL_MS, 'NX');
-    if (stored !== 'OK') return res.redirect(303, '/?signin_error=SIGN_IN_FAILED');
+    const handoff = await this.signIns.park<ParkedVisitorSignIn>(SCOPE, { relayState, gatewayId: gateway.id, endUserId: pending.endUserId, identity });
+    if (!handoff) return res.redirect(303, '/?signin_error=SIGN_IN_FAILED');
     res.redirect(303, `${HostedChatSsoController.apiPrefix()}/public/chat/${slug}/auth/sso/saml/complete?handoff=${handoff}`);
   }
 
@@ -192,11 +174,13 @@ export class HostedChatSsoController {
     @Res() res: Response,
   ) {
     const gateway = await this.surface(slug);
-    const raw = typeof handoff === 'string' && handoff ? await this.redis.getdel(HANDOFF_PREFIX + handoff) : null;
-    const record = raw ? (JSON.parse(raw) as SamlHandoff) : null;
-    const cookieState = (req as any).cookies?.[HostedChatSsoController.SAML_STATE_COOKIE];
+    const record = await this.signIns.takeHandoff<ParkedVisitorSignIn>(
+      SCOPE,
+      handoff,
+      (req as any).cookies?.[HostedChatSsoController.SAML_STATE_COOKIE],
+    );
     const session = (req as any).cookies?.[HostedChatService.SESSION_COOKIE];
-    if (!record || record.gatewayId !== gateway.id || !sameSecret(cookieState, record.relayState) || !session) {
+    if (!record || record.gatewayId !== gateway.id || !session) {
       return res.redirect(302, '/?signin_error=SIGN_IN_EXPIRED');
     }
     const { endUser } = await this.hostedChat.resolveEndUser(gateway, session, trustedClientIp(req as any));
@@ -272,9 +256,4 @@ export class HostedChatSsoController {
       maxAge: 10 * 60 * 1000,
     };
   }
-}
-
-function sameSecret(a: unknown, b: unknown): boolean {
-  if (typeof a !== 'string' || typeof b !== 'string' || !a || a.length !== b.length) return false;
-  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }

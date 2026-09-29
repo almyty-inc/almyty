@@ -134,6 +134,50 @@ export function defaultLimitsFor(authMode: AppAuthMode | undefined): NonNullable
   return { costCapCents: DEFAULT_PUBLIC_APP_LIMITS.costCapCents, perUserRateLimit: null, perIpRateLimit: null };
 }
 
+/**
+ * What a whole app may spend, across every place and every visitor.
+ *
+ * The per-run cap bounds one conversation and the rate limits bound one
+ * visitor, but neither bounds the product: a thousand polite visitors
+ * each inside their own share still add up to the owner's whole model
+ * bill. This is that bound, counted from the cost the runs themselves
+ * record (agent_runs.totalCost, the same number the Cost tab sums).
+ *
+ * An app open to anyone starts at five dollars a UTC day and fifty a
+ * month. A gated app starts with none: everyone who reaches it has
+ * signed in through the organization's own directory.
+ */
+export const DEFAULT_PUBLIC_DAILY_SPEND_CAP_CENTS = 500;
+export const DEFAULT_PUBLIC_MONTHLY_SPEND_CAP_CENTS = 5000;
+
+export interface AppSpendCaps {
+  /** Null means no daily ceiling. */
+  dailyCents: number | null;
+  /** Null means no monthly ceiling. */
+  monthlyCents: number | null;
+}
+
+function capFrom(value: unknown, fallback: number | null): number | null {
+  // Missing is "the default"; null, zero or anything unusable is "none".
+  if (value === undefined) return fallback;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
+  return Math.floor(value);
+}
+
+/**
+ * The effective spend caps for an app: stored values over the defaults.
+ * A missing field takes the default for the app's auth mode, so an app
+ * created before the field existed is capped like a new one. An owner
+ * who clears a field (null) has turned that cap off on purpose.
+ */
+export function appSpendCapsFrom(app: Pick<AgentApp, 'limits' | 'authMode'>): AppSpendCaps {
+  const open = isOpenToAnyone(app.authMode);
+  return {
+    dailyCents: capFrom(app.limits?.dailySpendCapCents, open ? DEFAULT_PUBLIC_DAILY_SPEND_CAP_CENTS : null),
+    monthlyCents: capFrom(app.limits?.monthlySpendCapCents, open ? DEFAULT_PUBLIC_MONTHLY_SPEND_CAP_CENTS : null),
+  };
+}
+
 /** True when anyone holding the link or the artifact can use it. */
 export function isOpenToAnyone(authMode: AppAuthMode | string | undefined): boolean {
   return !GATED_AUTH_MODES.includes((authMode ?? AppAuthMode.PUBLIC_LINK) as AppAuthMode);
@@ -202,7 +246,44 @@ export function checkApp(
   return { ok: refusals.length === 0, refusals };
 }
 
-const BUNDLE_ID_PATTERN = /^[a-z0-9]+(\.[a-z0-9-]+)+$/;
+export const BUNDLE_ID_PATTERN = /^[a-z0-9]+(\.[a-z0-9-]+)+$/;
+
+/** Apple's ceiling for a bundle identifier; nothing we build to takes more. */
+export const MAX_BUNDLE_ID_LENGTH = 155;
+
+/** Why this bundle identifier cannot go into a build, or null when it can. */
+export function bundleIdError(bundleId: unknown): string | null {
+  return typeof bundleId === 'string' &&
+    bundleId.length <= MAX_BUNDLE_ID_LENGTH &&
+    BUNDLE_ID_PATTERN.test(bundleId)
+    ? null
+    : APP_REFUSALS.BUNDLE_ID_INVALID;
+}
+
+/**
+ * What a build version may look like: `1`, `1.2`, `1.2.3` or `1.2.3.4`,
+ * optionally followed by a `-prerelease` and a `+build` tag of letters,
+ * digits, dots and dashes. The version is written into the packager's
+ * command line (`--config.buildVersion=...`) and the artifact's metadata,
+ * so anything else is refused before a build is queued.
+ */
+export const BUILD_VERSION_PATTERN =
+  /^\d{1,9}(?:\.\d{1,9}){0,3}(?:-[0-9A-Za-z][0-9A-Za-z.-]{0,39})?(?:\+[0-9A-Za-z][0-9A-Za-z.-]{0,39})?$/;
+
+export const MAX_BUILD_VERSION_LENGTH = 64;
+
+export const BUILD_VERSION_INVALID =
+  'A build version is numbers separated by dots, such as 1.2.3, optionally with a -beta.1 or +build tag.';
+
+/** Why this build version cannot go into a build, or null when it can (or is absent). */
+export function buildVersionError(version: unknown): string | null {
+  if (version === undefined || version === null) return null;
+  return typeof version === 'string' &&
+    version.length <= MAX_BUILD_VERSION_LENGTH &&
+    BUILD_VERSION_PATTERN.test(version)
+    ? null
+    : BUILD_VERSION_INVALID;
+}
 
 /** Targets that produce a file someone installs, and so need an identity. */
 const PACKAGED_TARGETS: readonly DistributionTarget[] = Object.freeze([
@@ -247,7 +328,7 @@ export function checkDistribution(
 
   if (PACKAGED_TARGETS.includes(target as DistributionTarget)) {
     const bundleId = (configuration?.bundleId ?? '').trim();
-    if (!BUNDLE_ID_PATTERN.test(bundleId)) {
+    if (bundleIdError(bundleId)) {
       refusals.push({
         code: 'BUNDLE_ID_INVALID',
         message: APP_REFUSALS.BUNDLE_ID_INVALID,

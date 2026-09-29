@@ -217,7 +217,7 @@ export const ELECTRON_TARGETS: Record<string, { platform: string; arch: string; 
  * dots and spaces, and a slug can be shaped by a customer.
  */
 export function safeExecutableName(slug: string): string {
-  const cleaned = slug.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  const cleaned = slug.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|(?<!-)-+$/g, '');
   return cleaned || 'app';
 }
 

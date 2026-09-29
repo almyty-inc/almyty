@@ -411,6 +411,8 @@ export class OrganizationsService {
   inviteUser(...args: Parameters<OrganizationsInvitesHelper['inviteUser']>) { return this.invitesHelper.inviteUser(...args); }
   acceptInvite(...args: Parameters<OrganizationsInvitesHelper['acceptInvite']>) { return this.invitesHelper.acceptInvite(...args); }
   getInviteDetails(...args: Parameters<OrganizationsInvitesHelper['getInviteDetails']>) { return this.invitesHelper.getInviteDetails(...args); }
+  acceptInviteForMembership(...args: Parameters<OrganizationsInvitesHelper['acceptInviteForMembership']>) { return this.invitesHelper.acceptInviteForMembership(...args); }
+  getInviteDetailsForMembership(...args: Parameters<OrganizationsInvitesHelper['getInviteDetailsForMembership']>) { return this.invitesHelper.getInviteDetailsForMembership(...args); }
   listPendingInvites(...args: Parameters<OrganizationsInvitesHelper['listPendingInvites']>) { return this.invitesHelper.listPendingInvites(...args); }
   revokePendingInvite(...args: Parameters<OrganizationsInvitesHelper['revokePendingInvite']>) { return this.invitesHelper.revokePendingInvite(...args); }
 

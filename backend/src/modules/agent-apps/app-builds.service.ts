@@ -33,6 +33,7 @@ import { downloadedFilename } from './build-handoff';
 import { buildsRunOnWorker } from './build-mode';
 import { ProcessToolchainRunner, TOOL_FOR_TARGET, toolchainReadiness } from './build-toolchain';
 import { Readable } from 'stream';
+import { buildVersionError, bundleIdError, isPackagedTarget } from './agent-app.rules';
 
 export const APP_BUILD_QUEUE = 'app-build';
 
@@ -126,6 +127,23 @@ export class AppBuildsService {
         `This organization already has ${inFlight} builds queued or running. Wait for one to finish before starting another.`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
+    }
+
+    // The version and the bundle identifier go onto the packager's and the
+    // signer's command lines. The DTO checks the version; this holds it for
+    // every caller, and the bundle id comes from the distribution's stored
+    // configuration, which nothing format-checked before a build.
+    const versionError = buildVersionError(dto.version);
+    if (versionError) throw new BadRequestException(versionError);
+    if (isPackagedTarget(dto.target)) {
+      const distribution = await this.distributionRepository.findOne({
+        where: { appId: app.id, target: dto.target },
+      });
+      const bundleId = distribution?.configuration?.bundleId;
+      // Unset means the default, which defaultBundleId always makes valid.
+      if (bundleId !== undefined && bundleId !== null && bundleId !== '' && bundleIdError(bundleId)) {
+        throw new BadRequestException(bundleIdError(bundleId)!);
+      }
     }
 
     if (!BUILD_PLATFORMS[dto.platform]) {

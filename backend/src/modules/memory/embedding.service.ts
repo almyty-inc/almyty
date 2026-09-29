@@ -211,9 +211,9 @@ export class EmbeddingService {
   private resolveEmbeddingBaseUrl(provider: LlmProvider, backend: EmbeddingBackend): string {
     const configured = provider.configuration?.apiUrl;
     if (backend.provider === 'ollama') {
-      const base = (configured || backend.defaultBaseUrl).replace(/\/+$/, '');
+      const base = (configured || backend.defaultBaseUrl).replace(/(?<!\/)\/+$/, '');
       return base.toLowerCase().endsWith('/v1')
-        ? base.slice(0, -3).replace(/\/+$/, '')
+        ? base.slice(0, -3).replace(/(?<!\/)\/+$/, '')
         : base;
     }
     return configured || backend.defaultBaseUrl;

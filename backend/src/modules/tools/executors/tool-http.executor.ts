@@ -54,6 +54,7 @@ import {
  * bloats LLM context windows and our logs.
  */
 import { executeWithPagination, processHttpResponse } from './tool-http-pagination';
+import { matchDelimited } from '../../../common/security/linear-text';
 const MAX_ERR_MESSAGE = 500;
 
 /** Default per-response size cap. 10MB for success, 5MB for the body we send. */
@@ -113,7 +114,7 @@ export class ToolHttpExecutor {
       // latter is relative, collapsing the slash boundary.
       let url = httpConfig.path;
       if (api?.baseUrl && !url.startsWith('http')) {
-        const base = api.baseUrl.replace(/\/+$/, '');
+        const base = api.baseUrl.replace(/(?<!\/)\/+$/, '');
         const path = url.replace(/^\/+/, '');
         url = `${base}/${path}`;
       }
@@ -371,7 +372,7 @@ export class ToolHttpExecutor {
         ) {
           bodyData = parameters;
         } else {
-          const pathParamNames = (operation.endpoint.match(/\{([^}]+)\}/g) || []).map(p =>
+          const pathParamNames = matchDelimited(operation.endpoint, '{', '}').map(p =>
             p.slice(1, -1),
           );
           pathParamNames.forEach(name => {
