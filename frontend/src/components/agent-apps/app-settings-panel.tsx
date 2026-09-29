@@ -21,6 +21,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import {
   appPrivacyFrom,
+  appSpendCapsFrom,
   agentAppsApi,
   isOpenToAnyone,
   type AgentApp,
@@ -37,16 +38,22 @@ export interface AppSettingsPanelProps {
 /** At most this many starter prompts: they fill the empty chat on a phone. */
 const MAX_PROMPTS = 4
 
-/** "Spend limit 0.50 per run · 60 messages per visitor an hour · ...", the defaults at a glance. */
+/** "Spend limit 0.50 per run · App limit 5 a day, 50 a month · ...", the defaults at a glance. */
 export function advancedSummary(values: {
   costCap: string
+  dailyCap?: string
+  monthlyCap?: string
   perUser: string
   perIp: string
   retentionDays: string
   local: boolean
 }): string {
+  const day = values.dailyCap?.trim() ?? ''
+  const month = values.monthlyCap?.trim() ?? ''
+  const appLimit = [day ? `${day} a day` : '', month ? `${month} a month` : ''].filter(Boolean).join(', ')
   const parts = [
     values.costCap.trim() ? `Spend limit ${values.costCap.trim()} per run` : 'No spend limit',
+    appLimit ? `App limit ${appLimit}` : 'No app limit',
     values.perUser.trim() ? `${pluralized(Number(values.perUser.trim()), 'message')} per visitor an hour` : 'No visitor limit',
     values.retentionDays.trim()
       ? `visitor data deleted after ${values.retentionDays.trim()} days`
@@ -90,6 +97,15 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
   const [perIp, setPerIp] = useState(
     app.limits?.perIpRateLimit != null ? String(app.limits.perIpRateLimit) : '',
   )
+  // Shown with the effective value, default included, so what the app is
+  // capped at is on the screen rather than implied by an empty field.
+  const initialCaps = appSpendCapsFrom(app)
+  const [dailyCap, setDailyCap] = useState(
+    initialCaps.dailyCents != null ? String(initialCaps.dailyCents / 100) : '',
+  )
+  const [monthlyCap, setMonthlyCap] = useState(
+    initialCaps.monthlyCents != null ? String(initialCaps.monthlyCents / 100) : '',
+  )
   const initialPrivacy = appPrivacyFrom(app.privacy)
   const [retentionDays, setRetentionDays] = useState(
     initialPrivacy.retentionDays != null ? String(initialPrivacy.retentionDays) : '',
@@ -111,7 +127,7 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
   // before a navigation throws them away. A prompt typed and not added
   // counts too.
   const snapshot = JSON.stringify([
-    appName, primaryColor, theme, greeting, prompts, aiDisclosure, whiteLabel, costCap, perUser, perIp,
+    appName, primaryColor, theme, greeting, prompts, aiDisclosure, whiteLabel, costCap, dailyCap, monthlyCap, perUser, perIp,
     retentionDays, visitorCanDelete, visitorCanExport, visitorMemory, shell, fsRead,
   ])
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot)
@@ -137,6 +153,10 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
           costCapCents: costCap.trim() ? Math.round(Number(costCap) * 100) : null,
           perUserRateLimit: perUser.trim() ? Number(perUser) : null,
           perIpRateLimit: perIp.trim() ? Number(perIp) : null,
+          // Empty is "no limit" here, sent as null, which the server keeps
+          // apart from a field never set (that one takes the default).
+          dailySpendCapCents: dailyCap.trim() ? Math.round(Number(dailyCap) * 100) : null,
+          monthlySpendCapCents: monthlyCap.trim() ? Math.round(Number(monthlyCap) * 100) : null,
         },
         privacy: {
           retentionDays: retentionDays.trim() ? retentionValue : null,
@@ -303,7 +323,7 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
 
       <Disclosure
         title="Advanced"
-        summary={advancedSummary({ costCap, perUser, perIp, retentionDays, local: wantsLocal })}
+        summary={advancedSummary({ costCap, dailyCap, monthlyCap, perUser, perIp, retentionDays, local: wantsLocal })}
       >
         <section className="space-y-4">
           <h3 className="text-sm font-medium">What it may cost</h3>
@@ -331,6 +351,35 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
               In whole currency. A run that would cost more is stopped rather than billed.
             </p>
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="app-daily-cap">Spend limit per day</Label>
+              <Input
+                id="app-daily-cap"
+                inputMode="decimal"
+                value={dailyCap}
+                onChange={(e) => setDailyCap(e.target.value)}
+                placeholder="No daily limit"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="app-monthly-cap">Spend limit per month</Label>
+              <Input
+                id="app-monthly-cap"
+                inputMode="decimal"
+                value={monthlyCap}
+                onChange={(e) => setMonthlyCap(e.target.value)}
+                placeholder="No monthly limit"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            For the whole app: every place and every visitor together. Days and months
+            start at midnight UTC. Once the app reaches a limit, visitors are told
+            &ldquo;This app has reached its limit for today&rdquo; until it resets, and
+            owners and admins are notified. Leave a field empty for no limit.
+          </p>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -399,7 +448,7 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
             <div className="space-y-0.5">
               <Label htmlFor="app-visitor-export">Let visitors download their data</Label>
               <p className="text-xs text-muted-foreground">
-                On by default. Adds a JSON download to the hosted chat.
+                On by default. Adds a download to the web chat and the website widget.
               </p>
             </div>
             <Switch
@@ -413,7 +462,8 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
             <div className="space-y-0.5">
               <Label htmlFor="app-visitor-delete">Let visitors delete their data</Label>
               <p className="text-xs text-muted-foreground">
-                On by default. Visitors can remove one conversation or everything about them.
+                On by default. In the web chat visitors can remove one conversation or
+                everything about them; on your website, their conversation.
               </p>
             </div>
             <Switch
@@ -427,8 +477,9 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
             <div className="space-y-0.5">
               <Label htmlFor="app-visitor-memory">Include visitor conversations in memory</Label>
               <p className="text-xs text-muted-foreground">
-                Off by default. When enabled, visitor conversations may be summarized into
-                shared agent memory and influence answers to other visitors.
+                Off by default. When on, conversations from every place (web chat, website,
+                messaging channels, A2A) may be summarized into shared agent memory and
+                influence answers to other visitors.
               </p>
             </div>
             <Switch

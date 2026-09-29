@@ -20,6 +20,7 @@ import { Message } from '../../entities/message.entity';
 import { AgentApp } from '../../entities/agent-app.entity';
 import { AppDistribution } from '../../entities/agent-app-distribution.entity';
 import { GatewayAppLinkService } from './gateway-app-link.service';
+import { AppPlacePolicyService } from './app-place-policy.service';
 import { GatewayAppLinkController } from './gateway-app-link.controller';
 import { GatewaysService } from './gateways.service';
 import { GatewayProtocolService } from './gateway-protocol.service';
@@ -116,6 +117,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
   providers: [
     HostedChatService,
     GatewayAppLinkService,
+    AppPlacePolicyService,
     VisitorEmailOtpService,
     CustomDomainService,
     { provide: CUSTOM_DOMAIN_STORE, useClass: PgCustomDomainStore },
@@ -183,6 +185,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
     GatewayAuthService, GatewayAuthValidators, GatewaysStatsHelper,
     GatewayToolService,
     GatewayAppLinkService,
+    AppPlacePolicyService,
     ChannelGatewayService,
     DiscordGatewayTransport,
     ChannelWebhookRegistrar,

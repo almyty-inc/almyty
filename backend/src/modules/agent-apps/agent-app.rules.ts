@@ -134,6 +134,50 @@ export function defaultLimitsFor(authMode: AppAuthMode | undefined): NonNullable
   return { costCapCents: DEFAULT_PUBLIC_APP_LIMITS.costCapCents, perUserRateLimit: null, perIpRateLimit: null };
 }
 
+/**
+ * What a whole app may spend, across every place and every visitor.
+ *
+ * The per-run cap bounds one conversation and the rate limits bound one
+ * visitor, but neither bounds the product: a thousand polite visitors
+ * each inside their own share still add up to the owner's whole model
+ * bill. This is that bound, counted from the cost the runs themselves
+ * record (agent_runs.totalCost, the same number the Cost tab sums).
+ *
+ * An app open to anyone starts at five dollars a UTC day and fifty a
+ * month. A gated app starts with none: everyone who reaches it has
+ * signed in through the organization's own directory.
+ */
+export const DEFAULT_PUBLIC_DAILY_SPEND_CAP_CENTS = 500;
+export const DEFAULT_PUBLIC_MONTHLY_SPEND_CAP_CENTS = 5000;
+
+export interface AppSpendCaps {
+  /** Null means no daily ceiling. */
+  dailyCents: number | null;
+  /** Null means no monthly ceiling. */
+  monthlyCents: number | null;
+}
+
+function capFrom(value: unknown, fallback: number | null): number | null {
+  // Missing is "the default"; null, zero or anything unusable is "none".
+  if (value === undefined) return fallback;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
+  return Math.floor(value);
+}
+
+/**
+ * The effective spend caps for an app: stored values over the defaults.
+ * A missing field takes the default for the app's auth mode, so an app
+ * created before the field existed is capped like a new one. An owner
+ * who clears a field (null) has turned that cap off on purpose.
+ */
+export function appSpendCapsFrom(app: Pick<AgentApp, 'limits' | 'authMode'>): AppSpendCaps {
+  const open = isOpenToAnyone(app.authMode);
+  return {
+    dailyCents: capFrom(app.limits?.dailySpendCapCents, open ? DEFAULT_PUBLIC_DAILY_SPEND_CAP_CENTS : null),
+    monthlyCents: capFrom(app.limits?.monthlySpendCapCents, open ? DEFAULT_PUBLIC_MONTHLY_SPEND_CAP_CENTS : null),
+  };
+}
+
 /** True when anyone holding the link or the artifact can use it. */
 export function isOpenToAnyone(authMode: AppAuthMode | string | undefined): boolean {
   return !GATED_AUTH_MODES.includes((authMode ?? AppAuthMode.PUBLIC_LINK) as AppAuthMode);

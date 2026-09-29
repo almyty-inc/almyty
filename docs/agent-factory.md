@@ -64,7 +64,7 @@ Publishing is idempotent: doing it twice re-syncs the existing gateway rather th
 
 **The website widget** (`widget`, a `chat_widget` gateway) takes its look from the app on every request: `GET /gateways/:id/widget-config` overlays the app's colour, name, greeting, theme, AI disclosure (always shown) and almyty mark (`widgetConfigFor`), and keeps only the widget's placement (`configuration.widget.position`, `launcherIcon`), which republishing keeps (`KEPT_ON_REPUBLISH`, with the allowed sites). It has no sign-in, so it is refused on an app whose auth mode is not `public_link` (`WIDGET_HAS_NO_SIGN_IN`, in both `checkDistribution` and `checkPublish`); its rate limits are per visitor, like the web app.
 
-**A2A** (`a2a`) answers at `/{org}/apps/{app}/a2a` with its card at `.well-known/agent-card.json`, through the unified endpoint's app-surface lookup. Callers sign in with the gateway's API keys, made on the place's page (the same auth section a shared-tools gateway has). The card and JSON-RPC answer only for an active agent the gateway may serve (`findServableGatewayAgent`), and publishing refuses a workflow agent. Its rate limit keeps a surface ceiling, like a messaging channel.
+**A2A** (`a2a`) answers at `/{org}/apps/{app}/a2a` with its card at `.well-known/agent-card.json`, through the unified endpoint's app-surface lookup. Callers sign in with the gateway's API keys, made on the place's page (the same auth section a shared-tools gateway has). The card and JSON-RPC answer only for an active agent the gateway may serve (`findServableGatewayAgent`), and publishing refuses a workflow agent. Its rate limit keeps a surface ceiling, like a messaging channel, and each caller credential has its own per-visitor share on the methods that start a task (`A2A_RUN_METHODS`).
 
 Publishing refuses two things that would otherwise produce a surface that is live and useless. A platform whose credentials are absent (`REQUIRED_CREDENTIALS`, read off what each adapter actually uses, never invented) and a workflow agent behind a chat surface, which the runtime turns away at the first message with "not in autonomous mode".
 
@@ -107,9 +107,13 @@ The first two are satisfied from the app's own `limits` column: a cost ceiling p
 
 Those inputs live under Advanced on the Settings tab, below the look, with their current values summed up in one line. Who may use the product is a one-line choice at the top of Settings and of the web app page.
 
-![App Settings tab with cost ceiling and per-user / per-IP rate limits](../docs-site/public/screenshots/apps-settings.png)
+![App Settings tab with cost ceiling, spend limits and per-user / per-IP rate limits](../docs-site/public/screenshots/apps-settings.png)
 
 A limit left empty is stored as null, not as zero. Zero would read as "no requests allowed" rather than "unset", and the rules treat both as unprotected, but only one of them is what the operator meant.
+
+**Every place runs under the app.** `AppPlacePolicyService` (gateways module) is the one place a web chat, widget, messaging channel or A2A call asks before a run: it resolves the app through the distribution and hands the run options every place starts with (`withPlace`): the app's per-run `costCapCents` as `maxCostCents`, `appId` on the run, the place's `gatewayId` on a new conversation (what per-app retention and widget erasure find it by), and `metadata.appVisitor` with the app's `visitorMemory`, so a visitor with no end-user row (widget, channel, A2A) stays out of shared memory unless the app opted in. Per-visitor shares are the web chat visitor, the widget thread, the channel sender and the A2A credential (`a2aCallerId`); `app-place-policy.guard.spec.ts` reads the source so a new `startRun` on a place cannot skip it.
+
+**Spend cap.** `limits.dailySpendCapCents` and `monthlySpendCapCents` bound the whole app across places and visitors: a missing field is the default for the auth mode (open: 500 and 5000, SSO: none, `appSpendCapsFrom`), null is none. The policy sums `agent_runs.totalCost` for the app over the UTC day and month (by `updatedAt`, so a thread open across midnight is counted; index `IDX_agent_runs_appId_updatedAt`). Reached, the web chat, widget and A2A answer 429 `APP_SPEND_CAP_REACHED` with "This app has reached its limit for today." (or "for this month."), a channel sends that sentence as its reply without a run, owners and admins get one `budget.alert` notification per period, and `GET /apps/:slug/spend` drives the notice on the app page.
 
 ## Custom domains
 
