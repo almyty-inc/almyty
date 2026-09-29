@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/store/auth'
 import { useNotifications } from '@/store/app'
 import { authApi } from '@/lib/api'
+import { loginReturnTo } from '@/lib/return-to'
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Invalid email address'),
@@ -43,22 +44,13 @@ export function LoginPage() {
   })
 
   // Honour ?returnTo=… so flows like the CLI browser login (which sends
-  // the user through /auth/login?returnTo=/cli-login?…) come back to
-  // their original destination after a successful sign-in. Only allow
-  // SAME-ORIGIN paths to prevent open-redirect.
-  const returnTo = (() => {
-    const raw = new URLSearchParams(location.search).get('returnTo')
-    if (!raw) return null
-    // Allow relative paths (same-origin navigation)
-    if (raw.startsWith('/') && !raw.startsWith('//')) return raw
-    // Allow absolute URLs to the API domain (OAuth authorize callbacks)
-    try {
-      const url = new URL(raw)
-      const apiBase = import.meta.env.ALMYTY_API_BASE_URL || ''
-      if (apiBase && url.origin === new URL(apiBase).origin) return raw
-    } catch {}
-    return null
-  })()
+  // the user through /auth/login?returnTo=/cli-login?…) and the MCP OAuth
+  // authorize endpoint come back to where they started. Only those, so the
+  // parameter is never an open redirect (see loginReturnTo).
+  const returnTo = loginReturnTo(
+    new URLSearchParams(location.search).get('returnTo'),
+    import.meta.env.ALMYTY_API_BASE_URL || '',
+  )
 
   const onSubmit = async (data: LoginFormData) => {
     setLoginError(null)
