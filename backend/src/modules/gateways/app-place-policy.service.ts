@@ -45,7 +45,33 @@ export interface AppPlaceRunOptions {
   appId: string | null;
   gatewayId: string;
   maxCostCents?: number;
-  metadata: { appVisitor: true; visitorMemory: boolean; appId?: string };
+  metadata: {
+    appVisitor: true;
+    visitorMemory: boolean;
+    appId?: string;
+    /**
+     * On an A2A place: the gateway, and the caller's credential
+     * (a2aCallerId). A2A callers have no visitor row, so this is how an
+     * owner answering a data request finds the runs a caller started.
+     */
+    gatewayId?: string;
+    a2aCaller?: string;
+  };
+}
+
+/**
+ * The place's run options with the A2A caller stamped on them. A caller
+ * with no credential of its own (refused by the auth layer anyway) is
+ * filed under the gateway alone.
+ */
+export function withA2ACaller(place: AppPlace, gatewayId: string, callerId: string | null): AppPlace {
+  return {
+    ...place,
+    runOptions: {
+      ...place.runOptions,
+      metadata: { ...place.runOptions.metadata, gatewayId, ...(callerId ? { a2aCaller: callerId } : {}) },
+    },
+  };
 }
 
 export interface AppPlace {

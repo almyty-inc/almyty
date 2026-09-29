@@ -21,6 +21,8 @@ import { AgentApp } from '../../entities/agent-app.entity';
 import { AppDistribution } from '../../entities/agent-app-distribution.entity';
 import { GatewayAppLinkService } from './gateway-app-link.service';
 import { AppPlacePolicyService } from './app-place-policy.service';
+import { AppVisitorDataService } from './app-visitor-data.service';
+import { FilesModule } from '../files/files.module';
 import { GatewayAppLinkController } from './gateway-app-link.controller';
 import { GatewaysService } from './gateways.service';
 import { GatewayProtocolService } from './gateway-protocol.service';
@@ -113,11 +115,15 @@ import { ChannelInstallationsController } from './channels/channel-installations
     ToolsModule,
     forwardRef(() => AgentsModule),
     AuthorizationModule,
+    // Erasing a visitor's data removes the stored objects behind the files
+    // their runs produced (AppVisitorDataService).
+    FilesModule,
   ],
   providers: [
     HostedChatService,
     GatewayAppLinkService,
     AppPlacePolicyService,
+    AppVisitorDataService,
     VisitorEmailOtpService,
     CustomDomainService,
     { provide: CUSTOM_DOMAIN_STORE, useClass: PgCustomDomainStore },
@@ -186,6 +192,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
     GatewayToolService,
     GatewayAppLinkService,
     AppPlacePolicyService,
+    AppVisitorDataService,
     ChannelGatewayService,
     DiscordGatewayTransport,
     ChannelWebhookRegistrar,

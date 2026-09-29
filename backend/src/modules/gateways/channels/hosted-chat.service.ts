@@ -6,7 +6,7 @@ import { createHash, randomBytes } from 'crypto';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { EndUser } from '../../../entities/end-user.entity';
 import { Conversation, ConversationStatus } from '../../../entities/conversation.entity';
-import { Message, MessageRole, MessageType } from '../../../entities/message.entity';
+import { Message } from '../../../entities/message.entity';
 import { AgentRun } from '../../../entities/agent-run.entity';
 import {
   HostedChatConfig,
@@ -19,6 +19,8 @@ import { EE_ENTITLEMENTS } from '../../licensing/license.constants';
 import { isPrivateGateway } from '../private-gateway';
 import { providerLabel, visitorOAuthConfigured } from './visitor-oauth';
 import { GatewayAppLinkService } from '../gateway-app-link.service';
+import { AppVisitorDataService } from '../app-visitor-data.service';
+import { TranscriptTurn, groupTranscripts, isPublicTurn, toTranscript } from '../visitor-transcript';
 
 /**
  * The tenant-facing half of the hosted chat app.
@@ -77,6 +79,11 @@ export class HostedChatService {
     // Required: Nest must inject it, so a surface never serves branding
     // from the gateway. Typed optional only for positional unit specs.
     private readonly appLink?: GatewayAppLinkService,
+    // What "delete my data" erases, shared with the widget and with an
+    // owner answering a data request. Nest always injects it
+    // (app-visitor-data.guard.spec.ts); see visitorDataService().
+    @Optional()
+    private readonly visitorData?: AppVisitorDataService,
   ) {}
 
   /**
@@ -324,13 +331,16 @@ export class HostedChatService {
     await this.conversationRepository.delete({ id: conversation.id, endUserId: endUser.id });
   }
 
-  /** Erase everything this surface holds about the visitor. The cookie dies with the row. */
+  /**
+   * Erase everything this surface holds about the visitor. The cookie dies
+   * with the row. The same scope an owner erases when answering a data
+   * request (AppVisitorDataService): runs, transcripts, the memories and
+   * files those runs wrote, and stored replies.
+   */
   async deleteVisitor(gateway: Gateway, endUser: EndUser): Promise<void> {
-    // agent_runs.endUserId has no foreign key; take them out explicitly.
-    await this.runRepository.delete({ endUserId: endUser.id });
-    // conversations (and their messages) cascade from the visitor row.
-    await this.endUserRepository.delete({ id: endUser.id, gatewayId: gateway.id });
-    this.audit(gateway, 'visitor.erased', { endUserId: endUser.id });
+    const data = this.visitorDataService();
+    const removed = await data.erase(await data.forWebVisitors(gateway, [endUser.id]));
+    this.audit(gateway, 'visitor.erased', { endUserId: endUser.id, ...removed });
   }
 
   /** Everything this surface holds about the visitor, for them to keep. */
@@ -379,56 +389,37 @@ export class HostedChatService {
    *
    * Same filtering `listMessages` applies — only user and assistant turns,
    * nothing marked internal — and the same per-conversation ceiling, applied
-   * after grouping. The overall `take` is what keeps an export bounded in
+   * after grouping (groupTranscripts, which the widget's and the operator's
+   * exports use too). The overall `take` is what keeps an export bounded in
    * heap regardless of how much the visitor has written.
    */
-  private async messagesByConversation(
-    conversationIds: string[],
-  ): Promise<Map<string, Array<{ id: string; role: string; content: string; createdAt: Date }>>> {
-    const grouped = new Map<string, Array<{ id: string; role: string; content: string; createdAt: Date }>>();
-    if (!conversationIds.length) return grouped;
-
+  private async messagesByConversation(conversationIds: string[]): Promise<Map<string, TranscriptTurn[]>> {
+    if (!conversationIds.length) return new Map();
     const rows = await this.messageRepository.find({
       where: { conversationId: In(conversationIds) },
       order: { conversationId: 'ASC', createdAt: 'ASC' },
       take: EXPORT_MESSAGE_LIMIT,
     });
+    return groupTranscripts(rows);
+  }
 
-    for (const m of rows) {
-      if (!HostedChatService.isPublicTurn(m)) continue;
-      const bucket = grouped.get(m.conversationId);
-      if (bucket) {
-        if (bucket.length < MESSAGE_PAGE_LIMIT) bucket.push(HostedChatService.toTranscript(m));
-      } else {
-        grouped.set(m.conversationId, [HostedChatService.toTranscript(m)]);
-      }
-    }
-    return grouped;
+  /** Whether a turn belongs in a public transcript (visitor-transcript.ts). */
+  static isPublicTurn(m: Message): boolean {
+    return isPublicTurn(m);
+  }
+
+  /** The shape a transcript turn is exposed as (visitor-transcript.ts). */
+  static toTranscript(m: Message): TranscriptTurn {
+    return toTranscript(m);
   }
 
   /**
-   * Tool calls and system scaffolding stay out of a public transcript. An
-   * assistant turn that called tools is scaffolding too: its text is the
-   * agent narrating its working (what it is about to look up, what the
-   * last tool said), saved alongside the call, not an answer.
+   * The visitor-data scope shared with the widget and with an owner
+   * answering a data request. Built from this service's own run repository
+   * when a positional unit spec leaves it out; Nest always injects it.
    */
-  static isPublicTurn(m: Message): boolean {
-    return (
-      (m.role === MessageRole.USER || m.role === MessageRole.ASSISTANT) &&
-      m.type !== MessageType.TOOL_CALL &&
-      !(Array.isArray(m.toolCalls) && m.toolCalls.length > 0) &&
-      m.metadata?.internal !== true
-    );
-  }
-
-  /** The shape a transcript turn is exposed as. */
-  static toTranscript(m: Message): { id: string; role: string; content: string; createdAt: Date } {
-    return {
-      id: m.id,
-      role: m.role,
-      content: typeof m.getTextContent === 'function' ? m.getTextContent() : m.content,
-      createdAt: m.createdAt,
-    };
+  private visitorDataService(): AppVisitorDataService {
+    return this.visitorData ?? new AppVisitorDataService(this.runRepository);
   }
 
   private audit(gateway: Gateway, action: string, details: Record<string, unknown>): void {

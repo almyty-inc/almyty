@@ -19,6 +19,7 @@ import { AppBuildsService, APP_BUILD_QUEUE } from './app-builds.service';
 import { AppBuildProcessor } from './app-build.processor';
 import { buildProcessingEnabled } from './build-mode';
 import { BuildSignerService } from './build-signer.service';
+import { AppVisitorRequestsService } from './app-visitor-requests.service';
 
 /**
  * The agent factory: turning agents into products a customer ships.
@@ -46,6 +47,8 @@ import { BuildSignerService } from './build-signer.service';
     AgentAppsService,
     AppBuildsService,
     BuildSignerService,
+    // An owner answering one person's data request (export, erase).
+    AppVisitorRequestsService,
     // Only consume build jobs when this process is meant to. An API pod
     // running alongside a dedicated build worker sets APP_BUILD_MODE=off
     // so it does not grab a job it cannot fully handle.

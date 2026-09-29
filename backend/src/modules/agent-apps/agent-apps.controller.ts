@@ -3,12 +3,14 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Request,
   Res,
+  ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
@@ -24,7 +26,10 @@ import {
   CreateAppBodyDto,
   RequestBuildBodyDto,
   UpdateAppBodyDto,
+  VisitorDataRequestBodyDto,
 } from './dto/agent-apps-controller.dto';
+import { AppVisitorRequestsService, type DataRequestCaller } from './app-visitor-requests.service';
+import { findEffectiveMembership } from '../../common/authorization/membership';
 import { platformsFor, signingRequirementFor } from './build-targets';
 import { downloadedFilename, handoffFor } from './build-handoff';
 import { maskChannelConfigSecrets } from '../gateways/channels/channel-config.helper';
@@ -89,10 +94,18 @@ export class AgentAppsController {
   constructor(
     private readonly apps: AgentAppsService,
     private readonly builds: AppBuildsService,
+    // Required: Nest always injects it. Typed optional only so positional
+    // unit specs that never touch data requests can leave it out.
+    private readonly visitorRequests?: AppVisitorRequestsService,
   ) {}
 
   private org(req: any): string {
     return req.user.currentOrganizationId;
+  }
+
+  private requests(): AppVisitorRequestsService {
+    if (!this.visitorRequests) throw new ServiceUnavailableException('Data requests are not available.');
+    return this.visitorRequests;
   }
 
   @Get()
@@ -168,6 +181,51 @@ export class AgentAppsController {
   async remove(@Param('slug') slug: string, @Request() req: any) {
     await this.apps.remove(this.org(req), slug);
     return { success: true };
+  }
+
+  // -- Data requests ---------------------------------------------------------
+  //
+  // An owner or admin answering one person's request for their data. Open
+  // to every role at the guard so the service can answer a member with
+  // the 404 another organization gets: whether a person talked to the app
+  // is itself personal data.
+
+  @Post(':slug/visitor-data/lookup')
+  @HttpCode(200)
+  @Roles('viewer', 'member', 'admin', 'owner')
+  @ApiOperation({ summary: 'What this app holds about one person, in counts and dates' })
+  async lookupVisitorData(@Param('slug') slug: string, @Body() body: VisitorDataRequestBodyDto, @Request() req: any) {
+    return { success: true, data: await this.requests().lookup(this.dataRequestCaller(req), slug, body) };
+  }
+
+  @Post(':slug/visitor-data/export')
+  @HttpCode(200)
+  @Roles('viewer', 'member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Everything this app holds about one person, as JSON' })
+  async exportVisitorData(
+    @Param('slug') slug: string,
+    @Body() body: VisitorDataRequestBodyDto,
+    @Request() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const data = await this.requests().export(this.dataRequestCaller(req), slug, body);
+    res.setHeader('Content-Disposition', `attachment; filename="${slug}-data-request.json"`);
+    return data;
+  }
+
+  @Post(':slug/visitor-data/erase')
+  @HttpCode(200)
+  @Roles('viewer', 'member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Erase everything this app holds about one person' })
+  async eraseVisitorData(@Param('slug') slug: string, @Body() body: VisitorDataRequestBodyDto, @Request() req: any) {
+    return { success: true, data: await this.requests().erase(this.dataRequestCaller(req), slug, body) };
+  }
+
+  /** The caller and their role in the organization the request acts on. */
+  private dataRequestCaller(req: any): DataRequestCaller {
+    const organizationId = this.org(req);
+    const membership = findEffectiveMembership<any>(req.user?.organizationMemberships, organizationId);
+    return { userId: req.user?.id, organizationId, role: membership?.role ?? null };
   }
 
   @Post(':slug/distributions')

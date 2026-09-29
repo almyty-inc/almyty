@@ -95,6 +95,11 @@ export enum AuditAction {
   // else, and a deleted team's resources widened to the organization.
   OWNERSHIP_TRANSFER = 'ownership_transfer',
   VISIBILITY_CHANGE = 'visibility_change',
+
+  // An owner or admin answering a person's data request on an app: their
+  // copy, or the erasure of everything the app holds about them.
+  VISITOR_DATA_EXPORT = 'visitor_data_export',
+  VISITOR_DATA_ERASE = 'visitor_data_erase',
 }
 
 
@@ -122,6 +127,8 @@ export enum AuditResource {
 
   REFERRAL = 'referral',
   RUNNER = 'runner',
+  /** An app (agent factory): its visitors' data requests are audited against it. */
+  APP = 'app',
 }
 
 @Entity('audit_logs')

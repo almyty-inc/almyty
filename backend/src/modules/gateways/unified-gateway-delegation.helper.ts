@@ -30,7 +30,7 @@ import { findServableGatewayAgent } from './gateway-servable';
 import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
 import { SkillGeneratorService } from '../tools/skill-generator.service';
 import { assertOAuthScope } from '../mcp/services/mcp-oauth-scope';
-import { AppPlace, AppPlacePolicyService, a2aCallerId } from './app-place-policy.service';
+import { AppPlace, AppPlacePolicyService, a2aCallerId, withA2ACaller } from './app-place-policy.service';
 import { HostedChatService } from './channels/hosted-chat.service';
 import { trustedClientIp } from '../../common/security/client-ip';
 
@@ -474,7 +474,10 @@ export class UnifiedGatewayDelegation {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-    return this.places ? this.places.admit(gateway) : null;
+    if (!this.places) return null;
+    // Each run is filed under the caller's credential, so an owner can
+    // answer that caller's data request (AppVisitorDataService.forA2ACaller).
+    return withA2ACaller(await this.places.admit(gateway), gateway.id, a2aCallerId(auth));
   }
 
   private async delegateACP(

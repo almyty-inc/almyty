@@ -216,14 +216,23 @@ describe('HostedChatService', () => {
       expect(runRepository.delete).not.toHaveBeenCalled();
     });
 
-    it('erases the visitor: runs explicitly, the row (and its conversations) by cascade', async () => {
-      runRepository.delete = jest.fn(async () => ({ affected: 2 }));
-      endUserRepository.delete = jest.fn(async () => ({ affected: 1 }));
+    it('erases the visitor through the shared visitor-data scope, found by their row on this surface', async () => {
+      const footprint = { organizationId: 'org-1', gatewayIds: ['gw-1'], endUserIds: ['eu-1'], runIds: ['r1'], conversationIds: ['c1'], widgetThreads: [] };
+      const visitorData = {
+        forWebVisitors: jest.fn(async () => footprint),
+        erase: jest.fn(async () => ({ conversations: 1, messages: 3, runs: 1, memories: 1, storedReplies: 0, files: 1, visitors: 1 })),
+      };
+      const scoped = new HostedChatService(
+        gatewayRepository, endUserRepository, conversationRepository, messageRepository, runRepository,
+        auditLogService as any, undefined, undefined, visitorData as any,
+      );
 
-      await service.deleteVisitor(gateway(), visitor);
+      await scoped.deleteVisitor(gateway(), visitor);
 
-      expect(runRepository.delete).toHaveBeenCalledWith({ endUserId: 'eu-1' });
-      expect(endUserRepository.delete).toHaveBeenCalledWith({ id: 'eu-1', gatewayId: 'gw-1' });
+      // The same erasure an owner's data request runs: runs, transcripts,
+      // the memories and files those runs wrote, stored replies, the row.
+      expect(visitorData.forWebVisitors).toHaveBeenCalledWith(expect.objectContaining({ id: 'gw-1' }), ['eu-1']);
+      expect(visitorData.erase).toHaveBeenCalledWith(footprint);
     });
 
     it('exports the visitor record and every conversation with its messages', async () => {

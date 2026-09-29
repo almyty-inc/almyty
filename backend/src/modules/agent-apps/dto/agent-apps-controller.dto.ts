@@ -112,3 +112,20 @@ export class RequestBuildBodyDto {
   @IsIn(['zip', 'dmg'])
   macPackaging?: MacPackaging;
 }
+
+/**
+ * One person in a data request: the place they used and what identifies
+ * them there (a Slack user id, a phone number, an email address, a widget
+ * conversation id, an A2A key or client id). Sent in a POST body rather
+ * than a query string so the identifier stays out of access logs.
+ */
+export class VisitorDataRequestBodyDto {
+  @ApiProperty({ enum: DistributionTarget, description: 'The place the person used' })
+  @IsEnum(DistributionTarget)
+  place: DistributionTarget;
+
+  @ApiProperty({ description: 'What identifies the person on that place' })
+  @IsString()
+  @MaxLength(320)
+  id: string;
+}

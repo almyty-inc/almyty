@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
 import { isUniqueViolation } from '../../../common/utils/unique-violation';
@@ -38,10 +38,8 @@ import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { outboundFailureDetail, safeFetch } from '../../../common/security/safe-fetch';
 import { isPrivateGateway } from '../private-gateway';
 import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
-import { Message } from '../../../entities/message.entity';
-import { Conversation } from '../../../entities/conversation.entity';
-import { HostedChatService } from './hosted-chat.service';
 import { APP_SPEND_CAP_MESSAGES, AppPlace, AppPlacePolicyService, withPlace } from '../app-place-policy.service';
+import { AppVisitorDataService } from '../app-visitor-data.service';
 
 /**
  * A handle on a `channel_events` row, so a later step can finish it.
@@ -108,6 +106,10 @@ export class ChannelGatewayService {
     // shared memory. Optional for the same positional-construction reason;
     // Nest always injects it (app-place-policy.guard.spec.ts).
     @Optional() private readonly places?: AppPlacePolicyService,
+    // What a widget visitor's download and erasure cover, shared with the
+    // web chat and with an owner answering a data request. Optional for
+    // the same reason; Nest always injects it (app-visitor-data.guard.spec.ts).
+    @Optional() private readonly visitorData?: AppVisitorDataService,
   ) {
 
     this.adapters = new Map<string, BaseAdapter>([
@@ -796,70 +798,40 @@ export class ChannelGatewayService {
   // ---------------------------------------------------------------------------
   // Widget visitor rights: the visitor's own copy, and erasure
   // ---------------------------------------------------------------------------
+  //
+  // The widget has no visitor row, so the thread is the visitor: every run
+  // filed under the gateway with that threadId (a thread can outlive one
+  // run). What a thread covers is AppVisitorDataService's, the same scope
+  // the web chat's erasure and an owner's data request use.
 
-  /**
-   * The runs behind one widget thread on this gateway. The widget has no
-   * visitor row, so the thread is the visitor: every run filed under the
-   * gateway with that threadId (a thread can outlive one run).
-   */
-  private async widgetThreadRuns(gateway: Gateway, threadId: string): Promise<AgentRun[]> {
-    if (!threadId) return [];
-    return this.runRepository
-      .createQueryBuilder('run')
-      .where('run.organizationId = :organizationId', { organizationId: gateway.organizationId })
-      .andWhere("run.metadata->>'gatewayId' = :gatewayId", { gatewayId: gateway.id })
-      .andWhere("run.metadata->>'threadId' = :threadId", { threadId })
-      .orderBy('run.createdAt', 'ASC')
-      .limit(500)
-      .getMany();
+  private visitorDataService(): AppVisitorDataService {
+    return this.visitorData ?? new AppVisitorDataService(this.runRepository);
   }
 
   /** Everything the widget holds about one thread, for the visitor to keep. */
   async exportWidgetThread(gateway: Gateway, threadId: string): Promise<Record<string, unknown>> {
-    const runs = await this.widgetThreadRuns(gateway, threadId);
-    const conversationIds = [...new Set(runs.map((r) => r.conversationId).filter((id): id is string => !!id))];
-    const messages = conversationIds.length
-      ? await this.runRepository.manager.getRepository(Message).find({
-          where: { conversationId: In(conversationIds) },
-          order: { createdAt: 'ASC' },
-          take: 25_000,
-        })
-      : [];
-    return {
-      exportedAt: new Date().toISOString(),
-      threadId,
-      messages: messages
-        .filter((m) => HostedChatService.isPublicTurn(m))
-        .map((m) => {
-          const { role, content, createdAt } = HostedChatService.toTranscript(m);
-          return { role, content, createdAt };
-        }),
-    };
+    const data = this.visitorDataService();
+    const footprint = await data.forWidgetThread(gateway, threadId);
+    const transcripts = await data.transcripts(footprint.conversationIds);
+    // One thread reads as one conversation: the turns of every run behind
+    // it, in order.
+    const messages = footprint.conversationIds
+      .flatMap((id) => transcripts.get(id) ?? [])
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .map(({ role, content, createdAt }) => ({ role, content, createdAt }));
+    return { exportedAt: new Date().toISOString(), threadId, messages };
   }
 
   /**
    * Erase one widget thread: its runs, their conversations and messages,
-   * and the replies stored for the poll endpoint. Scoped to this gateway
-   * and organization, so a thread id can only ever reach its own rows.
+   * the memories and files those runs wrote, and the replies stored for
+   * the poll endpoint. Scoped to this gateway and organization, so a
+   * thread id can only ever reach its own rows.
    */
   async deleteWidgetThread(gateway: Gateway, threadId: string): Promise<void> {
-    const runs = await this.widgetThreadRuns(gateway, threadId);
-    const conversationIds = [...new Set(runs.map((r) => r.conversationId).filter((id): id is string => !!id))];
-    if (runs.length) await this.runRepository.delete({ id: In(runs.map((r) => r.id)) });
-    if (conversationIds.length) {
-      await this.runRepository.manager.getRepository(Message).delete({ conversationId: In(conversationIds) });
-      await this.runRepository.manager
-        .getRepository(Conversation)
-        .delete({ id: In(conversationIds), organizationId: gateway.organizationId });
-    }
-    await this.eventRepository
-      .createQueryBuilder()
-      .delete()
-      .from(ChannelEvent)
-      .where('"gatewayId" = :gatewayId', { gatewayId: gateway.id })
-      .andWhere(`payload->>'threadId' = :threadId`, { threadId })
-      .execute();
-    this.logger.log(`[widget] visitor thread erased gateway=${gateway.id} runs=${runs.length}`);
+    const data = this.visitorDataService();
+    const removed = await data.erase(await data.forWidgetThread(gateway, threadId));
+    this.logger.log(`[widget] visitor thread erased gateway=${gateway.id} runs=${removed.runs}`);
   }
 
   // ---------------------------------------------------------------------------
