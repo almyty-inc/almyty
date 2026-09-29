@@ -36,12 +36,13 @@ test.describe('Complete E2E Workflow', () => {
     await expect(page.getByRole('heading', { name: 'Connect an API' })).toBeVisible()
 
     // ============================================================
-    // STEP 2: One box: the link to its description, then Import
+    // STEP 2: The kind first, then the link to its description
     // ============================================================
-    await page.getByLabel('Paste a link, drop a file, or paste it here').fill(TEST_APIS.PETSTORE.schemaUrl)
+    await page.getByTestId('api-kind-openapi').click()
+    await page.getByLabel('Link to the description').fill(TEST_APIS.PETSTORE.schemaUrl)
     await page.getByRole('button', { name: 'Advanced' }).click()
     await page.getByLabel('Name', { exact: true }).fill('E2E Petstore API')
-    await page.getByRole('button', { name: 'Import' }).click()
+    await page.getByRole('button', { name: 'Connect API' }).click()
 
     // Petstore declares a key, so the next page asks for it; skip it here.
     await expect(page).toHaveURL(/\/apis\/[^/]+\/setup\?/)

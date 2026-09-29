@@ -16,16 +16,19 @@ test.describe('APIs - CRUD Operations', () => {
     await expect(page.getByText(/no apis|create your first api|get started/i).first()).toBeVisible()
   })
 
-  test('connects an API from a pasted description in one step', async ({ authenticatedPage: page }) => {
+  test('connects an API: the kind first, then its pasted description', async ({ authenticatedPage: page }) => {
     await page.getByRole('link', { name: /connect an api/i }).first().click()
     await expect(page).toHaveURL(/\/apis\/new$/)
     await expect(page.getByRole('heading', { name: 'Connect an API' })).toBeVisible()
+    await page.getByTestId('api-kind-openapi').click()
+    await expect(page).toHaveURL(/\/apis\/new\/openapi$/)
 
-    // One box; everything else is read from the description.
-    await page.getByLabel('Paste a link, drop a file, or paste it here').fill(JSON.stringify(MINIMAL_OPENAPI_SCHEMA))
+    // Everything but the description is read from it.
+    await page.getByRole('tab', { name: 'Paste' }).click()
+    await page.getByLabel('The description').fill(JSON.stringify(MINIMAL_OPENAPI_SCHEMA))
 
     const responsePromise = page.waitForResponse((r) => r.url().includes('/apis/import') && r.request().method() === 'POST')
-    await page.getByRole('button', { name: 'Import' }).click()
+    await page.getByRole('button', { name: 'Connect API' }).click()
     const response = await responsePromise
     expect(response.status()).toBe(201)
 
@@ -34,26 +37,45 @@ test.describe('APIs - CRUD Operations', () => {
   })
 
   test('connects a GraphQL API from pasted SDL', async ({ authenticatedPage: page }) => {
-    await page.goto('/apis/new')
-    await page.getByLabel('Paste a link, drop a file, or paste it here').fill('type Query {\n  hello: String\n}')
+    await page.goto('/apis/new/graphql')
+    await page.getByRole('tab', { name: 'Paste' }).click()
+    await page.getByLabel('The schema').fill('type Query {\n  hello: String\n}')
     await page.getByRole('button', { name: 'Advanced' }).click()
     await page.getByLabel('Name').fill('Test GraphQL')
     await page.getByLabel('Address').fill('https://graphql.example.com/graphql')
-    await page.getByRole('button', { name: 'Import' }).click()
+    await page.getByRole('button', { name: 'Connect API' }).click()
     await expect(page.getByRole('heading', { name: 'Test GraphQL' })).toBeVisible({ timeout: 60000 })
   })
 
   test('says what to do when nothing was given', async ({ authenticatedPage: page }) => {
-    await page.goto('/apis/new')
-    await page.getByRole('button', { name: 'Import' }).click()
-    await expect(page.getByText('Paste a link, drop a file, or paste the description first.')).toBeVisible()
+    await page.goto('/apis/new/openapi')
+    await page.getByRole('button', { name: 'Connect API' }).click()
+    await expect(page.getByText('Paste the link.')).toBeVisible()
   })
 
   test('refuses text that is not an API description, in plain words', async ({ authenticatedPage: page }) => {
-    await page.goto('/apis/new')
-    await page.getByLabel('Paste a link, drop a file, or paste it here').fill('just some notes, no spec here')
-    await page.getByRole('button', { name: 'Import' }).click()
+    await page.goto('/apis/new/openapi')
+    await page.getByRole('tab', { name: 'Paste' }).click()
+    await page.getByLabel('The description').fill('just some notes, no spec here')
+    await page.getByRole('button', { name: 'Connect API' }).click()
     await expect(page.getByText("We couldn't read this as OpenAPI, GraphQL, WSDL or proto.")).toBeVisible()
+  })
+
+  test('refuses a description of another kind than the one picked', async ({ authenticatedPage: page }) => {
+    await page.goto('/apis/new/openapi')
+    await page.getByRole('tab', { name: 'Paste' }).click()
+    await page.getByLabel('The description').fill('type Query {\n  hello: String\n}')
+    await page.getByRole('button', { name: 'Connect API' }).click()
+    await expect(page.getByText('This is a GraphQL description, not an OpenAPI one.', { exact: false })).toBeVisible()
+  })
+
+  test('connects a manual HTTP API from its address', async ({ authenticatedPage: page }) => {
+    await page.goto('/apis/new')
+    await page.getByTestId('api-kind-http').click()
+    await page.getByLabel(/^Name/).fill(`Manual ${Date.now()}`)
+    await page.getByLabel(/^Address/).fill('https://api.example.com')
+    await page.getByRole('button', { name: 'Connect API' }).click()
+    await expect(page).toHaveURL(/\/apis\/[0-9a-f-]{36}$/)
   })
   })
 
