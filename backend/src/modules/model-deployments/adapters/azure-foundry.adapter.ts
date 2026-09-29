@@ -262,7 +262,7 @@ export class AzureFoundryAdapter implements ModelProviderAdapter {
 
   /** The OpenAI-compatible v1 base of a Foundry account. */
   static openAiBase(accountEndpoint: string): string {
-    return `${accountEndpoint.replace(/\/+$/, '')}/openai/v1`;
+    return `${accountEndpoint.replace(/(?<!\/)\/+$/, '')}/openai/v1`;
   }
 
   async deploy(request: DeployRequest, credentials: AdapterCredentials): Promise<EndpointRef> {

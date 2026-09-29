@@ -162,7 +162,11 @@ export class AnthropicMemoryToolBackend implements MemoryBackend {
 
   toCanonical(raw: any): MemoryItem {
     const filename: string = raw?.filename ?? '';
-    const m = filename.match(/^([^_]+)_([^_]+(?:[^_]+)*?)__([0-9a-f-]{36})\.md$/i);
+    // `[^_]+` where this read `[^_]+(?:[^_]+)*?`, which matches the same
+    // text but tries every way of splitting it: a listed filename (the
+    // Files API returns whatever the account holds) of a few hundred
+    // characters that did not end in a uuid took minutes.
+    const m = filename.match(/^([^_]+)_([^_]+)__([0-9a-f-]{36})\.md$/i);
     const content = typeof raw?._content === 'string' ? raw._content : String(raw?.content ?? '');
     const now = new Date();
     return {

@@ -79,7 +79,7 @@ export class McpOAuthController {
   private checkResource(orgSlug: string, gatewaySlug: string, resource: unknown): string | undefined {
     if (resource === undefined || resource === null || resource === '') return undefined;
     const gatewayResource = `${this.resolve.getBaseUrl()}/${orgSlug}/${gatewaySlug}`;
-    const given = typeof resource === 'string' ? resource.replace(/\/+$/, '') : '';
+    const given = typeof resource === 'string' ? resource.replace(/(?<!\/)\/+$/, '') : '';
     if (given !== gatewayResource && !given.startsWith(`${gatewayResource}/`)) {
       throw new HttpException(
         { error: 'invalid_target', error_description: 'resource is not this gateway' },

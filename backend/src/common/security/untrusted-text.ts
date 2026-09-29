@@ -133,7 +133,7 @@ export function cliFlagName(value: unknown): string {
     .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/^-+|(?<!-)-+$/g, '');
 }
 
 // ---------------------------------------------------------------- markdown / yaml

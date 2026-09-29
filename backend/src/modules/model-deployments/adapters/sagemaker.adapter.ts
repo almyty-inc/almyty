@@ -164,7 +164,7 @@ export class SageMakerAdapter implements ModelProviderAdapter {
 
   /** An uncompressed S3 prefix source must end with a slash. */
   static s3Prefix(registryUri: string): string {
-    return `${registryUri.replace(/@[^@/]+$/, '').replace(/\/+$/, '')}/`;
+    return `${registryUri.replace(/@[^@/]+$/, '').replace(/(?<!\/)\/+$/, '')}/`;
   }
 
   /** The model package ARN behind a sagemaker://model-package/ version. */

@@ -236,7 +236,7 @@ export function isBlockedAddress(address: string): boolean {
 
 /** True when a hostname (not an IP) is on the pre-DNS refusal list. */
 export function isBlockedHostname(hostname: string): boolean {
-  const h = stripBrackets(String(hostname).trim().toLowerCase()).replace(/\.+$/, '');
+  const h = stripBrackets(String(hostname).trim().toLowerCase()).replace(/(?<!\.)\.+$/, '');
   if (!h) return false;
   return BLOCKED_HOSTNAMES.some((b) => h === b || h.endsWith(`.${b}`));
 }

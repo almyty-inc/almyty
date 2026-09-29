@@ -520,7 +520,7 @@ export class UtcpService {
 
 /** The public address of a gateway: `<base>/<org slug><gateway endpoint>`. */
 export function gatewayBaseUrl(baseUrl: string, orgSlug: string, gateway: Pick<Gateway, 'endpoint'>): string {
-  return `${baseUrl.replace(/\/+$/, '')}/${orgSlug}${gateway.endpoint}`;
+  return `${baseUrl.replace(/(?<!\/)\/+$/, '')}/${orgSlug}${gateway.endpoint}`;
 }
 
 /**

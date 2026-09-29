@@ -19,7 +19,7 @@ export interface GatewayInfo {
 export function gatewayRefSlug(gw: Pick<GatewayInfo, 'name' | 'endpoint'>): string {
   const fromEndpoint = (gw.endpoint ?? '').replace(/^\/+/, '');
   if (fromEndpoint) return fromEndpoint;
-  return (gw.name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return (gw.name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|(?<!-)-+$/g, '');
 }
 
 export interface ParsedRef {
@@ -221,7 +221,7 @@ export class AlmytyClient {
           trimmed = segments.join('-');
         }
         if (trimmed.length > room) trimmed = trimmed.slice(-room);
-        return `${gw}-${trimmed.replace(/^-+|-+$/g, '')}`;
+        return `${gw}-${trimmed.replace(/^-+|(?<!-)-+$/g, '')}`;
       };
 
       const match = allTools.find((gt: any) => {

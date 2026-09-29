@@ -69,7 +69,7 @@ export function getSuggestion(partial: string): string {
 export function continuationOf(value: string): string | null {
   if (!/\\$/.test(value)) return null;
   // An escaped backslash at the end is a literal one, not a hinge.
-  const trailing = value.length - value.replace(/\\+$/, '').length;
+  const trailing = value.length - value.replace(/(?<!\\)\\+$/, '').length;
   if (trailing % 2 === 0) return null;
   return value.slice(0, -1);
 }
@@ -83,7 +83,7 @@ export function continuationOf(value: string): string | null {
  * command. Newlines inside a submitted value are content.
  */
 export function joinSubmission(lines: string[]): string {
-  return lines.join('\n').replace(/\s+$/, '');
+  return lines.join('\n').replace(/(?<!\s)\s+$/, '');
 }
 
 /** Whether a submission should be read as a slash command. */

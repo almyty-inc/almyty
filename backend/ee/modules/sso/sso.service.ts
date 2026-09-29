@@ -591,8 +591,18 @@ export class SsoService {
   }
 }
 
-function isEmail(value: unknown): value is string {
-  return typeof value === 'string' && /.+@.+\..+/.test(value);
+/**
+ * `/.+@.+\..+/.test(value)`: on one line, something, `@`, something, `.`,
+ * something. The regex tried every way of sharing a line out between its
+ * three `.+`, so a claim of 100 KB of `@` did not finish in thirty
+ * seconds; the earliest `@` and the last `.` of each line decide it.
+ */
+export function isEmail(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  return (value.match(/.+/g) ?? []).some((line) => {
+    const at = line.indexOf('@', 1);
+    return at !== -1 && line.lastIndexOf('.', line.length - 2) >= at + 2;
+  });
 }
 
 /** What the OIDC client adapter checks on the callback. */

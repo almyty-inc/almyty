@@ -68,7 +68,7 @@ const CONTAINER_PORT = 8080;
 
 const ACCEPTED_SOURCES = 'a Model Garden model (vertex://publishers/{publisher}/models/{model}@{version}), a Hugging Face repository (hf://) that Model Garden deploys for you, or your own weights in Cloud Storage (gs://)';
 
-const b64url = (s: string | Buffer) => Buffer.from(s).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+const b64url = (s: string | Buffer) => Buffer.from(s).toString('base64').replace(/(?<!=)=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
 
 export class VertexAdapter implements ModelProviderAdapter {
   readonly key = 'vertex';
@@ -201,7 +201,7 @@ export class VertexAdapter implements ModelProviderAdapter {
   /** The dedicated DNS is documented with its scheme already on it, so strip one if it is there. */
   static host(location: string, dedicatedDns?: string): string {
     if (!dedicatedDns) return VertexAdapter.base(location);
-    return `https://${dedicatedDns.replace(/^https?:\/\//, '').replace(/\/+$/, '')}/v1`;
+    return `https://${dedicatedDns.replace(/^https?:\/\//, '').replace(/(?<!\/)\/+$/, '')}/v1`;
   }
 
   /** The OpenAI-compatible base: chat goes to `<openAiBase>/chat/completions`. */

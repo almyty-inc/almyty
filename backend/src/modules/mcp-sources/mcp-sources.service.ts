@@ -507,7 +507,7 @@ export class McpSourcesService {
    * capped at 128 chars.
    */
   private toolName(source: McpSource, remoteName: string): string {
-    const slug = (s: string) => s.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+    const slug = (s: string) => s.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|(?<!_)_+$/g, '');
     const name = `${slug(source.name)}_${slug(remoteName)}`;
     return name.slice(0, 128);
   }

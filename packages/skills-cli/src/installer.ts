@@ -19,8 +19,12 @@ import type { AgentTarget } from './agents.js';
  *  name. Kept here so `remove`/`installed` continue to find them. */
 const LEGACY_SKILL_PREFIX = 'almyty-';
 
-/** Marker line we expect inside every SKILL.md frontmatter we wrote. */
-const ALMYTY_MARKER = /^\s*author:\s*almyty\s*$/m;
+/** Marker line we expect inside every SKILL.md frontmatter we wrote.
+ *  The leading run stops at a line break: as `^\s*` in a multiline regex
+ *  every line start rescanned all the blank lines after it, and 100 KB of
+ *  them in a SKILL.md (its content is the gateway's) took seven seconds.
+ *  A match that crossed blank lines also matches from the last of them. */
+export const ALMYTY_MARKER = /^[^\S\n\r\u2028\u2029]*author:\s*almyty\s*$/m;
 
 /**
  * Skill names come from the backend/gateway and are used to build

@@ -57,7 +57,7 @@ export class EmailProvisioningService {
       .replace(/^\/+/, '')
       .replace(/[^a-z0-9._-]+/g, '-')
       .replace(/-{2,}/g, '-')
-      .replace(/^[-._]+|[-._]+$/g, '');
+      .replace(/^[-._]+|(?<![-._])[-._]+$/g, '');
     return (slug || gateway.id).slice(0, 64);
   }
 
