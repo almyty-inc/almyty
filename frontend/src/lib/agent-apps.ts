@@ -917,6 +917,106 @@ export interface AppSpendStatus {
   resetsAt: string | null
 }
 
+// -- Data requests ---------------------------------------------------------
+//
+// An owner or admin answering one person's request for their data: look
+// them up on the place they used, download everything, or erase it.
+
+/** Places a person talks to the app on, where a data request can find them. */
+export function isPeoplePlace(target: DistributionTarget): boolean {
+  return target === 'web' || target === 'widget' || target === 'a2a' || isChannelTarget(target)
+}
+
+/** What identifies a person on each place, in the words an owner knows it by. */
+export interface PersonIdentifierHint {
+  label: string
+  placeholder: string
+  help: string
+}
+
+const PHONE_HINT: PersonIdentifierHint = {
+  label: 'Phone number',
+  placeholder: '+1 415 555 0100',
+  help: 'With the country code. Spaces and dashes do not matter.',
+}
+
+export const PERSON_IDENTIFIER_HINTS: Record<DistributionTarget, PersonIdentifierHint> = {
+  web: {
+    label: 'Email address or visitor id',
+    placeholder: 'name@example.com',
+    help: 'The email they signed in with, or the visitor id in the file they downloaded from the chat.',
+  },
+  widget: {
+    label: 'Conversation id',
+    placeholder: 'The threadId in their download',
+    help: 'The widget has no sign-in, so the conversation is the person. The id is in the file they download from the widget.',
+  },
+  a2a: {
+    label: 'Caller key or client id',
+    placeholder: 'key id, OAuth client id, or key:…',
+    help: 'The API key id or OAuth client the calling agent used.',
+  },
+  slack: { label: 'Slack member id', placeholder: 'U012ABCDEF', help: 'In Slack: their profile, then More, then Copy member ID.' },
+  discord: { label: 'Discord user id', placeholder: '80351110224678912', help: 'With developer mode on: right-click them, Copy User ID.' },
+  telegram: { label: 'Telegram user id', placeholder: '123456789', help: 'The number Telegram gives their account, not their @name.' },
+  whatsapp: PHONE_HINT,
+  whatsapp_cloud: PHONE_HINT,
+  sms: PHONE_HINT,
+  signal: PHONE_HINT,
+  microsoft_teams: { label: 'Teams user id', placeholder: '29:1abc…', help: 'The id Teams sends for them, as shown in the channel events.' },
+  google_chat: { label: 'Google Chat user', placeholder: 'users/1234567890', help: 'The users/… name Google Chat sends for them.' },
+  email: { label: 'Email address', placeholder: 'name@example.com', help: 'The address they wrote from.' },
+  matrix: { label: 'Matrix user id', placeholder: '@name:example.org', help: 'Their full Matrix id.' },
+  irc: { label: 'IRC nick', placeholder: 'nick', help: 'The nick they used.' },
+  webhook: { label: 'Sender id', placeholder: 'user-123', help: 'The userId your system sends with each message.' },
+  tui: { label: 'Id', placeholder: '', help: '' },
+  desktop: { label: 'Id', placeholder: '', help: '' },
+  binary: { label: 'Id', placeholder: '', help: '' },
+}
+
+/** One person, as the owner knows them. */
+export interface VisitorDataRequest {
+  place: DistributionTarget
+  id: string
+}
+
+/** What the app holds for them, in counts and dates. */
+export interface VisitorDataSummary {
+  found: boolean
+  conversations: number
+  messages: number
+  firstAt: string | null
+  lastAt: string | null
+  memories: number
+  storedReplies: number
+  files: number
+  runs: number
+  recent: Array<{ id: string; title: string | null; messages: number; firstAt: string | null; lastAt: string | null }>
+}
+
+/** What an erasure removed. */
+export interface VisitorErasure {
+  conversations: number
+  messages: number
+  runs: number
+  memories: number
+  storedReplies: number
+  files: number
+  visitors: number
+}
+
+export const visitorDataApi = {
+  lookup: (slug: string, request: VisitorDataRequest) =>
+    apiPost(`/apps/${slug}/visitor-data/lookup`, request).then((r) => unwrap<VisitorDataSummary>(r)),
+
+  /** Everything held for them, as the JSON file they are sent. */
+  export: (slug: string, request: VisitorDataRequest) =>
+    apiPost<Record<string, unknown>>(`/apps/${slug}/visitor-data/export`, request),
+
+  erase: (slug: string, request: VisitorDataRequest) =>
+    apiPost(`/apps/${slug}/visitor-data/erase`, request).then((r) => unwrap<VisitorErasure>(r)),
+}
+
 /** Cents as the owner reads money: "$5", "$0.50". */
 export function formatCents(cents: number): string {
   const dollars = cents / 100

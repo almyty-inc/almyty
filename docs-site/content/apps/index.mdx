@@ -33,6 +33,8 @@ The separation is deliberate. The same agent can appear in an internal app and a
 
 Create an app from **Apps → Create app** (`/apps/new`). Its detail page has a header, three tabs (**Where people use it**, **Agents**, **Settings**), and a card for each place the product ships. Every card shows a badge for the medium and a status (Live, Building, Draft). Clicking a card opens its page at `/apps/:slug/distributions/:target`.
 
+Owners and admins also see a fourth tab, **Visitor data**, where they answer a person's request for their data: look someone up on the place they used (a Slack member id, a phone number, an email address, a widget conversation, an A2A key), download everything the app holds for them, or delete it. See [How to answer a data request](/hosted-chat#how-to-answer-a-data-request).
+
 ![An app detail page with its places as cards](/screenshots/apps-detail.png)
 
 A product that is not in front of anyone yet shows an empty state on that tab, with the same **Add a place** action as the header. That action opens `/apps/:slug/distributions/new`; publishing or building happens separately on the place's own page.

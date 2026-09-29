@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+
+import { useAuthStore } from '@/store/auth'
+import { useOrganizationStore } from '@/store/organization'
 
 import { render } from '../../test/setup'
 import { AppDetailPage } from '../app-detail'
@@ -106,5 +110,33 @@ describe('AppDetailPage', () => {
     render(<AppDetailPage />)
 
     expect(await screen.findByText(/Not in front of anyone yet/)).toBeInTheDocument()
+  })
+
+  describe('visitor data', () => {
+    const org = { id: 'org-1', name: 'Acme' } as any
+    const as = (role: string) => {
+      useOrganizationStore.setState({ organizations: [org], currentOrganization: org, isInitialized: true })
+      useAuthStore.setState({ user: { id: 'u1', email: 'o@example.test', organizationMemberships: [{ organization: org, role }] } as any })
+    }
+
+    it('gives owners and admins a tab to answer a data request', async () => {
+      as('admin')
+      ;(agentAppsApi.getById as any).mockResolvedValue(
+        app({ distributions: [{ id: 'd-1', target: 'telegram', status: 'live', gatewayId: 'gw-1', configuration: {} }] }),
+      )
+      const user = userEvent.setup()
+      render(<AppDetailPage />)
+
+      await user.click(await screen.findByRole('tab', { name: 'Visitor data' }))
+      expect(await screen.findByRole('heading', { name: 'Answer a data request' })).toBeInTheDocument()
+      expect(screen.getByLabelText('Telegram user id')).toBeInTheDocument()
+    })
+
+    it('does not offer it to a member, whom the server refuses', async () => {
+      as('member')
+      render(<AppDetailPage />)
+      expect(await screen.findByRole('tab', { name: /Settings/ })).toBeInTheDocument()
+      expect(screen.queryByRole('tab', { name: 'Visitor data' })).not.toBeInTheDocument()
+    })
   })
 })

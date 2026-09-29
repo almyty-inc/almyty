@@ -84,14 +84,47 @@ A visitor on `{slug}.almyty.app` (or your own domain) is your user, not almyty's
 
 Every app carries these settings on its **Settings** tab, under **Advanced**, with defaults that need no attention:
 
-- **Let visitors delete their data** (on by default). In the web chat the menu offers *Delete this conversation* and *Delete everything about me*; deleting everything removes the visitor record, every conversation and the runs behind them, then reloads the page with a new private visitor identity. The widget on your website offers *Delete my chat*, pressed twice, which removes that conversation, its runs and its stored replies.
-- **Let visitors download their data** (on by default). The web chat's *Download my data* is a JSON file with the visitor record and every conversation; the widget offers *Download my chat*, the conversation as JSON.
+- **Let visitors delete their data** (on by default). In the web chat the menu offers *Delete this conversation* and *Delete everything about me*; deleting everything removes the visitor record, every conversation and the runs behind them, the memories and files those runs wrote, and the stored replies, then reloads the page with a new private visitor identity. The widget on your website offers *Delete my chat*, pressed twice, which removes the same for that conversation.
+- **Let visitors download their data** (on by default). The web chat's *Download my data* is a JSON file with the visitor record and every conversation; the widget offers *Download my chat*, the conversation as JSON, with its id (`threadId`).
 - **Include visitor conversations in memory** (off by default): only switch it on for an agent whose memory is meant to learn from the public.
 - **Delete visitor data after** a number of days (empty by default, meaning the organization policy applies). A value only ever shortens the organization policy; the hourly sweep removes older conversations, their messages and runs.
 
 ![The hosted chat privacy menu with export and deletion controls](/screenshots/apps-hosted-chat-privacy.png)
 
-Switching a right off returns a plain refusal to the visitor with a stable code (`VISITOR_RIGHT_DISABLED`), and the widget stops offering the button; nothing is deleted or exported behind their back. Messaging channels and A2A have no self-service: someone who asks you through one of those to delete or export what they said is handled from the dashboard.
+Switching a right off returns a plain refusal to the visitor with a stable code (`VISITOR_RIGHT_DISABLED`), and the widget stops offering the button; nothing is deleted or exported behind their back. Messaging channels and A2A have no self-service: someone who reaches the app that way asks you, and you answer from the app's page (below).
+
+## How to answer a data request
+
+Someone who messaged your app on Slack, Telegram, WhatsApp, SMS, email or another messaging app, or who runs an agent that calls it over A2A, cannot download or delete their own data: there is no page to put the button on. They ask you, and you answer from the app.
+
+1. Open the app and go to **Visitor data**. Owners and admins see this tab; for anyone else the data requests do not exist, the same answer another organization gets.
+2. Under **Where they used it**, pick the place they used. Only places that are published and talk to people are listed.
+3. Type what that place knows them by, and **Look up**:
+
+| Place | What to type |
+|---|---|
+| Web app | The email they signed in with, or the visitor id in the file they downloaded |
+| On your website | The conversation id (`threadId`) in the file they downloaded from the widget |
+| Slack | Their member id (`U012ABCDEF`): in Slack, their profile, then More, then Copy member ID |
+| Telegram | Their Telegram user id (a number), not their @name |
+| Discord | Their user id: with developer mode on, right-click them, Copy User ID |
+| SMS, WhatsApp, Signal | Their phone number with the country code; spaces, dashes and a `whatsapp:` prefix do not matter |
+| Email | The address they wrote from |
+| Microsoft Teams, Google Chat, Matrix, IRC, Webhook | The sender id the platform sends (`29:…`, `users/…`, `@name:server`, the nick, or the `userId` your system sends) |
+| Other agents (A2A) | The API key id or OAuth client id the calling agent used (either bare, or as `key:…` / `oauth:…`) |
+
+4. The result says what the app holds for them, in counts and dates: conversations, messages with the first and last date, memories written for them, stored replies and channel deliveries, files, and runs, with their recent conversations listed. Nothing held means nothing to send or delete; check how the place writes the id first.
+5. **Download their data** gives you a JSON file to send them: every conversation's transcript, the memories their conversations wrote, the stored replies to them, and the files and runs, by name and date. A channel's raw delivery is listed by date only, because the platform's copy also carries your workspace and bot ids.
+6. **Delete their data**, confirmed once, removes everything tied to them in this app: the same things the web chat's *Delete everything about me* removes, on the place you picked. The runs they started are removed with the runs those started, and nothing of another person, another app or another organization is touched.
+
+Each download and each deletion is written to the audit log (**Analytics**, **Audit**, filter by *Visitor data sent* or *Visitor data deleted*): who answered, which app and place, and the counts. The person is recorded as a hash of the place and what you typed, never the id itself, so an auditor holding the id can find the entry and the log holds no phone number or address. If the audit row cannot be written, nothing is exported or deleted.
+
+What this covers and what it does not:
+
+- It covers what almyty holds for the app. Copies the messaging platform keeps (the Slack workspace's own history, the email in your inbox) are yours to handle on that platform.
+- A group thread on a messaging channel is filed under the person who started it; messages someone else added to that thread go with it.
+- Memories exist only when the app lets visitor conversations reach memory, and are found by the run that wrote them. Memories synced to an external memory provider are removed there by that provider's own tools.
+- A person who used two places (the web app and Slack) is two look-ups.
 
 
 ## Protect model spend

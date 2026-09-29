@@ -23,6 +23,8 @@ import {
 import { AppAgentsPanel } from '@/components/agent-apps/app-agents-panel'
 import { AppSettingsPanel } from '@/components/agent-apps/app-settings-panel'
 import { AppSpendNotice } from '@/components/agent-apps/app-spend-notice'
+import { AppVisitorData } from '@/components/agent-apps/app-visitor-data'
+import { useOrganizationRole } from '@/hooks/use-organization-role'
 
 /** How each distribution status reads and colours in a badge. */
 const STATUS: Record<DistributionStatus, { label: string; variant: 'success' | 'secondary' | 'warning' | 'outline' | 'destructive' }> = {
@@ -49,6 +51,9 @@ export function AppDetailPage() {
   // Which tab is open. Until someone picks one, an app with no agent opens
   // on Agents, because adding one is the only step that makes sense next.
   const [tab, setTab] = useState<string | null>(null)
+  // Answering a person's data request is for owners and admins; the server
+  // refuses anyone else, so the tab is not offered to them.
+  const { canManage } = useOrganizationRole()
 
   const {
     data: app,
@@ -177,6 +182,7 @@ export function AppDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="agents">Agents ({app.agentIds.length})</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
+          {canManage ? <TabsTrigger value="visitor-data">Visitor data</TabsTrigger> : null}
         </TabsList>
 
         <TabsContent value="distributions" className="space-y-4">
@@ -230,6 +236,14 @@ export function AppDetailPage() {
             <AppSettingsPanel app={app} onSaved={invalidate} />
           </Card>
         </TabsContent>
+
+        {canManage ? (
+          <TabsContent value="visitor-data">
+            <Card className="p-6">
+              <AppVisitorData app={app} />
+            </Card>
+          </TabsContent>
+        ) : null}
       </Tabs>
     </div>
   )
