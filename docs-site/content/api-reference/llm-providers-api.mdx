@@ -39,11 +39,12 @@ curl -X POST https://api.almyty.com/llm-providers/connect \
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `type` | string | Yes | The provider type, as `GET /llm-providers/provider-types` lists it |
-| `name` | string | No | Defaults to the provider's own name |
+| `name` | string | No | The connection's name, shown in every model chooser. Defaults to the provider's own name; several connections of one provider can each have their own |
 | `configuration` | object | No | The key and the few fields the type needs, as for [Add a Provider](#configuration): `apiKey`, `apiUrl` (your own server, Ollama), `bedrock.region`, `azure.resourceName` and `azure.deploymentName`, `vertex.projectId`, `runpod.endpointId`, and `model` for a type whose `listsModels` is false |
 | `credentialId` | uuid | No | Use a saved connection instead of pasting a key |
 | `visibility` | string | No | `org` (default), `team` or `private` |
 | `teamId` | uuid | No | With `visibility: team` |
+| `allowNewModels`, `hiddenModels`, `allowedModels` | | No | Which models the connection offers; see [Which models a connection offers](#which-models-a-connection-offers). Every model, new ones included, when left out |
 
 ```json
 {
@@ -66,6 +67,27 @@ A failure answers `400` with one plain sentence in `message`, the vendor's own w
 | `INVALID_CONFIGURATION` | A required field is missing or the URL is not allowed |
 
 The vendor's own 401 never reaches you as a 401, so a client does not mistake it for its own session ending.
+
+## Which models a connection offers
+
+Every model a connection's key reaches is offered by default. Three fields, on connect, create and `PATCH /llm-providers/:id`, narrow that:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `allowNewModels` | boolean | `true` (default): every model is offered except `hiddenModels`, and a model the provider lists later is offered at once. `false`: only `allowedModels`, and a model listed later waits until it is added |
+| `hiddenModels` | string[] \| null | Vendor model ids not offered while `allowNewModels` is `true` |
+| `allowedModels` | string[] \| null | Vendor model ids offered while `allowNewModels` is `false`. With the switch off it must name at least one (`NO_MODELS_ALLOWED` otherwise) |
+
+Both lists are kept whichever way the switch is set, so flipping it back loses nothing. Pin a key to one model:
+
+```bash
+curl -X PATCH https://api.almyty.com/llm-providers/7c1e... \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "allowNewModels": false, "allowedModels": ["meta-llama/Llama-3.3-70B-Instruct"] }'
+```
+
+A model the connection does not offer reads `allowed: false` and `selectable: false` on `GET /models`, the router never plans it, and a chat call that names it through this connection answers `400` with `MODEL_NOT_ALLOWED` before anything reaches the provider. A call that names no model uses the connection's default model when it is offered, else the best offered one. Changing these fields spends no key check. A rename changes the name of the key the connection made for itself too.
 ## Add a Provider
 
 `type` picks the vendor, and everything else about the connection — the key, the base URL, the default call parameters — lives under `configuration`.
@@ -98,8 +120,9 @@ curl -X POST https://api.almyty.com/llm-providers \
 | `usageCredentialId` | uuid | No | Connection holding the admin key for the vendor's usage/cost API |
 | `capabilities` | object | No | `{supportedModels, maxTokens, supportsFunctionCalling, supportsStreaming, supportsBatching, supportsVision, supportsAudio, supportsToolUse, supportedToolFormats}` |
 | `metadata` | object | No | `{version, region, endpoint, modelInfo}` |
-| `visibility` | `org` \| `team` | No | Who in the organization sees the provider |
+| `visibility` | `org` \| `team` \| `private` | No | Who in the organization sees the provider |
 | `teamId` | string | No | The owning team when `visibility` is `team` |
+| `allowNewModels`, `hiddenModels`, `allowedModels` | | No | Which models it offers; see [above](#which-models-a-connection-offers) |
 
 Creating, updating, and deleting a provider require the `admin` or `owner` role. Reading, testing, and chatting are open to `member` as well.
 

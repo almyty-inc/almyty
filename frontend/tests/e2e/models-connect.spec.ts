@@ -114,7 +114,7 @@ test.describe('Models: connect a provider, see its models, pick one', () => {
   test('an empty Models page goes straight to connecting, and the old addresses redirect', async ({ page }) => {
     await page.goto('/models')
     await expect(page.getByRole('heading', { name: 'Models', exact: true })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Connect your first provider' })).toBeVisible()
+    await expect(page.getByText('No models yet')).toBeVisible()
     await expect(page.getByText(/Where does it run/i)).toHaveCount(0)
 
     for (const [from, to] of [['/llm-providers', /\/models$/], ['/llm-providers/new', /\/models\/connect$/], ['/models/new?type=anthropic', /\/models\/connect\?type=anthropic$/]] as const) {
@@ -156,8 +156,11 @@ test.describe('Models: connect a provider, see its models, pick one', () => {
     await expect(done).toContainText('e2e-small')
     await done.getByRole('button', { name: 'Done' }).click()
 
-    await expect(page).toHaveURL(/\/models$/)
-    await expect(page.getByRole('link', { name: /My server/ })).toBeVisible()
+    // Done opens the new connection; the catalog lists its models.
+    await expect(page).toHaveURL(/\/models\/providers\/[0-9a-f-]{36}$/)
+    await expect(page.getByRole('heading', { name: 'My server' })).toBeVisible()
+    await page.goto('/models')
+    await expect(page.getByRole('link', { name: /My server/ }).first()).toBeVisible()
     await expect(page.getByText('e2e-small').first()).toBeVisible()
 
     await page.goto('/chat')

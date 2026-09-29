@@ -8,7 +8,7 @@
       "path": "screenshots/agent-builder-autonomous.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh, and Agent capabilities now has a Machine labels field (label routing). Recapture on staging.",
+      "reason": "Legacy image predates the UI refresh, and Agent capabilities now has a Machine labels field (label routing). The model chooser also shows each model's price and status and has Add a connection. Recapture on staging.",
       "sha256": "c94b58f0f0c815fbb223492905bb6a79c98972f42157f255c2a44cf5cd844466"
     },
     {
@@ -640,7 +640,7 @@
       "path": "screenshots/llm-providers-create.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Connecting a provider now asks for a connection name, shows Ollama Cloud and your own server as a choice on the Ollama tile, and ends with the models found, all ticked, to untick before Done. Recapture after the provider-connections rework reaches staging.",
       "sha256": "b890a50dca4543856c488141c13a8988cc3bf08ed257e84e28c5c8ea55137943"
     },
     {
@@ -695,7 +695,7 @@
       "path": "screenshots/models.png",
       "capturedAt": "2026-09-23T05:31:21.070Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "Models is now a catalog table of every model from every provider connection (connection, price, context, status, New), with no connected-provider cards; connections are named, several per provider, and choose which models they offer. Recapture after the provider-connections rework reaches staging.",
       "sha256": "43650583b6d8cea1468aab7833a72f97f7d78a03f3928cbfb490b4dd72460e72",
       "source": {
         "kind": "browser",
