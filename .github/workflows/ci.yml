@@ -491,9 +491,6 @@ jobs:
           DB_SSL: 'false'
           REDIS_HOST: 127.0.0.1
           REDIS_PORT: '6379'
-          JWT_SECRET: e2e-jwt-secret-0123456789abcdef0123456789
-          JWT_REFRESH_SECRET: e2e-refresh-secret-0123456789abcdef
-          ENCRYPTION_KEY: e2e-encryption-key-32-bytes-minimum!!
           FRONTEND_URL: http://localhost:3002
           CORS_ORIGIN: http://localhost:3002
           BASE_URL: http://localhost:4000
@@ -501,6 +498,10 @@ jobs:
           LLM_ALLOW_PRIVATE_URLS: 'true'
           MODEL_PRICE_FEED_DISABLED: 'true'
         run: |
+          # Throwaway secrets, made per run so none sits in the repo.
+          export JWT_SECRET="$(openssl rand -hex 32)"
+          export JWT_REFRESH_SECRET="$(openssl rand -hex 32)"
+          export ENCRYPTION_KEY="$(openssl rand -hex 32)"
           nohup node dist-ee/src/main > "$RUNNER_TEMP/api.log" 2>&1 &
           for _ in $(seq 1 90); do
             curl -sf http://localhost:4000/health > /dev/null && exit 0
