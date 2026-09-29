@@ -41,6 +41,11 @@ describe('CreateWorkspaceDto', () => {
     ).resolves.toEqual([]);
   });
 
+  it('accepts label requirements as typed text or as an object', async () => {
+    await expect(violations({ cwd: '/srv/app', labels: 'gpu=yes, os=mac' })).resolves.toEqual([]);
+    await expect(violations({ cwd: '/srv/app', labels: { gpu: 'yes' } })).resolves.toEqual([]);
+  });
+
   it('refuses a missing cwd', async () => {
     const errs = await violations({});
     expect(errs).toContain('cwd:isString');

@@ -27,6 +27,13 @@ export interface ToolExecutionOptions {
    * is authorized as `userId`.
    */
   principal?: ExecutionPrincipal;
+  /**
+   * Label requirements for a runner-backed tool (`{ gpu: 'yes' }`), from
+   * the agent's config. The call goes to an online runner the principal
+   * may use whose labels include all of them, rather than only the runner
+   * the tool was published for. Ignored by every other tool type.
+   */
+  runnerLabels?: Record<string, string>;
   timeout?: number;
   retries?: number;
   skipCache?: boolean;

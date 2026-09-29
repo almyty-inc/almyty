@@ -86,6 +86,16 @@ draining -> offline          drain grace expires
 
 `canAcceptWork(state)` returns true for ONLINE and BUSY only; routing checks this before dispatching.
 
+### Labels route work
+
+`Runner.labels` are the owner's tags (`os=mac`, `gpu=yes`, set with `--label` or on the setup page). Work that names label requirements goes only to a runner that carries all of them:
+
+- **Selection** is `RunnerService.resolveByLabels(required, caller, organizationId, { preferRunnerId })`. Candidates are the organization's runners in a `canAcceptWork` state whose labels include every requirement (keys and values trimmed, compared case-insensitively; extra labels are fine). Each candidate is then put through `resolveForDispatch` with the same caller, so label routing adds no access rule of its own: private is the owner's, team is the team's (and org admins', as everywhere), a runner of a deactivated member takes nobody's work, a dispatch with no known caller reaches org-wide runners only, a gateway run is judged by the gateway's scope. A candidate also needs a live session. Order: the preferred runner, then ONLINE before BUSY, then the latest heartbeat.
+- **No match** is a 404 with one sentence, `No machine with gpu=yes is online`, the same whether no runner carries the labels or the ones that do are someone else's, so the answer does not say which machines exist. Over the runner bridge it is `runner_not_found` with that message.
+- **Agents**: `agentConfig.runnerLabels` (typed as `gpu=yes, os=mac` on the autonomous agent form under Agent capabilities, stored as an object by `normaliseRunnerLabels`). The engine hands it to every tool call (`ToolExecutionOptions.runnerLabels`, from `agent-step-processor.ts` and, for pipelines, `NodeExecutionOptions.runnerLabels`), and `RunnerCallService.dispatch` routes a runner-backed tool's call with it, preferring the tool's own runner.
+- **Workspaces**: `POST /workspaces` takes `labels` (text or object). Without `runnerId` the workspace goes on the runner `resolveByLabels` picks for the caller, which can be another member's org or team runner; with `runnerId` that runner must carry the labels (400 otherwise). Work in a workspace always goes to the workspace's runner; a dispatch that also names labels is refused when that runner lacks one.
+- `backend/src/__tests__/no-control-is-stored-and-ignored.guard.spec.ts` checks that the reader exists end to end, and `test/integration/runner-label-routing.integration.spec.ts` proves it against Postgres.
+
 ### Single-runner-per-account in v1.0
 
 The data model carries no such restriction; the limit lives in the registration policy in `RunnerService.register` (and `create`, for the setup page's record). When the v1.x scheduler arrives, the limit lifts without a migration.
@@ -255,7 +265,7 @@ commands you send it.
 
 - **Container isolation enforcement**: see above — the tier is stored and
   refused, not enforced.
-- **Multi-runner scheduling**: the data model supports it; the picker in `WorkspaceService.pickRunner` returns the user's single runner today, and throws `multiple runners present but no scheduler in v1.0` if there is more than one and no explicit `runnerId`. Scheduler logic is v1.x.
+- **Multi-runner scheduling**: label routing (above) picks among the runners a caller may use, which already spans several members' machines. One member still registers one runner per organization, and without labels or a `runnerId` `WorkspaceService.pickRunner` returns the caller's single runner and throws `multiple runners present but no scheduler in v1.0` if there is more than one. Load-aware scheduling is v1.x.
 - **Real-time runner state in the UI**: the polling-vs-subscription question described under the UI cluster above.
 
 ## Anti-goals reaffirmed

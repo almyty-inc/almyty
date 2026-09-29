@@ -775,6 +775,8 @@ export class AgentStepProcessor {
               // when it sets one, so a genuinely flaky integration can
               // still override.
               retries: resolvedLimits.toolErrorRetries,
+              // The machine this agent's runner-backed tools must run on.
+              runnerLabels: agent.agentConfig?.runnerLabels,
             };
 
             const toolResult: ToolExecutionResult = await this.s.toolExecutorService.executeTool(

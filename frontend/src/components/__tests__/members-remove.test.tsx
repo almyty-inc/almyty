@@ -125,7 +125,6 @@ describe('other destructive member and team actions', () => {
     const user = userEvent.setup()
     render(<MembersAndTeamsTab organizationId="org1" />)
 
-    await user.click(await screen.findByRole('tab', { name: 'Teams' }))
     await user.click(await screen.findByRole('button', { name: 'Delete team Platform' }))
     const dialog = await screen.findByRole('alertdialog')
     expect(dialog).toHaveTextContent('Delete this team?')
@@ -143,7 +142,6 @@ describe('other destructive member and team actions', () => {
     const user = userEvent.setup()
     render(<MembersAndTeamsTab organizationId="org1" />)
 
-    await user.click(await screen.findByRole('tab', { name: 'Teams' }))
     await user.click(await screen.findByRole('button', { name: 'Remove Grace from Platform' }))
     const dialog = await screen.findByRole('alertdialog')
     expect(organizationsApi.removeTeamMember).not.toHaveBeenCalled()

@@ -235,8 +235,8 @@ export function RunnerNewPage() {
                 <Label>Labels (optional)</Label>
                 <p className="text-xs text-muted-foreground mt-1" data-testid="runner-labels-hint">
                   Short tags that say what this machine has, such as <code>os=mac</code> or <code>gpu=yes</code>.
-                  {' '}They are meant for sending work to a machine that matches; for now they only help you tell
-                  runners apart, and work is not routed by label yet.
+                  {' '}An agent or workspace that asks for <code>gpu=yes</code> runs only on an online machine
+                  with that label.
                 </p>
                 <div className="space-y-2 mt-2">
                   {labels.map((label, i) => (
