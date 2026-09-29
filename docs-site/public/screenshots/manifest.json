@@ -498,7 +498,8 @@
       "title": "MCP server CLI 1.5.0 help",
       "path": "screenshots/cli/mcp-server-help.png",
       "capturedAt": "2026-09-22T13:42:14.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "Captured from published 1.5.0. The source has since changed: almyty_create_gateway shares tools only (A2A is now a place on an app), though the help text itself is the same. Recapture after the next publish of @almyty/mcp-server.",
       "sha256": "ca20cb3aa051362aa5c2bdfc09da337171142ca458566e69d736430b6db59b3f",
       "source": {
         "kind": "published-cli",
@@ -625,11 +626,11 @@
     },
     {
       "id": "interfaces-channel-setup",
-      "title": "interfaces channel setup",
+      "title": "A channel's place on its app, with the callback URL next to the settings it needs",
       "path": "screenshots/interfaces-channel-setup.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Shows the Channel Setup panel, which is gone: a channel is now set up as a place on an app (Apps > Where people use it). Recapture from an app's channel place.",
+      "reason": "Shows the Channel Setup panel, which is gone: a channel is now set up as a place on an app (Apps > Where people use it > Add a place). Recapture from an app's channel place, e.g. /apps/<app>/distributions/whatsapp_cloud, showing its settings and callback URL.",
       "sha256": "981ad7f99f7e76e0d34d788f046417d0caba96e2fc133b53c60b40a11ee657ab"
     },
     {
@@ -1214,11 +1215,11 @@
     },
     {
       "id": "widget-builder",
-      "title": "widget builder",
+      "title": "The website widget's place on its app: embed line, placement with live preview, allowed sites",
       "path": "screenshots/widget-builder.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Shows the old widget builder on the gateway page. The widget is now the On your website place on an app: the embed line, position and launcher icon with a live preview (its look comes from the app), and allowed sites. Recapture from /apps/<app>/distributions/widget once published.",
       "sha256": "3e007ef828b2789531a98aa22d9ba9f573f0fbc419ec4fea57d99accf938a991"
     }
   ]
