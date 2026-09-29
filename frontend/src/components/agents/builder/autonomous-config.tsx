@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { VerifierPanelList } from '@/components/agents/verifier-panel'
 import { RunLimitsSection, type RunLimitsConfig } from '@/components/agents/builder/run-limits-section'
 import { ModelsSection } from '@/components/agents/builder/models-section'
+import { RunnerLabelsField } from '@/components/agents/builder/runner-labels-field'
 import { StrategyChoice } from '@/components/agents/builder/strategy-choice'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -41,6 +42,8 @@ export interface AutonomousConfigProps {
   agentConfig: {
     canCallAgents?: boolean
     canCreateAgents?: boolean
+    /** Machine label requirements: typed as `gpu=yes, os=mac`, stored by the server as an object. */
+    runnerLabels?: Record<string, string> | string
     runLimits?: RunLimitsConfig
     /** Shown read-only here and saved back as it is; edited on the overview. */
     verify?: NonNullable<Agent['agentConfig']>['verify']
@@ -184,6 +187,13 @@ export function AutonomousConfig({
               onChange={(e) => onAgentConfigChange({ ...agentConfig, canCreateAgents: e.target.checked })} className="rounded" />
             <div><p className="text-sm font-medium">Can create agents</p><p className="text-xs text-muted-foreground">Spawn temporary specialist agents during runs</p></div>
           </label>
+          {/* Where its runner tools run: an online machine with these labels. */}
+          <RunnerLabelsField
+            id="agent-runner-labels"
+            value={agentConfig.runnerLabels}
+            onChange={(runnerLabels) => onAgentConfigChange({ ...agentConfig, runnerLabels })}
+            hint="Tools that run on your machines go to an online runner with all of these labels. Leave empty to use each tool's own machine."
+          />
         </CardContent>
       </Card>
 

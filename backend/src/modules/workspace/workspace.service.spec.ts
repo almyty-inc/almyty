@@ -5,6 +5,7 @@ import { ConflictException, NotFoundException, BadRequestException } from '@nest
 import { Runner, RunnerState, RunnerIsolationTier } from '../../entities/runner.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { WorkspaceService } from './workspace.service';
+import { RunnerService } from '../runner/runner.service';
 import { strandingQueryBuilder } from './strand-query.fixtures';
 
 /**
@@ -170,6 +171,66 @@ describe('WorkspaceService', () => {
     )).rejects.toBeInstanceOf(ConflictException);
   });
 
+
+  // ── label requirements ──────────────────────────────────────────────
+
+  describe('create with label requirements', () => {
+    let byLabels: jest.Mock;
+
+    beforeEach(async () => {
+      byLabels = jest.fn();
+      const moduleRef = await Test.createTestingModule({
+        providers: [
+          WorkspaceService,
+          { provide: getRepositoryToken(Workspace), useValue: workspaces },
+          { provide: getRepositoryToken(Runner), useValue: runners },
+          { provide: RunnerService, useValue: { resolveByLabels: byLabels } },
+        ],
+      }).compile();
+      service = moduleRef.get(WorkspaceService);
+    });
+
+    it('pins the workspace to the online runner resolveByLabels picks for the caller', async () => {
+      const gpuBox = makeRunner({ id: 'r-gpu', name: 'gpu-box', ownerUserId: 'colleague', labels: { gpu: 'yes' } });
+      byLabels.mockResolvedValue(gpuBox);
+      const ws = await service.create({ cwd: '/work/repo', labels: 'gpu=yes' }, ownerUserId, organizationId);
+      expect(byLabels).toHaveBeenCalledWith({ gpu: 'yes' }, ownerUserId, organizationId);
+      expect(ws.runnerId).toBe('r-gpu');
+      expect(ws.ownerUserId).toBe(ownerUserId);
+    });
+
+    it('says plainly when no machine matches', async () => {
+      byLabels.mockRejectedValue(new NotFoundException('No machine with gpu=yes is online'));
+      await expect(service.create({ cwd: '/work/repo', labels: { gpu: 'yes' } }, ownerUserId, organizationId))
+        .rejects.toThrow('No machine with gpu=yes is online');
+      expect(workspaces._store.size).toBe(0);
+    });
+
+    it('refuses labels that are not key=value before looking for a machine', async () => {
+      await expect(service.create({ cwd: '/work/repo', labels: 'gpu' }, ownerUserId, organizationId))
+        .rejects.toBeInstanceOf(BadRequestException);
+      expect(byLabels).not.toHaveBeenCalled();
+    });
+
+    it('checks a named runner against the requirements instead of searching', async () => {
+      const mac = makeRunner({ labels: { os: 'mac' } });
+      runners._store.set(mac.id, mac);
+      await expect(service.create({ cwd: '/work/repo', runnerId: mac.id, labels: 'gpu=yes' }, ownerUserId, organizationId))
+        .rejects.toThrow('r1 does not have gpu=yes');
+      mac.labels = { os: 'mac', gpu: 'yes' };
+      await expect(service.create({ cwd: '/work/repo', runnerId: mac.id, labels: 'gpu=yes' }, ownerUserId, organizationId))
+        .resolves.toMatchObject({ runnerId: mac.id });
+      expect(byLabels).not.toHaveBeenCalled();
+    });
+
+    it('with no requirements, picks the caller\'s own runner as before', async () => {
+      const own = makeRunner();
+      runners._store.set(own.id, own);
+      await expect(service.create({ cwd: '/work/repo', labels: '' }, ownerUserId, organizationId))
+        .resolves.toMatchObject({ runnerId: own.id });
+      expect(byLabels).not.toHaveBeenCalled();
+    });
+  });
   it('create rejects an invalid ttlMs', async () => {
     const runner = makeRunner();
     runners._store.set(runner.id, runner);

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
+import { QueryClient } from '@tanstack/react-query'
 
 import { render } from '../../test/setup'
-import { PlanBadge, UpgradePrompt, planFromEntitlements } from '../plan-indicator'
+import { PlanBadge, PlanLine, UpgradePrompt, hasPlanToShow, planFromEntitlements } from '../plan-indicator'
 
 // PlanBadge derives its LABEL from the billing plan (via useBillingPlan ->
 // billingApi.getStatus + the current org), NOT from entitlements — Free and Pro
@@ -24,6 +25,26 @@ import { billingApi } from '../../lib/api'
 
 const mockedGetStatus = billingApi.getStatus as unknown as ReturnType<typeof vi.fn>
 
+const BILLING_KEY = ['billing-status', 'org-1']
+
+/**
+ * What an install without the billing module leaves behind: the status
+ * query failed with a 404. The failure is seeded into the cache rather
+ * than thrown from the mock, because vitest counts a mock's rejected
+ * result as a test failure even when the query handled it.
+ */
+function failingBillingClient() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, refetchOnMount: false } } })
+  queryClient.getQueryCache().build(queryClient, { queryKey: BILLING_KEY }).setState({
+    status: 'error',
+    error: Object.assign(new Error('Not Found'), { response: { status: 404 } }),
+    errorUpdatedAt: Date.now(),
+    fetchStatus: 'idle',
+  })
+  // Nothing should ask again; a second request would show a plan and fail the test.
+  mockedGetStatus.mockResolvedValue(statusFor('pro'))
+  return queryClient
+}
 function statusFor(plan: string) {
   return {
     plan,
@@ -73,7 +94,9 @@ describe('planFromEntitlements', () => {
 })
 
 describe('PlanBadge', () => {
-  beforeEach(() => mockedGetStatus.mockReset())
+  // mockClear, not mockReset: after a reset, vitest reports a rejected
+  // implementation as a test failure even when the query handled it.
+  beforeEach(() => mockedGetStatus.mockClear())
 
   it('renders "Free" for a genuinely free org', async () => {
     mockedGetStatus.mockResolvedValue(statusFor('free'))
@@ -125,6 +148,75 @@ describe('PlanBadge', () => {
     render(<PlanBadge />)
     const link = await screen.findByRole('link')
     expect(link).toHaveAttribute('href', '/settings/billing')
+  })
+
+  it('renders nothing, not a placeholder, when billing status fails (no billing module)', async () => {
+    const queryClient = failingBillingClient()
+    const { container } = render(<PlanBadge />, { queryClient })
+    await waitFor(() => expect(queryClient.getQueryState(BILLING_KEY)?.status).toBe('error'))
+    expect(mockedGetStatus).not.toHaveBeenCalled()
+    expect(container.querySelector('.animate-pulse')).not.toBeInTheDocument()
+    expect(container).toBeEmptyDOMElement()
+  })
+})
+
+// The sidebar line under the organization switcher. It used to be a "Plan"
+// label next to a skeleton that never filled in when billing was absent.
+describe('PlanLine', () => {
+  // mockClear, not mockReset: after a reset, vitest reports a rejected
+  // implementation as a test failure even when the query handled it.
+  beforeEach(() => mockedGetStatus.mockClear())
+
+  it('shows nothing while the plan loads: no lone label, no skeleton', async () => {
+    let resolve!: (v: unknown) => void
+    mockedGetStatus.mockReturnValue(new Promise((r) => (resolve = r)))
+    const { container } = render(<PlanLine />)
+    expect(screen.queryByText(/Plan/)).not.toBeInTheDocument()
+    expect(container).toBeEmptyDOMElement()
+    resolve(statusFor('pro'))
+    await waitFor(() => expect(screen.getByTestId('plan-line')).toBeInTheDocument())
+  })
+
+  it('shows nothing when the billing request fails (self-hosted without billing)', async () => {
+    const queryClient = failingBillingClient()
+    const { container } = render(<PlanLine />, { queryClient })
+    await waitFor(() => expect(queryClient.getQueryState(BILLING_KEY)?.status).toBe('error'))
+    expect(mockedGetStatus).not.toHaveBeenCalled()
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('shows nothing when billing is off and the org is on the default plan', async () => {
+    mockedGetStatus.mockResolvedValue({ ...statusFor('free'), status: null, stripeConfigured: false })
+    const { container } = render(<PlanLine />)
+    await waitFor(() => expect(mockedGetStatus).toHaveBeenCalled())
+    await new Promise((r) => setTimeout(r, 0))
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('shows "Plan: <name>" once when there is a plan', async () => {
+    mockedGetStatus.mockResolvedValue(statusFor('pro'))
+    render(<PlanLine />)
+    const line = await screen.findByTestId('plan-line')
+    expect(line).toHaveTextContent(/^Plan:\s*Pro$/)
+    expect(screen.getAllByText('Pro')).toHaveLength(1)
+    expect(screen.getAllByText(/Plan/)).toHaveLength(1)
+  })
+
+  it('shows a licensed plan on an install without hosted billing', async () => {
+    mockedGetStatus.mockResolvedValue({ ...statusFor('enterprise'), stripeConfigured: false, hasLicenseToken: true })
+    render(<PlanLine />)
+    expect(await screen.findByTestId('plan-line')).toHaveTextContent('Enterprise')
+  })
+})
+
+describe('hasPlanToShow', () => {
+  it('is false without a status and for a default Free plan with billing off', () => {
+    expect(hasPlanToShow(undefined)).toBe(false)
+    expect(hasPlanToShow({ ...statusFor('free'), stripeConfigured: false })).toBe(false)
+  })
+
+  it('is true for Free with hosted billing on, so people can see they can upgrade', () => {
+    expect(hasPlanToShow(statusFor('free'))).toBe(true)
   })
 })
 

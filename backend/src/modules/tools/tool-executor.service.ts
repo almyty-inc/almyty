@@ -689,7 +689,16 @@ export class ToolExecutorService {
         // The caller rides along so the runner's own visibility is checked
         // at dispatch too, not only the tool row's -- as the run's principal,
         // so a gateway run is judged by its gateway's scope.
-        { signal: options.signal, timeoutMs: tool.configuration?.timeout, callerUserId: options.userId ?? null, principal: options.principal },
+        {
+          signal: options.signal,
+          timeoutMs: tool.configuration?.timeout,
+          callerUserId: options.userId ?? null,
+          principal: options.principal,
+          // The agent's machine requirements (gpu=yes): the call goes to an
+          // online runner with those labels, this tool's own when it has them.
+          labels: options.runnerLabels,
+          organizationId: options.organizationId,
+        },
       );
       if (!response.ok) {
         return {

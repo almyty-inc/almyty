@@ -529,6 +529,43 @@ describe('ToolExecutorService', () => {
     });
   });
 
+  describe('runner dispatch with label requirements', () => {
+    const runnerTool = () => ({
+      id: 'tool-runner-1',
+      name: 'laptop_shell_exec',
+      status: ToolStatus.ACTIVE,
+      type: ToolType.FUNCTION,
+      organizationId: 'org-1',
+      operation: null,
+      configuration: { timeout: 5000 },
+      runnerConfig: { runnerId: 'runner-1', method: 'shell.exec', requiresWorkspace: false },
+    } as any);
+
+    it('hands the agent\'s label requirements and the organization to the runner dispatch', async () => {
+      toolRepository.findOne.mockResolvedValue(runnerTool());
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        hasPermissionInOrganization: jest.fn().mockReturnValue(true),
+      } as any);
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      const runnerCalls = (service as any).runnerCalls;
+
+      await service.executeTool('tool-runner-1', { command: 'nvidia-smi' }, {
+        userId: 'user-1',
+        organizationId: 'org-1',
+        runnerLabels: { gpu: 'yes' },
+      });
+
+      expect(runnerCalls.dispatch).toHaveBeenCalledWith(
+        'runner-1',
+        'shell.exec',
+        { command: 'nvidia-smi' },
+        undefined,
+        expect.objectContaining({ labels: { gpu: 'yes' }, organizationId: 'org-1' }),
+      );
+    });
+  });
+
   describe('mcp dispatch', () => {
     const mcpTool = () => ({
       id: 'tool-mcp-1',

@@ -8,7 +8,7 @@
       "path": "screenshots/agent-builder-autonomous.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Legacy image predates the UI refresh, and Agent capabilities now has a Machine labels field (label routing). Recapture on staging.",
       "sha256": "c94b58f0f0c815fbb223492905bb6a79c98972f42157f255c2a44cf5cd844466"
     },
     {
@@ -767,7 +767,7 @@
       "path": "screenshots/runner-detail.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Legacy image predates the UI refresh, and the Labels card now says labels send work to a matching machine (label routing). Recapture on staging.",
       "sha256": "1b1cd0d9afbed153cd9e0a2018e6b8cdb044b93920be5080745dc94b411db426"
     },
     {
@@ -1050,7 +1050,7 @@
       "path": "screenshots/settings-teams.png",
       "capturedAt": "2026-09-23T06:10:33.702Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "Members and teams are one page now (members first, teams below, no inner tabs), and the Settings header no longer shows the plan. Recapture on staging.",
       "sha256": "bbdd844b8f42e116b403a9b0b4d2ef147ec950dd89b320de263823fa9958cb1a",
       "source": {
         "kind": "browser",

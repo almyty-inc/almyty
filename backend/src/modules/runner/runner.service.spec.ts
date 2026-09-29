@@ -513,6 +513,107 @@ describe('RunnerService', () => {
     });
   });
 
+  // ── label routing ───────────────────────────────────────────────────
+
+  // Work that names label requirements (gpu=yes) goes to an online runner
+  // carrying all of them, among the runners its caller may use. One runner
+  // per member, so each machine here belongs to a different member.
+  describe('resolveByLabels', () => {
+    const machine = async (
+      owner: string,
+      name: string,
+      labels: Record<string, string>,
+      opts: { visibility?: 'org' | 'team' | 'private'; state?: RunnerState; session?: boolean; org?: string } = {},
+    ) => {
+      const { runner } = await service.register(
+        {
+          name, labels, runtimeInfo: validRuntimeInfo, config: validConfig,
+          visibility: opts.visibility ?? 'org', teamId: opts.visibility === 'team' ? 'team-1' : null,
+        },
+        owner, opts.org ?? organizationId,
+      );
+      await runners.update(runner.id, { state: opts.state ?? RunnerState.ONLINE, lastHeartbeatAt: new Date() });
+      if (opts.session !== false) await service.onSessionConnect(runner.id, `sh_${name}`);
+      return runner;
+    };
+
+    it('picks the online runner whose labels include every requirement', async () => {
+      await machine('colleague', 'mac-mini', { os: 'mac' });
+      const gpuMac = await machine('outsider', 'gpu-mac', { os: 'mac', gpu: 'yes' });
+      await machine('admin-1', 'linux-gpu', { os: 'linux', gpu: 'yes' });
+
+      const picked = await service.resolveByLabels({ os: 'mac', gpu: 'yes' }, ownerUserId, organizationId);
+      expect(picked.id).toBe(gpuMac.id);
+    });
+
+    it('matches keys and values without regard to case or surrounding space', async () => {
+      const gpu = await machine('colleague', 'gpu-box', { GPU: ' Yes ' });
+      await expect(service.resolveByLabels({ gpu: 'yes' }, ownerUserId, organizationId)).resolves.toMatchObject({ id: gpu.id });
+    });
+
+    it('says plainly when no machine matches', async () => {
+      await machine('colleague', 'mac-mini', { os: 'mac' });
+      const err = await service.resolveByLabels({ gpu: 'yes' }, ownerUserId, organizationId).catch((e) => e);
+      expect(err).toBeInstanceOf(NotFoundException);
+      expect(err.message).toBe('No machine with gpu=yes is online');
+    });
+
+    it('does not count a matching runner that is offline, stale, draining or has no session', async () => {
+      await machine('colleague', 'gpu-offline', { gpu: 'yes' }, { state: RunnerState.OFFLINE });
+      await machine('outsider', 'gpu-stale', { gpu: 'yes' }, { state: RunnerState.STALE });
+      await machine('admin-1', 'gpu-draining', { gpu: 'yes' }, { state: RunnerState.DRAINING });
+      await machine(ownerUserId, 'gpu-nosession', { gpu: 'yes' }, { session: false });
+      await expect(service.resolveByLabels({ gpu: 'yes' }, ownerUserId, organizationId))
+        .rejects.toThrow('No machine with gpu=yes is online');
+    });
+
+    it('never picks a runner the caller may not use: another member\'s private one, a team it is not on', async () => {
+      await machine('colleague', 'private-gpu', { gpu: 'yes' }, { visibility: 'private' });
+      await machine(ownerUserId, 'team-gpu', { gpu: 'yes' }, { visibility: 'team' });
+      // outsider is on no team and does not own the private runner.
+      await expect(service.resolveByLabels({ gpu: 'yes' }, 'outsider', organizationId))
+        .rejects.toThrow('No machine with gpu=yes is online');
+      // an org admin may use team runners (the access policy's rule), but
+      // never another member's private one.
+      await expect(service.resolveByLabels({ gpu: 'yes' }, 'admin-1', organizationId))
+        .resolves.toMatchObject({ name: 'team-gpu' });
+      // a team member who is not the private runner's owner gets the team one.
+      await expect(service.resolveByLabels({ gpu: 'yes' }, ownerUserId, organizationId))
+        .resolves.toMatchObject({ name: 'team-gpu' });
+    });
+
+    it('with no known caller, reaches org-wide runners only', async () => {
+      await machine('colleague', 'private-gpu', { gpu: 'yes' }, { visibility: 'private' });
+      await expect(service.resolveByLabels({ gpu: 'yes' }, null, organizationId))
+        .rejects.toThrow('No machine with gpu=yes is online');
+      const open = await machine('outsider', 'org-gpu', { gpu: 'yes' });
+      await expect(service.resolveByLabels({ gpu: 'yes' }, null, organizationId)).resolves.toMatchObject({ id: open.id });
+    });
+
+    it('never reaches into another organization', async () => {
+      await machine(ownerUserId, 'elsewhere', { gpu: 'yes' }, { org: 'org-2' });
+      await expect(service.resolveByLabels({ gpu: 'yes' }, ownerUserId, organizationId))
+        .rejects.toThrow('No machine with gpu=yes is online');
+    });
+
+    it('keeps work on the preferred runner when it matches, and prefers an idle runner to a busy one', async () => {
+      const busy = await machine('colleague', 'busy-gpu', { gpu: 'yes' }, { state: RunnerState.BUSY });
+      const idle = await machine('outsider', 'idle-gpu', { gpu: 'yes' });
+      await expect(service.resolveByLabels({ gpu: 'yes' }, ownerUserId, organizationId)).resolves.toMatchObject({ id: idle.id });
+      await expect(service.resolveByLabels({ gpu: 'yes' }, ownerUserId, organizationId, { preferRunnerId: busy.id }))
+        .resolves.toMatchObject({ id: busy.id });
+    });
+
+    it('skips a runner whose registering member is deactivated', async () => {
+      await machine(ownerUserId, 'gpu-of-leaver', { gpu: 'yes' });
+      for (const row of userOrgs.rows) {
+        if (row.userId === ownerUserId && row.organizationId === organizationId) row.isActive = false;
+      }
+      await expect(service.resolveByLabels({ gpu: 'yes' }, 'colleague', organizationId))
+        .rejects.toThrow('No machine with gpu=yes is online');
+    });
+  });
+
   // ── names and re-registration ───────────────────────────────────────
 
   it('refuses a runner name another member of the org already uses (no takeover by name)', async () => {
