@@ -40,6 +40,7 @@ import { RolesGuard } from '../../modules/auth/guards/roles.guard';
 import { Roles } from '../../modules/auth/decorators/roles.decorator';
 import { JwtStrategy } from '../../modules/auth/strategies/jwt.strategy';
 import { User } from '../../entities/user.entity';
+import { AuthSession } from '../../entities/auth-session.entity';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 
 // Stub api-key strategy that always rejects — JwtAuthGuard tries
@@ -128,6 +129,8 @@ async function buildApp(user: any): Promise<{ app: INestApplication; jwt: JwtSer
       StubApiKeyStrategy,
       Reflector,
       { provide: getRepositoryToken(User), useValue: userRepoStub },
+      // Tokens here carry no session id, so the session table is never read.
+      { provide: getRepositoryToken(AuthSession), useValue: { count: async () => 0 } },
       { provide: APP_GUARD, useClass: JwtAuthGuard },
       { provide: APP_GUARD, useClass: RolesGuard },
       ConfigService,

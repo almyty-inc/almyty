@@ -5,6 +5,8 @@ import { ThrottlerException, ThrottlerStorageService } from '@nestjs/throttler';
 import { AccountThrottleGuard } from '../guards/account-throttle.guard';
 import { AuthController } from '../auth.controller';
 
+type Handler = (...args: never[]) => unknown;
+
 /**
  * The per-IP limit on login, forgot-password and the unauthenticated
  * verification resend is one bucket per address. An attacker with many
@@ -12,7 +14,7 @@ import { AuthController } from '../auth.controller';
  * single account. These routes are also limited per account.
  */
 describe('per-account limits on the public auth routes', () => {
-  const contextFor = (handler: Function, email: unknown): ExecutionContext =>
+  const contextFor = (handler: Handler, email: unknown): ExecutionContext =>
     ({
       getHandler: () => handler,
       getClass: () => AuthController,
@@ -29,7 +31,7 @@ describe('per-account limits on the public auth routes', () => {
 
   afterEach(() => storage.onApplicationShutdown());
 
-  async function attempts(handler: Function, email: string, count: number): Promise<number> {
+  async function attempts(handler: Handler, email: string, count: number): Promise<number> {
     let allowed = 0;
     for (let i = 0; i < count; i++) {
       try {
@@ -70,7 +72,7 @@ describe('per-account limits on the public auth routes', () => {
   });
 
   it('is wired onto exactly the routes it protects, ahead of the password check', () => {
-    const guardsOf = (handler: Function) => Reflect.getMetadata('__guards__', handler) ?? [];
+    const guardsOf = (handler: Handler) => Reflect.getMetadata('__guards__', handler) ?? [];
     expect(guardsOf(AuthController.prototype.login)[0]).toBe(AccountThrottleGuard);
     expect(guardsOf(AuthController.prototype.forgotPassword)).toContain(AccountThrottleGuard);
     expect(guardsOf(AuthController.prototype.resendVerificationByEmail)).toContain(AccountThrottleGuard);
