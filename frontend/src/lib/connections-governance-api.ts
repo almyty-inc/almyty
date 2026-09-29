@@ -1,5 +1,6 @@
 /**
- * Client for the EE connections governance routes under /ee/connections.
+ * Client for the EE credentials governance routes under /ee/credentials
+ * (/ee/connections still answers the same).
  * Every route needs the `connections_governance` entitlement (402 without
  * it) and an owner or admin; the UI gates on the entitlement first. The
  * helpers below unwrap the `{ success, data }` envelope.
@@ -35,7 +36,7 @@ import { pluralized } from './utils'
 
 export const CONNECTIONS_GOVERNANCE_ENTITLEMENT = 'connections_governance'
 
-const BASE = '/ee/connections'
+const BASE = '/ee/credentials'
 
 export const POLICIES_QUERY_KEY = ['connections-governance', 'policies'] as const
 export const REVIEW_QUERY_KEY = ['connections-governance', 'review'] as const

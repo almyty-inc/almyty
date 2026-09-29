@@ -48,15 +48,15 @@ afterEach(() => {
 describe('connectionPoliciesApi', () => {
   it('lists, gets, creates, updates and removes under /ee/connections/policies', async () => {
     await connectionPoliciesApi.list()
-    expect(getSpy).toHaveBeenCalledWith('/ee/connections/policies', undefined)
+    expect(getSpy).toHaveBeenCalledWith('/ee/credentials/policies', undefined)
     await connectionPoliciesApi.get('p1')
-    expect(getSpy).toHaveBeenLastCalledWith('/ee/connections/policies/p1', undefined)
+    expect(getSpy).toHaveBeenLastCalledWith('/ee/credentials/policies/p1', undefined)
     await connectionPoliciesApi.create({ kind: 'expiry_rule', rule: { maxAgeDays: 90, warnDays: 7, enforce: true } })
-    expect(postSpy).toHaveBeenCalledWith('/ee/connections/policies', { kind: 'expiry_rule', rule: { maxAgeDays: 90, warnDays: 7, enforce: true } }, undefined)
+    expect(postSpy).toHaveBeenCalledWith('/ee/credentials/policies', { kind: 'expiry_rule', rule: { maxAgeDays: 90, warnDays: 7, enforce: true } }, undefined)
     await connectionPoliciesApi.update('p1', { enabled: false })
-    expect(patchSpy).toHaveBeenCalledWith('/ee/connections/policies/p1', { enabled: false }, undefined)
+    expect(patchSpy).toHaveBeenCalledWith('/ee/credentials/policies/p1', { enabled: false }, undefined)
     await connectionPoliciesApi.remove('p1')
-    expect(deleteSpy).toHaveBeenCalledWith('/ee/connections/policies/p1', undefined)
+    expect(deleteSpy).toHaveBeenCalledWith('/ee/credentials/policies/p1', undefined)
   })
 
   it('unwraps the envelope', async () => {
@@ -68,27 +68,27 @@ describe('connectionPoliciesApi', () => {
 describe('review, expiry, rotation', () => {
   it('lists the review, filtering by environment only when asked', async () => {
     await connectionsReviewApi.list()
-    expect(getSpy).toHaveBeenCalledWith('/ee/connections/review', undefined)
+    expect(getSpy).toHaveBeenCalledWith('/ee/credentials/review', undefined)
     await connectionsReviewApi.list('production')
-    expect(getSpy).toHaveBeenLastCalledWith('/ee/connections/review', { params: { environment: 'production' } })
+    expect(getSpy).toHaveBeenLastCalledWith('/ee/credentials/review', { params: { environment: 'production' } })
   })
 
   it('revokes grants with the default principal types unless given', async () => {
     await connectionsReviewApi.revokeGrants('c1')
-    expect(postSpy).toHaveBeenCalledWith('/ee/connections/review/c1/revoke-grants', {}, undefined)
+    expect(postSpy).toHaveBeenCalledWith('/ee/credentials/review/c1/revoke-grants', {}, undefined)
     await connectionsReviewApi.revokeGrants('c1', ['agent'])
-    expect(postSpy).toHaveBeenLastCalledWith('/ee/connections/review/c1/revoke-grants', { principalTypes: ['agent'] }, undefined)
+    expect(postSpy).toHaveBeenLastCalledWith('/ee/credentials/review/c1/revoke-grants', { principalTypes: ['agent'] }, undefined)
   })
 
   it('reads and triggers expiry and rotation', async () => {
     await connectionsExpiryApi.list()
-    expect(getSpy).toHaveBeenCalledWith('/ee/connections/expiring', undefined)
+    expect(getSpy).toHaveBeenCalledWith('/ee/credentials/expiring', undefined)
     await connectionsExpiryApi.enforce()
-    expect(postSpy).toHaveBeenCalledWith('/ee/connections/expiring/enforce', undefined, undefined)
+    expect(postSpy).toHaveBeenCalledWith('/ee/credentials/expiring/enforce', undefined, undefined)
     await connectionsRotationApi.candidates()
-    expect(getSpy).toHaveBeenLastCalledWith('/ee/connections/rotate-due', undefined)
+    expect(getSpy).toHaveBeenLastCalledWith('/ee/credentials/rotate-due', undefined)
     await connectionsRotationApi.rotateDue()
-    expect(postSpy).toHaveBeenLastCalledWith('/ee/connections/rotate-due', undefined, undefined)
+    expect(postSpy).toHaveBeenLastCalledWith('/ee/credentials/rotate-due', undefined, undefined)
   })
 })
 
@@ -108,7 +108,7 @@ describe('connectionsAuditExportApi', () => {
 
     const result = await connectionsAuditExportApi.download('csv', { from: '2026-01-01T00:00:00.000Z', limit: 100 })
 
-    expect(getSpy).toHaveBeenCalledWith('/ee/connections/audit-export', { params: { format: 'csv', from: '2026-01-01T00:00:00.000Z', limit: '100' }, responseType: 'blob' })
+    expect(getSpy).toHaveBeenCalledWith('/ee/credentials/audit-export', { params: { format: 'csv', from: '2026-01-01T00:00:00.000Z', limit: '100' }, responseType: 'blob' })
     expect(result).toEqual({ filename: 'connections-audit-2026-09-08.csv', count: 12, retentionDays: 'unlimited' })
     expect(createObjectURL).toHaveBeenCalledTimes(1)
     expect(click).toHaveBeenCalledTimes(1)

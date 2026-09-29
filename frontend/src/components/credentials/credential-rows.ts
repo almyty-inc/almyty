@@ -1,10 +1,9 @@
 /**
- * The rows of the Credentials page, from the two lists the server keeps:
- * GET /connections (every key or account added on Credentials or through
- * the pick-or-create control, with its service and whether it works) and
- * GET /credentials (the same, plus the keys a single API, MCP server,
- * channel or app keeps for itself). A key a model provider uses goes in
- * its own group.
+ * The rows of the Credentials page, from GET /credentials: every key or
+ * account added on Credentials or through the pick-or-create control
+ * (with its service and whether it works), plus the keys a single API,
+ * MCP server, channel or app keeps for itself. A key a model provider
+ * uses goes in its own group.
  */
 import type { ServiceCheck } from '@/components/connect/status-label'
 import type { Connection, Connector, ConnectorKind } from '@/types/connections'
