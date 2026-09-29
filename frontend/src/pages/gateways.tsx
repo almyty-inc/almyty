@@ -256,7 +256,7 @@ export function GatewaysPage() {
         actions={
           <Button onClick={() => navigate('/gateways/new')} disabled={!currentOrganization}>
             <Plus className="h-4 w-4 mr-2" />
-            Share tools
+            Create gateway
           </Button>
         }
       />
@@ -279,12 +279,12 @@ export function GatewaysPage() {
         <EmptyState
           variant="panel"
           icon={Zap}
-          title="Nothing shared yet"
-          description="Pick tools and get one address that works in Claude Code, Cursor and any MCP, UTCP or Skills client."
+          title="No gateways yet"
+          description="Pick a protocol (MCP, UTCP or Skills) and the tools to serve, and get an address Claude Code, Cursor or another client can use."
           action={
             <Button onClick={() => navigate('/gateways/new')}>
               <Plus className="h-4 w-4 mr-2" />
-              Share tools
+              Create gateway
             </Button>
           }
         />

@@ -110,7 +110,7 @@ export const FEATURE_MATRIX: FeatureRow[] = [
   { label: 'Approval policies', entitlement: 'approval_policy' },
   { label: 'PII filtering / compliance pack', entitlement: 'compliance_pack' },
   { label: 'Audit export', entitlement: 'audit_export' },
-  { label: 'Connections governance', entitlement: 'connections_governance' },
+  { label: 'Credentials governance', entitlement: 'connections_governance' },
   { label: 'BYO-KMS (customer-managed keys)', entitlement: 'byo_kms' },
   { label: 'Cost attribution / chargeback', entitlement: 'chargeback' },
   { label: 'White label (remove the almyty mark)', entitlement: 'white_label' },

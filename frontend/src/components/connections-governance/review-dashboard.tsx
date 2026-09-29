@@ -25,7 +25,7 @@ import { QueryError } from '@/components/ui/query-error'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ConnectionHealthBadge } from '@/components/connections/health-badge'
-import { CONNECTIONS_QUERY_KEY } from '@/components/connections/paths'
+import { CONNECTIONS_QUERY_KEY } from '@/components/credentials/paths'
 import { errorMessage } from '@/lib/connections-api'
 import { REVIEW_QUERY_KEY, connectionsReviewApi } from '@/lib/connections-governance-api'
 import { useNotifications } from '@/store/app'
@@ -81,7 +81,7 @@ export function ReviewDashboard() {
   return (
     <div className="space-y-3" data-testid="review-panel">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted-foreground">Personal connections that agents or workspaces can resolve. A production agent on a member's own key is a governance gap: move it to an organization connection, or revoke.</p>
+        <p className="text-sm text-muted-foreground">Personal credentials that agents or workspaces can use. A production agent on a member's own key is a governance gap: move it to an organization credential, or revoke.</p>
         <div className="flex shrink-0 items-center gap-2">
           <Label htmlFor="review-environment" className="text-xs text-muted-foreground">Environment</Label>
           <select id="review-environment" className={SELECT_CLASS} value={environment} onChange={(e) => setEnvironment(e.target.value as ReviewEnvironment)}>
@@ -104,7 +104,7 @@ export function ReviewDashboard() {
           variant="panel"
               icon={Eye}
               title="Nothing to review"
-              description={environment === 'any' ? 'No personal connection is granted to an agent or workspace.' : `No personal connection is granted to a ${environment} agent. Switch to any to see every environment.`}
+              description={environment === 'any' ? 'No personal credential is granted to an agent or workspace.' : `No personal credential is granted to a ${environment} agent. Switch to any to see every environment.`}
             />
       )}
 
@@ -113,7 +113,7 @@ export function ReviewDashboard() {
           <Table data-testid="review-table">
             <TableHeader>
               <TableRow>
-                <TableHead>Connection</TableHead>
+                <TableHead>Credential</TableHead>
                 <TableHead>Owner</TableHead>
                 <TableHead>Granted to</TableHead>
                 <TableHead>Health</TableHead>
@@ -175,7 +175,7 @@ export function ReviewDashboard() {
             <AlertDialogTitle>Revoke grants on {toRevoke?.connection.name}?</AlertDialogTitle>
             <AlertDialogDescription>
               {toRevoke ? `${pluralized(toRevoke.grants.length, 'agent and workspace grant')} will be removed. ` : ''}
-              {toRevoke ? `${ownerLabel(toRevoke.owner)} keeps the connection; nothing else can resolve it until it is granted again.` : ''}
+              {toRevoke ? `${ownerLabel(toRevoke.owner)} keeps the credential; nothing else can resolve it until it is granted again.` : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

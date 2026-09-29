@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Layers, Trash2 } from 'lucide-react'
 
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { timeLeft, workspacePath } from '@/components/runners/runner-workspaces-tab'
 import { workspacesApi } from '@/lib/api'
 import { cn, formatRelativeTime, formatDateTime } from '@/lib/utils'
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
@@ -30,8 +31,13 @@ interface Workspace {
   closedAt: string | null
 }
 
+/**
+ * One workspace, at /runners/:runnerId/workspaces/:id: it belongs to the
+ * runner it is pinned to, and the back link returns to that runner's
+ * Workspaces tab.
+ */
 export function WorkspaceDetailPage() {
-  const { id = '' } = useParams<{ id: string }>()
+  const { id = '', runnerId = '' } = useParams<{ id: string; runnerId: string }>()
   const queryClient = useQueryClient()
   const { success, error: errNotif } = useNotifications()
   const { confirm, dialog: confirmDialog } = useConfirm()
@@ -69,7 +75,7 @@ export function WorkspaceDetailPage() {
   if (wsQuery.isLoading) {
     return (
       <div className="space-y-6">
-        <BackHeader />
+        <BackHeader runnerId={runnerId} />
         <div className="py-12 flex justify-center"><LoadingSpinner size="lg" /></div>
       </div>
     )
@@ -77,7 +83,7 @@ export function WorkspaceDetailPage() {
   if (wsQuery.isError || !wsQuery.data) {
     return (
       <div className="space-y-6">
-        <BackHeader />
+        <BackHeader runnerId={runnerId} />
         <QueryError
           error={wsQuery.error as Error}
           onRetry={wsQuery.refetch}
@@ -88,10 +94,12 @@ export function WorkspaceDetailPage() {
   }
 
   const ws = wsQuery.data
+  // An address with another runner in it goes to the one it is pinned to.
+  if (runnerId && ws.runnerId !== runnerId) return <Navigate to={workspacePath(ws)} replace />
 
   return (
     <div className="space-y-6">
-      <BackHeader />
+      <BackHeader runnerId={ws.runnerId} />
 
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
@@ -139,7 +147,7 @@ export function WorkspaceDetailPage() {
           <Row
             label="TTL"
             value={ws.ttlAt
-              ? <span title={formatDateTime(ws.ttlAt)}>{ws.status === 'active' ? `expires ${formatRelativeTime(ws.ttlAt)}` : formatDateTime(ws.ttlAt)}</span>
+              ? <span title={formatDateTime(ws.ttlAt)}>{ws.status === 'active' ? `ends ${timeLeft(ws.ttlAt)}` : formatDateTime(ws.ttlAt)}</span>
               : <span className="text-muted-foreground">none</span>}
           />
           <Row label="Created" value={<span title={formatDateTime(ws.createdAt)}>{formatRelativeTime(ws.createdAt)}</span>} />
@@ -173,15 +181,35 @@ export function WorkspaceDetailPage() {
   )
 }
 
-function BackHeader() {
+function BackHeader({ runnerId }: { runnerId: string }) {
   return (
     <div>
-      <Link to="/workspaces" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
+      <Link to={runnerId ? `/runners/${runnerId}?tab=workspaces` : '/runners'} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="mr-1 h-4 w-4" />
-        Workspaces
+        {runnerId ? 'Workspaces' : 'Runners'}
       </Link>
     </div>
   )
+}
+
+/**
+ * /workspaces/:id, from before workspaces lived on their runner's page:
+ * on to the workspace under its runner, or to Runners when it is gone.
+ */
+export function WorkspaceAddressRedirect() {
+  const { id = '' } = useParams<{ id: string }>()
+  const wsQuery = useQuery<Workspace>({
+    queryKey: ['workspace', id],
+    queryFn: () => workspacesApi.getById(id),
+    enabled: !!id,
+    retry: false,
+  })
+  if (wsQuery.isLoading) {
+    return (
+      <div className="py-12 flex justify-center"><LoadingSpinner size="lg" /></div>
+    )
+  }
+  return <Navigate to={wsQuery.data?.runnerId ? workspacePath(wsQuery.data) : '/runners'} replace />
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {

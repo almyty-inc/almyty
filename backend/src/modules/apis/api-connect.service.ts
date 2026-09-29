@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { Api } from '../../entities/api.entity';
+import { Api, ApiType } from '../../entities/api.entity';
 import { ResourceVisibility } from '../../common/authorization/access-policy.service';
 import { nameTaken } from '../../common/authorization/private-visibility';
 import { assertOutboundUrlAllowed, EgressError } from '../../common/security/safe-fetch';
@@ -16,6 +16,32 @@ export const MAX_IMPORT_BYTES = 100 * 1024 * 1024;
 export const LINK_NOT_A_DESCRIPTION = "This link doesn't return an API description.";
 export const LINK_PRIVATE = "almyty can't open links to private or local addresses.";
 
+/** The kinds of description a person picks on "Connect an API" before giving one. */
+export const DESCRIPTION_TYPES = [ApiType.OPENAPI, ApiType.GRAPHQL, ApiType.SOAP, ApiType.GRPC] as const;
+export type DescriptionType = (typeof DESCRIPTION_TYPES)[number];
+
+/** An API type in a sentence ("an OpenAPI"). */
+export const API_TYPE_WORDS: Partial<Record<ApiType, string>> = {
+  [ApiType.OPENAPI]: 'an OpenAPI',
+  [ApiType.GRAPHQL]: 'a GraphQL',
+  [ApiType.SOAP]: 'a SOAP',
+  [ApiType.GRPC]: 'a gRPC',
+  [ApiType.HTTP]: 'an HTTP',
+  [ApiType.SDK]: 'an SDK',
+};
+
+const API_TYPE_NAMES: Partial<Record<ApiType, string>> = {
+  [ApiType.OPENAPI]: 'OpenAPI',
+  [ApiType.GRAPHQL]: 'GraphQL',
+  [ApiType.SOAP]: 'SOAP',
+  [ApiType.GRPC]: 'gRPC',
+};
+
+/** Why a description of one kind was refused where another kind was picked. */
+export function typeMismatchMessage(detected: ApiType, picked: ApiType): string {
+  return `This is ${API_TYPE_WORDS[detected] ?? detected} description, not ${API_TYPE_WORDS[picked] ?? picked} one. Pick ${API_TYPE_NAMES[detected] ?? detected} instead, or give ${API_TYPE_WORDS[picked] ?? picked} description.`;
+}
+
 /** Exactly one of these three: a link, an uploaded file, or pasted text. */
 export interface DescribeInput {
   file?: { buffer: Buffer; originalname?: string };
@@ -26,6 +52,8 @@ export interface DescribeInput {
 export interface ConnectApiInput extends DescribeInput {
   organizationId: string;
   userId?: string;
+  /** The kind the person picked; a description of another kind is refused. */
+  type?: DescriptionType;
   /** Advanced overrides. Everything else is read from the description. */
   name?: string;
   baseUrl?: string;
@@ -60,6 +88,9 @@ export class ApiConnectService {
 
   async connect(input: ConnectApiInput): Promise<ConnectApiResult> {
     const detected = await this.describe(input);
+    if (input.type && detected.type !== input.type) {
+      throw new BadRequestException({ code: 'API_TYPE_MISMATCH', message: typeMismatchMessage(detected.type, input.type) });
+    }
 
     const baseUrl = input.baseUrl?.trim() || detected.baseUrl || '';
     if (input.baseUrl?.trim() && !/^https?:\/\/.+/i.test(input.baseUrl.trim())) {

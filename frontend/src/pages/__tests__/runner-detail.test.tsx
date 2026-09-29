@@ -144,17 +144,22 @@ describe('RunnerDetailPage', () => {
     await waitFor(() => expect(screen.getByText(/no coding agents detected/i)).toBeInTheDocument())
   })
 
-  it('lists active workspaces with a link to workspace detail', async () => {
+  it('keeps its workspaces on a Workspaces tab next to Overview', async () => {
     getRunner.mockResolvedValue(makeRunner({ state: 'busy' }))
     getWorkspaces.mockResolvedValue([
       makeWorkspace({ id: 'ws-aaaaaaaa-1111-2222', runnerId: 'r1', status: 'active', cwd: '/foo/bar' }),
       makeWorkspace({ id: 'ws-bbbbbbbb-3333-4444', runnerId: 'r1', status: 'released', cwd: '/baz' }),
     ])
+    const user = userEvent.setup()
     render(<RunnerDetailPage />)
-    await waitFor(() => expect(screen.getByText('Active workspaces (1)')).toBeInTheDocument())
-    expect(screen.getByText('/foo/bar')).toBeInTheDocument()
-    // Released workspace shown in "Recent" section, not "Active".
-    expect(screen.getByText('/baz')).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
+    // Overview is the machine; its workspaces are one tab away.
+    expect(screen.queryByText('/foo/bar')).toBeNull()
+    const tab = await screen.findByRole('tab', { name: 'Workspaces (1 active)' })
+    await user.click(tab)
+    const table = await screen.findByTestId('runner-workspaces')
+    expect(await within(table).findByText('/foo/bar')).toBeInTheDocument()
+    expect(within(table).getByText('/baz')).toBeInTheDocument()
   })
 })
 

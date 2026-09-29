@@ -16,7 +16,6 @@ export default {
   'operate-separator': { type: 'separator', title: 'Operate' },
   memory: 'Memory',
   credentials: 'Credentials',
-  connections: 'Connections',
   approvals: 'Approvals',
   organizations: 'Organizations',
   analytics: 'Analytics',

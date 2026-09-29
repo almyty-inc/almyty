@@ -1,4 +1,4 @@
 export default {
   index: 'Overview',
-  grants: 'Grants',
+  grants: 'Who can use it',
 }

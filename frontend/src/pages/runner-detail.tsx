@@ -1,6 +1,6 @@
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Cpu, Trash2, Wrench } from 'lucide-react'
 
@@ -10,7 +10,9 @@ import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { runnersApi, workspacesApi, toolsApi } from '@/lib/api'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { RunnerWorkspacesTab, useRunnerWorkspaces } from '@/components/runners/runner-workspaces-tab'
+import { runnersApi, toolsApi } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
@@ -24,7 +26,6 @@ import {
   runnerStartCommand,
   runnerStateLabel,
   runnerStateVariant,
-  workspaceStatusVariant,
 } from './runners-shared'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
@@ -62,20 +63,21 @@ interface Runner {
   registeredAt: string
 }
 
-interface Workspace {
-  id: string
-  runnerId: string
-  cwd: string
-  isolation: 'container' | 'host'
-  status: 'active' | 'released' | 'expired' | 'stranded'
-  ttlAt: string | null
-  closeReason: { kind: string; detail: string } | null
-  createdAt: string
-}
+/** The tabs `?tab=` may open. */
+export const RUNNER_TABS = ['overview', 'workspaces'] as const
 
 export function RunnerDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab')
+  const tab = requestedTab && (RUNNER_TABS as readonly string[]).includes(requestedTab) ? requestedTab : 'overview'
+  const setTab = (next: string) => {
+    const params = new URLSearchParams(searchParams)
+    if (next === 'overview') params.delete('tab')
+    else params.set('tab', next)
+    setSearchParams(params, { replace: true })
+  }
   const queryClient = useQueryClient()
   const { success, error: errNotif } = useNotifications()
   const { confirm, dialog: confirmDialog } = useConfirm()
@@ -99,16 +101,7 @@ export function RunnerDetailPage() {
   }, [runnerQuery.data])
 
   const runnerOffline = runnerQuery.data?.state === 'offline'
-  const workspacesQuery = useQuery<Workspace[]>({
-    queryKey: ['workspaces', { runnerId: id }],
-    queryFn: () => workspacesApi.getAll(),
-    enabled: !!id,
-    // An offline runner cannot take new work, and every workspace
-    // pinned to it has already been stranded, so there is nothing
-    // left for this poll to find.
-    refetchInterval: runnerOffline ? false : RUNNER_HEARTBEAT_POLL_MS,
-    select: (all) => all.filter(w => w.runnerId === id),
-  })
+  const workspacesQuery = useRunnerWorkspaces(id, { poll: !runnerOffline })
 
   const { currentOrganization } = useOrganizationStore()
   const capabilitiesQuery = useQuery<Tool[]>({
@@ -172,9 +165,7 @@ export function RunnerDetailPage() {
   }
 
   const runner = runnerQuery.data
-  const workspaces = workspacesQuery.data ?? []
-  const active = workspaces.filter(w => w.status === 'active')
-  const recent = workspaces.filter(w => w.status !== 'active').slice(0, 10)
+  const activeWorkspaces = (workspacesQuery.data ?? []).filter((w) => w.status === 'active').length
 
   return (
     <div className="space-y-6">
@@ -230,6 +221,15 @@ export function RunnerDetailPage() {
         </Card>
       )}
 
+      <Tabs value={tab} onValueChange={setTab} className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="workspaces">Workspaces{activeWorkspaces > 0 ? ` (${activeWorkspaces} active)` : ''}</TabsTrigger>
+        </TabsList>
+        <TabsContent value="workspaces">
+          <RunnerWorkspacesTab runnerId={runner.id} poll={!runnerOffline} />
+        </TabsContent>
+        <TabsContent value="overview" className="space-y-6">
       {isOwner && (
         <Card>
           <CardHeader>
@@ -323,28 +323,6 @@ export function RunnerDetailPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Active workspaces ({active.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {active.length === 0
-            ? <p className="text-sm text-muted-foreground">No active workspaces pinned to this runner.</p>
-            : <WorkspaceTable rows={active} />}
-        </CardContent>
-      </Card>
-
-      {recent.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Recent workspaces</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <WorkspaceTable rows={recent} />
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Wrench className="h-4 w-4" />
             Published capabilities
@@ -381,6 +359,8 @@ export function RunnerDetailPage() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
 
       {confirmDialog}
     </div>
@@ -453,47 +433,6 @@ function CodingAgentsGrid({ agents }: { agents: CodingAgent[] }) {
           </div>
         </div>
       ))}
-    </div>
-  )
-}
-
-function WorkspaceTable({ rows }: { rows: Workspace[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-muted-foreground">
-            <th className="pb-2 pr-4 font-medium">Id</th>
-            <th className="pb-2 pr-4 font-medium">cwd</th>
-            <th className="pb-2 pr-4 font-medium">Isolation</th>
-            <th className="pb-2 pr-4 font-medium">Status</th>
-            <th className="pb-2 font-medium">TTL / closed</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(w => (
-            <tr key={w.id} className="border-b last:border-b-0">
-              <td className="py-2 pr-4">
-                <Link to={`/workspaces/${w.id}`} className="font-mono text-xs hover:underline">
-                  {w.id.slice(0, 8)}…
-                </Link>
-              </td>
-              <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{w.cwd}</td>
-              <td className="py-2 pr-4">
-                <Badge variant="outline" className="font-normal">{w.isolation}</Badge>
-              </td>
-              <td className="py-2 pr-4">
-                <Badge variant={workspaceStatusVariant[w.status]}>{w.status}</Badge>
-              </td>
-              <td className="py-2 text-muted-foreground">
-                {w.status === 'active'
-                  ? (w.ttlAt ? `expires ${formatRelativeTime(w.ttlAt)}` : 'no TTL')
-                  : (w.closeReason?.kind ?? '—')}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

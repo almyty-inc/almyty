@@ -32,7 +32,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
-import { CredentialPicker } from '@/components/credential-picker'
+import { OTHER_SERVICE_KEY } from '@/components/connections/connect-flow'
+import { CredentialPicker } from '@/components/credentials/credential-picker'
 import { SdkToolForm } from '@/components/tools/sdk-tool-form'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { ModelPicker } from '@/components/model-picker'
@@ -296,12 +297,14 @@ return new Promise((resolve, reject) => {
       }
 
       // The backend stores auth nested (`{ type, config }`), while the
-      // form holds it flat, hence the reshape.
+      // form holds it flat, hence the reshape. A key or token is a
+      // credential the tool points at (picked or created in the form, so
+      // it lives on the Credentials page); only basic auth is typed here.
       const inlineAuth =
-        authConfig.type === 'bearer' && authConfig.bearerToken
-          ? { type: 'bearer', config: { token: authConfig.bearerToken } }
-          : authConfig.type === 'apiKey' && authConfig.apiKey
-            ? { type: 'apiKey', config: { key: authConfig.apiKey, headerName: 'X-API-Key' } }
+        authConfig.type === 'bearer' && authConfig.credentialId
+          ? { type: 'bearer', config: { credentialId: authConfig.credentialId } }
+          : authConfig.type === 'apiKey' && authConfig.credentialId
+            ? { type: 'apiKey', config: { credentialId: authConfig.credentialId, headerName: 'X-API-Key' } }
             : authConfig.type === 'basic' && authConfig.username
               ? { type: 'basic', config: { username: authConfig.username, password: authConfig.password } }
               : null
@@ -863,26 +866,15 @@ return new Promise((resolve, reject) => {
             </Select>
           </Field>
 
-          {authConfig.type === 'apiKey' && (
+          {(authConfig.type === 'apiKey' || authConfig.type === 'bearer') && (
             <CredentialPicker
-              label="API key"
+              id="tool-auth-credential"
+              label={authConfig.type === 'apiKey' ? 'API key' : 'Bearer token'}
               value={authConfig.credentialId || ''}
-              onSelect={(id) => setAuthConfig({ ...authConfig, credentialId: id })}
-              onNewKey={(key) => setAuthConfig({ ...authConfig, apiKey: key })}
-              newKeyValue={authConfig.apiKey || ''}
-              filterType="api_key"
-            />
-          )}
-
-          {authConfig.type === 'bearer' && (
-            <CredentialPicker
-              label="Bearer token"
-              value={authConfig.credentialId || ''}
-              onSelect={(id) => setAuthConfig({ ...authConfig, credentialId: id })}
-              onNewKey={(key) => setAuthConfig({ ...authConfig, bearerToken: key })}
-              newKeyValue={authConfig.bearerToken || ''}
-              placeholder="eyJhbGc..."
-              filterType="bearer_token"
+              onChange={(credential) => setAuthConfig({ ...authConfig, credentialId: credential?.id })}
+              connectorKey={OTHER_SERVICE_KEY}
+              defaultName={createForm.watch('name') ? `${createForm.watch('name')} key` : undefined}
+              hint={authConfig.type === 'apiKey' ? 'Sent in the X-API-Key header.' : 'Sent as a bearer token.'}
             />
           )}
 

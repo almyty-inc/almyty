@@ -90,20 +90,20 @@ const PRESENTATION: Record<string, NotificationPresentation> = {
   'connections.expiring': {
     icon: KeyRound,
     accentClass: 'text-amber-500',
-    label: 'Connection expiring',
-    description: 'A connected account expires soon. Rotate it before it stops working.',
+    label: 'Credential expiring',
+    description: 'A credential expires soon. Replace its key before it stops working.',
   },
   'connections.expired': {
     icon: KeyRound,
     accentClass: 'text-red-500',
-    label: 'Connection expired',
-    description: 'A connected account has expired and its grants were paused.',
+    label: 'Credential expired',
+    description: 'A credential has expired and who may use it was paused.',
   },
   'connections.rotation_due': {
     icon: KeyRound,
     accentClass: 'text-cyan-500',
     label: 'Rotation due',
-    description: 'A connection is older than your rotation rule allows.',
+    description: 'A credential is older than your rotation rule allows.',
   },
   'domains.unverified': {
     icon: Globe,

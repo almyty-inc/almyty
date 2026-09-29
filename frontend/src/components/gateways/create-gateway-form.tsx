@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Boxes, Search } from 'lucide-react'
+import { BookOpen, Boxes, FileJson, Plug, Search } from 'lucide-react'
 
 import { Field, FormPage, FormSection } from '@/components/layout/form-page'
 import { ChoiceTile, ChoiceTiles } from '@/components/connect/service-tiles'
@@ -17,7 +17,7 @@ import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { gatewaysApi } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { gatewayBackendUrl, orgSlugOf } from '@/lib/gateway-connect'
+import { GATEWAY_PROTOCOLS, gatewayBackendUrl, gatewayUsesAccessKey, orgSlugOf, type GatewayProtocol } from '@/lib/gateway-connect'
 import { toolsQuery } from '@/lib/list-queries'
 import { readableToolName } from '@/lib/tool-names'
 import { cn, pluralized } from '@/lib/utils'
@@ -103,19 +103,39 @@ export function defaultShareName(picked: ShareableTool[]): string {
   return picked.length === 1 ? first : `${first} and ${picked.length - 1} more`
 }
 
+/** The protocol tiles: a label and one line on who reads it. */
+export const PROTOCOL_CHOICES: Record<GatewayProtocol, { label: string; hint: string; icon: typeof Plug }> = {
+  mcp: { label: 'MCP', hint: 'Claude Code, Cursor', icon: Plug },
+  utcp: { label: 'UTCP', hint: 'Any UTCP client', icon: FileJson },
+  skills: { label: 'Skills', hint: 'SKILL.md for agents', icon: BookOpen },
+}
+
+/** What each protocol needs in its configuration to be created. */
+export function protocolConfiguration(protocol: GatewayProtocol): Record<string, string> {
+  if (protocol === 'mcp') return { transport: 'http' }
+  if (protocol === 'utcp') return { protocol: 'http' }
+  return { format: 'skill-md' }
+}
+
+function isProtocol(value: string | null): value is GatewayProtocol {
+  return !!value && (GATEWAY_PROTOCOLS as readonly string[]).includes(value)
+}
+
 /**
- * Share tools: pick tools, or a whole API, and get one address that works
- * in every client. The only question is what to share; the name, the path,
- * who it is for and the access key follow from the pick and can be changed
- * under Advanced. The one address speaks MCP, UTCP and Skills, so there is
- * no protocol to choose.
+ * Create gateway: pick the protocol it speaks (MCP, UTCP or Skills), then
+ * the tools it serves, or a whole API. The name, the path and who it is for
+ * follow from the pick and can be changed under Advanced. Only active tools
+ * can be served; an MCP or UTCP gateway gets an access key, shown once on
+ * the next page with the setup for each client.
  */
-export function ShareToolsForm() {
+export function CreateGatewayForm() {
   const { currentOrganization } = useOrganizationStore()
   const { error: errorNotif } = useNotifications()
   const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
 
+  const [protocol, setProtocol] = useState<GatewayProtocol | null>(() => (isProtocol(searchParams.get('protocol')) ? (searchParams.get('protocol') as GatewayProtocol) : null))
+  const [protocolError, setProtocolError] = useState<string | undefined>()
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [name, setName] = useState('')
@@ -197,7 +217,7 @@ export function ShareToolsForm() {
     })
   }
 
-  const share = useMutation({
+  const create = useMutation({
     mutationFn: (payload: Record<string, unknown>) => gatewaysApi.create(payload),
     onSuccess: async (gateway: any) => {
       captureEvent('gateway_deployed')
@@ -206,11 +226,15 @@ export function ShareToolsForm() {
         state: { initialApiKey: gateway?.initialApiKey, sharedTools: gateway?.sharedTools },
       })
     },
-    onError: (err: unknown) => errorNotif('Could not share these tools', getApiErrorMessage(err, 'Please try again.')),
+    onError: (err: unknown) => errorNotif('Could not create the gateway', getApiErrorMessage(err, 'Please try again.')),
   })
 
   const onSubmit = () => {
     let ok = true
+    if (!protocol) {
+      setProtocolError('Pick a protocol.')
+      ok = false
+    }
     if (picked.size === 0) {
       setPickError('Pick at least one tool, or an API.')
       ok = false
@@ -219,35 +243,62 @@ export function ShareToolsForm() {
       setNameError('Give it a name.')
       ok = false
     } else setNameError(undefined)
-    if (!ok) return
-    share.mutate({
+    if (!ok || !protocol) return
+    create.mutate({
       name: effectiveName.trim().slice(0, 100),
-      type: 'tools',
+      type: protocol,
       kind: 'tool',
       endpoint: effectivePath,
       description: description || undefined,
-      configuration: {},
+      configuration: protocolConfiguration(protocol),
       visibility: effectiveScope.visibility,
       teamId: effectiveScope.teamId,
       toolIds: [...picked],
     })
   }
 
-  const count = picked.size
   const whoSummary = { org: 'everyone in your organization', team: 'one team', private: 'only you' }[effectiveScope.visibility]
 
   return (
     <FormPage
-      title="Share tools"
-      description="Pick tools and get one address that works in Claude Code, Cursor and any MCP, UTCP or Skills client."
+      title="Create gateway"
+      description="Serve the tools you pick over one protocol, at an address your AI clients can use."
       back={{ to: '/gateways', label: 'Gateways' }}
       guard={guard}
       width="wide"
-      submitLabel={count > 0 ? `Share ${pluralized(count, 'tool')}` : 'Share tools'}
-      submitting={share.isPending}
+      submitLabel="Create gateway"
+      submitting={create.isPending}
       onSubmit={onSubmit}
     >
-      <FormSection title="What to share" description="A whole API, or single tools: search to find one. Drafts can't be shared until they are active.">
+      <FormSection title="Protocol" description="What the clients that will use these tools speak.">
+        <ChoiceTiles label="Protocol">
+          {GATEWAY_PROTOCOLS.map((p) => {
+            const choice = PROTOCOL_CHOICES[p]
+            const Icon = choice.icon
+            return (
+              <ChoiceTile
+                key={p}
+                testId={`gateway-protocol-${p}`}
+                icon={<Icon className="h-4 w-4 text-primary" />}
+                label={choice.label}
+                hint={choice.hint}
+                selected={protocol === p}
+                onClick={() => {
+                  setProtocol(p)
+                  setProtocolError(undefined)
+                }}
+              />
+            )
+          })}
+        </ChoiceTiles>
+        {protocolError && (
+          <p role="alert" className="text-sm text-destructive" data-invalid="true">
+            {protocolError}
+          </p>
+        )}
+      </FormSection>
+
+      <FormSection title="Tools" description="A whole API, or single tools: search to find one. Drafts can't be served until they are active.">
         <div className="relative max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search APIs and tools" aria-label="Search APIs and tools" />
@@ -352,7 +403,7 @@ export function ShareToolsForm() {
       </FormSection>
 
       <FormSection>
-        <Field id="share-name" label="Name" error={nameError} hint={`Address: ${address}`}>
+        <Field id="gateway-name" label="Name" error={nameError} hint={`Address: ${address}`}>
           <Input
             value={effectiveName}
             placeholder="Weather tools"
@@ -366,8 +417,8 @@ export function ShareToolsForm() {
         </Field>
       </FormSection>
 
-      <Disclosure title="Advanced" summary={`Path ${effectivePath} · ${whoSummary} · access key`}>
-        <Field id="share-path" label="Path" hint="The last part of the address.">
+      <Disclosure title="Advanced" summary={`Path ${effectivePath} · ${whoSummary}${!protocol || gatewayUsesAccessKey(protocol) ? ' · access key' : ''}`}>
+        <Field id="gateway-path" label="Path" hint="The last part of the address.">
           <Input
             value={effectivePath}
             autoComplete="off"
@@ -378,19 +429,21 @@ export function ShareToolsForm() {
             }}
           />
         </Field>
-        <Field id="share-description" label="Description">
+        <Field id="gateway-description" label="Description">
           <Textarea rows={2} value={description} placeholder="What these tools are for" onChange={(e) => setDescription(e.target.value)} />
         </Field>
         <WhoCanUse
           value={effectiveScope}
-          noun="these tools"
+          noun="this gateway"
           onChange={(next) => {
             setScopeTouched(true)
             setScope(next)
           }}
         />
         <p className="text-sm text-muted-foreground">
-          Every share gets an access key, shown once on the next page. Other sign-in methods, such as OAuth or JWT, can be added there under Advanced.
+          {protocol === 'skills'
+            ? 'Skills are installed with the almyty CLI, signed in as you, so a Skills gateway has no access key.'
+            : 'The gateway gets an access key, shown once on the next page. Other sign-in methods, such as OAuth or JWT, can be added there.'}
         </p>
       </Disclosure>
     </FormPage>

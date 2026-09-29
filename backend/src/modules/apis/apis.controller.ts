@@ -29,7 +29,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateApiGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ApisService } from './apis.service';
-import { ApiConnectService } from './api-connect.service';
+import { API_TYPE_WORDS, ApiConnectService, type DescriptionType } from './api-connect.service';
 import { CredentialService } from './credential.service';
 import { ConnectApiDto, CreateApiDto, UpdateApiDto, ImportSchemaDto, CreateHttpApiDto, CreateSdkApiDto } from './dto/api.dto';
 import { ApiType, ApiStatus } from '../../entities/api.entity';
@@ -96,6 +96,7 @@ export class ApisController {
       file: file ? { buffer: await readFile(file.path), originalname: file.originalname } : undefined,
       url: dto.url,
       content: dto.content,
+      type: dto.type as DescriptionType,
       name: dto.name,
       baseUrl: dto.baseUrl,
       authType: dto.authType,
@@ -602,13 +603,3 @@ export class ApisController {
     );
   }
 }
-
-/** How an error names each kind of description ("This is a GraphQL description"). */
-const API_TYPE_WORDS: Partial<Record<ApiType, string>> = {
-  [ApiType.OPENAPI]: 'an OpenAPI',
-  [ApiType.GRAPHQL]: 'a GraphQL',
-  [ApiType.SOAP]: 'a SOAP',
-  [ApiType.GRPC]: 'a gRPC',
-  [ApiType.HTTP]: 'an HTTP',
-  [ApiType.SDK]: 'an SDK',
-};

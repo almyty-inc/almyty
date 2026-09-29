@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { QueryError } from '@/components/ui/query-error'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { CONNECTIONS_QUERY_KEY } from '@/components/connections/paths'
+import { CONNECTIONS_QUERY_KEY } from '@/components/credentials/paths'
 import { connectionsApi, errorMessage } from '@/lib/connections-api'
 import {
   EXPIRING_QUERY_KEY,
@@ -55,7 +55,7 @@ export function ExpiryPanel() {
     },
   })
   const byId = useMemo(() => new Map<string, Connection>((connectionsQuery.data ?? []).map((c) => [c.id, c])), [connectionsQuery.data])
-  const nameOf = (id: string, connectorKey: string | null) => byId.get(id)?.name ?? (connectorKey ? `${connectorKey} connection` : id)
+  const nameOf = (id: string, connectorKey: string | null) => byId.get(id)?.name ?? (connectorKey ? `${connectorKey} credential` : id)
   const ownerOf = (id: string, ownerUserId: string | null) => {
     const c = byId.get(id)
     if (c) return c.owner === 'user' ? 'personal' : 'org'
@@ -135,7 +135,7 @@ export function ExpiryPanel() {
           </div>
         </CardHeader>
         <CardContent>
-          {expiringQuery.isError && <QueryError error={expiringQuery.error} onRetry={() => expiringQuery.refetch()} title="Expiring connections could not be loaded" />}
+          {expiringQuery.isError && <QueryError error={expiringQuery.error} onRetry={() => expiringQuery.refetch()} title="Expiring credentials could not be loaded" />}
           {expiringQuery.isLoading && <Skeleton className="h-12 rounded-lg" />}
           {!expiringQuery.isLoading && !expiringQuery.isError && expiryLines.length === 0 && (
             <p className="text-sm text-muted-foreground" data-testid="expiring-empty">Nothing is inside a warning window or past its maximum age.</p>
@@ -145,7 +145,7 @@ export function ExpiryPanel() {
               <Table data-testid="expiring-table">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Connection</TableHead>
+                    <TableHead>Credential</TableHead>
                     <TableHead>Owner</TableHead>
                     <TableHead>Age</TableHead>
                     <TableHead>Expires</TableHead>
@@ -204,7 +204,7 @@ export function ExpiryPanel() {
               <Table data-testid="rotation-table">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Connection</TableHead>
+                    <TableHead>Credential</TableHead>
                     <TableHead>Owner</TableHead>
                     <TableHead>Age</TableHead>
                     <TableHead>How</TableHead>
@@ -234,7 +234,7 @@ export function ExpiryPanel() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Audit export</CardTitle>
-          <CardDescription>The connections event stream, newest first: connects, validations, grants, rotations and policy changes, with an EU AI Act Annex IV mapping in the JSON envelope.</CardDescription>
+          <CardDescription>Every credential event, newest first: adds, checks, grants, rotations and policy changes, with an EU AI Act Annex IV mapping in the JSON envelope.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2" data-testid="audit-export-buttons">

@@ -1,8 +1,10 @@
 /**
- * The key an API's tools send: paste it, or connect an account instead.
- * How it is sent (the header, bearer, basic, OAuth 2.0) comes from the
- * API's description and is a one-line "Change" away. Same shape as
- * connecting a model provider: the key, then "or Connect an account".
+ * The key an API's tools send: a credential picked from Credentials, or
+ * one created right here with the shared pick-or-create control, so the
+ * key lands on the Credentials page like every other. How it is sent (the
+ * header, bearer, basic, OAuth 2.0) comes from the API's description and
+ * is a one-line "Change" away. A username and password (basic auth) are
+ * typed here, and an OAuth 2.0 sign-in happens here.
  *
  * Used on "Finish connecting" (/apis/:id/setup) and by the API page's
  * Key card.
@@ -16,7 +18,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { SecretInput } from '@/components/ui/secret-input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ConnectAccountButton } from '@/components/connections/connect-flow'
+import { OTHER_SERVICE_KEY } from '@/components/connections/connect-flow'
+import { CredentialPicker } from '@/components/credentials/credential-picker'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { apisApi, credentialsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -122,20 +125,19 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo, 
       signIn.mutate()
       return
     }
+    if (type !== 'basic') {
+      setError('Pick a key, or create one here.')
+      return
+    }
     if (!key.trim()) {
-      setError(type === 'basic' ? 'Enter the password.' : 'Paste the key.')
+      setError('Enter the password.')
       return
     }
     if (type === 'basic' && !username.trim()) {
       setError('Enter the username.')
       return
     }
-    save.mutate({
-      type,
-      key: key.trim(),
-      ...(type === 'basic' ? { username: username.trim() } : {}),
-      ...(type === 'api_key' ? { headerName: headerName.trim() || 'X-API-Key', location } : {}),
-    })
+    save.mutate({ type, key: key.trim(), username: username.trim() })
   }
 
   return (
@@ -211,26 +213,32 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo, 
             Paste an access token instead
           </button>
         </div>
-      ) : (
+      ) : type === 'basic' ? (
         <div className="space-y-3">
-          {type === 'basic' && (
-            <div>
-              <Label htmlFor="api-key-username">Username</Label>
-              <Input id="api-key-username" className="mt-1" value={username} onChange={(e) => setUsername(e.target.value)} disabled={busy} autoComplete="off" />
-            </div>
-          )}
           <div>
-            <Label htmlFor="api-key-value">{type === 'basic' ? 'Password' : type === 'oauth2' ? 'Access token' : 'Paste your key'}</Label>
-            <SecretInput
-              id="api-key-value"
-              className="mt-1"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              placeholder={type === 'basic' ? '' : 'Paste your key'}
-              disabled={busy}
-            />
+            <Label htmlFor="api-key-username">Username</Label>
+            <Input id="api-key-username" className="mt-1" value={username} onChange={(e) => setUsername(e.target.value)} disabled={busy} autoComplete="off" />
+          </div>
+          <div>
+            <Label htmlFor="api-key-value">Password</Label>
+            <SecretInput id="api-key-value" className="mt-1" value={key} onChange={(e) => setKey(e.target.value)} disabled={busy} />
           </div>
         </div>
+      ) : (
+        <CredentialPicker
+          id="api-key-credential"
+          label={type === 'oauth2' ? 'Access token' : 'Credential'}
+          value={view.connection?.id ?? ''}
+          connectorKey={OTHER_SERVICE_KEY}
+          defaultName={`${apiName} key`}
+          disabled={busy}
+          hint="Saved in Credentials, so other APIs and tools can use it too."
+          onChange={(credential) => {
+            if (!credential) return
+            setError(null)
+            save.mutate({ type, connectionId: credential.id, ...(type === 'api_key' ? { headerName: headerName.trim() || 'X-API-Key', location } : {}) })
+          }}
+        />
       )}
 
       {error && (
@@ -239,21 +247,21 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo, 
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" disabled={busy}>
-          {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
-          {oauth ? (oauth.flow === 'client_credentials' || !oauth.authorizationUrl ? 'Connect' : 'Sign in') : submitLabel}
-        </Button>
-        {onCancel && (
-          <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>
-            Cancel
-          </Button>
-        )}
-        <span className="text-xs text-muted-foreground">or</span>
-        <ConnectAccountButton
-          onConnected={(connection) => save.mutate({ type: type === 'none' ? 'api_key' : type, connectionId: connection.id, ...(type === 'api_key' ? { headerName, location } : {}) })}
-        />
-      </div>
+      {(oauth || type === 'basic' || onCancel) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {(oauth || type === 'basic') && (
+            <Button type="submit" disabled={busy}>
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
+              {oauth ? (oauth.flow === 'client_credentials' || !oauth.authorizationUrl ? 'Save' : 'Sign in') : submitLabel}
+            </Button>
+          )}
+          {onCancel && (
+            <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>
+              Cancel
+            </Button>
+          )}
+        </div>
+      )}
       {guard.element}
     </form>
   )

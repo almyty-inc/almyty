@@ -1,6 +1,6 @@
-# Connections API
+# Credentials API
 
-> This is the HTTP API reference. For the concepts, see [Connections](/connections) and [Grants](/connections/grants).
+> This is the HTTP API reference. For the concepts, see [Credentials](/credentials) and [Who can use a credential](/credentials/grants). The routes keep their `/connections` and `/connectors` paths: a connection in this API is a credential on the Credentials page.
 
 REST reference for the connector catalog and connections. Responses never contain a secret value; a connection is returned as its account label, health, scopes, method and owner.
 
@@ -11,7 +11,7 @@ REST reference for the connector catalog and connections. Responses never contai
 | `GET` | `/connectors?kind=` | `connections:read` | Catalog: built-in, adapter-derived and custom connectors. `cloud_iam` methods carry a rendered `quickCreateUrl` when `CONNECTIONS_AWS_CFN_TEMPLATE_URL` and `CONNECTIONS_AWS_TRUSTED_ACCOUNT_ID` are set |
 | `POST` | `/connectors` | admin, `connections:manage` | Define a custom connector; may not shadow a built-in key |
 | `POST` | `/connections/connect/:connectorKey` | `connections:read` (`connections:manage` for an organization owner) | Start a connection |
-| `GET` | `/connections/oauth/callback?code&state` | nobody (the state is the credential) | Browser leg of a sign-in; redirects to `FRONTEND_URL/connections?connection=&status=` when set, JSON otherwise |
+| `GET` | `/connections/oauth/callback?code&state` | nobody (the state is the credential) | Browser leg of a sign-in; redirects to `FRONTEND_URL/credentials?connection=&status=`, which opens the new credential when set, JSON otherwise |
 | `POST` | `/connections/connect/:connectorKey/complete` | member | `{ state, code }` headless completion |
 | `GET` | `/connections` | `connections:read` | Masked list; personal connections visible to their owner and to `connections:manage` |
 | `GET` | `/connections/:id` | same | One connection |
@@ -93,7 +93,7 @@ Kinds: `inference`, `deployment`, `memory`, `mcp`, `tool_source`, `channel`, `cl
 
 ## Grants
 
-Who may use a connection beyond its owner. The rules are on [Grants](/connections/grants); the routes only check membership (`connections:read`), and whether the caller may manage this particular connection is decided per request.
+Who may use a credential beyond its owner. The rules are on [Who can use a credential](/credentials/grants); the routes only check membership (`connections:read`), and whether the caller may manage this particular connection is decided per request.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

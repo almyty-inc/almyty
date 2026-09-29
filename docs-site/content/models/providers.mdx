@@ -105,7 +105,7 @@ Every native type ships with its default base URL; set `configuration.apiUrl` to
 
 ## Keys
 
-A key belongs to one provider, is stored in [Connections](/connections), encrypted at rest with the platform key (or your own KMS on Enterprise), and is never returned by the API. The connect form links to each vendor's key page. Instead of pasting a key you can connect an account: vendors that offer a sign-in flow can be connected without pasting anything (OpenRouter mints a key scoped to almyty when you approve it), and a key already saved as a connection can be picked.
+A key belongs to one provider, is stored in [Credentials](/credentials), encrypted at rest with the platform key (or your own KMS on Enterprise), and is never returned by the API. The connect form links to each vendor's key page. Instead of pasting a key you can connect an account: vendors that offer a sign-in flow can be connected without pasting anything (OpenRouter mints a key scoped to almyty when you approve it), and a key already saved as a connection can be picked.
 
 ## Your own server
 
@@ -135,4 +135,4 @@ Your own server has no feed price, so give its models a price override under **A
 - [Connect a provider](/llm-providers): the connect page, the provider's page and the key check
 - [Models](/models): the list, when a model is usable, and pricing
 - [Your cloud account](/models/your-cloud): start an open model on capacity in your own account
-- [Connections](/connections): keys, sign-in flows and who may use them
+- [Credentials](/credentials): keys, sign-in flows and who may use them

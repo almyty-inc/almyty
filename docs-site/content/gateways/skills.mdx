@@ -4,12 +4,13 @@ Drop your tools into any AI coding agent as installable skills. A Skills gateway
 
 ![Gateway detail page](/screenshots/gateway-detail.png)
 
-## Share the tools
+## Create the gateway
 
-1. Open **Gateways → Share tools** (`/gateways/new`)
-2. Under **What to share**, pick a whole API or single tools
-3. Name it; the address follows from the name (**Advanced** changes the path and who can use it)
-4. Click **Share** and copy the access key
+1. Open **Gateways** and click **Create gateway** (`/gateways/new`)
+2. Under **Protocol**, pick **Skills**
+3. Under **Tools**, pick a whole API or single tools (a draft can't be served until it is active)
+4. Name it; the address follows from the name (**Advanced** changes the path and who can use it)
+5. Click **Create gateway**. A Skills gateway has no access key: the Skills CLI signs in as you (`npx @almyty/auth login`)
 
 Each tool the gateway serves becomes one `SKILL.md` file; **Tool scoping** on the gateway detail page changes which. Copy the gateway slug: you will use it with the Skills CLI.
 

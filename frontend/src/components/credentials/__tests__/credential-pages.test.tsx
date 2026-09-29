@@ -1,18 +1,19 @@
 /**
- * The Connections pages under a real router: the list, connect a service
- * (tile, key, checked, listed), a connection's own page, the admins'
- * Advanced tab, and the redirects from Credentials and Settings >
- * Connections.
+ * The Credentials pages under a real router: the list (a table, model
+ * provider keys as their own group, keys a single API keeps listed too),
+ * Add credential (tile, key, checked, listed), a credential's own page,
+ * the admins' Advanced tab, and the redirects from where credentials used
+ * to live (Connections, Settings > Connections).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 
 import { renderAtRoute } from '../../../test/render-at-route'
-import { ConnectionsPage } from '../../../pages/connections'
-import { ConnectServicePage } from '../../../pages/connections-connect'
-import { ConnectionDetailRoutePage, CredentialsRedirect, SettingsConnectionsRedirect, credentialsTarget, settingsConnectionsTarget } from '../../../pages/connection-pages'
+import { CredentialsPage } from '../../../pages/credentials'
+import { AddCredentialPage } from '../../../pages/credential-new'
+import { AccessKeysRedirect, CredentialDetailRoutePage, OldCredentialsAddressRedirect, credentialsTarget } from '../../../pages/credential-pages'
 import { connectionsApi, connectorsApi } from '../../../lib/connections-api'
-import { organizationsApi } from '../../../lib/api'
+import { credentialsApi, organizationsApi } from '../../../lib/api'
 import type { Connection, Connector } from '@/types/connections'
 
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
@@ -42,6 +43,7 @@ vi.mock('../../../lib/api', () => ({
   organizationsApi: { getById: vi.fn(), getMembers: vi.fn().mockResolvedValue([]), getTeams: vi.fn().mockResolvedValue([]) },
   agentsApi: { getAll: vi.fn().mockResolvedValue([]) },
   workspacesApi: { getAll: vi.fn().mockResolvedValue([]) },
+  credentialsApi: { getAll: vi.fn(), getById: vi.fn(), remove: vi.fn() },
 }))
 
 // Governance is its own feature with its own tests; here it is a marker.
@@ -84,6 +86,7 @@ function connection(overrides: Partial<Connection> = {}): Connection {
     id: 'conn-1',
     name: 'GitHub',
     connectorKey: 'github',
+    connectorDisplayName: 'GitHub',
     kind: 'tool_source',
     owner: 'org',
     accountLabel: 'octocat',
@@ -94,7 +97,10 @@ function connection(overrides: Partial<Connection> = {}): Connection {
   }
 }
 
-const PATHS = ['/connections', '/connections/advanced', '/connections/connect', '/connections/:id', '/models/connect', '/guide', '/gateways']
+/** A key one API keeps for itself: in GET /credentials, not in GET /connections. */
+const apiKey = { id: 'cred-api', name: 'Petstore key', type: 'api_key', connectorKey: null, visibility: 'org', createdAt: '2026-08-01T00:00:00.000Z', metadata: { managedBy: { kind: 'api', id: 'api-1' } } }
+
+const PATHS = ['/credentials', '/credentials/advanced', '/credentials/new', '/credentials/:id', '/models/connect', '/guide', '/gateways', '/apis/:id', '/models']
 
 let openSpy: ReturnType<typeof vi.spyOn>
 
@@ -103,96 +109,126 @@ beforeEach(() => {
   Object.assign(role, { role: 'admin', canManage: true })
   vi.mocked(organizationsApi.getById).mockResolvedValue({ id: 'test-org-id', plan: 'free', settings: {} })
   vi.mocked(connectorsApi.list).mockResolvedValue([github, slack, openai, other, custom])
-  vi.mocked(connectionsApi.list).mockResolvedValue([connection(), connection({ id: 'conn-2', name: 'Acme CRM', connectorKey: 'other', owner: 'private', accountLabel: null, health: { status: 'failed', error: 'refused' } })])
+  vi.mocked(connectionsApi.list).mockResolvedValue([
+    connection(),
+    connection({ id: 'conn-2', name: 'Acme CRM', connectorKey: 'other', connectorDisplayName: 'Other service', owner: 'private', accountLabel: null, health: { status: 'failed', error: 'refused' } }),
+    connection({ id: 'conn-3', name: 'OpenAI', connectorKey: 'openai', connectorDisplayName: 'OpenAI', kind: 'inference', accountLabel: null }),
+  ])
+  vi.mocked(credentialsApi.getAll).mockResolvedValue([apiKey, { id: 'conn-1', name: 'GitHub', type: 'api_key', connectorKey: 'github' }])
   openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
 })
 
 afterEach(() => openSpy.mockRestore())
 
-describe('/connections', () => {
-  const at = (url = '/connections') => renderAtRoute(<ConnectionsPage />, { path: '/connections', url, paths: PATHS })
+describe('/credentials', () => {
+  const at = (url = '/credentials') => renderAtRoute(<CredentialsPage />, { path: '/credentials', url, paths: PATHS })
 
-  it('lists each connected service with whether it works, the account and who can use it', async () => {
+  it('lists every credential in a table, with whether it works and who can use it', async () => {
     at()
-    const card = await screen.findByTestId('connection-card-conn-1')
-    expect(card).toHaveAttribute('href', '/connections/conn-1')
-    expect(within(card).getByText('GitHub')).toBeInTheDocument()
-    expect(within(card).getByTestId('connection-status')).toHaveTextContent('Works')
-    expect(within(card).getByText('octocat')).toBeInTheDocument()
-    expect(within(card).getByTestId('connection-who')).toHaveTextContent('Everyone')
+    const table = await screen.findByTestId('credentials-table')
+    const row = (await within(table).findByText('GitHub', { selector: 'span.truncate' })).closest('tr')!
+    expect(within(row).getByTestId('credential-status')).toHaveTextContent('Works')
+    expect(within(row).getByText('Everyone')).toBeInTheDocument()
 
-    const failing = screen.getByTestId('connection-card-conn-2')
-    expect(within(failing).getByTestId('connection-status')).toHaveTextContent('Needs attention')
-    expect(within(failing).getByTestId('connection-who')).toHaveTextContent('Only you')
+    const failing = within(table).getByText('Acme CRM').closest('tr')!
+    expect(within(failing).getByTestId('credential-status')).toHaveTextContent('Needs attention')
+    expect(within(failing).getByText('Only you')).toBeInTheDocument()
   })
 
-  it('shows an empty state that leads to connecting a service', async () => {
-    vi.mocked(connectionsApi.list).mockResolvedValue([])
+  it('lists the keys a single API keeps too, saying what uses it', async () => {
     at()
-    expect(await screen.findByText('Nothing connected yet')).toBeInTheDocument()
-    fireEvent.click(screen.getAllByRole('link', { name: 'Connect a service' })[0])
-    expect(await screen.findByText('at /connections/connect')).toBeInTheDocument()
+    const table = await screen.findByTestId('credentials-table')
+    const row = (await within(table).findByText('Petstore key')).closest('tr')!
+    expect(within(row).getByText('API key')).toBeInTheDocument()
+    expect(within(row).getByText('An API')).toBeInTheDocument()
+    // Each credential once: GitHub is in both lists, and shows once.
+    expect(within(table).getAllByText('GitHub', { selector: 'span.truncate' })).toHaveLength(1)
+  })
+
+  it('shows model provider keys as their own group, pointing at Models', async () => {
+    at()
+    const group = await screen.findByTestId('model-provider-credentials')
+    expect(await within(group).findByText('OpenAI', { selector: 'span.truncate' })).toBeInTheDocument()
+    expect(within(group).getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models')
+    expect(within(screen.getByTestId('credentials-table')).queryByText('OpenAI', { selector: 'span.truncate' })).not.toBeInTheDocument()
+  })
+
+  it('opens a credential\'s own page from its row', async () => {
+    const { router } = at()
+    const table = await screen.findByTestId('credentials-table')
+    fireEvent.click((await within(table).findByText('Acme CRM')).closest('tr')!)
+    await waitFor(() => expect(router.state.location.pathname).toBe('/credentials/conn-2'))
+  })
+
+  it('shows an empty state that leads to adding a credential', async () => {
+    vi.mocked(connectionsApi.list).mockResolvedValue([])
+    vi.mocked(credentialsApi.getAll).mockResolvedValue([])
+    at()
+    expect(await screen.findByText('No credentials yet')).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('link', { name: 'Add credential' })[0])
+    expect(await screen.findByText('at /credentials/new')).toBeInTheDocument()
   })
 
   it('gives admins an Advanced tab, and nobody else', async () => {
     const { unmount } = at()
-    await screen.findByTestId('connection-card-conn-1')
+    await screen.findByTestId('credentials-table')
     expect(screen.getByRole('tab', { name: 'Advanced' })).toBeInTheDocument()
     unmount()
 
     Object.assign(role, { role: 'member', canManage: false })
     at()
-    await screen.findByTestId('connection-card-conn-1')
+    await screen.findByTestId('credentials-table')
     expect(screen.queryByRole('tab', { name: 'Advanced' })).not.toBeInTheDocument()
   })
 
   it('sends a member who opens Advanced back to the list', async () => {
     Object.assign(role, { role: 'member', canManage: false })
-    const { router } = renderAtRoute(<ConnectionsPage />, { path: '/connections/advanced', paths: PATHS })
-    await waitFor(() => expect(router.state.location.pathname).toBe('/connections'))
+    const { router } = renderAtRoute(<CredentialsPage />, { path: '/credentials/advanced', paths: PATHS })
+    await waitFor(() => expect(router.state.location.pathname).toBe('/credentials'))
     expect(screen.queryByTestId('connections-advanced')).not.toBeInTheDocument()
   })
 
-  it('opens the connection a sign-in came back with', async () => {
-    const { router } = at('/connections?connection=conn-1&status=connected')
-    await waitFor(() => expect(router.state.location.pathname).toBe('/connections/conn-1'))
+  it('opens the credential a sign-in came back with', async () => {
+    const { router } = at('/credentials?connection=conn-1&status=connected')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/credentials/conn-1'))
   })
 })
 
-describe('/connections/advanced', () => {
-  const at = (url = '/connections/advanced') => renderAtRoute(<ConnectionsPage />, { path: '/connections/advanced', url, paths: PATHS })
+describe('/credentials/advanced', () => {
+  const at = (url = '/credentials/advanced') => renderAtRoute(<CredentialsPage />, { path: '/credentials/advanced', url, paths: PATHS })
 
-  it('holds who can use each connection, personal keys, custom services and the rules', async () => {
-    at('/connections/advanced?connection=conn-1')
+  it('holds who can use each credential, personal keys, custom services and the rules', async () => {
+    at('/credentials/advanced?credential=conn-1')
     expect(await screen.findByTestId('connections-advanced')).toBeInTheDocument()
-    // The grants of the connection named in the URL.
+    // The grants of the credential named in the URL.
     await waitFor(() => expect(connectionsApi.listGrants).toHaveBeenCalledWith('conn-1'))
     expect(screen.getByRole('switch', { name: 'Allow personal keys' })).toBeInTheDocument()
     expect(await screen.findByText('Office vLLM')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Add a custom service' })).toHaveAttribute('href', '/connections/custom/new')
+    expect(screen.getByRole('link', { name: 'Add a custom service' })).toHaveAttribute('href', '/credentials/custom/new')
     expect(screen.getByTestId('governance-marker')).toBeInTheDocument()
   })
 
-  it('never offers a private connection for sharing', async () => {
+  it('never offers a private credential for sharing', async () => {
     at()
     await screen.findByTestId('connections-advanced')
-    fireEvent.click(screen.getByRole('combobox', { name: 'Connection' }))
+    fireEvent.click(screen.getByRole('combobox', { name: 'Credential' }))
     expect(await screen.findByRole('option', { name: 'GitHub' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'Acme CRM' })).not.toBeInTheDocument()
   })
 })
 
-describe('/connections/connect', () => {
-  const at = (url = '/connections/connect') => renderAtRoute(<ConnectServicePage />, { path: '/connections/connect', url, paths: PATHS })
+describe('/credentials/new', () => {
+  const at = (url = '/credentials/new') => renderAtRoute(<AddCredentialPage />, { path: '/credentials/new', url, paths: PATHS })
 
   it('goes tile, key, checked, listed', async () => {
     let resolve!: (v: unknown) => void
     vi.mocked(connectionsApi.connect).mockReturnValue(new Promise((r) => (resolve = r)))
     const { router } = at()
+    expect(await screen.findByRole('heading', { name: 'Add credential' })).toBeInTheDocument()
     fireEvent.click(await screen.findByTestId('service-tile-github'))
     expect(router.state.location.search).toBe('?service=github')
 
-    const form = await screen.findByRole('form', { name: 'Connect GitHub' })
+    const form = await screen.findByRole('form', { name: 'Add GitHub' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     // No name, no type, no description: the key and who can use it.
     expect(form.querySelectorAll('input')).toHaveLength(1)
@@ -201,39 +237,39 @@ describe('/connections/connect', () => {
     expect(within(form).getByTestId('who-can-use')).toHaveTextContent('everyone in your organization')
 
     fireEvent.change(within(form).getByLabelText('Token'), { target: { value: 'ghp_123' } })
-    fireEvent.click(within(form).getByRole('button', { name: 'Connect' }))
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
     expect(await screen.findByRole('button', { name: /Checking your key/ })).toBeDisabled()
     expect(connectionsApi.connect).toHaveBeenCalledWith('github', { method: 'api_key', owner: 'org', input: { apiKey: 'ghp_123' } })
 
     resolve({ pending: false, connection: connection({ id: 'conn-new' }) })
     const done = await screen.findByTestId('connect-success')
-    expect(done).toHaveTextContent('GitHub is connected.')
+    expect(done).toHaveTextContent('GitHub is saved.')
     expect(within(done).getByTestId('connection-status')).toHaveTextContent('Works')
     fireEvent.click(within(done).getByRole('button', { name: 'Done' }))
-    expect(await screen.findByText('at /connections')).toBeInTheDocument()
+    expect(await screen.findByText('at /credentials')).toBeInTheDocument()
   })
 
-  it('opens the new connection from the result, or returns to a same-origin returnTo', async () => {
+  it('opens the new credential from the result, or returns to a same-origin returnTo', async () => {
     vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connection({ id: 'conn-new' }) })
-    const { unmount } = at('/connections/connect?service=github')
+    const { unmount } = at('/credentials/new?service=github')
     fireEvent.change(await screen.findByLabelText('Token'), { target: { value: 'ghp_123' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Open connection' }))
-    expect(await screen.findByText('at /connections/conn-new')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Open credential' }))
+    expect(await screen.findByText('at /credentials/conn-new')).toBeInTheDocument()
     unmount()
 
-    at('/connections/connect?service=github&returnTo=%2Fguide')
+    at('/credentials/new?service=github&returnTo=%2Fguide')
     fireEvent.change(await screen.findByLabelText('Token'), { target: { value: 'ghp_123' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Done' }))
     expect(await screen.findByText('at /guide')).toBeInTheDocument()
   })
 
-  it('connects a sign-in service with its Connect button', async () => {
+  it('adds a sign-in service with its Sign in button', async () => {
     vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: true, method: 'oauth2_code', mode: 'browser', authorizeUrl: 'https://slack.com/oauth?state=s', state: 's', expiresInSeconds: 600, completeWith: 'callback' })
     vi.mocked(connectionsApi.list).mockResolvedValue([])
-    at('/connections/connect?service=channel-slack')
-    fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
+    at('/credentials/new?service=channel-slack')
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }))
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('channel-slack', { method: 'oauth2_code', owner: 'org' }))
     expect(openSpy).toHaveBeenCalledWith('https://slack.com/oauth?state=s', '_blank', 'noopener')
     expect(await screen.findByTestId('oauth-waiting')).toHaveTextContent('Waiting for Slack')
@@ -243,14 +279,14 @@ describe('/connections/connect', () => {
     vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connection({ id: 'conn-acme', name: 'Acme CRM', connectorKey: 'other', accountLabel: null }) })
     at()
     fireEvent.click(await screen.findByTestId('service-tile-other'))
-    const form = await screen.findByRole('form', { name: 'Connect Other service' })
-    fireEvent.click(within(form).getByRole('button', { name: 'Connect' }))
+    const form = await screen.findByRole('form', { name: 'Add a key' })
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
     expect(await within(form).findByText('Give it a name you will recognise')).toBeInTheDocument()
     expect(connectionsApi.connect).not.toHaveBeenCalled()
 
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Acme CRM' } })
     fireEvent.change(within(form).getByLabelText('Key'), { target: { value: 'acme-secret' } })
-    fireEvent.click(within(form).getByRole('button', { name: 'Connect' }))
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('other', { method: 'api_key', owner: 'org', name: 'Acme CRM', input: { apiKey: 'acme-secret' } }))
     expect(within(await screen.findByTestId('connect-success')).getByTestId('connection-status')).toHaveTextContent('Saved')
   })
@@ -263,52 +299,41 @@ describe('/connections/connect', () => {
     expect(router.state.location.search).toBe('?service=other')
   })
 
-  it('shows AI models as one tile that leads to Models, with no AI or GPU hosting groups of its own', async () => {
+  it('shows model providers as one tile that leads to Models, with no AI or GPU hosting groups of its own', async () => {
     const modal: Connector = { key: 'modal', kind: 'deployment', adapterKey: 'modal', displayName: 'Modal', connect: [{ type: 'api_key' }] }
-    const stub: Connector = { key: 'deploy-stub', kind: 'deployment', adapterKey: 'stub', displayName: 'Stub (in-memory)', connect: [{ type: 'api_key' }] }
-    vi.mocked(connectorsApi.list).mockResolvedValue([github, slack, openai, modal, stub, other])
+    vi.mocked(connectorsApi.list).mockResolvedValue([github, slack, openai, modal, other])
     const { router } = at()
     const tile = await screen.findByTestId('service-tile-ai-models')
-    expect(tile).toHaveTextContent('Connect AI models')
+    expect(tile).toHaveTextContent('Model providers')
     expect(screen.queryByTestId('service-tile-openai')).not.toBeInTheDocument()
     expect(screen.queryByTestId('service-tile-modal')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('service-tile-deploy-stub')).not.toBeInTheDocument()
     expect(screen.queryByText('GPU hosting')).not.toBeInTheDocument()
-    expect(screen.queryByText(/stub/i)).not.toBeInTheDocument()
     fireEvent.click(tile)
     await waitFor(() => expect(router.state.location.pathname).toBe('/models/connect'))
   })
 
-  it('keeps the AI models tile while a search matches an AI provider, and drops it otherwise', async () => {
-    at()
-    const box = await screen.findByRole('textbox', { name: 'Search services' })
-    fireEvent.change(box, { target: { value: 'openai' } })
-    expect(screen.getByTestId('service-tile-ai-models')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Save its key as another service' })).not.toBeInTheDocument()
-    fireEvent.change(box, { target: { value: 'github' } })
-    expect(screen.queryByTestId('service-tile-ai-models')).not.toBeInTheDocument()
-    expect(screen.getByTestId('service-tile-github')).toBeInTheDocument()
-  })
-
-  it('sends a link to an AI model provider on to Models, where its models come with it', async () => {
-    const { router } = at('/connections/connect?service=openai')
+  it('sends a link to a model provider on to Models, where its models come with it', async () => {
+    const { router } = at('/credentials/new?service=openai')
     await waitFor(() => expect(router.state.location.pathname).toBe('/models/connect'))
     expect(router.state.location.search).toBe('?type=openai')
   })
 })
 
-describe('/connections/:id', () => {
-  const at = (id = 'conn-1') => renderAtRoute(<ConnectionDetailRoutePage />, { path: '/connections/:id', url: `/connections/${id}`, paths: PATHS })
+describe('/credentials/:id', () => {
+  const at = (id = 'conn-1') => renderAtRoute(<CredentialDetailRoutePage />, { path: '/credentials/:id', url: `/credentials/${id}`, paths: PATHS })
 
-  it('shows whether it works, the account, the key and who can use it', async () => {
+  it('has the detail header, and shows whether it works, the account, the key and who can use it', async () => {
     vi.mocked(connectionsApi.list).mockResolvedValue([connection({ health: { status: 'expired', error: 'token expired' } })])
     at()
     expect(await screen.findByRole('heading', { name: 'GitHub' })).toBeInTheDocument()
-    expect(screen.getByTestId('connection-status')).toHaveTextContent('Needs attention')
-    expect(screen.getByTestId('connection-last-error')).toHaveTextContent('token expired')
+    expect(screen.getByRole('link', { name: 'Credentials' })).toHaveAttribute('href', '/credentials')
+    expect(screen.getByTestId('credential-status')).toHaveTextContent('Needs attention')
+    expect(screen.getByTestId('credential-last-error')).toHaveTextContent('token expired')
     expect(screen.getByText('octocat')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Used by/ })).toBeInTheDocument()
     expect(screen.getByTestId('who-can-use')).toHaveTextContent('everyone in your organization')
-    expect(screen.getByRole('link', { name: 'Change' })).toHaveAttribute('href', '/connections/advanced?connection=conn-1')
+    expect(screen.getByRole('link', { name: 'Change' })).toHaveAttribute('href', '/credentials/advanced?credential=conn-1')
   })
 
   it('checks again and says the answer', async () => {
@@ -316,7 +341,7 @@ describe('/connections/:id', () => {
     at()
     fireEvent.click(await screen.findByRole('button', { name: 'Check again' }))
     await waitFor(() => expect(connectionsApi.validate).toHaveBeenCalledWith('conn-1'))
-    expect(await screen.findByTestId('connection-check-result')).toHaveTextContent('Works.')
+    expect(await screen.findByTestId('credential-check-result')).toHaveTextContent('Works.')
   })
 
   it('replaces the key in place', async () => {
@@ -326,55 +351,67 @@ describe('/connections/:id', () => {
     fireEvent.change(await screen.findByLabelText('Token'), { target: { value: 'ghp_new' } })
     fireEvent.click(screen.getByRole('button', { name: 'Replace key' }))
     await waitFor(() => expect(connectionsApi.rotate).toHaveBeenCalledWith('conn-1', { input: { apiKey: 'ghp_new' } }))
-    expect(await screen.findByTestId('connection-check-result')).toHaveTextContent('New key saved. Works.')
+    expect(await screen.findByTestId('credential-check-result')).toHaveTextContent('New key saved. Works.')
   })
 
-  it('disconnects after a one-line confirm and returns to the list', async () => {
+  it('deletes after a one-line confirm and returns to the list', async () => {
     vi.mocked(connectionsApi.remove).mockResolvedValue({ revoked: true })
     at()
-    fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete credential' }))
     const confirm = await screen.findByRole('alertdialog')
-    expect(within(confirm).getByText('Disconnect GitHub?')).toBeInTheDocument()
-    fireEvent.click(within(confirm).getByRole('button', { name: 'Disconnect' }))
+    expect(within(confirm).getByText('Delete GitHub?')).toBeInTheDocument()
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(connectionsApi.remove).toHaveBeenCalledWith('conn-1'))
-    expect(await screen.findByText('at /connections')).toBeInTheDocument()
+    expect(await screen.findByText('at /credentials')).toBeInTheDocument()
   })
 
-  it('offers no change of who can use a private connection', async () => {
+  it('offers no change of who can use a private credential', async () => {
     at('conn-2')
     expect(await screen.findByRole('heading', { name: 'Acme CRM' })).toBeInTheDocument()
     expect(screen.getByTestId('who-can-use')).toHaveTextContent('only you')
     expect(screen.queryByRole('link', { name: 'Change' })).not.toBeInTheDocument()
   })
 
-  it('says so when the connection is gone', async () => {
+  it('shows a key a single API keeps, and where it is changed', async () => {
+    vi.mocked(credentialsApi.getById).mockResolvedValue(apiKey)
+    at('cred-api')
+    expect(await screen.findByRole('heading', { name: 'Petstore key' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Change it where it is used' })).toHaveAttribute('href', '/apis/api-1')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete credential' }))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(credentialsApi.remove).toHaveBeenCalledWith('cred-api'))
+    expect(await screen.findByText('at /credentials')).toBeInTheDocument()
+  })
+
+  it('says so when the credential is gone', async () => {
+    vi.mocked(credentialsApi.getById).mockRejectedValue(new Error('404'))
     at('nope')
-    expect(await screen.findByText(/This connection is gone/)).toBeInTheDocument()
+    expect(await screen.findByText(/This credential is gone/)).toBeInTheDocument()
   })
 })
 
-describe('where connections and credentials used to live', () => {
-  it('maps every Settings > Connections address onto Connections', () => {
-    expect(settingsConnectionsTarget('/settings/connections', '')).toBe('/connections')
-    expect(settingsConnectionsTarget('/settings/connections/connect', '')).toBe('/connections/connect')
-    expect(settingsConnectionsTarget('/settings/connections/connect/github', '?returnTo=%2Fguide')).toBe('/connections/connect?service=github&returnTo=%2Fguide')
-    expect(settingsConnectionsTarget('/settings/connections/custom/new', '')).toBe('/connections/custom/new')
-    expect(settingsConnectionsTarget('/settings/connections/policies/p1', '')).toBe('/connections/policies/p1')
-    expect(settingsConnectionsTarget('/settings/connections/conn-1', '')).toBe('/connections/conn-1')
+describe('where credentials used to live', () => {
+  it('maps every Connections and Settings > Connections address onto Credentials', () => {
+    for (const base of ['/connections', '/settings/connections']) {
+      expect(credentialsTarget(base, '')).toBe('/credentials')
+      expect(credentialsTarget(`${base}/advanced`, '')).toBe('/credentials/advanced')
+      expect(credentialsTarget(`${base}/connect`, '')).toBe('/credentials/new')
+      expect(credentialsTarget(`${base}/connect`, '?service=github')).toBe('/credentials/new?service=github')
+      expect(credentialsTarget(`${base}/connect/github`, '?returnTo=%2Fguide')).toBe('/credentials/new?service=github&returnTo=%2Fguide')
+      expect(credentialsTarget(`${base}/custom/new`, '')).toBe('/credentials/custom/new')
+      expect(credentialsTarget(`${base}/policies/p1`, '')).toBe('/credentials/policies/p1')
+      expect(credentialsTarget(`${base}/policies/new`, '?kind=expiry_rule')).toBe('/credentials/policies/new?kind=expiry_rule')
+      expect(credentialsTarget(`${base}/conn-1`, '')).toBe('/credentials/conn-1')
+    }
+    // A sign-in that came back to the old address opens what it made.
+    expect(credentialsTarget('/connections', '?connection=conn-9&status=valid')).toBe('/credentials/conn-9')
   })
 
-  it('maps Credentials onto Connections, and access keys onto the gateways they unlock', () => {
-    expect(credentialsTarget('/credentials')).toBe('/connections')
-    expect(credentialsTarget('/credentials/new')).toBe('/connections/connect?service=other')
-    expect(credentialsTarget('/credentials/access-keys')).toBe('/gateways')
-    expect(credentialsTarget('/credentials/access-keys/new')).toBe('/gateways')
-  })
-
-  it('redirects under a router', async () => {
-    const settings = renderAtRoute(<SettingsConnectionsRedirect />, { path: '/settings/connections/*', url: '/settings/connections/conn-1', paths: PATHS })
-    await waitFor(() => expect(settings.router.state.location.pathname).toBe('/connections/conn-1'))
-    settings.unmount()
-    const creds = renderAtRoute(<CredentialsRedirect />, { path: '/credentials/*', url: '/credentials', paths: PATHS })
-    await waitFor(() => expect(creds.router.state.location.pathname).toBe('/connections'))
+  it('redirects under a router, and sends access keys to the gateways they unlock', async () => {
+    const old = renderAtRoute(<OldCredentialsAddressRedirect />, { path: '/connections/*', url: '/connections/conn-1', paths: PATHS })
+    await waitFor(() => expect(old.router.state.location.pathname).toBe('/credentials/conn-1'))
+    old.unmount()
+    const keys = renderAtRoute(<AccessKeysRedirect />, { path: '/credentials/access-keys/*', url: '/credentials/access-keys', paths: PATHS })
+    await waitFor(() => expect(keys.router.state.location.pathname).toBe('/gateways'))
   })
 })

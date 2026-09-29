@@ -24,7 +24,7 @@ vi.mock('../../lib/api', () => ({
   llmProvidersApi: { connect: vi.fn(), providerTypes: vi.fn().mockResolvedValue([]), getModels: vi.fn().mockResolvedValue([]) },
 }))
 
-vi.mock('@/components/credential-picker', () => ({
+vi.mock('@/components/credentials/credential-picker', () => ({
   CredentialPicker: () => <div data-testid="credential-picker" />,
 }))
 vi.mock('@/lib/connections-api', () => ({
@@ -53,24 +53,25 @@ beforeEach(() => {
 
 const privateOption = () => screen.getByRole('radio', { name: /Private/ })
 
-describe('share tools page', () => {
+describe('create gateway page', () => {
   it('is a page, not a dialog, and sends visibility private with no team', async () => {
     const user = userEvent.setup()
     vi.mocked(gatewaysApi.create).mockResolvedValue({ id: 'gw-new' })
     render(<GatewayNewPage />)
 
-    expect(screen.getByRole('heading', { name: 'Share tools' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Create gateway' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
+    await user.click(screen.getByTestId('gateway-protocol-mcp'))
     await user.click(await screen.findByLabelText(/listPets/))
     await user.click(screen.getByRole('button', { name: /^Advanced/ }))
     await user.click(screen.getByRole('button', { name: 'Change' }))
     await user.click(privateOption())
-    await user.click(screen.getByRole('button', { name: 'Share 1 tool' }))
+    await user.click(screen.getByRole('button', { name: 'Create gateway' }))
 
     await waitFor(() => expect(gatewaysApi.create).toHaveBeenCalled())
     expect(vi.mocked(gatewaysApi.create).mock.calls[0][0]).toMatchObject({
-      name: 'List pets', type: 'tools', visibility: 'private', teamId: null, toolIds: ['t1'],
+      name: 'List pets', type: 'mcp', visibility: 'private', teamId: null, toolIds: ['t1'],
     })
     await waitFor(() => expect(mockNavigate.mock.calls.at(-1)?.[0]).toBe('/gateways/gw-new'))
   })

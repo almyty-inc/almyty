@@ -6,10 +6,11 @@ import { startFakeUpstreams, type FakeUpstreams, FINAL_ANSWER, FORECAST, MODEL_I
 
 /**
  * The core journey, through the UI, the way a new user takes it: sign up,
- * connect a model, import an API, share its tools over MCP/UTCP/Skills,
- * build an autonomous agent on that model and tool and run it, add a web
- * chat channel to it and chat with it as a visitor, then look at
- * Connections. Unit suites cannot see the seams between these (a client
+ * connect a model, connect an API (its kind first), create a gateway for
+ * its tools over MCP, UTCP and Skills (one per protocol), build an
+ * autonomous agent on that model and tool and run it, add a web chat
+ * channel to it and chat with it as a visitor, then look at Credentials.
+ * Unit suites cannot see the seams between these (a client
  * calling a route the server shadows, a proxy rule missing, a response
  * shape the page does not wait for); this walks across all of them.
  *
@@ -106,7 +107,7 @@ function watch(page: Page, who: string, trouble: Trouble) {
   })
 }
 
-test('core journey: sign up, model, API, shared tools, agent, channel, connections', async ({ browser, page, request }) => {
+test('core journey: sign up, model, API, gateways, agent, channel, credentials', async ({ browser, page, request }) => {
   test.setTimeout(120_000)
   const fake: FakeUpstreams = await startFakeUpstreams()
   const trouble: Trouble = { consoleErrors: [], failedRequests: [] }
@@ -151,32 +152,58 @@ test('core journey: sign up, model, API, shared tools, agent, channel, connectio
       await expect(page).toHaveURL(/\/models$/)
     })
 
-    await test.step('APIs: import one through the one box', async () => {
+    let apiId = ''
+    await test.step('APIs: pick the kind, then give its description', async () => {
       await page.goto('/apis/new')
+      await page.getByTestId('api-kind-openapi').click()
+      await expect(page).toHaveURL(/\/apis\/new\/openapi$/)
       // A link to a local address is refused on purpose, so the description goes in as a file.
+      await page.getByRole('tab', { name: 'File' }).click()
       await page.locator('input[type=file]').setInputFiles({ name: 'forecast.json', mimeType: 'application/json', buffer: Buffer.from(fake.openApi()) })
-      await page.getByRole('button', { name: 'Import' }).click()
+      await page.getByRole('button', { name: 'Connect API' }).click()
       await page.waitForURL(/\/apis\/[0-9a-f-]{36}$/)
+      apiId = new URL(page.url()).pathname.split('/')[2]
       await expect(page.getByRole('heading', { name: 'E2E Forecast', level: 1 })).toBeVisible()
       await expect(page.getByRole('button', { name: /GET \/forecast/ })).toBeVisible()
     })
 
+    /** Create gateway for the API's tools over one protocol; the key (none for Skills) and the address. */
+    const createGateway = async (protocol: 'mcp' | 'utcp' | 'skills', path: string) => {
+      await page.goto(`/gateways/new?protocol=${protocol}&api=${apiId}`)
+      await expect(page.getByTestId(`gateway-protocol-${protocol}`)).toHaveAttribute('aria-pressed', 'true')
+      await expect(page.getByTestId(`share-api-${apiId}`)).toHaveAttribute('aria-pressed', 'true')
+      // One gateway per protocol over the same tools: each its own path.
+      await page.getByRole('button', { name: /^Advanced/ }).click()
+      await page.getByLabel('Path').fill(path)
+      await page.getByRole('button', { name: 'Create gateway' }).click()
+      await page.waitForURL(/\/gateways\/[0-9a-f-]{36}$/)
+      const id = new URL(page.url()).pathname.split('/')[2]
+      const key = protocol === 'skills' ? '' : (await page.getByTestId('initial-api-key').locator('code').innerText()).trim()
+      const address = (await page.getByTestId('connect-snippets').locator('code').filter({ hasText: /^https?:\/\// }).first().innerText()).trim()
+      // The address is on the API's origin, which in dev is vite; a client talks to the API itself.
+      return { id, key, url: `${API_ORIGIN}${new URL(address).pathname}` }
+    }
+
     let gatewayUrl = ''
     let accessKey = ''
-    await test.step('Share tools: get the address and key', async () => {
-      await page.getByRole('link', { name: 'Share tools' }).click()
-      await page.getByRole('button', { name: 'Share 1 tool' }).click()
+    await test.step('Create gateway: MCP, from the API page, with the key and the MCP setups', async () => {
+      await page.getByRole('link', { name: 'Create gateway' }).click()
+      await expect(page).toHaveURL(new RegExp(`/gateways/new\\?api=${apiId}$`))
+      await page.getByTestId('gateway-protocol-mcp').click()
+      await page.getByRole('button', { name: 'Create gateway' }).click()
       await page.waitForURL(/\/gateways\/[0-9a-f-]{36}$/)
       accessKey = (await page.getByTestId('initial-api-key').locator('code').innerText()).trim()
       expect(accessKey).toMatch(/^gw_/)
-      const address = (await page.locator('code').filter({ hasText: /^https?:\/\// }).first().innerText()).trim()
-      // The address is on the API's origin, which in dev is vite; a client talks to the API itself.
+      const snippets = page.getByTestId('connect-snippets')
+      await expect(snippets.getByRole('tab', { name: 'Claude Code' })).toBeVisible()
+      await expect(snippets.getByRole('tab', { name: 'UTCP' })).toHaveCount(0)
+      const address = (await snippets.locator('code').filter({ hasText: /^https?:\/\// }).first().innerText()).trim()
       gatewayUrl = `${API_ORIGIN}${new URL(address).pathname}`
-      await expect(page.getByRole('region', { name: 'Shared tools (1)' })).toBeVisible()
+      await expect(page.getByRole('tab', { name: /Tool scoping \(1\// })).toBeVisible()
     })
 
     let forecastTool = ''
-    await test.step('call the shared tools over MCP, and list them over UTCP and Skills', async () => {
+    await test.step('call the tools over MCP; a UTCP and a Skills gateway list the same tool', async () => {
       // The fake API is on localhost: the organization says that host is its own.
       const orgId = sql(`SELECT uo."organizationId" FROM user_organizations uo JOIN users u ON u.id = uo."userId" WHERE u.email = '${user.email}' LIMIT 1;`)
       const allowed = await page.request.patch(`/organizations/${orgId}`, { data: { settings: { egressAllowlist: ['localhost'] } } })
@@ -191,16 +218,20 @@ test('core journey: sign up, model, API, shared tools, agent, channel, connectio
       expect(JSON.stringify(called.content)).toContain(FORECAST)
       expect(fake.apiCalls).toContain('GET /api/forecast?city=Lisbon')
 
-      const manual = await request.get(`${gatewayUrl}/manual`, { headers: { 'x-api-key': accessKey } })
+      const utcp = await createGateway('utcp', '/forecast-utcp')
+      const manual = await request.get(`${utcp.url}/manual`, { headers: { 'x-api-key': utcp.key } })
       expect(manual.status(), await manual.text()).toBe(200)
       const manualNames: string[] = ((await manual.json()).tools ?? []).map((t: { name: string }) => t.name)
       expect(manualNames.some((n) => n === forecastTool || n.endsWith(`.${forecastTool}`)), `UTCP manual: ${manualNames.join(', ')}`).toBe(true)
 
-      const skills = await request.get(`${gatewayUrl}/skills`, { headers: { 'x-api-key': accessKey } })
+      // A Skills gateway has no access key: the Skills CLI reads it signed in as you, from here.
+      const skillsGateway = await createGateway('skills', '/forecast-skills')
+      const skills = await page.request.get(`/gateways/${skillsGateway.id}/skills/individual`)
       expect(skills.status(), await skills.text()).toBe(200)
-      // The same tool, in the Agent Skills spelling: lowercase with dashes.
-      const skillNames = ((await skills.json()).data?.skills ?? []).map((s: { name: string }) => s.name)
-      expect(skillNames).toEqual([forecastTool.replace(/_/g, '-')])
+      // The same tool, in the Agent Skills spelling (lowercase with dashes), under the gateway's name.
+      const body = await skills.json()
+      const skillNames: string[] = (body.data?.skills ?? []).map((s: { name: string }) => s.name)
+      expect(skillNames).toEqual([`forecast-skills-${forecastTool.replace(/_/g, '-')}`])
     })
 
     await test.step('Agents: an autonomous agent on that model and tool, run from the UI', async () => {
@@ -257,12 +288,12 @@ test('core journey: sign up, model, API, shared tools, agent, channel, connectio
       }
     })
 
-    await test.step('Connections: the page and the connect-a-service tiles', async () => {
-      await page.getByRole('link', { name: 'Connections', exact: true }).click()
-      await expect(page.getByRole('heading', { name: 'Connections', level: 1 })).toBeVisible()
-      await page.getByRole('link', { name: 'Connect a service' }).first().click()
-      await expect(page).toHaveURL(/\/connections\/connect$/)
-      await expect(page.getByRole('heading', { name: 'Connect a service', level: 1 })).toBeVisible()
+    await test.step('Credentials: the page and the Add credential tiles', async () => {
+      await page.getByRole('link', { name: 'Credentials', exact: true }).click()
+      await expect(page.getByRole('heading', { name: 'Credentials', level: 1 })).toBeVisible()
+      await page.getByRole('link', { name: 'Add credential' }).first().click()
+      await expect(page).toHaveURL(/\/credentials\/new$/)
+      await expect(page.getByRole('heading', { name: 'Add credential', level: 1 })).toBeVisible()
       await expect(page.locator('[data-testid^="service-tile-"]').first()).toBeVisible()
       await page.getByLabel('Search services').fill('zzzz-no-such-service')
       await expect(page.getByRole('button', { name: 'Save its key as another service' })).toBeVisible()

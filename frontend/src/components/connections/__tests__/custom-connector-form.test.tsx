@@ -3,7 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 
 import { renderAtRoute } from '../../../test/render-at-route'
 import { EMPTY_CUSTOM_CONNECTOR, buildCustomConnectorBody } from '../custom-connector-form'
-import { CustomConnectorNewPage } from '../../../pages/connection-pages'
+import { CustomServiceNewPage } from '../../../pages/credential-pages'
 import { connectorsApi } from '../../../lib/connections-api'
 
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
@@ -57,12 +57,12 @@ describe('buildCustomConnectorBody', () => {
   })
 })
 
-describe('/connections/custom/new', () => {
+describe('/credentials/custom/new', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('posts the connector and goes straight on to connecting it', async () => {
     vi.mocked(connectorsApi.create).mockResolvedValue({ key: 'office-vllm', kind: 'inference', displayName: 'Office vLLM', connect: [] })
-    const { router } = renderAtRoute(<CustomConnectorNewPage />, { path: '/connections/custom/new' })
+    const { router } = renderAtRoute(<CustomServiceNewPage />, { path: '/credentials/custom/new' })
 
     fireEvent.change(screen.getByLabelText(/^Display name/), { target: { value: 'Office vLLM' } })
     fireEvent.change(screen.getByLabelText(/^Key/), { target: { value: 'office-vllm' } })
@@ -71,12 +71,12 @@ describe('/connections/custom/new', () => {
 
     await waitFor(() => expect(connectorsApi.create).toHaveBeenCalledTimes(1))
     expect(vi.mocked(connectorsApi.create).mock.calls[0][0]).toMatchObject({ key: 'office-vllm', kind: 'inference', validation: { kind: 'http' } })
-    expect(await screen.findByText('at /connections/connect')).toBeInTheDocument()
+    expect(await screen.findByText('at /credentials/new')).toBeInTheDocument()
     expect(router.state.location.search).toBe('?service=office-vllm')
   })
 
   it('shows field errors and focuses the first one instead of posting', async () => {
-    renderAtRoute(<CustomConnectorNewPage />, { path: '/connections/custom/new' })
+    renderAtRoute(<CustomServiceNewPage />, { path: '/credentials/custom/new' })
     fireEvent.click(screen.getByRole('button', { name: 'Add service' }))
     expect(await screen.findByText('Key is required')).toBeInTheDocument()
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^Display name/)))
