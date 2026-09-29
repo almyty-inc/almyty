@@ -1,9 +1,9 @@
 # Gateways
 
 Publish your tools once, reach them from any agent or client. A gateway takes the
-tools you have already built and exposes them from one authenticated address that
-speaks MCP, UTCP and Agent Skills. You pick which tools a gateway serves, so every
-address has a focused, purpose-built surface.
+tools you have already built and serves them over one protocol (MCP, UTCP or Agent
+Skills) from an authenticated address. You pick the protocol and which tools a gateway
+serves, so every address has a focused, purpose-built surface.
 
 ![A gateway detail page with its assigned tools, endpoint, and auth](/screenshots/gateway-detail-tools.png)
 
@@ -22,18 +22,21 @@ claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
   Claude calls getPetById via almyty -> "Rosie", available
 ```
 
-The same address answers MCP, UTCP and Agent Skills, so other frameworks and coding
-agents reach the identical tools without a second gateway. Putting an agent in front of
+Create another gateway over the same tools to reach clients that speak another protocol.
+Putting an agent in front of
 people or other systems is a different job: web chats, website widgets, messaging
 channels and A2A endpoints for other agents are places on an app, set up under **Apps**.
 
-## Share tools
+## Create a gateway
 
-1. Open **Gateways** in the sidebar and click **Share tools** to open `/gateways/new`
-2. Under **What to share**, pick a whole API or single tools (a draft can't be shared until it is active)
-3. Name it; the address follows from the name, and **Advanced** changes the path and who can use it
-4. Click **Share**, then copy the access key: it is shown once
-5. Change which tools it serves from **Tool scoping** on the gateway page, and its auth from the **Authentication** section
+1. Open **Gateways** in the sidebar and click **Create gateway** to open `/gateways/new`
+2. Under **Protocol**, pick **MCP**, **UTCP** or **Skills**. Nothing is picked for you
+3. Under **Tools**, pick a whole API or single tools (a draft can't be served until it is active)
+4. Name it; the address follows from the name, and **Advanced** changes the path and who can use it
+5. Click **Create gateway**. An MCP or UTCP gateway shows its access key once, on the next page, with the setup for each client that speaks its protocol already filled in with the key. A Skills gateway has no access key: the Skills CLI signs in as you
+6. Change which tools it serves from **Tool scoping** on the gateway page, and its auth from the **Authentication** section
+
+An API's page has **Create gateway** too, with that API's tools already picked.
 
 The gateway's **Integrations** tab gives you the live endpoint plus discovery URLs to
 paste into any client:
@@ -42,9 +45,9 @@ paste into any client:
 
 ## Protocols
 
-One set of tools, three ways to reach them, all at one address:
-`api.almyty.com/{org}/{gateway}`. There is no protocol to pick: a JSON-RPC POST to the
-address is MCP, `/manual` and `/execute` are UTCP, and `/skills` lists the Agent Skills.
+Each gateway speaks the protocol it was created for, at `api.almyty.com/{org}/{gateway}`.
+A gateway made before the protocol pick serves all three at one address: a JSON-RPC POST
+is MCP, `/manual` and `/execute` are UTCP, and `/skills` lists the Agent Skills.
 
 | Protocol | Reach it with | Endpoint |
 |----------|---------------|----------|
