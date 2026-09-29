@@ -20,14 +20,18 @@ describe('gateway body DTOs', () => {
     expect(await errorsOf(UpdateGatewayBodyDto, { status })).toEqual(['status']);
   });
 
-  const create = { name: 'Weather', type: 'tools', endpoint: '/weather', configuration: {} };
+  const create = { name: 'Weather', type: 'mcp', endpoint: '/weather', configuration: { transport: 'http' } };
 
-  it('accepts a shared-tools gateway with picked tool ids', async () => {
+  it('accepts a tool gateway with picked tool ids', async () => {
     expect(await errorsOf(CreateGatewayBodyDto, { ...create, toolIds: ['0d000000-0000-4000-8000-000000000001'] })).toEqual([]);
   });
 
   it('refuses tool ids that are not ids', async () => {
     expect(await errorsOf(CreateGatewayBodyDto, { ...create, toolIds: ['get_weather'] })).toEqual(['toolIds']);
     expect(await errorsOf(CreateGatewayBodyDto, { ...create, toolIds: 'x' })).toEqual(['toolIds']);
+  });
+
+  it('refuses a gateway of every protocol: each gateway serves one', async () => {
+    expect(await errorsOf(CreateGatewayBodyDto, { ...create, type: 'tools' })).toEqual(['type']);
   });
 });
