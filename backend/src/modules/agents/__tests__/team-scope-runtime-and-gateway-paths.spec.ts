@@ -279,7 +279,7 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
 
   describe('invoke_agent, from inside a run', () => {
     const helper = () =>
-      new AgentBuiltInToolsHelper(agents as any, queue as any, {} as any, runtime, {} as any);
+      new AgentBuiltInToolsHelper(agents as any, queue as any, runtime, {} as any);
     const parentRun = (principal: ExecutionPrincipal, userId: string | null = null) =>
       Object.assign(new AgentRun(), { id: 'parent-run', organizationId: CAST.org, userId, endUserId: null, principal });
 
@@ -322,7 +322,7 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
 
   describe('create_agent, from inside a run', () => {
     const helper = () =>
-      new AgentBuiltInToolsHelper(agents as any, queue as any, {} as any, runtime, {} as any);
+      new AgentBuiltInToolsHelper(agents as any, queue as any, runtime, {} as any);
     const parentRun = (principal: ExecutionPrincipal) =>
       Object.assign(new AgentRun(), { id: 'parent-run', organizationId: CAST.org, userId: null, principal });
     const create = (principal: ExecutionPrincipal, toolIds: string[]) =>

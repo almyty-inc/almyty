@@ -32,6 +32,11 @@ const FILES_API_BETA = 'files-api-2025-04-14';
 export class AnthropicMemoryToolBackend implements MemoryBackend {
   readonly id = 'anthropic-memory-tool';
   readonly schema_version = 1;
+
+  nativeId(item: MemoryItem): string | null {
+    const id = (item.metadata as Record<string, unknown>)?.anthropic_file_id;
+    return typeof id === 'string' && id ? id : null;
+  }
   readonly capabilities = new Set<Capability>([
     'mode_memory', 'mode_document', 'vector_search', 'multi_tenant', 'batch_writes',
   ]);

@@ -123,6 +123,18 @@ export async function runAgent(opts: {
    * policy's objective: the head of the plan, on one of `providers`.
    */
   routes?: Record<string, { providerId: string; model: string }>;
+  /** Fields of the agent row this case sets (memoryConfig, agentConfig, toolIds). */
+  agent?: Record<string, any>;
+  /** Fields of the run this case sets (userId, endUserId, metadata). */
+  run?: Record<string, any>;
+  /** The memory accounts double (MemoryAccountsService's put and search). */
+  memoryAccounts?: { put: jest.Mock; search: jest.Mock };
+  /** Other agents of the organization. */
+  otherAgents?: Array<Record<string, any>>;
+  /** More tool rows of the organization. */
+  tools?: Array<Record<string, any>>;
+  /** The tool executor's executeTool, when a case needs to see its options. */
+  executeTool?: jest.Mock;
 }) {
   const bodies: Array<{ model: string; body: any }> = [];
   const queues: Streams = JSON.parse(JSON.stringify(opts.streams));
@@ -161,6 +173,8 @@ export async function runAgent(opts: {
     collaboration: null,
     settings: {},
   };
+  // A case's own settings on the agent: its memory, its capabilities, its tools.
+  Object.assign(agent, opts.agent ?? {});
   const limits = { maxSteps: 20, maxCostCents: 100, maxDurationMs: 3_600_000, maxToolCalls: 100, ...(opts.limits ?? {}) };
   const runRow = (id: string, conversationId: string, extra: Record<string, any> = {}) => ({
     id,
@@ -188,13 +202,15 @@ export async function runAgent(opts: {
     parentRunId: null,
     ...extra,
   });
-  const runRepository = fakeRepository<AgentRun>({ make: () => new AgentRun(), seed: [runRow('run-1', 'conv-1') as any] });
+  const runRepository = fakeRepository<AgentRun>({ make: () => new AgentRun(), seed: [runRow('run-1', 'conv-1', opts.run ?? {}) as any] });
 
   const toolExecutorService = {
-    executeTool: jest.fn(async (toolId: string) => {
-      if (toolId !== 'tool-crm') throw new Error(`unexpected tool ${toolId}`);
-      return { success: true, data: { account: '4411', eta: 'Monday' }, executionTime: 4 };
-    }),
+    executeTool:
+      opts.executeTool ??
+      jest.fn(async (toolId: string) => {
+        if (toolId !== 'tool-crm') throw new Error(`unexpected tool ${toolId}`);
+        return { success: true, data: { account: '4411', eta: 'Monday' }, executionTime: 4 };
+      }),
   };
 
   const llm = new LlmChatHelper(
@@ -270,21 +286,27 @@ export async function runAgent(opts: {
     runRepository,
     messageRepository,
     organizationRepository: fakeRepository([{ id: 'org-1', settings: {} }]),
-    toolRepository: fakeRepository([{ id: 'tool-crm', organizationId: 'org-1', name: 'crm_lookup', description: 'Look up an order', parameters: { type: 'object', properties: { account: { type: 'string' } } } }]),
-    agentRepository: fakeRepository([agent]),
+    toolRepository: fakeRepository([
+      { id: 'tool-crm', organizationId: 'org-1', name: 'crm_lookup', description: 'Look up an order', parameters: { type: 'object', properties: { account: { type: 'string' } } } },
+      ...(opts.tools ?? []),
+    ]),
+    agentRepository: fakeRepository([agent, ...(opts.otherAgents ?? [])]),
     executionAccess: access.executionAccess,
     misc: {
       resolveLimits: async (run: AgentRun, organization: any) => resolveRunLimits({ organization, agent: run.agent, run }),
       bumpAgentStats: async () => undefined,
-      autoSaveMemory: async () => undefined,
     },
     builders: new AgentRuntimeBuilders(messageRepository as any, { listActiveRules: async () => [] } as any),
     builtInTools: {
       executeBuiltInTool: async (name: string) => {
-        if (name in BUILT_IN_TOOLS) throw new Error(`built-in ${name} is not part of these runs`);
+        // store_memory and recall_memory are the memory keeper's, not this helper's.
+        if (name in BUILT_IN_TOOLS && name !== 'store_memory' && name !== 'recall_memory') throw new Error(`built-in ${name} is not part of these runs`);
         return null;
       },
     },
+    // The agent's memory account (almyty's own or an outside one): the
+    // double a memory case hands in, or nothing.
+    memoryAccounts: opts.memoryAccounts,
     toolExecutorService,
     llmProvidersService,
     processStep: (runId: string) => processor.processStep(runId),

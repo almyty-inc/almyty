@@ -31,6 +31,11 @@ import { BackendCredentials, BackendHealth, MemoryBackend } from './memory-backe
 export class ZepBackend implements MemoryBackend {
   readonly id = 'zep';
   readonly schema_version = 1;
+
+  nativeId(item: MemoryItem): string | null {
+    const id = (item.metadata as Record<string, unknown>)?.zep_uuid;
+    return typeof id === 'string' && id ? id : null;
+  }
   readonly capabilities = new Set<Capability>([
     'mode_memory', 'vector_search', 'graph_search', 'bi_temporal',
     'multi_tenant', 'batch_writes', 'export',
@@ -69,12 +74,13 @@ export class ZepBackend implements MemoryBackend {
     const client = this.requireClient(creds);
     const userId = scopeToUserId({ scope_type: item.scope_type, scope_id: item.scope_id });
     await this.ensureUser(client, userId);
-    await client.graph.add({
+    const episode: any = await client.graph.add({
       data: item.content,
       type: 'message',
       userId,
     });
-    return item;
+    // The episode's uuid is what delete takes (nativeId).
+    return episode?.uuid ? { ...item, metadata: { ...item.metadata, zep_uuid: episode.uuid } } : item;
   }
 
   async delete(id: string, _mode: 'soft' | 'hard' = 'soft', creds?: BackendCredentials): Promise<boolean> {

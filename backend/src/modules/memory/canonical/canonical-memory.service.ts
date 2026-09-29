@@ -601,6 +601,18 @@ export class CanonicalMemoryService {
     };
   }
 
+  /**
+   * A canonical item for `input`, checked against the schema, for a write
+   * that goes to an outside memory service rather than this store (an
+   * agent's chosen memory account). Nothing is saved here.
+   */
+  draftItem(input: PutInput): MemoryItem {
+    const item = this.buildItem(input, input.id ?? uuidv7(), Buffer.byteLength(input.content, 'utf8'), new Date());
+    const issues = validateMemoryItem(item);
+    if (issues.length > 0) throw new MemoryError({ kind: 'validation', issues });
+    return item;
+  }
+
   // ── Delegations to CanonicalMemoryOpsHelper ──
   enqueueEmbeddingFor(...args: Parameters<CanonicalMemoryOpsHelper['enqueueEmbeddingFor']>) { return this.opsHelper.enqueueEmbeddingFor(...args); }
   fillEmbedding(...args: Parameters<CanonicalMemoryOpsHelper['fillEmbedding']>) { return this.opsHelper.fillEmbedding(...args); }

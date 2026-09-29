@@ -87,6 +87,12 @@ describe('ZepBackend (SDK-mocked)', () => {
     });
   });
 
+  it('put keeps the episode uuid, which is what delete takes (nativeId)', async () => {
+    mockClient.graph.add.mockResolvedValueOnce({ uuid: 'ep-9' });
+    const saved = await backend.put(makeItem(), creds);
+    expect(backend.nativeId(saved)).toBe('ep-9');
+    expect(backend.nativeId(makeItem())).toBeNull();
+  });
   it('put swallows 409 from user.add (existing user)', async () => {
     mockClient.user.add.mockRejectedValue({ statusCode: 409 });
     const item = makeItem();

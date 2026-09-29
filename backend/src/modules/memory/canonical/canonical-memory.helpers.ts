@@ -116,6 +116,7 @@ export function parseScheme(uri: string): string | null {
  */
 export function scopeToOrganizationId(scopeType: ScopeType, scopeId: string): string {
   if (scopeType === 'user') return scopeId.split(USER_SCOPE_SEPARATOR)[0];
+  if (scopeType === 'agent') return scopeId.split(AGENT_SCOPE_SEPARATOR)[0];
   return scopeId;
 }
 
@@ -127,6 +128,7 @@ export function scopeToUserId(scopeType: ScopeType, scopeId: string): string | n
 }
 
 const USER_SCOPE_SEPARATOR = ':user:';
+const AGENT_SCOPE_SEPARATOR = ':agent:';
 
 /**
  * The scope_id of one member's `user` memories inside one organization.
@@ -138,6 +140,30 @@ const USER_SCOPE_SEPARATOR = ':user:';
  */
 export function userScopeId(organizationId: string, userId: string): string {
   return `${organizationId}${USER_SCOPE_SEPARATOR}${userId}`;
+}
+
+/**
+ * The scope_id of one visitor's memories: a `user` scope of its own, apart
+ * from every member's. A visitor (hosted chat, widget) has an end-user id,
+ * never a users.id, so the `visitor:` prefix keeps the two from meeting.
+ */
+export function visitorScopeId(organizationId: string, endUserId: string): string {
+  return userScopeId(organizationId, `visitor:${endUserId}`);
+}
+
+/**
+ * The scope_id of one agent's own memories (an agent whose memory is "per
+ * agent"): no other agent reads it. Prefixed by the organization, like a
+ * user scope, so scopeToOrganizationId finds the tenant.
+ */
+export function agentScopeId(organizationId: string, agentId: string): string {
+  return `${organizationId}${AGENT_SCOPE_SEPARATOR}${agentId}`;
+}
+
+/** Whether `scopeId` is an agent scope inside `organizationId`. */
+export function isAgentScopeOf(organizationId: string, scopeId: string): boolean {
+  const prefix = `${organizationId}${AGENT_SCOPE_SEPARATOR}`;
+  return scopeId.startsWith(prefix) && scopeId.length > prefix.length;
 }
 
 export function itemToEntity(item: MemoryItem): CanonicalMemory {

@@ -15,6 +15,7 @@ import { EventEmitter } from 'events';
 import { LlmProvidersService } from '../llm-providers/llm-providers.service';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
+import { MemoryAccountsService } from '../memory/canonical/memory-accounts.service';
 import { Tier } from '../memory/canonical/canonical.types';
 import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
@@ -200,6 +201,10 @@ export class AgentRuntimeService implements OnModuleInit {
     readonly budgets: BudgetsService,
     // The team/private execution gate every run start goes through.
     readonly executionAccess: ExecutionAccessService,
+    // The memory account an agent chose (almyty's own or an outside one),
+    // its retention, and the organization's accounts (AgentMemoryKeeper).
+    @Optional()
+    readonly memoryAccounts?: MemoryAccountsService,
   ) {}
 
   /**

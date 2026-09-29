@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpException,
   HttpStatus,
+  Optional,
   Param,
   Post,
   Query,
@@ -23,7 +24,8 @@ import {
   SupersedeMemoryDto,
 } from './canonical-memory.dto';
 import { MemoryError, Mode, Provenance, ScopeType, SCOPE_TYPE_VALUES } from './canonical.types';
-import { userScopeId } from './canonical-memory.helpers';
+import { isAgentScopeOf, userScopeId } from './canonical-memory.helpers';
+import { MemoryAccountsService } from './memory-accounts.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -84,7 +86,10 @@ export class CanonicalMemoryController {
     // user scope id (what this API hands back on a user memory).
     const userId = this.userId(req);
     const own = userId ? [organizationId, userScopeId(organizationId, userId)] : [organizationId];
-    if (scope?.scope_id && !own.includes(scope.scope_id)) {
+    // An agent's own memory (`<org>:agent:<agentId>`) is the organization's
+    // like its workspace memory is: any agent scope inside the caller's org.
+    const agentScope = scope?.scope_type === 'agent' && !!scope.scope_id && isAgentScopeOf(organizationId, scope.scope_id);
+    if (scope?.scope_id && !own.includes(scope.scope_id) && !agentScope) {
       throw new HttpException(
         {
           success: false,
@@ -148,6 +153,17 @@ export class CanonicalMemoryController {
       }
       return { scope_type: scopeType, scope_id: userScopeId(this.orgId(req), userId) };
     }
+    // One agent's own memory: the id names the agent, inside this org
+    // (assertScope refused any other org's above).
+    if (scopeType === 'agent') {
+      if (!scope?.scope_id || !isAgentScopeOf(this.orgId(req), scope.scope_id)) {
+        throw new HttpException(
+          { success: false, error: 'BAD_REQUEST', message: 'An agent scope id is <organization id>:agent:<agent id>' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      return { scope_type: scopeType, scope_id: scope.scope_id };
+    }
     return { scope_type: scopeType, scope_id: this.orgId(req) };
   }
 
@@ -176,6 +192,7 @@ export class CanonicalMemoryController {
     private readonly chunker: DocumentChunkerService,
     private readonly consolidation: ConsolidationService,
     private readonly memorySync: MemorySyncService,
+    @Optional() private readonly accounts?: MemoryAccountsService,
   ) {}
 
   // ── backends list / health ────────────────────────────────────────
@@ -192,6 +209,16 @@ export class CanonicalMemoryController {
   @ApiOperation({ summary: 'Run a health check against every backend' })
   async healthAll() {
     return { success: true, data: await this.router.healthAll() };
+  }
+
+  // ── memory accounts an agent can keep its memories in ─────────────
+
+  @Get('accounts')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: "almyty's own memory and every outside memory account the organization has set up" })
+  async listAccounts(@Request() req: any) {
+    const organizationId = this.orgId(req);
+    return { success: true, data: this.accounts ? await this.accounts.accounts(organizationId) : [] };
   }
 
   // ── workspace config (per-scope routing + softcap) ────────────────

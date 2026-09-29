@@ -47,6 +47,8 @@ import { VertexMemoryBankBackend } from './canonical/backends/vertex-memory-bank
 import { MemoryRouter } from './canonical/memory-router.service';
 import { BackendCredentialsResolver } from './canonical/backend-credentials.resolver';
 import { DocumentChunkerService } from './canonical/document-chunker.service';
+import { MemoryExpiry } from './canonical/memory-expiry.entity';
+import { MemoryAccountsService } from './canonical/memory-accounts.service';
 
 /**
  * Memory module.
@@ -67,6 +69,7 @@ import { DocumentChunkerService } from './canonical/document-chunker.service';
       CanonicalMemory,
       CanonicalMemoryWorkspaceConfig,
       CanonicalMemorySoftcapWarning,
+      MemoryExpiry,
       Organization,
       LlmProvider,
       Credential,
@@ -102,10 +105,10 @@ import { DocumentChunkerService } from './canonical/document-chunker.service';
     MemoryRouter,
     BackendCredentialsResolver,
     DocumentChunkerService,
-    DocumentChunkerService,
+    MemoryAccountsService,
   ],
   controllers: [CanonicalMemoryController],
-  exports: [CanonicalMemoryService, EmbeddingService, MemoryRouter, DocumentChunkerService],
+  exports: [CanonicalMemoryService, EmbeddingService, MemoryRouter, DocumentChunkerService, MemoryAccountsService],
 })
 export class MemoryModule implements OnApplicationBootstrap {
   constructor(
@@ -128,6 +131,19 @@ export class MemoryModule implements OnApplicationBootstrap {
       {
         repeat: { every: 60_000 },
         jobId: 'canonical-memory-ttl-sweeper:repeat',
+        removeOnComplete: 50,
+        removeOnFail: 50,
+      },
+    );
+    // An agent's memories in an outside account that cannot expire them
+    // itself are deleted through that service's API once they are due
+    // (memory_expiries). Hourly: retention is counted in days.
+    await this.ttlQueue.add(
+      'expire-outside',
+      {},
+      {
+        repeat: { every: 60 * 60 * 1000 },
+        jobId: 'canonical-memory-expire-outside:repeat',
         removeOnComplete: 50,
         removeOnFail: 50,
       },

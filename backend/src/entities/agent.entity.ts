@@ -172,17 +172,37 @@ export class Agent {
     };
   };
 
+  /**
+   * The Memory section of an autonomous agent: which account its memories
+   * are kept in, whose memory it is, what gets saved (and what never is),
+   * and how long it is kept. See AgentMemoryConfig in
+   * modules/agents/agent-memory-settings.ts.
+   */
   @Column({ type: 'json', nullable: true })
   memoryConfig: {
     enabled?: boolean;
     autoSave?: boolean;
     scopes?: string[];
+    account?: string;
+    whose?: 'person' | 'agent' | 'shared';
+    save?: 'facts' | 'conversations' | 'asked';
+    neverSave?: string;
+    retentionDays?: number | null;
   };
 
   @Column({ type: 'json', nullable: true })
   agentConfig: {
+    /** Kept equal to "callableAgentIds is not empty" (normaliseCapabilities). */
     canCallAgents?: boolean;
+    /** The other agents it may call or hand work to (agent-capabilities.ts). */
+    callableAgentIds?: string[];
+    /** APIs it may use: every active tool of each, including tools added later. */
+    apiIds?: string[];
     canCreateAgents?: boolean;
+    /** Temporary agents it may create in one run. */
+    maxTemporaryAgents?: number;
+    /** Temporary agents of its runs that may exist at once. */
+    maxTemporaryAgentsAlive?: number;
     /**
      * Label requirements for the machine the agent's runner-backed tools
      * run on (`{ gpu: 'yes' }`). Each such call goes to an online runner

@@ -21,7 +21,7 @@ describe('create_agent records a real owner', () => {
 
   function build() {
     const agents = fakeRepository<Agent>({ make: () => new Agent(), idPrefix: 'agent' });
-    const helper = new AgentBuiltInToolsHelper(agents as any, {} as any, {} as any, {} as any, {} as any);
+    const helper = new AgentBuiltInToolsHelper(agents as any, {} as any, {} as any, {} as any);
     const create = (run: Record<string, any>) =>
       helper.executeBuiltInTool(
         'create_agent',
@@ -72,7 +72,7 @@ describe('create_agent never makes a temporary agent wider than its parent', () 
 
   async function childOf(parent: Record<string, any>, run: Record<string, any> = { userId: RUNNER }) {
     const agents = fakeRepository<Agent>({ make: () => new Agent(), idPrefix: 'agent' });
-    const helper = new AgentBuiltInToolsHelper(agents as any, {} as any, {} as any, {} as any, {} as any);
+    const helper = new AgentBuiltInToolsHelper(agents as any, {} as any, {} as any, {} as any);
     const out = await helper.executeBuiltInTool(
       'create_agent',
       { name: 'Child', instructions: 'x' },

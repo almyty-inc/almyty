@@ -2,7 +2,7 @@ import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentReadinessService } from './agent-readiness.service';
 import { AgentTemplate, getAgentTemplates } from './agent-templates';
 import { EstimatedCost, estimateAgentCost } from './agent-cost-estimator';
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { validateUrl } from '../../common/security/url-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -16,6 +16,10 @@ import { AgentAuditService } from './agent-audit.service';
 import { AgentCollaboration, collaborationProblems } from './collaboration-participants';
 import { AgentModels, agentModelsProblems, syncMainRole } from './autonomous-models';
 import { parseLabelRequirements } from '../runner/runner-labels';
+import { AgentMemoryConfig, memoryConfigProblems, memorySettings, retentionSeconds, NATIVE_MEMORY_ACCOUNT } from './agent-memory-settings';
+import { capabilityProblems, normaliseCapabilities } from './agent-capabilities';
+import { MemoryAccountsService } from '../memory/canonical/memory-accounts.service';
+import { Api } from '../../entities/api.entity';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
 import {
   assertAttachable,
@@ -54,8 +58,8 @@ export interface CreateAgentInput {
   heartbeat?: { enabled: boolean; intervalMinutes: number; prompt: string };
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
-  memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
-  agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean; runnerLabels?: Record<string, string> | string };
+  memoryConfig?: AgentMemoryConfig;
+  agentConfig?: AgentConfigInput;
   collaboration?: AgentCollaboration | null;
   models?: AgentModels | null;
   variables?: Record<string, any>;
@@ -78,8 +82,8 @@ export interface UpdateAgentInput {
   heartbeat?: { enabled: boolean; intervalMinutes: number; prompt: string };
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
-  memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
-  agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean; runnerLabels?: Record<string, string> | string };
+  memoryConfig?: AgentMemoryConfig;
+  agentConfig?: AgentConfigInput;
   collaboration?: AgentCollaboration | null;
   models?: AgentModels | null;
   variables?: Record<string, any>;
@@ -90,6 +94,11 @@ export interface UpdateAgentInput {
   visibility?: ResourceVisibility;
   teamId?: string | null;
 }
+
+/** The agentConfig a save may send: runner labels as typed text or as an object. */
+export type AgentConfigInput = Omit<NonNullable<Agent['agentConfig']>, 'runnerLabels'> & {
+  runnerLabels?: Record<string, string> | string;
+};
 
 export { AgentTemplate } from './agent-templates';
 
@@ -189,7 +198,58 @@ export class AgentsService {
     private readonly validation: AgentValidationHelper,
     private readonly accessPolicy: AccessPolicyService,
     private readonly readiness: AgentReadinessService,
+    // The organization's memory accounts, to check the one an agent names
+    // and to apply its retention to what it already saved.
+    @Optional() private readonly memoryAccounts?: MemoryAccountsService,
   ) {}
+
+  /**
+   * Refuse a Memory or Capabilities section the runtime could not honour:
+   * a value out of range, a memory account the organization has not set up
+   * (or a time limit on one that cannot delete a memory), an agent to call
+   * or an API to use that is not in this organization. Tidies the lists
+   * and keeps canCallAgents equal to the list on the way.
+   */
+  private async assertMemoryAndCapabilities(
+    memoryConfig: unknown,
+    agentConfig: AgentConfigInput | null | undefined,
+    organizationId: string,
+    selfId?: string,
+  ): Promise<void> {
+    const problems: string[] = [];
+    const mc = memoryConfig as AgentMemoryConfig | null | undefined;
+    const outside = !!mc && typeof mc === 'object' && typeof mc.account === 'string' && mc.account !== '' && mc.account !== NATIVE_MEMORY_ACCOUNT;
+    const accounts = outside && this.memoryAccounts ? await this.memoryAccounts.accounts(organizationId) : undefined;
+    problems.push(...memoryConfigProblems(memoryConfig, accounts));
+
+    normaliseCapabilities(agentConfig as any);
+    const capability = capabilityProblems(agentConfig);
+    problems.push(...capability);
+    if (!capability.length && agentConfig) {
+      const callable = (agentConfig.callableAgentIds ?? []).filter((id) => id !== selfId);
+      if (agentConfig.callableAgentIds?.includes(selfId ?? '')) problems.push('An agent cannot call itself');
+      if (callable.length) {
+        const found = await this.agentRepository.find({
+          where: { id: In(callable), organizationId, isTemporary: false },
+          select: { id: true },
+        });
+        const have = new Set(found.map((a) => a.id));
+        const missing = callable.filter((id) => !have.has(id));
+        if (missing.length) problems.push(`These agents are not in this organization: ${missing.join(', ')}`);
+      }
+      const apiIds = agentConfig.apiIds ?? [];
+      if (apiIds.length) {
+        const found = await this.agentRepository.manager.getRepository(Api).find({
+          where: { id: In(apiIds), organizationId },
+          select: { id: true },
+        });
+        const have = new Set(found.map((a) => a.id));
+        const missing = apiIds.filter((id) => !have.has(id));
+        if (missing.length) problems.push(`These APIs are not in this organization: ${missing.join(', ')}`);
+      }
+    }
+    if (problems.length) throw new BadRequestException(`Invalid settings: ${problems.join('; ')}`);
+  }
 
   /**
    * Refuse a collaboration the engine cannot run: an unknown strategy, a
@@ -304,6 +364,7 @@ export class AgentsService {
       pipeline?: AgentPipeline | null;
       collaboration?: Agent['collaboration'] | null;
       models?: AgentModels | null;
+      agentConfig?: Agent['agentConfig'] | null;
     },
     organizationId: string,
   ): Promise<void> {
@@ -374,6 +435,7 @@ export class AgentsService {
       normaliseRunnerLabels(createDto.agentConfig);
       this.assertModels(createDto.models);
       await this.assertToolsInOrg(createDto.toolIds, organizationId);
+      await this.assertMemoryAndCapabilities(createDto.memoryConfig, createDto.agentConfig, organizationId);
 
       // Verify organization
       const organization = await this.organizationRepository.findOne({
@@ -424,6 +486,7 @@ export class AgentsService {
           pipeline: createDto.pipeline,
           collaboration: createDto.collaboration as Agent['collaboration'],
           models: next.models,
+          agentConfig: createDto.agentConfig as Agent['agentConfig'],
         },
         organizationId,
       );
@@ -658,6 +721,13 @@ export class AgentsService {
     normaliseRunnerLabels(updateDto.agentConfig);
     this.assertModels(updateDto.models);
     await this.assertToolsInOrg(updateDto.toolIds, agent.organizationId);
+    await this.assertMemoryAndCapabilities(
+      updateDto.memoryConfig !== undefined ? updateDto.memoryConfig : undefined,
+      updateDto.agentConfig,
+      agent.organizationId,
+      agent.id,
+    );
+    const retentionBefore = retentionSeconds(memorySettings(agent.memoryConfig as AgentMemoryConfig));
 
     // An autonomous agent's main role and its modelConfig say the same
     // thing, whichever of the two this update writes (syncMainRole).
@@ -689,7 +759,8 @@ export class AgentsService {
       updateDto.toolIds !== undefined ||
       updateDto.pipeline !== undefined ||
       updateDto.collaboration !== undefined ||
-      updateDto.models !== undefined;
+      updateDto.models !== undefined ||
+      updateDto.agentConfig !== undefined;
     if (scopeChanging || referencesChanging) {
       await this.assertPrivateReferencesAllowed(
         {
@@ -700,6 +771,7 @@ export class AgentsService {
           pipeline: updateDto.pipeline ?? agent.pipeline,
           collaboration: (updateDto.collaboration as Agent['collaboration']) ?? agent.collaboration,
           models: next.models,
+          agentConfig: updateDto.agentConfig !== undefined ? (updateDto.agentConfig as Agent['agentConfig']) : agent.agentConfig,
         },
         organizationId,
       );
@@ -744,6 +816,13 @@ export class AgentsService {
     }
     if (updateDto.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);
     const saved = await this.agentRepository.save(agent);
+
+    // A changed retention applies to what the agent already saved, in
+    // almyty's own store and in outside accounts alike.
+    const retentionAfter = retentionSeconds(memorySettings(saved.memoryConfig as AgentMemoryConfig));
+    if (retentionAfter !== retentionBefore && this.memoryAccounts) {
+      await this.memoryAccounts.setAgentRetention(organizationId, saved.id, retentionAfter);
+    }
 
     this.logger.log(`[UPDATE_AGENT] Agent updated: id=${saved.id}`);
 

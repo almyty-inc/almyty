@@ -17,6 +17,7 @@ export function collectAgentReferences(agent: {
   pipeline?: AgentPipeline | null;
   collaboration?: Agent['collaboration'] | LegacyCollaboration | null;
   models?: Pick<AgentModels, 'roles'> | null;
+  agentConfig?: Pick<NonNullable<Agent['agentConfig']>, 'callableAgentIds'> | null;
 }): { toolIds: Set<string>; agentIds: Set<string> } {
   const toolIds = new Set<string>();
   const agentIds = new Set<string>();
@@ -50,6 +51,8 @@ export function collectAgentReferences(agent: {
   for (const role of agent.models?.roles ?? []) {
     if (role && role.kind === 'agent' && typeof role.agentId === 'string' && role.agentId) agentIds.add(role.agentId);
   }
+  // The agents its Capabilities section lets it call.
+  for (const id of agent.agentConfig?.callableAgentIds ?? []) if (typeof id === 'string' && id) agentIds.add(id);
   return { toolIds, agentIds };
 }
 /**

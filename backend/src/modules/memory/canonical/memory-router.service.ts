@@ -108,6 +108,48 @@ export class MemoryRouter implements OnModuleInit {
     }));
   }
 
+  /** One backend by id, or undefined. */
+  backend(id: string): MemoryBackend | undefined {
+    return this.backends.get(id);
+  }
+
+  // ── explicit-backend operations (an agent's chosen memory account) ──
+  //
+  // An agent names the account its memories go to, whatever scope they
+  // are in (its own, a person's, the organization's). The account's
+  // credential is the organization's: it sits on the workspace memory
+  // settings, `credentialScope` here.
+
+  async putOn(backendId: string, item: MemoryItem, credentialScope: ScopeRef): Promise<MemoryItem> {
+    const b = this.explicit(backendId, item.mode);
+    const creds = await this.credsResolver.resolve(credentialScope, b.id);
+    return b.put(item, creds ?? undefined);
+  }
+
+  async searchOn(backendId: string, query: SearchQuery, credentialScope: ScopeRef): Promise<ReturnType<MemoryBackend['search']>> {
+    const b = this.explicit(backendId, query.mode ?? 'memory');
+    this.require(b, 'vector_search');
+    const creds = await this.credsResolver.resolve(credentialScope, b.id);
+    return b.search(query, creds ?? undefined);
+  }
+
+  /** Delete one memory by the id the backend knows it by (MemoryBackend.nativeId). */
+  async deleteOn(backendId: string, nativeId: string, credentialScope: ScopeRef): Promise<boolean> {
+    const b = this.backends.get(backendId);
+    if (!b) throw new Error(`unknown memory backend: ${backendId}`);
+    const creds = await this.credsResolver.resolve(credentialScope, b.id);
+    return b.delete(nativeId, 'hard', creds ?? undefined);
+  }
+
+  private explicit(backendId: string, mode: Mode): MemoryBackend {
+    const b = this.backends.get(backendId);
+    if (!b) throw new Error(`unknown memory backend: ${backendId}`);
+    if (!b.supported_modes.has(mode)) {
+      throw new MemoryError({ kind: 'unsupported_capability', backend: b.id, capability: mode === 'memory' ? 'mode_memory' : 'mode_document' });
+    }
+    return b;
+  }
+
   async healthAll(scope?: ScopeRef): Promise<Record<string, { ok: boolean; latency_ms: number }>> {
     const result: Record<string, { ok: boolean; latency_ms: number }> = {};
     await Promise.all(

@@ -1,27 +1,15 @@
-import type { Agent } from '../../entities/agent.entity';
 import type { AgentRun } from '../../entities/agent-run.entity';
 
 /**
- * Whether a finished run may be summarised into the agent's memory.
+ * Whether a run may write memory at all -- by auto-save (facts, the
+ * conversation) or by the `store_memory` tool, whichever scope it goes to.
  *
- * Auto-saved memory lives at workspace scope and is read back into later
- * runs for everyone. A run started by a member of the public (a hosted
- * chat or widget visitor, identified by `endUserId`) must therefore not
- * feed it: one visitor's question would otherwise surface in another
- * visitor's answer, and the tenant would be storing personal data it
- * never asked for. Operators' own runs keep the existing opt-in.
- */
-export function shouldAutoSaveMemory(
-  agent: Pick<Agent, 'memoryConfig'>,
-  run: Pick<AgentRun, 'endUserId'> & { metadata?: Record<string, any> | null },
-): boolean {
-  if (!agent.memoryConfig?.autoSave) return false;
-  return runMayWriteSharedMemory(run);
-}
-
-/**
- * Whether a run may write the organization's shared (workspace-scoped)
- * memory at all -- by auto-save or by the `store_memory` tool.
+ * Memory is read back into later runs: shared memory for everyone, a
+ * visitor's own memory for that visitor. A run started by a member of the
+ * public must therefore not write it unless the product said visitors'
+ * memory may be kept; otherwise one visitor's question would surface in
+ * another's answer, and the tenant would be storing personal data it
+ * never asked for.
  *
  * Not a visitor's run: a product may opt its visitors in (app privacy
  * setting, carried on the run when the surface starts it), and the
