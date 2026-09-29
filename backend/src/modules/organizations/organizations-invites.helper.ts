@@ -262,6 +262,18 @@ export class OrganizationsInvitesHelper {
       if (membership.userId !== userId) {
         throw new NotFoundException('Invalid or expired invitation');
       }
+      // The row names an account by id, and that account is only its
+      // owner's once the address has been proven. Anyone can register an
+      // address they do not hold (registration hands back a session before
+      // verification), and an invite to that address then lands on their
+      // account, token and all, in the in-app notification. So the account
+      // has to have answered a mail to the address before it can join.
+      if (!caller.verifiedAt && !caller.isVerified) {
+        throw new ForbiddenException({
+          code: 'EMAIL_NOT_VERIFIED',
+          message: 'Verify your email address before accepting this invitation.',
+        });
+      }
 
       membership.inviteAccepted = true;
       membership.inviteToken = null;
