@@ -11,10 +11,12 @@
  * These mirror the server rather than adding to it: everything here is a
  * reason the server would reject the save anyway, so nothing that the API
  * accepts becomes unsaveable. The one rule that is the builder's own is the
- * Model Call check, which the server has no case for -- it stays a warning
+ * Model call check, which the server has no case for -- it stays a warning
  * about a node that would fail at run time, and it still accepts a node
  * that names a role.
  */
+
+import { STEP_NAMES } from '../step-values'
 
 export interface GraphNode {
   id: string
@@ -37,27 +39,13 @@ function branchHandle(edge: GraphEdge): string {
 
 /**
  * What a person sees on the canvas: each node is drawn with its type as the
- * header ("Model Call", "Tool Call") and never its id. Messages used to say
- * `Pick a model for the Model Call step "llm_1"` -- naming the node by an id
+ * header ("Model call", "Tool call") and never its id. Messages used to say
+ * `Pick a model for the Model call step "llm_1"` -- naming the node by an id
  * the reader had never seen. A node the user has labelled is called by that
- * label; otherwise by the header it is drawn with. Which of several Model
- * Calls an item means is answered by clicking it, not by a string.
+ * label; otherwise by the header it is drawn with, which is `STEP_NAMES`:
+ * one list for the palette, the canvas, the side panel and these messages.
+ * Which of several Model calls an item means is answered by clicking it.
  */
-const STEP_NAMES: Record<string, string> = {
-  input: 'Input',
-  output: 'Output',
-  llm_call: 'Model Call',
-  tool_call: 'Tool Call',
-  condition: 'Condition',
-  decision: 'Decision',
-  transform: 'Transform',
-  loop: 'Loop',
-  parallel: 'Parallel',
-  merge: 'Merge',
-  sub_agent: 'Sub-Agent',
-  verify: 'Verify',
-  extract_context: 'Extract Context',
-}
 
 export function stepName(node: GraphNode): string {
   const label = typeof node.data?.label === 'string' ? node.data.label.trim() : ''

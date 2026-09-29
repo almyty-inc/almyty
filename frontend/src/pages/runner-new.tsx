@@ -1,5 +1,5 @@
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
@@ -21,6 +21,7 @@ import {
   RUNNER_INSTALL_COMMAND,
   RUNNER_LOGIN_COMMAND,
   isPendingRunner,
+  suggestRunnerName,
   runnerStartCommand,
 } from './runners-shared'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
@@ -111,6 +112,17 @@ export function RunnerNewPage() {
   const watchedName = form.watch('name')
   const nameTaken = watchedName.length > 0 && existingNames.has(watchedName)
 
+  // Start with a name so nobody has to invent one: filled once the
+  // organization's runners are known (so the guess is not already
+  // taken), and never over something the person typed.
+  const suggested = useRef(false)
+  useEffect(() => {
+    if (suggested.current || pending || !existingRunnersQuery.isSuccess) return
+    suggested.current = true
+    if (form.getValues('name')) return
+    form.setValue('name', suggestRunnerName(user as { firstName?: string; email?: string } | null, existingNames))
+  }, [existingRunnersQuery.isSuccess, existingNames, pending, form, user])
+
   useEffect(() => {
     const live = pendingQuery.data
     if (live && (live.state === 'online' || live.state === 'busy') && live.lastHeartbeatAt) {
@@ -197,11 +209,16 @@ export function RunnerNewPage() {
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <div>
                 <Label htmlFor="name">Name</Label>
+                <p id="name-hint" className="text-xs text-muted-foreground mt-1">
+                  What to call this machine, so you can tell it apart from others. We filled in a
+                  guess; the machine's own name (run <code>hostname</code> on it) works well too.
+                </p>
                 <Input
                   id="name"
                   {...form.register('name')}
                   placeholder="my-laptop"
                   autoComplete="off"
+                  aria-describedby="name-hint"
                   className="mt-1"
                 />
                 {form.formState.errors.name && (
@@ -216,9 +233,10 @@ export function RunnerNewPage() {
 
               <div>
                 <Label>Labels (optional)</Label>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Descriptive tags, e.g. <code>env=dev</code>, <code>tier=staging</code>.
-                  {' '}Labels do not affect where work is dispatched yet.
+                <p className="text-xs text-muted-foreground mt-1" data-testid="runner-labels-hint">
+                  Short tags that say what this machine has, such as <code>os=mac</code> or <code>gpu=yes</code>.
+                  {' '}They are meant for sending work to a machine that matches; for now they only help you tell
+                  runners apart, and work is not routed by label yet.
                 </p>
                 <div className="space-y-2 mt-2">
                   {labels.map((label, i) => (

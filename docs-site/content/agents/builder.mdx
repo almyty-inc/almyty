@@ -12,7 +12,7 @@ The builder has three main areas:
 
 | Area | Location | Purpose |
 |------|----------|---------|
-| **Node Palette** | Left panel | Lists all 10 node types available to drag onto the canvas |
+| **Steps** | Left panel | Every step type you can drag onto the canvas |
 | **Canvas** | Center | The DAG workspace where you arrange and connect nodes |
 | **Node Config Panel** | Right panel (opens on node click) | Configure the selected node's properties |
 
@@ -59,21 +59,21 @@ See the [Agents CLI](/cli/agents) for `--watch`, `--json`, and more.
 
 ## Node Types
 
-The palette contains all 10 node types. Each has a distinct color on the canvas
+The palette, headed **Steps**, lists every step type. Each has a distinct color on the canvas
 for quick identification.
 
 | Node Type | Purpose |
 |-----------|---------|
 | **Input** | Entry point: defines the JSON Schema for incoming data |
 | **Output** | Exit point: maps the final result from upstream nodes |
-| **LLM Call** | Sends a prompt to an LLM provider and returns the response |
-| **Tool Call** | Invokes a tool with explicit parameter mapping |
+| **Model call** | Sends a prompt to an LLM provider and returns the response |
+| **Tool call** | Invokes a tool with explicit parameter mapping |
 | **Condition** | Branches the pipeline based on a boolean expression (true/false edges) |
 | **Transform** | Renders a `{{...}}` template and outputs the resulting text |
 | **Loop** | Resolves an expression to an array and outputs it, capped |
 | **Parallel** | Marks a fan-out point; the branches wired to it run together |
 | **Merge** | Combines outputs from multiple upstream nodes into a single value |
-| **Sub-Agent** | Invokes another agent as a step in this pipeline |
+| **Sub-agent** | Invokes another agent as a step in this pipeline |
 
 See [Node Types](/agents/node-types) for full configuration details on each.
 

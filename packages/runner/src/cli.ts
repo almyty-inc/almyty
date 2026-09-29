@@ -26,7 +26,7 @@ Usage:
   almyty-runner stop               Send SIGTERM to the local daemon
 
 Options for start:
-  --name <name>           Runner name (matches [a-zA-Z0-9_-]{1,64}); a label, unique in the org
+  --name <name>           Runner name (matches [a-zA-Z0-9_-]{1,64}), unique in the org; defaults to this machine's hostname
   --org <org-id>          Organization to register in (needed if you belong to several)
   --label key=value       Add a descriptive label; repeat for multiple
   --config <path>         Path to a JSON config file (overrides global+project)

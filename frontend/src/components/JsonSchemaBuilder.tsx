@@ -114,7 +114,7 @@ export function JsonSchemaBuilder({ value, onChange, readOnly = false }: JsonSch
     return (
       <div className="space-y-4">
         <div className="flex justify-between items-center">
-          <h4 className="text-sm font-medium">Schema Properties</h4>
+          <h4 className="text-sm font-medium">Schema properties</h4>
           <Button variant="ghost" size="sm" onClick={() => setViewMode('source')}>
             <Code className="h-4 w-4 mr-1" />
             View source
@@ -153,7 +153,7 @@ export function JsonSchemaBuilder({ value, onChange, readOnly = false }: JsonSch
     return (
       <div className="space-y-2">
         <div className="flex justify-between items-center">
-          <Label>JSON Schema Source</Label>
+          <Label>JSON schema source</Label>
           <Button variant="ghost" size="sm" onClick={() => setViewMode('visual')}>
             Visual editor
           </Button>
@@ -172,7 +172,7 @@ export function JsonSchemaBuilder({ value, onChange, readOnly = false }: JsonSch
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <Label>Schema Properties</Label>
+        <Label>Schema properties</Label>
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={() => setViewMode('source')}>
             <Code className="h-4 w-4 mr-1" />
@@ -203,7 +203,7 @@ export function JsonSchemaBuilder({ value, onChange, readOnly = false }: JsonSch
             <div key={prop.name} className="border rounded-lg p-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs" htmlFor={`prop-${prop.name}-name`}>Property Name</Label>
+                  <Label className="text-xs" htmlFor={`prop-${prop.name}-name`}>Property name</Label>
                   <Input
                     id={`prop-${prop.name}-name`}
                     value={prop.name}

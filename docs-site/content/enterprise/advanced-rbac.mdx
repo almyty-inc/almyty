@@ -2,13 +2,13 @@
 
 Requires the `advanced_rbac` entitlement (Business or Enterprise on the hosted platform). Grant exactly the access each person needs, down to a single action or a single request. The core role model (org `owner`/`admin`/`member` plus team leads) is free and covers most teams. Advanced RBAC adds two layers on top when fixed roles stop being enough: **custom roles** with wildcard permissions, and **ABAC policies** for attribute-based rules.
 
-With the entitlement enabled, **Settings → Roles** provides custom roles, effective-permission lookup and access policies. Without it, these controls are locked; core member and team controls remain available separately.
+With the entitlement enabled, **Settings → People and access → Roles** provides custom roles, effective-permission lookup and access policies. Without it, these controls are locked; core member and team controls remain available separately.
 
 ![Business organization with custom role controls enabled](/screenshots/settings-rbac-enabled.png)
 
 ## Custom roles
 
-A custom role is a named, org-scoped set of permission strings, assigned per-user in addition to their core role. Under **Settings → Roles**, click **New role** to open the inline form. Enter a name, an optional description and permissions (one per line), then click **Create role**. You can also use the API.
+A custom role is a named, org-scoped set of permission strings, assigned per-user in addition to their core role. Under **Settings → People and access → Roles**, click **New role** to open the inline form. Enter a name, an optional description and permissions (one per line), then click **Create role**. You can also use the API.
 
 ![New custom role form with name, description and permissions fields](/screenshots/settings-rbac-new-role.png)
 
@@ -39,7 +39,7 @@ Role names are unique per org; permission lists are normalized (trimmed, dedupli
 
 ## ABAC policies
 
-Under **Settings → Roles → New policy**, the inline form accepts a name, effect, action, priority and description. It does not expose condition editing; use the API for attribute conditions such as the example below. A policy without conditions matches every request covered by its action, so review the effect and action before creating one.
+Under **Settings → People and access → Roles → New policy**, the inline form accepts a name, effect, action, priority and description. It does not expose condition editing; use the API for attribute conditions such as the example below. A policy without conditions matches every request covered by its action, so review the effect and action before creating one.
 
 ![New access policy form with effect, priority and action fields](/screenshots/settings-rbac-new-policy.png)
 

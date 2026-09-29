@@ -189,7 +189,7 @@ describe('JsonSchemaBuilder', () => {
       const viewSourceButton = screen.getByText(/View source/i)
       fireEvent.click(viewSourceButton)
 
-      expect(screen.getByText('JSON Schema Source')).toBeInTheDocument()
+      expect(screen.getByText('JSON schema source')).toBeInTheDocument()
       expect(screen.getByRole('textbox')).toHaveValue(
         JSON.stringify({ type: 'object', properties: {} }, null, 2)
       )
@@ -254,11 +254,11 @@ describe('JsonSchemaBuilder', () => {
 
       // Go to source mode
       fireEvent.click(screen.getByText(/View source/i))
-      expect(screen.getByText('JSON Schema Source')).toBeInTheDocument()
+      expect(screen.getByText('JSON schema source')).toBeInTheDocument()
 
       // Go back to visual mode
       fireEvent.click(screen.getByText(/Visual editor/i))
-      expect(screen.getByText('Schema Properties')).toBeInTheDocument()
+      expect(screen.getByText('Schema properties')).toBeInTheDocument()
       expect(screen.getByDisplayValue('test')).toBeInTheDocument()
     })
   })

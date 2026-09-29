@@ -50,9 +50,9 @@ export function ToolsTab() {
               <tr className="border-b text-left bg-muted">
                 <th className={TH}>Tool</th>
                 <th className={`${TH} text-right`}>Executions</th>
-                <th className={`${TH} text-right`}>Success Rate</th>
-                <th className={`${TH} text-right`}>Avg Time</th>
-                <th className={`${TH} text-right`}>Last Used</th>
+                <th className={`${TH} text-right`}>Success rate</th>
+                <th className={`${TH} text-right`}>Avg time</th>
+                <th className={`${TH} text-right`}>Last used</th>
               </tr>
             </thead>
             <tbody>

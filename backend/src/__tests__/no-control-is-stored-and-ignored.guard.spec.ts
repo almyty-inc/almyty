@@ -187,8 +187,9 @@ describe('no control is stored and then ignored', () => {
     it('runner labels are not claimed to route, in the entity or the UI', () => {
       expect(src('backend/src/entities/runner.entity.ts')).toContain('NOT USED FOR ROUTING TODAY');
       expect(src('frontend/src/pages/runner-detail.tsx')).toContain(
-        'affect where work is dispatched yet',
+        'for now they only help you tell runners apart',
       );
+      expect(src('frontend/src/pages/runner-new.tsx')).toContain('work is not routed by label yet');
     });
 
     it('pickRunner still does not select on labels', () => {
