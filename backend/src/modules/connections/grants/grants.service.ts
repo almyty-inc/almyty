@@ -97,7 +97,7 @@ function userIdOf(principal: ConnectionPrincipal | GrantPrincipal): string {
  * Grants: who besides the owner may use a connection. `assertCanUse` is
  * the check the resolver seam calls on every resolve-for-use;
  * `recordResolve` writes the audit row for it. list / grant / revoke
- * back the /connections/:id/grants endpoints.
+ * back the /credentials/:id/grants endpoints.
  */
 @Injectable()
 export class GrantsService {

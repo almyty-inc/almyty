@@ -79,7 +79,7 @@ describe('OpenRouter PKCE connect end to end', () => {
     expect(authorize.searchParams.has('client_id')).toBe(false);
     expect(authorize.searchParams.has('state')).toBe(false);
     const callbackUrl = new URL(authorize.searchParams.get('callback_url')!);
-    expect(callbackUrl.origin + callbackUrl.pathname).toBe('https://api.test.almyty.com/connections/oauth/callback');
+    expect(callbackUrl.origin + callbackUrl.pathname).toBe('https://api.test.almyty.com/credentials/oauth/callback');
     expect(callbackUrl.searchParams.get('state')).toBe(start.state);
     expect(start.completeWith).toBe('callback');
     expect(start.expiresInSeconds).toBe(600);

@@ -5,13 +5,12 @@ import { PATH_METADATA } from '@nestjs/common/constants';
 import { CredentialsController } from '../credentials.controller';
 import { ConnectionsService } from '../../connections/connections.service';
 import { GrantsController } from '../../connections/grants/grants.controller';
-import { ConnectionsGovernanceController } from '../../../../ee/modules/connections-governance/connections-governance.controller';
+import { CredentialSignInController } from '../../connections/connections.controller';
 
 /**
  * Credentials is the one name: every key, token and account is added,
- * listed, checked, replaced and deleted under /credentials, and the
- * older /connections, /connectors and /ee/connections routes keep
- * answering as aliases.
+ * listed, checked, replaced and deleted under /credentials, with grants
+ * and the sign-in callback under the same name.
  */
 describe('/credentials routes', () => {
   const ORG = 'org-1';
@@ -72,9 +71,10 @@ describe('/credentials routes', () => {
     expect((await controller.listServices({ user: member }, {} as any)).data).toEqual([{ key: 'github' }]);
   });
 
-  it('keeps the older paths as aliases of grants and governance', () => {
-    expect(Reflect.getMetadata(PATH_METADATA, GrantsController)).toEqual(['credentials/:id/grants', 'connections/:id/grants']);
-    expect(Reflect.getMetadata(PATH_METADATA, ConnectionsGovernanceController)).toEqual(['ee/credentials', 'ee/connections']);
+  it('puts grants and the sign-in callback under /credentials, and nothing under /connections', () => {
+    // Governance (EE) is under /ee/credentials: connections-governance.routes.spec.ts.
+    expect(Reflect.getMetadata(PATH_METADATA, GrantsController)).toBe('credentials/:id/grants');
+    expect(Reflect.getMetadata(PATH_METADATA, CredentialSignInController)).toBe('credentials');
   });
 
   it('declares the fixed routes before the :id ones', () => {

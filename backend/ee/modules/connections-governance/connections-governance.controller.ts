@@ -72,13 +72,12 @@ export class RevokeGrantsDto {
  * connections review, expiry and rotation triggers, and the audit
  * export of the connections event stream. Every route is gated by the
  * entitlement (402 in the community build) and restricted to org
- * owner/admin. Mounted at `/ee/connections`, apart from the core
- * `/connections` and `/connectors` routes.
+ * owner/admin. Mounted at `/ee/credentials`, apart from the core
+ * `/credentials` routes.
  */
-@ApiTags('Connections Governance (EE)')
+@ApiTags('Credentials Governance (EE)')
 @ApiBearerAuth()
-// /ee/credentials is the name; /ee/connections the older alias.
-@Controller(['ee/credentials', 'ee/connections'])
+@Controller('ee/credentials')
 @UseGuards(JwtAuthGuard, RolesGuard, EntitlementGuard)
 @RequiresEntitlement(EE_ENTITLEMENTS.CONNECTIONS_GOVERNANCE)
 @Roles('owner', 'admin')

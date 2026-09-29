@@ -41,10 +41,9 @@ function requireOrg(req: any): string {
  * (`connections:read`); whether the caller may manage this particular
  * connection is the service's decision (docs/design/connections-grants.md).
  */
-@ApiTags('Connections')
+@ApiTags('Credentials')
 @ApiBearerAuth()
-// /credentials/:id/grants is the name; /connections/:id/grants the older alias.
-@Controller(['credentials/:id/grants', 'connections/:id/grants'])
+@Controller('credentials/:id/grants')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class GrantsController {
   constructor(private readonly grants: GrantsService) {}

@@ -506,7 +506,7 @@ export class CredentialRefResolver {
     if (!CredentialRefResolver.isManagedBy(credential, patch.managedBy)) {
       throw new ForbiddenException({
         code: 'CREDENTIAL_NOT_MANAGED',
-        message: 'this credential is a shared connection; rotate it through /connections',
+        message: 'this credential is shared; replace its key through /credentials/:id/rotate',
       });
     }
     const merged = { ...(credential.config ?? {}), ...patch.config };

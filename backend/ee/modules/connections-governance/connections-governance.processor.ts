@@ -29,7 +29,7 @@ export interface SweepSummary {
  * the audit retention window, per organization that holds the
  * `connections_governance` entitlement and has a matching enabled
  * rule. Cadence via CONNECTIONS_GOVERNANCE_CRON (or `off`), always off
- * under NODE_ENV=test. `POST /ee/connections/rotate-due` and the
+ * under NODE_ENV=test. `POST /ee/credentials/rotate-due` and the
  * expiry endpoint run the same handlers on demand for one org.
  */
 @Processor(CONNECTIONS_GOVERNANCE_QUEUE)

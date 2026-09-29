@@ -80,11 +80,10 @@ export class CredentialsController {
   // ──────────────────────────────────────────────
   // Credentials: every key, token and account the org keeps.
   //
-  // The canonical routes. A credential made through a service (a
-  // "connection" in the code) is added, checked, replaced and deleted
-  // here; `/connections`, `/connectors` and `/connections/:id/grants` keep
-  // answering the same as aliases. The fixed paths come before `:id`
-  // (route-shadowing.guard.spec.ts).
+  // A credential made through a service (a "connection" in the code) is
+  // added, checked, replaced and deleted here; its grants are on
+  // GrantsController and the sign-in callback on CredentialSignInController.
+  // The fixed paths come before `:id` (route-shadowing.guard.spec.ts).
   // ──────────────────────────────────────────────
 
   private connectionsService(): ConnectionsService {
