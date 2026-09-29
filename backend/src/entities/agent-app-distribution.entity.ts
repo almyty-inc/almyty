@@ -27,6 +27,17 @@ export enum DistributionTarget {
   DESKTOP = 'desktop',
   /** Standalone executable, no runtime required on the target machine. */
   BINARY = 'binary',
+  /**
+   * The chat widget, embedded on someone's own website with a script tag.
+   * Distinct from WEB: that is a site of its own, this is a bubble on
+   * theirs.
+   */
+  WIDGET = 'widget',
+  /**
+   * The app's agent as an A2A server: other agents find it by its agent
+   * card and call it over JSON-RPC.
+   */
+  A2A = 'a2a',
   // Messaging platforms are listed individually rather than collapsed
   // into one "channel" target. An app ships to Slack, not to an
   // abstraction, and naming the platform is what makes a distribution

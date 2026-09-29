@@ -23,6 +23,8 @@ export type DistributionTarget =
   | 'tui'
   | 'desktop'
   | 'binary'
+  | 'widget'
+  | 'a2a'
   | 'slack'
   | 'discord'
   | 'telegram'
@@ -168,6 +170,8 @@ export const DISTRIBUTION_LABELS: Record<DistributionTarget, string> = {
   // Kept so an existing distribution still renders. Not offered when
   // adding one: it compiles to the same artifact as 'tui'.
   binary: 'Standalone binary',
+  widget: 'On your website',
+  a2a: 'Other agents (A2A)',
   slack: 'Slack',
   discord: 'Discord',
   telegram: 'Telegram',
@@ -184,10 +188,12 @@ export const DISTRIBUTION_LABELS: Record<DistributionTarget, string> = {
 }
 
 export const DISTRIBUTION_BLURBS: Record<DistributionTarget, string> = {
-  web: 'A branded chat app on its own address',
-  tui: 'A command your users run in a terminal',
-  desktop: 'An installable windowed app',
+  web: 'A chat site of its own',
+  tui: 'Runs in a terminal',
+  desktop: 'An installable app',
   binary: 'One executable, no runtime to install',
+  widget: 'A chat bubble on your site',
+  a2a: 'Callable by other agents',
   slack: 'In your Slack workspace',
   discord: 'In your Discord server',
   telegram: 'As a Telegram bot',
@@ -632,6 +638,8 @@ export const DISTRIBUTION_INBOUND: Record<DistributionTarget, DistributionInboun
   tui: { mode: 'none', why: 'A terminal app is a file people download; nothing calls back.' },
   desktop: { mode: 'none', why: 'A desktop app is a file people download; nothing calls back.' },
   binary: { mode: 'none', why: 'A binary is a file people download; nothing calls back.' },
+  widget: { mode: 'none', why: 'the widget talks to almyty from your page, so there is nothing to register.' },
+  a2a: { mode: 'none', why: 'other agents call almyty at the address below.' },
   discord: {
     mode: 'none',
     why: 'almyty connects out to Discord’s gateway, so there is no URL to register.',
@@ -717,6 +725,8 @@ export const DISTRIBUTION_DESCRIPTIONS: Record<DistributionTarget, string> = {
   tui: 'A command your users install and run in a terminal.',
   desktop: 'An installable windowed app for macOS, Windows and Linux.',
   binary: 'A single executable with no runtime to install.',
+  widget: 'A chat bubble on your own website, added with one line of code.',
+  a2a: 'Other agents find it by its agent card and call it over A2A.',
   slack: 'Answers direct messages and mentions in your Slack workspace.',
   discord: 'Answers in your Discord server as a bot.',
   telegram: 'Answers as a Telegram bot.',
@@ -960,6 +970,22 @@ export function appWebUrl(slug: string): string {
   return `https://${slug}.${hostedChatBaseDomain()}`
 }
 
+/**
+ * Where other agents reach an app's A2A place: the JSON-RPC address and the
+ * agent card next to it. The gateway's own endpoint wins (a place may point
+ * at a gateway it took over); before publishing it is the one publishing
+ * will use, `/apps/<app>/a2a` (endpointFor in the backend).
+ */
+export function a2aAddresses(
+  apiBase: string,
+  orgSlug: string,
+  appSlug: string,
+  gatewayEndpoint?: string | null,
+): { endpoint: string; card: string } {
+  const path = (gatewayEndpoint || `/apps/${appSlug}/a2a`).replace(/^\/+/, '')
+  const endpoint = `${apiBase.replace(/\/+$/, '')}/${orgSlug}/${path}`
+  return { endpoint, card: `${endpoint}/.well-known/agent-card.json` }
+}
 /** The URL to register as the Slack app's redirect URL for "Add to Slack". */
 export function slackInstallRedirectUrl(apiBase: string, gatewayId: string): string {
   return `${apiBase.replace(/\/+$/, '')}/gateways/${gatewayId}/install/slack/callback`

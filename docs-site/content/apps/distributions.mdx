@@ -1,6 +1,6 @@
 # Where people use it
 
-An app is the one place an agent is put in front of people: on the web, in Slack or any other chat app, or in a terminal or desktop app. Each of those is a place on the app's **Where people use it** tab. You add a place to record *where* a product will ship; you **publish** it as the separate decision to let people actually reach it. There is exactly one of each per app.
+An app is the one place an agent is put in front of people or other systems: on the web or your own website, in Slack or any other chat app, in front of other agents over A2A, or in a terminal or desktop app. Each of those is a place on the app's **Where people use it** tab, added with **Add a place**. You add a place to record *where* a product will ship; you **publish** it as the separate decision to let people actually reach it. There is exactly one of each per app.
 
 The agent's own **Interfaces** tab lists where it is used, read-only, with a link to each place ("Used in: Acme support > Slack"). A gateway an app stood up says **Managed in** that app on its page and links back to the place.
 
@@ -38,12 +38,27 @@ The **Web app** is a hosted chat on its own address, carrying the product's name
 
 See **[Hosted Chat App](/hosted-chat)** for addressing, custom domains, and self-hosting.
 
+## On your website
+
+**On your website** puts the app's agent in a chat bubble on a site you already have. Publish it, and its page gives you one line to paste before the closing `body` tag:
+
+```html
+<script src="https://<api-host>/gateways/<gateway-id>/widget.js" async></script>
+```
+
+The widget takes its colour, name, greeting, theme and AI disclosure from the app's settings, so it looks the same as the web app. On its page you choose where it sits (bottom right or left) and its launcher icon, with a live preview of the real widget, and list the sites allowed to show it. The widget has no sign-in: anyone on an allowed site can use it, within the app's cost and rate limits, so it only goes on an app anyone can use.
+
+## Other agents (A2A)
+
+**Other agents (A2A)** lets agents elsewhere call the app's agent over Google's Agent-to-Agent protocol. Publish it, and its page shows the Agent Card URL and the JSON-RPC endpoint, `https://<api-host>/<org>/apps/<app>/a2a`. Under **How other agents sign in**, make a key for each caller; each call sends it in the `x-api-key` header. The card and the endpoint answer only while the place is published and its agent is active. See **[A2A](/gateways/a2a)** for the methods and the card.
+
 ## What publishing refuses
 
-Publishing turns away two things that would otherwise produce a surface that is live and useless:
+Publishing turns away three things that would otherwise produce a surface that is live and useless, or open when you meant it closed:
 
 - **Missing credentials**: a channel whose required credentials are absent. Each adapter declares exactly what it uses, so you are told which credential is missing rather than getting a channel that silently receives nothing.
-- **A workflow agent behind a chat surface**: the runtime turns these away at the first message, so publishing stops it up front.
+- **A workflow agent behind a chat surface or A2A**: the runtime turns these away at the first message, so publishing stops it up front.
+- **The website widget on an app people sign in to**: the widget has no sign-in, so it would be the way round the rule. The widget's page says so before you publish.
 
 ## What gates an app from shipping
 

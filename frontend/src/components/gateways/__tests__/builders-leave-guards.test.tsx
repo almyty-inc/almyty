@@ -6,6 +6,7 @@
  */
 import { describe, it, vi, beforeEach } from 'vitest'
 import { fireEvent, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 import { renderAtRoute } from '@/test/render-at-route'
 import { expectLeaveAsks, expectLeavesWithoutAsking } from '@/test/leave-guard'
@@ -33,16 +34,19 @@ beforeEach(() => {
 const at = (el: JSX.Element) => renderAtRoute(el, { path: '/gateways/gw-1', paths: ['/elsewhere'] })
 
 describe('widget builder', () => {
-  const gateway = { id: 'gw-1', name: 'Support widget', type: 'chat_widget', configuration: { widget: { title: 'Support' } } }
+  const gateway = { id: 'gw-1', name: 'Support widget', type: 'chat_widget', configuration: { widget: { position: 'bottom-right' } } }
+  const app = { name: 'Support', branding: {} }
 
-  it('asks once the widget is restyled and not saved', async () => {
-    const { router } = at(<WidgetBuilder gateway={gateway as any} />)
-    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Help desk' } })
+  it('asks once the widget is moved and not saved', async () => {
+    const { router } = at(<WidgetBuilder gateway={gateway as any} app={app} />)
+    const user = userEvent.setup()
+    await user.click(screen.getByLabelText('Position'))
+    await user.click(await screen.findByRole('option', { name: 'Bottom left' }))
     await expectLeaveAsks(router)
   })
 
-  it('leaves the saved look without asking', async () => {
-    const { router } = at(<WidgetBuilder gateway={gateway as any} />)
+  it('leaves the saved placement without asking', async () => {
+    const { router } = at(<WidgetBuilder gateway={gateway as any} app={app} />)
     await expectLeavesWithoutAsking(router)
   })
 })

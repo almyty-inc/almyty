@@ -17,13 +17,15 @@ That is the part nobody else ships, so it is the part this subsystem is built ar
    capability     ->     product          ->    where it reaches people
    ─────────             ─────────              ─────────
    what it knows         what it is called      web       (hosted chat)
-   which models          who may use it         slack, telegram, ...
-   which tools           branding               tui       (terminal)
-   how its loop runs     cost + rate limits     desktop   (installable)
+   which models          who may use it         widget    (on your website)
+   which tools           branding               slack, telegram, ...
+   how its loop runs     cost + rate limits     a2a       (other agents)
+                                                tui       (terminal)
+                                                desktop   (installable)
                                                 binary    (one executable)
 ```
 
-**Agent** is a capability. **App** is a product decision: a name, a set of agents, branding, an auth mode, limits. **Distribution** ("a place", under "Where people use it", in the UI) is one place that product reaches people. The app is the only place an agent is put in front of people: Share tools makes only a shared-tools gateway, the server refuses a web chat or messaging gateway no app publishes, the agent page only lists where it is used, and there is exactly one per target.
+**Agent** is a capability. **App** is a product decision: a name, a set of agents, branding, an auth mode, limits. **Distribution** ("a place", under "Where people use it", in the UI) is one place that product reaches people or other agents. The app is the only place an agent is put in front of people or other systems: Share tools makes only a shared-tools gateway, the server refuses a web chat, widget, messaging or A2A gateway no app publishes, the agent page only lists where it is used, and there is exactly one per target.
 
 The separation is load-bearing. One agent appears in an internal app and a customer-facing one at the same time, under different names, different auth and different limits, without being duplicated.
 
@@ -58,7 +60,11 @@ The surface is created with the product's own branding and the product's own rat
 
 Publishing is idempotent: doing it twice re-syncs the existing gateway rather than failing on the unique endpoint, because the second attempt is usually someone reapplying a settings change.
 
-**Every web chat and messaging gateway belongs to an app.** The gateway types a place stands up (`APP_SURFACE_GATEWAY_TYPES` in `gateways/app-surface.ts`, read off `GATEWAY_TYPE_FOR_TARGET`: the hosted chat and the thirteen messaging platforms) are made only by `upsertForDistribution`, which passes the app to `createGateway` as `forApp`. `createGateway` refuses one of these types without it (`APP_SURFACE_NEEDS_APP`), so `POST /gateways`, the platform's own MCP tools and the CLI cannot make a chat surface outside an app; `app-surfaces-belong-to-an-app.spec.ts` holds `forApp` to that one caller. Migration `EveryChatSurfaceHasAnApp1750812800000` put every such gateway no place pointed at on an app: one app per agent, named after it and built by `newAppFields` (the row `AgentAppsService.create` saves), with a place per platform pointing at the gateway and carrying its connection reference and non-secret settings. The chat widget has no app place and is not on the list.
+**Every app place's gateway belongs to an app.** The gateway types a place stands up (`APP_SURFACE_GATEWAY_TYPES` in `gateways/app-surface.ts`, read off `GATEWAY_TYPE_FOR_TARGET`: the hosted chat, the chat widget, A2A and the thirteen messaging platforms) are made only by `upsertForDistribution`, which passes the app to `createGateway` as `forApp`. `createGateway` refuses one of these types without it (`APP_SURFACE_NEEDS_APP`), so `POST /gateways`, the platform's own MCP tools and the CLI cannot make one outside an app; `app-surfaces-belong-to-an-app.spec.ts` holds `forApp` to that one caller. Migrations wrap every such gateway no place points at in a place on an app (`wrapUnownedPlaces` in `agent-apps/wrap-unowned-places.ts`): one app per agent, named after it and built by `newAppFields` (the row `AgentAppsService.create` saves), with a place per platform pointing at the gateway and carrying its connection reference and non-secret settings; the gateway keeps its address and keys. `EveryChatSurfaceHasAnApp1750812800000` wrapped web chats and channels; `EveryWidgetAndA2aHasAnApp1750812900000` wraps widgets and A2A gateways, joining the agent's existing app when it has one without that place, and gives an app it makes for a widget the widget's old look as branding. Each migration names the types it wraps as a frozen list, so a type that becomes a place later gets a migration of its own. ACP and OpenAI-compatible gateways are not places.
+
+**The website widget** (`widget`, a `chat_widget` gateway) takes its look from the app on every request: `GET /gateways/:id/widget-config` overlays the app's colour, name, greeting, theme, AI disclosure (always shown) and almyty mark (`widgetConfigFor`), and keeps only the widget's placement (`configuration.widget.position`, `launcherIcon`), which republishing keeps (`KEPT_ON_REPUBLISH`, with the allowed sites). It has no sign-in, so it is refused on an app whose auth mode is not `public_link` (`WIDGET_HAS_NO_SIGN_IN`, in both `checkDistribution` and `checkPublish`); its rate limits are per visitor, like the web app.
+
+**A2A** (`a2a`) answers at `/{org}/apps/{app}/a2a` with its card at `.well-known/agent-card.json`, through the unified endpoint's app-surface lookup. Callers sign in with the gateway's API keys, made on the place's page (the same auth section a shared-tools gateway has). The card and JSON-RPC answer only for an active agent the gateway may serve (`findServableGatewayAgent`), and publishing refuses a workflow agent. Its rate limit keeps a surface ceiling, like a messaging channel.
 
 Publishing refuses two things that would otherwise produce a surface that is live and useless. A platform whose credentials are absent (`REQUIRED_CREDENTIALS`, read off what each adapter actually uses, never invented) and a workflow agent behind a chat surface, which the runtime turns away at the first message with "not in autonomous mode".
 

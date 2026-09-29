@@ -86,11 +86,14 @@ describe('AllowedOriginsCard', () => {
 })
 
 describe('where the card is', () => {
-  it('is on the web app page for a hosted chat, and on the gateway page for a widget, inline (no dialog)', () => {
+  it('is on the app page of the web app and of the website widget, inline (no dialog)', () => {
     const web = readFileSync(join(__dirname, '../../agent-apps/web-place.tsx'), 'utf8')
     expect(web).toMatch(/<AllowedOriginsCard\s/)
+    const widget = readFileSync(join(__dirname, '../../agent-apps/other-places.tsx'), 'utf8')
+    expect(widget).toMatch(/<AllowedOriginsCard\s/)
+    // The gateway page keeps it only for a surface no app owns.
     const page = readFileSync(join(__dirname, '../../../pages/gateway-detail.tsx'), 'utf8')
-    expect(page).toMatch(/gateway\.type === 'chat_widget' \|\| \(gateway\.type === 'hosted_chat' && !managedBy\)\) && \(\s*<AllowedOriginsCard/)
+    expect(page).toMatch(/\(gateway\.type === 'chat_widget' \|\| gateway\.type === 'hosted_chat'\) && !managedBy && \(\s*<AllowedOriginsCard/)
     const card = readFileSync(join(__dirname, '../allowed-origins-card.tsx'), 'utf8')
     expect(card).not.toMatch(/Dialog/)
   })

@@ -261,10 +261,26 @@ describe('/apps/:slug/distributions/new', () => {
     await waitFor(() => expect(where()).toBe('/apps/support/distributions/slack'))
   })
 
-  it('links a target the app already ships to instead of offering it again', async () => {
+  it('opens a place the app already has instead of adding it again', async () => {
     renderAt('/apps/support/distributions/new')
-    const existing = await screen.findByRole('link', { name: /WhatsApp \(Meta\)/ })
-    expect(existing).toHaveAttribute('href', '/apps/support/distributions/whatsapp_cloud')
+    const existing = await screen.findByTestId('place-whatsapp_cloud')
+    expect(existing).toHaveTextContent('Already added')
+    fireEvent.click(existing)
+    await waitFor(() => expect(where()).toBe('/apps/support/distributions/whatsapp_cloud'))
+    expect(api.addDistribution).not.toHaveBeenCalled()
+  })
+
+  it('offers the website widget next to the web app, and A2A for other agents', async () => {
+    renderAt('/apps/support/distributions/new')
+    const web = await screen.findByRole('region', { name: 'On the web' })
+    expect(within(web).getByTestId('place-web')).toHaveTextContent('Web app')
+    expect(within(web).getByTestId('place-widget')).toHaveTextContent('On your website')
+    const agents = screen.getByRole('region', { name: 'Other agents' })
+    expect(within(agents).getByTestId('place-a2a')).toHaveTextContent('Other agents (A2A)')
+
+    fireEvent.click(screen.getByTestId('place-widget'))
+    await waitFor(() => expect(api.addDistribution).toHaveBeenCalledWith('support', 'widget'))
+    await waitFor(() => expect(where()).toBe('/apps/support/distributions/widget'))
   })
 })
 
