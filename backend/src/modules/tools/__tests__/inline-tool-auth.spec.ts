@@ -1,13 +1,8 @@
 import { ToolAuthService } from '../services/tool-auth.service';
 
 /**
- * Inline auth on a standalone HTTP tool.
- *
- * The create-tool dialog offers Bearer, API key and Basic, and this
- * implemented only the first two -- so a tool configured with Basic sent
- * no credentials at all and got back a 401 nothing in the product
- * explained. (The payload never carried authConfig to begin with, which
- * is fixed on the frontend; this covers the half that lives here.)
+ * How a standalone HTTP tool's key goes onto the request, once it is read
+ * from the credential the tool points at: bearer, API key or basic.
  */
 describe('applyInlineToolAuth', () => {
   const service = new ToolAuthService(null as any, null as any, null as any);
@@ -34,7 +29,7 @@ describe('applyInlineToolAuth', () => {
     expect(headersFor({ type: 'apiKey', config: { key: 'k' } })).toEqual({ 'X-API-Key': 'k' });
   });
 
-  it('sends basic auth, which the dialog offers and this used to ignore', () => {
+  it('sends basic auth', () => {
     const headers = headersFor({ type: 'basic', config: { username: 'ada', password: 'hunter2' } });
 
     expect(headers.Authorization).toBe(`Basic ${Buffer.from('ada:hunter2').toString('base64')}`);
@@ -46,7 +41,7 @@ describe('applyInlineToolAuth', () => {
     expect(headers.Authorization).toBe(`Basic ${Buffer.from('ada:').toString('base64')}`);
   });
 
-  it('adds nothing when the tool has no inline auth', () => {
+  it('adds nothing when the tool signs no calls', () => {
     expect(headersFor({ type: 'none' })).toEqual({});
   });
 });
@@ -55,7 +50,7 @@ describe('applyInlineToolAuth', () => {
  * A tool pointed at a credential (picked or created in the tool form's
  * "pick or create" control) keeps no secret of its own: the key is read
  * from Credentials at call time, as the caller, and sent the way the tool
- * says. The form used to keep the picked id in state and never send it.
+ * says.
  */
 describe('applyToolAuth with a credential', () => {
   const principal = { kind: 'user', userId: 'u1', source: 'session' } as any;
@@ -116,9 +111,9 @@ describe('applyToolAuth with a credential', () => {
     expect(applied).toHaveBeenCalledWith(expect.anything(), row);
   });
 
-  it('still sends an older inline key', async () => {
+  it('sends no key for a tool without a credential, whatever sits beside it', async () => {
     const { service, resolve } = serviceWith({});
-    expect(await headersFor(service, { type: 'bearer', config: { token: 't0ken' } })).toEqual({ Authorization: 'Bearer t0ken' });
+    expect(await headersFor(service, { type: 'bearer', config: { token: 't0ken' } })).toBeUndefined();
     expect(resolve).not.toHaveBeenCalled();
   });
 });

@@ -63,8 +63,8 @@ export class ToolScriptExecutor {
   /**
    * The private registry an SDK or JavaScript tool installs from. Its token
    * is a credential the registry names (`credentialId`), read at run time as
-   * the caller; nothing secret is kept on the tool or the API. An older row
-   * with its token inline still installs.
+   * the caller; nothing secret is kept on the tool or the API, and a token
+   * written beside the registry is never sent.
    */
   async registryFor(
     registry: Record<string, any> | null | undefined,
@@ -72,17 +72,15 @@ export class ToolScriptExecutor {
     options: ToolExecutionOptions,
   ): Promise<NpmRegistryConfig | undefined> {
     if (!registry?.url) return undefined;
-    const { credentialId, token, authToken, ...rest } = registry;
-    if (credentialId && this.credentialRefs) {
-      const resolved = await this.credentialRefs.resolve(options.organizationId, credentialId, {
-        principal: options.principal ?? userPrincipal(options.userId),
-        context: { purpose: 'npm_registry', resourceType: 'tool', resourceId: tool.id },
-      });
-      const secret = connectionSecretOf(resolved.config);
-      return { ...(rest as NpmRegistryConfig), ...(secret ? { authToken: secret } : {}) };
-    }
-    const inline = authToken ?? token;
-    return { ...(rest as NpmRegistryConfig), ...(inline ? { authToken: inline } : {}) };
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { credentialId, token: _token, authToken: _authToken, ...rest } = registry;
+    if (!credentialId || !this.credentialRefs) return rest as NpmRegistryConfig;
+    const resolved = await this.credentialRefs.resolve(options.organizationId, credentialId, {
+      principal: options.principal ?? userPrincipal(options.userId),
+      context: { purpose: 'npm_registry', resourceType: 'tool', resourceId: tool.id },
+    });
+    const secret = connectionSecretOf(resolved.config);
+    return { ...(rest as NpmRegistryConfig), ...(secret ? { authToken: secret } : {}) };
   }
 
   // ─── LLM tool ──────────────────────────────────────────────────

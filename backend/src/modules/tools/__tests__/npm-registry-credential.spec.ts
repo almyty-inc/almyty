@@ -3,8 +3,7 @@ import { ToolScriptExecutor } from '../executors/tool-script.executor';
 /**
  * A private npm registry's token is a credential: the SDK API names it
  * (`npmRegistry.credentialId`) and the token is read from Credentials when
- * the tool runs, as the caller. The form used to send `token`, which the
- * installer (it reads `authToken`) never saw.
+ * the tool runs, as the caller.
  */
 describe('the npm registry an SDK tool installs from', () => {
   const principal = { kind: 'user', userId: 'u1', source: 'session' } as any;
@@ -23,9 +22,9 @@ describe('the npm registry an SDK tool installs from', () => {
     await expect(make(resolve).registryFor({ url: 'https://npm.acme.dev', credentialId: 'cred-9' }, { id: 'tool-1' }, options)).rejects.toThrow('credential not found');
   });
 
-  it('still installs from an older registry with its token inline', async () => {
-    expect(await make().registryFor({ url: 'https://npm.acme.dev', token: 'old' }, { id: 'tool-1' }, options)).toEqual({ url: 'https://npm.acme.dev', authToken: 'old' });
-    expect(await make().registryFor({ url: 'https://npm.acme.dev', authToken: 'old2' }, { id: 'tool-1' }, options)).toEqual({ url: 'https://npm.acme.dev', authToken: 'old2' });
+  it('never sends a token written beside the registry', async () => {
+    expect(await make().registryFor({ url: 'https://npm.acme.dev', token: 't1' }, { id: 'tool-1' }, options)).toEqual({ url: 'https://npm.acme.dev' });
+    expect(await make().registryFor({ url: 'https://npm.acme.dev', authToken: 't2' }, { id: 'tool-1' }, options)).toEqual({ url: 'https://npm.acme.dev' });
   });
 
   it('is nothing without a registry address', async () => {
