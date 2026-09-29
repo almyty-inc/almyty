@@ -7,7 +7,7 @@
  * directory below the package root, so the same relative path resolves
  * for the built bin and for `tsx src/index.tsx`.
  *
- * A single-file executable (the `/apps` tui target compiles this client
+ * A single-file executable (a Terminal app channel compiles this client
  * with `bun --compile`) has no package.json to read, so it falls back.
  * A compiled terminal app's version is the app's, not this client's,
  * and the build is where that belongs.

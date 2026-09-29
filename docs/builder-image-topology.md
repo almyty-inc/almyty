@@ -21,7 +21,7 @@ An ephemeral Kubernetes Job per build is the stronger long-term isolation bounda
 ```text
 browser
   |
-  | POST /apps/:slug/builds
+  | POST /agents/:agentId/channels/:channelId/builds
   v
 API -- validate target, platform, ownership, and readiness
   |
@@ -34,7 +34,7 @@ build queue ---> app-builder worker ---> object storage
                   database <-------------- API
 ```
 
-The queue payload should contain identifiers, not decrypted credentials or customer configuration snapshots. The worker reloads the build, app, distribution, and credential inside the job's organization scope immediately before execution. This keeps the database as the source of truth and prevents secrets from living in Redis.
+The queue payload should contain identifiers, not decrypted credentials or customer configuration snapshots. The worker reloads the build, channel, agent, and credential inside the job's organization scope immediately before execution. This keeps the database as the source of truth and prevents secrets from living in Redis.
 
 ## Image contents
 
@@ -58,7 +58,7 @@ Set CPU, memory, ephemeral-storage, wall-clock, output-size, and concurrency lim
 
 ## Readiness and rollout
 
-`GET /apps/:slug/distributions/:target/capabilities` should report the worker fleet's capability, not the API pod's local binaries. Publish a short-lived readiness record from each worker containing its image digest, platforms, compiler versions, signing tools, and last heartbeat; the API aggregates healthy workers by target and platform.
+`GET /agents/:agentId/channels/:channelId/capabilities` should report the worker fleet's capability, not the API pod's local binaries. Publish a short-lived readiness record from each worker containing its image digest, platforms, compiler versions, signing tools, and last heartbeat; the API aggregates healthy workers by target and platform.
 
 Roll out in four steps:
 

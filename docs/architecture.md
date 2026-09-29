@@ -117,7 +117,8 @@ entity versioning), `promoted-skills`.
 **Agents** — `agents` (CRUD, the DAG execution engine, the autonomous step
 processor, scheduler, webhooks, and the OpenAI- and Anthropic-compatible
 endpoints), `agent-constraints`, `memory` (agent memory and embeddings),
-`agent-apps` (the `/apps` factory: products, builds, signing, distributions).
+`agent-channels` (an agent's channels: branding and visitor rules, publishing,
+builds, signing).
 
 **Serving** — `gateways` (CRUD, auth enforcement, protocol serving, the unified
 endpoint, and the chat channel adapters), `mcp` (MCP and UTCP controllers, the
@@ -277,8 +278,8 @@ An `org` resource: any gateway of the organization. A `team` resource: only a
 gateway scoped to that same team, or a gateway private to someone who may run
 the resource right now. A `private` resource: only a gateway private to its
 owner. It is checked when a resource is put on a gateway (the person doing it
-must also be able to run it; an app distribution for a team agent is created
-scoped to that team) and again on every call, so a resource moved to another
+must also be able to run it; a channel of a team agent is published through a
+gateway scoped to that team) and again on every call, so a resource moved to another
 team, or a private gateway whose owner left the team, stops being served.
 
 **One gate, three executors.** `AgentExecutionEngine.execute`,
@@ -346,7 +347,7 @@ The things that quietly break if you do not know them:
   layers above a single call
 - `docs/connections.md` — connectors, connections, grants
 - `docs/runner.md` — runners and workspaces
-- `docs/agent-factory.md` — `/apps`: builds, signing, distributions
+- `docs/channels.md` — an agent's channels: publishing, builds, signing
 - `docs/interface-adapters-audit.md` — the chat channels, adapter by adapter
 - `docs/retention.md`, `docs/budgets.md`, `docs/enterprise.md` — operational
   and commercial surfaces

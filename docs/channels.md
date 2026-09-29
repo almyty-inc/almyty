@@ -1,8 +1,8 @@
-# Agent factory
+# Channels
 
-The screen at `/apps`. It takes agents someone has already built and turns them into a product they ship under their own name: a hosted chat on its own address, a Slack or WhatsApp presence, a terminal command, a desktop app, a standalone binary.
+An agent's **Channels** tab (`/agents/:id?tab=channels`). It puts an agent someone has already built in front of people or other agents, under their own name: a hosted chat on its own address, a chat widget on their website, a Slack or WhatsApp presence, an A2A endpoint, a terminal command, a desktop app.
 
-![The Apps list with a customer-facing product](../docs-site/public/screenshots/apps-list.png)
+![An agent's Channels tab](../docs-site/public/screenshots/apps-list.png)
 
 ## Why this exists
 
@@ -10,83 +10,78 @@ Every competitor terminates at a hosted widget, a messaging channel, or an API. 
 
 That is the part nobody else ships, so it is the part this subsystem is built around.
 
-## The three nouns
+## The two nouns
 
 ```
-   Agent(s)              App                    Distributions
-   capability     ->     product          ->    where it reaches people
-   ─────────             ─────────              ─────────
-   what it knows         what it is called      web       (hosted chat)
-   which models          who may use it         widget    (on your website)
-   which tools           branding               slack, telegram, ...
-   how its loop runs     cost + rate limits     a2a       (other agents)
-                                                tui       (terminal)
-                                                desktop   (installable)
-                                                binary    (one executable)
+   Agent                                  Channels
+   capability + how it faces people  ->   where it reaches people
+   ─────────                              ─────────
+   what it knows, models, tools           web       (hosted chat)
+   branding                               widget    (on your website)
+   visitor rules: who may use it,         slack, telegram, ... (13 platforms)
+     cost + rate limits, visitor data     a2a       (other agents)
+                                          tui       (terminal)
+                                          desktop   (installable)
 ```
 
-**Agent** is a capability. **App** is a product decision: a name, a set of agents, branding, an auth mode, limits. **Distribution** ("a place", under "Where people use it", in the UI) is one place that product reaches people or other agents. The app is the only place an agent is put in front of people or other systems: Share tools makes only a shared-tools gateway, the server refuses a web chat, widget, messaging or A2A gateway no app publishes, the agent page only lists where it is used, and there is exactly one per target.
+**Agent** carries the capability and, in `agents.branding` and `agents.visitorRules`, how it faces the public: its name, look, who may use it, its limits and what it keeps about visitors. **Channel** (`agent_channels`, entity `agent-channel.entity.ts`) is one place that agent reaches people or other agents. One agent has many channels; a channel has exactly one agent (`agentId`, cascade on delete). A channel may override the agent's branding and visitor rules field by field (`agent_channels.branding`, `visitorRules`); `effectiveBranding` and `effectiveVisitorRules` in `agent-channels/channel-rules.ts` are the one merge everything reads.
 
-The separation is load-bearing. One agent appears in an internal app and a customer-facing one at the same time, under different names, different auth and different limits, without being duplicated.
+The Channels tab is the only place a channel is added or edited: Share tools makes only a shared-tools gateway, the server refuses a web chat, widget, messaging or A2A gateway no channel publishes, and the gateway page links back to its channel.
 
-An app is a normal detail page: a header, three tabs (Where people use it, Agents, Settings; the UI never says distribution), and a card per place the product ships. Each card carries a ProtocolBadge for the medium and a status badge (Live, Building, Draft). Create an app at `/apps/new`, add a distribution at `/apps/:slug/distributions/new`, and click a card to open its configuration page at `/apps/:slug/distributions/:target`. Signing credential creation has its own page beneath that route at `/signing/new`.
+The tab is a DataTable of the agent's channels, with **Add channel** (`/agents/:id/channels/new`, a ChoiceTiles picker) and **Branding and visitor rules** (`/agents/:id/channels/settings`). A row opens the channel's page at `/agents/:id/channels/:channelId`, a FormPage holding its keys, publish state and type-specific sections. Signing credential creation has its own page beneath it at `/signing/new`. Gateways that serve the agent without being a channel (ACP, OpenAI-compatible) are listed under **Also served by gateways**.
 
-![An app detail page with Slack, Terminal, and Web distributions as cards](../docs-site/public/screenshots/apps-detail.png)
-
-A product not in front of anyone yet shows an EmptyState on that tab, with the same Add a place action as the header.
-
-![Empty app detail: no distributions yet](../docs-site/public/screenshots/apps-empty.png)
-
-Entities: `agent-app.entity.ts`, `agent-app-distribution.entity.ts`, `app-build.entity.ts`.
+Entities: `agent-channel.entity.ts`, `app-build.entity.ts` (`channelId`, `agentId`).
 
 ## Addressing
 
-Everything is addressed by name. `/apps/acme-support`, `/apps/acme-support/distributions/slack`. The slug is unique per organization and is what the product ships under, so it is what an operator recognises and can type. An opaque id in a path is unreadable and unshareable for no gain.
+A channel is addressed by id under its agent: `/agents/:agentId/channels/:channelId`. A web chat also has a slug, unique across web chats and hosted-chat gateways, generated from the agent's name, which is its public address (`<slug>.almyty.app`).
 
 ## Publishing
 
-Adding a distribution records where a product will ship. Publishing is the separate decision to let people reach it, and it is what turns a row into something that answers:
+Adding a channel records where an agent will be. Publishing is the separate decision to let people reach it, and it is what turns a row into something that answers:
 
 ```
-POST /apps/:slug/distributions/:target/publish
-POST /apps/:slug/distributions/:target/unpublish
+POST /agents/:agentId/channels/:channelId/publish
+POST /agents/:agentId/channels/:channelId/unpublish
 ```
 
-For every target except the three that compile to a file, publishing stands up a gateway of the matching type (`distribution-publish.ts` holds that mapping as one readable table) at `/apps/:slug/:target`, unique per organization, so it cannot collide with a hand-made gateway or with the same product's other surfaces.
+For every type except the two that compile to a file, publishing stands up a gateway of the matching type (`channel-publish.ts` holds that mapping as one readable table, `GATEWAY_TYPE_FOR_CHANNEL`) at `/channels/:channelId`, so it cannot collide with a hand-made gateway or with another channel.
 
-The surface is created with the product's own branding and the product's own rate limits. Publishing with the limits dropped would make the check that allowed it theatre.
+The gateway is created with the channel's effective rate limits. Publishing with the limits dropped would make the check that allowed it theatre.
 
-**Which agent answers** is per surface. A product can carry several, and the entity documents the first as the default: a fine default and a bad silent decision, because a support product with a triage agent and a billing agent should be able to put the billing one on the billing channel. A distribution may name its own in `configuration.agentId` and falls back to the default when it does not. Naming one that has since been removed from the product is refused rather than published, so a surface never answers with something the operator believes is no longer involved.
+Publishing is idempotent: doing it twice re-syncs the existing gateway rather than failing, because the second attempt is usually someone reapplying a settings change. A change to the agent's branding and visitor rules re-syncs every live channel's gateway.
 
-Publishing is idempotent: doing it twice re-syncs the existing gateway rather than failing on the unique endpoint, because the second attempt is usually someone reapplying a settings change.
+**Every channel gateway belongs to a channel.** The gateway types a channel stands up (`CHANNEL_GATEWAY_TYPES` in `gateways/channel-surface.ts`: the hosted chat, the chat widget, A2A and the thirteen messaging platforms) are made only by `upsertForChannel`, which passes `forChannel` to `createGateway`. `createGateway` refuses one of these types without it (`CHANNEL_GATEWAY_NEEDS_AGENT`), so `POST /gateways`, the platform's own MCP tools and the CLI cannot make one outside a channel; `channel-gateways-belong-to-an-agent.spec.ts` holds `forChannel` to that one caller. ACP and OpenAI-compatible gateways are not channels.
 
-**Every app place's gateway belongs to an app.** The gateway types a place stands up (`APP_SURFACE_GATEWAY_TYPES` in `gateways/app-surface.ts`, read off `GATEWAY_TYPE_FOR_TARGET`: the hosted chat, the chat widget, A2A and the thirteen messaging platforms) are made only by `upsertForDistribution`, which passes the app to `createGateway` as `forApp`. `createGateway` refuses one of these types without it (`APP_SURFACE_NEEDS_APP`), so `POST /gateways`, the platform's own MCP tools and the CLI cannot make one outside an app; `app-surfaces-belong-to-an-app.spec.ts` holds `forApp` to that one caller. Migrations wrap every such gateway no place points at in a place on an app (`wrapUnownedPlaces` in `agent-apps/wrap-unowned-places.ts`): one app per agent, named after it and built by `newAppFields` (the row `AgentAppsService.create` saves), with a place per platform pointing at the gateway and carrying its connection reference and non-secret settings; the gateway keeps its address and keys. `EveryChatSurfaceHasAnApp1750812800000` wrapped web chats and channels; `EveryWidgetAndA2aHasAnApp1750812900000` wraps widgets and A2A gateways, joining the agent's existing app when it has one without that place, and gives an app it makes for a widget the widget's old look as branding. Each migration names the types it wraps as a frozen list, so a type that becomes a place later gets a migration of its own. ACP and OpenAI-compatible gateways are not places.
+**The website widget** (`widget`, a `chat_widget` gateway) takes its look from the agent and channel on every request: `GET /gateways/:id/widget-config` overlays the effective colour, name, greeting, theme, AI disclosure (always shown) and almyty mark, and keeps only the widget's placement (`configuration.widget.position`, `launcherIcon`), which republishing keeps (with the allowed sites). It has no sign-in, so it is refused on a channel whose effective auth mode is not `public_link` (`WIDGET_HAS_NO_SIGN_IN`, in both `checkChannel` and `checkPublish`); its rate limits are per visitor, like the web chat.
 
-**The website widget** (`widget`, a `chat_widget` gateway) takes its look from the app on every request: `GET /gateways/:id/widget-config` overlays the app's colour, name, greeting, theme, AI disclosure (always shown) and almyty mark (`widgetConfigFor`), and keeps only the widget's placement (`configuration.widget.position`, `launcherIcon`), which republishing keeps (`KEPT_ON_REPUBLISH`, with the allowed sites). It has no sign-in, so it is refused on an app whose auth mode is not `public_link` (`WIDGET_HAS_NO_SIGN_IN`, in both `checkDistribution` and `checkPublish`); its rate limits are per visitor, like the web app.
+**A2A** (`a2a`) answers at `/{org}/channels/{channelId}` with its card at `.well-known/agent-card.json`, through the unified endpoint's channel lookup (`channelSurfaceSlug`). Callers sign in with the gateway's API keys, made on the channel's page. The card and JSON-RPC answer only for an active agent the gateway may serve (`findServableGatewayAgent`), and publishing refuses a workflow agent. Each caller credential has its own per-visitor share on the methods that start a task (`A2A_RUN_METHODS`).
 
-**A2A** (`a2a`) answers at `/{org}/apps/{app}/a2a` with its card at `.well-known/agent-card.json`, through the unified endpoint's app-surface lookup. Callers sign in with the gateway's API keys, made on the place's page (the same auth section a shared-tools gateway has). The card and JSON-RPC answer only for an active agent the gateway may serve (`findServableGatewayAgent`), and publishing refuses a workflow agent. Its rate limit keeps a surface ceiling, like a messaging channel, and each caller credential has its own per-visitor share on the methods that start a task (`A2A_RUN_METHODS`).
+Publishing refuses what would otherwise produce a channel that is live and useless (`PUBLISH_REFUSALS`): a platform whose keys are absent (`REQUIRED_CREDENTIALS`, read off what each adapter actually uses), a workflow agent behind a chat surface, an agent private to its owner, and a desktop app with no web chat to open (`DESKTOP_NEEDS_WEB_CHAT`).
 
-Publishing refuses two things that would otherwise produce a surface that is live and useless. A platform whose credentials are absent (`REQUIRED_CREDENTIALS`, read off what each adapter actually uses, never invented) and a workflow agent behind a chat surface, which the runtime turns away at the first message with "not in autonomous mode".
-
-Channel distributions take those credentials on the distribution itself (for Slack: the Slack app's client ID, client secret and signing secret for Add to Slack, or a bot token for one workspace under Advanced; `CREDENTIAL_ALTERNATIVES`) rather than sending the operator to Gateways. Publishing with them filled goes live. The values never sit on the distribution row: they go into one credential the distribution manages (`metadata.managedBy.kind = 'app_distribution'`), the row keeps `credentialId` and `credentialKeys` (names only), every read shows them masked, and publishing hands the gateway the reference rather than a copy. Removing the distribution deletes that credential.
+Messaging channels take their keys on the channel page, entered there or picked from Credentials (`CredentialChoice`, `components/credentials/credential-choice.tsx`). Entered values never sit on the channel row: they go into one credential the channel manages (`metadata.managedBy.kind = 'agent_channel'`), the row keeps `credentialId` and `credentialKeys` (names only), every read shows them masked, and publishing hands the gateway the reference rather than a copy. Removing the channel deletes that credential; a picked credential is left alone.
 
 ![Slack published and live, with Unpublish instead of a silent fail](../docs-site/public/screenshots/apps-slack-live.png)
 
-For the hosted chat, publish writes the `hostedChat` block it is looked up by, and only that: its address (the app slug) and a mirror of the sign-in rule. Without it a published web app is a gateway `findBySlug` cannot see, which is what happened before. Branding is not copied onto the gateway. It has one home, the app: `findBySlug` and `findByCustomDomain` overlay the app's look, sign-in rule and visitor rights on every request (`GatewayAppLinkService.withAppSettings`, `hostedChatBlockFor`), so a change on the app shows without republishing. Migration `AppOwnsBranding1750812600000` moved existing gateway branding onto the apps (whichever row was saved last wins per field) and gave every hosted chat no app owned an app of its own with a `web` place pointing at it; `publishDistribution` re-syncs the gateway a place already answers on (`gatewayId`) before looking one up by endpoint, so such a surface is never joined by a second gateway on its address. Allowed sites set on the web app page survive a republish (`KEPT_ON_REPUBLISH`).
+For the hosted chat, publish writes the `hostedChat` block it is looked up by: its address (the channel slug) and a mirror of the sign-in rule. Branding is not copied onto the gateway: `findBySlug` and `findByCustomDomain` overlay the effective look, sign-in rule and visitor rights on every request (`ChannelLinkService.withChannelSettings`, `ownerOf`, `hostedChatBlockFor`), so a change shows without republishing.
 
-![The web app page after a successful publish](../docs-site/public/screenshots/apps-web-published.png)
+![The web chat channel after a successful publish](../docs-site/public/screenshots/apps-web-published.png)
 
-The resulting hosted surface carries the product name, greeting, colour, disclosure, and public-session controls rather than the dashboard chrome. Publishing shows the link at once. Who can use it, the sign-in provider (presets first; a discovery URL only for Other; endpoints, keys and scopes under Advanced), the custom domain and the allowed sites are cards on the same page, the ones the gateway page used to carry, keyed by the place's `gatewayId`.
+The web chat channel page carries the sign-in provider (presets first; a discovery URL only for Other; endpoints, keys and scopes under Advanced), the custom domain and the allowed sites, keyed by the channel's `gatewayId`.
 
-A gateway an app stood up is found from `agent_app_distributions.gatewayId` (`GET /gateways/:id/app`). Its page says "Managed in <app>" with a link to the place and drops the settings the app owns (channel credentials, domain, sign-in, allowed sites). The agent's Interfaces tab is a read-only "Used in" list from `GET /apps/used-by/:agentId`: each app that carries the agent and the places in it where that agent answers.
+A gateway a channel stood up is found from `agent_channels.gatewayId` (`GET /gateways/:id/channel`). Its page says which agent's channel it is, with a link back, and drops the settings the channel owns.
 
 ![The branded hosted chat surface](../docs-site/public/screenshots/apps-hosted-chat.png)
 
-Unpublishing **deactivates** the gateway rather than deleting it. Republishing keeps the same endpoint and whatever credentials were attached, so taking a product down for an afternoon does not mean re-registering a Slack app afterwards.
+Unpublishing **deactivates** the gateway rather than deleting it. Republishing keeps the same endpoint and whatever keys were attached, so taking a channel down for an afternoon does not mean re-registering a Slack app afterwards. Deleting a channel deletes its gateway.
 
-## What stops an app from shipping
+## Migration from apps
 
-`agent-app.rules.ts` returns the unmet rules continuously while someone is still editing, rather than letting them discover the list when a publish is rejected. The rules that matter:
+`ChannelsOnTheAgent1750813742000` moved the earlier app model onto agents (`migrations/support/channels-on-the-agent.ts`). Each app place became a channel with the same id on `configuration.agentId`, else the app's first agent; a place with neither was skipped and logged. The first app (by creation) to reach an agent gave it its branding and visitor rules; a later app whose settings differ put them on its own channels as overrides, and each such conflict is logged. Gateways, managed credentials and builds were repointed to the channel. The `agent_apps` and `agent_app_distributions` tables were left in place and are no longer read.
+
+## What stops a channel from shipping
+
+`checkChannel` in `channel-rules.ts` returns the unmet rules continuously while someone is still editing, rather than letting them discover the list when a publish is rejected. The rules that matter:
 
 - `PUBLIC_NEEDS_COST_CAP`: anyone with the link or the binary can spend against the customer's model keys.
 - `PUBLIC_NEEDS_RATE_LIMIT`: one user must not be able to exhaust it for everyone else.
@@ -96,58 +91,57 @@ An unset auth mode reads as open, not as unset. The permissive reading of missin
 
 The auth mode is enforced by the hosted-chat backend, not just displayed. A surface set to anything other than `public_link` answers `401 AUTH_REQUIRED` on every visitor endpoint (conversations, messages, stream, transcript) until the visitor has signed in the required way, and `GET /public/chat/:slug/me` tells the page which sign-in to show. Every sign-in ends in `bindAuthenticatedVisitor`, which attaches the verified identity to the visitor and rotates the session cookie. All sign-in routes live under `/public/chat/:slug/auth/` on the tenant host, so the session cookie travels with them.
 
-- `email_otp`: a six-digit code mailed to the address, redeemable once, within ten minutes and five guesses, from the browser that asked for it. Counted as open for app caps: anyone with an inbox passes.
-- `oauth`: the surface's own identity provider, configured inline on the app's web app page, presets first (Google, GitHub, one Microsoft Entra tenant, or any OpenID Connect or OAuth 2.0 provider; discovery documents are fetched through the SSRF gate when the provider is saved and must name the issuer they were read from). The client secret is stored only in `credentials`, as a row managed by the surface (`hosted_chat_oauth`). Each sign-in carries a state, a PKCE S256 verifier and, for OpenID Connect, a nonce, kept in Redis for ten minutes, bound to the visitor who started it and taken with `GETDEL`. The code is exchanged server-side through the SSRF-safe fetch, and ID tokens are checked against the provider's keys, issuer and client. The admin registers the redirect URIs the card shows: `https://{slug}.{base}/api/public/chat/{slug}/auth/oauth/callback`, plus the same path on the verified custom domain. An optional list of email domains admits only addresses the provider says it verified. Counted as open for app caps: anyone with an account at a public provider passes.
-- `sso` (commercial): the organization's own SSO configuration. For OIDC the visitor goes through `/auth/sso/login` and back to `https://{slug}.{base}/api/public/chat/{slug}/auth/sso/callback`. For SAML the same login sends an AuthnRequest whose ID is remembered; the IdP posts to `https://{slug}.{base}/api/public/chat/{slug}/auth/sso/saml/acs` (register it as an additional ACS URL for the SP entity; with SSO chosen as the access mode, the app's web app page shows the exact URL, and the verified custom domain's, with a copy button, from `GET /gateways/:id/hosted-chat-sso`), where the response must answer that request, pass node-saml's signature, audience and time checks, and be claimed once in the SAML replay cache. Because that POST is cross-site and carries no cookies, the identity is parked for two minutes and bound on a same-host GET that must present the state cookie set at login and come from the same visitor. An SSO surface on an organization without the `sso` entitlement closes rather than opening.
+- `email_otp`: a six-digit code mailed to the address, redeemable once, within ten minutes and five guesses, from the browser that asked for it. Counted as open for spend caps: anyone with an inbox passes.
+- `oauth`: the surface's own identity provider, configured inline on the web chat channel page, presets first (Google, GitHub, one Microsoft Entra tenant, or any OpenID Connect or OAuth 2.0 provider; discovery documents are fetched through the SSRF gate when the provider is saved and must name the issuer they were read from). The client secret is stored only in `credentials`, as a row managed by the surface (`hosted_chat_oauth`). Each sign-in carries a state, a PKCE S256 verifier and, for OpenID Connect, a nonce, kept in Redis for ten minutes, bound to the visitor who started it and taken with `GETDEL`. The code is exchanged server-side through the SSRF-safe fetch, and ID tokens are checked against the provider's keys, issuer and client. The admin registers the redirect URIs the card shows: `https://{slug}.{base}/api/public/chat/{slug}/auth/oauth/callback`, plus the same path on the verified custom domain. An optional list of email domains admits only addresses the provider says it verified. Counted as open for spend caps: anyone with an account at a public provider passes.
+- `sso` (commercial): the organization's own SSO configuration. For OIDC the visitor goes through `/auth/sso/login` and back to `https://{slug}.{base}/api/public/chat/{slug}/auth/sso/callback`. For SAML the same login sends an AuthnRequest whose ID is remembered; the IdP posts to `https://{slug}.{base}/api/public/chat/{slug}/auth/sso/saml/acs` (register it as an additional ACS URL for the SP entity; with SSO chosen, the web chat channel page shows the exact URL, and the verified custom domain's, with a copy button, from `GET /gateways/:id/hosted-chat-sso`), where the response must answer that request, pass node-saml's signature, audience and time checks, and be claimed once in the SAML replay cache. Because that POST is cross-site and carries no cookies, the identity is parked for two minutes and bound on a same-host GET that must present the state cookie set at login and come from the same visitor. An SSO surface on an organization without the `sso` entitlement closes rather than opening.
 
 A surface whose mode has no working sign-in (OAuth without a provider, SSO without the entitlement) tells the visitor it is not accepting sign-ins rather than showing a button that goes nowhere.
 
+The first two are satisfied from the effective `limits`: a cost ceiling per run in cents, and per-user and per-IP request ceilings. Cents rather than currency because a ceiling in floating point is a rounding argument later; per-IP separately from per-user because a hosted chat visitor has no account.
 
-The first two are satisfied from the app's own `limits` column: a cost ceiling per run in cents, and per-user and per-IP request ceilings. Cents rather than currency because a ceiling in floating point is a rounding argument later; per-IP separately from per-user because a hosted chat visitor has no account.
+Those inputs live under Advanced on **Branding and visitor rules**, below the look, with their current values summed up in one line. A channel page can switch on its own branding and visitor rules; only the fields that differ from the agent's are stored.
 
-Those inputs live under Advanced on the Settings tab, below the look, with their current values summed up in one line. Who may use the product is a one-line choice at the top of Settings and of the web app page.
-
-![App Settings tab with cost ceiling, spend limits and per-user / per-IP rate limits](../docs-site/public/screenshots/apps-settings.png)
+![Branding and visitor rules with cost ceiling, spend limits and per-user / per-IP rate limits](../docs-site/public/screenshots/apps-settings.png)
 
 A limit left empty is stored as null, not as zero. Zero would read as "no requests allowed" rather than "unset", and the rules treat both as unprotected, but only one of them is what the operator meant.
 
-**Every place runs under the app.** `AppPlacePolicyService` (gateways module) is the one place a web chat, widget, messaging channel or A2A call asks before a run: it resolves the app through the distribution and hands the run options every place starts with (`withPlace`): the app's per-run `costCapCents` as `maxCostCents`, `appId` on the run, the place's `gatewayId` on a new conversation (what per-app retention and widget erasure find it by), and `metadata.appVisitor` with the app's `visitorMemory`, so a visitor with no end-user row (widget, channel, A2A) stays out of shared memory unless the app opted in. Per-visitor shares are the web chat visitor, the widget thread, the channel sender and the A2A credential (`a2aCallerId`); `app-place-policy.guard.spec.ts` reads the source so a new `startRun` on a place cannot skip it.
+**Every channel runs under its policy.** `ChannelPolicyService` (gateways module) is the one place a web chat, widget, messaging channel or A2A call asks before a run: it resolves the channel and its agent from the gateway and hands the run options every channel starts with (`withChannelPolicy`): the effective per-run `costCapCents` as `maxCostCents`, `channelId` on the run, the channel's `gatewayId` on a new conversation (what retention and widget erasure find it by), and `metadata.appVisitor` with the effective `visitorMemory`, so a visitor with no end-user row (widget, channel, A2A) stays out of shared memory unless the agent opted in. Per-visitor shares are the web chat visitor, the widget thread, the channel sender and the A2A credential (`a2aCallerId`); `channel-policy.guard.spec.ts` reads the source so a new `startRun` on a channel cannot skip it.
 
-**Spend cap.** `limits.dailySpendCapCents` and `monthlySpendCapCents` bound the whole app across places and visitors: a missing field is the default for the auth mode (open: 500 and 5000, SSO: none, `appSpendCapsFrom`), null is none. The policy sums `agent_runs.totalCost` for the app over the UTC day and month (by `updatedAt`, so a thread open across midnight is counted; index `IDX_agent_runs_appId_updatedAt`). Reached, the web chat, widget and A2A answer 429 `APP_SPEND_CAP_REACHED` with "This app has reached its limit for today." (or "for this month."), a channel sends that sentence as its reply without a run, owners and admins get one `budget.alert` notification per period, and `GET /apps/:slug/spend` drives the notice on the app page.
+**Spend cap.** `dailySpendCapCents` and `monthlySpendCapCents` on the agent bound all of its channels together: a missing field is the default for the auth mode (open: 500 and 5000, SSO: none, `spendCapsFrom`), null is none. A channel that sets either in its own visitor rules gets an allowance of its own (`ownSpend`) and is left out of the agent's pool. The policy sums `agent_runs.totalCost` over the UTC day and month (by `updatedAt`, so a thread open across midnight is counted; index `IDX_agent_runs_channelId_updatedAt`), counting runs with `channelId` and, for the pool, runs from before the move that carry only `appId`. Reached, the web chat, widget and A2A answer 429 with the code `APP_SPEND_CAP_REACHED` (kept for clients) and "This app has reached its limit for today." (or "for this month."), a messaging channel sends that sentence as its reply without a run, owners and admins get one `budget.alert` notification per period, and `GET /agents/:agentId/public-settings/spend` drives the notice on the Channels tab.
 
 ## Custom domains
 
-A hosted chat surface can also be served on a domain the tenant owns, set on the app's web app page (the card is keyed by the gateway the place was published as). The claim lives in the gateway's `customDomain` column, which no ordinary gateway save writes: only the custom-domain endpoints (`/gateways/:id/custom-domain`, `/verify`, and `DELETE`) change it, so an edit that loaded the gateway before a verify or removal cannot write the old claim back. A domain is served once its `_almyty-verify` TXT record proves control, and one hostname has at most one live owner across all organizations. Live domains are re-checked daily; after three definite misses in a row (a lookup error does not count) the domain stops being served and the organization's owners and admins are notified. A later claim that proves its own TXT record while the current holder's record no longer resolves takes the hostname over, demoting the holder in the same transaction.
+A hosted chat surface can also be served on a domain the tenant owns, set on the web chat channel page (the card is keyed by the gateway the channel was published as). The claim lives in the gateway's `customDomain` column, which no ordinary gateway save writes: only the custom-domain endpoints (`/gateways/:id/custom-domain`, `/verify`, and `DELETE`) change it, so an edit that loaded the gateway before a verify or removal cannot write the old claim back. A domain is served once its `_almyty-verify` TXT record proves control, and one hostname has at most one live owner across all organizations. Live domains are re-checked daily; after three definite misses in a row (a lookup error does not count) the domain stops being served and the organization's owners and admins are notified. A later claim that proves its own TXT record while the current holder's record no longer resolves takes the hostname over, demoting the holder in the same transaction.
 
 ## Builds
 
 A build runs on our machines and produces a file. It does not run on the customer's laptop, which is the difference between "download your app" and "install Node and run this command".
 
 ```
-POST /apps/:slug/builds          queue one
-GET  /apps/:slug/builds          history
-GET  /apps/:slug/builds/:id/download    a link
-GET  /apps/:slug/builds/:id/artifact    the bytes
+POST /agents/:agentId/channels/:channelId/builds                queue one
+GET  /agents/:agentId/channels/:channelId/builds                history
+GET  /agents/:agentId/channels/:channelId/builds/:id/download   a link
+GET  /agents/:agentId/channels/:channelId/builds/:id/artifact   the bytes
 ```
 
-Everything knowable up front is checked before queueing rather than inside the job: an unknown platform, a target that produces no file, a missing toolchain. Finding out twenty minutes into a queued job is worse than being told at once.
+Everything knowable up front is checked before queueing rather than inside the job: an unknown platform, a channel that produces no file, a missing toolchain. Finding out twenty minutes into a queued job is worse than being told at once.
 
 ### Targets and platforms
 
-| Target | Tool | Linux | Windows | macOS |
+| Channel | Tool | Linux | Windows | macOS |
 |---|---|---|---|---|
-| `tui`, `binary` | `bun build --compile` | bare executable | `.exe` | bare executable |
+| `tui` | `bun build --compile` | bare executable | `.exe` | bare executable |
 | `desktop` | `electron-builder` | `.AppImage` | NSIS `.exe` | `.app` in a `.zip` |
 
-`binary` compiles to byte-identical output to `tui` (same entry point, same invocation), so it is no longer offered when adding a distribution. The target still works and existing distributions still build; there is simply no reason to ask someone to choose between two names for one thing.
+`binary` compiled to byte-identical output to `tui` (same entry point, same invocation), so it is not offered as a channel type. A `binary` channel carried over from an app still builds; there is simply no reason to ask someone to choose between two names for one thing.
 
-Everything cross-compiles. A Linux x64 ELF and a macOS arm64 Mach-O both build on a macOS host, and vice versa. The one exception is a macOS `.dmg`, which needs Apple tooling; the desktop target ships a zipped `.app` instead, which any Mac opens.
+Everything cross-compiles. A Linux x64 ELF and a macOS arm64 Mach-O both build on a macOS host, and vice versa. The one exception is a macOS `.dmg`, which needs Apple tooling; the desktop app ships a zipped `.app` instead, which any Mac opens.
 
-The extension depends on the target as well as the platform, which the platform table alone cannot express (`artifactExtension`). This is not cosmetic: a Mach-O executable named `.zip` does not open when double-clicked and browsers try to expand it.
+The extension depends on the channel type as well as the platform, which the platform table alone cannot express (`artifactExtension`). This is not cosmetic: a Mach-O executable named `.zip` does not open when double-clicked and browsers try to expand it.
 
 ### The icon
 
-Without one, every customer's app wears the Electron logo, which undoes most of what a branded build is for. `build-icon.ts` fetches `branding.iconUrl` into `build/icon.png`, which electron-builder picks up by convention and derives the platform formats from.
+Without one, every customer's app wears the Electron logo, which undoes most of what a branded build is for. `build-icon.ts` fetches the effective `branding.iconUrl` into `build/icon.png`, which electron-builder picks up by convention and derives the platform formats from.
 
 That URL is customer input and the fetch runs from the build host's own network, so it goes through the same SSRF-safe agents the rest of the product uses: a link to `169.254.169.254` or to something on the internal network is refused at connect time. The bytes are checked for a PNG signature rather than trusted on the URL's extension or the server's content-type, and capped, because this file is handed to an image toolchain.
 
@@ -155,9 +149,9 @@ None of it ever fails a build. A default icon is worse than a branded one and fa
 
 ### The desktop shell
 
-`packages/desktop-shell` is an Electron window, identical for every customer. What differs is the `app-config.json` written beside it at build time, naming the product and the address it opens. No customer-authored code is packaged, and only the two files that ship are copied, so a developer's `node_modules` and tests never reach an artifact.
+`packages/desktop-shell` is an Electron window, identical for every customer. What differs is the `app-config.json` written beside it at build time, naming the product and the web chat it opens (the channel's `webChatChannelId`, else the agent's first web chat). No customer-authored code is packaged, and only the two files that ship are copied, so a developer's `node_modules` and tests never reach an artifact.
 
-It renders remote content under someone else's name, so it is locked down to match: no Node in the renderer, `contextIsolation` on, permission requests refused outright, and navigation confined to the app's own origin.
+It renders remote content under someone else's name, so it is locked down to match: no Node in the renderer, `contextIsolation` on, permission requests refused outright, and navigation confined to the web chat's own origin.
 
 That last check compares **origins**, not prefixes. `https://acme.almyty.app.attacker.test` passes a `startsWith` test. It treats a scheme with no host as no origin at all. `data:`, `file:` and `javascript:` URLs all report the origin string `"null"`, so an equality check alone would count them as each other, and as a build that has no address.
 
@@ -175,7 +169,7 @@ The certificate is the customer's, so the signature is the customer's. That is t
 | Windows | `osslsigncode` | sign with an RFC 3161 timestamp |
 | Linux | none | nothing to sign against |
 
-A distribution names a `code_signing` credential, or the build stays unsigned and says so. Nothing is guessed: signing software with an identity nobody chose is not a convenience.
+A desktop or terminal channel names a `code_signing` credential, or the build stays unsigned and says so. Nothing is guessed: signing software with an identity nobody chose is not a convenience.
 
 Rules the code holds to:
 
@@ -191,11 +185,11 @@ Rules the code holds to:
 - Written `0o600` for the length of one build, and removed **before** the scratch directory is, so a failure to clean up the directory does not leave a private key behind.
 - The Apple password goes via `--p12-password-file`. An argument list is readable through `ps` by every process on the host, and a build host runs other tenants' builds.
 - The tool's own output goes to the build log, which stays server side. What reaches the operator is one sentence with absolute paths removed, because a build panel is a web page and the raw output names the path the certificate was written to.
-- On macOS, `--binary-identifier` is set from the distribution's bundle id. A bare executable has no `Info.plist`, so without it every customer's binary identifies as whatever the compiler called it.
+- On macOS, `--binary-identifier` is set from the channel's bundle id. A bare executable has no `Info.plist`, so without it every customer's binary identifies as whatever the compiler called it.
 
 ## Downloads
 
-`StorageService.canPresign` decides the shape. S3 presigns and keeps the bytes off the API. Anything else streams through `GET /apps/:slug/builds/:buildId/artifact`, under the same ownership and expiry checks as the link.
+`StorageService.canPresign` decides the shape. S3 presigns and keeps the bytes off the API. Anything else streams through `GET /agents/:agentId/channels/:channelId/builds/:buildId/artifact`, under the same ownership and expiry checks as the link.
 
 The link is minted per request and short lived rather than stored, so a URL that ends up in a chat log or a ticket stops working. The artifact expires on its own schedule (`ARTIFACT_TTL_DAYS`), and an hourly repeatable job clears the bytes once it has. The expiry was enforced on download and nowhere else, so links stopped working on time while storage grew for ever. Override the cadence with `APP_ARTIFACT_SWEEP_CRON`.
 
@@ -211,16 +205,16 @@ Getting this wrong is not a tidiness problem. Attributing a visitor through `use
 
 | Tool | For |
 |---|---|
-| `bun` | `tui` and `binary` targets |
-| `npx` | `desktop` target, via `electron-builder` |
+| `bun` | `tui` channels |
+| `npx` | `desktop` channels, via `electron-builder` |
 | `rcodesign` | signing and notarising macOS artifacts |
 | `osslsigncode` | signing Windows executables |
 
 Desktop builds download the pinned Electron release, so the host needs outbound network at build time. `toolchainReadiness` and `signingReadiness` check for each before doing any work, and a deployment missing one says so in a sentence rather than failing obscurely.
 
-`GET /apps/:slug/distributions/:target/capabilities` answers both before anyone presses Build, and the panel disables the button when the host cannot compile and warns separately when it can compile but not sign. Those are different problems with different fixes, so they are said separately.
+`GET /agents/:agentId/channels/:channelId/capabilities` answers both before anyone presses Build, and the panel disables the button when the host cannot compile and warns separately when it can compile but not sign. Those are different problems with different fixes, so they are said separately.
 
-![A Terminal app distribution that can build now that bun is on the host](../docs-site/public/screenshots/apps-build-capabilities.png)
+![A Terminal app channel that can build now that bun is on the host](../docs-site/public/screenshots/apps-build-capabilities.png)
 
 The API image should remain lean. The recommended production layout is a dedicated build worker image, with an eventual option to isolate each build in an ephemeral Kubernetes Job. The trade-offs, security boundary, and rollout are in [Builder image topology](./builder-image-topology.md).
 

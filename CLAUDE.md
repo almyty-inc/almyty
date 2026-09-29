@@ -41,7 +41,7 @@
 backend/src/
 ├── entities/          # 38 TypeORM entities
 ├── modules/
-│   ├── agent-apps/    # Agent factory (/apps): products, distributions, builds, signing
+│   ├── agent-channels/ # An agent's channels: branding + visitor rules, publishing, builds, signing
 │   ├── agents/        # Agent CRUD, DAG execution engine, scheduler, webhooks, OpenAI-compat API
 │   ├── apis/          # API CRUD, schema import
 │   ├── audit-log/     # Audit trail for sensitive actions
@@ -96,7 +96,7 @@ packages/
 ├── skills-cli/        # @almyty/skills — install API skills into 30 AI coding agents
 ├── mcp-server/        # @almyty/mcp-server — skill-first MCP proxy
 ├── cli-tests/         # Smoke tests gated behind RUN_CLI_SMOKE=1
-├── desktop-shell/     # Electron window an /apps desktop build is packaged into (never published on its own)
+├── desktop-shell/     # Electron window a Desktop app channel build is packaged into (never published on its own)
 └── runner/            # @almyty/runner — long-running daemon that runs CLI agents on the user's machine
 ```
 
@@ -107,7 +107,7 @@ packages/
 - **Entities**: 73 (`ls backend/src/entities/*.entity.ts | wc -l` — count it, do not trust this line)
 - **Agent node types** (12): `input`, `output`, `llm_call`, `tool_call`, `condition`, `transform`, `loop`, `parallel`, `merge`, `sub_agent`, `verify`, `extract_context`. The dispatch switch in `agents/agent-node-executor.ts` is the list — count it there. `verify` runs a panel of refute-only checkers and emits a verdict a `condition` can branch on; `extract_context` compresses what upstream steps learned into a small structured brief. Both are load-bearing for the compiled strategies (cascade, best_of_n, explore_extract_patch) and neither is in the builder palette — see `docs/strategies.md`.
 - **Gateway types**: MCP, A2A, UTCP, Skills
-- **App distribution targets**: `web`, `widget`, `a2a`, `tui`, `desktop`, `binary` + 13 messaging platforms. `tui`/`binary` compile via `bun --compile`; `desktop` packages via electron-builder. Every gateway a place stands up (web chat, widget, A2A, channels) is made only through an app. See `docs/agent-factory.md`.
+- **Channel types** (on the agent, `agent_channels`): `web`, `widget`, `a2a`, `tui`, `desktop` + 13 messaging platforms (`binary` still builds but is not offered). `tui`/`binary` compile via `bun --compile`; `desktop` packages via electron-builder. Every gateway a channel stands up (web chat, widget, A2A, messaging) is made only through `upsertForChannel`. See `docs/channels.md`.
 - **Tool types**: API (auto-generated), HTTP, JavaScript (sandboxed via worker_threads), GraphQL, LLM, SDK
 - **LLM Providers**: 39. `backend/src/entities/llm-provider-type.ts` is the list, mirrored member-for-member in `frontend/src/types/index.ts`; count it there rather than trusting a list in prose. It spans the first-party vendors (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Cohere), the hosted-inference fleet (Groq, Together, OpenRouter, Fireworks, Cerebras, DeepInfra, Novita, Baseten, Nebius, SambaNova, Perplexity, and more), cloud-owned surfaces (Azure OpenAI, Azure AI Foundry, AWS Bedrock, Vertex AI, DigitalOcean, RunPod, Modal), brand-named model families (Moonshot, Qwen, MiniMax, Upstage, Writer, Z.ai, and the Chinese vendors Qianfan, Hunyuan, Volcengine, Spark), plus Hugging Face, Ollama and `custom`. Most are OpenAI-compatible and ride the OpenAI dispatch path; Ollama is keyless local inference, and its private URLs are gated by `OLLAMA_ALLOW_PRIVATE_URLS` (default off).
 - **Chat channel adapters**: 14, in `gateways/channels/adapters/` NOT `interfaces/` (Slack, Discord, Telegram, WhatsApp, WhatsApp Cloud, SMS, Microsoft Teams, Google Chat, Signal, Matrix, IRC, Email, Webhook, Chat Widget). Chat Widget serves both `CHAT_WIDGET` and `HOSTED_CHAT`, so 14 adapter classes cover 15 gateway types. Shared pipeline + AI disclosure in `channel-gateway.service.ts`; Discord inbound via `discord-gateway.transport.ts`. SMS is Twilio-backed and verifies `X-Twilio-Signature` via `twilio-signature.helper.ts`; WhatsApp Cloud talks to Meta directly, verifies `X-Hub-Signature-256` fail-closed and answers the `hub.challenge` GET handshake in `unified-gateway-delegation.helper.ts`. Audit: `docs/interface-adapters-audit.md`
@@ -208,7 +208,7 @@ Tokens live in httpOnly cookies only. `withCredentials: true` on every axios cal
 
 - `docs/design/layers.md` — The six layers (L1 egress → L6 orchestrator), what belongs where, and the cross-cutting concerns. Twenty-nine code comments cite it by layer number; keep it true or fix the comments.
 - `docs/architecture.md` — System architecture: the layers, the backend module map, and the five request paths
-- `docs/agent-factory.md` — `/apps`: builds, signing, distributions
+- `docs/channels.md` — an agent's channels: publishing, builds, signing
 - `docs/runner.md` — Runner + workspace architecture
 - `docs/models.md` — Models layer: catalog, routing, pricing, deployments (design: `docs/design/models-layer.md`)
 - `docs/enterprise.md` — EE entitlements, what each grants, and how per-org gating works

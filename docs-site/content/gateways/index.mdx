@@ -25,7 +25,8 @@ claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
 The same address answers MCP, UTCP and Agent Skills, so other frameworks and coding
 agents reach the identical tools without a second gateway. Putting an agent in front of
 people or other systems is a different job: web chats, website widgets, messaging
-channels and A2A endpoints for other agents are places on an app, set up under **Apps**.
+channels and A2A endpoints for other agents are channels of an agent, added on the agent's
+**Channels** tab.
 
 ## Share tools
 
@@ -53,8 +54,8 @@ address is MCP, `/manual` and `/execute` are UTCP, and `/skills` lists the Agent
 | [Agent Skills](/gateways/skills) | 30+ coding agents, via the Skills CLI | Installed as `SKILL.md` files |
 
 An agent, rather than a set of tools, reaches other agents over [A2A](/gateways/a2a): add
-**Other agents (A2A)** as a place on its app, and it answers at
-`api.almyty.com/{org}/apps/{app}/a2a` with its Agent Card next to it.
+**Other agents (A2A)** as a channel on the agent, and it answers at
+`api.almyty.com/{org}/channels/{channel-id}` with its Agent Card next to it.
 
 Agents you build on almyty also get an [OpenAI-compatible endpoint](/api-reference/openai-compatible),
 so anything that talks to the OpenAI API can call an agent without code changes.

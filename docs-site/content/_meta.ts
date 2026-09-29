@@ -10,7 +10,7 @@ export default {
   'agentic-loops': 'Agentic Loops',
   models: 'Models',
   'llm-providers': 'Connect a provider',
-  apps: 'Agent Factory',
+  channels: 'Channels',
   interfaces: 'Chat Interfaces',
   'hosted-chat': 'Hosted Chat App',
   'operate-separator': { type: 'separator', title: 'Operate' },

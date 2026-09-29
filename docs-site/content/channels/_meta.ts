@@ -1,6 +1,6 @@
 export default {
   index: 'Overview',
-  distributions: 'Where people use it',
-  builds: 'Downloadable Apps',
+  messaging: 'Publishing a channel',
+  builds: 'Downloadable apps',
   signing: 'Signing',
 }
