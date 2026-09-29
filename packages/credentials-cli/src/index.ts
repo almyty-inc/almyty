@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 /**
- * @almyty/connections: third-party accounts from the terminal.
+ * @almyty/credentials: keys, tokens and accounts from the terminal.
  *
- * Connections are the one place almyty keeps a third-party secret: every
- * connection is a credential row with a connector key, an account label and
- * a health status, and everything that uses it (agents, models, deployments,
- * channels) holds a reference rather than a copy. See docs/connections.md.
+ * Credentials are the one place almyty keeps a third-party secret: every
+ * credential is a row with its service, an account label and a health
+ * status, and everything that uses it (agents, APIs, tools, models,
+ * deployments, channels) holds a reference rather than a copy. The older
+ * name, @almyty/connections, is a thin alias of this package. See
+ * docs/connections.md.
  *
  * How a secret reaches the API matters, so this tool never wants one on the
  * command line: argv is visible in `ps` and lands in shell history and CI
- * logs. The paths are, best first: the connector's sign-in flow (nothing to
+ * logs. The paths are, best first: the service's sign-in flow (nothing to
  * paste), a hidden terminal prompt, `--input-file`, or `--input-stdin`.
  * `--input` stays for non-secret fields and is refused for secret ones.
  */
@@ -62,33 +64,35 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
 function printHelp(): void {
   console.log(`
-@almyty/connections v${VERSION}
+@almyty/credentials v${VERSION}
 
-Connect a third-party account once; agents, models, deployments and channels
-use the connection. The secret is stored encrypted in almyty and is never
-returned, not even masked.
+Add a key, a token or a sign-in once; agents, APIs, tools, models,
+deployments and channels use the credential. The secret is stored encrypted
+in almyty and is never returned, not even masked.
 
 Usage:
-  npx @almyty/connections <command> [options]
+  npx @almyty/credentials <command> [options]
 
 Read:
-  connectors [--kind k]                 Connector catalog: what can be connected, and how
+  services [--kind k]                   The services a credential can be added for, and how
                                         --kind inference|deployment|memory|mcp|tool_source|channel|cloud|registry
-  list                                  Connected accounts with health
-  get <id>                              One connection: connector, account, health, scopes, owner
-  grants <id>                           Who may use this connection
+  list                                  Every credential, with whether it works
+  get <id>                              One credential: service, account, health, scopes, owner
+  grants <id>                           Who may use this credential
 
-Connect:
-  connect <key> [--method m] [--owner org|user|private] [--name n] [--headless] [--open]
-                                        Sign-in connectors print an authorize URL (--open launches
-                                        a browser, --headless asks the provider for a code to paste).
-                                        Form connectors prompt for each field, secrets not echoed.
-  complete <key> --state s --code c     Finish a headless sign-in by pasting the code
-  validate <id>                         Re-check against the provider; refreshes health and label.
+Add:
+  add <service> [--method m] [--owner org|user|private] [--name n] [--headless] [--open]
+                                        A sign-in prints an authorize URL (--open launches a
+                                        browser, --headless asks the service for a code to paste).
+                                        A key form prompts for each field, secrets not echoed.
+  complete <service> --state s --code c Finish a headless sign-in by pasting the code
+  validate <id>                         Check it with the service again; refreshes health and label.
                                         Exits non-zero unless the health comes back valid.
-  rotate <id> [--headless] [--open]     Replace the secret in place; everything pointing at the
-                                        connection keeps working. Prompts for the new value.
-  disconnect <id>                       Revoke at the provider where it can be, then delete
+  rotate <id> [--headless] [--open]     Replace the key in place; everything using the
+                                        credential keeps working. Prompts for the new value.
+  delete <id>                           Revoke at the service where it can be, then delete
+
+  The older names still work: connectors (services), connect (add), disconnect (delete).
 
 Share:
   grant <id> --principal user|team|role|agent|workspace --to <principalId>
@@ -99,7 +103,7 @@ Supplying form fields without a prompt (connect, rotate):
   --input-file <path>                   Read the fields as a JSON object from a file
   --input-stdin                         Read the fields as a JSON object from stdin
   --input '<json>'                      Non-secret fields only. Refused when it carries a field the
-                                        connector marks secret, because argv is world-readable.
+                                        service marks secret, because argv is world-readable.
 
 Options:
   --json                                Undecorated JSON on stdout, for scripts
@@ -129,7 +133,7 @@ const need = (flags: ParsedArgs['flags'], key: string): string => {
  */
 export function needArg(positional: string[], index: number, name: string, usage: string): string {
   const v = positional[index];
-  if (!v) throw new UsageError(`${name} is required\n  usage: almyty connections ${usage}`);
+  if (!v) throw new UsageError(`${name} is required\n  usage: almyty credentials ${usage}`);
   return v;
 }
 
@@ -229,15 +233,15 @@ export function pendingRedirectMessage(pending: any, connectorKey: string): stri
   if (pending.completeWith === 'code') {
     lines.push(
       'The provider will show you a code. Paste it with:',
-      `  almyty connections complete ${connectorKey} --state ${pending.state} --code <code>`,
+      `  almyty credentials complete ${connectorKey} --state ${pending.state} --code <code>`,
     );
   } else {
     lines.push(
       'Approve in the browser and the connect finishes on its own; then:',
-      '  almyty connections list',
+      '  almyty credentials list',
       '',
       'On a machine with no browser, start again with --headless and the provider',
-      'shows a code you paste into `almyty connections complete` instead.',
+      'shows a code you paste into `almyty credentials complete` instead.',
     );
   }
   if (pending.expiresInSeconds) lines.push('', `This link expires in ${Math.round(pending.expiresInSeconds / 60)} minutes.`);
@@ -257,15 +261,15 @@ export function formatConnection(c: any): string {
 }
 
 /**
- * The detail view. `list` is one line per connection; this answers the
- * question the one-liner cannot: what is wrong with this connection, when
+ * The detail view. `list` is one line per credential; this answers the
+ * question the one-liner cannot: what is wrong with this credential, when
  * was that last checked, and what may it do.
  */
 export function formatConnectionDetail(c: any): string {
   const lines = [
     `${c.name ?? c.connectorKey}`,
     `  id          ${c.id}`,
-    `  connector   ${c.connectorKey}${c.connectorDisplayName ? ` (${c.connectorDisplayName})` : ''}${c.kind ? `  [${c.kind}]` : ''}`,
+    `  service     ${c.connectorKey}${c.connectorDisplayName ? ` (${c.connectorDisplayName})` : ''}${c.kind ? `  [${c.kind}]` : ''}`,
     `  owner       ${c.owner}${c.ownerUserId ? ` (${c.ownerUserId})` : ''}`,
     `  method      ${c.method ?? 'unknown'}`,
     `  account     ${c.accountLabel ?? '(the provider named none)'}`,
@@ -275,7 +279,7 @@ export function formatConnectionDetail(c: any): string {
   lines.push(`  scopes      ${c.scopesGranted?.length ? c.scopesGranted.join(', ') : '(none reported)'}`);
   if (c.expiresAt) lines.push(`  expires     ${c.expiresAt}`);
   if (c.health?.status && c.health.status !== 'valid') {
-    lines.push('', healthAdvice(c.health.status), '', 'The stored secret is never returned, so fix it at the provider and then:', `  almyty connections rotate ${c.id}`);
+    lines.push('', healthAdvice(c.health.status), '', 'The stored secret is never returned, so fix it at the provider and then:', `  almyty credentials rotate ${c.id}`);
   }
   return lines.join('\n');
 }
@@ -287,7 +291,7 @@ export function healthAdvice(status: string): string {
     case 'expired': return 'The stored secret has expired. Rotate to replace it.';
     case 'revoked': return 'The secret was revoked at the provider. Rotate to replace it.';
     case 'quota': return 'The credential is good but the account is out of quota or over its rate limit at the provider.';
-    case 'unknown': return 'Never checked against the provider. Run `almyty connections validate <id>`.';
+    case 'unknown': return 'Never checked against the provider. Run `almyty credentials validate <id>`.';
     default: return `Health is ${status}.`;
   }
 }
@@ -346,7 +350,7 @@ export function assertStdinIsPiped(flag: string): void {
   if (!process.stdin.isTTY) return;
   throw new UsageError(
     `${flag} reads stdin, and stdin is your terminal, so it would wait forever.\n` +
-    `  Pipe the JSON in:  cat fields.json | almyty connections <command> ${flag}\n` +
+    `  Pipe the JSON in:  cat fields.json | almyty credentials <command> ${flag}\n` +
     '  Or use --input-file <path>, or leave both off and be prompted.',
   );
 }
@@ -442,30 +446,32 @@ async function main(): Promise<void> {
   const post = (path: string, body: unknown) => q(path, { method: 'POST', body: JSON.stringify(body) });
 
   switch (args.command) {
+    case 'services':
     case 'connectors': {
       // Filtered by the API, so an unknown kind is an error instead of an
       // empty list that looks like "nothing can be connected".
       const kind = str(args.flags, 'kind');
-      const res = await q(`/connectors${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`);
-      out(args, res.data, () => (res.data.length ? res.data.map(formatConnector).join('\n') : `No connectors${kind ? ` of kind ${kind}` : ''}.`));
+      const res = await q(`/credentials/services${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`);
+      out(args, res.data, () => (res.data.length ? res.data.map(formatConnector).join('\n') : `No services${kind ? ` of kind ${kind}` : ''}.`));
       return;
     }
     case 'list': {
-      const res = await q('/connections');
-      out(args, res.data, () => (res.data.length ? res.data.map(formatConnection).join('\n') : 'No connections yet. Run: almyty connections connectors'));
+      const res = await q('/credentials');
+      out(args, res.data, () => (res.data.length ? res.data.map(formatConnection).join('\n') : 'No credentials yet. Run: almyty credentials services'));
       return;
     }
     case 'get': {
-      const id = needArg(args.positional, 0, 'connection id', 'get <id>');
-      const res = await q(`/connections/${id}`);
+      const id = needArg(args.positional, 0, 'credential id', 'get <id>');
+      const res = await q(`/credentials/${id}`);
       out(args, res.data, () => formatConnectionDetail(res.data));
       return;
     }
+    case 'add':
     case 'connect': {
-      const key = needArg(args.positional, 0, 'connector key', 'connect <connectorKey>');
-      const catalog = await q('/connectors');
+      const key = needArg(args.positional, 0, 'service key', 'add <service>');
+      const catalog = await q('/credentials/services');
       const connector = catalog.data.find((c: any) => c.key === key);
-      if (!connector) throw new UsageError(`unknown connector ${key}; run: almyty connections connectors`);
+      if (!connector) throw new UsageError(`unknown service ${key}; run: almyty credentials services`);
       const method = chooseMethod(connector, str(args.flags, 'method'));
       const isRedirect = isRedirectMethod(method.type);
       let input = await suppliedInput(args.flags, method.schema);
@@ -482,25 +488,25 @@ async function main(): Promise<void> {
       }
       const body = connectBody({ ...args.flags, method: method.type }, input);
       if (isRedirect) body.mode = connectMode(args.flags);
-      const res = await post(`/connections/connect/${key}`, body);
+      const res = await post(`/credentials/connect/${key}`, body);
       if (res.data?.authorizeUrl) {
         if (args.flags.json) console.log(JSON.stringify(res.data, null, 2));
         else console.log(pendingRedirectMessage(res.data, key));
         if (args.flags.open) await openInBrowser(res.data.authorizeUrl);
         return;
       }
-      out(args, res.data, () => `Connected.\n${formatConnection(res.data.connection ?? res.data)}`);
+      out(args, res.data, () => `Added.\n${formatConnection(res.data.connection ?? res.data)}`);
       return;
     }
     case 'complete': {
-      const key = needArg(args.positional, 0, 'connector key', 'complete <connectorKey> --state s --code c');
-      const res = await post(`/connections/connect/${key}/complete`, { state: need(args.flags, 'state'), code: need(args.flags, 'code') });
-      out(args, res.data, () => `Connected.\n${formatConnection(res.data.connection ?? res.data)}`);
+      const key = needArg(args.positional, 0, 'service key', 'complete <service> --state s --code c');
+      const res = await post(`/credentials/connect/${key}/complete`, { state: need(args.flags, 'state'), code: need(args.flags, 'code') });
+      out(args, res.data, () => `Added.\n${formatConnection(res.data.connection ?? res.data)}`);
       return;
     }
     case 'validate': {
-      const id = needArg(args.positional, 0, 'connection id', 'validate <id>');
-      const res = await post(`/connections/${id}/validate`, {});
+      const id = needArg(args.positional, 0, 'credential id', 'validate <id>');
+      const res = await post(`/credentials/${id}/validate`, {});
       const connection = res.data.connection ?? res.data;
       const status = connection.health?.status ?? 'unknown';
       out(args, connection, () => (status === 'valid'
@@ -512,53 +518,54 @@ async function main(): Promise<void> {
       return;
     }
     case 'rotate': {
-      const id = needArg(args.positional, 0, 'connection id', 'rotate <id>');
+      const id = needArg(args.positional, 0, 'credential id', 'rotate <id>');
       const supplied = await suppliedInput(args.flags, undefined, false);
       const body: Record<string, unknown> = {};
       if (supplied) body.input = supplied;
       if (args.flags.headless) body.mode = 'headless';
-      let res = await post(`/connections/${id}/rotate`, body);
+      let res = await post(`/credentials/${id}/rotate`, body);
       if (res.data?.authorizeUrl) {
         if (args.flags.json) console.log(JSON.stringify(res.data, null, 2));
-        else console.log(pendingRedirectMessage(res.data, res.data.connectorKey ?? '<connector>'));
+        else console.log(pendingRedirectMessage(res.data, res.data.connectorKey ?? '<service>'));
         if (args.flags.open) await openInBrowser(res.data.authorizeUrl);
         return;
       }
-      // A pasted-key connector answers a rotate with the form to fill in.
+      // A pasted-key service answers a rotate with the form to fill in.
       // Sending {} and reporting "Rotated." left the old secret in place.
       if (res.data?.pending && res.data.form) {
         const form = res.data.form;
         if (form.keyPageUrl) console.log(`Create the replacement key at: ${form.keyPageUrl}`);
         requireTty(`rotate ${id}`);
         const input = await promptForSchema(form.schema);
-        if (Object.keys(input).length === 0) throw new Error('nothing entered; the connection was left as it was');
-        res = await post(`/connections/${id}/rotate`, { input });
+        if (Object.keys(input).length === 0) throw new Error('nothing entered; the credential was left as it was');
+        res = await post(`/credentials/${id}/rotate`, { input });
       }
       out(args, res.data, () => `Rotated.\n${formatConnection(res.data.connection ?? res.data)}`);
       return;
     }
+    case 'delete':
     case 'disconnect': {
-      const id = needArg(args.positional, 0, 'connection id', 'disconnect <id>');
-      const res = await q(`/connections/${id}`, { method: 'DELETE' });
-      out(args, res?.data ?? { id, disconnected: true }, () => 'Disconnected.');
+      const id = needArg(args.positional, 0, 'credential id', 'delete <id>');
+      const res = await q(`/credentials/${id}`, { method: 'DELETE' });
+      out(args, res?.data ?? { id, deleted: true }, () => 'Deleted.');
       return;
     }
     case 'grants': {
-      const id = needArg(args.positional, 0, 'connection id', 'grants <id>');
-      const res = await q(`/connections/${id}/grants`);
-      out(args, res.data, () => (res.data.length ? res.data.map(formatGrant).join('\n') : 'No grants: only the owner (and org admins for org connections) can use it.'));
+      const id = needArg(args.positional, 0, 'credential id', 'grants <id>');
+      const res = await q(`/credentials/${id}/grants`);
+      out(args, res.data, () => (res.data.length ? res.data.map(formatGrant).join('\n') : 'No grants: only the owner (and org admins for org credentials) can use it.'));
       return;
     }
     case 'grant': {
-      const id = needArg(args.positional, 0, 'connection id', 'grant <id> --principal p --to id');
-      const res = await post(`/connections/${id}/grants`, grantBody(args.flags));
+      const id = needArg(args.positional, 0, 'credential id', 'grant <id> --principal p --to id');
+      const res = await post(`/credentials/${id}/grants`, grantBody(args.flags));
       out(args, res.data, () => `Granted.\n${formatGrant(res.data)}`);
       return;
     }
     case 'revoke': {
-      const id = needArg(args.positional, 0, 'connection id', 'revoke <id> <grantId>');
+      const id = needArg(args.positional, 0, 'credential id', 'revoke <id> <grantId>');
       const grantId = needArg(args.positional, 1, 'grant id', 'revoke <id> <grantId>');
-      const res = await q(`/connections/${id}/grants/${grantId}`, { method: 'DELETE' });
+      const res = await q(`/credentials/${id}/grants/${grantId}`, { method: 'DELETE' });
       out(args, res?.data ?? { id: grantId, revoked: true }, () => 'Revoked.');
       return;
     }
@@ -569,7 +576,7 @@ async function main(): Promise<void> {
   }
 }
 
-const invokedDirectly = process.argv[1] && /connections-cli|almyty-connections|dist\/index\.js|src\/index\.ts/.test(process.argv[1]) && !process.env.VITEST;
+const invokedDirectly = process.argv[1] && /credentials-cli|connections-cli|almyty-credentials|almyty-connections|dist\/index\.js|src\/index\.ts/.test(process.argv[1]) && !process.env.VITEST;
 if (invokedDirectly) {
   main().catch((err) => {
     console.error(describeError(err, process.env.ALMYTY_URL));

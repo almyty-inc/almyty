@@ -35,7 +35,7 @@ const apiKeyMethod = {
   },
 };
 
-describe('@almyty/connections', () => {
+describe('@almyty/credentials', () => {
   it('parses commands, positionals and flags', () => {
     expect(parseArgs(['revoke', 'c1', 'g1', '--json'])).toEqual({ command: 'revoke', positional: ['c1', 'g1'], flags: { json: true } });
   });
@@ -143,13 +143,13 @@ describe('@almyty/connections', () => {
 
   it('tells you to paste a code only when the flow finishes with a code', () => {
     const code = pendingRedirectMessage({ authorizeUrl: 'https://p/auth', state: 'st-1', completeWith: 'code', expiresInSeconds: 600 }, 'openrouter');
-    expect(code).toContain('almyty connections complete openrouter --state st-1 --code <code>');
+    expect(code).toContain('almyty credentials complete openrouter --state st-1 --code <code>');
     expect(code).toContain('10 minutes');
 
     const callback = pendingRedirectMessage({ authorizeUrl: 'https://p/auth', state: 'st-1', completeWith: 'callback' }, 'openrouter');
     // The state is consumed by the redirect, so `complete` cannot work here.
     expect(callback).not.toContain('--code');
-    expect(callback).toContain('almyty connections list');
+    expect(callback).toContain('almyty credentials list');
     expect(callback).toContain('--headless');
   });
 
@@ -188,7 +188,7 @@ describe('@almyty/connections', () => {
     expect(detail).toContain('models:read');
     expect(detail).toContain('invalid_api_key');
     expect(detail).toContain('checked 2026-09-17T10:00:00Z');
-    expect(detail).toContain('almyty connections rotate c1');
+    expect(detail).toContain('almyty credentials rotate c1');
 
     const healthy = formatConnectionDetail({ id: 'c2', connectorKey: 'huggingface', owner: 'user', health: { status: 'valid' } });
     expect(healthy).not.toContain('rotate c2');
@@ -197,7 +197,7 @@ describe('@almyty/connections', () => {
 
   it('says which argument is missing instead of sending the string "undefined" to the API', () => {
     expect(() => needArg([], 0, 'connection id', 'validate <id>')).toThrow(/connection id is required/);
-    expect(() => needArg([], 0, 'connection id', 'validate <id>')).toThrow(/almyty connections validate <id>/);
+    expect(() => needArg([], 0, 'connection id', 'validate <id>')).toThrow(/almyty credentials validate <id>/);
     expect(needArg(['c1'], 0, 'connection id', 'validate <id>')).toBe('c1');
   });
 });

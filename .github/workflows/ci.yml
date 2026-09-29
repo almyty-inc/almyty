@@ -217,6 +217,7 @@ jobs:
           - chat-cli
           - client
           - connections-cli
+          - credentials-cli
           - mcp-mux
           - mcp-server
           - models-cli

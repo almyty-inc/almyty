@@ -30,7 +30,7 @@ describe('subcommand table', () => {
     }
   });
 
-  it('lists every sibling CLI, models and connections included', () => {
+  it('lists every sibling CLI, models and credentials included', () => {
     const packages = new Set(Object.values(SUBCOMMANDS).map((s) => s.pkg));
     for (const expected of [
       '@almyty/auth',

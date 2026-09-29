@@ -218,12 +218,12 @@ async function main() {
     {
       name: 'almyty_add_provider',
       description:
-        'Add an LLM provider backed by an existing connection. Connect the vendor account first with `npx @almyty/connections connect <vendor>` and pass the connection id here. ' +
+        'Add an LLM provider backed by an existing credential. Add the vendor key first with `npx @almyty/credentials add <vendor>` and pass the credential id here. ' +
         'This tool deliberately does not take an API key: a key passed as a tool argument would be written into this conversation\'s transcript and the host editor\'s logs.',
       shape: {
         name: z.string().describe('Display name for the provider'),
         type: z.string().describe('Provider type (openai, anthropic, gemini, azure, bedrock, ...)'),
-        credentialId: z.string().describe('Id of an existing connection, from `npx @almyty/connections list`'),
+        credentialId: z.string().describe('Id of an existing credential, from `npx @almyty/credentials list`'),
       },
       run: (args) => proxy.addProvider({ name: args.name, type: args.type, credentialId: args.credentialId, configuration: {} }),
     },
@@ -400,7 +400,7 @@ Management tools (both modes), for building on almyty from your assistant:
 
   almyty_add_provider takes a connection id, never an API key: a key passed as
   a tool argument would land in the assistant's transcript and the editor's
-  logs. Make the connection first with \`npx @almyty/connections connect <vendor>\`.
+  logs. Add the credential first with \`npx @almyty/credentials add <vendor>\`.
 
 Authentication:
   npx @almyty/auth login              Browser-based login (one-time setup)

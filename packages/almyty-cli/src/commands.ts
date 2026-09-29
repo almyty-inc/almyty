@@ -44,7 +44,11 @@ export const SUBCOMMANDS: Record<string, Subcommand> = {
   chat: { pkg: '@almyty/chat', group: 'Agents', help: 'Interactive chat REPL with an agent' },
   skills: { pkg: '@almyty/skills', group: 'Skills', help: 'Install API skills into AI coding agents', subcommands: ['install', 'list', 'search', 'run', 'installed', 'remove', 'gateways', 'daemon', 'watch'] },
   models: { pkg: '@almyty/models', group: 'Platform', help: 'Model catalog: cards, validation, hosting' },
-  connections: { pkg: '@almyty/connections', group: 'Platform', help: 'Connect third-party accounts: connectors, validate, grants' },
+  // Both names run the published @almyty/connections (1.x), whose routes
+  // the backend still answers. Point them at @almyty/credentials once that
+  // name is on the registry and the lock can be regenerated against it.
+  credentials: { pkg: '@almyty/connections', group: 'Platform', help: 'Keys, tokens and accounts: add, check, share' },
+  connections: { pkg: '@almyty/connections', group: 'Platform', help: 'Older name of `almyty credentials`' },
   runner: { pkg: '@almyty/runner', group: 'Serving', help: 'Run agents on this machine as a daemon' },
   mcp: { pkg: '@almyty/mcp-server', group: 'Serving', help: 'Serve your agents and tools over MCP' },
   acp: { pkg: '@almyty/acp-server', group: 'Serving', help: 'Serve an agent over the Agent Client Protocol' },

@@ -112,7 +112,7 @@ almyty runner start --name laptop         # register this machine as a runner
 almyty completion zsh                     # shell completion; bash and fish too
 ```
 
-Each subcommand maps to a standalone npm package (`@almyty/auth`, `@almyty/agents`, `@almyty/chat`, `@almyty/models`, `@almyty/connections`, `@almyty/skills`, `@almyty/mcp-server`, `@almyty/acp-server`, `@almyty/runner`) and the umbrella delegates to whichever you call. See the [CLI docs](https://docs.almyty.com/cli/authentication) for the full reference.
+Each subcommand maps to a standalone npm package (`@almyty/auth`, `@almyty/agents`, `@almyty/chat`, `@almyty/models`, `@almyty/credentials`, `@almyty/skills`, `@almyty/mcp-server`, `@almyty/acp-server`, `@almyty/runner`) and the umbrella delegates to whichever you call. See the [CLI docs](https://docs.almyty.com/cli/authentication) for the full reference.
 
 **Scripting.** Every read command takes `--json` and writes nothing but JSON to stdout. Every CLI shares one exit-code table: `0` ok, `1` unexpected, `2` usage, `3` not authenticated, `4` not found, `5` the operation ran and failed — so a script can tell a stale login from a crash from an agent that ran and returned an error. `NO_COLOR` and `CI` are honoured, and `ALMYTY_NON_INTERACTIVE=1` blocks every prompt.
 

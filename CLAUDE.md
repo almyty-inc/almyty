@@ -91,7 +91,8 @@ packages/
 ├── auth-cli/          # @almyty/auth — browser-based login, token storage
 ├── agents-cli/        # @almyty/agents — list, run, inspect agents
 ├── models-cli/        # @almyty/models — model cards, validation, deployments
-├── connections-cli/   # @almyty/connections — connect third-party accounts, validate, grants
+├── credentials-cli/   # @almyty/credentials — keys, tokens and accounts: add, check, share
+├── connections-cli/   # @almyty/connections — old name, a thin alias of @almyty/credentials
 ├── chat-cli/          # @almyty/chat — interactive agent REPL
 ├── skills-cli/        # @almyty/skills — install API skills into 30 AI coding agents
 ├── mcp-server/        # @almyty/mcp-server — skill-first MCP proxy
