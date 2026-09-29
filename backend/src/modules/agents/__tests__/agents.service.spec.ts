@@ -221,7 +221,7 @@ describe('AgentsService', () => {
         name: 'Bad Agent',
         pipeline: {
           nodes: [
-            { id: 'llm_1', type: 'llm_call', config: {} },
+            { id: 'llm_1', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
             { id: 'output_1', type: 'output', config: {} },
           ],
           edges: [{ id: 'e1', source: 'llm_1', target: 'output_1' }],
@@ -241,7 +241,7 @@ describe('AgentsService', () => {
         pipeline: {
           nodes: [
             { id: 'input_1', type: 'input', config: {} },
-            { id: 'a', type: 'llm_call', config: {} },
+            { id: 'a', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
             { id: 'b', type: 'transform', config: {} },
             { id: 'output_1', type: 'output', config: {} },
           ],
@@ -427,7 +427,7 @@ describe('AgentsService', () => {
 
       const badPipeline: AgentPipeline = {
         nodes: [
-          { id: 'llm_1', type: 'llm_call', config: {} },
+          { id: 'llm_1', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
         ],
         edges: [],
       };
@@ -646,7 +646,7 @@ describe('AgentsService', () => {
     it('should validate pipeline before activating', async () => {
       const agent = makeAgent({
         pipeline: {
-          nodes: [{ id: 'llm_1', type: 'llm_call', config: {} }],
+          nodes: [{ id: 'llm_1', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } }],
           edges: [],
         },
       });
@@ -692,7 +692,7 @@ describe('AgentsService', () => {
       const pipeline: AgentPipeline = {
         nodes: [
           { id: 'input_1', type: 'input', config: {} },
-          { id: 'llm_1', type: 'llm_call', config: {} },
+          { id: 'llm_1', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
         ],
         edges: [
           { id: 'e1', source: 'input_1', target: 'llm_1' },
@@ -711,7 +711,7 @@ describe('AgentsService', () => {
       const pipeline: AgentPipeline = {
         nodes: [
           { id: 'input_1', type: 'input', config: {} },
-          { id: 'llm_1', type: 'llm_call', config: {} },
+          { id: 'llm_1', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
           { id: 'output_1', type: 'output', config: {} },
           { id: 'output_2', type: 'output', config: {} },
         ],
@@ -735,8 +735,8 @@ describe('AgentsService', () => {
         nodes: [
           { id: 'input_1', type: 'input', config: {} },
           { id: 'cond_1', type: 'condition', config: {}, data: { expression: '{{input.flag}}' } },
-          { id: 'llm_true', type: 'llm_call', config: {} },
-          { id: 'llm_false', type: 'llm_call', config: {} },
+          { id: 'llm_true', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
+          { id: 'llm_false', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
           { id: 'output_1', type: 'output', config: {} },
           { id: 'output_2', type: 'output', config: {} },
         ],
@@ -758,7 +758,7 @@ describe('AgentsService', () => {
         nodes: [
           { id: 'input_1', type: 'input', config: {} },
           { id: 'cond_1', type: 'condition', config: {}, data: { expression: '{{input.flag}}' } },
-          { id: 'llm_1', type: 'llm_call', config: {} },
+          { id: 'llm_1', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
           { id: 'output_1', type: 'output', config: {} },
         ],
         edges: [
@@ -777,7 +777,7 @@ describe('AgentsService', () => {
       const pipeline: AgentPipeline = {
         nodes: [
           { id: 'input_1', type: 'input', config: {} },
-          { id: 'llm_1', type: 'llm_call', config: {} },
+          { id: 'llm_1', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
           { id: 'merge_1', type: 'merge', config: {} },
           { id: 'output_1', type: 'output', config: {} },
         ],
@@ -809,7 +809,7 @@ describe('AgentsService', () => {
       const pipeline: AgentPipeline = {
         nodes: [
           { id: 'input_1', type: 'input', config: {} },
-          { id: 'llm_1', type: 'llm_call', config: {} },
+          { id: 'llm_1', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
           { id: 'dead_end', type: 'transform', config: {}, data: { expression: 'x' } },
           { id: 'output_1', type: 'output', config: {} },
         ],
@@ -828,7 +828,7 @@ describe('AgentsService', () => {
       const pipeline: AgentPipeline = {
         nodes: [
           { id: 'input_1', type: 'input', config: {} },
-          { id: 'llm_1', type: 'llm_call', config: {} },
+          { id: 'llm_1', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
           { id: 'output_1', type: 'output', config: {} },
           { id: 'output_2', type: 'output', config: {} },
         ],
@@ -853,7 +853,7 @@ describe('AgentsService', () => {
       const pipeline: AgentPipeline = {
         nodes: [
           { id: 'input_1', type: 'input', config: {} },
-          { id: 'input_1', type: 'llm_call', config: {} }, // duplicate
+          { id: 'input_1', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } }, // duplicate
           { id: 'output_1', type: 'output', config: {} },
         ],
         edges: [
@@ -869,8 +869,8 @@ describe('AgentsService', () => {
         nodes: [
           { id: 'input_1', type: 'input', config: {} },
           { id: 'par_1', type: 'parallel', config: {} },
-          { id: 'llm_1', type: 'llm_call', config: {} },
-          { id: 'llm_2', type: 'llm_call', config: {} },
+          { id: 'llm_1', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
+          { id: 'llm_2', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
           { id: 'merge_1', type: 'merge', config: {} },
           { id: 'output_1', type: 'output', config: {} },
         ],
@@ -973,8 +973,8 @@ describe('AgentsService', () => {
         nodes: [
           { id: 'input_1', type: 'input', config: {} },
           { id: 'cond_1', type: 'condition', config: {}, data: { expression: '{{input.flag}}' } },
-          { id: 'llm_true', type: 'llm_call', config: {} },
-          { id: 'llm_false', type: 'llm_call', config: {} },
+          { id: 'llm_true', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
+          { id: 'llm_false', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
           { id: 'output_1', type: 'output', config: {} },
           { id: 'output_2', type: 'output', config: {} },
         ],
@@ -1230,8 +1230,8 @@ describe('AgentsService', () => {
           nodes: [
             { id: 'input_1', type: 'input', config: {} },
             { id: 'par_1', type: 'parallel', config: {} },
-            { id: 'llm_1', type: 'llm_call', config: {} },
-            { id: 'llm_2', type: 'llm_call', config: {} },
+            { id: 'llm_1', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
+            { id: 'llm_2', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}' } },
             { id: 'merge_1', type: 'merge', config: {} },
             { id: 'output_1', type: 'output', config: {} },
           ],

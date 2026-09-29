@@ -6,6 +6,8 @@ import {
   validateQuestion,
 } from '../model-catalog/decide/decide-contract';
 
+/** A config string that says something: set, and not only whitespace. */
+const nonEmpty = (value: unknown): boolean => typeof value === 'string' && value.trim() !== '';
 @Injectable()
 export class AgentValidationHelper {
   validatePipeline(pipeline: AgentPipeline, agentId?: string): void {
@@ -85,6 +87,11 @@ export class AgentValidationHelper {
               `Condition node '${node.id}' outgoing edges must have sourceHandle 'true'/'false' (or 'yes'/'no'), found: ${handles.join(', ')}`,
             );
           }
+          if (!nonEmpty((node.data || node.config || {}).expression)) {
+            throw new BadRequestException(
+              `Condition node '${node.id}' must have an 'expression' in config (what it branches on)`,
+            );
+          }
           break;
         }
 
@@ -130,6 +137,36 @@ export class AgentValidationHelper {
           if (!toolData.toolId) {
             throw new BadRequestException(
               `Tool call node '${node.id}' must have 'toolId' in config`,
+            );
+          }
+          break;
+        }
+
+        // The config the executor cannot run without. Each of these used to
+        // save and then fail on its first run, on the node, with the same
+        // message this gives now -- so the refusal belongs here, where it
+        // costs nothing and the builder is still open.
+        case 'llm_call': {
+          const llmData = node.data || node.config || {};
+          if (!nonEmpty(llmData.userPromptTemplate) && !nonEmpty(llmData.userPrompt)) {
+            throw new BadRequestException(
+              `LLM call node '${node.id}' must have a 'userPromptTemplate' (the prompt it sends)`,
+            );
+          }
+          break;
+        }
+
+        case 'transform': {
+          if (!nonEmpty((node.data || node.config || {}).expression)) {
+            throw new BadRequestException(`Transform node '${node.id}' must have an 'expression' in config`);
+          }
+          break;
+        }
+
+        case 'loop': {
+          if (!nonEmpty((node.data || node.config || {}).iterableExpression)) {
+            throw new BadRequestException(
+              `Loop node '${node.id}' must have an 'iterableExpression' in config (the array to iterate)`,
             );
           }
           break;
@@ -446,7 +483,22 @@ export class AgentValidationHelper {
     }
 
     if (visited !== pipeline.nodes.length) {
-      const inCycle = pipeline.nodes.filter(n => !sorted.has(n.id)).map(n => `'${n.id}'`);
+      // What the sort never reached is the cycle AND everything downstream
+      // of it, so an output node after a loop was named as part of the loop.
+      // Peel off, repeatedly, whatever has no edge back into the remainder:
+      // what is left is only the nodes the cycle actually runs through.
+      const remaining = new Set(pipeline.nodes.filter(n => !sorted.has(n.id)).map(n => n.id));
+      let peeled = true;
+      while (peeled) {
+        peeled = false;
+        for (const id of [...remaining]) {
+          if (!(adjacencyList.get(id) || []).some(next => remaining.has(next))) {
+            remaining.delete(id);
+            peeled = true;
+          }
+        }
+      }
+      const inCycle = pipeline.nodes.filter(n => remaining.has(n.id)).map(n => `'${n.id}'`);
       throw new BadRequestException(
         `Pipeline contains a cycle through node(s) ${inCycle.join(', ')}. A pipeline runs ` +
           `each node once, in dependency order, so it cannot contain a loop back to an ` +
