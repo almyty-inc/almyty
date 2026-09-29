@@ -2,7 +2,7 @@
 
 A **channel** is how people, or other agents, reach one of your agents: a web chat on its own link, a chat widget on your own website, Slack, WhatsApp and the other messaging apps, an A2A endpoint other agents call, or a desktop or terminal app people download.
 
-Every agent has a **Channels** tab. It is the only place channels are added and edited. An agent can have as many channels as you like, and each channel belongs to exactly one agent.
+Every agent has a **Channels** tab. It is the only place channels are added and edited. An agent can have as many channels as you like, several of one kind among them (a Slack for support and a Slack for sales), and each channel belongs to exactly one agent. Each has a name of its own, which starts as its kind and can be changed on its page.
 
 ![An agent's Channels tab](/screenshots/apps-list.png)
 
@@ -23,14 +23,16 @@ Every agent has a **Channels** tab. It is the only place channels are added and 
 
 ## Adding a channel
 
-On the agent, open **Channels** and select **Add channel**, then pick the kind. The channel is added to the agent and its page opens. Nothing answers until you **publish** it (or, for a desktop or terminal app, build it): adding a channel records where the agent will be, publishing is the decision to let people reach it.
+On the agent, open **Channels** and select **Add channel**, then pick the kind. The channel is added to the agent and its page opens. A desktop app opens the agent's web chat, so picking **Desktop app** on an agent with no web chat offers to add the web chat as well. Nothing answers until you **publish** it (or, for a desktop or terminal app, build it): adding a channel records where the agent will be, publishing is the decision to let people reach it.
 
 A channel's page has what that channel needs and nothing else:
 
-- **Keys** for a messaging channel: enter them on the page, or pick a credential you already keep on Credentials. Keys entered on the page are kept as a credential too, encrypted, and are never shown again.
+- Its **name**, and for a web chat its **address**.
+- **Keys** for a messaging channel: pick a credential you keep on Credentials, or select **Create one here** to add one without leaving the page. Only credentials for that platform are offered.
+- **AI disclosure**: a switch, on by default, that tells people they are talking to an AI, with the line from the branding.
 - The **Callback URL** to paste into the platform's console, where the platform needs one. Telegram and the Twilio channels register it for you when you publish.
 - **Publish** and **Unpublish**. Unpublishing stops the channel answering and keeps its settings and address, so publishing again needs no re-registration on the platform side.
-- **Delete** removes the channel and stops it answering.
+- **Delete** removes the channel and the gateway it answers on, and stops it answering.
 
 A channel of an agent private to its owner cannot be added or published: share the agent with the organization first. A workflow agent cannot be published on a channel either, because it answers a call rather than a person; switch it to autonomous.
 

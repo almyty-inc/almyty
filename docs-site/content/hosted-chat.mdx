@@ -19,7 +19,7 @@ The channel changes to **Live** when the hosted chat is answering. Open `https:/
 
 ![The web chat channel after publishing](/screenshots/apps-web-published.png)
 
-The address is the channel's slug. It must be 3 to 63 characters, using lowercase letters, numbers, and hyphens without a hyphen at either end. Reserved service names cannot be used.
+The address is made from the agent's name, and you can change it under **Address** on the web chat's page. It is a web address every organization shares, so it has to be free across almyty; the page says so when another web chat has it. It must be 3 to 63 characters, using lowercase letters, numbers, and hyphens without a hyphen at either end. Reserved service names cannot be used.
 
 ### On the web chat page
 
@@ -105,7 +105,7 @@ Every channel an agent answers on (web chat, website widget, each messaging chan
 
 These are rate and cost limits for each visitor and for the agent, never one shared bucket built from a per-visitor number.
 
-When the agent reaches its daily or monthly spend limit, no channel sharing it answers a new message until the limit resets or you raise it. Visitors are told, in plain words, **This app has reached its limit for today** (or *for this month*): the web chat and the widget show it in place of a reply, a messaging channel sends it as the answer, and an A2A caller gets it with the code `APP_SPEND_CAP_REACHED`. The agent's Channels tab says the same thing with what it spent, and owners and admins get a notification once per period.
+When the agent reaches its daily or monthly spend limit, no channel sharing it answers a new message until the limit resets or you raise it. Visitors are told, in plain words, **This chat has reached its limit for today** (or *for this month*): the web chat and the widget show it in place of a reply, a messaging channel sends it as the answer, and an A2A caller gets it with the code `CHANNEL_SPEND_CAP_REACHED`. The agent's Channels tab says the same thing with what it spent, and owners and admins get a notification once per period.
 
 The spend limit counts the cost its channels' runs have recorded. A conversation already under way when the limit is reached finishes under its own per-run limit, so the agent can go over by at most one run's limit per conversation running at that moment. A conversation that stays open across midnight counts in full on each day it is active.
 

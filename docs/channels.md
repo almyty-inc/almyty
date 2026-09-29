@@ -1,6 +1,6 @@
 # Channels
 
-An agent's **Channels** tab (`/agents/:id?tab=channels`). It puts an agent someone has already built in front of people or other agents, under their own name: a hosted chat on its own address, a chat widget on their website, a Slack or WhatsApp presence, an A2A endpoint, a terminal command, a desktop app.
+An agent's **Channels** tab (`/agents/:id?tab=channels`). The agent's own API keys (for its API and the OpenAI-compatible endpoint) are on its Overview, next to the API snippets; a channel's keys are on that channel. It puts an agent someone has already built in front of people or other agents, under their own name: a hosted chat on its own address, a chat widget on their website, a Slack or WhatsApp presence, an A2A endpoint, a terminal command, a desktop app.
 
 ![An agent's Channels tab](../docs-site/public/screenshots/apps-list.png)
 
@@ -28,7 +28,7 @@ That is the part nobody else ships, so it is the part this subsystem is built ar
 
 The Channels tab is the only place a channel is added or edited: Share tools makes only a shared-tools gateway, the server refuses a web chat, widget, messaging or A2A gateway no channel publishes, and the gateway page links back to its channel.
 
-The tab is a DataTable of the agent's channels, with **Add channel** (`/agents/:id/channels/new`, a ChoiceTiles picker) and **Branding and visitor rules** (`/agents/:id/channels/settings`). A row opens the channel's page at `/agents/:id/channels/:channelId`, a FormPage holding its keys, publish state and type-specific sections. Signing credential creation has its own page beneath it at `/signing/new`. Gateways that serve the agent without being a channel (ACP, OpenAI-compatible) are listed under **Also served by gateways**.
+The tab is a DataTable of the agent's channels by name, with **Add channel** (`/agents/:id/channels/new`, a ChoiceTiles picker; picking a desktop app on an agent with no web chat offers, inline, to add both) and **Branding and visitor rules** (`/agents/:id/channels/settings`). A row opens the channel's page at `/agents/:id/channels/:channelId`, a FormPage holding its keys, publish state and type-specific sections. Signing credential creation has its own page beneath it at `/signing/new`. Gateways that serve the agent without being a channel (ACP, OpenAI-compatible) are listed under **Also served by gateways**.
 
 Entities: `agent-channel.entity.ts`, `app-build.entity.ts` (`channelId`, `agentId`).
 
@@ -59,7 +59,11 @@ Publishing is idempotent: doing it twice re-syncs the existing gateway rather th
 
 Publishing refuses what would otherwise produce a channel that is live and useless (`PUBLISH_REFUSALS`): a platform whose keys are absent (`REQUIRED_CREDENTIALS`, read off what each adapter actually uses), a workflow agent behind a chat surface, an agent private to its owner, and a desktop app with no web chat to open (`DESKTOP_NEEDS_WEB_CHAT`).
 
-Messaging channels take their keys on the channel page, entered there or picked from Credentials (`CredentialChoice`, `components/credentials/credential-choice.tsx`). Entered values never sit on the channel row: they go into one credential the channel manages (`metadata.managedBy.kind = 'agent_channel'`), the row keeps `credentialId` and `credentialKeys` (names only), every read shows them masked, and publishing hands the gateway the reference rather than a copy. Removing the channel deletes that credential; a picked credential is left alone.
+Messaging channels take their keys from Credentials only: the channel page has the shared `CredentialPicker` (`components/credentials/credential-picker.tsx`), which lists that platform's credentials (`channel-<type>` connectors, and `channel-slack-app` for a Slack app's Add to Slack credentials) and creates one in place. The row keeps `credentialId` and `credentialKeys` (secret names only) and a copy of the credential's plain settings (`channelSettingsIn`: a phone number, a receiving address), which routing and the publish check read from the row; they are read again from the credential on every publish. A key sent in a channel's configuration (by the API or the `add_channel` MCP tool) is refused, and a write drops any key the row holds. Deleting a channel leaves its credential on Credentials.
+
+Each channel has a `name`, unique among the agent's channels, so an agent can have several of one kind. A web chat's `slug` (its address) is generated from the agent's name and can be changed; it is a subdomain, so it is free across every organization and every hosted chat gateway (`freeSlug`).
+
+**AI disclosure.** Every channel people talk to (`carriesDisclosure`: web, widget, messaging) has a switch, `configuration.aiDisclosure`, on unless false. A messaging channel's gateway gets the effective branding line (or `true` for the default) as `aiDisclosure`, which `applyAiDisclosure` prefixes to the first reply; the web chat and widget read the switch live through `ownerOf`. Off is a removal of the disclosure: saving it needs the white-label entitlement (`DISCLOSURE_REMOVAL_NOT_ENTITLED`), refused on save as well as at publish because the web surfaces read it live.
 
 ![Slack published and live, with Unpublish instead of a silent fail](../docs-site/public/screenshots/apps-slack-live.png)
 
@@ -74,10 +78,6 @@ A gateway a channel stood up is found from `agent_channels.gatewayId` (`GET /gat
 ![The branded hosted chat surface](../docs-site/public/screenshots/apps-hosted-chat.png)
 
 Unpublishing **deactivates** the gateway rather than deleting it. Republishing keeps the same endpoint and whatever keys were attached, so taking a channel down for an afternoon does not mean re-registering a Slack app afterwards. Deleting a channel deletes its gateway.
-
-## Migration from apps
-
-`ChannelsOnTheAgent1750813742000` moved the earlier app model onto agents (`migrations/support/channels-on-the-agent.ts`). Each app place became a channel with the same id on `configuration.agentId`, else the app's first agent; a place with neither was skipped and logged. The first app (by creation) to reach an agent gave it its branding and visitor rules; a later app whose settings differ put them on its own channels as overrides, and each such conflict is logged. Gateways, managed credentials and builds were repointed to the channel. The `agent_apps` and `agent_app_distributions` tables were left in place and are no longer read.
 
 ## What stops a channel from shipping
 
@@ -107,7 +107,7 @@ A limit left empty is stored as null, not as zero. Zero would read as "no reques
 
 **Every channel runs under its policy.** `ChannelPolicyService` (gateways module) is the one place a web chat, widget, messaging channel or A2A call asks before a run: it resolves the channel and its agent from the gateway and hands the run options every channel starts with (`withChannelPolicy`): the effective per-run `costCapCents` as `maxCostCents`, `channelId` on the run, the channel's `gatewayId` on a new conversation (what retention and widget erasure find it by), and `metadata.appVisitor` with the effective `visitorMemory`, so a visitor with no end-user row (widget, channel, A2A) stays out of shared memory unless the agent opted in. Per-visitor shares are the web chat visitor, the widget thread, the channel sender and the A2A credential (`a2aCallerId`); `channel-policy.guard.spec.ts` reads the source so a new `startRun` on a channel cannot skip it.
 
-**Spend cap.** `dailySpendCapCents` and `monthlySpendCapCents` on the agent bound all of its channels together: a missing field is the default for the auth mode (open: 500 and 5000, SSO: none, `spendCapsFrom`), null is none. A channel that sets either in its own visitor rules gets an allowance of its own (`ownSpend`) and is left out of the agent's pool. The policy sums `agent_runs.totalCost` over the UTC day and month (by `updatedAt`, so a thread open across midnight is counted; index `IDX_agent_runs_channelId_updatedAt`), counting runs with `channelId` and, for the pool, runs from before the move that carry only `appId`. Reached, the web chat, widget and A2A answer 429 with the code `APP_SPEND_CAP_REACHED` (kept for clients) and "This app has reached its limit for today." (or "for this month."), a messaging channel sends that sentence as its reply without a run, owners and admins get one `budget.alert` notification per period, and `GET /agents/:agentId/public-settings/spend` drives the notice on the Channels tab.
+**Spend cap.** `dailySpendCapCents` and `monthlySpendCapCents` on the agent bound all of its channels together: a missing field is the default for the auth mode (open: 500 and 5000, SSO: none, `spendCapsFrom`), null is none. A channel that sets either in its own visitor rules gets an allowance of its own (`ownSpend`) and is left out of the agent's pool. The policy sums `agent_runs.totalCost` over the UTC day and month (by `updatedAt`, so a thread open across midnight is counted; index `IDX_agent_runs_channelId_updatedAt`), counting the runs stamped with a `channelId`. Reached, the web chat, widget and A2A answer 429 with the code `CHANNEL_SPEND_CAP_REACHED` and "This chat has reached its limit for today." (or "for this month."), a messaging channel sends that sentence as its reply without a run, owners and admins get one `budget.alert` notification per period, and `GET /agents/:agentId/public-settings/spend` drives the notice on the Channels tab.
 
 ## Custom domains
 
@@ -132,8 +132,6 @@ Everything knowable up front is checked before queueing rather than inside the j
 |---|---|---|---|---|
 | `tui` | `bun build --compile` | bare executable | `.exe` | bare executable |
 | `desktop` | `electron-builder` | `.AppImage` | NSIS `.exe` | `.app` in a `.zip` |
-
-`binary` compiled to byte-identical output to `tui` (same entry point, same invocation), so it is not offered as a channel type. A `binary` channel carried over from an app still builds; there is simply no reason to ask someone to choose between two names for one thing.
 
 Everything cross-compiles. A Linux x64 ELF and a macOS arm64 Mach-O both build on a macOS host, and vice versa. The one exception is a macOS `.dmg`, which needs Apple tooling; the desktop app ships a zipped `.app` instead, which any Mac opens.
 

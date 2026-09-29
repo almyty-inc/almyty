@@ -7,7 +7,7 @@ Agents are most useful where your users already are. Deploying an agent to a cha
 ## How a deployment works
 
 1. Open the agent, go to its **Channels** tab, select **Add channel** and pick a platform. The Channels tab is the one place an agent's channels are added and edited.
-2. Enter the platform keys from the table below, or pick a credential you already keep. They are stored as a credential, encrypted at rest like every other.
+2. Pick the credential that holds the platform keys from the table below, or select **Create one here** to add it on the spot. It is kept on Credentials, encrypted at rest like every other.
 3. Publish. The page shows your channel's inbound webhook URL with a copy button where the platform needs one pasted into its console; for Telegram and Twilio-backed channels the webhook is registered automatically where the platform supports it. Slack leads with **Add to Slack**: an install link any workspace can use.
 4. Send it a message from the platform. A bad token shows on the channel's page as missing or refused, instead of on the first missed message.
 
@@ -152,11 +152,11 @@ The widget's look is the agent's: its colour, name, greeting, theme and AI discl
 
 ## AI disclosure (EU AI Act Art. 50)
 
-A messaging channel can precede the first outbound message of each conversation with a disclosure line, when its gateway's `aiDisclosure` setting is on. By default the line is:
+Every messaging channel has an **AI disclosure** switch on its page, on by default. While it is on, the first outbound message of each conversation is preceded by the disclosure line from the agent's branding (or the channel's own), by default:
 
 > You are chatting with an AI assistant.
 
-The text can be changed per channel. If you deploy agents to the public in the EU, turn this on; Article 50 of the AI Act requires that people be informed they are interacting with an AI system. See [Compliance](/compliance) for the full mapping.
+Change the line under **Branding and visitor rules**. Turning the switch off needs the white-label entitlement: Article 50 of the AI Act requires that people be informed they are interacting with an AI system. See [Compliance](/compliance) for the full mapping.
 
 The [hosted chat app](/hosted-chat) is the exception: it shows the disclosure by default, and removing it needs an entitlement and is recorded.
 
