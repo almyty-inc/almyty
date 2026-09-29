@@ -74,13 +74,13 @@ describe('NotificationsController', () => {
 
   it('POST /notifications/:id/read returns {success} and scopes to the caller', async () => {
     const res = await controller.read(req, 'n-1');
-    expect(service.markRead).toHaveBeenCalledWith('user-1', 'n-1');
+    expect(service.markRead).toHaveBeenCalledWith('user-1', 'n-1', undefined);
     expect(res).toEqual({ success: true });
   });
 
   it('POST /notifications/read-all returns {success}', async () => {
     const res = await controller.readAll(req);
-    expect(service.markAllRead).toHaveBeenCalledWith('user-1');
+    expect(service.markAllRead).toHaveBeenCalledWith('user-1', undefined);
     expect(res).toEqual({ success: true });
   });
 

@@ -162,8 +162,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         message = message.join('; ');
       }
 
-      // Set WWW-Authenticate header on 401 responses (per HTTP/A2A/UTCP specs)
-      if (status === 401 && (exception as any).wwwAuthenticate) {
+      // Set WWW-Authenticate on 401 (per HTTP/A2A/UTCP specs) and on a 403
+      // insufficient_scope refusal (RFC 6750 §3.1)
+      if ((status === 401 || status === 403) && (exception as any).wwwAuthenticate) {
         response.setHeader('WWW-Authenticate', (exception as any).wwwAuthenticate);
       }
     } else if (exception instanceof QueryFailedError) {

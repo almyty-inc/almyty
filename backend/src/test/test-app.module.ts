@@ -64,6 +64,8 @@ import { ApiSchema } from '../entities/api-schema.entity';
 // Auth
 import { AuthController } from '../modules/auth/auth.controller';
 import { AuthService } from '../modules/auth/auth.service';
+import { AuthSessionService } from '../modules/auth/auth-session.service';
+import { AuthSession } from '../entities/auth-session.entity';
 import { ReferralsService } from '../modules/referrals/referrals.service';
 import { JwtStrategy } from '../modules/auth/strategies/jwt.strategy';
 import { ApiKeyStrategy } from '../modules/auth/strategies/api-key.strategy';
@@ -207,7 +209,7 @@ const mockRedis = {
       Agent, AgentExecution, AgentRun,
       CanonicalMemory, CanonicalMemoryWorkspaceConfig, CanonicalMemorySoftcapWarning,
       AgentFile, ExternalAgent,
-      ToolTemplate, JsonSchema, ApiSchema,
+      ToolTemplate, JsonSchema, ApiSchema, AuthSession,
     ]),
 
     ThrottlerModule.forRoot({ throttlers: [{ ttl: 60, limit: 1000 }] }),
@@ -234,6 +236,7 @@ const mockRedis = {
   providers: [
     // Auth
     AuthService,
+    AuthSessionService,
     JwtStrategy,
     ApiKeyStrategy,
     LocalStrategy,

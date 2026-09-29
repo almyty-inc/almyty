@@ -40,7 +40,7 @@ describe('OAuth consent GET session validation', () => {
   function helperFor(user: Record<string, any>) {
     const users = fakeRepository<any>([{ tokenVersion: 0, isActive: true, ...user }]);
     // Constructing the strategy registers it with passport, as AuthModule does.
-    new JwtStrategy(config, users as any);
+    new JwtStrategy(config, users as any, fakeRepository() as any);
     return new McpOAuthResolveHelper(fakeRepository() as any, fakeRepository() as any, config);
   }
 

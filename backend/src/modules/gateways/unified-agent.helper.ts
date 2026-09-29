@@ -25,6 +25,9 @@ import { ExecutionPrincipal, userPrincipal } from '../../common/authorization/ex
 import { hasEffectiveMembership } from '../../common/authorization/membership';
 import { User } from '../../entities/user.entity';
 import { keyUserIsMember } from '../agents/compat-auth.helper';
+import { AuthSession } from '../../entities/auth-session.entity';
+import { isSessionLive } from '../auth/auth-session.service';
+import { isAccessTokenPayload } from '../auth/token-kinds';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -243,7 +246,17 @@ export class UnifiedAgentHelper {
           relations: { organizationMemberships: true },
         })
       : null;
-    if (!user || !user.isActive || (payload.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+    // The token must be an access token of a session that is still live:
+    // refresh and email-verification tokens are signed with the same secret,
+    // and a logged-out session's token has not expired yet.
+    if (
+      !user ||
+      !user.isActive ||
+      (payload.tv ?? 0) !== (user.tokenVersion ?? 0) ||
+      !isAccessTokenPayload(payload) ||
+      (payload.sid !== undefined &&
+        !(await isSessionLive(this.apiKeyRepository.manager.getRepository(AuthSession), payload.sid, user.id)))
+    ) {
       throw new HttpException(
         { success: false, message: 'Invalid API key or JWT', error: 'AGENT_AUTH_INVALID' },
         HttpStatus.UNAUTHORIZED,

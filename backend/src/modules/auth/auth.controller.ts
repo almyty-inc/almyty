@@ -28,6 +28,7 @@ import { Request as ExpressRequest, Response } from 'express';
 import { AuthService } from './auth.service';
 import { assertMayChangeLoginEmail } from './sso-session';
 import { LocalAuthGuard } from './guards/local-auth.guard';
+import { AccountThrottle, AccountThrottleGuard } from './guards/account-throttle.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
@@ -160,7 +161,11 @@ export class AuthController {
   // account. Attackers are slowed to 2/min per IP; legitimate
   // users with a typo have plenty of headroom.
   @Throttle({ default: { limit: 10, ttl: 5 * 60 * 1000 } })
-  @UseGuards(LocalAuthGuard)
+  // Per account as well: a spray spread over many IPs stays under every
+  // per-IP bucket while hammering one login. The account guard runs first,
+  // so a blocked attempt costs no password hash.
+  @AccountThrottle({ name: 'login', limit: 10, ttlMs: 15 * 60 * 1000 })
+  @UseGuards(AccountThrottleGuard, LocalAuthGuard)
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
@@ -239,11 +244,19 @@ export class AuthController {
     };
   }
 
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Logout and clear auth cookie' })
+  @ApiOperation({ summary: 'Logout: end the session and clear the auth cookie' })
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
-  async logout(@Res({ passthrough: true }) res: Response) {
+  async logout(@Req() req: ExpressRequest, @Res({ passthrough: true }) res: Response) {
+    // End the server-side session first, so the token stops working
+    // everywhere, not just in this browser. The cookie is the web client's
+    // token; a programmatic client sends the same token as a bearer.
+    const bearer = req.headers.authorization?.startsWith('Bearer ')
+      ? req.headers.authorization.slice('Bearer '.length)
+      : undefined;
+    await this.authService.logout(req.cookies?.access_token ?? bearer);
     res.clearCookie('access_token', { path: '/' });
 
     return {
@@ -407,6 +420,10 @@ export class AuthController {
   // effects via SMTP metrics or timing) and a spam vector for
   // the outbound mail relay.
   @Throttle({ default: { limit: 5, ttl: 60 * 60 * 1000 } })
+  // And per account, so spreading the requests over many IPs does not
+  // turn one mailbox into a spam target.
+  @AccountThrottle({ name: 'forgot-password', limit: 3, ttlMs: 60 * 60 * 1000 })
+  @UseGuards(AccountThrottleGuard)
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset' })
@@ -578,6 +595,8 @@ export class AuthController {
   // this keys off the email. Non-enumerating (always the same neutral
   // response) and tightly throttled since it sends outbound mail.
   @Throttle({ default: { limit: 5, ttl: 60 * 60 * 1000 } })
+  @AccountThrottle({ name: 'resend-verification', limit: 3, ttlMs: 60 * 60 * 1000 })
+  @UseGuards(AccountThrottleGuard)
   @Post('resend-verification-email')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Re-send the verification link addressed by email (unauthenticated)' })

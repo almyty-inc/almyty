@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { JwtStrategy } from './jwt.strategy';
 import { User } from '../../../entities/user.entity';
+import { AuthSession } from '../../../entities/auth-session.entity';
 
 describe('JwtStrategy', () => {
   let strategy: JwtStrategy;
@@ -28,6 +29,10 @@ describe('JwtStrategy', () => {
         {
           provide: getRepositoryToken(User),
           useValue: mockUserRepository,
+        },
+        {
+          provide: getRepositoryToken(AuthSession),
+          useValue: { count: jest.fn().mockResolvedValue(1) },
         },
       ],
     }).compile();

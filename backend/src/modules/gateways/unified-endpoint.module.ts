@@ -17,7 +17,7 @@ import { AgentsModule } from '../agents/agents.module';
 import { A2AModule } from '../a2a/a2a.module';
 import { AcpModule } from '../acp/acp.module';
 import { ToolsModule } from '../tools/tools.module';
-import { DEV_ONLY_JWT_SECRET } from '../auth/dev-jwt-secret';
+import { jwtSecretOrDevFallback } from '../auth/dev-jwt-secret';
 
 /**
  * Unified endpoint module — MUST be imported LAST in AppModule
@@ -30,8 +30,8 @@ import { DEV_ONLY_JWT_SECRET } from '../auth/dev-jwt-secret';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET', DEV_ONLY_JWT_SECRET),
-        verifyOptions: { issuer: 'almyty', audience: 'almyty-api' },
+        secret: jwtSecretOrDevFallback(config.get<string>('JWT_SECRET'), 'UnifiedEndpointModule'),
+        verifyOptions: { issuer: 'almyty', audience: 'almyty-api', algorithms: ['HS256'] },
       }),
     }),
     forwardRef(() => McpModule),

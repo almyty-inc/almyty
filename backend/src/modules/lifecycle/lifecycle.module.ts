@@ -11,7 +11,7 @@ import { OnboardingModule } from '../onboarding/onboarding.module';
 import { LifecycleEmailService } from './lifecycle-email.service';
 import { LifecycleController } from './lifecycle.controller';
 import { LifecycleEmailProcessor, LIFECYCLE_EMAIL_QUEUE } from './lifecycle-email.processor';
-import { DEV_ONLY_JWT_SECRET } from '../auth/dev-jwt-secret';
+import { jwtSecretOrDevFallback } from '../auth/dev-jwt-secret';
 
 /**
  * New-signup activation lifecycle emails (welcome + up to 3 nudges).
@@ -31,18 +31,12 @@ import { DEV_ONLY_JWT_SECRET } from '../auth/dev-jwt-secret';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const secret = config.get<string>('JWT_SECRET');
-        if (!secret && process.env.NODE_ENV === 'production') {
-          throw new Error(
-            'JWT_SECRET environment variable is required in production. ' +
-              'Refusing to start the lifecycle module with an undefined signing key.',
-          );
-        }
+        const secret = jwtSecretOrDevFallback(config.get<string>('JWT_SECRET'), 'LifecycleModule');
         return {
-          secret: secret || DEV_ONLY_JWT_SECRET,
+          secret,
           // No expiresIn: an unsubscribe link should keep working forever.
-          signOptions: { issuer: 'almyty', audience: 'almyty-api' },
-          verifyOptions: { issuer: 'almyty', audience: 'almyty-api' },
+          signOptions: { issuer: 'almyty', audience: 'almyty-api', algorithm: 'HS256' },
+          verifyOptions: { issuer: 'almyty', audience: 'almyty-api', algorithms: ['HS256'] },
         };
       },
     }),

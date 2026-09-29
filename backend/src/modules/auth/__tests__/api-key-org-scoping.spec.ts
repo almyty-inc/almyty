@@ -8,6 +8,7 @@ import { CaptchaService } from '../captcha.service';
 import { ApiKey } from '../../../entities/api-key.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { User } from '../../../entities/user.entity';
+import { AuthSessionService } from '../auth-session.service';
 import { UserOrganization, OrganizationRole } from '../../../entities/user-organization.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { MailService } from '../../mail/mail.service';
@@ -110,6 +111,7 @@ describe('api key organization scoping', () => {
         },
         { provide: MailService, useValue: { send: jest.fn() } },
         { provide: ReferralsService, useValue: { attributeSignup: jest.fn() } },
+        { provide: AuthSessionService, useValue: { start: jest.fn(async () => ({ id: 's', refreshJti: 'j', ssoOrganizationId: null })) } },
         {
           provide: CaptchaService,
           useValue: { isEnabled: jest.fn().mockReturnValue(false), verify: jest.fn() },

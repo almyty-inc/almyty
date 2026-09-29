@@ -429,6 +429,9 @@ export class McpOAuthController {
   // POST /:orgSlug/:gatewaySlug/token
   // ---------------------------------------------------------------------------
   @Post(':orgSlug/:gatewaySlug/token')
+  // Tighter than the global limit: this is where client secrets, codes and
+  // refresh tokens are presented, and a real client needs a handful a minute.
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @Header('Content-Type', 'application/json')
   @Header('Cache-Control', 'no-store')

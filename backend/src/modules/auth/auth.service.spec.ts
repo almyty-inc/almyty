@@ -7,6 +7,7 @@ import * as bcrypt from 'bcryptjs';
 
 import { AuthService, JwtPayload } from './auth.service';
 import { User } from '../../entities/user.entity';
+import { AuthSessionService } from './auth-session.service';
 import { ApiKey } from '../../entities/api-key.entity';
 import { Organization } from '../../entities/organization.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
@@ -27,6 +28,7 @@ describe('AuthService', () => {
   let organizationRepository: jest.Mocked<Repository<Organization>>;
   let userOrganizationRepository: jest.Mocked<Repository<UserOrganization>>;
   let jwtService: jest.Mocked<JwtService>;
+  let authSessions: any;
   let referralsService: any;
   let captchaService: any;
   let auditLogService: any;
@@ -136,6 +138,18 @@ describe('AuthService', () => {
           useValue: { sendPasswordReset: jest.fn().mockResolvedValue(true), sendInvitation: jest.fn().mockResolvedValue(true), sendEmailVerification: jest.fn().mockResolvedValue(true), send: jest.fn().mockResolvedValue(true) },
         },
         {
+          provide: AuthSessionService,
+          useValue: {
+            start: jest.fn(async (_userId: string, options: any = {}) => ({
+              id: 'sess-1',
+              refreshJti: 'jti-1',
+              ssoOrganizationId: options.ssoOrganizationId ?? null,
+            })),
+            rotate: jest.fn(async () => ({ id: 'sess-1', refreshJti: 'jti-2', ssoOrganizationId: null })),
+            revoke: jest.fn(),
+          },
+        },
+        {
           provide: ReferralsService,
           useValue: { attributeSignup: jest.fn().mockResolvedValue(null) },
         },
@@ -157,6 +171,7 @@ describe('AuthService', () => {
     organizationRepository = module.get(getRepositoryToken(Organization));
     userOrganizationRepository = module.get(getRepositoryToken(UserOrganization));
     jwtService = module.get(JwtService);
+    authSessions = module.get(AuthSessionService);
     mailService = module.get(MailService);
     referralsService = module.get(ReferralsService);
     captchaService = module.get(CaptchaService);
@@ -678,6 +693,31 @@ describe('AuthService', () => {
       expect(result).toBeNull();
     });
 
+    // The response time must not say whether an address has an account:
+    // an unknown, inactive or password-less account costs the same
+    // cost-12 bcrypt comparison a real one does.
+    it.each([
+      ['unknown address', null],
+      ['inactive account', { id: 'u', email: 'x@example.com', isActive: false, passwordHash: '$2b$12$abcdefghijklmnopqrstuuMPbBc5fyGT2Ce0fq5SX5HPWAkfKzkE2' }],
+      ['account without a password', { id: 'u', email: 'x@example.com', isActive: true, passwordHash: null }],
+    ])('spends a cost-12 bcrypt comparison on an %s', async (_label, row) => {
+      // What one real comparison costs on this machine, right now.
+      const realHash = await bcrypt.hash('some-password', 12);
+      let started = performance.now();
+      await bcrypt.compare('wrong-password', realHash);
+      const oneComparison = performance.now() - started;
+
+      userRepository.findOne.mockResolvedValue(row as any);
+      started = performance.now();
+      const result = await service.validateUser('x@example.com', 'password');
+      const elapsed = performance.now() - started;
+
+      expect(result).toBeNull();
+      // Without the dummy comparison this path returned in well under a
+      // millisecond; half a real comparison leaves room for scheduler noise.
+      expect(elapsed).toBeGreaterThan(oneComparison * 0.5);
+    });
+
     it('should return null for inactive user', async () => {
       const mockUser = {
         id: 'user-123',
@@ -877,13 +917,26 @@ describe('AuthService', () => {
       } as any;
       userRepository.findOne.mockResolvedValue(mockUser);
 
-      const result = await service.refreshToken(signTestJwt({ sub: 'user-1', type: 'refresh' }));
-
-      const jwt = realJwtService();
-      expect(jwt.verify(result.accessToken)).toEqual(expect.objectContaining({ sub: 'user-1' }));
-      expect(jwt.verify(result.refreshToken)).toEqual(
-        expect.objectContaining({ sub: 'user-1', type: 'refresh', tv: 0 }),
+      const result = await service.refreshToken(
+        signTestJwt({ sub: 'user-1', type: 'refresh', sid: 'sess-1', jti: 'jti-1' }, { audience: 'almyty-refresh' }),
       );
+
+      // The session's current refresh id was redeemed, and the new pair
+      // continues the same session with the rotated id.
+      expect(authSessions.rotate).toHaveBeenCalledWith('sess-1', 'user-1', 'jti-1');
+      const jwt = realJwtService();
+      expect(jwt.verify(result.accessToken)).toEqual(expect.objectContaining({ sub: 'user-1', sid: 'sess-1' }));
+      expect(jwt.verify(result.refreshToken)).toEqual(
+        expect.objectContaining({ sub: 'user-1', type: 'refresh', tv: 0, sid: 'sess-1', jti: 'jti-2', aud: 'almyty-refresh' }),
+      );
+    });
+
+    it('refuses a refresh token signed for the access audience', async () => {
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', isActive: true, organizationMemberships: [] } as any);
+      await expect(
+        service.refreshToken(signTestJwt({ sub: 'user-1', type: 'refresh', sid: 'sess-1', jti: 'jti-1' }, { audience: 'almyty-api' })),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(authSessions.rotate).not.toHaveBeenCalled();
     });
 
     it('should throw error for invalid token type', async () => {
@@ -1124,17 +1177,19 @@ describe('AuthService', () => {
   });
 
   describe('resetPassword', () => {
-    it('should initiate password reset for existing user', async () => {
+    it('stores only the hash of the token it mails', async () => {
       const mockUser = { id: 'user-1', email: 'test@example.com' } as any;
       userRepository.findOne.mockResolvedValue(mockUser);
-      userRepository.save.mockResolvedValue(mockUser);
 
       await service.resetPassword('test@example.com');
 
-      expect(userRepository.save).toHaveBeenCalled();
-      expect(mockUser.resetPasswordToken).toBeDefined();
-      expect(mockUser.resetPasswordExpires).toBeDefined();
       expect(mailService.sendPasswordReset).toHaveBeenCalledWith('test@example.com', expect.any(String));
+      const mailed = (mailService.sendPasswordReset as jest.Mock).mock.calls[0][1];
+      const [where, columns] = (userRepository.update as jest.Mock).mock.calls[0];
+      expect(where).toEqual({ id: 'user-1' });
+      expect(columns.resetPasswordToken).toBe(AuthService.hashResetToken(mailed));
+      expect(columns.resetPasswordToken).not.toBe(mailed);
+      expect(columns.resetPasswordExpires).toBeInstanceOf(Date);
     });
 
     it('should not reveal if user does not exist', async () => {
@@ -1142,7 +1197,7 @@ describe('AuthService', () => {
 
       await service.resetPassword('nonexistent@example.com');
 
-      expect(userRepository.save).not.toHaveBeenCalled();
+      expect(userRepository.update).not.toHaveBeenCalled();
       expect(mailService.sendPasswordReset).not.toHaveBeenCalled();
     });
   });
@@ -1155,31 +1210,37 @@ describe('AuthService', () => {
 
       const mockUser = {
         id: 'user-1',
-        resetPasswordToken: 'valid-token',
+        resetPasswordToken: AuthService.hashResetToken('valid-token'),
         resetPasswordExpires: futureDate,
       } as any;
 
-      let savedUser: any;
       userRepository.findOne.mockResolvedValue(mockUser);
-      userRepository.save.mockImplementation((user) => {
-        savedUser = user;
-        return Promise.resolve(user as any);
-      });
 
       await service.confirmPasswordReset('valid-token', newPassword);
 
-      expect(savedUser.resetPasswordToken).toBeNull();
-      expect(savedUser.resetPasswordExpires).toBeNull();
-      expect(userRepository.save).toHaveBeenCalled();
+      // Looked up by the hash, consumed only while the hash is still there.
+      expect(userRepository.findOne).toHaveBeenCalledWith({
+        where: { resetPasswordToken: AuthService.hashResetToken('valid-token') },
+      });
+      const [where, columns] = (userRepository.update as jest.Mock).mock.calls[0];
+      expect(where).toEqual({ id: 'user-1', resetPasswordToken: AuthService.hashResetToken('valid-token') });
+      expect(columns.resetPasswordToken).toBeNull();
+      expect(columns.resetPasswordExpires).toBeNull();
+      expect(columns.tokenVersion).toBe(1); // revokes existing sessions
+      expect(await bcrypt.compare(newPassword, columns.passwordHash)).toBe(true);
+    });
 
-      // Verify new password was hashed
-      expect(savedUser.passwordHash).toBeDefined();
-      expect(savedUser.passwordHash).not.toBe(newPassword);
-      expect(savedUser.tokenVersion).toBe(1); // revokes existing sessions
+    it('refuses the loser of two simultaneous submissions of one link', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        resetPasswordToken: AuthService.hashResetToken('valid-token'),
+        resetPasswordExpires: new Date(Date.now() + 60_000),
+      } as any);
+      (userRepository.update as jest.Mock).mockResolvedValueOnce({ affected: 0 });
 
-      // Verify the hash is valid
-      const isPasswordValid = await bcrypt.compare(newPassword, savedUser.passwordHash);
-      expect(isPasswordValid).toBe(true);
+      await expect(service.confirmPasswordReset('valid-token', 'NewSecurePassword123!')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should throw error for expired token', async () => {
@@ -1278,23 +1339,6 @@ describe('AuthService', () => {
   });
 
   describe('verifyEmail', () => {
-    it('should verify email successfully', async () => {
-      const mockUser = {
-        id: 'user-1',
-        verificationToken: 'valid-token',
-        isVerified: false,
-      } as any;
-
-      userRepository.findOne.mockResolvedValue(mockUser);
-      userRepository.save.mockResolvedValue({ ...mockUser, isVerified: true, verificationToken: null } as any);
-
-      await service.verifyEmail('valid-token');
-
-      expect(mockUser.isVerified).toBe(true);
-      expect(mockUser.verificationToken).toBeNull();
-      expect(userRepository.save).toHaveBeenCalled();
-    });
-
     it('should throw error for invalid verification token', async () => {
       userRepository.findOne.mockResolvedValue(null);
 
@@ -1378,6 +1422,7 @@ describe('AuthService email verification', () => {
       audit,
       mail,
       referrals,
+      { start: jest.fn(async () => ({ id: 'sess-1', refreshJti: 'jti-1', ssoOrganizationId: null })) } as any,
       captcha,
       overrides.notifications,
     );
@@ -1413,7 +1458,7 @@ describe('AuthService email verification', () => {
       await expect(svc.verifyEmail('signed-token')).rejects.toThrow(BadRequestException);
     });
 
-    it('falls back to the legacy DB-token path when the value is not a JWT', async () => {
+    it('does not look a value that is not a signed token up in the plaintext column', async () => {
       const { svc, userRepo, jwt } = makeDirect();
       jwt.verify.mockImplementation(() => {
         throw new Error('jwt malformed');
@@ -1421,11 +1466,20 @@ describe('AuthService email verification', () => {
       const user: any = { id: 'u1', isVerified: false, verifiedAt: null, verificationToken: 'db-token' };
       userRepo.findOne.mockResolvedValue(user);
 
-      await svc.verifyEmail('db-token');
+      await expect(svc.verifyEmail('db-token')).rejects.toThrow(BadRequestException);
 
-      expect(userRepo.findOne).toHaveBeenCalledWith({ where: { verificationToken: 'db-token' } });
-      expect(user.verifiedAt).toBeInstanceOf(Date);
-      expect(user.isVerified).toBe(true);
+      expect(userRepo.findOne).not.toHaveBeenCalled();
+      expect(user.verifiedAt).toBeNull();
+    });
+
+    it('verifies only with the email-verification audience', async () => {
+      const { svc, userRepo, jwt } = makeDirect();
+      jwt.verify.mockReturnValue({ sub: 'u1', email: 'a@example.com', purpose: 'email_verify' });
+      userRepo.findOne.mockResolvedValue({ id: 'u1', email: 'a@example.com', verifiedAt: null });
+
+      await svc.verifyEmail('signed-token');
+
+      expect(jwt.verify).toHaveBeenCalledWith('signed-token', { audience: 'almyty-email-verify' });
     });
 
     it('rejects empty and unknown tokens', async () => {
@@ -1456,7 +1510,7 @@ describe('AuthService email verification', () => {
       expect(result.alreadyVerified).toBe(false);
       expect(jwt.sign).toHaveBeenCalledWith(
         { sub: 'u1', email: 'a@example.com', purpose: 'email_verify' },
-        { expiresIn: '7d' },
+        { expiresIn: '7d', audience: 'almyty-email-verify' },
       );
       expect(mail.sendEmailVerification).toHaveBeenCalledWith('a@example.com', 'signed-token', 'Ada');
     });

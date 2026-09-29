@@ -4,12 +4,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
 import { User } from '../../../entities/user.entity';
+import { AuthSession } from '../../../entities/auth-session.entity';
 import { OrganizationRole } from '../../../entities/user-organization.entity';
 import { AuthController } from '../auth.controller';
 import { AuthService } from '../auth.service';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { LocalAuthGuard } from '../guards/local-auth.guard';
 import { JwtStrategy } from '../strategies/jwt.strategy';
+import { ThrottlerStorage } from '@nestjs/throttler';
 
 /**
  * The "double login": sign in, watch the dashboard paint, get bounced
@@ -104,11 +106,13 @@ describe('the profile org list is exactly what JwtStrategy accepts', () => {
       providers: [
         JwtStrategy,
         { provide: AuthService, useValue: {} },
+        { provide: ThrottlerStorage, useValue: { increment: jest.fn(async () => ({ isBlocked: false })) } },
         { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('test-secret') } },
         {
           provide: getRepositoryToken(User),
           useValue: { findOne: jest.fn().mockResolvedValue(user) },
         },
+        { provide: getRepositoryToken(AuthSession), useValue: { count: jest.fn().mockResolvedValue(1) } },
       ],
     })
       .overrideGuard(LocalAuthGuard)
