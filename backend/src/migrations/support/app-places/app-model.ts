@@ -1,4 +1,4 @@
-import { GatewayType } from '../../entities/gateway.entity';
+import { GatewayType } from '../../../entities/gateway.entity';
 
 /**
  * The app model as the migrations of 2026-09 knew it, frozen.

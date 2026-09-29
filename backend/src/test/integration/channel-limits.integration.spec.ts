@@ -143,6 +143,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
         organizationId: org.id,
         agentId: agent.id,
         type: target,
+        name: String(target),
         status: ChannelStatus.LIVE,
         slug: target === DistributionTarget.WEB ? slug : null,
         configuration: {},
@@ -379,8 +380,8 @@ run('channel limits and visitor rights (real Postgres)', () => {
       const first = await refusal(post(app.slug));
       expect(first.status).toBe(429);
       expect(first.body).toMatchObject({
-        code: 'APP_SPEND_CAP_REACHED',
-        message: 'This app has reached its limit for today.',
+        code: 'CHANNEL_SPEND_CAP_REACHED',
+        message: 'This chat has reached its limit for today.',
         period: 'day',
       });
       await refusal(post(app.slug, '198.51.100.9'));
@@ -402,7 +403,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
       });
       await spend(app, 1.5);
       const refused = await refusal(post(app.slug));
-      expect(refused.body).toMatchObject({ code: 'APP_SPEND_CAP_REACHED', message: 'This app has reached its limit for this month.' });
+      expect(refused.body).toMatchObject({ code: 'CHANNEL_SPEND_CAP_REACHED', message: 'This chat has reached its limit for this month.' });
     });
 
     it('does not count another agent, or a run no channel started, against this one', async () => {
@@ -464,7 +465,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
       const { app, gateway } = await place(DistributionTarget.WIDGET, GatewayType.CHAT_WIDGET);
       await spend(app, 6);
       const refused = await refusal(post(gateway.id));
-      expect(refused.body).toMatchObject({ code: 'APP_SPEND_CAP_REACHED', message: 'This app has reached its limit for today.' });
+      expect(refused.body).toMatchObject({ code: 'CHANNEL_SPEND_CAP_REACHED', message: 'This chat has reached its limit for today.' });
       expect(runtime.startRun).not.toHaveBeenCalled();
     });
 
@@ -556,7 +557,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
       expect(runtime.startRun).not.toHaveBeenCalled();
       expect(telegram.sendResponse).toHaveBeenCalledWith(
         expect.anything(),
-        { text: 'This app has reached its limit for today.' },
+        { text: 'This chat has reached its limit for today.' },
         expect.objectContaining({ threadId: 'chat-dave', userId: 'dave' }),
       );
     });
@@ -640,7 +641,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
       });
       await spend(app, 5);
       const refused = await refusal(call(gateway, 'key-c'));
-      expect(refused).toMatchObject({ status: 429, body: { code: 'APP_SPEND_CAP_REACHED', message: 'This app has reached its limit for today.' } });
+      expect(refused).toMatchObject({ status: 429, body: { code: 'CHANNEL_SPEND_CAP_REACHED', message: 'This chat has reached its limit for today.' } });
       expect(runtime.startRun).not.toHaveBeenCalled();
     });
   });

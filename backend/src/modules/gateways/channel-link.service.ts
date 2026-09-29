@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import { Agent } from '../../entities/agent.entity';
 import { AgentChannel, ChannelType } from '../../entities/agent-channel.entity';
 import type { Gateway } from '../../entities/gateway.entity';
-import { effectiveBranding, effectiveVisitorRules } from '../agent-channels/channel-rules';
+import { carriesDisclosure, disclosureOn, effectiveBranding, effectiveVisitorRules } from '../agent-channels/channel-rules';
 import { hostedChatBlockFor } from './channels/hosted-chat.config';
 
 /** The channel a gateway answers for, with the agent it belongs to. */
@@ -77,9 +77,15 @@ export class ChannelLinkService {
 /** What a hosted chat reads about the channel that owns it: its resolved branding and rules. */
 export function ownerOf(channel: LinkedChannel) {
   const rules = effectiveVisitorRules(channel.agent, channel);
+  const branding = effectiveBranding(channel.agent, channel);
+  // The channel's AI disclosure switch. Only an org that may remove the
+  // disclosure can store it off (the channel service refuses otherwise), so
+  // off here is a removal the org is entitled to: an empty line.
+  const disclosureOff = carriesDisclosure(channel.type) && !disclosureOn(channel.configuration);
   return {
     name: channel.agent.name,
-    branding: effectiveBranding(channel.agent, channel),
+    branding: disclosureOff ? { ...branding, aiDisclosure: '' } : branding,
+    disclosureOff,
     authMode: rules.authMode,
     privacy: rules.privacy,
   };

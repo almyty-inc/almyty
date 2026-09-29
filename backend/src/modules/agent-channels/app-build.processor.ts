@@ -167,7 +167,7 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
       const extension = artifactExtension(build.target, build.platform, macPackaging);
       const outfile = join(workDir, extension ? `app.${extension}` : 'app');
 
-      if (build.target === 'tui' || build.target === 'binary') {
+      if (build.target === 'tui') {
         // The entry point is ours, not the customer's: an app is
         // configuration over a client we ship, so no customer-authored
         // code enters this compile.

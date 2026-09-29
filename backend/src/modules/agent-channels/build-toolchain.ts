@@ -113,9 +113,8 @@ export class ProcessToolchainRunner implements ToolchainRunner {
 /** How a target reads to a person, rather than the enum value. */
 export const TARGET_LABEL: Record<string, string> = {
   tui: 'Terminal app',
-  binary: 'Standalone binary',
   desktop: 'Desktop app',
-  web: 'Web app',
+  web: 'Web chat',
 };
 
 /** The human name for a target, falling back to the raw value. */
@@ -126,7 +125,6 @@ export function targetLabel(target: string): string {
 /** Which tool produces which target. */
 export const TOOL_FOR_TARGET: Record<string, string> = {
   tui: 'bun',
-  binary: 'bun',
   // electron-builder runs from the shell's lockfile install when there
   // is one and through npx (pinned) otherwise; readiness asks for npx,
   // the one of the two a host must carry.

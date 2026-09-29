@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-import { wrapUnownedPlaces } from './legacy/wrap-unowned-places';
+import { wrapUnownedPlaces } from './support/app-places/wrap-unowned-places';
 
 /**
  * The gateway types this migration wraps, as they were when it was

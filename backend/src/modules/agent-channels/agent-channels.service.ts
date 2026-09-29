@@ -8,7 +8,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Not, Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 
 import { Agent } from '../../entities/agent.entity';
 import {
@@ -19,7 +19,6 @@ import {
   VisitorRules,
   isChannelType,
 } from '../../entities/agent-channel.entity';
-import { CredentialType } from '../../entities/credential.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { assertManageable, assertReadable } from '../../common/authorization/read-rule';
@@ -27,7 +26,6 @@ import { GatewaysService } from '../gateways/gateways.service';
 import { OrgLicenseResolver } from '../licensing/org-license.resolver';
 import { EE_ENTITLEMENTS } from '../licensing/license.constants';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
-import { channelConnectorKey } from '../gateways/channels/channel-credential.service';
 import { channelSecretKeysIn } from '../gateways/channels/channel-config.helper';
 import { ChannelPolicyService, SpendStatus } from '../gateways/channel-policy.service';
 import {
@@ -38,8 +36,13 @@ import {
   buildVersionError,
   channelSlugError,
   channelSlugFromName,
+  CHANNEL_REFUSALS,
+  carriesDisclosure,
+  channelNameError,
   checkChannel,
   defaultBundleId,
+  defaultChannelName,
+  disclosureOn,
   effectiveBranding,
   effectiveVisitorRules,
   isPackagedType,
@@ -55,7 +58,7 @@ import {
   gatewayNameFor,
   rateLimitFor,
 } from './channel-publish';
-import { channelManagedBy, splitChannelSecrets } from './channel-secrets';
+import { channelSettingsIn, splitChannelSecrets } from './channel-secrets';
 
 /** Who is asking: the signed-in user. */
 export interface Caller {
@@ -65,6 +68,8 @@ export interface Caller {
 /** What adding a channel takes. */
 export interface AddChannelInput {
   type: ChannelType;
+  /** What the owner calls it. The type's label, numbered when taken, when left out. */
+  name?: string | null;
   /** The web chat's address, or a download's file name. Made from the agent's name when left out. */
   slug?: string | null;
   configuration?: Record<string, any>;
@@ -76,6 +81,9 @@ export interface AddChannelInput {
 
 /** What changing a channel takes. Every field optional; null on an override clears it. */
 export interface UpdateChannelInput {
+  name?: string;
+  /** A web chat's address. */
+  slug?: string;
   configuration?: Record<string, any>;
   credentialId?: string | null;
   branding?: ChannelBranding | null;
@@ -91,8 +99,8 @@ export interface PublicSettingsInput {
 /** What the channel page shows: the row, where it answers, and what it resolves to. */
 export type ChannelView = AgentChannel & {
   endpoint: string;
-  /** Its keys come from a credential picked on Credentials, not keys entered on the channel. */
-  credentialPicked: boolean;
+  /** Whether this organization may turn the AI disclosure off (the white-label entitlement). */
+  disclosureRemovable: boolean;
   effective: {
     branding: ReturnType<typeof effectiveBranding>;
     visitorRules: Omit<ReturnType<typeof effectiveVisitorRules>, 'ownSpend'> & { ownSpend: boolean };
@@ -233,24 +241,11 @@ export class AgentChannelsService {
   }
 
   private async views(agent: Agent, channels: AgentChannel[]): Promise<ChannelView[]> {
-    const gatewayIds = channels.map((c) => c.gatewayId).filter((id): id is string => !!id);
-    const gateways = gatewayIds.length
-      ? await this.gatewayRepository.find({ where: { id: In(gatewayIds) }, select: { id: true, endpoint: true } })
-      : [];
-    const endpoints = new Map(gateways.map((g) => [g.id, g.endpoint]));
-    // Whether a channel's keys come from a credential picked on Credentials
-    // rather than keys entered on the channel (kept in one it manages).
-    const picked = new Set<string>();
-    for (const channel of channels) {
-      const credentialId = channel.configuration?.credentialId;
-      if (typeof credentialId !== 'string' || !credentialId || !this.credentialRefs) continue;
-      const row = await this.credentialRefs.load(channel.organizationId, credentialId).catch(() => null);
-      if (row && !CredentialRefResolver.isManagedBy(row, channelManagedBy(channel.id))) picked.add(channel.id);
-    }
+    const disclosureRemovable = channels.length ? (await this.entitlements(agent.organizationId)).hasWhiteLabel === true : false;
     return channels.map((channel) =>
       Object.assign(channel, {
-        endpoint: (channel.gatewayId && endpoints.get(channel.gatewayId)) || endpointFor(channel),
-        credentialPicked: picked.has(channel.id),
+        endpoint: endpointFor(channel),
+        disclosureRemovable,
         effective: {
           branding: effectiveBranding(agent, channel),
           visitorRules: effectiveVisitorRules(agent, channel),
@@ -266,10 +261,11 @@ export class AgentChannelsService {
     if (agent.visibility === 'private') throw new BadRequestException(PUBLISH_REFUSALS.AGENT_PRIVATE);
 
     const slug = SLUGGED_CHANNEL_TYPES.includes(input.type) ? await this.freeSlug(agent, input.type, input.slug) : null;
-    const incoming = splitChannelSecrets(input.configuration ?? {});
+    const name = await this.freeName(agent, input.type, input.name);
     const overrides = this.normalizedOverrides(input);
 
-    let configuration: Record<string, any> = { ...incoming.publicConfig };
+    let configuration: Record<string, any> = this.withoutKeys(input.configuration);
+    await this.assertDisclosureSwitch(agent, input.type, configuration);
     // A new desktop or terminal app starts with a bundle id made from its
     // address and opens the agent's first web chat, so the first build
     // needs nothing typed in.
@@ -288,6 +284,7 @@ export class AgentChannelsService {
         agentId,
         type: input.type,
         status: ChannelStatus.DRAFT,
+        name,
         slug,
         gatewayId: null,
         configuration,
@@ -295,15 +292,8 @@ export class AgentChannelsService {
       }),
     );
 
-    // The managed credential names the channel, so the row is saved first
-    // and then pointed at the credential.
-    if (input.credentialId) {
-      configuration = await this.useCredential(agent, created, input.credentialId, caller);
-    } else if (Object.keys(incoming.secrets).length > 0) {
-      await this.storeSecrets(agent, created, incoming.secrets, []);
-      configuration = created.configuration ?? {};
-    }
-    created.configuration = configuration;
+    if (!input.credentialId) return (await this.views(agent, [created]))[0];
+    created.configuration = await this.useCredential(agent, created, input.credentialId, caller);
     const saved = await this.channelRepository.save(created);
     return (await this.views(agent, [saved]))[0];
   }
@@ -318,28 +308,34 @@ export class AgentChannelsService {
     const agent = await this.manageableAgent(organizationId, agentId, caller);
     const channel = await this.channelOf(organizationId, agent, channelId);
     const overrides = this.normalizedOverrides(input);
+    if (input.name !== undefined && input.name.trim() !== channel.name) {
+      channel.name = await this.freeName(agent, channel.type, input.name, channel.id);
+    }
+    if (input.slug !== undefined && input.slug.trim().toLowerCase() !== channel.slug) {
+      // Only a web chat's address is the owner's to choose: a download's
+      // file name follows its App ID and build.
+      if (channel.type !== ChannelType.WEB) throw new BadRequestException('Only a web chat has an address to change.');
+      channel.slug = await this.freeSlug(agent, channel.type, input.slug, channel);
+    }
     if ('branding' in overrides) channel.branding = overrides.branding ?? null;
     if ('visitorRules' in overrides) channel.visitorRules = overrides.visitorRules ?? null;
 
     if (input.configuration !== undefined) {
       // Merged rather than replaced, so a caller that sends one field does
       // not drop the others. Clearing a field is done by sending it empty.
-      // A secret still inline on an older row moves to the store here.
-      const incoming = splitChannelSecrets(input.configuration);
-      const stored = splitChannelSecrets(channel.configuration);
+      const incoming = this.withoutKeys(input.configuration);
+      await this.assertDisclosureSwitch(agent, channel.type, incoming);
+      // A key never stays on the row, whatever wrote it there.
       channel.configuration = {
-        ...stored.publicConfig,
+        ...splitChannelSecrets(channel.configuration).publicConfig,
+        ...incoming,
         ...this.credentialReference(channel.configuration),
-        ...incoming.publicConfig,
       };
-      if (input.credentialId === undefined) {
-        await this.storeSecrets(agent, channel, { ...stored.secrets, ...incoming.secrets }, incoming.cleared);
-      }
     }
     if (input.credentialId !== undefined) {
       channel.configuration = input.credentialId
         ? await this.useCredential(agent, channel, input.credentialId, caller)
-        : await this.dropCredential(channel);
+        : this.dropCredential(channel);
     }
 
     const saved = await this.channelRepository.save(channel);
@@ -356,10 +352,8 @@ export class AgentChannelsService {
       const gateway = await this.gatewayRepository.findOne({ where: { id: channel.gatewayId, organizationId } });
       if (gateway) await this.gateways.deleteGateway(gateway.id, organizationId, caller.id);
     }
+    // The credential it used stays on Credentials: it is the org's, not the channel's.
     await this.channelRepository.remove(channel);
-    // Its managed keys go with it. A credential picked from Credentials is
-    // not its to delete, and releaseManaged leaves that alone.
-    await this.credentialRefs?.releaseManaged(organizationId, channel.configuration?.credentialId, channelManagedBy(channelId));
   }
 
   /** Whether the channel may go live or be built, and if not, why. */
@@ -387,6 +381,24 @@ export class AgentChannelsService {
     return result;
   }
 
+  /**
+   * Turning a channel's AI disclosure off is removing it, which only an
+   * org with the white-label entitlement may do (EU AI Act Art. 50). It is
+   * refused when saved, not only at publish, because the hosted chat and
+   * the widget read the switch live.
+   */
+  private async assertDisclosureSwitch(agent: Agent, type: ChannelType, configuration: Record<string, any>): Promise<void> {
+    if (configuration.aiDisclosure === undefined) return;
+    if (typeof configuration.aiDisclosure !== 'boolean') throw new BadRequestException('The AI disclosure switch is on or off.');
+    if (!carriesDisclosure(type)) {
+      delete configuration.aiDisclosure;
+      return;
+    }
+    if (configuration.aiDisclosure === false && !(await this.entitlements(agent.organizationId)).hasWhiteLabel) {
+      throw new BadRequestException(CHANNEL_REFUSALS.DISCLOSURE_REMOVAL_NOT_ENTITLED);
+    }
+  }
+
   private async entitlements(organizationId: string): Promise<ChannelContext> {
     const has = async (key: string) => {
       try {
@@ -410,6 +422,9 @@ export class AgentChannelsService {
     const agent = await this.manageableAgent(organizationId, agentId, caller);
     const channel = await this.channelOf(organizationId, agent, channelId);
 
+    // Keys a picked credential holds are read fresh, so a change made on
+    // Credentials since it was picked is what goes live.
+    await this.refreshFromCredential(channel);
     const product = await this.checkOf(agent, channel);
     const publish = checkPublish(channel.type, agent);
     const refusals = [...product.refusals, ...publish.refusals];
@@ -489,22 +504,34 @@ export class AgentChannelsService {
    * subdomain, so it must be free across every organization; a download's
    * is only a file name.
    */
-  private async freeSlug(agent: Agent, type: ChannelType, wanted?: string | null): Promise<string> {
+  private async freeSlug(
+    agent: Agent,
+    type: ChannelType,
+    wanted?: string | null,
+    /** The web chat being renamed: its own address and gateway do not count as taken. */
+    self?: Pick<AgentChannel, 'id' | 'gatewayId'>,
+  ): Promise<string> {
     const taken = async (slug: string) => {
       if (type !== ChannelType.WEB) return false;
-      const channel = await this.channelRepository.count({ where: { type: ChannelType.WEB, slug } });
+      const channel = await this.channelRepository.count({
+        where: { type: ChannelType.WEB, slug, ...(self ? { id: Not(self.id) } : {}) },
+      });
       if (channel > 0) return true;
-      const gateway = await this.gatewayRepository
+      const gateways = this.gatewayRepository
         .createQueryBuilder('gateway')
-        .where("gateway.configuration::jsonb -> 'hostedChat' ->> 'slug' = :slug", { slug })
-        .getCount();
-      return gateway > 0;
+        .where("gateway.configuration::jsonb -> 'hostedChat' ->> 'slug' = :slug", { slug });
+      if (self?.gatewayId) gateways.andWhere('gateway.id != :own', { own: self.gatewayId });
+      return (await gateways.getCount()) > 0;
     };
     if (wanted !== undefined && wanted !== null && wanted !== '') {
       const slug = wanted.trim().toLowerCase();
       const error = channelSlugError(slug);
       if (error) throw new BadRequestException(error);
-      if (await taken(slug)) throw new ConflictException('That address is taken. Pick another.');
+      // The address is a subdomain every organization shares, so it has to
+      // be free everywhere, not only in this organization.
+      if (await taken(slug)) {
+        throw new ConflictException(`${slug} is already taken as a web chat address. Pick another.`);
+      }
       return slug;
     }
     const used = new Set<string>();
@@ -517,6 +544,29 @@ export class AgentChannelsService {
     return candidate;
   }
 
+  /**
+   * A name none of the agent's other channels has. Asked for: used as it
+   * is, or refused when another channel has it. Not asked for: the type's
+   * label, numbered when taken.
+   */
+  private async freeName(agent: Agent, type: ChannelType, wanted?: string | null, selfId?: string): Promise<string> {
+    const siblings = await this.channelRepository.find({
+      where: { organizationId: agent.organizationId, agentId: agent.id },
+      select: { id: true, name: true },
+    });
+    const names = new Set(siblings.filter((c) => c.id !== selfId).map((c) => (c.name ?? '').toLowerCase()));
+    if (wanted === undefined || wanted === null || (wanted === '' && !selfId)) {
+      return defaultChannelName(type, (name) => names.has(name.toLowerCase()));
+    }
+    const error = channelNameError(wanted);
+    if (error) throw new BadRequestException(error);
+    const name = wanted.trim();
+    if (names.has(name.toLowerCase())) {
+      throw new ConflictException(`${agent.name} already has a channel called ${name}. Pick another name.`);
+    }
+    return name;
+  }
+
   /** `credentialId` / `credentialKeys` of a stored configuration, the only server-owned keys it keeps. */
   private credentialReference(configuration: Record<string, any> | null | undefined): Record<string, any> {
     const id = configuration?.credentialId;
@@ -525,9 +575,25 @@ export class AgentChannelsService {
   }
 
   /**
+   * Platform settings, with no key in them. Keys are a credential on
+   * Credentials, picked by `credentialId`; one sent inline is refused
+   * rather than stored on the row.
+   */
+  private withoutKeys(configuration: Record<string, any> | null | undefined): Record<string, any> {
+    const { secrets, cleared, publicConfig } = splitChannelSecrets(configuration ?? {});
+    const keys = [...Object.keys(secrets), ...cleared];
+    if (keys.length > 0) {
+      throw new BadRequestException(
+        `Platform keys (${keys.join(', ')}) go in a credential on Credentials. Pick it with credentialId.`,
+      );
+    }
+    return publicConfig;
+  }
+
+  /**
    * Take the platform keys from a credential on Credentials. It must be
    * this organization's and usable by whoever this channel's gateway runs
-   * as; the channel's own managed keys, if it had any, are released.
+   * as.
    */
   private async useCredential(
     agent: Agent,
@@ -547,91 +613,56 @@ export class AgentChannelsService {
         teamId: agent.teamId ?? null,
         noun: 'channel',
       },
-      { actorId: caller.id, managedBy: channelManagedBy(channel.id) },
+      { actorId: caller.id },
     );
-    const previous = channel.configuration?.credentialId;
-    if (previous && previous !== credential.id) {
-      await this.credentialRefs.releaseManaged(channel.organizationId, previous, channelManagedBy(channel.id));
-    }
     return {
       ...(channel.configuration ?? {}),
+      ...channelSettingsIn(credential.config),
       credentialId: credential.id,
       credentialKeys: channelSecretKeysIn(credential.config),
     };
   }
 
-  /** Stop using a credential: release it when the channel made it, and clear the reference. */
-  private async dropCredential(channel: AgentChannel): Promise<Record<string, any>> {
-    const { credentialId, credentialKeys: _keys, ...rest } = channel.configuration ?? {};
-    await this.credentialRefs?.releaseManaged(channel.organizationId, credentialId, channelManagedBy(channel.id));
-    return rest;
-  }
-
   /**
-   * Put typed platform keys in the channel's managed credential: rotated
-   * in place when it has one, created when not. A credential picked from
-   * Credentials is never written to; typing keys replaces it with one of
-   * the channel's own. Mutates the channel's configuration.
+   * Read a picked credential again: its secret key names, and the plain
+   * settings (a phone number, a receiving address) copied onto the channel,
+   * which routing and the publish check read from the row.
    */
-  private async storeSecrets(
-    agent: Agent,
-    channel: AgentChannel,
-    secrets: Record<string, string>,
-    cleared: string[],
-  ): Promise<void> {
-    const secretKeys = Object.keys(secrets);
-    if (secretKeys.length === 0 && cleared.length === 0) return;
-    if (!this.credentialRefs) {
-      // Failing closed: the alternative is writing the secret onto the row.
-      throw new ServiceUnavailableException('The credential store is not available, so platform keys cannot be saved.');
-    }
-    const organizationId = channel.organizationId;
-    const managedBy = channelManagedBy(channel.id);
-    const currentId = channel.configuration?.credentialId;
-    const current =
-      typeof currentId === 'string' && currentId
-        ? await this.credentialRefs.load(organizationId, currentId).catch(() => null)
-        : null;
-
-    let row;
-    if (current && CredentialRefResolver.isManagedBy(current, managedBy)) {
-      const patch: Record<string, string> = { ...secrets };
-      for (const key of cleared) if (!(key in patch)) patch[key] = '';
-      row = await this.credentialRefs.rotateManaged(organizationId, current.id, { config: patch, secretKeys, managedBy });
-    } else if (secretKeys.length > 0) {
-      const gatewayType = GATEWAY_TYPE_FOR_CHANNEL[channel.type];
-      row = await this.credentialRefs.createManaged(organizationId, {
-        name: `${agent.name} ${channel.type} channel`,
-        description: `Platform keys of the ${channel.type} channel of agent ${agent.name}`,
-        type: CredentialType.CUSTOM,
-        config: secrets,
-        secretKeys,
-        connectorKey: gatewayType ? channelConnectorKey(gatewayType) : null,
-        managedBy,
-      });
-    } else {
-      return;
-    }
+  private async refreshFromCredential(channel: AgentChannel): Promise<void> {
+    const id = channel.configuration?.credentialId;
+    if (typeof id !== 'string' || !id || !this.credentialRefs) return;
+    const credential = await this.credentialRefs.load(channel.organizationId, id).catch(() => null);
+    if (!credential) return;
     channel.configuration = {
       ...(channel.configuration ?? {}),
-      credentialId: row.id,
-      credentialKeys: channelSecretKeysIn(row.config),
+      ...channelSettingsIn(credential.config),
+      credentialKeys: channelSecretKeysIn(credential.config),
     };
+  }
+
+  /** Stop using a credential: the reference goes; the credential stays on Credentials. */
+  private dropCredential(channel: AgentChannel): Record<string, any> {
+    const { credentialId: _id, credentialKeys: _keys, ...rest } = channel.configuration ?? {};
+    return rest;
   }
 
   /** Create or re-sync the gateway a channel answers on. */
   private async upsertGateway(agent: Agent, channel: AgentChannel, caller: Caller, activate: boolean): Promise<Gateway> {
     const rules = effectiveVisitorRules(agent, channel);
+    // The switch turns the disclosure off only where the org may remove it;
+    // publishing refuses otherwise, and this holds on a re-sync too.
+    const off = !disclosureOn(channel.configuration) && (await this.entitlements(agent.organizationId)).hasWhiteLabel;
+    const disclosure = off ? false : (effectiveBranding(agent, channel).aiDisclosure ?? '');
     return this.gateways.upsertForChannel(
       {
-        name: gatewayNameFor(agent.name, channel.type),
+        name: gatewayNameFor(agent.name, channel.name),
         description: agent.description ?? undefined,
         type: GATEWAY_TYPE_FOR_CHANNEL[channel.type]!,
         agentId: agent.id,
         endpoint: endpointFor(channel),
         // The platform keys (by reference) and, for the web chat, the
         // address block it is looked up by. Branding is read live.
-        configuration: gatewayConfigurationFor(channel, rules.authMode),
+        configuration: gatewayConfigurationFor(channel, rules.authMode, disclosure),
         rateLimitConfig: rateLimitFor(rules.limits, channel.type),
         // A channel serves only what its own scope covers, so a team agent
         // is published through a gateway scoped to that team.

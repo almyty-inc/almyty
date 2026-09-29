@@ -29,6 +29,12 @@ export class AddChannelBodyDto {
   @IsEnum(ChannelType)
   type: ChannelType;
 
+  @ApiPropertyOptional({ description: "What to call it, unique among the agent's channels. The type's label when left out." })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  name?: string;
+
   @ApiPropertyOptional({ description: "The web chat's address, or a download's file name. Made from the agent's name when left out." })
   @IsOptional()
   @IsString()
@@ -60,6 +66,18 @@ export class AddChannelBodyDto {
 }
 
 export class UpdateChannelBodyDto {
+  @ApiPropertyOptional({ description: "What to call it, unique among the agent's channels" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  name?: string;
+
+  @ApiPropertyOptional({ description: "A web chat's address. Free across every organization, since it is a subdomain." })
+  @IsOptional()
+  @IsString()
+  @MaxLength(63)
+  slug?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsObject()

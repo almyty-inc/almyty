@@ -1,7 +1,7 @@
 import { Client } from 'pg';
 
 import { EveryWidgetAndA2aHasAnApp1750812900000 } from '../../migrations/1750812900000-EveryWidgetAndA2aHasAnApp';
-import { AppAuthMode, defaultLimitsFor } from '../../migrations/legacy/app-model';
+import { AppAuthMode, defaultLimitsFor } from '../../migrations/support/app-places/app-model';
 
 /**
  * The EveryWidgetAndA2aHasAnApp migration against a real Postgres: every

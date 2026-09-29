@@ -6,7 +6,6 @@ import { Credential } from '../../../entities/credential.entity';
 import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
 import { fakeRepository, type FakeRepository } from '../../../test/fake-repository';
 import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
-import { decryptField, isEncrypted } from '../../../common/security/field-crypto';
 import { MASKED_CHANNEL_SECRET } from '../../gateways/channels/channel-config.helper';
 import { splitChannelSecrets } from '../channel-secrets';
 import { publicChannel } from '../agent-channels.controller';
@@ -25,6 +24,9 @@ describe('AgentChannelsService', () => {
   const ORG = 'org-1';
   const ME = { id: 'user-1' };
   const SLACK = { bot_token: 'xoxb-live-1', signing_secret: 'sign-live-1' };
+  /** A Slack credential on Credentials, as a channel picks it. */
+  const slackCredential = (id = 'cred-slack') =>
+    credentials.seed({ id, organizationId: ORG, name: 'Our Slack', config: { bot_token: 'enc', signing_secret: 'enc' }, visibility: 'org', isActive: true, metadata: {} } as any);
 
   let agents: FakeRepository<any>;
   let channels: FakeRepository<AgentChannel>;
@@ -54,6 +56,7 @@ describe('AgentChannelsService', () => {
         let slug = '';
         const qb: any = {
           where: (_sql: string, params: any) => ((slug = params.slug), qb),
+          andWhere: () => qb,
           getCount: async () => (hostedChatSlugsTaken.includes(slug) ? 1 : 0),
         };
         return qb;
@@ -89,7 +92,6 @@ describe('AgentChannelsService', () => {
   });
 
   const stored = () => channels.rows()[0];
-  const plaintextOf = (credentialId: string, key: string) => decryptField(credentials.row(credentialId)!.config[key], ORG);
 
   describe('who may see and change channels', () => {
     it('is a 404 for an agent of another organization', async () => {
@@ -128,11 +130,22 @@ describe('AgentChannelsService', () => {
       expect(view.endpoint).toBe(`/channels/${view.id}`);
     });
 
-    it('lets one agent have several channels of the same kind', async () => {
+    it('lets one agent have several channels of the same kind, each with a name of its own', async () => {
       const service = build();
       await service.add(ORG, 'agent-1', ME, { type: ChannelType.SLACK });
       await service.add(ORG, 'agent-1', ME, { type: ChannelType.SLACK });
-      expect(await service.list(ORG, 'agent-1', ME)).toHaveLength(2);
+      await service.add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, name: 'Slack for sales' });
+      expect((await service.list(ORG, 'agent-1', ME)).map((c) => c.name)).toEqual(['Slack', 'Slack 2', 'Slack for sales']);
+    });
+
+    it('refuses a name another channel of the agent has, in any case, and an empty one', async () => {
+      const service = build();
+      await service.add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, name: 'Support desk' });
+      await expect(service.add(ORG, 'agent-1', ME, { type: ChannelType.TELEGRAM, name: 'support DESK' })).rejects.toBeInstanceOf(ConflictException);
+      const other = await service.add(ORG, 'agent-1', ME, { type: ChannelType.TELEGRAM });
+      await expect(service.update(ORG, 'agent-1', other.id, ME, { name: '  ' })).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.update(ORG, 'agent-1', other.id, ME, { name: 'Support desk' })).rejects.toBeInstanceOf(ConflictException);
+      await expect(service.update(ORG, 'agent-1', other.id, ME, { name: 'Telegram for Berlin' })).resolves.toMatchObject({ name: 'Telegram for Berlin' });
     });
 
     it('gives a web chat a free address made from the agent name, across every organization', async () => {
@@ -156,21 +169,13 @@ describe('AgentChannelsService', () => {
       expect(desktop.configuration).toEqual({ bundleId: 'app.almyty.supportagent', webChatChannelId: web.id });
     });
 
-    it('keeps typed keys off the row, in one credential the channel manages', async () => {
-      const view = await build().add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, configuration: SLACK });
-      const row = stored();
-      expect(row.configuration).toEqual({
-        credentialId: expect.any(String),
-        credentialKeys: expect.arrayContaining(['bot_token', 'signing_secret']),
-      });
-      expect(JSON.stringify(row)).not.toContain('xoxb-live-1');
-      expect(JSON.stringify(view)).not.toContain('xoxb-live-1');
-      // Keys entered on the channel are its own, not a credential picked from Credentials.
-      expect(view.credentialPicked).toBe(false);
-      const credential = credentials.row(row.configuration!.credentialId)!;
-      expect(credential.metadata.managedBy).toEqual({ kind: 'agent_channel', id: row.id });
-      expect(isEncrypted(credential.config.bot_token)).toBe(true);
-      expect(plaintextOf(credential.id, 'bot_token')).toBe('xoxb-live-1');
+    // Every key is a credential on Credentials; a channel never holds one.
+    it('refuses keys sent inline, and makes no credential of them', async () => {
+      await expect(build().add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, configuration: SLACK })).rejects.toThrow(
+        'Platform keys (bot_token, signing_secret) go in a credential on Credentials. Pick it with credentialId.',
+      );
+      expect(channels.rows()).toHaveLength(0);
+      expect(credentials.rows()).toHaveLength(0);
     });
 
     it('takes the keys from a credential picked on Credentials, without copying them', async () => {
@@ -185,7 +190,6 @@ describe('AgentChannelsService', () => {
       } as any);
       const view = await build().add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, credentialId: 'cred-shared' });
       expect(view.configuration).toEqual({ credentialId: 'cred-shared', credentialKeys: ['bot_token', 'signing_secret'] });
-      expect(view.credentialPicked).toBe(true);
       expect(credentials.rows()).toHaveLength(1);
     });
 
@@ -196,30 +200,25 @@ describe('AgentChannelsService', () => {
       );
     });
 
-    it('refuses a key rather than writing it to the row when the store is missing', async () => {
-      await expect(build({ withStore: false }).add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, configuration: SLACK })).rejects.toBeInstanceOf(
+    it('refuses a credential when the store is missing, rather than guessing', async () => {
+      slackCredential();
+      await expect(build({ withStore: false }).add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, credentialId: 'cred-slack' })).rejects.toBeInstanceOf(
         ServiceUnavailableException,
       );
     });
   });
 
   describe('changing a channel', () => {
-    it('rotates its own credential in place, clears a key sent empty, and ignores a masked value sent back', async () => {
+    it('refuses a key sent on a change, and ignores a masked one sent back', async () => {
+      slackCredential();
       const service = build();
-      const view = await service.add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, configuration: SLACK });
-      const credentialId = stored().configuration!.credentialId;
-
-      await service.update(ORG, 'agent-1', view.id, ME, { configuration: { bot_token: 'xoxb-live-2' } });
-      expect(stored().configuration!.credentialId).toBe(credentialId);
-      expect(plaintextOf(credentialId, 'bot_token')).toBe('xoxb-live-2');
-      expect(plaintextOf(credentialId, 'signing_secret')).toBe('sign-live-1');
-
+      const view = await service.add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, credentialId: 'cred-slack' });
+      await expect(service.update(ORG, 'agent-1', view.id, ME, { configuration: { bot_token: 'xoxb-live-2' } })).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.update(ORG, 'agent-1', view.id, ME, { configuration: { signing_secret: '' } })).rejects.toBeInstanceOf(BadRequestException);
+      // A masked value is what the page was shown, not a key; nor may a
+      // caller point the channel at a credential through configuration.
       await service.update(ORG, 'agent-1', view.id, ME, { configuration: { bot_token: MASKED_CHANNEL_SECRET, credentialId: 'someone-elses' } });
-      expect(stored().configuration!.credentialId).toBe(credentialId);
-      expect(plaintextOf(credentialId, 'bot_token')).toBe('xoxb-live-2');
-
-      await service.update(ORG, 'agent-1', view.id, ME, { configuration: { signing_secret: '' } });
-      expect(stored().configuration!.credentialKeys).toEqual(['bot_token']);
+      expect(stored().configuration).toEqual({ credentialId: 'cred-slack', credentialKeys: ['bot_token', 'signing_secret'] });
     });
 
     it('does not drop settings a partial update did not mention', async () => {
@@ -229,14 +228,16 @@ describe('AgentChannelsService', () => {
       expect(stored().configuration).toMatchObject({ phone_number: '+1555', twilio_account_sid: 'AC1' });
     });
 
-    it('switching to a picked credential releases the one the channel made', async () => {
+    it('switches to another credential, and stops using one, leaving both on Credentials', async () => {
+      credentials.seed({ id: 'cred-first', organizationId: ORG, config: { bot_token: 'enc' }, visibility: 'org', metadata: {} } as any);
       credentials.seed({ id: 'cred-shared', organizationId: ORG, config: { bot_token: 'enc' }, visibility: 'org', metadata: {} } as any);
       const service = build();
-      const view = await service.add(ORG, 'agent-1', ME, { type: ChannelType.TELEGRAM, configuration: { bot_token: '123:abc' } });
-      expect(credentials.rows()).toHaveLength(2);
+      const view = await service.add(ORG, 'agent-1', ME, { type: ChannelType.TELEGRAM, credentialId: 'cred-first' });
       await service.update(ORG, 'agent-1', view.id, ME, { credentialId: 'cred-shared' });
-      expect(credentials.rows().map((c) => c.id)).toEqual(['cred-shared']);
       expect(stored().configuration).toEqual({ credentialId: 'cred-shared', credentialKeys: ['bot_token'] });
+      await service.update(ORG, 'agent-1', view.id, ME, { credentialId: null });
+      expect(stored().configuration).toEqual({});
+      expect(credentials.rows().map((c) => c.id).sort()).toEqual(['cred-first', 'cred-shared']);
     });
 
     it("stores the channel's own branding and visitor rules, and null inherits again", async () => {
@@ -255,6 +256,73 @@ describe('AgentChannelsService', () => {
       expect(stored().visitorRules).toBeNull();
     });
 
+    it("changes a web chat's address, and says plainly when another web chat has it", async () => {
+      const service = build();
+      const view = await service.add(ORG, 'agent-1', ME, { type: ChannelType.WEB });
+      expect(view.slug).toBe('support-agent');
+      // Its own address is not taken from itself.
+      await expect(service.update(ORG, 'agent-1', view.id, ME, { slug: 'support-agent' })).resolves.toMatchObject({ slug: 'support-agent' });
+      await expect(service.update(ORG, 'agent-1', view.id, ME, { slug: 'Acme-Help' })).resolves.toMatchObject({ slug: 'acme-help' });
+
+      // The address is a subdomain: taken in another organization is taken.
+      channels.seed({ id: 'c-theirs', organizationId: 'org-2', agentId: 'x', type: ChannelType.WEB, slug: 'their-chat', name: 'Web chat' });
+      const taken = service.update(ORG, 'agent-1', view.id, ME, { slug: 'their-chat' });
+      await expect(taken).rejects.toBeInstanceOf(ConflictException);
+      await expect(taken).rejects.toThrow('their-chat is already taken as a web chat address. Pick another.');
+      hostedChatSlugsTaken = ['old-gateway'];
+      await expect(service.update(ORG, 'agent-1', view.id, ME, { slug: 'old-gateway' })).rejects.toBeInstanceOf(ConflictException);
+
+      await expect(service.update(ORG, 'agent-1', view.id, ME, { slug: 'a' })).rejects.toThrow('Must be at least 3 characters.');
+      await expect(service.update(ORG, 'agent-1', view.id, ME, { slug: 'api' })).rejects.toThrow('That address is reserved.');
+      expect(stored().slug).toBe('acme-help');
+    });
+
+    it("refuses to change the address of anything but a web chat", async () => {
+      const service = build();
+      const view = await service.add(ORG, 'agent-1', ME, { type: ChannelType.TUI });
+      await expect(service.update(ORG, 'agent-1', view.id, ME, { slug: 'other-name' })).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    // Off is a removal of the AI disclosure, which only a white-label org
+    // may make; refused when saved, since the web chat and the widget read
+    // the switch live.
+    it('keeps the AI disclosure switch on unless a white-label org turns it off', async () => {
+      const plain = build();
+      const view = await plain.add(ORG, 'agent-1', ME, { type: ChannelType.SLACK });
+      expect(view.disclosureRemovable).toBe(false);
+      await expect(plain.update(ORG, 'agent-1', view.id, ME, { configuration: { aiDisclosure: false } })).rejects.toThrow(
+        'Removing the AI disclosure requires the white-label entitlement',
+      );
+      expect(stored().configuration?.aiDisclosure).toBeUndefined();
+      await expect(plain.update(ORG, 'agent-1', view.id, ME, { configuration: { aiDisclosure: 'no' } })).rejects.toBeInstanceOf(BadRequestException);
+
+      const licensed = build({ licensed: ['white_label'] });
+      const off = await licensed.update(ORG, 'agent-1', view.id, ME, { configuration: { aiDisclosure: false } });
+      expect(off.disclosureRemovable).toBe(true);
+      expect(stored().configuration?.aiDisclosure).toBe(false);
+    });
+
+    it('copies the plain settings of a picked credential onto the channel, and never a secret', async () => {
+      credentials.seed({
+        id: 'cred-email',
+        organizationId: ORG,
+        name: 'Support mailbox',
+        config: { resend_api_key: 'enc', inbound_address: 'help@acme.test', reply_from: 'help@acme.test' },
+        visibility: 'org',
+        isActive: true,
+        metadata: {},
+      } as any);
+      const view = await build().add(ORG, 'agent-1', ME, { type: ChannelType.EMAIL, credentialId: 'cred-email' });
+      // Mail is matched to a channel by the receiving address on its row.
+      expect(view.configuration).toEqual({
+        inbound_address: 'help@acme.test',
+        reply_from: 'help@acme.test',
+        credentialId: 'cred-email',
+        credentialKeys: ['resend_api_key'],
+      });
+      expect((await build().check(ORG, 'agent-1', view.id, ME)).refusals.map((r) => r.code)).not.toContain('MISSING_CREDENTIALS');
+    });
+
     it('refuses visitor rules it cannot keep', async () => {
       const service = build();
       const view = await service.add(ORG, 'agent-1', ME, { type: ChannelType.WEB, slug: 'acme-help' });
@@ -266,8 +334,9 @@ describe('AgentChannelsService', () => {
 
   describe('publishing', () => {
     it('stands up the gateway quiet, records it, and only then lets it answer', async () => {
+      slackCredential();
       const service = build();
-      const view = await service.add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, configuration: SLACK });
+      const view = await service.add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, credentialId: 'cred-slack' });
       gateways.activateGateway.mockImplementation(async (id: string) => {
         // By the time it answers, the channel already points at it.
         expect(channels.row(view.id)!.gatewayId).toBe(id);
@@ -283,7 +352,7 @@ describe('AgentChannelsService', () => {
       expect(user).toBe('user-1');
       expect(options).toEqual({ channelId: view.id, activate: false, gatewayId: null });
       expect(dto).toMatchObject({
-        name: 'Support agent (slack)',
+        name: 'Support agent (Slack)',
         type: 'slack',
         agentId: 'agent-1',
         endpoint: `/channels/${view.id}`,
@@ -291,7 +360,7 @@ describe('AgentChannelsService', () => {
         // The defaults a nobody-configured agent is capped with.
         rateLimitConfig: { enabled: true, perVisitorPerHour: 60, perIpPerHour: 120 },
       });
-      expect(dto.configuration).toMatchObject({ channelId: view.id, authMode: 'public_link', credentialId: expect.any(String) });
+      expect(dto.configuration).toMatchObject({ channelId: view.id, authMode: 'public_link', credentialId: 'cred-slack', aiDisclosure: true });
       expect(JSON.stringify(dto)).not.toContain('xoxb-live-1');
     });
 
@@ -372,16 +441,16 @@ describe('AgentChannelsService', () => {
   });
 
   describe('deleting a channel', () => {
-    it('takes its gateway and its own keys with it', async () => {
+    it('takes its gateway with it', async () => {
+      slackCredential();
       const service = build();
-      const view = await service.add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, configuration: SLACK });
+      const view = await service.add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, credentialId: 'cred-slack' });
       await service.publish(ORG, 'agent-1', view.id, ME);
       const gatewayId = stored().gatewayId;
 
       await service.remove(ORG, 'agent-1', view.id, ME);
 
       expect(channels.rows()).toHaveLength(0);
-      expect(credentials.rows()).toHaveLength(0);
       expect(gateways.deleteGateway).toHaveBeenCalledWith(gatewayId, ORG, 'user-1');
     });
 
@@ -448,7 +517,7 @@ describe('AgentChannelsService', () => {
 
   describe('on the way out', () => {
     it('masks inline values and the keys the credential holds', () => {
-      expect(publicChannel({ configuration: { bot_token: 'xoxb-legacy', credentialId: 'c', credentialKeys: ['signing_secret'] } })).toEqual({
+      expect(publicChannel({ configuration: { bot_token: 'xoxb-inline', credentialId: 'c', credentialKeys: ['signing_secret'] } })).toEqual({
         configuration: {
           bot_token: MASKED_CHANNEL_SECRET,
           signing_secret: MASKED_CHANNEL_SECRET,
@@ -458,7 +527,7 @@ describe('AgentChannelsService', () => {
       });
     });
 
-    it('splits keys from public settings, legacy spellings included', () => {
+    it('splits keys from public settings, camelCase spellings included', () => {
       expect(splitChannelSecrets({ botToken: 'b', phone_number: '+1', twilio_auth_token: '', credentialKeys: ['x'] })).toEqual({
         secrets: { bot_token: 'b' },
         cleared: ['twilio_auth_token'],

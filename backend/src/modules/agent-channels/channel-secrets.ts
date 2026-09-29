@@ -1,6 +1,7 @@
-import type { ManagedBy } from '../credentials/credential-ref.resolver';
 import {
   CHANNEL_CREDENTIAL_KEYS,
+  CHANNEL_SECRET_CONFIG_KEYS,
+  isChannelCredentialKey,
   normalizeChannelConfigKeys,
   splitChannelConfigSecrets,
 } from '../gateways/channels/channel-config.helper';
@@ -8,17 +9,11 @@ import {
 /**
  * A channel's platform keys live in `credentials`, never on the row.
  *
- * Keys typed on the channel form go into one credential the channel
- * manages; a key picked from Credentials is referenced as it is. Either
- * way the configuration keeps only `credentialId` and `credentialKeys`
- * (names, never values), the same shape a channel gateway keeps, so
- * publishing hands the gateway a reference rather than a copy.
+ * A channel picks a credential from Credentials; its configuration keeps
+ * only `credentialId` and `credentialKeys` (names, never values), the
+ * same shape a channel gateway keeps, so publishing hands the gateway a
+ * reference rather than a copy.
  */
-
-/** The consumer identity of a channel's managed credential row. */
-export function channelManagedBy(channelId: string): ManagedBy {
-  return { kind: 'agent_channel', id: channelId };
-}
 
 /** Keys of the configuration the server owns; a client never sets them directly. */
 const SERVER_OWNED_KEYS = ['credentialId', 'credentialKeys', 'connectionId'];
@@ -43,4 +38,23 @@ export function splitChannelSecrets(configuration: Record<string, any> | null | 
   const cleared = CHANNEL_CREDENTIAL_KEYS.filter((key) => normalized[key] === '' || normalized[key] === null);
   for (const key of SERVER_OWNED_KEYS) delete publicConfig[key];
   return { secrets, cleared, publicConfig };
+}
+
+/**
+ * The plain settings a picked credential carries (a phone number, a
+ * receiving address, a homeserver URL), to copy onto the channel. They are
+ * not secret, and the row is where routing and the publish check read
+ * them: mail is matched to a channel by its receiving address on the row.
+ * Secrets stay in the credential and are never copied.
+ */
+export function channelSettingsIn(config: Record<string, any> | null | undefined): Record<string, string> {
+  const normalized = normalizeChannelConfigKeys(config ?? {});
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(normalized)) {
+    if (!/^[a-z][a-z0-9_]*$/.test(key) || SERVER_OWNED_KEYS.includes(key)) continue;
+    if (isChannelCredentialKey(key) || CHANNEL_SECRET_CONFIG_KEYS.includes(key)) continue;
+    if (typeof value !== 'string' || !value.trim() || value.length > 2048) continue;
+    out[key] = value;
+  }
+  return out;
 }

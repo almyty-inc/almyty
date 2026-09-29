@@ -28,7 +28,7 @@ describe('GATEWAY_TYPE_FOR_CHANNEL', () => {
   });
 
   it('has nothing to stand up for the downloads', () => {
-    for (const type of [ChannelType.TUI, ChannelType.DESKTOP, ChannelType.BINARY]) expect(servesOverGateway(type)).toBe(false);
+    for (const type of [ChannelType.TUI, ChannelType.DESKTOP]) expect(servesOverGateway(type)).toBe(false);
   });
 
   it('serves every messaging platform over a gateway, and maps back', () => {
@@ -105,8 +105,8 @@ describe('endpointFor and gatewayNameFor', () => {
     expect(endpointFor({ id: 'c-1' })).not.toBe(endpointFor({ id: 'c-2' }));
   });
 
-  it('names the gateway after the agent and the channel type', () => {
-    expect(gatewayNameFor('Support agent', ChannelType.SLACK)).toBe('Support agent (slack)');
+  it('names the gateway after the agent and the channel, so two Slack channels are told apart', () => {
+    expect(gatewayNameFor('Support agent', 'Slack for sales')).toBe('Support agent (Slack for sales)');
   });
 });
 
@@ -144,7 +144,21 @@ describe('gatewayConfigurationFor', () => {
       ...slackCreds,
       authMode: 'public_link',
       channelId: 'c-1',
+      aiDisclosure: true,
     });
+  });
+
+  // The switch is on by default; a messaging channel prefixes the
+  // branding's line (or the default one) to its first reply, and says
+  // nothing only when the switch is off and the org may turn it off.
+  it('gives a messaging channel the AI disclosure: the branding line, the default, or off', () => {
+    expect(gatewayConfigurationFor(channel(), VisitorAuthMode.PUBLIC_LINK, 'An AI answers here.').aiDisclosure).toBe('An AI answers here.');
+    expect(gatewayConfigurationFor(channel(), VisitorAuthMode.PUBLIC_LINK, '').aiDisclosure).toBe(true);
+    expect(gatewayConfigurationFor(channel(), VisitorAuthMode.PUBLIC_LINK, false).aiDisclosure).toBe(false);
+    // The stored switch itself never reaches the gateway as the line.
+    expect(gatewayConfigurationFor(channel({ configuration: { ...slackCreds, aiDisclosure: false } }), VisitorAuthMode.PUBLIC_LINK, 'Line').aiDisclosure).toBe('Line');
+    // The web chat and the widget read the switch from the channel, live.
+    expect(gatewayConfigurationFor(channel({ type: ChannelType.WEB, slug: 'acme', configuration: {} }), VisitorAuthMode.PUBLIC_LINK, false)).not.toHaveProperty('aiDisclosure');
   });
 
   it('keeps branding and download-only settings off the gateway', () => {

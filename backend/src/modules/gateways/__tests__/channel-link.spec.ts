@@ -1,7 +1,8 @@
 import { NotFoundException } from '@nestjs/common';
 
 import { HostedChatService } from '../channels/hosted-chat.service';
-import { ChannelLinkService } from '../channel-link.service';
+import { ChannelLinkService, ownerOf } from '../channel-link.service';
+import { widgetConfigFor } from '../channels/widget-script';
 import { ChannelLinkController } from '../channel-link.controller';
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
 import { Agent } from '../../../entities/agent.entity';
@@ -205,5 +206,35 @@ describe('ChannelLinkController', () => {
     const gateways = { getGateway: jest.fn(async () => { throw new NotFoundException('Gateway not found'); }) };
     const controller = new ChannelLinkController(gateways as any, new ChannelLinkService(fakeRepository<any>([webChannel()]) as any));
     await expect(controller.managedBy('gw-1', req)).rejects.toThrow(NotFoundException);
+  });
+});
+
+/**
+ * The per-channel AI disclosure switch, as the web chat and the widget
+ * read it live. On by default; off (which only a white-label org can
+ * store) is an empty disclosure line for the hosted chat and no line at
+ * all in the widget. A channel with no people on it has no switch.
+ */
+describe('the AI disclosure switch of a web chat or widget', () => {
+  const branding = { ...supportAgent().branding, aiDisclosure: 'An AI answers here.' };
+
+  it('shows the branding line while the switch is on, as it is by default', () => {
+    const owner = ownerOf(webChannel({ agent: supportAgent({ branding }) }) as any);
+    expect(owner.disclosureOff).toBe(false);
+    expect(owner.branding.aiDisclosure).toBe('An AI answers here.');
+    expect(widgetConfigFor({}, owner).aiDisclosure).toBe('An AI answers here.');
+  });
+
+  it('removes the line when the switch is off', () => {
+    const owner = ownerOf(webChannel({ agent: supportAgent({ branding }), configuration: { aiDisclosure: false } }) as any);
+    expect(owner.disclosureOff).toBe(true);
+    expect(owner.branding.aiDisclosure).toBe('');
+    const widget = ownerOf(webChannel({ type: ChannelType.WIDGET, configuration: { aiDisclosure: false } }) as any);
+    expect(widgetConfigFor({}, widget).aiDisclosure).toBeNull();
+    expect(widgetConfigFor({}, ownerOf(webChannel({ type: ChannelType.WIDGET }) as any)).aiDisclosure).toBeTruthy();
+  });
+
+  it('has no switch on a channel no person talks to', () => {
+    expect(ownerOf(webChannel({ type: ChannelType.A2A, configuration: { aiDisclosure: false } }) as any).disclosureOff).toBe(false);
   });
 });

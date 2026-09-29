@@ -133,6 +133,8 @@ export function sanitizeWidgetConfig(
 /** The channel a widget is, as far as its look and visitor rights go (resolved from its agent). */
 export interface WidgetOwner {
   name: string;
+  /** The channel's AI disclosure switch is off: the widget shows no disclosure line. */
+  disclosureOff?: boolean;
   branding?: {
     appName?: string;
     primaryColor?: string;
@@ -174,7 +176,11 @@ export function widgetConfigFor(
       theme: branding.theme,
       poweredBy: !branding.whiteLabel,
     },
-    aiDisclosure: typeof branding.aiDisclosure === 'string' && branding.aiDisclosure.trim() ? branding.aiDisclosure : true,
+    aiDisclosure: owner.disclosureOff
+      ? false
+      : typeof branding.aiDisclosure === 'string' && branding.aiDisclosure.trim()
+        ? branding.aiDisclosure
+        : true,
   });
   return {
     ...look,
@@ -452,7 +458,7 @@ export function buildWidgetScript(gatewayId: string): string {
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (out) { return { ok: r.ok, out: out }; });
     }).then(function (res) {
-      // A refusal (too many messages, or the app has reached its limit)
+      // A refusal (too many messages, or the chat has reached its limit)
       // is said in the server's own plain words.
       if (!res.ok) {
         var said = res.out && typeof res.out.message === 'string' ? res.out.message : '';

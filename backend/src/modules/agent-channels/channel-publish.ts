@@ -1,5 +1,5 @@
 import { GatewayType } from '../../entities/gateway.entity';
-import { ChannelType, VisitorAuthMode, type VisitorLimits } from '../../entities/agent-channel.entity';
+import { ChannelType, MESSAGING_CHANNEL_TYPES, VisitorAuthMode, type VisitorLimits } from '../../entities/agent-channel.entity';
 import { credentialKeysOf } from '../gateways/channels/channel-config.helper';
 
 /**
@@ -35,7 +35,6 @@ export const GATEWAY_TYPE_FOR_CHANNEL: Record<string, GatewayType | null> = Obje
   // These produce a file someone downloads. Nothing to stand up.
   [ChannelType.TUI]: null,
   [ChannelType.DESKTOP]: null,
-  [ChannelType.BINARY]: null,
 });
 
 /** Whether publishing this channel means standing up a gateway. */
@@ -75,7 +74,6 @@ export const REQUIRED_CREDENTIALS: Record<string, readonly string[]> = Object.fr
   [ChannelType.A2A]: [],
   [ChannelType.TUI]: [],
   [ChannelType.DESKTOP]: [],
-  [ChannelType.BINARY]: [],
 });
 
 /**
@@ -152,17 +150,15 @@ export function checkPublish(
 
 /**
  * Where a published channel answers. The channel id makes it unique per
- * organization and unable to collide with a hand-made gateway. A channel
- * moved from an app keeps the endpoint its gateway already had, because
- * platforms were told that URL.
+ * organization and unable to collide with a hand-made gateway.
  */
 export function endpointFor(channel: { id: string }): string {
   return `/channels/${channel.id}`;
 }
 
 /** What the gateway is called in a list of gateways. */
-export function gatewayNameFor(agentName: string, type: ChannelType | string): string {
-  return `${agentName} (${type})`;
+export function gatewayNameFor(agentName: string, channelName: string): string {
+  return `${agentName} (${channelName})`;
 }
 
 /**
@@ -215,6 +211,12 @@ export function rateLimitFor(limits: VisitorLimits, type: ChannelType | string =
 export function gatewayConfigurationFor(
   channel: { id: string; type: ChannelType | string; slug?: string | null; configuration?: Record<string, any> | null },
   authMode: VisitorAuthMode,
+  /**
+   * The AI disclosure a messaging channel prefixes to the first reply of a
+   * conversation: the branding's line (or the default when it has none),
+   * or false when the channel's switch is off and the org may turn it off.
+   */
+  disclosure: string | false = '',
 ): Record<string, any> {
   const {
     branding: _staleBranding,
@@ -222,10 +224,14 @@ export function gatewayConfigurationFor(
     bundleId: _bundleId,
     webChatChannelId: _webChat,
     signingCredentialId: _signing,
+    aiDisclosure: _switch,
     ...operator
   } = channel.configuration ?? {};
 
-  const base = { ...operator, authMode, channelId: channel.id };
+  const base: Record<string, any> = { ...operator, authMode, channelId: channel.id };
+  if (MESSAGING_CHANNEL_TYPES.includes(channel.type as ChannelType)) {
+    base.aiDisclosure = disclosure === false ? false : disclosure.trim() || true;
+  }
   if (channel.type !== ChannelType.WEB) return base;
   return {
     ...base,

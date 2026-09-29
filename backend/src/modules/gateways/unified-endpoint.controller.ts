@@ -365,11 +365,10 @@ export class UnifiedEndpointController {
 
     // 2. Try to find a gateway. A published agent channel lives deeper
     // than a hand-made gateway -- its endpoint is /channels/<id>
-    // (endpointFor in agent-channels), or /apps/<app>/<target> for one
-    // moved from an app -- so the callback URL Slack, Meta or Teams is
-    // given for it arrives here with resourceSlug 'channels' or 'apps' and
-    // has to be matched on the full path. Every other path does exactly
-    // one lookup.
+    // (endpointFor in agent-channels) -- so the callback URL Slack, Meta
+    // or Teams is given for it arrives here with resourceSlug 'channels'
+    // and has to be matched on the full path. Every other path does
+    // exactly one lookup.
     const appSurface = channelSurfaceSlug(req.path, orgSlug, resourceSlug);
     const findActive = (endpoint: string) =>
       this.gatewayRepository.findOne({
@@ -472,18 +471,14 @@ export class UnifiedEndpointController {
  * The gateway slug of a published agent channel, or null.
  *
  * A channel's gateway answers on `/channels/<channel id>`, so
- * `/acme/channels/<id>` names it. A channel moved from an app keeps the
- * endpoint its gateway had, `/apps/<app>/<target>`, because the platforms
- * were given that URL, so `/acme/apps/support/whatsapp_cloud` still names
- * that one. Only paths under those two reserved segments are read this
- * way, and anything after them (a platform sub-path) is left to the
- * delegation, as for any other gateway.
+ * `/acme/channels/<id>` names it. Only paths under that reserved segment
+ * are read this way, and anything after it (a platform sub-path) is left
+ * to the delegation, as for any other gateway.
  */
 export function channelSurfaceSlug(path: string, orgSlug: string, resourceSlug: string): string | null {
   const parts = (path || '').split('/').filter(Boolean);
   if (parts[0] !== orgSlug || parts[1] !== resourceSlug) return null;
   if (resourceSlug === 'channels' && parts.length >= 3) return `channels/${parts[2]}`;
-  if (resourceSlug === 'apps' && parts.length >= 4) return `apps/${parts[2]}/${parts[3]}`;
   return null;
 }
 

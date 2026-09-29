@@ -12,7 +12,6 @@ describe('what can be built, and where', () => {
   it('knows which targets produce an artifact at all', () => {
     expect(platformsFor(ChannelType.TUI).length).toBeGreaterThan(0);
     expect(platformsFor(ChannelType.DESKTOP).length).toBeGreaterThan(0);
-    expect(platformsFor(ChannelType.BINARY).length).toBeGreaterThan(0);
     // A web app is served, not downloaded, and Slack is someone else's
     // client. Neither has anything to compile.
     expect(platformsFor(ChannelType.WEB)).toEqual([]);
@@ -22,7 +21,6 @@ describe('what can be built, and where', () => {
   it('offers macOS for every buildable target', () => {
     for (const target of [
       ChannelType.TUI,
-      ChannelType.BINARY,
       ChannelType.DESKTOP,
     ]) {
       const ids = platformsFor(target).map((p) => p.id);
@@ -36,7 +34,6 @@ describe('what can be built, and where', () => {
     // from Linux. The usual "macOS needs a Mac" shorthand does not apply.
     for (const target of [
       ChannelType.TUI,
-      ChannelType.BINARY,
       ChannelType.DESKTOP,
     ]) {
       for (const platform of platformsFor(target)) {

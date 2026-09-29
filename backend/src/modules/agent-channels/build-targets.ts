@@ -142,13 +142,6 @@ export const TARGET_PLATFORMS: Partial<Record<ChannelType, string[]>> = {
   // A terminal app is a single compiled executable with no window, no
   // webview and nothing to notarise, so it cross-compiles cleanly.
   [ChannelType.TUI]: ['linux-x64', 'linux-arm64', 'windows-x64', 'macos-arm64', 'macos-x64'],
-  [ChannelType.BINARY]: [
-    'linux-x64',
-    'linux-arm64',
-    'windows-x64',
-    'macos-arm64',
-    'macos-x64',
-  ],
   // Desktop is an Electron shell. Each platform needs its own packaging
   // step, but none of them needs Apple hardware: the macOS artifact is
   // a zipped .app rather than a .dmg.

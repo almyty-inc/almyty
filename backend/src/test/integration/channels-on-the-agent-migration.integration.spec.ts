@@ -8,10 +8,10 @@ import { moveAppsToChannels } from '../../migrations/support/channels-on-the-age
  * The ChannelsOnTheAgent migration against a real Postgres.
  *
  * Runs the migration class itself (its DDL and its data move) on tables
- * with the columns and types production has: apps and their places as
- * the app era left them, the agents, gateways, credentials, builds and
- * runs they point at. Then reads back what an agent, its channels and
- * everything around them hold.
+ * with the columns and types production has: apps and their places, the
+ * agents, gateways, credentials, builds and runs they point at. Then reads
+ * back what an agent, its channels and everything around them hold, and
+ * that the app tables are gone.
  */
 const describeOrSkip = process.env.RUN_DB_INTEGRATION === '1' ? describe : describe.skip;
 
@@ -71,6 +71,7 @@ describeOrSkip('channels on the agent migration (real Postgres)', () => {
       CREATE TABLE credentials (
         id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
         "organizationId" uuid NOT NULL,
+        name varchar NOT NULL DEFAULT 'Keys',
         metadata json
       )`);
     await db.query(`
@@ -213,12 +214,13 @@ describeOrSkip('channels on the agent migration (real Postgres)', () => {
 
     await up();
 
-    expect(await channel(web)).toMatchObject({ agentId: support, organizationId: ORG, type: 'web', status: 'live', slug: 'acme-help', gatewayId: webGateway, configuration: {} });
+    expect(await channel(web)).toMatchObject({ agentId: support, organizationId: ORG, type: 'web', status: 'live', name: 'Web chat', slug: 'acme-help', gatewayId: webGateway, configuration: {} });
     // configuration.agentId is gone: a channel has exactly one agent.
     expect(await channel(slack)).toMatchObject({
       agentId: support,
       type: 'slack',
       status: 'draft',
+      name: 'Slack',
       slug: null,
       configuration: { client_id: '123.456', credentialId: 'c-1', credentialKeys: ['client_secret', 'signing_secret'] },
     });
@@ -239,16 +241,25 @@ describeOrSkip('channels on the agent migration (real Postgres)', () => {
       },
     });
 
-    // The gateway names its channel instead of its app, at the same address.
+    // The gateway answers at the channel's address and names its channel.
     const gw = (await db.query(`SELECT endpoint, configuration::jsonb AS configuration FROM gateways WHERE id = $1`, [webGateway])).rows[0];
-    expect(gw.endpoint).toBe('/apps/acme-support/web');
+    expect(gw.endpoint).toBe(`/channels/${web}`);
     expect(gw.configuration).toEqual({ channelId: web, authMode: 'public_link', hostedChat: { slug: 'acme-help', authMode: 'public_link' } });
 
-    const cred = (await db.query(`SELECT metadata::jsonb AS metadata FROM credentials WHERE id = $1`, [credential])).rows[0];
-    expect(cred.metadata.managedBy).toEqual({ kind: 'agent_channel', id: slack });
+    // The keys the place kept for itself are an ordinary credential now.
+    const cred = (await db.query(`SELECT name, metadata::jsonb AS metadata FROM credentials WHERE id = $1`, [credential])).rows[0];
+    expect(cred.metadata.managedBy).toBeUndefined();
+    expect(cred.name).toBe('Support agent: Slack');
 
     const [build] = (await db.query(`SELECT "channelId", "agentId" FROM app_builds`)).rows;
     expect(build).toEqual({ channelId: desktop, agentId: support });
+
+    // The app tables are gone, and nothing points at them.
+    expect((await db.query(`SELECT to_regclass('agent_apps') AS a, to_regclass('agent_app_distributions') AS d`)).rows[0]).toEqual({ a: null, d: null });
+    const buildColumns = (await db.query(`SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'app_builds'`, [schema])).rows.map((r) => r.column_name);
+    expect(buildColumns).not.toContain('appId');
+    const runColumns = (await db.query(`SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'agent_runs'`, [schema])).rows.map((r) => r.column_name);
+    expect(runColumns).not.toContain('appId');
 
     // New columns exist where the code reads them.
     await db.query(`INSERT INTO agent_runs ("agentId", "organizationId", "channelId") VALUES ($1, $2, $3)`, [support, ORG, web]);
@@ -267,6 +278,7 @@ describeOrSkip('channels on the agent migration (real Postgres)', () => {
     expect((await channel(web)).agentId).toBe(triage);
     expect(await channel(email)).toMatchObject({ agentId: billing, configuration: { inbound_address: 'billing@acme.test' } });
     expect((await agentRow(triage)).branding).toEqual({ greeting: 'Hi', appName: 'Acme' });
+    expect((await channel(email)).name).toBe('Email');
     expect((await agentRow(billing)).branding).toEqual({ greeting: 'Hi', appName: 'Acme' });
   });
 
@@ -285,6 +297,9 @@ describeOrSkip('channels on the agent migration (real Postgres)', () => {
       visitorRules: { authMode: 'public_link' },
     });
     const firstChannel = await channel(firstWeb);
+    // Two web chats from two apps on one agent are told apart by name.
+    expect(firstChannel.name).toBe('Web chat');
+    expect((await channel(secondWeb)).name).toBe('Web chat (Second)');
     expect(firstChannel.branding).toBeNull();
     expect(firstChannel.visitorRules).toBeNull();
     // What visitors of the second app's chat saw is what they still see.
@@ -330,7 +345,30 @@ describeOrSkip('channels on the agent migration (real Postgres)', () => {
     expect((await agentRow(lonely)).branding).toEqual({ greeting: 'Soon', appName: 'Unshipped' });
   });
 
-  it('does not move a place with no agent in its organization, and keeps its rows', async () => {
+  it('makes a standalone binary a terminal app, which compiles to the same file', async () => {
+    const support = await agent('Support agent');
+    const acme = await app({ name: 'Acme', slug: 'acme', agentIds: [support] });
+    const binary = await place(acme, 'binary', { configuration: { bundleId: 'com.acme.cli' } });
+    await db.query(`INSERT INTO app_builds ("organizationId", "appId", target, platform) VALUES ($1, $2, 'binary', 'linux-x64')`, [ORG, acme]);
+
+    await up();
+
+    expect(await channel(binary)).toMatchObject({ type: 'tui', name: 'Terminal app', slug: 'acme', configuration: { bundleId: 'com.acme.cli' } });
+    expect((await db.query(`SELECT target, "channelId" FROM app_builds`)).rows).toEqual([{ target: 'tui', channelId: binary }]);
+  });
+
+  it('drops the builds of a place it could not move, with the app tables', async () => {
+    const empty = await app({ name: 'Empty', slug: 'empty', agentIds: [] });
+    await place(empty, 'tui');
+    await db.query(`INSERT INTO app_builds ("organizationId", "appId", target, platform) VALUES ($1, $2, 'tui', 'linux-x64')`, [ORG, empty]);
+
+    await up();
+
+    expect((await db.query(`SELECT count(*)::int AS n FROM app_builds`)).rows[0].n).toBe(0);
+    expect((await db.query(`SELECT to_regclass('agent_apps') AS a`)).rows[0].a).toBeNull();
+  });
+
+  it('does not move a place with no agent in its organization', async () => {
     const theirs = await agent('Theirs', OTHER_ORG);
     const empty = await app({ name: 'Empty', slug: 'empty', agentIds: [] });
     const orphan = await place(empty, 'web');
@@ -344,8 +382,6 @@ describeOrSkip('channels on the agent migration (real Postgres)', () => {
 
     expect(result.skipped.map((s: any) => s.placeId).sort()).toEqual([orphan, crossOrg, garbage].sort());
     expect((await db.query(`SELECT count(*)::int AS n FROM agent_channels`)).rows[0].n).toBe(0);
-    expect((await db.query(`SELECT count(*)::int AS n FROM agent_app_distributions`)).rows[0].n).toBe(3);
-    expect((await db.query(`SELECT count(*)::int AS n FROM agent_apps`)).rows[0].n).toBe(2);
   });
 
   it('runs twice without moving anything twice', async () => {
@@ -353,41 +389,20 @@ describeOrSkip('channels on the agent migration (real Postgres)', () => {
     const acme = await app({ name: 'Acme', slug: 'acme', agentIds: [support] });
     await place(acme, 'web');
     await up();
+    await up();
     const again = await moveAppsToChannels(queryRunner as any);
     expect(again.moved).toBe(0);
     expect((await db.query(`SELECT count(*)::int AS n FROM agent_channels`)).rows[0].n).toBe(1);
   });
 
-  it('down undoes the schema and puts the app references back', async () => {
-    const support = await agent('Support');
-    const acme = await app({ name: 'Acme', slug: 'acme', agentIds: [support] });
-    const gw = await gateway('telegram', '/apps/acme/telegram', { appId: acme });
-    const tg = await place(acme, 'telegram', { gatewayId: gw });
-    await db.query(`INSERT INTO credentials ("organizationId", metadata) VALUES ($1, $2::json)`, [
-      ORG,
-      JSON.stringify({ managedBy: { kind: 'app_distribution', id: tg } }),
-    ]);
+  it('cannot be reverted, since the app tables are gone', async () => {
     await up();
-
-    await migration.down(queryRunner as any);
-
-    expect((await db.query(`SELECT to_regclass('agent_channels') AS t`)).rows[0].t).toBeNull();
-    const columns = (await db.query(`SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'agents'`, [schema])).rows.map(
-      (r) => r.column_name,
-    );
-    expect(columns).not.toContain('branding');
-    const gatewayConfig = (await db.query(`SELECT configuration::jsonb AS c FROM gateways WHERE id = $1`, [gw])).rows[0].c;
-    expect(gatewayConfig).toEqual({ appId: acme });
-    const cred = (await db.query(`SELECT metadata::jsonb AS m FROM credentials`)).rows[0].m;
-    expect(cred.managedBy.kind).toBe('app_distribution');
+    await expect(migration.down()).rejects.toThrow('cannot be reverted');
   });
 
-  /** The migration's DDL alone (its data move finds no apps), then the move itself, returning what it did. */
+  /** The channel schema, then the move itself, returning what it did; the app tables stay for the spec to read. */
   async function moveAppsToChannelsAfterDdl() {
-    await migration.up({
-      query: async (sql: string, params?: unknown[]) =>
-        /to_regclass\('agent_apps'\)/.test(sql) ? [] : (await db.query(sql, params as any[])).rows,
-    } as any);
+    await migration.createChannelSchema(queryRunner as any);
     return moveAppsToChannels(queryRunner as any);
   }
 });

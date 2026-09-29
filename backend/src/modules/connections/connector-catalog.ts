@@ -465,6 +465,9 @@ function channelKey(type: string): string {
   return `channel-${type.replace(/_/g, '-')}`;
 }
 
+/** The Slack app credentials "Add to Slack" installs with; a Slack channel takes these or a bot token. */
+export const SLACK_APP_CONNECTOR_KEY = 'channel-slack-app';
+
 /**
  * Verified 2026-09-09: POST https://slack.com/api/auth.test with
  * `Authorization: Bearer <bot token>` answers HTTP 200 for a rejected
@@ -569,6 +572,37 @@ const CHANNEL_CONNECTORS: ConnectorDefinition[] = [
     capabilities: ['send', 'receive'],
     scopesNeeded: SLACK_SCOPES,
     validation: SLACK_AUTH_TEST,
+    keyPageUrl: 'https://api.slack.com/apps',
+    docsUrl: 'https://docs.slack.dev/authentication/installing-with-oauth',
+  },
+  {
+    // The Slack app a Slack channel installs with "Add to Slack": any
+    // workspace can install it and brings its own bot token, so there is no
+    // token to check here, only the shape of what was pasted.
+    key: SLACK_APP_CONNECTOR_KEY,
+    kind: 'channel',
+    displayName: 'Slack app (Add to Slack)',
+    description: 'Your own Slack app, which any workspace can install with Add to Slack. From its Basic Information page.',
+    connect: [
+      {
+        type: 'api_key',
+        label: 'Slack app credentials',
+        description: 'api.slack.com/apps, your app, Basic Information: App Credentials.',
+        schema: {
+          type: 'object',
+          properties: {
+            client_id: { type: 'string', title: 'Client ID', pattern: '^\\d+\\.\\d+$', description: 'Two numbers joined by a dot.' },
+            client_secret: { type: 'string', title: 'Client secret', 'x-secret': true, minLength: 16 },
+            signing_secret: { type: 'string', title: 'Signing secret', 'x-secret': true, minLength: 16, description: 'Checks that incoming events really come from Slack.' },
+          },
+          required: ['client_id', 'client_secret', 'signing_secret'],
+        },
+        credentialType: CredentialType.API_KEY,
+        keyPageUrl: 'https://api.slack.com/apps',
+      },
+    ],
+    capabilities: ['send', 'receive'],
+    validation: { kind: 'format', fields: { client_id: '^\\d+\\.\\d+$' }, accountLabelFrom: 'client_id' },
     keyPageUrl: 'https://api.slack.com/apps',
     docsUrl: 'https://docs.slack.dev/authentication/installing-with-oauth',
   },

@@ -1,6 +1,6 @@
 import { GatewayType } from '../../entities/gateway.entity';
-import { AppAuthMode, DistributionTarget, appSlugError, defaultLimitsFor } from '../legacy/app-model';
-import { appSlugFromName, newAppFields, placeConfigurationFrom, targetForGatewayType } from '../legacy/new-app';
+import { AppAuthMode, DistributionTarget, appSlugError, defaultLimitsFor } from '../support/app-places/app-model';
+import { appSlugFromName, newAppFields, placeConfigurationFrom, targetForGatewayType } from '../support/app-places/new-app';
 
 /**
  * The pieces an app was made from, frozen with the migrations that build

@@ -2,6 +2,7 @@ import {
   ChannelBranding,
   ChannelCapabilities,
   ChannelType,
+  MESSAGING_CHANNEL_TYPES,
   VisitorAuthMode,
   VisitorLimits,
   VisitorPrivacy,
@@ -69,8 +70,62 @@ export const SLUGGED_CHANNEL_TYPES: readonly ChannelType[] = Object.freeze([
   ChannelType.WEB,
   ChannelType.DESKTOP,
   ChannelType.TUI,
-  ChannelType.BINARY,
 ]);
+
+/** What a new channel is called until its owner names it: the type's label. */
+export const CHANNEL_DEFAULT_NAMES: Readonly<Record<ChannelType, string>> = Object.freeze({
+  [ChannelType.WEB]: 'Web chat',
+  [ChannelType.WIDGET]: 'Website widget',
+  [ChannelType.A2A]: 'Other agents (A2A)',
+  [ChannelType.TUI]: 'Terminal app',
+  [ChannelType.DESKTOP]: 'Desktop app',
+  [ChannelType.SLACK]: 'Slack',
+  [ChannelType.DISCORD]: 'Discord',
+  [ChannelType.TELEGRAM]: 'Telegram',
+  [ChannelType.WHATSAPP]: 'WhatsApp (Twilio)',
+  [ChannelType.WHATSAPP_CLOUD]: 'WhatsApp (Meta Cloud)',
+  [ChannelType.SMS]: 'SMS',
+  [ChannelType.MICROSOFT_TEAMS]: 'Microsoft Teams',
+  [ChannelType.GOOGLE_CHAT]: 'Google Chat',
+  [ChannelType.EMAIL]: 'Email',
+  [ChannelType.SIGNAL]: 'Signal',
+  [ChannelType.MATRIX]: 'Matrix',
+  [ChannelType.IRC]: 'IRC',
+  [ChannelType.WEBHOOK]: 'Webhook',
+});
+
+export const MAX_CHANNEL_NAME_LENGTH = 120;
+
+/** Why a channel name cannot be used, or null. */
+export function channelNameError(name: unknown): string | null {
+  if (typeof name !== 'string' || !name.trim()) return 'Give the channel a name.';
+  if (name.trim().length > MAX_CHANNEL_NAME_LENGTH) return `Keep the name to ${MAX_CHANNEL_NAME_LENGTH} characters.`;
+  return null;
+}
+
+/** The type's label, numbered when the agent already has a channel of that name. */
+export function defaultChannelName(type: ChannelType, taken: (name: string) => boolean): string {
+  const base = CHANNEL_DEFAULT_NAMES[type] ?? String(type);
+  if (!taken(base)) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base} ${n}`;
+    if (!taken(candidate)) return candidate;
+  }
+}
+
+/**
+ * The channels that talk to people, and so carry the AI disclosure switch:
+ * the web chat, the website widget and every messaging platform. A desktop
+ * app shows its web chat, so it follows that web chat's switch.
+ */
+export function carriesDisclosure(type: ChannelType | string): boolean {
+  return type === ChannelType.WEB || type === ChannelType.WIDGET || MESSAGING_CHANNEL_TYPES.includes(type as ChannelType);
+}
+
+/** The per-channel AI disclosure switch: on unless it was turned off. */
+export function disclosureOn(configuration: Record<string, any> | null | undefined): boolean {
+  return configuration?.aiDisclosure !== false;
+}
 
 /**
  * Reason codes for refusing to publish or build. Each is paired with a
@@ -379,7 +434,7 @@ export function buildVersionError(version: unknown): string | null {
 }
 
 /** Channels that produce a file someone installs, and so need a bundle id. */
-const PACKAGED_TYPES: readonly ChannelType[] = Object.freeze([ChannelType.DESKTOP, ChannelType.BINARY]);
+const PACKAGED_TYPES: readonly ChannelType[] = Object.freeze([ChannelType.DESKTOP]);
 
 /** Whether a channel produces a file someone installs (and so needs a bundle id). */
 export function isPackagedType(type: ChannelType | string): boolean {
@@ -387,7 +442,7 @@ export function isPackagedType(type: ChannelType | string): boolean {
 }
 
 /** Channels built into a download rather than served. */
-export const BUILDABLE_TYPES: readonly ChannelType[] = Object.freeze([ChannelType.TUI, ChannelType.DESKTOP, ChannelType.BINARY]);
+export const BUILDABLE_TYPES: readonly ChannelType[] = Object.freeze([ChannelType.TUI, ChannelType.DESKTOP]);
 
 export function isBuildableType(type: ChannelType | string): boolean {
   return BUILDABLE_TYPES.includes(type as ChannelType);
@@ -441,7 +496,8 @@ export function checkChannel(channel: ChannelShape, context: ChannelContext = {}
   if (channel.branding.whiteLabel && !context.hasWhiteLabel) refuse('WHITE_LABEL_NOT_ENTITLED');
   // Null means the default line. An empty string is a removal.
   const disclosure = channel.branding.aiDisclosure;
-  if (typeof disclosure === 'string' && disclosure.trim() === '' && !context.hasWhiteLabel) {
+  const switchedOff = carriesDisclosure(channel.type) && !disclosureOn(channel.configuration);
+  if (((typeof disclosure === 'string' && disclosure.trim() === '') || switchedOff) && !context.hasWhiteLabel) {
     refuse('DISCLOSURE_REMOVAL_NOT_ENTITLED');
   }
 

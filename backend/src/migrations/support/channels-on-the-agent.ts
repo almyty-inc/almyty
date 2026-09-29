@@ -10,8 +10,50 @@ import type { QueryRunner } from 'typeorm';
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ADDRESSED = ['web', 'desktop', 'tui', 'binary'];
-const DOWNLOADS = ['desktop', 'tui', 'binary'];
+const ADDRESSED = ['web', 'desktop', 'tui'];
+const DOWNLOADS = ['desktop', 'tui'];
+
+/**
+ * The channel type a place becomes. A standalone binary compiled to exactly
+ * what a terminal app compiles to, so it becomes a terminal app.
+ */
+const channelTypeOf = (target: string): string => (target === 'binary' ? 'tui' : target);
+
+/** What a moved channel is called: its type's label, frozen here as it read at the move. */
+const CHANNEL_NAMES: Record<string, string> = {
+  web: 'Web chat',
+  widget: 'Website widget',
+  a2a: 'Other agents (A2A)',
+  tui: 'Terminal app',
+  desktop: 'Desktop app',
+  slack: 'Slack',
+  discord: 'Discord',
+  telegram: 'Telegram',
+  whatsapp: 'WhatsApp (Twilio)',
+  whatsapp_cloud: 'WhatsApp (Meta Cloud)',
+  sms: 'SMS',
+  microsoft_teams: 'Microsoft Teams',
+  google_chat: 'Google Chat',
+  email: 'Email',
+  signal: 'Signal',
+  matrix: 'Matrix',
+  irc: 'IRC',
+  webhook: 'Webhook',
+};
+
+/**
+ * A name no other channel of the agent has: the type's label, then the
+ * label with the app it came from, then that with a number.
+ */
+function channelNameFor(target: string, appName: string, used: Set<string>): string {
+  const label = CHANNEL_NAMES[target] ?? target;
+  const candidates = [label, `${label} (${appName})`.slice(0, 120)];
+  for (const candidate of candidates) if (!used.has(candidate.toLowerCase())) return candidate;
+  for (let n = 2; ; n += 1) {
+    const candidate = `${candidates[1].slice(0, 112)} ${n}`;
+    if (!used.has(candidate.toLowerCase())) return candidate;
+  }
+}
 
 interface AppRow {
   id: string;
@@ -87,10 +129,20 @@ export async function moveAppsToChannels(queryRunner: Pick<QueryRunner, 'query'>
        LEFT JOIN "gateways" g ON g.id = d."gatewayId"
       ORDER BY d."createdAt", d.id`,
   );
-  const agents: Array<{ id: string; organizationId: string; branding: unknown; visitorRules: unknown }> = await queryRunner.query(
-    `SELECT id, "organizationId", branding::jsonb AS branding, "visitorRules"::jsonb AS "visitorRules" FROM "agents"`,
+  const agents: Array<{ id: string; organizationId: string; name: string; branding: unknown; visitorRules: unknown }> = await queryRunner.query(
+    `SELECT id, "organizationId", name, branding::jsonb AS branding, "visitorRules"::jsonb AS "visitorRules" FROM "agents"`,
   );
   const agentOrg = new Map(agents.map((a) => [a.id, String(a.organizationId)]));
+  const agentName = new Map(agents.map((a) => [a.id, String(a.name ?? '')]));
+  // Channel names already taken on each agent (a rerun, or channels added since).
+  const namesOf = new Map<string, Set<string>>();
+  const existingNames: Array<{ agentId: string; name: string }> = await queryRunner.query(
+    `SELECT "agentId", name FROM "agent_channels"`,
+  );
+  for (const row of existingNames) {
+    if (!namesOf.has(row.agentId)) namesOf.set(row.agentId, new Set());
+    namesOf.get(row.agentId)!.add(String(row.name).toLowerCase());
+  }
   // Agents that already carry settings (set by hand, or by an earlier run
   // of this) keep them; an app that agrees with them is not a conflict.
   const settled = new Map<string, { appId: string; settings: ReturnType<typeof appSettingsFor> }>();
@@ -146,34 +198,38 @@ export async function moveAppsToChannels(queryRunner: Pick<QueryRunner, 'query'>
 
     const webPlace = resolved.find((r) => r.place.target === 'web' && r.agentId);
     for (const { place, agentId } of resolved) {
+      const type = channelTypeOf(place.target);
       if (!agentId) {
         skipped.push({ placeId: place.id, appId: app.id, target: place.target });
         logger?.warn(`Place ${place.id} (${place.target}) of app ${app.id} (${app.slug}) has no agent in its organization and was not moved.`);
         continue;
       }
       const { agentId: _named, ...configuration } = place.configuration ?? {};
-      if (DOWNLOADS.includes(place.target) && app.capabilities && Object.keys(app.capabilities).length > 0) {
+      if (DOWNLOADS.includes(type) && app.capabilities && Object.keys(app.capabilities).length > 0) {
         configuration.capabilities = app.capabilities;
       }
-      if (place.target === 'desktop' && webPlace && !configuration.webChatChannelId) {
+      if (type === 'desktop' && webPlace && !configuration.webChatChannelId) {
         configuration.webChatChannelId = webPlace.place.id;
       }
-      const slug = ADDRESSED.includes(place.target)
-        ? (place.target === 'web' && place.hostedChatSlug) || app.slug
+      const slug = ADDRESSED.includes(type)
+        ? (type === 'web' && place.hostedChatSlug) || app.slug
         : null;
       const override = overridden.has(agentId);
+      if (!namesOf.has(agentId)) namesOf.set(agentId, new Set());
+      const used = namesOf.get(agentId)!;
+      const name = channelNameFor(type, app.name, used);
       const inserted = await queryRunner.query(
         `INSERT INTO "agent_channels"
-           ("id", "organizationId", "agentId", "type", "status", "slug", "gatewayId", "configuration",
+           ("id", "organizationId", "agentId", "type", "status", "name", "slug", "gatewayId", "configuration",
             "branding", "visitorRules", "lastBuild", "createdAt", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::json, $9::json, $10::json, $11::json, $12, $13)
+         VALUES ($1, $2, $3, $4, $5, $14, $6, $7, $8::json, $9::json, $10::json, $11::json, $12, $13)
          ON CONFLICT ("id") DO NOTHING
          RETURNING id`,
         [
           place.id,
           place.organizationId,
           agentId,
-          place.target,
+          type,
           place.status,
           slug,
           place.gatewayId,
@@ -183,29 +239,39 @@ export async function moveAppsToChannels(queryRunner: Pick<QueryRunner, 'query'>
           place.lastBuild == null ? null : JSON.stringify(place.lastBuild),
           place.createdAt,
           place.updatedAt,
+          name,
         ],
       );
       if (inserted.length === 0) continue;
+      used.add(name.toLowerCase());
       moved += 1;
 
+      // The gateway answers at the channel's own address and names its
+      // channel. A platform given the app address needs the channel's
+      // callback URL instead (Telegram and Twilio re-register on publish).
       if (place.gatewayId) {
         await queryRunner.query(
           `UPDATE "gateways"
-              SET "configuration" = ((COALESCE("configuration"::jsonb, '{}'::jsonb) - 'appId') || jsonb_build_object('channelId', $2::text))::json
+              SET "configuration" = ((COALESCE("configuration"::jsonb, '{}'::jsonb) - 'appId') || jsonb_build_object('channelId', $2::text))::json,
+                  "endpoint" = '/channels/' || $2::text
             WHERE id = $1`,
           [place.gatewayId, place.id],
         );
       }
+      // Platform keys are a credential on Credentials like any other: the
+      // one the place kept for itself becomes an ordinary credential the
+      // channel uses, named after it.
       await queryRunner.query(
         `UPDATE "credentials"
-            SET "metadata" = jsonb_set("metadata"::jsonb, '{managedBy,kind}', '"agent_channel"')::json
+            SET "metadata" = ("metadata"::jsonb - 'managedBy')::json,
+                "name" = $2
           WHERE "metadata"::jsonb -> 'managedBy' ->> 'kind' = 'app_distribution'
             AND "metadata"::jsonb -> 'managedBy' ->> 'id' = $1`,
-        [place.id],
+        [place.id, `${agentName.get(agentId) ?? 'Agent'}: ${name}`.slice(0, 255)],
       );
       await queryRunner.query(
-        `UPDATE "app_builds" SET "channelId" = $1, "agentId" = $2 WHERE "appId" = $3 AND target = $4 AND "channelId" IS NULL`,
-        [place.id, agentId, app.id, place.target],
+        `UPDATE "app_builds" SET "channelId" = $1, "agentId" = $2, target = $5 WHERE "appId" = $3 AND target = $4 AND "channelId" IS NULL`,
+        [place.id, agentId, app.id, place.target, type],
       );
     }
   }

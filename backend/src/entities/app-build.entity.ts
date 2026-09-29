@@ -50,22 +50,15 @@ export class AppBuild {
   @Column()
   organizationId: string;
 
-  /** The desktop or terminal channel this artifact was built for. Null only on a build from an app whose place had no agent to move to. */
-  @Column({ type: 'uuid', nullable: true })
-  channelId: string | null;
+  /** The desktop or terminal channel this artifact was built for. */
+  @Column({ type: 'uuid' })
+  channelId: string;
 
   /** The agent the channel belongs to, for listing an agent's builds. */
-  @Column({ type: 'uuid', nullable: true })
-  agentId: string | null;
+  @Column({ type: 'uuid' })
+  agentId: string;
 
-  /**
-   * Legacy: the app a build was made for, before apps became channels on
-   * the agent. Kept for the history rows; nothing writes it any more.
-   */
-  @Column({ type: 'uuid', nullable: true })
-  appId: string | null;
-
-  /** Which kind of channel this artifact is for: tui, desktop, binary. */
+  /** Which kind of channel this artifact is for: tui or desktop. */
   @Column({ type: 'varchar' })
   target: string;
 

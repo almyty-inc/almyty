@@ -128,7 +128,6 @@ describe('platform mapping', () => {
 
   it('builds executables with bun and the desktop shell with npx', () => {
     expect(TOOL_FOR_TARGET.tui).toBe('bun');
-    expect(TOOL_FOR_TARGET.binary).toBe('bun');
     expect(TOOL_FOR_TARGET.desktop).toBe('npx');
   });
 });
@@ -167,9 +166,9 @@ describe('targetLabel in readiness reasons', () => {
     expect(r.reason).not.toMatch(/build tui\b/);
   });
 
-  it('says a web distribution produces no file in words', async () => {
+  it('says a web chat produces no file in words', async () => {
     const r = await toolchainReadiness('web', noBun);
-    expect(r.reason).toContain('Web app');
+    expect(r.reason).toContain('Web chat');
     expect(r.reason).not.toMatch(/^web /);
   });
 });

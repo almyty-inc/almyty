@@ -35,8 +35,6 @@ export enum ChannelType {
   TUI = 'tui',
   /** Desktop app, packaged and signed. */
   DESKTOP = 'desktop',
-  /** Standalone executable. Kept so an existing one still works; not offered when adding. */
-  BINARY = 'binary',
   SLACK = 'slack',
   DISCORD = 'discord',
   TELEGRAM = 'telegram',
@@ -206,6 +204,14 @@ export class AgentChannel {
 
   @Column({ type: 'varchar', default: ChannelStatus.DRAFT })
   status: ChannelStatus;
+
+  /**
+   * What the owner calls it, unique among the agent's channels, so two
+   * channels of one type (a Slack for support, a Slack for sales) can be
+   * told apart. Starts as the type's label.
+   */
+  @Column({ type: 'varchar', length: 120 })
+  name: string;
 
   /**
    * The channel's address name: the web chat's subdomain, and the file

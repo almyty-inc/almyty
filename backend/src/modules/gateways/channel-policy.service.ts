@@ -18,8 +18,8 @@ export type SpendPeriod = 'day' | 'month';
 
 /** What a visitor is told when the spend allowance is used up. Plain words, no numbers. */
 export const SPEND_CAP_MESSAGES: Readonly<Record<SpendPeriod, string>> = Object.freeze({
-  day: 'This app has reached its limit for today.',
-  month: 'This app has reached its limit for this month.',
+  day: 'This chat has reached its limit for today.',
+  month: 'This chat has reached its limit for this month.',
 });
 
 export interface SpendStatus {
@@ -79,7 +79,7 @@ export function withChannelPolicy<T extends object>(
 export class SpendCapReachedException extends HttpException {
   constructor(readonly period: SpendPeriod, readonly resetsAt: string | null) {
     super(
-      { code: 'APP_SPEND_CAP_REACHED', message: SPEND_CAP_MESSAGES[period], period, resetsAt },
+      { code: 'CHANNEL_SPEND_CAP_REACHED', message: SPEND_CAP_MESSAGES[period], period, resetsAt },
       HttpStatus.TOO_MANY_REQUESTS,
     );
   }
@@ -178,7 +178,7 @@ export class ChannelPolicyService {
 
   /**
    * Resolve the policy and refuse when the spend allowance is used up.
-   * Throws SpendCapReachedException (429, APP_SPEND_CAP_REACHED -- the wire code the hosted chat and widget clients already read) with the
+   * Throws SpendCapReachedException (429, CHANNEL_SPEND_CAP_REACHED, the code the hosted chat and widget clients read) with the
    * sentence a visitor is shown.
    */
   async admit(gateway: Gateway): Promise<ChannelPolicy> {
@@ -237,9 +237,9 @@ export class ChannelPolicyService {
    * counts in full on each day it is active, which errs towards stopping
    * early rather than late.
    *
-   * The agent's allowance counts every visitor run of the agent (stamped
-   * with a channel, or with an app before apps became channels) except
-   * those on channels that have an allowance of their own.
+   * The agent's allowance counts every visitor run of the agent (every run
+   * stamped with a channel) except those on channels that have an
+   * allowance of their own.
    */
   private async spentSince(scope: SpendScope, from: Date): Promise<number> {
     const query = this.runRepository
@@ -254,8 +254,8 @@ export class ChannelPolicyService {
       query
         .where('run.agentId = :agentId', { agentId: scope.agent.id })
         .andWhere('run.organizationId = :organizationId', { organizationId: scope.agent.organizationId })
-        .andWhere('(run.channelId IS NOT NULL OR run.appId IS NOT NULL)');
-      if (own.length) query.andWhere('(run.channelId IS NULL OR run.channelId NOT IN (:...own))', { own });
+        .andWhere('run.channelId IS NOT NULL');
+      if (own.length) query.andWhere('run.channelId NOT IN (:...own)', { own });
     }
     query.andWhere('run.updatedAt >= :from', { from });
     const row = await query.getRawOne<{ total: string | number | null }>();

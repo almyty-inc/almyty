@@ -6,15 +6,13 @@ import { fakeRepository } from '../../../test/fake-repository';
 import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 import { Credential } from '../../../entities/credential.entity';
 import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
-import { decryptField } from '../../../common/security/field-crypto';
 
 /**
  * A channel's platform keys (a Slack bot token and signing secret, a
- * Twilio auth token, a Resend key) belong in its credential, but a row
- * written before that still carries them inline, as the seed here does.
- * The channel list is readable by any member who can read the agent, so
- * whatever the row holds is masked on the way out, and the next write
- * moves it into the store.
+ * Twilio auth token, a Resend key) are a credential on Credentials, never
+ * on the row. The channel list is readable by any member who can read the
+ * agent, so were a key ever on the row (the seed here puts one there), it
+ * is masked on the way out, and the next write drops it.
  */
 
 const ORG = 'org-1';
@@ -75,17 +73,16 @@ describe('channel keys never leave the API in the clear', () => {
     expect(JSON.stringify(data)).not.toContain(SECRET);
   });
 
-  it('keeps the stored key when a masked placeholder is sent back, and moves both into the store', async () => {
+  it('drops a key from the row on the next write, and stores none it is sent', async () => {
     const { service, channels, credentials } = makeService();
 
-    await service.update(ORG, 'agent-1', 'channel-1', { id: 'user-1' }, {
-      configuration: { bot_token: MASKED_CHANNEL_SECRET, signing_secret: 'rotated-secret' },
-    });
+    await expect(
+      service.update(ORG, 'agent-1', 'channel-1', { id: 'user-1' }, { configuration: { signing_secret: 'rotated-secret' } }),
+    ).rejects.toThrow('go in a credential on Credentials');
+    await service.update(ORG, 'agent-1', 'channel-1', { id: 'user-1' }, { configuration: { bot_token: MASKED_CHANNEL_SECRET, phone_number: '+1666' } });
 
     const row = channels.row('channel-1')!;
-    expect(JSON.stringify(row.configuration)).not.toContain(SECRET);
-    const credential = credentials.row(row.configuration.credentialId)!;
-    expect(decryptField(credential.config.bot_token, ORG)).toBe(SECRET);
-    expect(decryptField(credential.config.signing_secret, ORG)).toBe('rotated-secret');
+    expect(row.configuration).toEqual({ phone_number: '+1666' });
+    expect(credentials.rows()).toHaveLength(0);
   });
 });

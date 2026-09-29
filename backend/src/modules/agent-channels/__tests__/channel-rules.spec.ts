@@ -3,9 +3,13 @@ import {
   CHANNEL_REFUSALS,
   DEFAULT_PUBLIC_DAILY_SPEND_CAP_CENTS,
   RESERVED_CHANNEL_SLUGS,
+  CHANNEL_DEFAULT_NAMES,
+  carriesDisclosure,
+  channelNameError,
   channelSlugError,
   channelSlugFromName,
   checkChannel,
+  defaultChannelName,
   defaultBundleId,
   effectiveBranding,
   effectiveVisitorRules,
@@ -32,6 +36,21 @@ const channel = (overrides: Partial<ChannelShape> & { authMode?: VisitorAuthMode
 };
 
 const codes = (result: ReturnType<typeof checkChannel>) => result.refusals.map((r) => r.code);
+
+describe('channel names', () => {
+  it('starts a channel at its type\'s label, numbered when the agent has one of that name', () => {
+    expect(defaultChannelName(ChannelType.SLACK, () => false)).toBe('Slack');
+    const taken = new Set(['Slack', 'Slack 2']);
+    expect(defaultChannelName(ChannelType.SLACK, (n) => taken.has(n))).toBe('Slack 3');
+    for (const type of Object.values(ChannelType)) expect(CHANNEL_DEFAULT_NAMES[type]).toBeTruthy();
+  });
+
+  it('wants a name, and not a long one', () => {
+    expect(channelNameError('Slack for sales')).toBeNull();
+    expect(channelNameError('   ')).toBe('Give the channel a name.');
+    expect(channelNameError('x'.repeat(121))).toBe('Keep the name to 120 characters.');
+  });
+});
 
 describe('channelSlugError', () => {
   it('accepts a usable address', () => {
@@ -122,6 +141,18 @@ describe('checkChannel', () => {
     it('allows a custom disclosure but gates removing it', () => {
       expect(checkChannel(channel({ branding: { aiDisclosure: 'This is a bot.' } })).ok).toBe(true);
       expect(codes(checkChannel(channel({ branding: { aiDisclosure: '  ' } })))).toContain('DISCLOSURE_REMOVAL_NOT_ENTITLED');
+    });
+
+    it('treats the disclosure switch turned off as a removal, only on a channel people talk to', () => {
+      const off = { aiDisclosure: false };
+      expect(codes(checkChannel(channel({ configuration: off })))).toContain('DISCLOSURE_REMOVAL_NOT_ENTITLED');
+      expect(codes(checkChannel(channel({ type: ChannelType.SLACK, slug: null, configuration: { ...off, credentialKeys: ['bot_token'] } })))).toContain(
+        'DISCLOSURE_REMOVAL_NOT_ENTITLED',
+      );
+      expect(codes(checkChannel(channel({ configuration: off }), { hasWhiteLabel: true }))).not.toContain('DISCLOSURE_REMOVAL_NOT_ENTITLED');
+      expect(codes(checkChannel(channel({ configuration: { aiDisclosure: true } })))).not.toContain('DISCLOSURE_REMOVAL_NOT_ENTITLED');
+      expect(carriesDisclosure(ChannelType.A2A)).toBe(false);
+      expect(carriesDisclosure(ChannelType.WIDGET)).toBe(true);
     });
   });
 

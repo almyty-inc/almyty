@@ -1,4 +1,4 @@
-import { splitChannelConfigSecrets } from '../../modules/gateways/channels/channel-config.helper';
+import { splitChannelConfigSecrets } from '../../../modules/gateways/channels/channel-config.helper';
 import {
   AppAuthMode,
   AppBranding,

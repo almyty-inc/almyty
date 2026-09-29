@@ -6,40 +6,46 @@ import { moveAppsToChannels } from './support/channels-on-the-agent';
 /**
  * Channels on the agent.
  *
- * Apps and their places are gone: an agent has channels (web chat, website
- * widget, messaging platforms, A2A, desktop and terminal apps), and its
- * branding and visitor rules live on the agent, overridable per channel.
- * This moves what the apps held onto the agents they answered with.
+ * An agent has channels (web chat, website widget, messaging platforms,
+ * A2A, desktop and terminal apps), and its branding and visitor rules live
+ * on the agent, overridable per channel. This creates them from what the
+ * apps held, then drops the app tables.
  *
- * - Each place becomes a channel with the SAME id (so the credential it
- *   manages, its builds and its gateway keep pointing at it), on the agent
- *   it answers with: the place's `configuration.agentId`, else the app's
- *   first agent. A place whose agent no longer exists in the organization
- *   is not moved and is logged; its rows stay where they are.
+ * - Each place becomes a channel with the same id, on the agent it answers
+ *   with: the place's `configuration.agentId`, else the app's first agent.
+ *   A place whose agent no longer exists in the organization is logged and
+ *   dropped with the app tables. A standalone binary becomes a terminal
+ *   app, which compiles to the same file.
  * - The app's branding (its name when branding has none) and visitor rules
  *   (sign-in, limits, privacy) are copied onto each agent that receives
  *   one of its places, or onto its first agent when it has none. When two
  *   apps put different settings on the same agent, the first app (oldest)
- *   wins on the agent and the later app's settings go onto ITS channels as
+ *   wins on the agent and the later app's settings go onto its channels as
  *   overrides, so what visitors of those channels see does not change. Each
  *   such conflict is logged.
+ * - Each channel is named after its kind, with the app's name added when
+ *   the agent already has a channel of that name.
  * - Downloads keep what they may touch (`capabilities`), and a desktop app
- *   keeps opening the web chat of the app it came from.
+ *   opens the web chat of the app it came from.
  * - A web chat keeps its address (the gateway's hostedChat slug).
- * - A published place's gateway gets `configuration.channelId` instead of
- *   `appId`; its endpoint is untouched, because platforms were given it.
- * - Managed credentials of places are re-labelled as the channel's.
- * - Builds point at their channel; runs gain a channelId for spend caps.
- *
- * The app tables themselves are left in place, untouched and unread, so
- * nothing is lost if a mapping above needs a second look.
+ * - A published place's gateway answers at `/channels/<channel id>` and
+ *   names its channel in `configuration.channelId`.
+ * - The credential a place kept its keys in becomes an ordinary credential
+ *   on Credentials, named after the agent and the channel.
+ * - Builds point at their channel. A build whose place was not moved goes.
  */
 export class ChannelsOnTheAgent1750813742000 implements MigrationInterface {
   name = 'ChannelsOnTheAgent1750813742000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const logger = new Logger(this.name);
+    await this.createChannelSchema(queryRunner);
+    await moveAppsToChannels(queryRunner, logger);
+    await this.dropAppModel(queryRunner);
+  }
 
+  /** The agent's branding and visitor rules, its channels, and what builds and runs point at. */
+  async createChannelSchema(queryRunner: Pick<QueryRunner, 'query'>): Promise<void> {
     await queryRunner.query(`
       ALTER TABLE "agents"
         ADD COLUMN IF NOT EXISTS "branding" json,
@@ -53,6 +59,7 @@ export class ChannelsOnTheAgent1750813742000 implements MigrationInterface {
         "agentId" uuid NOT NULL,
         "type" character varying NOT NULL,
         "status" character varying NOT NULL DEFAULT 'draft',
+        "name" character varying(120) NOT NULL,
         "slug" character varying,
         "gatewayId" uuid,
         "configuration" json,
@@ -76,7 +83,6 @@ export class ChannelsOnTheAgent1750813742000 implements MigrationInterface {
 
     await queryRunner.query(`
       ALTER TABLE "app_builds"
-        ALTER COLUMN "appId" DROP NOT NULL,
         ADD COLUMN IF NOT EXISTS "channelId" uuid,
         ADD COLUMN IF NOT EXISTS "agentId" uuid
     `);
@@ -97,45 +103,29 @@ export class ChannelsOnTheAgent1750813742000 implements MigrationInterface {
     await queryRunner.query(`
       CREATE INDEX IF NOT EXISTS "IDX_agent_runs_channelId_updatedAt" ON "agent_runs" ("channelId", "updatedAt") WHERE "channelId" IS NOT NULL
     `);
-
-    await moveAppsToChannels(queryRunner, logger);
   }
 
-  public async down(queryRunner: QueryRunner): Promise<void> {
+  /** What the apps held is on the agents and channels now: drop the app tables and what pointed at them. */
+  async dropAppModel(queryRunner: Pick<QueryRunner, 'query'>): Promise<void> {
+    await queryRunner.query(`DELETE FROM "app_builds" WHERE "channelId" IS NULL`);
+    await queryRunner.query(`ALTER TABLE "app_builds" DROP CONSTRAINT IF EXISTS "FK_app_builds_app"`);
+    await queryRunner.query(`ALTER TABLE "app_builds" DROP COLUMN IF EXISTS "appId"`);
     await queryRunner.query(`
-      UPDATE "credentials" c
-         SET "metadata" = jsonb_set(c."metadata"::jsonb, '{managedBy,kind}', '"app_distribution"')::json
-        FROM "agent_channels" ch
-       WHERE c."metadata"::jsonb -> 'managedBy' ->> 'kind' = 'agent_channel'
-         AND c."metadata"::jsonb -> 'managedBy' ->> 'id' = ch.id::text
-         AND EXISTS (SELECT 1 FROM "agent_app_distributions" d WHERE d.id = ch.id)
+      ALTER TABLE "app_builds"
+        ALTER COLUMN "channelId" SET NOT NULL,
+        ALTER COLUMN "agentId" SET NOT NULL
     `);
-    await queryRunner.query(`
-      UPDATE "gateways" g
-         SET "configuration" = ((g."configuration"::jsonb - 'channelId') || jsonb_build_object('appId', d."appId"::text))::json
-        FROM "agent_app_distributions" d
-       WHERE d."gatewayId" = g.id
-    `);
-    await queryRunner.query(`
-      DROP INDEX IF EXISTS "IDX_agent_runs_channelId_updatedAt"
-    `);
-    await queryRunner.query(`
-      ALTER TABLE "agent_runs" DROP COLUMN IF EXISTS "channelId"
-    `);
-    await queryRunner.query(`
-      DROP INDEX IF EXISTS "IDX_app_builds_channelId_createdAt"
-    `);
-    await queryRunner.query(`
-      ALTER TABLE "app_builds" DROP CONSTRAINT IF EXISTS "FK_app_builds_channel"
-    `);
-    await queryRunner.query(`
-      ALTER TABLE "app_builds" DROP COLUMN IF EXISTS "channelId", DROP COLUMN IF EXISTS "agentId"
-    `);
-    await queryRunner.query(`
-      DROP TABLE IF EXISTS "agent_channels"
-    `);
-    await queryRunner.query(`
-      ALTER TABLE "agents" DROP COLUMN IF EXISTS "branding", DROP COLUMN IF EXISTS "visitorRules"
-    `);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_agent_runs_appId_updatedAt"`);
+    await queryRunner.query(`ALTER TABLE "agent_runs" DROP COLUMN IF EXISTS "appId"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "agent_app_distributions" CASCADE`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "agent_apps" CASCADE`);
+  }
+
+  /**
+   * The app tables are dropped and their rows are channels now; there is
+   * nothing to put back. Restore a backup taken before this migration.
+   */
+  public async down(): Promise<void> {
+    throw new Error('ChannelsOnTheAgent1750813742000 drops the app tables and cannot be reverted. Restore a backup taken before it.');
   }
 }

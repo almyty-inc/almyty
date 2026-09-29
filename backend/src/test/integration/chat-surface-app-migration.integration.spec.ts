@@ -1,7 +1,7 @@
 import { Client } from 'pg';
 
 import { EveryChatSurfaceHasAnApp1750812800000 } from '../../migrations/1750812800000-EveryChatSurfaceHasAnApp';
-import { AppAuthMode, defaultLimitsFor } from '../../migrations/legacy/app-model';
+import { AppAuthMode, defaultLimitsFor } from '../../migrations/support/app-places/app-model';
 
 /** The types this migration wraps: the web chat and thirteen messaging platforms, frozen with it. */
 const CHAT_SURFACES = [
