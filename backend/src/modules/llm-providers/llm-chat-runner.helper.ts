@@ -337,6 +337,12 @@ export class LlmChatRunnerHelper {
       case LlmProviderType.VERTEX_AI:
         return callVertex(provider, request, session, tools, startTime, costFn);
       case LlmProviderType.CUSTOM:
+        // Your own server speaking the OpenAI format gets the full chat
+        // completions client: tools offered, tool calls read back. The
+        // custom client below sends text only, for the other formats.
+        if ((provider.configuration?.custom?.requestFormat || 'openai') === 'openai') {
+          return callOpenAI(provider, request, session, tools, startTime, costFn);
+        }
         return callCustomProvider(provider, request, session, tools, startTime);
       default:
         throw new BadRequestException(`Unsupported LLM provider type: ${provider.type}`);

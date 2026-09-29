@@ -917,6 +917,7 @@ export const agentsApi = {
     apiPatch(`/agents/${id}/heartbeat`, body),
   // Runs (autonomous mode)
   listRuns: (id: string, params?: any) => apiGet(`/agents/${id}/runs`, { params }),
+  getRun: (id: string, runId: string) => apiGet(`/agents/${id}/runs/${runId}`),
 }
 
 // Promoted Skills API (run -> skill)

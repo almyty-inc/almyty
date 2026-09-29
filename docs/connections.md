@@ -326,6 +326,13 @@ range to every organization on the install, which is a far larger hole
 than the one anybody is trying to make. Those flags still work where they
 always did.
 
+The same allowlist covers an API's tools. A tool whose API lives at a
+private address (`http://inventory.internal:8080`) is refused when it
+runs, unless that host is on the organization's allowlist; then the call
+goes out, and the connect-time check makes the exception for that one name.
+Importing an API by *link* from a private address stays refused: upload
+the description or paste it instead.
+
 **What this check cannot do.** A hostname is not known to be private until
 it resolves, so `http://gpu-1.internal/v1` passes the save-time check. It
 is refused later instead: every outbound call resolves through an agent

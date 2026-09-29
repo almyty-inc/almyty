@@ -20,9 +20,13 @@
  *     first one — every URL pulled out of the response body runs
  *     back through validateUrl).
  */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
-import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
+import { agentsExempting, ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Organization } from '../../../entities/organization.entity';
+import { decideEgress } from '../../connections/egress-policy';
 import { Tool } from '../../../entities/tool.entity';
 import { Api } from '../../../entities/api.entity';
 import { Operation } from '../../../entities/operation.entity';
@@ -60,7 +64,38 @@ const MAX_BODY_LENGTH = 10 * 1024 * 1024;
 export class ToolHttpExecutor {
   private readonly logger = new Logger(ToolHttpExecutor.name);
 
-  constructor(private readonly authService: ToolAuthService) {}
+  constructor(
+    private readonly authService: ToolAuthService,
+    @Optional()
+    @InjectRepository(Organization)
+    private readonly organizations?: Repository<Organization>,
+  ) {}
+
+  /**
+   * May this tool call go to `url`, and through which agents?
+   *
+   * A public URL passes `validateUrl` and goes through the DNS-pinning
+   * agents. A private, loopback or link-local one is refused unless its
+   * host is on the organization's egress allowlist (settings
+   * .egressAllowlist), the same allowlist a model provider's URL is judged
+   * by: an API on the organization's own network is reachable once an
+   * admin says that host is theirs. Then the pinning lookup makes an
+   * exception for that one name and nothing else. See
+   * connections/egress-policy.ts and docs/connections.md.
+   */
+  private async egressFor(
+    url: string,
+    organizationId: string | null | undefined,
+  ): Promise<{ error: string | null; httpAgent?: AxiosRequestConfig['httpAgent']; httpsAgent?: AxiosRequestConfig['httpsAgent'] }> {
+    const strict = validateUrl(url);
+    if (strict.valid) return { error: null, httpAgent: ssrfSafeHttpAgent, httpsAgent: ssrfSafeHttpsAgent };
+    const refused = { error: strict.error ?? 'The URL is not allowed' };
+    if (!organizationId || !this.organizations) return refused;
+    const organization = await this.organizations.findOne({ where: { id: organizationId } });
+    const decision = decideEgress(url, { allowlist: organization?.settings?.egressAllowlist ?? [] });
+    if (!decision.allowed || !decision.viaAllowlist) return refused;
+    return { error: null, ...agentsExempting(new URL(url).hostname) };
+  }
 
   // ─── Structured httpConfig path ────────────────────────────────
 
@@ -94,9 +129,10 @@ export class ToolHttpExecutor {
         return match;
       });
 
-      // 3. SSRF validation on the fully-constructed URL.
-      const urlCheck = validateUrl(url);
-      if (!urlCheck.valid) {
+      // 3. SSRF validation on the fully-constructed URL (a private host
+      // only when this organization allowlisted it).
+      const urlCheck = await this.egressFor(url, api?.organizationId ?? tool.organizationId);
+      if (urlCheck.error) {
         this.logger.warn(`SSRF blocked for HTTP tool ${tool.name}: ${urlCheck.error}`);
         return this.blockedResult(url, httpConfig.method, urlCheck.error!, startTime);
       }
@@ -186,8 +222,9 @@ export class ToolHttpExecutor {
         maxBodyLength: MAX_BODY_LENGTH,
         // SSRF: never follow redirects past the validateUrl gate.
         maxRedirects: 0,
-        httpAgent: ssrfSafeHttpAgent,
-        httpsAgent: ssrfSafeHttpsAgent,
+        // Pinned: the checked host's own exemption when it is allowlisted.
+        httpAgent: urlCheck.httpAgent ?? ssrfSafeHttpAgent,
+        httpsAgent: urlCheck.httpsAgent ?? ssrfSafeHttpsAgent,
         headers: safeHeaders,
         params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
         paramsSerializer: (params: any) => {
@@ -303,8 +340,8 @@ export class ToolHttpExecutor {
     options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
     try {
-      const baseUrlCheck = validateUrl(api.baseUrl);
-      if (!baseUrlCheck.valid) {
+      const baseUrlCheck = await this.egressFor(api.baseUrl, api.organizationId ?? tool.organizationId);
+      if (baseUrlCheck.error) {
         this.logger.warn(`SSRF blocked for tool ${tool.name}: ${baseUrlCheck.error}`);
         return this.blockedResult(api.baseUrl, operation.method, baseUrlCheck.error!, Date.now());
       }
@@ -359,8 +396,8 @@ export class ToolHttpExecutor {
         url = url.replace(new RegExp(`\\{${escaped}\\}`, 'g'), encodeURIComponent(String(value)));
       }
 
-      const fullUrlCheck = validateUrl(url);
-      if (!fullUrlCheck.valid) {
+      const fullUrlCheck = await this.egressFor(url, api.organizationId ?? tool.organizationId);
+      if (fullUrlCheck.error) {
         this.logger.warn(
           `SSRF blocked for constructed URL (tool ${tool.name}): ${fullUrlCheck.error}`,
         );
@@ -386,8 +423,9 @@ export class ToolHttpExecutor {
         maxBodyLength: MAX_BODY_LENGTH,
         // SSRF: never follow redirects past the validateUrl gate.
         maxRedirects: 0,
-        httpAgent: ssrfSafeHttpAgent,
-        httpsAgent: ssrfSafeHttpsAgent,
+        // Pinned: the checked host's own exemption when it is allowlisted.
+        httpAgent: fullUrlCheck.httpAgent ?? ssrfSafeHttpAgent,
+        httpsAgent: fullUrlCheck.httpsAgent ?? ssrfSafeHttpsAgent,
         params: queryParams,
         paramsSerializer: (params: any) => {
           const parts: string[] = [];

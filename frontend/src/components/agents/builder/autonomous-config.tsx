@@ -242,7 +242,7 @@ export function AutonomousConfig({
 
 /* ── Private sub-components ───────────────────────────────────────────── */
 
-function ToolGroupList({ tools, toolSearch, selectedIds, onSelectedIdsChange, expandedGroups, onExpandedGroupsChange }: {
+export function ToolGroupList({ tools, toolSearch, selectedIds, onSelectedIdsChange, expandedGroups, onExpandedGroupsChange }: {
   tools: any[]; toolSearch: string; selectedIds: string[]; onSelectedIdsChange: (v: string[]) => void
   expandedGroups: Set<string>; onExpandedGroupsChange: (v: Set<string>) => void
 }) {
@@ -281,25 +281,21 @@ function ToolGroupList({ tools, toolSearch, selectedIds, onSelectedIdsChange, ex
 
         return (
           <div key={groupName} className="border rounded-md">
-            <div
-              className="flex items-center gap-2 p-2 cursor-pointer hover:bg-muted/50 select-none"
-              role="button"
-              tabIndex={0}
-              aria-expanded={isExpanded}
-              onClick={toggleGroup}
-              onKeyDown={(e) => {
-                if (e.target !== e.currentTarget) return
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  toggleGroup()
-                }
-              }}
-            >
-              {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
-              <span className="text-sm font-medium flex-1">{groupName}</span>
-              <span className="text-xs text-muted-foreground">{pluralized(groupTools.length, 'tool')}{selectedInGroup > 0 ? `, ${selectedInGroup} selected` : ''}</span>
+            {/* Select all sits beside the expand button, not inside it: no control inside a control. */}
+            <div className="flex items-center gap-2 p-2 hover:bg-muted/50">
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left select-none"
+                aria-expanded={isExpanded}
+                onClick={toggleGroup}
+              >
+                {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden />}
+                <span className="text-sm font-medium flex-1">{groupName}</span>
+                <span className="text-xs text-muted-foreground">{pluralized(groupTools.length, 'tool')}{selectedInGroup > 0 ? `, ${selectedInGroup} selected` : ''}</span>
+              </button>
               <Button type="button" variant="ghost" size="sm" className="h-6 text-xs px-2"
-                onClick={(e) => { e.stopPropagation(); allSelectedInGroup ? deselectAll() : selectAll() }}>
+                aria-label={`${allSelectedInGroup ? 'Deselect' : 'Select'} all in ${groupName}`}
+                onClick={() => (allSelectedInGroup ? deselectAll() : selectAll())}>
                 {allSelectedInGroup ? 'Deselect all' : 'Select all'}
               </Button>
             </div>
