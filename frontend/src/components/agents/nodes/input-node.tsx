@@ -10,7 +10,7 @@ export function InputNode({ data, selected }: NodeProps) {
         <span className="text-xs font-semibold text-green-700 dark:text-green-300">Input</span>
       </div>
       <div className="p-3">
-        <div className="text-sm font-medium truncate">Pipeline Input</div>
+        <div className="text-sm font-medium truncate">What the run starts with</div>
         <div className="text-xs text-muted-foreground truncate mt-0.5">
           {data.schema ? `${Object.keys((data.schema as any)?.properties || {}).length} fields` : 'No schema defined'}
         </div>

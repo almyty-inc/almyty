@@ -76,7 +76,7 @@ export function SecurityTab() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label htmlFor="current-password">Current Password</Label>
+            <Label htmlFor="current-password">Current password</Label>
             <Input
               id="current-password"
               type="password"
@@ -87,7 +87,7 @@ export function SecurityTab() {
           </div>
           
           <div>
-            <Label htmlFor="new-password">New Password</Label>
+            <Label htmlFor="new-password">New password</Label>
             <Input
               id="new-password"
               type="password"
@@ -98,7 +98,7 @@ export function SecurityTab() {
           </div>
           
           <div>
-            <Label htmlFor="confirm-password">Confirm New Password</Label>
+            <Label htmlFor="confirm-password">Confirm new password</Label>
             <Input
               id="confirm-password"
               type="password"

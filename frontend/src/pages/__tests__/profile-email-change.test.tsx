@@ -39,8 +39,8 @@ describe('profile email change', () => {
     render(<ProfileTab />)
     await user.click(await screen.findByRole('button', { name: 'Edit profile' }))
     expect(screen.queryByLabelText('Current password')).toBeNull()
-    await user.clear(screen.getByLabelText('First Name'))
-    await user.type(screen.getByLabelText('First Name'), 'Augusta')
+    await user.clear(screen.getByLabelText('First name'))
+    await user.type(screen.getByLabelText('First name'), 'Augusta')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() =>
       expect(authApi.updateProfile).toHaveBeenCalledWith({ name: 'Augusta Lovelace', email: 'ada@example.com' }),
@@ -51,8 +51,8 @@ describe('profile email change', () => {
     const user = userEvent.setup()
     render(<ProfileTab />)
     await user.click(await screen.findByRole('button', { name: 'Edit profile' }))
-    await user.clear(screen.getByLabelText('Email Address'))
-    await user.type(screen.getByLabelText('Email Address'), 'new@example.com')
+    await user.clear(screen.getByLabelText('Email address'))
+    await user.type(screen.getByLabelText('Email address'), 'new@example.com')
 
     expect(screen.getByLabelText('Current password')).toHaveAttribute('type', 'password')
     await user.click(screen.getByRole('button', { name: 'Save' }))

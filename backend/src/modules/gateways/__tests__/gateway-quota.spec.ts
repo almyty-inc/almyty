@@ -5,7 +5,6 @@ import { QuotaLockRequiresTransactionError } from '../../../common/quota/org-quo
 import {
   GatewayQuotaExceededException,
   assertGatewayQuota,
-  remainingGatewayQuota,
   withGatewayQuota,
 } from '../gateway-quota';
 
@@ -76,10 +75,5 @@ describe('gateway quota', () => {
       GatewayQuotaExceededException,
     );
     expect(insert).not.toHaveBeenCalled();
-  });
-
-  it('reports remaining slots', async () => {
-    await expect(remainingGatewayQuota(quotaManager({ maxGateways: 5, current: 2 }).manager, ORG)).resolves.toBe(3);
-    await expect(remainingGatewayQuota(quotaManager({ current: 2 }).manager, ORG)).resolves.toBe(Infinity);
   });
 });

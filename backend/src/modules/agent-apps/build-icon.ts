@@ -1,10 +1,8 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import * as http from 'http';
-import * as https from 'https';
 
 import { validateUrl } from '../../common/security/url-validator';
-import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
+import { ResponseTooLargeError, outboundFailureDetail, safeFetch } from '../../common/security/safe-fetch';
 
 /**
  * The icon a packaged app wears.
@@ -48,52 +46,31 @@ export function looksLikePng(data: Buffer): boolean {
 /**
  * Fetch bytes from a customer-supplied URL.
  *
- * Uses the SSRF-safe agents so a link to 169.254.169.254 or to
- * something on the build host's own network is refused at connect time
- * rather than fetched and packaged.
+ * Through the shared guarded client: a link to 169.254.169.254 or to
+ * something on the build host's own network is refused (by string, and at
+ * connect time for a name that resolves there), a redirect is refused, the
+ * body stops at MAX_ICON_BYTES, and the deadline is for the whole
+ * download -- the old socket idle timer let a server that drips a byte at
+ * a time hold the build forever.
  */
-export function fetchIconBytes(url: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(url);
-    const client = parsed.protocol === 'https:' ? https : http;
-    const agent = parsed.protocol === 'https:' ? ssrfSafeHttpsAgent : ssrfSafeHttpAgent;
-
-    const request = client.get(
-      url,
-      { agent, timeout: ICON_FETCH_TIMEOUT_MS },
-      (response) => {
-        if ((response.statusCode ?? 0) >= 400) {
-          response.resume();
-          reject(new Error(`the server answered ${response.statusCode}`));
-          return;
-        }
-
-        const chunks: Buffer[] = [];
-        let size = 0;
-
-        response.on('data', (chunk: Buffer) => {
-          size += chunk.length;
-          if (size > MAX_ICON_BYTES) {
-            // Stop reading rather than buffering whatever is on the
-            // other end of a link we did not choose.
-            request.destroy();
-            reject(new Error('it is larger than an icon should be'));
-            return;
-          }
-          chunks.push(chunk);
-        });
-
-        response.on('end', () => resolve(Buffer.concat(chunks)));
-        response.on('error', reject);
-      },
-    );
-
-    request.on('timeout', () => {
-      request.destroy();
-      reject(new Error('the server did not answer in time'));
-    });
-    request.on('error', reject);
-  });
+export async function fetchIconBytes(url: string): Promise<Buffer> {
+  let res: Response;
+  try {
+    res = await safeFetch(url, { maxBytes: MAX_ICON_BYTES, timeoutMs: ICON_FETCH_TIMEOUT_MS });
+  } catch (err) {
+    if (err instanceof ResponseTooLargeError) throw new Error('it is larger than an icon should be');
+    throw new Error(outboundFailureDetail(err));
+  }
+  if (!res.ok) {
+    await res.body?.cancel().catch(() => undefined);
+    throw new Error('the server did not return it');
+  }
+  try {
+    return Buffer.from(await res.arrayBuffer());
+  } catch (err) {
+    if (err instanceof ResponseTooLargeError) throw new Error('it is larger than an icon should be');
+    throw new Error(outboundFailureDetail(err));
+  }
 }
 
 /**

@@ -48,17 +48,25 @@ function unreferencedExports(): string[] {
   return out.sort()
 }
 
-/** Methods of an API client object (`export const xApi = { ... }`) no production file calls. */
-function uncalledClientMethods(clients: string[]): string[] {
-  const out: string[] = []
-  for (const [, src] of sources) {
+/** The methods of each API client object (`export const xApi = { ... }`) in lib/. */
+function clientMethods(): Map<string, string[]> {
+  const clients = new Map<string, string[]>()
+  for (const [file, src] of sources) {
+    if (!file.startsWith('lib/')) continue
     for (const m of src.matchAll(/^export const (\w+Api) = \{\n([\s\S]*?)^\}/gm)) {
-      const client = m[1]
-      if (!clients.includes(client)) continue
-      for (const k of m[2].matchAll(/^ {2}(\w+)\s*[:(]/gm)) {
-        const call = new RegExp(`\\b${client}\\.${k[1]}\\b`)
-        if (![...sources.values()].some((s) => call.test(s))) out.push(`${client}.${k[1]}`)
-      }
+      clients.set(m[1], [...m[2].matchAll(/^ {2}(\w+)\s*[:(]/gm)].map((k) => k[1]))
+    }
+  }
+  return clients
+}
+
+/** Client methods no production file calls, a call chain broken across lines included. */
+function uncalledClientMethods(clients: Map<string, string[]>): string[] {
+  const out: string[] = []
+  for (const [client, methods] of clients) {
+    for (const method of methods) {
+      const call = new RegExp(`\\b${client}\\s*\\.\\s*${method}\\b`)
+      if (![...sources.values()].some((s) => call.test(s))) out.push(`${client}.${method}`)
     }
   }
   return out.sort()
@@ -72,8 +80,6 @@ const KNOWN_UNREFERENCED_EXPORTS = [
   'components/model-picker.tsx:keyRejected',
   'components/models/hosting/host-body.ts:adapterHasSecrets',
   'components/plan-indicator.tsx:planFromEntitlements',
-  'lib/api.ts:runsApi',
-  'lib/api.ts:usersApi',
   'lib/connections-api.ts:groupConnectorsByKind',
   'lib/connections-api.ts:isOAuthMethod',
   'lib/deployments-api.ts:describeModelRef',
@@ -86,25 +92,24 @@ const KNOWN_UNREFERENCED_EXPORTS = [
   'types/connections.ts:CONNECTION_OWNER_LABELS',
 ].sort()
 
-/** The clients of the gateway and app screens, which the Share tools and Apps changes rebuilt. */
-const CLIENTS = ['gatewaysApi', 'agentAppsApi', 'appPlacesApi']
-const KNOWN_UNCALLED_METHODS = [
-  'agentAppsApi.recordBuild',
-  'agentAppsApi.remove',
-  'gatewaysApi.getAvailableTools',
-  'gatewaysApi.getCliBundle',
-  'gatewaysApi.getMetrics',
-  'gatewaysApi.getSdk',
-  'gatewaysApi.getToolStats',
-  'gatewaysApi.testConnection',
-].sort()
+/** Every client object in lib/, found in the source rather than listed by hand. */
+const CLIENTS = clientMethods()
+const KNOWN_UNCALLED_METHODS: string[] = []
 
 describe('no export is left unreferenced', () => {
   it('every exported function, constant and class has a production use', () => {
     expect(unreferencedExports()).toEqual(KNOWN_UNREFERENCED_EXPORTS)
   })
 
-  it('every gateway and app client method has a production caller', () => {
+  it('finds every client object in lib/ and the methods of each', () => {
+    const declared = [...sources]
+      .filter(([file]) => file.startsWith('lib/'))
+      .flatMap(([, src]) => [...src.matchAll(/^export const (\w+Api)\s*=/gm)].map((m) => m[1]))
+    expect([...CLIENTS.keys()].sort()).toEqual(declared.sort())
+    for (const [client, methods] of CLIENTS) expect(methods.length, client).toBeGreaterThan(0)
+  })
+
+  it('every client method has a production caller', () => {
     expect(uncalledClientMethods(CLIENTS)).toEqual(KNOWN_UNCALLED_METHODS)
   })
 })

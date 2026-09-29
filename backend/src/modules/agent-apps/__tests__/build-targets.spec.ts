@@ -2,23 +2,21 @@ import { DistributionTarget } from '../../../entities/agent-app-distribution.ent
 import {
   BUILD_PLATFORMS,
   artifactExtension,
-  artifactFilename,
   canBuildHere,
   describeOutcome,
-  isBuildable,
   platformsFor,
   signingRequirementFor,
 } from '../build-targets';
 
 describe('what can be built, and where', () => {
   it('knows which targets produce an artifact at all', () => {
-    expect(isBuildable(DistributionTarget.TUI)).toBe(true);
-    expect(isBuildable(DistributionTarget.DESKTOP)).toBe(true);
-    expect(isBuildable(DistributionTarget.BINARY)).toBe(true);
+    expect(platformsFor(DistributionTarget.TUI).length).toBeGreaterThan(0);
+    expect(platformsFor(DistributionTarget.DESKTOP).length).toBeGreaterThan(0);
+    expect(platformsFor(DistributionTarget.BINARY).length).toBeGreaterThan(0);
     // A web app is served, not downloaded, and Slack is someone else's
     // client. Neither has anything to compile.
-    expect(isBuildable(DistributionTarget.WEB)).toBe(false);
-    expect(isBuildable(DistributionTarget.SLACK)).toBe(false);
+    expect(platformsFor(DistributionTarget.WEB)).toEqual([]);
+    expect(platformsFor(DistributionTarget.SLACK)).toEqual([]);
   });
 
   it('offers macOS for every buildable target', () => {
@@ -133,19 +131,5 @@ describe('artifactExtension', () => {
     expect(artifactExtension('desktop', 'macos-arm64', 'dmg')).toBe('dmg');
     expect(artifactExtension('desktop', 'linux-x64')).toBe('AppImage');
     expect(artifactExtension('desktop', 'windows-x64')).toBe('exe');
-  });
-});
-
-describe('artifactFilename', () => {
-  it('names a download after the app and the platform', () => {
-    expect(artifactFilename('acme-support', 'desktop', 'macos-arm64')).toBe(
-      'acme-support-macos-arm64.zip',
-    );
-  });
-
-  it('leaves a bare executable without a trailing dot', () => {
-    expect(artifactFilename('acme-support', 'tui', 'macos-arm64')).toBe(
-      'acme-support-macos-arm64',
-    );
   });
 });

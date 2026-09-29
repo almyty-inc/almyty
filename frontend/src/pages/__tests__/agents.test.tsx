@@ -392,7 +392,7 @@ describe('AgentsPage', () => {
       renderAgentsPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Start from a Template')).toBeInTheDocument()
+        expect(screen.getByText('Start from a template')).toBeInTheDocument()
         expect(screen.getByText('Simple Chat Agent')).toBeInTheDocument()
         expect(screen.getByText('Research Agent')).toBeInTheDocument()
       })
@@ -412,14 +412,14 @@ describe('AgentsPage', () => {
       renderAgentsPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Start from a Template')).toBeInTheDocument()
+        expect(screen.getByText('Start from a template')).toBeInTheDocument()
       })
 
       // Click the Hide button
       await user.click(screen.getByText('Hide'))
 
       // Templates section should disappear
-      expect(screen.queryByText('Start from a Template')).not.toBeInTheDocument()
+      expect(screen.queryByText('Start from a template')).not.toBeInTheDocument()
       expect(screen.queryByText('Simple Chat Agent')).not.toBeInTheDocument()
       expect(screen.queryByText('Research Agent')).not.toBeInTheDocument()
     })

@@ -11,7 +11,7 @@ export function TransformNode({ data, selected }: NodeProps) {
         <span className="text-xs font-semibold text-foreground">Transform</span>
       </div>
       <div className="p-3">
-        <div className="text-sm font-medium truncate">Data Transform</div>
+        <div className="text-sm font-medium truncate">Reshape data</div>
         <div className="text-xs text-muted-foreground truncate mt-0.5">
           {data.expression ? String(data.expression).substring(0, 40) + '...' : 'No expression'}
         </div>

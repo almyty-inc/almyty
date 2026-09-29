@@ -769,8 +769,6 @@ export const agentAppsApi = {
   update: (id: string, data: Partial<AgentApp>) =>
     apiPatch(`/apps/${id}`, data).then((r) => unwrap<AgentApp>(r)),
 
-  remove: (id: string) => apiDel(`/apps/${id}`),
-
   addDistribution: (
     id: string,
     target: DistributionTarget,
@@ -843,15 +841,6 @@ export const agentAppsApi = {
       const url = unwrap<{ url: string }>(r).url
       return /^https?:\/\//.test(url) ? url : `${getApiBaseUrl()}${url}`
     }),
-
-  recordBuild: (
-    slug: string,
-    target: DistributionTarget,
-    build: { version?: string; platform?: string; checksum?: string; signed?: boolean; error?: string },
-  ) =>
-    apiPost(`/apps/${slug}/distributions/${target}/build`, build).then((r) =>
-      unwrap<AppDistribution>(r),
-    ),
 }
 
 /** True when the product grants any access to the machine it runs on. */
@@ -965,6 +954,15 @@ export function missingChannelFields(
     .filter((f) => (f.required || replaceable.includes(f.key)) && !replaced.includes(f.key))
     .map((f) => f.key)
     .filter((key) => !has(key))
+}
+
+/**
+ * The bundle id a desktop or binary place starts with: the app's address
+ * in the app.almyty namespace. Mirrors defaultBundleId in the backend
+ * (agent-app.rules.ts), which seeds it when the place is added.
+ */
+export function defaultBundleId(slug: string): string {
+  return `app.almyty.${slug.replace(/[^a-z0-9]+/gi, '').toLowerCase()}`
 }
 
 /** The address a published web app answers on: its slug, as a subdomain. */
