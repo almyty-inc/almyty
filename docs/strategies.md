@@ -88,6 +88,20 @@ bound to that slot — the same answer `llm_call` and a judged `merge` give.
 A checker list written into the step's params wins, for a shape that wants
 to pin its own panel.
 
+### What a call is asked
+
+A compiled `call` step is an `llm_call` node, and an `llm_call` node
+with no prompt fails before it reaches a model. The compiler writes one:
+the request, read from `{{input.message}}` (where every chat surface and
+both compat APIs put it, and where the engine and the orchestrator read it
+from), followed by the output of each step that feeds this one — so the
+step after an extraction reads the brief, and an escalation reads why the
+check failed. A `parallel` feeder adds nothing; a replicated feeder
+(`rollout#2`) is not a template path and is left out. A shape can write
+its own `userPromptTemplate` into the step's params, which wins.
+
+A judged `merge` with no slot of its own — the panel's `consensus` — takes
+the organization's default routing policy, and fails by name without one.
 ### Fan-out happens at compile time
 
 A `parallel` step with `n` means "run what comes next n times over", and

@@ -7,7 +7,7 @@ import { StrategyCompileError } from '../strategies/strategy-compiler';
 const graph = (config: any) => ({
   nodes: [
     { id: 'input', type: 'input', config: {} },
-    { id: 'answer', type: 'llm_call', config },
+    { id: 'answer', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}', ...config } },
     { id: 'output', type: 'output', config: { mapping: '{{nodes.answer.output}}' } },
   ],
   edges: [{ source: 'input', target: 'answer' }, { source: 'answer', target: 'output' }],

@@ -390,6 +390,7 @@
             },
             "data": {
               "roleKey": "role-principal",
+              "userPromptTemplate": "{{input.message}}",
               "strategyKey": "single",
               "strategyStep": "answer"
             }
@@ -441,6 +442,7 @@
             },
             "data": {
               "roleKey": "role-drafter",
+              "userPromptTemplate": "{{input.message}}",
               "strategyKey": "cascade",
               "strategyStep": "draft"
             }
@@ -490,6 +492,7 @@
             },
             "data": {
               "roleKey": "role-principal",
+              "userPromptTemplate": "{{input.message}}\n\nEarlier steps produced:\n{{nodes.check.output}}",
               "strategyKey": "cascade",
               "strategyStep": "escalate"
             }
@@ -579,6 +582,7 @@
             },
             "data": {
               "roleKey": "role-principal",
+              "userPromptTemplate": "{{input.message}}",
               "strategyKey": "best_of_n",
               "strategyStep": "candidate",
               "strategyBranch": 1
@@ -594,6 +598,7 @@
             },
             "data": {
               "roleKey": "role-principal",
+              "userPromptTemplate": "{{input.message}}",
               "strategyKey": "best_of_n",
               "strategyStep": "candidate",
               "strategyBranch": 2
@@ -609,6 +614,7 @@
             },
             "data": {
               "roleKey": "role-principal",
+              "userPromptTemplate": "{{input.message}}",
               "strategyKey": "best_of_n",
               "strategyStep": "candidate",
               "strategyBranch": 3
@@ -719,6 +725,7 @@
             },
             "data": {
               "roleKey": "role-panelist_one",
+              "userPromptTemplate": "{{input.message}}",
               "strategyKey": "panel",
               "strategyStep": "a"
             }
@@ -733,6 +740,7 @@
             },
             "data": {
               "roleKey": "role-panelist_two",
+              "userPromptTemplate": "{{input.message}}",
               "strategyKey": "panel",
               "strategyStep": "b"
             }
@@ -747,6 +755,7 @@
             },
             "data": {
               "roleKey": "role-panelist_three",
+              "userPromptTemplate": "{{input.message}}",
               "strategyKey": "panel",
               "strategyStep": "c"
             }
@@ -857,6 +866,7 @@
             },
             "data": {
               "roleKey": "role-explorer",
+              "userPromptTemplate": "{{input.message}}",
               "strategyKey": "explore_extract_patch",
               "strategyStep": "rollout",
               "strategyBranch": 1
@@ -872,6 +882,7 @@
             },
             "data": {
               "roleKey": "role-explorer",
+              "userPromptTemplate": "{{input.message}}",
               "strategyKey": "explore_extract_patch",
               "strategyStep": "rollout",
               "strategyBranch": 2
@@ -887,6 +898,7 @@
             },
             "data": {
               "roleKey": "role-explorer",
+              "userPromptTemplate": "{{input.message}}",
               "strategyKey": "explore_extract_patch",
               "strategyStep": "rollout",
               "strategyBranch": 3
@@ -916,6 +928,7 @@
             },
             "data": {
               "roleKey": "role-principal",
+              "userPromptTemplate": "{{input.message}}\n\nEarlier steps produced:\n{{nodes.extract.output}}",
               "strategyKey": "explore_extract_patch",
               "strategyStep": "patch"
             }

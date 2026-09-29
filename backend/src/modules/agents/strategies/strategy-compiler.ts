@@ -142,6 +142,32 @@ export function compileStrategy(
   const gateIdFor = (verifyNodeId: string): string => `${verifyNodeId}__gate`;
   const isGated = (step: StrategyStep): boolean => step.kind === 'verify' && (step.next ?? []).length > 0;
 
+  // What a compiled `call` step is asked. An llm_call node with no prompt
+  // throws before it reaches a model, and the compiler emitted none, so
+  // every built-in strategy failed on its first call: `single` could not
+  // answer anything. The ask is the request -- `input.message`, the field
+  // every chat surface and both compat APIs put it in, and the one the
+  // engine and the orchestrator read the request from -- followed by what
+  // the steps feeding this one produced, so the step after an extraction
+  // reads the brief and an escalation reads why the check failed. A
+  // `parallel` feeder is a pass-through and adds nothing. A replicated
+  // feeder's ids (`step#2`) are not template paths, so they are left out.
+  // A shape can still write its own `userPromptTemplate` in the step's
+  // params, which wins.
+  const callPromptFor = (step: StrategyStep): string => {
+    const upstream = shape.steps
+      .filter((s) => s.kind !== 'parallel' && (s.next ?? []).includes(step.id))
+      .flatMap((s) => idsFor(s.id))
+      .filter((id) => /^[A-Za-z0-9_-]+$/.test(id));
+    if (!upstream.length) return '{{input.message}}';
+    return [
+      '{{input.message}}',
+      '',
+      'Earlier steps produced:',
+      ...upstream.map((id) => `{{nodes.${id}.output}}`),
+    ].join('\n');
+  };
+
   shape.steps.forEach((step, i) => {
     const slotRole = step.roleSlot ? bindings[step.roleSlot] : undefined;
     if (step.roleSlot && !slotRole) {
@@ -176,6 +202,7 @@ export function compileStrategy(
           ...(step.kind === 'verify' && slotRole && step.params?.checkers === undefined
             ? { checkers: [{ name: step.roleSlot ?? 'verifier', roleKey: slotRole }] }
             : {}),
+          ...(step.kind === 'call' ? { userPromptTemplate: callPromptFor(step) } : {}),
           ...(step.params ?? {}),
           strategyKey: strategy.key,
           strategyStep: step.id,
