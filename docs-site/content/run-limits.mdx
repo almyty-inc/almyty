@@ -67,6 +67,8 @@ A nested run (a sub-agent, a collaboration member) inherits its parent's resolve
 
 The loop node in the pipeline builder is bound by the same ceiling. A loop asking for 100 iterations inside a run capped at 25 steps gets 25.
 
+A workflow run is bound by the same limits. Its timeout is the tighter of the agent's `settings.maxExecutionTime` (5 minutes when unset) and the resolved **Timeout**; its spending cap is the tighter of `settings.budgetLimit` and the resolved **Cost cap**. It stops with status `timeout` and `Execution timed out after <n>ms`, or `failed` and `Budget limit ($<cap>) exceeded: $<spent>`, checked between steps, and a step running when the cap is crossed is aborted. **Max tool calls** counts every `tool_call` node, **Tool error retries** is how often each one is retried, and **Max recursion depth** bounds `sub_agent` nesting.
+
 ## When a limit trips
 
 The run fails with a machine-readable code **and** a sentence a person can act on. Never a silent stop.
