@@ -2,8 +2,7 @@ import { IsEmail, IsString, MinLength, MaxLength, IsNotEmpty, IsOptional } from 
 import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
-const stripHtml = ({ value }: { value: unknown }) =>
-  typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
+import { stripHtmlTransform as stripHtml } from '../../../common/security/strip-tags';
 
 export class CreateUserDto {
   @ApiProperty({

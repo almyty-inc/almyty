@@ -3,8 +3,7 @@ import { RESOURCE_VISIBILITIES, ResourceVisibility } from '../../../common/autho
 import { Type, Transform } from 'class-transformer';
 import { ApiType } from '../../../entities/api.entity';
 
-const stripHtml = ({ value }: { value: unknown }) =>
-  typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
+import { stripHtmlTransform as stripHtml } from '../../../common/security/strip-tags';
 
 export class AuthenticationConfigDto {
   @IsEnum(['none', 'api_key', 'bearer', 'basic', 'oauth2'])

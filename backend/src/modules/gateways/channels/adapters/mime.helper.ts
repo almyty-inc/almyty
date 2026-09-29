@@ -21,6 +21,8 @@
  *     retained (channel normalization only needs the metadata).
  */
 
+import { stripTags } from '../../../../common/security/strip-tags';
+
 /** Metadata for a single inbound attachment (bytes intentionally omitted). */
 export interface ParsedMimeAttachment {
   /** Filename from Content-Disposition or the Content-Type `name` param. */
@@ -99,13 +101,23 @@ export function parseMimeMessage(raw: string): ParsedMimeMessage {
   };
 }
 
-/** Strip an HTML body down to readable plain text. */
+/**
+ * Strip an HTML body down to readable plain text.
+ *
+ * Runs on inbound mail before the gateway it is for is even known, so on
+ * bytes anyone can send. Every step is linear in the input. The regexes
+ * this replaced were not: `<[^>]+>` rescans to the end of the input from
+ * each unclosed `<`, `[ \t]+\n` from each space in a long run, and
+ * `<(script|style)[\s\S]*?<\/\1>` from each unclosed `<script`, and
+ * `<br\s*\/?\s*>` tried every split of a run of spaces between its two
+ * `\s*`. 100 KB
+ * of `<` held the event loop for eight seconds.
+ */
 export function htmlToText(html: string): string {
-  let s = String(html);
-  s = s.replace(/<(script|style)[\s\S]*?<\/\1\s*>/gi, '');
-  s = s.replace(/<br\s*\/?\s*>/gi, '\n');
+  let s = removeScriptAndStyle(String(html));
+  s = s.replace(/<br\s*(?:\/\s*)?>/gi, '\n');
   s = s.replace(/<\/(p|div|tr|li|h[1-6]|blockquote|pre|table)\s*>/gi, '\n');
-  s = s.replace(/<[^>]+>/g, '');
+  s = stripTags(s, { allowEmpty: false });
   s = s
     .replace(/&nbsp;/gi, ' ')
     .replace(/&lt;/gi, '<')
@@ -115,7 +127,49 @@ export function htmlToText(html: string): string {
     .replace(/&#(\d+);/g, (_, d) => safeCodePoint(parseInt(d, 10)))
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => safeCodePoint(parseInt(h, 16)))
     .replace(/&amp;/gi, '&');
-  return s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  return trimLineEnds(s).replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
+ * `s.replace(/<(script|style)[\s\S]*?<\/\1\s*>/gi, '')`, linear.
+ *
+ * A block with no closing tag is left alone, as the regex leaves it, and
+ * so is every later block of the same kind: none of them can close either.
+ */
+function removeScriptAndStyle(s: string): string {
+  const open = /<(script|style)/gi;
+  const unclosed = new Set<string>();
+  let out = '';
+  let kept = 0;
+  let m: RegExpExecArray | null;
+  while ((m = open.exec(s))) {
+    const tag = m[1].toLowerCase();
+    if (unclosed.has(tag)) continue;
+    const close = new RegExp(`<\\/${tag}\\s*>`, 'gi');
+    close.lastIndex = open.lastIndex;
+    const end = close.exec(s);
+    if (!end) {
+      unclosed.add(tag);
+      continue;
+    }
+    out += s.slice(kept, m.index);
+    kept = end.index + end[0].length;
+    open.lastIndex = kept;
+  }
+  return out + s.slice(kept);
+}
+
+/** `s.replace(/[ \t]+\n/g, '\n')`, linear. */
+function trimLineEnds(s: string): string {
+  return s
+    .split('\n')
+    .map((line, i, lines) => {
+      if (i === lines.length - 1) return line;
+      let end = line.length;
+      while (end > 0 && (line[end - 1] === ' ' || line[end - 1] === '\t')) end--;
+      return line.slice(0, end);
+    })
+    .join('\n');
 }
 
 // ---------------------------------------------------------------------------

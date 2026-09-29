@@ -2,8 +2,7 @@ import { IsString, IsEmail, IsOptional, MinLength, MaxLength } from 'class-valid
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
-const stripHtml = ({ value }: { value: unknown }) =>
-  typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
+import { stripHtmlTransform as stripHtml } from '../../../common/security/strip-tags';
 
 export class UpdateProfileDto {
   @ApiPropertyOptional({

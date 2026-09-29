@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { MulterModule } from '@nestjs/platform-express';
 import { BullModule } from '@nestjs/bull';
 
+import { uploadLimits } from '../files/upload-limits';
+
 import { ApisController } from './apis.controller';
 import { ApisCredentialsController } from './apis-credentials.controller';
 import { ApisService } from './apis.service';
@@ -39,9 +41,8 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
       name: 'schema-import',
     }),
     MulterModule.register({
-      limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB max file size
-      },
+      // 10 MB for the description, and a bound on the fields beside it.
+      limits: uploadLimits(10 * 1024 * 1024),
       fileFilter: (req, file, cb) => {
         // Accept JSON, YAML, XML, and text files
         const allowedMimeTypes = [
