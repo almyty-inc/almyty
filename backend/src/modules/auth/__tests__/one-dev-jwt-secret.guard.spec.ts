@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 
 import { DEV_ONLY_JWT_SECRET, jwtSecretOrDevFallback } from '../dev-jwt-secret';
+import { restoreEnv } from '../../../test/env';
 
 /**
  * Every module that signs or verifies session JWTs must fall back to the
@@ -49,7 +50,7 @@ describe('JWT fallback secret', () => {
       process.env.NODE_ENV = 'development';
       expect(jwtSecretOrDevFallback(undefined, 'spec')).toBe(DEV_ONLY_JWT_SECRET);
     } finally {
-      process.env.NODE_ENV = previous;
+      restoreEnv('NODE_ENV', previous);
     }
   });
 });
