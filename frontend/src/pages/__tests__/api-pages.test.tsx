@@ -143,7 +143,7 @@ describe('/apis/new: pick the kind first', () => {
 })
 
 describe('/apis/new: ready-made provider APIs', () => {
-  const OPENAI_SPEC = 'https://raw.githubusercontent.com/openai/openai-openapi/a1514fbafe294e45d9200b32f1df7511f95492f7/openapi.yaml'
+  const OPENAI_SPEC = 'https://raw.githubusercontent.com/openai/openai-openapi/a1514fbafe294e45d9200b32f1df7511f95492f7/openapi.json'
   const openaiKey = { id: 'cred-openai', name: 'OpenAI', connectorKey: 'openai', connectorDisplayName: 'OpenAI', kind: 'inference', owner: 'org', health: { status: 'valid' }, createdAt: '2026-09-01T00:00:00.000Z' }
 
   it('offers the providers that publish an API description, as their own group of tiles', async () => {

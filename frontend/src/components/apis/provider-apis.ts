@@ -6,7 +6,8 @@
  * Only providers that publish a usable description are here. Each link is
  * pinned to a commit where the host allows it, so an import reads the same
  * description every time:
- *   - OpenAI: github.com/openai/openai-openapi (MIT), commit a1514fb.
+ *   - OpenAI: github.com/openai/openai-openapi (MIT), commit a1514fb, the
+ *     JSON copy (the YAML one has a block scalar YAML parsers refuse).
  *   - Mistral: github.com/mistralai/platform-docs-public (Apache-2.0),
  *     commit ecac75b.
  *   - Hugging Face: the Hub API description the Hub serves itself
@@ -31,7 +32,7 @@ export const PROVIDER_APIS: ProviderApi[] = [
     key: 'openai',
     label: 'OpenAI',
     hint: 'Chat, embeddings, images, files and more',
-    specUrl: 'https://raw.githubusercontent.com/openai/openai-openapi/a1514fbafe294e45d9200b32f1df7511f95492f7/openapi.yaml',
+    specUrl: 'https://raw.githubusercontent.com/openai/openai-openapi/a1514fbafe294e45d9200b32f1df7511f95492f7/openapi.json',
     apiName: 'OpenAI API',
     connectorKeys: ['openai'],
   },
