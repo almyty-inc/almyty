@@ -35,7 +35,7 @@ describe('GatewaysService.upsertForDistribution', () => {
     const { service, updateGateway, createGateway } = build([
       { id: 'gw-adopted', organizationId: ORG, endpoint: '/support-chat', configuration: {} },
     ]);
-    await service.upsertForDistribution(dto({ hostedChat: { slug: 'acme' } }), ORG, 'user-1', { activate: false, gatewayId: 'gw-adopted' });
+    await service.upsertForDistribution(dto({ hostedChat: { slug: 'acme' } }), ORG, 'user-1', { appId: 'app-1', activate: false, gatewayId: 'gw-adopted' });
     expect(createGateway).not.toHaveBeenCalled();
     expect(updateGateway.mock.calls[0][0]).toBe('gw-adopted');
   });
@@ -44,7 +44,7 @@ describe('GatewaysService.upsertForDistribution', () => {
     const { service, updateGateway, createGateway } = build([
       { id: 'gw-theirs', organizationId: 'org-2', endpoint: '/x', configuration: {} },
     ]);
-    await service.upsertForDistribution(dto({}), ORG, 'user-1', { activate: false, gatewayId: 'gw-theirs' });
+    await service.upsertForDistribution(dto({}), ORG, 'user-1', { appId: 'app-1', activate: false, gatewayId: 'gw-theirs' });
     expect(updateGateway).not.toHaveBeenCalled();
     expect(createGateway).toHaveBeenCalled();
   });
@@ -58,7 +58,7 @@ describe('GatewaysService.upsertForDistribution', () => {
         configuration: { allowedOrigins: ['https://www.acme.com'], hostedChat: { slug: 'old' }, stale: true },
       },
     ]);
-    await service.upsertForDistribution(dto({ hostedChat: { slug: 'acme' } }), ORG, 'user-1', { activate: false });
+    await service.upsertForDistribution(dto({ hostedChat: { slug: 'acme' } }), ORG, 'user-1', { appId: 'app-1', activate: false });
     expect(updateGateway.mock.calls[0][1].configuration).toEqual({
       allowedOrigins: ['https://www.acme.com'],
       hostedChat: { slug: 'acme' },

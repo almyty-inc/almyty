@@ -4,12 +4,15 @@ import {
   BadRequestException,
   ForbiddenException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
 
 import { Credential } from '../../entities/credential.entity';
+import { McpSource } from '../../entities/mcp-source.entity';
+import { CredentialRefResolver } from './credential-ref.resolver';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { ApiKey } from '../../entities/api-key.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
@@ -57,6 +60,9 @@ export class CredentialsService {
     private readonly auditLogService: AuditLogService,
     private readonly accessPolicy: AccessPolicyService,
     private readonly envelopeCrypto: EnvelopeCryptoService,
+    // The save-time scope rule for a credential's consumers. Optional only
+    // for specs that build the service by hand; without it nothing is checked.
+    @Optional() private readonly credentialRefs?: CredentialRefResolver,
   ) {}
 
   // ──────────────────────────────────────────────
@@ -178,6 +184,8 @@ export class CredentialsService {
       teamId: scope.teamId,
       ownerUserId: scope.visibility === 'private' ? userId! : null,
     });
+    // Bound to an API: the API's scope must be covered by this one's.
+    if (credential.apiId) await this.assertConsumersCovered(credential);
 
     // Encrypt sensitive data before saving. Org-aware envelope path: a
     // BYO-KMS org gets encrypted:kms:, every other org keeps the same
@@ -269,6 +277,9 @@ export class CredentialsService {
       credential.config = data.config;
       await credential.encryptSensitiveDataForOrg(this.envelopeCrypto);
     }
+    if (data.apiId !== undefined || data.visibility !== undefined || data.teamId !== undefined) {
+      await this.assertConsumersCovered(credential);
+    }
 
     const saved = await this.credentialRepository.save(credential);
     this.logger.log(`Credential updated: ${saved.id} (${saved.name})`);
@@ -277,6 +288,63 @@ export class CredentialsService {
     this.auditLogService.log({ organizationId, action: AuditAction.CREDENTIAL_UPDATE, resourceType: AuditResource.CREDENTIAL, resourceId: saved.id, resourceName: saved.name });
 
     return this.maskCredential(saved);
+  }
+
+  /**
+   * The consumers of a team or private credential must be ones its scope
+   * covers, or every caller outside it fails to resolve the secret: the
+   * API it is bound to (`apiId`) or that names it in its authentication,
+   * the LLM providers and MCP sources that point at it. Checked when the
+   * credential is bound to an API and when its scope narrows, with the
+   * same 400 the consumers' own save paths give
+   * (CredentialRefResolver.assertAttachable). Rows a consumer manages for
+   * itself follow that consumer and are not checked here.
+   */
+  private async assertConsumersCovered(credential: Credential): Promise<void> {
+    if ((credential.visibility ?? 'org') === 'org' || !this.credentialRefs) return;
+    if ((credential.metadata as Record<string, any> | null | undefined)?.managedBy) return;
+    const organizationId = credential.organizationId;
+    const scopeOf = (row: { visibility?: ResourceVisibility | null; teamId?: string | null; ownerUserId?: string | null }) => ({
+      organizationId,
+      visibility: row.visibility,
+      teamId: row.teamId,
+      ownerUserId: row.ownerUserId,
+    });
+    const apis = new Map<string, Api>();
+    if (credential.apiId) {
+      const bound = await this.apiRepository.findOne({ where: { id: credential.apiId, organizationId } });
+      if (bound) apis.set(bound.id, bound);
+    }
+    if (credential.id) {
+      const naming: Api[] = await this.apiRepository
+        .createQueryBuilder('api')
+        .where('api."organizationId" = :organizationId', { organizationId })
+        .andWhere(
+          `(api.authentication::jsonb -> 'config' ->> 'connectionId' = :id OR api.authentication::jsonb -> 'config' ->> 'credentialId' = :id)`,
+          { id: credential.id },
+        )
+        .getMany();
+      for (const api of naming) apis.set(api.id, api);
+    }
+    for (const api of apis.values()) {
+      await this.credentialRefs.assertAttachable(credential, { ...scopeOf(api), noun: 'API' });
+    }
+    if (!credential.id) return;
+    const providers = await this.llmProviderRepository.find({
+      where: [
+        { organizationId, credentialId: credential.id },
+        { organizationId, usageCredentialId: credential.id },
+      ],
+    });
+    for (const provider of providers) {
+      await this.credentialRefs.assertAttachable(credential, { ...scopeOf(provider), noun: 'LLM provider' });
+    }
+    const sources = await this.credentialRepository.manager
+      .getRepository(McpSource)
+      .count({ where: { organizationId, credentialId: credential.id } });
+    if (sources > 0) {
+      await this.credentialRefs.assertAttachable(credential, { organizationId, visibility: 'org', noun: 'MCP source' });
+    }
   }
 
   async delete(id: string, organizationId: string, userId?: string): Promise<void> {

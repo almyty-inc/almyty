@@ -44,16 +44,6 @@ function countGateways(manager: EntityManager, organizationId: string): Promise<
   return manager.getRepository(Gateway).count({ where: { organizationId, isSystem: false } });
 }
 
-/** Remaining gateway slots for the organization; Infinity when unlimited. */
-export async function remainingGatewayQuota(
-  manager: EntityManager,
-  organizationId: string,
-): Promise<number> {
-  const maxGateways = await maxGatewaysFor(manager, organizationId);
-  if (!maxGateways) return Infinity;
-  return Math.max(0, maxGateways - (await countGateways(manager, organizationId)));
-}
-
 /**
  * The enforcing check. `manager` must be inside a transaction, and the
  * Gateway insert must run on that same transaction after this returns:

@@ -5,7 +5,9 @@ import { versionsConfig } from 'typeorm-versions';
 import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
-import { UserTeam } from '../../entities/user-team.entity';
+import { UserTeam, TeamRole } from '../../entities/user-team.entity';
+import { Team } from '../../entities/team.entity';
+import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { ApprovalRequest } from '../../entities/approval-request.entity';
@@ -166,5 +168,39 @@ describeIfDb('approvals of a private agent are its owner\'s alone (real Postgres
     expect(await repo(ApprovalRequest).findOneByOrFail({ id: row.id })).toMatchObject({ visibility: 'private', ownerUserId: users.successor });
     expect(await pendingIds('successor')).toContain(row.id);
     expect(await pendingIds('owner')).not.toContain(row.id);
+  });
+
+  it("a run through a gateway asks in the gateway's scope, and nothing decides it for a null user", async () => {
+    const teamId = await insert(Team, { name: 'Payments', organizationId });
+    await insert(UserTeam, { userId: users.peer, teamId, role: TeamRole.LEAD, isActive: true });
+    const viaGateway = (visibility: 'org' | 'team' | 'private', over: Record<string, any> = {}) =>
+      gatewayPrincipal({ id: '00000000-0000-4000-8000-0000000000ee', organizationId, visibility, ...over });
+    const ask = async (principal: ReturnType<typeof viaGateway>) =>
+      service.create({
+        organizationId, teamId: null, runId: await run(orgAgent), agentId: orgAgent, toolCallId: null,
+        reason: 'refund 90 EUR', payload: { tool: 'payments.refund' }, principal,
+      });
+
+    // An org agent run through the Payments gateway: the team's request.
+    const teamRow = await ask(viaGateway('team', { teamId }));
+    expect(teamRow).toMatchObject({ visibility: 'team', teamId, ownerUserId: null });
+    expect(await pendingIds('peer')).toContain(teamRow.id);
+    expect(await pendingIds('admin')).toContain(teamRow.id);
+    expect(await pendingIds('owner')).not.toContain(teamRow.id);
+    await expect(service.approve(teamRow.id, { decidedBy: users.owner }, { id: users.owner }, organizationId))
+      .rejects.toBeInstanceOf(NotFoundException);
+
+    // No caller decides nothing: the request stays pending.
+    for (const nobody of [null, undefined, '']) {
+      await expect(service.approve(teamRow.id, { decidedBy: nobody as any }, { id: nobody as any }, organizationId))
+        .rejects.toBeInstanceOf(NotFoundException);
+    }
+    expect((await repo(ApprovalRequest).findOneByOrFail({ id: teamRow.id })).status).toBe('pending');
+    await expect(service.approve(teamRow.id, { decidedBy: users.peer }, { id: users.peer }, organizationId))
+      .resolves.toMatchObject({ status: 'approved' });
+
+    // Through a gateway private to its owner: that owner's. Through an org gateway: the agent's scope.
+    expect(await ask(viaGateway('private', { ownerUserId: users.peer }))).toMatchObject({ visibility: 'private', ownerUserId: users.peer });
+    expect(await ask(viaGateway('org'))).toMatchObject({ visibility: 'org', teamId: null });
   });
 });

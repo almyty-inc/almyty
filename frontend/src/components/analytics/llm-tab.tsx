@@ -57,9 +57,9 @@ export function LlmTab() {
                 <th className={TH}>Provider</th>
                 <th className={`${TH} text-right`}>Sessions</th>
                 <th className={`${TH} text-right`}>Messages</th>
-                <th className={`${TH} text-right`}>Input Tokens</th>
-                <th className={`${TH} text-right`}>Output Tokens</th>
-                <th className={`${TH} text-right`}>Tool Calls</th>
+                <th className={`${TH} text-right`}>Input tokens</th>
+                <th className={`${TH} text-right`}>Output tokens</th>
+                <th className={`${TH} text-right`}>Tool calls</th>
                 <th className={`${TH} text-right`}>Cost</th>
               </tr>
             </thead>

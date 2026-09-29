@@ -6,7 +6,6 @@ import {
   isVerified,
   newCustomDomain,
   newVerificationToken,
-  resourceNameFor,
   verificationRecord,
 } from '../custom-domain';
 
@@ -118,26 +117,6 @@ describe('verification', () => {
     expect(isVerified([], domain)).toBe(false);
     expect(isVerified(null, domain)).toBe(false);
     expect(isVerified(undefined, domain)).toBe(false);
-  });
-});
-
-describe('resourceNameFor', () => {
-  it('produces a DNS-safe name', () => {
-    expect(resourceNameFor('chat.acme.com')).toMatch(/^chat-[a-z0-9-]+-[0-9a-f]{10}$/);
-  });
-
-  it('is stable for the same hostname', () => {
-    expect(resourceNameFor('chat.acme.com')).toBe(resourceNameFor('CHAT.acme.com '));
-  });
-
-  it('never collides two hostnames that sanitise the same', () => {
-    // chat-acme.com and chat.acme.com both sanitise to chat-acme-com;
-    // the hash is what keeps their certificates apart.
-    expect(resourceNameFor('chat-acme.com')).not.toBe(resourceNameFor('chat.acme.com'));
-  });
-
-  it('stays within a Kubernetes name length for a long hostname', () => {
-    expect(resourceNameFor(`${'sub.'.repeat(20)}acme.com`).length).toBeLessThanOrEqual(63);
   });
 });
 

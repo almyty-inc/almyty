@@ -13,6 +13,8 @@ import * as bcrypt from 'bcryptjs';
 import { SAML, Profile, ValidateInResponseTo } from '@node-saml/passport-saml';
 import * as oidc from 'openid-client';
 
+import { safeFetch } from '../../../src/common/security/safe-fetch';
+
 import { User } from '../../../src/entities/user.entity';
 import { UserOrganization } from '../../../src/entities/user-organization.entity';
 import { isEffectiveMembership } from '../../../src/common/authorization/membership';
@@ -282,9 +284,19 @@ export class SsoService {
     const isLoopback =
       issuerUrl.protocol === 'http:' &&
       ['localhost', '127.0.0.1', '[::1]'].includes(issuerUrl.hostname);
-    const discoveryOptions = isLoopback
-      ? { execute: [oidc.allowInsecureRequests] }
-      : undefined;
+    // The issuer is an org admin's setting, and the discovery document it
+    // serves names the token, JWKS and userinfo endpoints. Every one of
+    // those requests goes through the egress gate: a login page any
+    // visitor can open must not make the server fetch an internal URL.
+    // A self-hosted IdP on a private network needs SSO_ALLOW_PRIVATE_URLS,
+    // and then only the issuer's own host is exempt.
+    const privateHost = process.env.SSO_ALLOW_PRIVATE_URLS === 'true' ? issuerUrl.hostname : null;
+    const idpFetch: oidc.CustomFetch = (url, options) =>
+      safeFetch(url, { ...(options as RequestInit), privateHost }) as ReturnType<oidc.CustomFetch>;
+    const discoveryOptions: oidc.DiscoveryRequestOptions = {
+      [oidc.customFetch]: idpFetch,
+      ...(isLoopback ? { execute: [oidc.allowInsecureRequests] } : {}),
+    };
     const configuration = await oidc.discovery(
       issuerUrl,
       config.oidcClientId,
@@ -292,6 +304,8 @@ export class SsoService {
       undefined,
       discoveryOptions,
     );
+    // Token exchange, JWKS and userinfo use the configuration's fetch.
+    configuration[oidc.customFetch] = idpFetch;
     const redirectUri = redirectUriOverride ?? config.oidcRedirectUri;
     return {
       authorizationUrl(parameters: Record<string, string>): string {

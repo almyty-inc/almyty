@@ -218,6 +218,7 @@ describe('GatewaysService', () => {
           },
           'org-1',
           'user-1',
+          { forApp: { appId: 'app-1' } },
         ),
       ).rejects.toThrow(ConflictException);
 

@@ -106,8 +106,11 @@ class FakeWorkspaceService {
     if (this.failure) throw this.failure;
     return (this.active[runnerId] ?? []).map((id) => ({ id }));
   }
-  async findForDispatch(id: string, runnerId: string, callerUserId?: string | null): Promise<{ id: string } | null> {
-    return this.owned.find((w) => w.id === id && w.runnerId === runnerId && w.ownerUserId === callerUserId) ?? null;
+  /** Who each dispatch's workspace check was asked for. */
+  dispatchCallers: unknown[] = [];
+  async findForDispatch(id: string, runnerId: string, caller?: unknown): Promise<{ id: string } | null> {
+    this.dispatchCallers.push(caller);
+    return this.owned.find((w) => w.id === id && w.runnerId === runnerId && w.ownerUserId === caller) ?? null;
   }
 }
 
@@ -162,6 +165,17 @@ describe('RunnerCallService', () => {
     });
     await p;
   });
+  it("a run's principal, not its user id, is what the workspace check judges", async () => {
+    const { svc, transport, workspaces } = makeService();
+    const gateway = { kind: 'gateway' as const, gatewayId: 'gw-1', organizationId: 'org-1', visibility: 'team' as const, teamId: 'team-1', ownerUserId: null };
+    const p = svc.dispatch('runner-1', 'shell.exec', { command: 'ls' }, 'ws-team', { timeoutMs: 200, callerUserId: null, principal: gateway });
+    p.catch(() => {});
+    await flush();
+    expect(workspaces.dispatchCallers).toEqual([gateway]);
+    expect(transport.pushed).toHaveLength(0);
+    await expect(p).rejects.toMatchObject({ code: RUNNER_CALL_ERRORS.WORKSPACE_NOT_FOUND });
+  });
+
 
 
   it('rejects with TIMEOUT when no response arrives in time', async () => {

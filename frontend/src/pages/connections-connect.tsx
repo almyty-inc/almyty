@@ -34,7 +34,7 @@ function serviceTileGroups(connectors: Connector[], search: string): ServiceTile
   const models: ServiceTileGroup = {
     id: AI_MODELS_TILE,
     title: 'AI models',
-    tiles: [{ key: AI_MODELS_TILE, label: 'Connect on Models', hint: 'OpenAI, Anthropic and more', icon: <Brain className="h-4 w-4 text-primary" /> }],
+    tiles: [{ key: AI_MODELS_TILE, label: 'Connect AI models', hint: 'OpenAI, Anthropic and more', icon: <Brain className="h-4 w-4 text-primary" /> }],
   }
   return [models, ...services]
 }

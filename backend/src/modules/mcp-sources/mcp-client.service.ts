@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { validateUrl } from '../../common/security/url-validator';
-import { ssrfSafeDispatcher } from '../../common/security/safe-fetch';
+import {
+  ResponseTooLargeError,
+  capResponse,
+  outboundFailureDetail,
+  ssrfSafeDispatcher,
+} from '../../common/security/safe-fetch';
 import { dispatcherExempting } from '../../common/security/exempt-dispatcher';
 
 /**
@@ -31,13 +36,17 @@ import { dispatcherExempting } from '../../common/security/exempt-dispatcher';
 
 export const MCP_PROTOCOL_VERSION = '2025-06-18';
 
+/** A tools/list page or tool result larger than this is not something to buffer. */
+export const MCP_MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+
 export type McpClientErrorCode =
   | 'MCP_URL_BLOCKED'
   | 'MCP_CONNECT_FAILED'
   | 'MCP_TIMEOUT'
   | 'MCP_HTTP_ERROR'
   | 'MCP_PROTOCOL_ERROR'
-  | 'MCP_REMOTE_ERROR';
+  | 'MCP_REMOTE_ERROR'
+  | 'MCP_RESPONSE_TOO_LARGE';
 
 export class McpClientError extends Error {
   constructor(
@@ -243,7 +252,10 @@ export class McpClientService {
     if (config.signal?.aborted) controller.abort(config.signal.reason);
 
     try {
-      return await fetch(config.url, {
+      // The body is capped: a tools/list is buffered whole (and an SSE
+      // stream until our response arrives), so an endless or huge reply
+      // would otherwise be read into the API process.
+      return capResponse(await fetch(config.url, {
         method: 'POST',
         headers: this.buildHeaders(config, session),
         body: JSON.stringify(body),
@@ -257,7 +269,7 @@ export class McpClientService {
         dispatcher: process.env.MCP_ALLOW_PRIVATE_URLS === 'true'
           ? dispatcherExempting(new URL(config.url).hostname)
           : ssrfSafeDispatcher,
-      } as RequestInit);
+      } as RequestInit), MCP_MAX_RESPONSE_BYTES);
     } catch (err: any) {
       if (controller.signal.aborted) {
         throw new McpClientError(
@@ -267,7 +279,7 @@ export class McpClientService {
       }
       throw new McpClientError(
         'MCP_CONNECT_FAILED',
-        `Could not reach MCP server at ${config.url}: ${err?.message ?? err}`,
+        `Could not reach MCP server at ${config.url}: ${outboundFailureDetail(err)}`,
       );
     } finally {
       clearTimeout(timer);
@@ -303,7 +315,12 @@ export class McpClientService {
     const res = await this.post(config, { jsonrpc: '2.0', id, method, params }, session);
     const sessionId = res.headers.get('mcp-session-id') ?? session?.sessionId ?? null;
 
-    const bodyText = await res.text().catch(() => '');
+    const bodyText = await res.text().catch((err) => {
+      if (err instanceof ResponseTooLargeError) {
+        throw new McpClientError('MCP_RESPONSE_TOO_LARGE', `MCP server response to ${method} exceeded ${MCP_MAX_RESPONSE_BYTES} bytes`);
+      }
+      return '';
+    });
 
     if (!res.ok) {
       throw new McpClientError(

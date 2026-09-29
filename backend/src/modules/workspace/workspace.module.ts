@@ -9,6 +9,7 @@ import { WorkspaceService } from './workspace.service';
 import { WorkspaceController } from './workspace.controller';
 import { WorkspaceTickProcessor, WORKSPACE_TICK_QUEUE } from './workspace-tick.processor';
 import { RunnerModule } from '../runner/runner.module';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
 /**
  * Workspace module: lifecycle (create / release / sweep) and the
@@ -28,6 +29,8 @@ import { RunnerModule } from '../runner/runner.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Workspace, Runner]),
+    // The team rule for a team gateway's dispatch into a workspace.
+    AuthorizationModule,
     BullModule.registerQueue({ name: WORKSPACE_TICK_QUEUE }),
     forwardRef(() => RunnerModule),
   ],

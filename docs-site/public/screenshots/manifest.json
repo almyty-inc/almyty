@@ -629,7 +629,7 @@
       "path": "screenshots/interfaces-channel-setup.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Shows the Channel Setup panel, which is gone: a channel is now set up as a place on an app (Apps > Where people use it). Recapture from an app's channel place.",
       "sha256": "981ad7f99f7e76e0d34d788f046417d0caba96e2fc133b53c60b40a11ee657ab"
     },
     {

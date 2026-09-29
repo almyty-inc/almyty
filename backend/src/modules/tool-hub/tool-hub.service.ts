@@ -24,6 +24,7 @@ import {
 } from './template-sanitizer';
 import { PublishToolTemplateDto, UpdateToolTemplateDto } from './dto/tool-hub.dto';
 import { capGeneratedDescription, precheckToolQuota, withToolQuota } from '../tools/tool-quota';
+import { generatedToolScope } from '../tools/generated-tool-scope';
 import { withApiQuota } from '../apis/api-quota';
 
 export interface ListTemplatesFilters {
@@ -247,8 +248,9 @@ export class ToolHubService {
       apiId: api?.id || null,
       organizationId: orgId,
       createdBy: userId,
-      // A tool installed onto the caller's private API is private with it.
-      ...(api?.visibility === 'private' ? { visibility: 'private' as const, teamId: null } : {}),
+      // A tool installed onto an API takes the API's scope: a team API's
+      // tool is its team's, the caller's private API's is private with it.
+      ...(api ? generatedToolScope(api) : {}),
       status: ToolStatus.ACTIVE,
       version: '1.0.0',
       metadata: {

@@ -12,7 +12,8 @@ import { Credential, CredentialType } from '../../entities/credential.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { Api } from '../../entities/api.entity';
 import { validateUrl } from '../../common/security/url-validator';
-import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
+import { egressAxiosConfig } from '../../common/security/pinned-redirects';
+import { outboundFailureDetail } from '../../common/security/safe-fetch';
 
 export interface CreateCredentialDto {
   name: string;
@@ -214,15 +215,11 @@ export class CredentialService {
         url: credential.api.baseUrl,
         headers: { ...headers, 'User-Agent': 'almyty-credential-test/1.0' },
         params,
-        timeout: 10000,
-        maxContentLength: 5 * 1024 * 1024,
         maxBodyLength: 5 * 1024 * 1024,
-        maxRedirects: 0,
-        // The string check above does not see what the name resolves to;
-        // the pinned agents refuse a private address at connect time.
-        httpAgent: ssrfSafeHttpAgent,
-        httpsAgent: ssrfSafeHttpsAgent,
         validateStatus: (status) => status < 500, // 4xx is OK (means API responded)
+        // Pinned (the string check above does not see what the name
+        // resolves to), redirects refused, body capped, whole-exchange deadline.
+        ...egressAxiosConfig({ timeoutMs: 10000, maxBytes: 5 * 1024 * 1024 }),
       });
 
       if (response.status === 401 || response.status === 403) {
@@ -231,7 +228,8 @@ export class CredentialService {
 
       return { success: true, message: `API responded with HTTP ${response.status}` };
     } catch (error) {
-      return { success: false, message: `Connection failed: ${error.message}` };
+      // Never the errno: it says which hosts exist and which ports answer.
+      return { success: false, message: `Connection failed: ${outboundFailureDetail(error)}` };
     }
   }
 
@@ -306,14 +304,10 @@ export class CredentialService {
         client_secret: config.clientSecret || '',
       }).toString(), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        timeout: 15000,
-        maxContentLength: 256 * 1024,
         maxBodyLength: 256 * 1024,
-        maxRedirects: 0,
-        // The string check above does not see what the name resolves to;
-        // the pinned agents refuse a private address at connect time.
-        httpAgent: ssrfSafeHttpAgent,
-        httpsAgent: ssrfSafeHttpsAgent,
+        // Pinned (the string check above does not see what the name
+        // resolves to), redirects refused, body capped, whole-exchange deadline.
+        ...egressAxiosConfig({ timeoutMs: 15000, maxBytes: 256 * 1024 }),
       });
 
       const { access_token, refresh_token, expires_in } = response.data;
@@ -349,7 +343,7 @@ export class CredentialService {
       this.logger.error(`OAuth2 token refresh failed for credential ${freshCredential.id}: ${error.message}`);
       freshCredential.isActive = false;
       await this.credentialRepository.save(freshCredential);
-      throw new BadRequestException(`Token refresh failed: ${error.message}`);
+      throw new BadRequestException(`Token refresh failed: ${outboundFailureDetail(error)}`);
     }
   }
 

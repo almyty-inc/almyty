@@ -200,11 +200,13 @@ export class LlmProvidersService {
       );
       const scope = normaliseVisibility(createDto.visibility, createDto.teamId);
       // Before anything reads the key (the model probe below does): a
-      // private connection only backs a provider private to its owner.
+      // private connection only backs a provider private to its owner, a
+      // team connection a provider of its team.
       await this.secrets.assertKeysServable(
         {
           organizationId,
           visibility: scope.visibility,
+          teamId: scope.teamId,
           ownerUserId: userId,
           credentialId: createAny.credentialId ?? null,
           usageCredentialId: createAny.usageCredentialId ?? null,
@@ -441,17 +443,24 @@ export class LlmProvidersService {
       // Credential row. A credentialId in the body points the provider at
       // a shared connection; null clears it.
       const updateAny = updateDto as UpdateLlmProviderDto & { credentialId?: string | null; usageCredentialId?: string | null };
-      // A newly referenced connection is checked against the scope the
-      // provider is about to have, before the model probe below reads it.
-      if (updateAny.credentialId || updateAny.usageCredentialId) {
+      // A newly referenced connection, or a change of the provider's scope,
+      // is checked against the scope the provider is about to have, before
+      // the model probe below reads the key or anything is written.
+      const scopeChanging = updateDto.visibility !== undefined || updateDto.teamId !== undefined;
+      if (updateAny.credentialId || updateAny.usageCredentialId || scopeChanging) {
+        const next = normaliseVisibility(
+          updateDto.visibility ?? provider.visibility,
+          updateDto.teamId !== undefined ? updateDto.teamId : provider.teamId,
+        );
         await this.secrets.assertKeysServable(
           {
             id: provider.id,
             organizationId,
-            visibility: (updateDto.visibility ?? provider.visibility) as LlmProvider['visibility'],
+            visibility: next.visibility as LlmProvider['visibility'],
+            teamId: next.teamId,
             ownerUserId: provider.ownerUserId ?? userId,
-            credentialId: updateAny.credentialId ?? null,
-            usageCredentialId: updateAny.usageCredentialId ?? null,
+            credentialId: updateAny.credentialId || (scopeChanging && updateAny.credentialId === undefined ? provider.credentialId : null),
+            usageCredentialId: updateAny.usageCredentialId || (scopeChanging && updateAny.usageCredentialId === undefined ? provider.usageCredentialId : null),
           },
           userId,
         );

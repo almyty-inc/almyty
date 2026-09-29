@@ -2,8 +2,8 @@ import { NotFoundException } from '@nestjs/common';
 import { Operation } from '../../entities/operation.entity';
 import { Resource } from '../../entities/resource.entity';
 import { ImportSchemaOptions } from './dto/apis.dto';
-import { assertOutboundUrlAllowed } from '../../common/security/safe-fetch';
-import { pinnedRedirects } from '../../common/security/pinned-redirects';
+import { assertOutboundUrlAllowed, outboundFailureDetail } from '../../common/security/safe-fetch';
+import { DEFAULT_REDIRECT_HOPS, egressAxiosConfig } from '../../common/security/pinned-redirects';
 import { Injectable, Logger, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -410,16 +410,17 @@ export class ApisImportHelper {
 
     try {
       const response = await axios.get(safeUrl, {
-        timeout: 30000,
-        // 15 MB inbound cap. The downstream importSchema enforces a 10 MB
-        // schema limit anyway; the slack here covers headers/transfer
-        // overhead and lets that error surface a clearer message.
-        maxContentLength: 15 * 1024 * 1024,
         maxBodyLength: 15 * 1024 * 1024,
-        ...pinnedRedirects(),
         headers: {
           'Accept': 'application/json, application/yaml, text/yaml, text/plain, application/xml, text/xml',
         },
+        // Pinned agents, every redirect hop re-gated (a few at most), a
+        // 15 MB inbound cap (the downstream importSchema enforces 10 MB;
+        // the slack lets that error say something clearer), and a TOTAL
+        // 30 s deadline: axios's own `timeout` is an idle timer that a
+        // server dripping a byte at a time resets forever. Spread last so
+        // nothing above can switch any of it off.
+        ...egressAxiosConfig({ timeoutMs: 30_000, maxBytes: 15 * 1024 * 1024, maxRedirects: DEFAULT_REDIRECT_HOPS }),
       });
 
       if (typeof response.data === 'string') {
@@ -431,7 +432,9 @@ export class ApisImportHelper {
       }
     } catch (error) {
       this.logger.error(`Failed to fetch schema from URL ${url}: ${error.message}`);
-      throw new BadRequestException(`Failed to fetch schema from URL: ${error.message}`);
+      // Never the errno or the upstream status: they tell the caller which
+      // hosts exist and which ports answer.
+      throw new BadRequestException(`Failed to fetch schema from URL: ${outboundFailureDetail(error)}`);
     }
   }
 
@@ -457,17 +460,15 @@ export class ApisImportHelper {
         safeUrl,
         { query: getIntrospectionQuery({ descriptions: true }) },
         {
-          timeout: 30000,
-          maxContentLength: 15 * 1024 * 1024,
           maxBodyLength: 1024 * 1024,
-          ...pinnedRedirects(),
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          ...egressAxiosConfig({ timeoutMs: 30_000, maxBytes: 15 * 1024 * 1024, maxRedirects: DEFAULT_REDIRECT_HOPS }),
         },
       );
       return typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
     } catch (error) {
       this.logger.warn(`GraphQL introspection of ${url} failed: ${error.message}`);
-      throw new BadRequestException(`Failed to introspect GraphQL endpoint: ${error.message}`);
+      throw new BadRequestException(`Failed to introspect GraphQL endpoint: ${outboundFailureDetail(error)}`);
     }
   }
 

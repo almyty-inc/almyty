@@ -649,6 +649,26 @@ describe('ToolsService', () => {
       toolRepo.save.mockImplementation((t: any) => Promise.resolve(t));
       toolVersionRepo.create.mockReturnValue({});
       toolVersionRepo.save.mockResolvedValue({});
+      // Narrowing to a team first asks which agents and gateways outside
+      // it use the tool: none here.
+      const agentReads: unknown[] = [];
+      const gatewayFilters: Record<string, unknown> = {};
+      const gatewayQuery: any = {
+        innerJoin: () => gatewayQuery,
+        where: (_sql: string, params: Record<string, unknown>) => (Object.assign(gatewayFilters, params), gatewayQuery),
+        andWhere: (_sql: string, params?: Record<string, unknown>) => (Object.assign(gatewayFilters, params ?? {}), gatewayQuery),
+        select: () => gatewayQuery,
+        getMany: async () => [],
+      };
+      Object.defineProperty(toolRepo, 'manager', {
+        configurable: true,
+        value: {
+          getRepository: (entity: { name: string }) =>
+            entity.name === 'Agent'
+              ? { find: async (options: unknown) => (agentReads.push(options), []) }
+              : { createQueryBuilder: () => gatewayQuery },
+        },
+      });
 
       await service.updateTool(
         'tool-1',
@@ -659,6 +679,8 @@ describe('ToolsService', () => {
 
       expect((tool as any).visibility).toBe('team');
       expect((tool as any).teamId).toBe('team-uuid');
+      expect(agentReads).toHaveLength(1);
+      expect(gatewayFilters).toEqual({ toolId: (tool as any).id, organizationId: 'org-1' });
     });
 
     it('flips visibility from team back to org and clears the dangling teamId', async () => {

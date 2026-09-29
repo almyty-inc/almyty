@@ -261,6 +261,22 @@ describe('AgentAppsService', () => {
       expect(created.appId).toBe('h-1');
     });
 
+    it('gives a new desktop or binary place an app id made from the app address', async () => {
+      // Nobody has to invent a reverse-domain name before a first build;
+      // the check refuses a packaged place without one.
+      for (const target of [DistributionTarget.DESKTOP, DistributionTarget.BINARY]) {
+        const created = await service.addDistribution(ORG, 'acme-support', target);
+        expect(created.configuration).toEqual({ bundleId: 'app.almyty.acmesupport' });
+      }
+    });
+
+    it('keeps an app id the caller sent, and gives other places none', async () => {
+      const desktop = await service.addDistribution(ORG, 'acme-support', DistributionTarget.DESKTOP, { bundleId: 'com.acme.assistant' });
+      expect(desktop.configuration).toEqual({ bundleId: 'com.acme.assistant' });
+      const web = await service.addDistribution(ORG, 'acme-support', DistributionTarget.WEB);
+      expect(web.configuration).toEqual({});
+    });
+
     it('keeps one distribution per target rather than adding a second', async () => {
       // Naming the platform rather than lumping them under "channel" is
       // what makes this simple: slack and telegram are separate targets.
@@ -377,7 +393,7 @@ describe('AgentAppsService', () => {
         expect.objectContaining({ endpoint: '/apps/acme-support/slack', agentId: 'agent-1' }),
         ORG,
         'user-1',
-        { activate: false },
+        { appId: 'h-1', activate: false },
       );
       expect(result.gatewayId).toBe('gw-1');
       expect(result.status).toBe(DistributionStatus.LIVE);
@@ -410,7 +426,7 @@ describe('AgentAppsService', () => {
         expect.anything(),
         ORG,
         'user-1',
-        { activate: false },
+        { appId: 'h-1', activate: false },
       );
       expect(order).toEqual([`save:gw-1:${DistributionStatus.LIVE}`, 'activate']);
     });
@@ -444,7 +460,7 @@ describe('AgentAppsService', () => {
 
       await service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1');
 
-      expect(gateways.upsertForDistribution.mock.calls[0][3]).toEqual({ activate: false, gatewayId: 'gw-adopted' });
+      expect(gateways.upsertForDistribution.mock.calls[0][3]).toEqual({ appId: 'h-1', activate: false, gatewayId: 'gw-adopted' });
     });
 
     it('refuses to publish in front of an agent that cannot hold a conversation', async () => {
@@ -480,7 +496,7 @@ describe('AgentAppsService', () => {
         expect.objectContaining({ agentId: 'agent-2' }),
         ORG,
         'user-1',
-        { activate: false },
+        { appId: 'h-1', activate: false },
       );
     });
 

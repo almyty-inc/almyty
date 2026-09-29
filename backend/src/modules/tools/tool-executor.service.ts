@@ -165,11 +165,10 @@ export class ToolExecutorService {
       try {
         await this.executionAccess.assertCanExecute(options.principal!, tool, 'Tool');
         // The API behind the tool is part of what runs: its base URL and the
-        // credentials bound to it. A tool generated from a team or private
-        // API is created org-wide unless the API is private, so the tool's
-        // own scope alone would hand the team's API to the whole org. The
-        // principal must be able to use the API too; refused as a missing
-        // tool, like the tool itself.
+        // credentials bound to it. A generated tool carries its API's scope
+        // (generatedToolScope), but a hand-made tool on a team or private
+        // API does not, so the principal must be able to use the API too;
+        // refused as a missing tool, like the tool itself.
         const api = tool.api ?? tool.operation?.api;
         if (api && (api.visibility ?? 'org') !== 'org') {
           await this.executionAccess.assertCanExecute(options.principal!, api, 'Tool');

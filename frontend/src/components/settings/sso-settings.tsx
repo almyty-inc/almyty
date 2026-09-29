@@ -52,7 +52,7 @@ export function SsoSettings() {
       fallback={
         <UpgradePrompt
           feature="sso"
-          title="Single Sign-On"
+          title="Single sign-on"
           description="SAML / OIDC login and SCIM provisioning let members sign in through your identity provider."
         />
       }

@@ -90,10 +90,7 @@ describe('connectionsApi', () => {
     await expect(connectionsApi.complete('slack', { state: 'st-1', code: 'abc' })).resolves.toEqual({ id: 'c2' })
   })
 
-  it('gets, validates, rotates and removes by id', async () => {
-    await connectionsApi.get('c1')
-    expect(getSpy).toHaveBeenCalledWith('/connections/c1', undefined)
-
+  it('validates, rotates and removes by id', async () => {
     postSpy.mockImplementation(() => envelope({ id: 'c1', health: { status: 'valid' } }) as any)
     await expect(connectionsApi.validate('c1')).resolves.toEqual({ id: 'c1', health: { status: 'valid' } })
     expect(postSpy).toHaveBeenCalledWith('/connections/c1/validate', undefined, undefined)

@@ -35,7 +35,7 @@ test.describe('Organizations - Settings', () => {
 
   test('should display organization members', async ({ authenticatedPage: page }) => {
     // Click the "Members & Teams" outer tab (not the inner "Members" sub-tab)
-    await page.getByRole('tab', { name: /members.*teams/i }).click()
+    await page.goto('/settings/members')
     await page.waitForTimeout(1000)
 
     // Should show at least one member (the owner)
@@ -44,7 +44,7 @@ test.describe('Organizations - Settings', () => {
 
   test('should show invite member dialog', async ({ authenticatedPage: page }) => {
     // Click the "Members & Teams" outer tab
-    await page.getByRole('tab', { name: /members.*teams/i }).click()
+    await page.goto('/settings/members')
     await page.waitForTimeout(1000)
 
     await page.getByRole('button', { name: /invite/i }).click()
@@ -55,7 +55,7 @@ test.describe('Organizations - Settings', () => {
   })
 
   test('should show profile tab', async ({ authenticatedPage: page }) => {
-    await page.getByRole('tab', { name: /profile/i }).click()
+    await page.goto('/settings/profile')
     await page.waitForTimeout(1000)
 
     await expect(page.getByText(/First Name/i)).toBeVisible()
@@ -63,7 +63,7 @@ test.describe('Organizations - Settings', () => {
   })
 
   test('should show security tab', async ({ authenticatedPage: page }) => {
-    await page.getByRole('tab', { name: /security/i }).click()
+    await page.goto('/settings/security')
     await page.waitForTimeout(1000)
 
     await expect(page.getByText(/Change Password/i)).toBeVisible()
