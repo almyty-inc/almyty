@@ -18,7 +18,7 @@ export function SecurityTab() {
   const [confirmPassword, setConfirmPassword] = useState('')
 
   // Change password mutation
-  // The button under "Email Verification" had no handler at all, while
+  // The button under "Email verification" had no handler at all, while
   // the identical action in the top-of-page banner worked. Someone who
   // never dismissed the banner would never find the working one.
   const resendVerification = useMutation({
@@ -134,7 +134,7 @@ export function SecurityTab() {
           <div className="space-y-3">
             <div className="flex items-center justify-between p-3 border rounded-lg">
               <div>
-                <div className="font-medium">Current Session</div>
+                <div className="font-medium">Current session</div>
                 <div className="text-sm text-muted-foreground">
                   This browser • Active now
                 </div>
@@ -171,7 +171,7 @@ export function SecurityTab() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-medium">Email Verification</div>
+                <div className="font-medium">Email verification</div>
                 <div className="text-sm text-muted-foreground">
                   Verify your email for better security
                 </div>
@@ -203,7 +203,7 @@ export function SecurityTab() {
 
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-medium">Password Strength</div>
+                <div className="font-medium">Password strength</div>
                 <div className="text-sm text-muted-foreground">
                   Last changed recently
                 </div>

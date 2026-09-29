@@ -10,6 +10,7 @@ import { ConnectProviderForm, type ConnectResult } from '@/components/llm-provid
 import { PROVIDER_TILE_GROUPS, isProviderType, providerTileLabel } from '@/components/llm-providers/provider-catalog'
 import { providerLogos } from '@/components/llm-providers/provider-type-config'
 import { safeReturnTo } from '@/lib/return-to'
+import { pluralized } from '@/lib/utils'
 
 /** How many model names the success panel lists before "and N more". */
 const SHOWN_MODELS = 8
@@ -117,7 +118,7 @@ function ConnectedSummary({ result, onDone, onOpen }: { result: ConnectResult; o
       <p className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
         <CheckCircle2 className="h-4 w-4" aria-hidden />
         {result.provider.name} is connected.{' '}
-        {models.length === 0 ? 'It lists no models yet.' : `${models.length} model${models.length === 1 ? '' : 's'} found.`}
+        {models.length === 0 ? 'It lists no models yet.' : `${pluralized(models.length, 'model')} found.`}
       </p>
       {shown.length > 0 && (
         <ul className="flex flex-wrap gap-1.5" aria-label="Models found">

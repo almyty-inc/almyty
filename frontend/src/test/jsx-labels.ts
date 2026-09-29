@@ -18,6 +18,8 @@ export interface JsxLabel {
   line: number
   /** Raw attribute source of the opening tag. */
   attrs: string
+  /** True when the children hold another element, not only text. */
+  nested: boolean
 }
 
 function skipBraces(src: string, i: number): number {
@@ -84,7 +86,7 @@ export function jsxLabels(src: string, tags: string[]): JsxLabel[] {
     const { end, selfClosing } = endOfOpeningTag(src, m.index + 1 + tag.length)
     const attrs = src.slice(m.index + 1 + tag.length, end - 1)
     if (selfClosing) {
-      out.push({ tag, text: '', variants: [], line: src.slice(0, m.index).split('\n').length, attrs })
+      out.push({ tag, text: '', variants: [], line: src.slice(0, m.index).split('\n').length, attrs, nested: false })
       opener.lastIndex = end
       continue
     }
@@ -93,6 +95,7 @@ export function jsxLabels(src: string, tags: string[]): JsxLabel[] {
     let i = end
     let text = ''
     let variants: string[] = []
+    let nested = false
     while (i < src.length && depth > 0) {
       if (src.startsWith(`</${tag}>`, i)) {
         depth--
@@ -112,6 +115,8 @@ export function jsxLabels(src: string, tags: string[]): JsxLabel[] {
         const sameTag = src.startsWith(`<${tag}`, i) && /[\s>/]/.test(src[i + 1 + tag.length] ?? '')
         const inner = endOfOpeningTag(src, i + 1)
         if (sameTag && !inner.selfClosing) depth++
+        // An icon (<Plus />) beside the text still leaves a text-only label.
+        if (src[i + 1] !== '/' && !inner.selfClosing) nested = true
         i = inner.end
         continue
       }
@@ -126,6 +131,7 @@ export function jsxLabels(src: string, tags: string[]): JsxLabel[] {
       variants: variants.length ? all.slice(1) : all,
       line: src.slice(0, m.index).split('\n').length,
       attrs,
+      nested,
     })
     opener.lastIndex = end
   }
@@ -150,7 +156,7 @@ export const LABEL_PROPER_PHRASES = [
   'Tool Hub', 'Agent Skills', 'Hugging Face', 'Google Chat', 'Microsoft Teams', 'Claude Code', 'Claude Desktop',
   'Amazon Bedrock', 'Cloud Storage', 'Universal Tool Call Protocol', 'Google Cloud Storage', 'VS Code', 'OpenID Connect',
   'EU AI Act', 'App Store Connect', 'Twilio Account SID', 'Terms of Service', 'Privacy Policy',
-  'Ctrl+Z', 'Ctrl+Shift+Z', 'Ctrl+K',
+  'Server-Sent Events', 'Google Cloud', 'Microsoft App ID', 'Azure AI Foundry', 'Ctrl+Z', 'Ctrl+Shift+Z', 'Ctrl+K',
 ]
 
 /** Words after the first that are capitalised without being a proper noun. */

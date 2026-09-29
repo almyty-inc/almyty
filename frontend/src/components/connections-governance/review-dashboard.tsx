@@ -31,6 +31,7 @@ import { REVIEW_QUERY_KEY, connectionsReviewApi } from '@/lib/connections-govern
 import { useNotifications } from '@/store/app'
 import type { ConnectionHealth } from '@/types/connections'
 import type { ReviewEnvironment, ReviewRow } from '@/types/connections-governance'
+import { pluralized, formatDateTime } from '@/lib/utils'
 
 const SELECT_CLASS =
   'flex h-9 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30'
@@ -38,7 +39,7 @@ const SELECT_CLASS =
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return 'Never'
   const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString()
+  return Number.isNaN(d.getTime()) ? iso : formatDateTime(d)
 }
 
 export function ownerLabel(owner: ReviewRow['owner']): string {
@@ -67,7 +68,7 @@ export function ReviewDashboard() {
       queryClient.invalidateQueries({ queryKey: ['connections', row.connection.id, 'grants'] })
       setToRevoke(null)
       const n = result?.revoked ?? 0
-      notifications.success('Grants revoked', `${n} grant${n === 1 ? '' : 's'} on ${row.connection.name} removed.`)
+      notifications.success('Grants revoked', `${pluralized(n, 'grant')} on ${row.connection.name} removed.`)
     },
     onError: (error: unknown) => {
       setToRevoke(null)
@@ -173,7 +174,7 @@ export function ReviewDashboard() {
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke grants on {toRevoke?.connection.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              {toRevoke ? `${toRevoke.grants.length} agent and workspace grant${toRevoke.grants.length === 1 ? '' : 's'} will be removed. ` : ''}
+              {toRevoke ? `${pluralized(toRevoke.grants.length, 'agent and workspace grant')} will be removed. ` : ''}
               {toRevoke ? `${ownerLabel(toRevoke.owner)} keeps the connection; nothing else can resolve it until it is granted again.` : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -101,7 +101,7 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
       })
     },
     onSuccess: () => {
-      success('Memory Added', 'Memory has been created for this agent.')
+      success('Memory added', 'Memory has been created for this agent.')
       queryClient.invalidateQueries({ queryKey: ['agent-memories', agentId] })
       // The Memory page lists the same rows under its own key, and a
       // memory added here is the org's memory too.

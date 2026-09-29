@@ -7,7 +7,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { QueryError } from '@/components/ui/query-error'
 import { analyticsApi } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn, formatDateTime } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import type { RequestLog } from '@/types'
 
@@ -88,7 +88,7 @@ export function RequestLogTab() {
                 {requestLogs.data.map((log: RequestLog) => (
                   <tr key={log.id} className="border-b last:border-0 hover:bg-muted/30 text-xs">
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                      {new Date(log.timestamp).toLocaleString()}
+                      {formatDateTime(log.timestamp)}
                     </td>
                     <td className="px-4 py-3 font-mono font-medium">{log.method}</td>
                     <td className="px-4 py-3 font-mono text-muted-foreground max-w-[300px] truncate">

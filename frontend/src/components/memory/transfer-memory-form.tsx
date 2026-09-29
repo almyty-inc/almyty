@@ -20,6 +20,7 @@ import { memoriesApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { memoryBackendName } from '@/components/memory/memory-words'
+import { pluralized } from '@/lib/utils'
 
 type TransferResult = {
   succeeded?: number
@@ -56,7 +57,7 @@ export function TransferMemoryForm() {
       const r: TransferResult = res?.data ?? res ?? {}
       notify.success(
         transfer.dry_run ? 'Dry run complete' : 'Transfer complete',
-        `${r.succeeded ?? 0} of ${r.total_source ?? 0} items, ${r.warnings?.length ?? 0} warnings`,
+        `${r.succeeded ?? 0} of ${pluralized(r.total_source, 'item')}, ${pluralized(r.warnings?.length, 'warning')}`,
       )
       if (transfer.dry_run) {
         setDryRunResult(r)
@@ -129,7 +130,7 @@ export function TransferMemoryForm() {
       {dryRunResult && (
         <FormSection title="Dry run result" description="Nothing was written. Untick dry run to transfer for real.">
           <p className="text-sm" data-testid="transfer-dry-run-result">
-            {dryRunResult.succeeded ?? 0} of {dryRunResult.total_source ?? 0} items would transfer.
+            {dryRunResult.succeeded ?? 0} of {pluralized(dryRunResult.total_source, 'item')} would transfer.
           </p>
           {(dryRunResult.warnings?.length ?? 0) > 0 ? (
             <ul className="list-disc space-y-1 pl-5 text-sm text-amber-700 dark:text-amber-400">

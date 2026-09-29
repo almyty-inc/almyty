@@ -27,6 +27,7 @@ import {
   type AppBranding,
 } from '@/lib/agent-apps'
 import { AppAccess } from './app-access'
+import { pluralized } from '@/lib/utils'
 
 export interface AppSettingsPanelProps {
   app: AgentApp
@@ -46,7 +47,7 @@ export function advancedSummary(values: {
 }): string {
   const parts = [
     values.costCap.trim() ? `Spend limit ${values.costCap.trim()} per run` : 'No spend limit',
-    values.perUser.trim() ? `${values.perUser.trim()} messages per visitor an hour` : 'No visitor limit',
+    values.perUser.trim() ? `${pluralized(Number(values.perUser.trim()), 'message')} per visitor an hour` : 'No visitor limit',
     values.retentionDays.trim()
       ? `visitor data deleted after ${values.retentionDays.trim()} days`
       : 'visitor data kept per organization policy',

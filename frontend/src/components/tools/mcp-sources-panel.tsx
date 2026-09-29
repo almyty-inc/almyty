@@ -19,6 +19,7 @@ import {
 import { mcpSourcesApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { pluralized, formatDateTime } from '@/lib/utils'
 
 export interface McpSourceView {
   id: string
@@ -111,8 +112,8 @@ export function McpSourcesPanel({ organizationId }: McpSourcesPanelProps) {
               <div className="text-sm text-muted-foreground truncate">
                 {source.url}
                 {' · '}
-                {source.toolCount} tool{source.toolCount !== 1 ? 's' : ''}
-                {source.lastSyncAt ? ` · synced ${new Date(source.lastSyncAt).toLocaleString()}` : ''}
+                {pluralized(source.toolCount, 'tool')}
+                {source.lastSyncAt ? ` · synced ${formatDateTime(source.lastSyncAt)}` : ''}
               </div>
               {source.status === 'error' && source.lastError && (
                 <div className="text-sm text-destructive truncate" title={source.lastError}>
@@ -149,7 +150,7 @@ export function McpSourcesPanel({ organizationId }: McpSourcesPanelProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete MCP server?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes "{deletingSource?.name}" and all {deletingSource?.toolCount ?? 0} tools
+              This removes "{deletingSource?.name}" and all {pluralized(deletingSource?.toolCount, 'tool')}
               discovered from it. Agents using those tools will lose access. This action cannot be
               undone.
             </AlertDialogDescription>

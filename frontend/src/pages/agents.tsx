@@ -140,7 +140,7 @@ export function AgentsPage() {
       return await agentsApi.delete(agentId)
     },
     onSuccess: async (_result, agentId) => {
-      success('Agent Deleted', 'Agent has been deleted successfully.')
+      success('Agent deleted', 'Agent has been deleted successfully.')
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
       // The detail page's caches for this agent would otherwise be
       // served to whoever navigated to it next. agent-detail.tsx does
@@ -159,7 +159,7 @@ export function AgentsPage() {
   const activateMutation = useMutation({
     mutationFn: (id: string) => agentsApi.activate(id),
     onSuccess: async (_result, id) => {
-      success('Agent Activated', 'Agent is now active.')
+      success('Agent activated', 'Agent is now active.')
       await invalidateAgent(id)
     },
     onError: (err: any) => {
@@ -171,7 +171,7 @@ export function AgentsPage() {
   const deactivateMutation = useMutation({
     mutationFn: (id: string) => agentsApi.deactivate(id),
     onSuccess: async (_result, id) => {
-      success('Agent Deactivated', 'Agent is now inactive.')
+      success('Agent deactivated', 'Agent is now inactive.')
       await invalidateAgent(id)
     },
     onError: (err: any) => {
@@ -183,7 +183,7 @@ export function AgentsPage() {
   const duplicateMutation = useMutation({
     mutationFn: (id: string) => agentsApi.duplicate(id),
     onSuccess: async (_result, id) => {
-      success('Agent Duplicated', 'A copy of the agent has been created.')
+      success('Agent duplicated', 'A copy of the agent has been created.')
       await invalidateAgent(id)
     },
     onError: (err: any) => {

@@ -26,6 +26,7 @@ import {
 import { useNotifications } from '@/store/app'
 import type { Connection } from '@/types/connections'
 import type { AuditExportFormat, ExpiryAction, RotationCandidate } from '@/types/connections-governance'
+import { pluralized, formatDate as calendarDate } from '@/lib/utils'
 
 type ExpiryStatus = 'warn' | 'expire'
 type RotationStatus = 'due' | 'manual'
@@ -36,7 +37,7 @@ interface RotationLine extends RotationCandidate { status: RotationStatus }
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return 'Unknown'
   const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString()
+  return Number.isNaN(d.getTime()) ? iso : calendarDate(d)
 }
 
 export function ExpiryPanel() {
@@ -97,7 +98,7 @@ export function ExpiryPanel() {
     mutationFn: () => connectionsExpiryApi.enforce(),
     onSuccess: (result) => {
       refresh()
-      const parts = [`${result?.warned ?? 0} warned`, `${result?.expired ?? 0} expired`, result?.enforce ? `${result?.revokedGrants ?? 0} grants revoked` : ''].filter(Boolean).join(', ')
+      const parts = [`${result?.warned ?? 0} warned`, `${result?.expired ?? 0} expired`, result?.enforce ? `${pluralized(result?.revokedGrants, 'grant')} revoked` : ''].filter(Boolean).join(', ')
       notifications.success('Expiry run finished', parts)
     },
     onError: (error: unknown) => notifications.error('Expiry did not run', errorMessage(error, 'The expiry run failed')),
@@ -108,7 +109,7 @@ export function ExpiryPanel() {
     try {
       const result = await connectionsAuditExportApi.download(format)
       const retention = result.retentionDays === 'unlimited' ? 'no retention window' : result.retentionDays !== null ? `${result.retentionDays} day retention` : ''
-      notifications.success('Export ready', [result.count !== null ? `${result.count} events` : '', retention, result.filename].filter(Boolean).join(', '))
+      notifications.success('Export ready', [result.count !== null ? pluralized(result.count, 'event') : '', retention, result.filename].filter(Boolean).join(', '))
     } catch (error) {
       notifications.error('Export failed', errorMessage(error, 'The audit export could not be downloaded'))
     } finally {
@@ -164,7 +165,7 @@ export function ExpiryPanel() {
                         <TableCell className="text-sm">{line.ageDays} of {line.maxAgeDays} days</TableCell>
                         <TableCell className="text-sm">
                           {formatDate(line.expiresOn)}
-                          {left !== null && <span className="ml-1 text-xs text-muted-foreground">({left <= 0 ? 'past' : `in ${left} day${left === 1 ? '' : 's'}`})</span>}
+                          {left !== null && <span className="ml-1 text-xs text-muted-foreground">({left <= 0 ? 'past' : `in ${pluralized(left, 'day')}`})</span>}
                         </TableCell>
                         <TableCell>
                           <Badge variant={line.status === 'expire' ? 'destructive' : 'secondary'} className="text-[10px]">{line.status === 'expire' ? 'expired' : 'expiring'}</Badge>

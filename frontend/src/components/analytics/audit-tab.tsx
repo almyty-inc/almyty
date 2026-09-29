@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { analyticsApi, auditExportApi, auditLogsApi } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn, formatDateTime } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { EntitlementGate } from '@/components/entitlement-gate'
@@ -349,7 +349,7 @@ export function AuditTab() {
                 {auditLogs.data.map((entry: AuditLogEntry) => (
                   <tr key={entry.id} className="border-b last:border-0 hover:bg-muted/30 text-xs">
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                      {new Date(entry.createdAt).toLocaleString()}
+                      {formatDateTime(entry.createdAt)}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground truncate max-w-[150px]">
                       {entry.userEmail || entry.userId?.slice(0, 8) || '--'}

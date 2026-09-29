@@ -166,7 +166,7 @@ export function ToolsPage() {
       setSelectedToolIds(new Set())
       if (failed.length === 0) {
         notifications.success(
-          activated === 1 ? 'Tool activated' : `${activated} tools activated`,
+          `${pluralized(activated, 'tool')} activated`,
           'Active tools can be assigned to a gateway.',
         )
         return
@@ -176,7 +176,7 @@ export function ToolsPage() {
         notifications.error('Could not activate', detail)
       } else {
         notifications.warning(
-          `${activated} of ${activated + failed.length} tools activated`,
+          `${activated} of ${pluralized(activated + failed.length, 'tool')} activated`,
           detail,
         )
       }

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { api } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { pluralized } from '@/lib/utils'
 
 /**
  * Where a run's requests actually went.
@@ -90,7 +91,7 @@ export function RouteTraceTimeline({ agentId, executionId }: { agentId: string; 
           {(data?.summary.opaqueHops ?? 0) > 0 && (
             // Named rather than folded into the total: the number above is
             // what we can see, not what the run cost.
-            <span data-testid="trace-opaque"> · {data?.summary.opaqueHops} hop(s) we cannot price</span>
+            <span data-testid="trace-opaque"> · {pluralized(data?.summary.opaqueHops, 'hop')} we cannot price</span>
           )}
         </span>
       </div>

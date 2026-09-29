@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle } from 'lucide-react'
 import { agentsApi } from '@/lib/api'
 import type { Agent, AgentExecution } from '@/types'
+import { formatDateTime } from '@/lib/utils'
 
 const FAILED = new Set(['failed', 'timeout'])
 
@@ -26,7 +27,7 @@ export function RunFailureBanner({ agent, executions }: { agent: Agent; executio
   const latest = autonomous ? runs?.[0] : executions[0]
   if (!latest || !FAILED.has(latest.status)) return null
   const when = new Date(latest.createdAt)
-  const whenLabel = Number.isNaN(when.getTime()) ? '' : when.toLocaleString()
+  const whenLabel = Number.isNaN(when.getTime()) ? '' : formatDateTime(when)
   const detail = (latest as any).error as string | undefined
   const roleFailure = /role ["'].*["'] (could not be filled|needs a model)|no models are registered/i.test(detail ?? '')
 

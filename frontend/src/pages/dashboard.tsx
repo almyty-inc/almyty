@@ -24,7 +24,7 @@ import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { pluralize } from '@/lib/utils'
+import { pluralize, pluralized } from '@/lib/utils'
 import type { RequestLog } from '@/types'
 
 /** Gateway types that take gateway sign-in (API key, bearer, OAuth). */
@@ -269,7 +269,7 @@ export function DashboardPage() {
                       className="flex items-center gap-2 text-sm text-amber-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
                     >
                       <AlertTriangle className="h-4 w-4 shrink-0" />
-                      <span>{apisWithNoTools.length === 1 ? '1 API has no tools yet' : `${apisWithNoTools.length} APIs have no tools yet`}</span>
+                      <span>{`${pluralized(apisWithNoTools.length, 'API')} ${apisWithNoTools.length === 1 ? 'has' : 'have'} no tools yet`}</span>
                     </Link>
                   )}
                   {gatewaysWithNoAuth.length > 0 && (
@@ -278,7 +278,7 @@ export function DashboardPage() {
                       className="flex items-center gap-2 text-sm text-amber-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
                     >
                       <AlertTriangle className="h-4 w-4 shrink-0" />
-                      <span>{gatewaysWithNoAuth.length === 1 ? '1 gateway is open to anyone: add sign-in' : `${gatewaysWithNoAuth.length} gateways are open to anyone: add sign-in`}</span>
+                      <span>{`${pluralized(gatewaysWithNoAuth.length, 'gateway')} ${gatewaysWithNoAuth.length === 1 ? 'is' : 'are'} open to anyone: add sign-in`}</span>
                     </Link>
                   )}
                 </div>

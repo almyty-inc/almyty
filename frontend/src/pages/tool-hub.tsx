@@ -21,7 +21,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { toolHubApi } from '@/lib/api'
-import { formatDate } from '@/lib/utils'
+import { formatDate, pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { ToolTemplate } from '@/types'
@@ -237,7 +237,7 @@ export function ToolHubPage() {
               <CardHeader>
                 <CardTitle className="text-lg">Published by your organization</CardTitle>
                 <CardDescription>
-                  {publishedHere.length} template{publishedHere.length !== 1 ? 's' : ''} only your organization can see
+                  {pluralized(publishedHere.length, 'template')} only your organization can see
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -261,7 +261,7 @@ export function ToolHubPage() {
                         {template.createdAt && (
                           <p className="text-xs text-muted-foreground mt-1">
                             Published {formatDate(template.createdAt)}
-                            {template.installCount > 0 ? ` · ${template.installCount} installs` : ''}
+                            {template.installCount > 0 ? ` · ${pluralized(template.installCount, 'install')}` : ''}
                           </p>
                         )}
                       </div>
@@ -313,7 +313,7 @@ export function ToolHubPage() {
                         <div>
                           <CardTitle className="text-base">{provider.provider}</CardTitle>
                           <p className="text-xs text-muted-foreground">
-                            {provider.count} tool{provider.count !== 1 ? 's' : ''}
+                            {pluralized(provider.count, 'tool')}
                           </p>
                         </div>
                       </div>
@@ -349,7 +349,7 @@ export function ToolHubPage() {
                   {expandedProvider} Templates
                 </CardTitle>
                 <CardDescription>
-                  {templatesByProvider[expandedProvider].length} template{templatesByProvider[expandedProvider].length !== 1 ? 's' : ''} available
+                  {pluralized(templatesByProvider[expandedProvider].length, 'template')} available
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -379,7 +379,7 @@ export function ToolHubPage() {
                           </span>
                           {template.installCount > 0 && (
                             <span className="text-xs text-muted-foreground">
-                              {template.installCount} installs
+                              {pluralized(template.installCount, 'install')}
                             </span>
                           )}
                         </div>
@@ -407,7 +407,7 @@ export function ToolHubPage() {
                   {searchQuery ? 'Search results' : 'All templates'}
                 </CardTitle>
                 <CardDescription>
-                  {templates.length} template{templates.length !== 1 ? 's' : ''} found
+                  {pluralized(templates.length, 'template')} found
                 </CardDescription>
               </CardHeader>
               <CardContent>

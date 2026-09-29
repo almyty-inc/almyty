@@ -606,7 +606,7 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
           onClick={() => setCodePreviewOpen(!codePreviewOpen)}
         >
           <Code className="h-4 w-4" />
-          <span>View Generated Code</span>
+          <span>View generated code</span>
           {codePreviewOpen ? <ChevronDown className="h-4 w-4 ml-auto" /> : <ChevronRight className="h-4 w-4 ml-auto" />}
         </button>
         {codePreviewOpen && (

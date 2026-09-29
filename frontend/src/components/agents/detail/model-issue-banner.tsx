@@ -1,6 +1,7 @@
 import { AlertTriangle } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Agent } from '@/types'
+import { formatDateTime } from '@/lib/utils'
 
 /**
  * Shown when the backend recorded that this agent's model is no longer
@@ -12,7 +13,7 @@ export function ModelIssueBanner({ agent }: { agent: Agent }) {
   if (!issue) return null
   const schedulePaused = agent.settings?.schedule?.pausedReason?.code === issue.code
   const when = new Date(issue.detectedAt)
-  const whenLabel = Number.isNaN(when.getTime()) ? '' : when.toLocaleString()
+  const whenLabel = Number.isNaN(when.getTime()) ? '' : formatDateTime(when)
 
   return (
     <div

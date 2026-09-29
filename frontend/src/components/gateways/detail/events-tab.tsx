@@ -33,7 +33,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { EmptyState } from '@/components/ui/empty-state'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { gatewaysApi } from '@/lib/api'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, pluralized, formatDateTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 
 export type ChannelDirection = 'inbound' | 'outbound'
@@ -181,7 +181,7 @@ function EventRow({ event, expanded, onToggle, onCopyId }: EventRowProps) {
             <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-wide">
               {event.channelType}
             </Badge>
-            <span className="text-xs text-muted-foreground" title={new Date(event.createdAt).toLocaleString()}>
+            <span className="text-xs text-muted-foreground" title={formatDateTime(event.createdAt)}>
               {formatRelativeTime(event.createdAt)}
             </span>
             {event.runId && (
@@ -218,7 +218,7 @@ function EventRow({ event, expanded, onToggle, onCopyId }: EventRowProps) {
         <div className="px-4 pb-4 pl-11">
           {truncated && (
             <p className="mb-2 text-xs text-amber-600 dark:text-amber-400">
-              Payload truncated{originalBytes ? ` (original: ${originalBytes} bytes)` : ''}. Showing preview only.
+              Payload truncated{originalBytes ? ` (original: ${pluralized(originalBytes, 'byte')})` : ''}. Showing preview only.
             </p>
           )}
           <pre className="max-h-96 overflow-auto rounded bg-muted/50 p-3 text-xs font-mono">
