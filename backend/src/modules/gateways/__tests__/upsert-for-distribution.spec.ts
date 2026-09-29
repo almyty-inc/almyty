@@ -64,4 +64,26 @@ describe('GatewaysService.upsertForDistribution', () => {
       hostedChat: { slug: 'acme' },
     });
   });
+
+  it('keeps where a widget sits on the page across a republish', async () => {
+    const { service, updateGateway } = build([
+      {
+        id: 'gw-w',
+        organizationId: ORG,
+        endpoint: '/apps/acme/widget',
+        configuration: { widget: { position: 'bottom-left', launcherIcon: 'help' }, allowedOrigins: ['https://acme.com'] },
+      },
+    ]);
+    await service.upsertForDistribution(
+      { ...dto({ appId: 'app-1' }), type: GatewayType.CHAT_WIDGET, endpoint: '/apps/acme/widget' },
+      ORG,
+      'user-1',
+      { appId: 'app-1', activate: false, gatewayId: 'gw-w' },
+    );
+    expect(updateGateway.mock.calls[0][1].configuration).toEqual({
+      widget: { position: 'bottom-left', launcherIcon: 'help' },
+      allowedOrigins: ['https://acme.com'],
+      appId: 'app-1',
+    });
+  });
 });

@@ -280,6 +280,50 @@ describe('ChannelWidgetController', () => {
         NotFoundException,
       );
     });
+
+    it('takes the look from the app that owns the widget, and only placement from the widget', async () => {
+      channelGatewayService.findWidgetGateway.mockResolvedValueOnce({
+        id: GATEWAY_UUID,
+        organizationId: 'org-1',
+        type: 'chat_widget',
+        configuration: {
+          widget: { primaryColor: '#ff00aa', title: 'Old title', greeting: 'Old', theme: 'dark', poweredBy: true, position: 'bottom-left', launcherIcon: 'help' },
+        },
+      });
+      const appLink = {
+        distributionFor: jest.fn(async () => ({
+          app: {
+            name: 'Acme',
+            branding: { appName: 'Acme Help', primaryColor: '#0F766E', greeting: 'Ask away', theme: 'light', whiteLabel: true, aiDisclosure: 'You are talking to a bot.' },
+          },
+        })),
+      };
+      const owned = new ChannelWidgetController(channelGatewayService as any, gatewayRateLimit as any, appLink as any);
+
+      const out = await owned.widgetConfig(GATEWAY_UUID, res as any);
+
+      expect(appLink.distributionFor).toHaveBeenCalledWith('org-1', GATEWAY_UUID);
+      expect(out.data).toEqual({
+        primaryColor: '#0f766e',
+        title: 'Acme Help',
+        greeting: 'Ask away',
+        theme: 'light',
+        poweredBy: false,
+        aiDisclosure: 'You are talking to a bot.',
+        position: 'bottom-left',
+        launcherIcon: 'help',
+      });
+    });
+
+    it('always shows an AI disclosure line on an app-owned widget', async () => {
+      channelGatewayService.findWidgetGateway.mockResolvedValueOnce({ id: GATEWAY_UUID, organizationId: 'org-1', type: 'chat_widget', configuration: {} });
+      const appLink = { distributionFor: jest.fn(async () => ({ app: { name: 'Acme', branding: {} } })) };
+      const owned = new ChannelWidgetController(channelGatewayService as any, gatewayRateLimit as any, appLink as any);
+
+      const out = await owned.widgetConfig(GATEWAY_UUID, res as any);
+
+      expect(out.data).toMatchObject({ title: 'Acme', aiDisclosure: WIDGET_DEFAULT_AI_DISCLOSURE, poweredBy: true });
+    });
   });
 
   describe('sanitizeWidgetConfig', () => {

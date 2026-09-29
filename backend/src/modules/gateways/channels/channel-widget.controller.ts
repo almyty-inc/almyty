@@ -10,6 +10,7 @@ import {
   Post,
   Query,
   Res,
+  Optional,
   Req,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -18,8 +19,9 @@ import { HostedChatService } from './hosted-chat.service';
 
 
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
+import { GatewayAppLinkService } from '../gateway-app-link.service';
 import { ChannelGatewayService } from './channel-gateway.service';
-import { buildWidgetScript, sanitizeWidgetConfig } from './widget-script';
+import { buildWidgetScript, widgetConfigFor } from './widget-script';
 import { trustedClientIp } from '../../../common/security/client-ip';
 
 /**
@@ -46,6 +48,9 @@ export class ChannelWidgetController {
   constructor(
     private readonly channelGatewayService: ChannelGatewayService,
     private readonly gatewayRateLimit: GatewayRateLimitService,
+    // The app the widget is a place of, whose look it shows. Optional so
+    // positional unit tests can construct the controller without it.
+    @Optional() private readonly appLink?: GatewayAppLinkService,
   ) {}
 
   @Get(':id/widget.js')
@@ -78,13 +83,14 @@ export class ChannelWidgetController {
   ) {
     // Same gate as widget.js: 404 unless the gateway exists, is a
     // chat_widget and is active. The response is a strict whitelist of
-    // presentation fields (see sanitizeWidgetConfig) — the raw
-    // configuration jsonb also holds channel credentials and must never
-    // leak through this public endpoint.
+    // presentation fields (see widgetConfigFor) — the raw configuration
+    // jsonb also holds channel credentials and must never leak through
+    // this public endpoint. The look is the owning app's.
     const gateway = await this.channelGatewayService.findWidgetGateway(id);
+    const place = this.appLink ? await this.appLink.distributionFor(gateway.organizationId, gateway.id) : null;
 
     res.setHeader('Cache-Control', 'public, max-age=60');
-    return { success: true, data: sanitizeWidgetConfig(gateway.configuration) };
+    return { success: true, data: widgetConfigFor(gateway.configuration, place?.app ?? null) };
   }
 
   @Post(':id/widget/messages')

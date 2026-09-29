@@ -386,3 +386,42 @@ describe('checkPublish agent choice', () => {
     expect(codes).not.toContain('AGENT_NOT_ON_APP');
   });
 });
+
+describe('the website widget and A2A places', () => {
+  const autonomous = { mode: 'autonomous' };
+
+  it('stands the widget up as a chat widget and A2A as an A2A gateway', () => {
+    expect(GATEWAY_TYPE_FOR_TARGET[DistributionTarget.WIDGET]).toBe(GatewayType.CHAT_WIDGET);
+    expect(GATEWAY_TYPE_FOR_TARGET[DistributionTarget.A2A]).toBe(GatewayType.A2A);
+  });
+
+  it('asks for no platform settings: we host both', () => {
+    expect(REQUIRED_CREDENTIALS[DistributionTarget.WIDGET]).toEqual([]);
+    expect(REQUIRED_CREDENTIALS[DistributionTarget.A2A]).toEqual([]);
+    expect(checkPublish(DistributionTarget.WIDGET, app(), null, autonomous).ok).toBe(true);
+    expect(checkPublish(DistributionTarget.A2A, app(), null, autonomous).ok).toBe(true);
+  });
+
+  it('refuses the widget on an app people have to sign in to, because the widget has no sign-in', () => {
+    const codes = checkPublish(DistributionTarget.WIDGET, app({ authMode: 'email_otp' }), null, autonomous)
+      .refusals.map((r) => r.code);
+    expect(codes).toEqual(['WIDGET_HAS_NO_SIGN_IN']);
+    // Callers of an A2A place sign in with the gateway's own keys, whatever the app's rule.
+    expect(checkPublish(DistributionTarget.A2A, app({ authMode: 'email_otp' }), null, autonomous).ok).toBe(true);
+  });
+
+  it('shares the widget allowance per visitor, like the web app', () => {
+    const limits = { perUserRateLimit: 10, perIpRateLimit: 90 };
+    expect(rateLimitFor(app({ limits }), DistributionTarget.WIDGET)).toEqual(rateLimitFor(app({ limits }), DistributionTarget.WEB));
+  });
+
+  it('keeps a surface ceiling on A2A, whose callers are machines', () => {
+    const limit = rateLimitFor(app({ limits: { perUserRateLimit: 10, perIpRateLimit: 90 } }), DistributionTarget.A2A);
+    expect(limit).toMatchObject({ enabled: true, requestsPerHour: 90 });
+  });
+
+  it('refuses a workflow agent on A2A too, which the A2A server does not run', () => {
+    const codes = checkPublish(DistributionTarget.A2A, app(), null, { mode: 'workflow' }).refusals.map((r) => r.code);
+    expect(codes).toEqual(['AGENT_NOT_CONVERSATIONAL']);
+  });
+});

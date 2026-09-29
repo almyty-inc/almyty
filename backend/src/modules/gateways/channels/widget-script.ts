@@ -120,6 +120,48 @@ export function sanitizeWidgetConfig(
   return out;
 }
 
+/** The app a widget is a place of, as far as its look goes. */
+export interface WidgetOwner {
+  name: string;
+  branding?: {
+    appName?: string;
+    primaryColor?: string;
+    greeting?: string;
+    theme?: string;
+    aiDisclosure?: string | null;
+    whiteLabel?: boolean;
+  } | null;
+}
+
+/**
+ * What the public widget-config endpoint answers for a widget.
+ *
+ * Branding has one home, the app: a widget an app owns takes its colour,
+ * name, greeting, theme, AI disclosure line and almyty mark from the app,
+ * read on every request, and keeps only where it sits on the page and
+ * which launcher icon it shows. The disclosure line is always shown on an
+ * app's widget (the app's own wording, or the default). A widget no app
+ * owns keeps its own block, sanitized the same way.
+ */
+export function widgetConfigFor(
+  configuration: Record<string, any> | null | undefined,
+  owner: WidgetOwner | null,
+): WidgetPublicConfig {
+  const own = sanitizeWidgetConfig(configuration);
+  if (!owner) return own;
+  const branding = owner.branding ?? {};
+  const look = sanitizeWidgetConfig({
+    widget: {
+      primaryColor: branding.primaryColor,
+      title: branding.appName || owner.name,
+      greeting: branding.greeting,
+      theme: branding.theme,
+      poweredBy: !branding.whiteLabel,
+    },
+    aiDisclosure: typeof branding.aiDisclosure === 'string' && branding.aiDisclosure.trim() ? branding.aiDisclosure : true,
+  });
+  return { ...look, position: own.position, launcherIcon: own.launcherIcon };
+}
 export function buildWidgetScript(gatewayId: string): string {
   // Defense in depth: the controller already ParseUUIDPipe-validates,
   // but never emit anything that isn't a plain UUID into JS source.

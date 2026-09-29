@@ -1,6 +1,6 @@
 import { GatewayType } from '../../entities/gateway.entity';
 import { DistributionTarget } from '../../entities/agent-app-distribution.entity';
-import type { AgentApp } from '../../entities/agent-app.entity';
+import { AppAuthMode, type AgentApp } from '../../entities/agent-app.entity';
 import { credentialKeysOf } from '../gateways/channels/channel-config.helper';
 
 
@@ -33,6 +33,9 @@ export const GATEWAY_TYPE_FOR_TARGET: Record<string, GatewayType | null> = Objec
   [DistributionTarget.SIGNAL]: GatewayType.SIGNAL,
   [DistributionTarget.MATRIX]: GatewayType.MATRIX,
   [DistributionTarget.IRC]: GatewayType.IRC,
+  // The widget on someone's own website, and the agent served to other agents.
+  [DistributionTarget.WIDGET]: GatewayType.CHAT_WIDGET,
+  [DistributionTarget.A2A]: GatewayType.A2A,
   // These three produce a file someone downloads. There is nothing to
   // stand up, and nothing to take down.
   [DistributionTarget.TUI]: null,
@@ -75,8 +78,10 @@ export const REQUIRED_CREDENTIALS: Record<string, readonly string[]> = Object.fr
   [DistributionTarget.SIGNAL]: ['api_url', 'phone_number'],
   [DistributionTarget.MATRIX]: ['homeserver_url', 'access_token', 'room_id'],
   [DistributionTarget.IRC]: ['webhook_url', 'bridge_token', 'nick', 'channel'],
-  // We host this one, so there is nothing for an operator to register.
+  // We host these, so there is nothing for an operator to register.
   [DistributionTarget.WEB]: [],
+  [DistributionTarget.WIDGET]: [],
+  [DistributionTarget.A2A]: [],
   [DistributionTarget.TUI]: [],
   [DistributionTarget.DESKTOP]: [],
   [DistributionTarget.BINARY]: [],
@@ -145,7 +150,9 @@ export const PUBLISH_REFUSALS = Object.freeze({
   AGENT_NOT_ON_APP:
     'The agent this place is set to answer with is no longer part of this app. Pick one that is.',
   AGENT_NOT_CONVERSATIONAL:
-    'A chat surface needs an agent that holds a conversation. This one runs as a workflow, which answers a call rather than a person, so switch it to autonomous or pick a different agent.',
+    'This place needs an agent that holds a conversation. This one runs as a workflow, which answers a call rather than a person, so switch it to autonomous or pick a different agent.',
+  WIDGET_HAS_NO_SIGN_IN:
+    'The website widget has no sign-in, so it only goes on an app anyone can use. Set who can use the app to anyone with the link, or use the web app, which asks people to sign in.',
 });
 
 export type PublishRefusalCode = keyof typeof PUBLISH_REFUSALS;
@@ -165,7 +172,7 @@ export interface PublishCheck {
  */
 export function checkPublish(
   target: DistributionTarget,
-  app: Pick<AgentApp, 'agentIds' | 'isActive'>,
+  app: Pick<AgentApp, 'agentIds' | 'isActive'> & Partial<Pick<AgentApp, 'authMode'>>,
   configuration: Record<string, any> | null | undefined = null,
   agent: { mode?: string } | null = null,
 ): PublishCheck {
@@ -176,6 +183,12 @@ export function checkPublish(
   if (!servesOverGateway(target)) refuse('NOT_SERVED');
   if (!app.agentIds?.length) refuse('NO_AGENT');
   if (app.isActive === false) refuse('APP_INACTIVE');
+
+  // The widget runs on someone else's page with no sign-in of ours, so on
+  // an app people must sign in to it would be the way round the rule.
+  if (target === DistributionTarget.WIDGET && (app.authMode ?? AppAuthMode.PUBLIC_LINK) !== AppAuthMode.PUBLIC_LINK) {
+    refuse('WIDGET_HAS_NO_SIGN_IN');
+  }
 
   // A named agent that has since been removed from the product would
   // otherwise publish a surface answered by something the operator
@@ -239,8 +252,9 @@ export function rateLimitFor(app: Pick<AgentApp, 'limits'>, target: Distribution
   // as well, but their webhook ingress also keeps a surface ceiling: a
   // public Slack or Telegram surface is the customer's model keys on the
   // open internet, and the ceiling is the spend bound while the sender
-  // is still unverified.
-  if (target !== DistributionTarget.WEB) {
+  // is still unverified. A2A callers are machines holding a key, so they
+  // get the surface ceiling too.
+  if (target !== DistributionTarget.WEB && target !== DistributionTarget.WIDGET) {
     const perHour = Math.max(perUser, perIp);
     return {
       enabled: true,
