@@ -259,6 +259,8 @@ export default defineConfig({
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
+      // Served by the credentials controller, which has no prefix of its own.
+      '/access-keys': { target: apiTarget, changeOrigin: true },
       '/external-agents': {
         target: apiTarget,
         changeOrigin: true,
