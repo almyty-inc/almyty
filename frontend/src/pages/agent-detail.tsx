@@ -28,6 +28,7 @@ import type {
 import { AgentHeader } from '@/components/agents/detail/agent-header'
 import { AgentStats } from '@/components/agents/detail/agent-stats'
 import { ModelIssueBanner } from '@/components/agents/detail/model-issue-banner'
+import { ModelAvailabilityBanner } from '@/components/agents/detail/model-availability-banner'
 import { PauseReasonBanner } from '@/components/agents/detail/pause-reason-banner'
 import { RunFailureBanner } from '@/components/agents/detail/run-failure-banner'
 import { ExecutionPlan } from '@/components/agents/detail/execution-plan'
@@ -365,6 +366,7 @@ export function AgentDetailPage() {
       {workflow && <ReadinessBanner result={readiness.data} pending={readiness.isPending} failed={readiness.isError} onRetry={() => readiness.refetch()} onConfigure={() => setActiveTab('execution')} />}
 
       <ModelIssueBanner agent={agent} />
+      <ModelAvailabilityBanner agentId={agent.id} />
       <PauseReasonBanner agent={agent} />
       <RunFailureBanner agent={agent} executions={executions} />
 
