@@ -1,6 +1,7 @@
 import { LlmProvider, LlmProviderType } from '../../../entities/llm-provider.entity';
 import { LlmModelsHelper } from '../llm-models.helper';
 import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
+import { snapshotEnv } from '../../../test/env';
 
 jest.mock('../providers/safe-request', () => ({
   ...jest.requireActual('../providers/safe-request'),
@@ -180,7 +181,7 @@ describe('fetchOpenAIModels vendor URL resolution', () => {
   );
 
   it('lists a custom server on a private address when the install allows it (LLM_ALLOW_PRIVATE_URLS)', async () => {
-    const before = process.env.LLM_ALLOW_PRIVATE_URLS;
+    const restoreEnv = snapshotEnv('LLM_ALLOW_PRIVATE_URLS');
     process.env.LLM_ALLOW_PRIVATE_URLS = 'true';
     try {
       (callLlmProviderHttp as jest.Mock).mockResolvedValue({ data: { data: [{ id: 'm' }] } });
@@ -189,8 +190,7 @@ describe('fetchOpenAIModels vendor URL resolution', () => {
       await helper.fetchModelsFromProvider(provider);
       expect((callLlmProviderHttp as jest.Mock).mock.calls[0][1]).toMatchObject({ allowPrivateUrls: true });
     } finally {
-      if (before === undefined) delete process.env.LLM_ALLOW_PRIVATE_URLS;
-      else process.env.LLM_ALLOW_PRIVATE_URLS = before;
+      restoreEnv();
     }
   });
 });
