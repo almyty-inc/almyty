@@ -7,6 +7,7 @@ import { FilesService } from '../files.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { MAX_UPLOAD_FIELDS } from '../upload-limits';
+import { listenOnLoopback } from '../../../test/http';
 
 /**
  * POST /files/upload through the real multer interceptor.
@@ -38,6 +39,7 @@ describe('POST /files/upload multipart limits', () => {
       .compile();
     app = moduleRef.createNestApplication();
     await app.init();
+    await listenOnLoopback(app);
   });
 
   afterAll(async () => {
