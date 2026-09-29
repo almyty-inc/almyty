@@ -20,7 +20,7 @@ export function ChannelIcon({ type, className }: { type: ChannelType; className?
   const cls = cn('h-4 w-4 text-primary', className)
   if (type === 'web') return <Globe className={cls} aria-hidden="true" />
   if (type === 'widget') return <Code2 className={cls} aria-hidden="true" />
-  if (type === 'tui' || type === 'binary') return <Terminal className={cls} aria-hidden="true" />
+  if (type === 'tui') return <Terminal className={cls} aria-hidden="true" />
   if (type === 'desktop') return <Monitor className={cls} aria-hidden="true" />
   if (type === 'a2a') return <Bot className={cls} aria-hidden="true" />
   if (type === 'email') return <Mail className={cls} aria-hidden="true" />

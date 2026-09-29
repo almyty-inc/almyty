@@ -24,19 +24,12 @@ function useChannelGateway(gatewayId: string | null) {
 }
 
 /**
- * The web chat's link: where it will be before publishing, the link to
- * copy and open once it is live.
+ * The live web chat's link, to copy and open. Before it is published the
+ * address field says where it will be.
  */
-export function WebChatAddress({ channel }: { channel: AgentChannel }) {
-  if (!channel.slug) return null
+export function WebChatLink({ channel }: { channel: AgentChannel }) {
+  if (!channel.slug || channel.status !== 'live') return null
   const url = webChatUrl(channel.slug)
-  if (channel.status !== 'live') {
-    return (
-      <p className="text-sm text-muted-foreground" data-testid="web-address-pending">
-        Publishing puts it at <span className="font-mono text-foreground">{url}</span> straight away.
-      </p>
-    )
-  }
   return (
     <div className="space-y-2" data-testid="web-address">
       <CopyField id="web-chat-url" value={url} label="Link" />

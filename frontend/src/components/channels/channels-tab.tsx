@@ -84,12 +84,17 @@ export function ChannelsTab({ agentId, agentName }: ChannelsTabProps) {
     {
       id: 'channel',
       header: 'Channel',
-      cell: ({ row }) => (
-        <span className="flex items-center gap-2 font-medium">
-          <ChannelIcon type={row.original.type} />
-          {CHANNEL_LABELS[row.original.type] ?? row.original.type}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const kind = CHANNEL_LABELS[row.original.type] ?? row.original.type
+        const named = row.original.name || kind
+        return (
+          <span className="flex items-center gap-2">
+            <ChannelIcon type={row.original.type} />
+            <span className="font-medium">{named}</span>
+            {named !== kind && <span className="text-xs text-muted-foreground">{kind}</span>}
+          </span>
+        )
+      },
     },
     {
       id: 'where',

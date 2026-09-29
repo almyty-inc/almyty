@@ -4,14 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Trash2 } from 'lucide-react'
 
 import { Field, FormPage, FormSection } from '@/components/layout/form-page'
-import { CredentialChoice } from '@/components/credentials/credential-choice'
+import { CredentialPicker } from '@/components/credentials/credential-picker'
+import { useConnectionOptions } from '@/components/connections/connection-select'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CopyField } from '@/components/ui/copy-field'
 import { Disclosure } from '@/components/ui/disclosure'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { SecretInput } from '@/components/ui/secret-input'
 import { Switch } from '@/components/ui/switch'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
@@ -19,32 +19,33 @@ import { getApiBaseUrl } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import {
   BUNDLE_ID_PATTERN,
-  CHANNEL_CREDENTIAL_FIELDS,
   CHANNEL_DESCRIPTIONS,
   CHANNEL_INBOUND,
   CHANNEL_LABELS,
   PACKAGED_CHANNEL_TYPES,
+  SLACK_APP_CONNECTOR_KEY,
   agentChannelsApi,
+  carriesDisclosure,
   channelCallbackUrl,
   channelConnectorKey,
   grantsLocalAccess,
   isBuildable,
   isMessagingChannel,
   isOpenToAnyone,
-  missingChannelFields,
+  webChatAddressError,
   webChatUrl,
   type AgentChannel,
   type ChannelCapabilities,
-  type ChannelCredentialField,
   type EffectiveSettings,
 } from '@/lib/agent-channels'
+import { DEFAULT_AI_DISCLOSURE } from '@/lib/hosted-chat'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { Agent } from '@/types'
 import { BuildPanel } from './build-panel'
 import { CHANNEL_STATUS } from './channel-meta'
 import { channelKeys, channelsTabPath } from './channel-page-loader'
-import { A2aChannelSettings, WebChatAddress, WebChatSettings, WidgetChannelSettings } from './hosted-channels'
+import { A2aChannelSettings, WebChatLink, WebChatSettings, WidgetChannelSettings } from './hosted-channels'
 import {
   PublicSettingsFields,
   formFromEffective,
@@ -55,7 +56,7 @@ import {
 import { SlackInstall } from './slack-install'
 
 /** Refusals a field on this page answers; the rest are said once, next to Publish. */
-const FIELD_REFUSALS = new Set(['MISSING_CREDENTIALS', 'BUNDLE_ID_INVALID'])
+const FIELD_REFUSALS = new Set(['MISSING_CREDENTIALS', 'BUNDLE_ID_INVALID', 'DISCLOSURE_REMOVAL_NOT_ENTITLED'])
 
 export interface ChannelSettingsProps {
   agent: Agent
@@ -92,7 +93,6 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   const messaging = isMessagingChannel(type)
   const packaged = PACKAGED_CHANNEL_TYPES.includes(type)
   const buildable = isBuildable(type)
-  const fields = messaging ? CHANNEL_CREDENTIAL_FIELDS[type] ?? [] : []
 
   // What is stored, refreshed from each save's response so the form is
   // clean again without waiting for a refetch.
@@ -100,21 +100,28 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   const configuration = stored.configuration ?? {}
   const live = stored.status === 'live'
 
-  // Keys: from a credential on Credentials, or entered here. A credential
-  // this channel made for keys typed here is "entered here".
-  const storedCredential: string | null = (() => {
-    const id = configuration.credentialId
-    return typeof id === 'string' && id && stored.credentialPicked ? id : null
-  })()
+  // Keys: a credential on Credentials, picked or created here.
+  const storedCredential: string | null = typeof configuration.credentialId === 'string' && configuration.credentialId ? configuration.credentialId : null
   const [credentialId, setCredentialId] = useState<string | null>(null)
   const [credentialTouched, setCredentialTouched] = useState(false)
-  const pickedCredential = credentialTouched ? credentialId : null
-  // Secrets start empty: a stored one is never shown back, and an empty
-  // secret field means "keep what is stored".
-  const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(fields.map((f) => [f.key, f.secret ? '' : ((configuration[f.key] as string) ?? '')])),
-  )
-  const changedFields = fields.filter((f) => (f.secret ? values[f.key] !== '' : values[f.key] !== ((configuration[f.key] as string) ?? '')))
+  const { all: credentials } = useConnectionOptions({ kind: 'channel', enabled: messaging })
+
+  const [name, setName] = useState(stored.name)
+  const [nameError, setNameError] = useState<string | undefined>()
+  const nameChanged = name.trim() !== stored.name
+
+  // The web chat's address: generated from the agent's name, the owner's
+  // to change.
+  const storedSlug = stored.slug ?? ''
+  const [slug, setSlug] = useState(storedSlug)
+  const [slugError, setSlugError] = useState<string | undefined>()
+  const slugChanged = type === 'web' && slug.trim().toLowerCase() !== storedSlug
+
+  // The AI disclosure switch: on unless it was turned off.
+  const disclosureCarried = carriesDisclosure(type)
+  const storedDisclosure = configuration.aiDisclosure !== false
+  const [disclosure, setDisclosure] = useState(storedDisclosure)
+  const disclosureChanged = disclosureCarried && disclosure !== storedDisclosure
 
   const storedBundleId = (configuration.bundleId as string | undefined) ?? ''
   const [bundleId, setBundleId] = useState(storedBundleId)
@@ -142,7 +149,9 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
     JSON.stringify(overrides.visitorRules) !== JSON.stringify(stored.visitorRules ?? null)
 
   const dirty =
-    changedFields.length > 0 ||
+    nameChanged ||
+    slugChanged ||
+    disclosureChanged ||
     (credentialTouched && credentialId !== storedCredential) ||
     (packaged && bundleId !== storedBundleId) ||
     capabilitiesChanged ||
@@ -167,12 +176,19 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   const save = useMutation({
     mutationFn: (body: Parameters<typeof agentChannelsApi.update>[2]) => agentChannelsApi.update(agent.id, channel.id, body),
     onSuccess: (saved) => {
-      success('Saved', `${label} settings updated.`)
-      setValues((v) => Object.fromEntries(fields.map((f) => [f.key, f.secret ? '' : v[f.key] ?? ''])))
+      success('Saved', `${saved.name} is updated.`)
       setCredentialTouched(false)
+      setName(saved.name)
+      setSlug(saved.slug ?? '')
       refresh(saved)
     },
-    onError: (err: unknown) => errorNotif('Could not save', getApiErrorMessage(err, 'Please try again.')),
+    onError: (err: unknown, body) => {
+      const message = getApiErrorMessage(err, 'Please try again.')
+      // A taken name or address is said next to the field it is about.
+      if (body.slug !== undefined && /address/i.test(message)) setSlugError(message)
+      else if (body.name !== undefined && /name|called/i.test(message)) setNameError(message)
+      else errorNotif('Could not save', message)
+    },
   })
 
   // The certificate choice belongs to the build, so it applies when picked.
@@ -203,7 +219,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   const remove = useMutation({
     mutationFn: () => agentChannelsApi.remove(agent.id, channel.id),
     onSuccess: () => {
-      success('Deleted', `${label} is no longer a channel of ${agent.name}.`)
+      success('Deleted', `${stored.name} is no longer a channel of ${agent.name}.`)
       queryClient.invalidateQueries({ queryKey: channelKeys.list(agent.id) })
       guard.leave(back)
     },
@@ -212,8 +228,10 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
 
   const askRemove = async () => {
     const ok = await confirm({
-      title: `Delete ${label}?`,
-      description: 'It stops answering and its settings go with it. Downloads already handed out keep working.',
+      title: `Delete ${stored.name}?`,
+      description: stored.gatewayId
+        ? 'It stops answering, the gateway it answers on is deleted, and its settings go with it. Downloads already handed out keep working.'
+        : 'Its settings go with it. Downloads already handed out keep working.',
       confirmLabel: 'Delete',
       destructive: true,
     })
@@ -221,6 +239,19 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   }
 
   const submit = () => {
+    if (nameChanged && !name.trim()) {
+      setNameError('Give the channel a name.')
+      return
+    }
+    setNameError(undefined)
+    if (slugChanged) {
+      const error = webChatAddressError(slug)
+      if (error) {
+        setSlugError(error)
+        return
+      }
+    }
+    setSlugError(undefined)
     const trimmed = bundleId.trim()
     if (packaged && trimmed !== storedBundleId && !BUNDLE_ID_PATTERN.test(trimmed)) {
       setBundleError('Use a reverse-domain name you own, such as com.acme.assistant.')
@@ -237,8 +268,10 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
         requireApprovalFor: approval ? ['shell'] : [],
       }
     }
-    if (!pickedCredential) for (const f of changedFields) patch[f.key] = values[f.key].trim()
+    if (disclosureChanged) patch.aiDisclosure = disclosure
     const body: Parameters<typeof agentChannelsApi.update>[2] = {}
+    if (nameChanged) body.name = name.trim()
+    if (slugChanged) body.slug = slug.trim().toLowerCase()
     if (Object.keys(patch).length) body.configuration = patch
     if (credentialTouched && credentialId !== storedCredential) body.credentialId = credentialId
     if (overridesChanged) {
@@ -255,46 +288,29 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   const callbackUrl = channelCallbackUrl(getApiBaseUrl(), orgSlug, stored)
   const status = CHANNEL_STATUS[stored.status] ?? CHANNEL_STATUS.draft
 
-  const has = (key: string) =>
-    !!pickedCredential ||
-    (!credentialTouched && !!storedCredential) ||
-    !!(configuration[key] as string | undefined)?.toString().trim() ||
-    (Array.isArray(configuration.credentialKeys) && configuration.credentialKeys.includes(key)) ||
-    !!values[key]?.trim()
-  const missing = new Set(missingChannelFields(type, has))
-  const everyday = fields.filter((f) => !f.advanced)
-  const alternatives = fields.filter((f) => f.advanced)
   const usingCredential = credentialTouched ? credentialId : storedCredential
+  const missingKeys = (check?.refusals ?? []).find((r) => r.code === 'MISSING_CREDENTIALS')?.message
+  const disclosureRefusal = (check?.refusals ?? []).find((r) => r.code === 'DISCLOSURE_REMOVAL_NOT_ENTITLED')?.message
+  const disclosureLine = stored.effective.branding.aiDisclosure?.trim() || DEFAULT_AI_DISCLOSURE
 
-  const renderField = (field: ChannelCredentialField) => {
-    const saved =
-      !!(configuration[field.key] as string | undefined)?.toString().trim() ||
-      (Array.isArray(configuration.credentialKeys) && configuration.credentialKeys.includes(field.key))
-    return (
-      <Field
-        key={field.key}
-        id={`cred-${field.key}`}
-        label={field.label}
-        required={field.required}
-        hint={
-          <>
-            {field.hint}
-            {missing.has(field.key) && (
-              <span className="mt-0.5 block text-amber-700 dark:text-amber-300">Needed before this can go live.</span>
-            )}
-          </>
-        }
-      >
-        <SecretInput
-          id={`cred-${field.key}`}
-          masked={!!field.secret}
-          value={values[field.key] ?? ''}
-          onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
-          placeholder={field.secret && saved ? 'Saved. Type a new value to replace it.' : field.placeholder}
-        />
-      </Field>
-    )
-  }
+  /** The keys picker: only credentials of this service are offered. */
+  const keysPicker = (id: string, label: string, connectorKey: string, hint?: string) => (
+    <CredentialPicker
+      id={id}
+      label={label}
+      kind="channel"
+      connectorKey={connectorKey}
+      connections={credentials.filter((c) => c.connectorKey === connectorKey)}
+      value={usingCredential ?? ''}
+      onChange={(picked) => {
+        setCredentialTouched(true)
+        setCredentialId(picked?.id ?? null)
+      }}
+      required
+      hint={hint}
+      error={missingKeys}
+    />
+  )
 
   const notReady = publishRefusals.length > 0 && (
     <ul className="space-y-1" data-testid="channel-refusals">
@@ -316,7 +332,26 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
           : 'Publishing makes it answer, with the saved settings.'
       }
     >
-      {type === 'web' && <WebChatAddress channel={stored} />}
+      {type === 'web' && (
+        <Field
+          id="channel-address"
+          label="Address"
+          hint={`People open it at ${webChatUrl(slug.trim().toLowerCase() || storedSlug)}. Unique across almyty, since it is a web address.`}
+          error={slugError}
+        >
+          <Input
+            id="channel-address"
+            value={slug}
+            onChange={(e) => {
+              setSlug(e.target.value)
+              setSlugError(undefined)
+            }}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </Field>
+      )}
+      {type === 'web' && !slugChanged && <WebChatLink channel={stored} />}
       {notReady}
       <div>
         <Button type="button" variant="outline" disabled={publish.isPending || dirty} onClick={() => publish.mutate()}>
@@ -343,7 +378,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
 
   return (
     <FormPage
-      title={label}
+      title={stored.name}
       description={CHANNEL_DESCRIPTIONS[type]}
       back={{ to: back, label: agent.name }}
       guard={guard}
@@ -353,6 +388,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
       submitDisabled={!dirty || (own && retentionInvalid(overrideForm))}
       actions={
         <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">{label}</Badge>
           <Badge variant={status.variant}>{status.label}</Badge>
           <Button
             type="button"
@@ -368,6 +404,27 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
         </div>
       }
     >
+      <FormSection>
+        <Field
+          id="channel-name"
+          label="Name"
+          required
+          hint={`Tells it apart from ${agent.name}'s other channels.`}
+          error={nameError}
+        >
+          <Input
+            id="channel-name"
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value)
+              setNameError(undefined)
+            }}
+            maxLength={120}
+            autoComplete="off"
+          />
+        </Field>
+      </FormSection>
+
       {(type === 'web' || type === 'widget' || type === 'a2a') && publishSection}
 
       {messaging && (
@@ -375,29 +432,17 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
           title={type === 'slack' ? 'Add to Slack' : 'Keys'}
           description={
             type === 'slack'
-              ? 'Create a Slack app at api.slack.com/apps and use its credentials. Once it is published, anyone you send the install link to can add it to their workspace.'
-              : 'From your own account on the platform. Stored encrypted; a saved secret is never shown again.'
+              ? 'Your own Slack app, from api.slack.com/apps. Once this is published, anyone you send the install link to can add it to their workspace.'
+              : 'Your account on the platform, kept on Credentials with your other keys.'
           }
         >
-          <CredentialChoice
-            id="channel-credential"
-            label="Keys"
-            connectorKey={channelConnectorKey(type)}
-            value={usingCredential}
-            onChange={(id) => {
-              setCredentialTouched(true)
-              setCredentialId(id)
-            }}
-          />
-          {!usingCredential && (
-            <>
-              <div className="space-y-4">{everyday.map(renderField)}</div>
-              {alternatives.length > 0 && (
-                <Disclosure title="Advanced" summary="One workspace with a bot token instead">
-                  <div className="space-y-4">{alternatives.map(renderField)}</div>
-                </Disclosure>
-              )}
-            </>
+          {type === 'slack'
+            ? keysPicker('channel-credential', 'Slack app', SLACK_APP_CONNECTOR_KEY)
+            : keysPicker('channel-credential', 'Credential', channelConnectorKey(type))}
+          {type === 'slack' && (
+            <Disclosure title="Advanced" summary="One workspace with a bot token instead">
+              {keysPicker('channel-credential-bot', 'Bot token', channelConnectorKey('slack'), 'For a single workspace: a Slack bot token instead of the app.')}
+            </Disclosure>
           )}
         </FormSection>
       )}
@@ -413,6 +458,29 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
         <p className="text-sm text-muted-foreground" data-testid="no-callback-url">
           No callback URL needed: {inbound.why}
         </p>
+      )}
+
+      {disclosureCarried && (
+        <FormSection title="AI disclosure" description="People are told they are talking to an AI. The EU AI Act (Art. 50) requires it.">
+          <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="channel-ai-disclosure">Tell people they are talking to an AI</Label>
+              <p className="text-xs text-muted-foreground">
+                {messaging ? 'Before the first reply of each conversation' : 'Under the message box'}: {disclosureLine}
+              </p>
+              {!stored.disclosureRemovable && (
+                <p className="text-xs text-muted-foreground">Turning it off needs the white-label entitlement.</p>
+              )}
+              {disclosureRefusal && <p className="text-xs text-destructive">{disclosureRefusal}</p>}
+            </div>
+            <Switch
+              id="channel-ai-disclosure"
+              checked={disclosure}
+              onCheckedChange={setDisclosure}
+              disabled={disclosure && !stored.disclosureRemovable}
+            />
+          </div>
+        </FormSection>
       )}
 
       {messaging && publishSection}

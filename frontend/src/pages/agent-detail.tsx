@@ -423,6 +423,9 @@ export function AgentDetailPage() {
             scheduleInput={scheduleInput}
             setScheduleInput={setScheduleInput}
           />
+          {/* The keys that call this agent's API sit by that API. A channel's
+              own keys (an A2A channel's callers) are on the channel. */}
+          <AgentAccessKeysSection agentId={id!} agentName={agent?.name} />
         </TabsContent>
 
         <TabsContent value="runs" className="space-y-4">
@@ -441,7 +444,6 @@ export function AgentDetailPage() {
 
         <TabsContent value="channels" className="space-y-4">
           <ChannelsTab agentId={id!} agentName={agent?.name} />
-          <AgentAccessKeysSection agentId={id!} agentName={agent?.name} />
         </TabsContent>
 
         <TabsContent value="skills" className="space-y-4">

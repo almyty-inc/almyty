@@ -86,8 +86,6 @@ export function managedUse(managedBy: { kind: string; id?: string } | null | und
       return { label: 'A channel', href: id ? `/gateways/${id}` : undefined }
     case 'channel_installation':
       return { label: 'A channel' }
-    case 'app_distribution':
-      return { label: 'An app', href: '/apps' }
     case 'hosted_chat_oauth':
       return { label: 'A hosted chat sign-in', href: id ? `/gateways/${id}` : undefined }
     default:

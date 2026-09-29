@@ -75,6 +75,17 @@ describe('ChannelsTab', () => {
     expect(agentChannelsApi.list).toHaveBeenCalledWith('agent-1')
   })
 
+  it('tells two channels of one kind apart by their names, with the kind beside a name of its own', async () => {
+    vi.mocked(agentChannelsApi.list).mockResolvedValue([
+      channel({ id: 'c-s1', type: 'slack', name: 'Slack' }),
+      channel({ id: 'c-s2', type: 'slack', name: 'Slack for sales' }),
+    ])
+    render(<ChannelsTab agentId="agent-1" agentName="Support" />)
+    await screen.findByText('Slack for sales')
+    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
+    expect(rows.map((r) => r.textContent)).toEqual([expect.stringMatching(/^Slack(?!Slack)/), expect.stringMatching(/^Slack for salesSlack/)])
+  })
+
   it('offers one "Add channel", and the branding and visitor rules every channel uses', async () => {
     vi.mocked(agentChannelsApi.list).mockResolvedValue([])
     render(<ChannelsTab agentId="agent-1" agentName="Support" />)

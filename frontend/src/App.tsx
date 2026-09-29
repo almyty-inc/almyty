@@ -192,7 +192,6 @@ export function createAppRoutes() {
           <Route path="/tool-hub" element={<Navigate to="/tools?tab=hub" replace />} />
           <Route path="/agents" element={<AgentsPage />} />
           {/* Apps became channels on the agent; an old link lands on the agents. */}
-          <Route path="/apps/*" element={<Navigate to="/agents" replace />} />
           <Route path="/agents/new" element={<AgentBuilderPage />} />
           <Route path="/agents/import" element={<AgentImportPage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />

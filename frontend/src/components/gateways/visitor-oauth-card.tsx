@@ -248,11 +248,16 @@ export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; a
             )}
 
             {showForm && (
-              <form
+              // A group, not a form: the card sits inside other forms (a
+              // channel's page), and a form may not contain a form.
+              <div
+                role="group"
+                aria-label="Sign-in provider"
                 className="space-y-3"
-                onSubmit={(e) => {
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' || !(e.target instanceof HTMLInputElement)) return
                   e.preventDefault()
-                  save.mutate()
+                  if (!save.isPending && draft.clientId.trim() && !(needsSecret && !draft.clientSecret)) save.mutate()
                 }}
               >
                 {/* The well-known providers first, as tiles; everything
@@ -374,7 +379,7 @@ export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; a
                 </Disclosure>
 
                 <div className="flex gap-2">
-                  <Button type="submit" disabled={save.isPending || !draft.clientId.trim() || (needsSecret && !draft.clientSecret)}>
+                  <Button type="button" onClick={() => save.mutate()} disabled={save.isPending || !draft.clientId.trim() || (needsSecret && !draft.clientSecret)}>
                     {save.isPending ? 'Saving...' : 'Save provider'}
                   </Button>
                   {editing && (
@@ -383,7 +388,7 @@ export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; a
                     </Button>
                   )}
                 </div>
-              </form>
+              </div>
             )}
 
             {error && (

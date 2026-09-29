@@ -67,7 +67,6 @@ describe('isBuildable', () => {
   it('is true only for targets that compile to a file', () => {
     expect(isBuildable('tui')).toBe(true)
     expect(isBuildable('desktop')).toBe(true)
-    expect(isBuildable('binary')).toBe(true)
     // A web app is served and Slack is someone else's client.
     expect(isBuildable('web')).toBe(false)
     expect(isBuildable('slack')).toBe(false)

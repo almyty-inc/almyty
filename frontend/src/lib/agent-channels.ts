@@ -19,7 +19,6 @@ export type ChannelType =
   | 'a2a'
   | 'tui'
   | 'desktop'
-  | 'binary'
   | 'slack'
   | 'discord'
   | 'telegram'
@@ -56,9 +55,7 @@ export function isMessagingChannel(type: ChannelType): boolean {
 }
 
 /**
- * The channels offered when adding one, in this order. A standalone
- * binary is not offered: it compiles to the same file as the terminal
- * app. One added before still shows and works.
+ * The channels offered when adding one, in this order.
  */
 export const ADDABLE_CHANNEL_TYPES: ChannelType[] = [
   'web',
@@ -151,13 +148,15 @@ export interface AgentChannel {
   agentId: string
   type: ChannelType
   status: ChannelStatus
+  /** What the owner calls it, unique among the agent's channels. */
+  name: string
   /** The web chat's address, or a download's file name. */
   slug: string | null
   gatewayId: string | null
   /** Where the channel answers (its gateway's endpoint). */
   endpoint: string
-  /** Its keys come from a credential picked on Credentials, rather than keys entered on the channel. */
-  credentialPicked?: boolean
+  /** Whether the organization may turn the AI disclosure off (white-label). */
+  disclosureRemovable?: boolean
   configuration?: Record<string, any> | null
   /** This channel's own branding; null uses the agent's. */
   branding: ChannelBranding | null
@@ -196,7 +195,6 @@ export const CHANNEL_LABELS: Record<ChannelType, string> = {
   tui: 'Terminal app',
   desktop: 'Desktop app',
   // Kept so one added before still renders; not offered when adding.
-  binary: 'Standalone binary',
   slack: 'Slack',
   discord: 'Discord',
   telegram: 'Telegram',
@@ -219,7 +217,6 @@ export const CHANNEL_HINTS: Record<ChannelType, string> = {
   a2a: 'Over A2A',
   tui: 'A command to download',
   desktop: 'An app to download',
-  binary: 'One executable',
   slack: 'In your workspace',
   discord: 'As a bot',
   telegram: 'As a bot',
@@ -242,7 +239,6 @@ export const CHANNEL_DESCRIPTIONS: Record<ChannelType, string> = {
   a2a: 'Other agents find it by its agent card and call it over A2A.',
   tui: 'A command your users download and run in a terminal.',
   desktop: 'An installable app for macOS, Windows and Linux.',
-  binary: 'A single executable with no runtime to install.',
   slack: 'Answers direct messages and mentions in your Slack workspace.',
   discord: 'Answers in your Discord server as a bot.',
   telegram: 'Answers as a Telegram bot.',
@@ -259,14 +255,14 @@ export const CHANNEL_DESCRIPTIONS: Record<ChannelType, string> = {
 }
 
 /** Channels built into a download rather than served. */
-export const BUILDABLE_CHANNEL_TYPES: ChannelType[] = ['tui', 'desktop', 'binary']
+export const BUILDABLE_CHANNEL_TYPES: ChannelType[] = ['tui', 'desktop']
 
 export function isBuildable(type: ChannelType): boolean {
   return BUILDABLE_CHANNEL_TYPES.includes(type)
 }
 
 /** Downloads that are installed, and so need an app ID. */
-export const PACKAGED_CHANNEL_TYPES: ChannelType[] = ['desktop', 'binary', 'tui']
+export const PACKAGED_CHANNEL_TYPES: ChannelType[] = ['desktop', 'tui']
 
 export const AUTH_MODE_LABELS: Record<VisitorAuthMode, string> = {
   public_link: 'Anyone with the link',
@@ -378,328 +374,6 @@ export interface SpendStatus {
 }
 
 /**
- * One setting a messaging channel asks for.
- *
- * `hint` is the one line that says where in the platform's own console
- * the value lives -- the question every one of these fields raised when
- * it was a bare label. `secret` values are masked as they are typed;
- * everything here, secret or not, is kept away from password managers,
- * which otherwise filled a dashboard login into the access-token field.
- */
-export interface ChannelCredentialField {
-  key: string
-  label: string
-  hint: string
-  placeholder?: string
-  /** Masked while typed, and never shown back once stored. */
-  secret?: boolean
-  /**
-   * Required before the channel can go live. Mirrors
-   * REQUIRED_CREDENTIALS in the backend (agent-channels/channel-publish.ts); an
-   * optional field is one the adapter reads but publishing does not
-   * insist on.
-   */
-  required?: boolean
-  /** Shown under Advanced: an alternative most people do not need. */
-  advanced?: boolean
-}
-
-const TWILIO_SID: ChannelCredentialField = {
-  key: 'twilio_account_sid',
-  label: 'Account SID',
-  hint: 'Twilio Console → Account Info on the dashboard. It starts with AC.',
-  placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-  required: true,
-}
-
-const TWILIO_TOKEN: ChannelCredentialField = {
-  key: 'twilio_auth_token',
-  label: 'Auth token',
-  hint: 'Twilio Console → Account Info → Auth Token.',
-  secret: true,
-  required: true,
-}
-
-/**
- * Signal, Matrix and IRC arrive through a bridge the customer runs, and
- * the adapters refuse a forwarded message that does not carry this token
- * (signal/matrix/irc.adapter.ts, `inbound_token`). Publishing does not
- * require it, so it is optional here, but without it nothing gets in.
- */
-const BRIDGE_INBOUND_TOKEN: ChannelCredentialField = {
-  key: 'inbound_token',
-  label: 'Incoming token',
-  hint: 'A random string you choose. The bridge sends it as a Bearer token with every message it forwards; without it incoming messages are refused.',
-  secret: true,
-}
-
-/**
- * The settings each channel needs before it can carry a message.
- *
- * The required keys mirror REQUIRED_CREDENTIALS in the backend
- * (agent-channels/channel-publish.ts), kept in step by hand because it is a small
- * fixed table. The backend is the authority: it refuses to publish a
- * channel missing any of them, so a drift here only ever means an
- * extra or missing field, never a surface that ships unprotected.
- */
-export const CHANNEL_CREDENTIAL_FIELDS: Partial<Record<ChannelType, ChannelCredentialField[]>> = {
-  // "Add to Slack" first: with the Slack app's client id and secret any
-  // workspace can install it and brings its own token. A bot token is the
-  // one-workspace alternative (CREDENTIAL_ALTERNATIVES), under Advanced.
-  slack: [
-    {
-      key: 'client_id',
-      label: 'Client ID',
-      hint: 'api.slack.com/apps → your app → Basic Information → App Credentials.',
-      placeholder: '1234567890.1234567890',
-    },
-    {
-      key: 'client_secret',
-      label: 'Client secret',
-      hint: 'Next to the Client ID, under App Credentials.',
-      secret: true,
-    },
-    {
-      key: 'signing_secret',
-      label: 'Signing secret',
-      hint: 'Under App Credentials too. Used to check that events really come from Slack.',
-      secret: true,
-      required: true,
-    },
-    {
-      key: 'bot_token',
-      label: 'Bot token',
-      hint: 'Only for one workspace, instead of Add to Slack: OAuth & Permissions → Bot User OAuth Token.',
-      placeholder: 'xoxb-...',
-      secret: true,
-      advanced: true,
-    },
-  ],
-  discord: [
-    {
-      key: 'bot_token',
-      label: 'Bot token',
-      hint: 'discord.com/developers/applications → your app → Bot → Reset Token. Turn on the Message Content intent on the same page.',
-      secret: true,
-      required: true,
-    },
-  ],
-  telegram: [
-    {
-      key: 'bot_token',
-      label: 'Bot token',
-      hint: 'Message @BotFather in Telegram, send /newbot, and copy the token it replies with.',
-      placeholder: '123456789:AA...',
-      secret: true,
-      required: true,
-    },
-  ],
-  whatsapp: [
-    TWILIO_SID,
-    TWILIO_TOKEN,
-    {
-      key: 'phone_number',
-      label: 'WhatsApp sender',
-      hint: 'Twilio Console → Messaging → Senders → WhatsApp senders, written as whatsapp:+15551234567.',
-      placeholder: 'whatsapp:+15551234567',
-      required: true,
-    },
-  ],
-  whatsapp_cloud: [
-    {
-      key: 'access_token',
-      label: 'Access token',
-      hint: 'Meta for Developers → your app → WhatsApp → API Setup. For production, a permanent system-user token from Business Settings.',
-      secret: true,
-      required: true,
-    },
-    {
-      key: 'phone_number_id',
-      label: 'Phone number ID',
-      hint: 'Meta for Developers → your app → WhatsApp → API Setup, under the sending number. An ID, not the phone number itself.',
-      placeholder: '109876543210987',
-      required: true,
-    },
-    {
-      key: 'app_secret',
-      label: 'App secret',
-      hint: 'Meta for Developers → your app → App settings → Basic → App secret. Used to check that incoming messages really come from Meta.',
-      secret: true,
-      required: true,
-    },
-    {
-      key: 'verify_token',
-      label: 'Verify token',
-      hint: 'Any phrase you choose. Enter the same phrase next to the callback URL in Meta’s webhook settings.',
-      required: true,
-    },
-  ],
-  sms: [
-    TWILIO_SID,
-    TWILIO_TOKEN,
-    {
-      key: 'phone_number',
-      label: 'Twilio phone number',
-      hint: 'Twilio Console → Phone Numbers → Active numbers, written as +15551234567.',
-      placeholder: '+15551234567',
-      required: true,
-    },
-  ],
-  email: [
-    {
-      key: 'resend_api_key',
-      label: 'Resend API key',
-      hint: 'resend.com → API Keys → Create API key. It starts with re_.',
-      placeholder: 're_...',
-      secret: true,
-      required: true,
-    },
-    {
-      key: 'inbound_address',
-      label: 'Receiving address',
-      hint: 'The address people write to. Its domain must receive mail through Resend (resend.com → Domains).',
-      placeholder: 'support@yourdomain.com',
-      required: true,
-    },
-    {
-      key: 'reply_from',
-      label: 'Reply-from address',
-      hint: 'Replies are sent from this address, on a domain verified in resend.com → Domains.',
-      placeholder: 'support@yourdomain.com',
-      required: true,
-    },
-  ],
-  webhook: [
-    {
-      key: 'callback_url',
-      label: 'Reply URL',
-      hint: 'Your own endpoint. Each reply is POSTed here as JSON.',
-      placeholder: 'https://your-server.example.com/almyty',
-      required: true,
-    },
-    {
-      key: 'secret',
-      label: 'Shared secret',
-      hint: 'A random string you choose. Sign what you send with HMAC-SHA256 in the X-Webhook-Signature header; replies are signed the same way.',
-      secret: true,
-      required: true,
-    },
-  ],
-  google_chat: [
-    {
-      key: 'webhook_url',
-      label: 'Space webhook URL',
-      hint: 'In Google Chat, open the space → Apps & integrations → Webhooks → Add webhook, and copy its URL. Replies are posted here.',
-      placeholder: 'https://chat.googleapis.com/v1/spaces/...',
-      secret: true,
-      required: true,
-    },
-    {
-      key: 'verification_token',
-      label: 'Verification token',
-      hint: 'Google Cloud console → APIs & Services → Google Chat API → Configuration. Every event must carry it as a Bearer token.',
-      secret: true,
-      required: true,
-    },
-  ],
-  microsoft_teams: [
-    {
-      key: 'bot_id',
-      label: 'Microsoft App ID',
-      hint: 'Azure portal → your Azure Bot → Configuration → Microsoft App ID.',
-      placeholder: '00000000-0000-0000-0000-000000000000',
-      required: true,
-    },
-    {
-      key: 'bot_password',
-      label: 'Client secret',
-      hint: 'Azure portal → the bot’s app registration → Certificates & secrets → New client secret. Copy the Value, not the ID.',
-      secret: true,
-      required: true,
-    },
-    {
-      key: 'service_url',
-      label: 'Service URL',
-      hint: 'Where replies go when a message does not say. Usually https://smba.trafficmanager.net/teams/.',
-      placeholder: 'https://smba.trafficmanager.net/teams/',
-      required: true,
-    },
-  ],
-  signal: [
-    {
-      key: 'api_url',
-      label: 'Bridge URL',
-      hint: 'The address of your signal-cli-rest-api bridge.',
-      placeholder: 'http://signal-cli:8080',
-      required: true,
-    },
-    {
-      key: 'phone_number',
-      label: 'Signal number',
-      hint: 'The number registered with the bridge, written as +15551234567.',
-      placeholder: '+15551234567',
-      required: true,
-    },
-    BRIDGE_INBOUND_TOKEN,
-  ],
-  matrix: [
-    {
-      key: 'homeserver_url',
-      label: 'Homeserver URL',
-      hint: 'Where the bot account lives.',
-      placeholder: 'https://matrix.org',
-      required: true,
-    },
-    {
-      key: 'access_token',
-      label: 'Access token',
-      hint: 'Sign in as the bot in Element → Settings → Help & About → Access token.',
-      secret: true,
-      required: true,
-    },
-    {
-      key: 'room_id',
-      label: 'Room ID',
-      hint: 'Element → the room → Settings → Advanced → Internal room ID. It starts with !.',
-      placeholder: '!abcdef:matrix.org',
-      required: true,
-    },
-    BRIDGE_INBOUND_TOKEN,
-  ],
-  irc: [
-    {
-      key: 'webhook_url',
-      label: 'Bridge URL',
-      hint: 'Your IRC bridge’s HTTP endpoint (matterbridge in API mode, or similar). Replies are POSTed here.',
-      placeholder: 'https://irc-bridge.example.com/api/message',
-      required: true,
-    },
-    {
-      key: 'bridge_token',
-      label: 'Reply token',
-      hint: 'Sent to the bridge as a Bearer token with every reply. Use whatever token your bridge checks.',
-      secret: true,
-      required: true,
-    },
-    {
-      key: 'nick',
-      label: 'Nick',
-      hint: 'The nick the bot speaks as.',
-      placeholder: 'acme-bot',
-      required: true,
-    },
-    {
-      key: 'channel',
-      label: 'Channel',
-      hint: 'Where replies go when a message does not say.',
-      placeholder: '#support',
-      required: true,
-    },
-    BRIDGE_INBOUND_TOKEN,
-  ],
-}
-
-/**
  * How a platform learns where to deliver messages.
  *
  *  - manual: the operator pastes our URL into the platform's console.
@@ -725,7 +399,6 @@ export const CHANNEL_INBOUND: Record<ChannelType, ChannelInbound> = {
   web: { mode: 'none', why: 'almyty hosts the web chat, so there is nothing to register.' },
   tui: { mode: 'none', why: 'A terminal app is a file people download; nothing calls back.' },
   desktop: { mode: 'none', why: 'A desktop app is a file people download; nothing calls back.' },
-  binary: { mode: 'none', why: 'A binary is a file people download; nothing calls back.' },
   widget: { mode: 'none', why: 'the widget talks to almyty from your page, so there is nothing to register.' },
   a2a: { mode: 'none', why: 'other agents call almyty at the address below.' },
   discord: {
@@ -799,25 +472,26 @@ export function channelCallbackUrl(apiBase: string, orgSlug: string, channel: Pi
   return `${base}/${orgSlug}/${channel.endpoint.replace(/^\/+/, '')}`
 }
 
-/**
- * Keys that stand in for others, mirroring CREDENTIAL_ALTERNATIVES in the
- * backend. A Slack channel carries either its Slack app's client id and
- * secret, for "Add to Slack", or one bot token for a single workspace.
- */
-export const CREDENTIAL_ALTERNATIVES: Partial<Record<ChannelType, { instead: string[]; all: string[] }>> = {
-  slack: { instead: ['bot_token'], all: ['client_id', 'client_secret'] },
+const WEB_ADDRESS_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
+const RESERVED_WEB_ADDRESSES = ['www', 'api', 'app', 'admin', 'docs', 'status', 'staging', 'dev', 'chat', 'mail', 'assets', 'static', 'cdn', 'download', 'install']
+
+/** Why a web chat address cannot be used, or null. Mirrors channelSlugError in the backend (channel-rules.ts). */
+export function webChatAddressError(slug: string): string | null {
+  const value = slug.trim().toLowerCase()
+  if (!value) return 'Pick an address.'
+  if (value.length < 3) return 'Must be at least 3 characters.'
+  if (value.length > 63) return 'Must be 63 characters or fewer.'
+  if (!WEB_ADDRESS_PATTERN.test(value)) return 'Use lowercase letters, numbers and hyphens. It cannot start or end with a hyphen.'
+  if (RESERVED_WEB_ADDRESSES.includes(value)) return 'That address is reserved.'
+  return null
 }
 
-/** The fields still needed before a channel can go live. */
-export function missingChannelFields(type: ChannelType, has: (key: string) => boolean): string[] {
-  const fields = CHANNEL_CREDENTIAL_FIELDS[type] ?? []
-  const alternative = CREDENTIAL_ALTERNATIVES[type]
-  const replaced = alternative && alternative.all.every(has) ? alternative.instead : []
-  const replaceable = alternative ? alternative.instead : []
-  return fields
-    .filter((f) => (f.required || replaceable.includes(f.key)) && !replaced.includes(f.key))
-    .map((f) => f.key)
-    .filter((key) => !has(key))
+/** The Slack app credentials a Slack channel installs with ("Add to Slack"). */
+export const SLACK_APP_CONNECTOR_KEY = 'channel-slack-app'
+
+/** Channels that talk to people, and so carry the AI disclosure switch. Mirrors carriesDisclosure in the backend. */
+export function carriesDisclosure(type: ChannelType): boolean {
+  return type === 'web' || type === 'widget' || isMessagingChannel(type)
 }
 
 /** The connector a channel's keys are filed under on Credentials, e.g. `channel-slack`. */
@@ -857,7 +531,7 @@ export const agentChannelsApi = {
 
   add: (
     agentId: string,
-    body: { type: ChannelType; slug?: string; configuration?: Record<string, any>; credentialId?: string | null },
+    body: { type: ChannelType; name?: string; slug?: string; configuration?: Record<string, any>; credentialId?: string | null },
   ) => apiPost(base(agentId), body).then((r) => unwrap<AgentChannel>(r)),
 
   /**
@@ -868,6 +542,9 @@ export const agentChannelsApi = {
     agentId: string,
     channelId: string,
     body: {
+      name?: string
+      /** A web chat's address. */
+      slug?: string
       configuration?: Record<string, any>
       credentialId?: string | null
       branding?: ChannelBranding | null

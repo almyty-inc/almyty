@@ -149,7 +149,6 @@ test.describe('Create pages open from deep-link', () => {
     { label: 'Create tool', path: '/tools?new=1', lands: /\/tools\/new$/, heading: 'Create tool' },
     { label: 'Connect a provider, from the old Add model link', path: '/models?new=1', lands: /\/models\/connect$/, heading: 'Connect a provider' },
     { label: 'Create gateway', path: '/gateways?new=1', lands: /\/gateways\/new$/, heading: 'Create gateway' },
-    { label: 'The old Create app link, now on the agent', path: '/apps?new=1', lands: /\/agents$/, heading: 'Agents' },
     { label: 'Add credential', path: '/credentials?new=1', lands: /\/credentials\/new$/, heading: 'Add credential' },
     { label: 'Create organization', path: '/organizations?new=1', lands: /\/organizations\/new$/, heading: 'Create organization' },
   ]

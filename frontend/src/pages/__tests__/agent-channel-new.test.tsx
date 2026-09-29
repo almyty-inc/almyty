@@ -15,7 +15,10 @@ vi.mock('@/components/channels/channel-page-loader', async () => {
 })
 vi.mock('@/lib/agent-channels', async () => {
   const actual = await vi.importActual<typeof import('@/lib/agent-channels')>('@/lib/agent-channels')
-  return { ...actual, agentChannelsApi: { add: vi.fn().mockResolvedValue({ id: 'c-new', type: 'slack' }) } }
+  return {
+    ...actual,
+    agentChannelsApi: { add: vi.fn().mockResolvedValue({ id: 'c-new', type: 'slack' }), list: vi.fn().mockResolvedValue([]) },
+  }
 })
 const notify = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
 vi.mock('@/store/app', () => ({ useNotifications: () => notify }))
@@ -53,5 +56,69 @@ describe('Add channel', () => {
     fireEvent.click(screen.getByTestId('channel-slack'))
     await waitFor(() => expect(agentChannelsApi.add).toHaveBeenCalledWith('agent-1', { type: 'slack' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/agents/agent-1/channels/c-new'))
+  })
+
+  const open = () => {
+    const router = createMemoryRouter(
+      [
+        { path: '/agents/:id/channels/new', element: <AgentChannelNewPage /> },
+        { path: '/agents/:id/channels/:channelId', element: <Opened /> },
+      ],
+      { initialEntries: ['/agents/agent-1/channels/new'] },
+    )
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    )
+    return router
+  }
+
+  // A desktop app opens the agent's web chat. On an agent with none, the
+  // same flow offers to add the web chat too, inline, not in a dialog.
+  it('offers to add the web chat with a desktop app when the agent has none', async () => {
+    vi.mocked(agentChannelsApi.add).mockReset()
+    vi.mocked(agentChannelsApi.list).mockResolvedValue([])
+    vi.mocked(agentChannelsApi.add).mockImplementation(async (_agent, body) =>
+      (body.type === 'web' ? { id: 'c-web', type: 'web', name: 'Web chat' } : { id: 'c-desk', type: 'desktop', name: 'Desktop app' }) as any,
+    )
+    const router = open()
+    await screen.findByRole('heading', { name: 'Add channel' })
+    await waitFor(() => expect(agentChannelsApi.list).toHaveBeenCalled())
+    fireEvent.click(screen.getByTestId('channel-desktop'))
+    const offer = await screen.findByTestId('desktop-needs-web-chat')
+    expect(offer).toHaveTextContent('A desktop app opens Support\'s web chat, and Support has none yet.')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(agentChannelsApi.add).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add the web chat and the desktop app' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/agents/agent-1/channels/c-desk'))
+    expect(vi.mocked(agentChannelsApi.add).mock.calls.map((c) => c[1])).toEqual([{ type: 'web' }, { type: 'desktop' }])
+  })
+
+  it('adds a desktop app straight away when the agent has a web chat', async () => {
+    vi.mocked(agentChannelsApi.add).mockReset()
+    vi.mocked(agentChannelsApi.list).mockResolvedValue([{ id: 'c-web', type: 'web' }] as any)
+    vi.mocked(agentChannelsApi.add).mockResolvedValue({ id: 'c-desk', type: 'desktop', name: 'Desktop app' } as any)
+    const router = open()
+    await screen.findByRole('heading', { name: 'Add channel' })
+    await waitFor(() => expect(agentChannelsApi.list).toHaveBeenCalled())
+    await new Promise((r) => setTimeout(r, 0))
+    fireEvent.click(screen.getByTestId('channel-desktop'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/agents/agent-1/channels/c-desk'))
+    expect(vi.mocked(agentChannelsApi.add).mock.calls.map((c) => c[1])).toEqual([{ type: 'desktop' }])
+    expect(screen.queryByTestId('desktop-needs-web-chat')).toBeNull()
+  })
+
+  it('cancels the offer without adding anything', async () => {
+    vi.mocked(agentChannelsApi.add).mockReset()
+    vi.mocked(agentChannelsApi.list).mockResolvedValue([])
+    open()
+    await waitFor(() => expect(agentChannelsApi.list).toHaveBeenCalled())
+    await new Promise((r) => setTimeout(r, 0))
+    fireEvent.click(await screen.findByTestId('channel-desktop'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByTestId('desktop-needs-web-chat')).toBeNull()
+    expect(agentChannelsApi.add).not.toHaveBeenCalled()
   })
 })
