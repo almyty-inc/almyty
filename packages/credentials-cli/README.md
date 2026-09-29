@@ -5,10 +5,6 @@ APIs, tools, models, deployments, memory backends, MCP servers, channels and
 registries then use the credential. Model providers, deployment clouds,
 buckets, chat platforms: all of them are services in the same catalog.
 
-This package was called `@almyty/connections`; that name is now a thin alias
-that runs this one, and the old command names (`connectors`, `connect`,
-`disconnect`) still work.
-
 ```sh
 npx @almyty/auth login
 npx @almyty/credentials services --kind inference

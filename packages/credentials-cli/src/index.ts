@@ -5,8 +5,7 @@
  * Credentials are the one place almyty keeps a third-party secret: every
  * credential is a row with its service, an account label and a health
  * status, and everything that uses it (agents, APIs, tools, models,
- * deployments, channels) holds a reference rather than a copy. The older
- * name, @almyty/connections, is a thin alias of this package. See
+ * deployments, channels) holds a reference rather than a copy. See
  * docs/connections.md.
  *
  * How a secret reaches the API matters, so this tool never wants one on the
@@ -92,7 +91,6 @@ Add:
                                         credential keeps working. Prompts for the new value.
   delete <id>                           Revoke at the service where it can be, then delete
 
-  The older names still work: connectors (services), connect (add), disconnect (delete).
 
 Share:
   grant <id> --principal user|team|role|agent|workspace --to <principalId>
@@ -446,8 +444,7 @@ async function main(): Promise<void> {
   const post = (path: string, body: unknown) => q(path, { method: 'POST', body: JSON.stringify(body) });
 
   switch (args.command) {
-    case 'services':
-    case 'connectors': {
+    case 'services': {
       // Filtered by the API, so an unknown kind is an error instead of an
       // empty list that looks like "nothing can be connected".
       const kind = str(args.flags, 'kind');
@@ -466,8 +463,7 @@ async function main(): Promise<void> {
       out(args, res.data, () => formatConnectionDetail(res.data));
       return;
     }
-    case 'add':
-    case 'connect': {
+    case 'add': {
       const key = needArg(args.positional, 0, 'service key', 'add <service>');
       const catalog = await q('/credentials/services');
       const connector = catalog.data.find((c: any) => c.key === key);
@@ -543,8 +539,7 @@ async function main(): Promise<void> {
       out(args, res.data, () => `Rotated.\n${formatConnection(res.data.connection ?? res.data)}`);
       return;
     }
-    case 'delete':
-    case 'disconnect': {
+    case 'delete': {
       const id = needArg(args.positional, 0, 'credential id', 'delete <id>');
       const res = await q(`/credentials/${id}`, { method: 'DELETE' });
       out(args, res?.data ?? { id, deleted: true }, () => 'Deleted.');
@@ -576,7 +571,7 @@ async function main(): Promise<void> {
   }
 }
 
-const invokedDirectly = process.argv[1] && /credentials-cli|connections-cli|almyty-credentials|almyty-connections|dist\/index\.js|src\/index\.ts/.test(process.argv[1]) && !process.env.VITEST;
+const invokedDirectly = process.argv[1] && /credentials-cli|almyty-credentials|dist\/index\.js|src\/index\.ts/.test(process.argv[1]) && !process.env.VITEST;
 if (invokedDirectly) {
   main().catch((err) => {
     console.error(describeError(err, process.env.ALMYTY_URL));

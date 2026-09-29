@@ -38,7 +38,7 @@ describe('subcommand table', () => {
       '@almyty/chat',
       '@almyty/skills',
       '@almyty/models',
-      '@almyty/connections',
+      '@almyty/credentials',
       '@almyty/runner',
       '@almyty/mcp-server',
       '@almyty/acp-server',

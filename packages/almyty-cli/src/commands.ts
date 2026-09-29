@@ -26,11 +26,8 @@ export interface Subcommand {
 /**
  * Top-level subcommand routing table. Order = display order in help.
  *
- * Every `pkg` here must be a dependency of @almyty/cli. `models` and
- * `connections` were listed in the help text while the umbrella did
- * not depend on them, so `almyty models list` answered "package
- * @almyty/models is not installed" for a command its own --help
- * advertised.
+ * Every `pkg` here must be a dependency of @almyty/cli, or a command its
+ * own --help advertises answers "package ... is not installed".
  */
 export const SUBCOMMANDS: Record<string, Subcommand> = {
   // Auth shortcuts at top level (gh-style: `almyty login` not `almyty auth login`)
@@ -44,11 +41,7 @@ export const SUBCOMMANDS: Record<string, Subcommand> = {
   chat: { pkg: '@almyty/chat', group: 'Agents', help: 'Interactive chat REPL with an agent' },
   skills: { pkg: '@almyty/skills', group: 'Skills', help: 'Install API skills into AI coding agents', subcommands: ['install', 'list', 'search', 'run', 'installed', 'remove', 'gateways', 'daemon', 'watch'] },
   models: { pkg: '@almyty/models', group: 'Platform', help: 'Model catalog: cards, validation, hosting' },
-  // Both names run the published @almyty/connections (1.x), whose routes
-  // the backend still answers. Point them at @almyty/credentials once that
-  // name is on the registry and the lock can be regenerated against it.
-  credentials: { pkg: '@almyty/connections', group: 'Platform', help: 'Keys, tokens and accounts: add, check, share' },
-  connections: { pkg: '@almyty/connections', group: 'Platform', help: 'Older name of `almyty credentials`' },
+  credentials: { pkg: '@almyty/credentials', group: 'Platform', help: 'Keys, tokens and accounts: add, check, share' },
   runner: { pkg: '@almyty/runner', group: 'Serving', help: 'Run agents on this machine as a daemon' },
   mcp: { pkg: '@almyty/mcp-server', group: 'Serving', help: 'Serve your agents and tools over MCP' },
   acp: { pkg: '@almyty/acp-server', group: 'Serving', help: 'Serve an agent over the Agent Client Protocol' },

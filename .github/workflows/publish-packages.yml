@@ -14,7 +14,6 @@ on:
           - agents-cli
           - models-cli
           - credentials-cli
-          - connections-cli
           - chat-cli
           - almyty-cli
           - acp-server
@@ -70,10 +69,6 @@ jobs:
           - id: credentials-cli
             npm_name: "@almyty/credentials"
             dir: packages/credentials-cli
-          # The old name, now a thin alias that runs @almyty/credentials.
-          - id: connections-cli
-            npm_name: "@almyty/connections"
-            dir: packages/connections-cli
           - id: chat-cli
             npm_name: "@almyty/chat"
             dir: packages/chat-cli

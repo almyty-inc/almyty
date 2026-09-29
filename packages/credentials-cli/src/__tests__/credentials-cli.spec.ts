@@ -42,13 +42,13 @@ describe('@almyty/credentials', () => {
 
   it('never swallows the next argument after a boolean flag', () => {
     // `--headless connect` used to eat the command as the flag's value.
-    expect(parseArgs(['connect', 'openrouter', '--headless', '--open'])).toEqual({
-      command: 'connect',
+    expect(parseArgs(['add', 'openrouter', '--headless', '--open'])).toEqual({
+      command: 'add',
       positional: ['openrouter'],
       flags: { headless: true, open: true },
     });
-    expect(parseArgs(['connect', 'slack', '--input-stdin'])).toEqual({
-      command: 'connect',
+    expect(parseArgs(['add', 'slack', '--input-stdin'])).toEqual({
+      command: 'add',
       positional: ['slack'],
       flags: { 'input-stdin': true },
     });
@@ -208,14 +208,14 @@ describe('conventions', () => {
   it('accepts --flag=value as well as --flag value', () => {
     // With only the space form, --input='{"a":1}' became a flag literally
     // named `input={"a":1}` and the value was silently dropped.
-    expect(parseArgs(['connect', 'slack', '--method=api_key']).flags).toEqual({ method: 'api_key' });
+    expect(parseArgs(['add', 'slack', '--method=api_key']).flags).toEqual({ method: 'api_key' });
     expect(parseArgs(['grant', 'c1', '--principal=agent', '--to=a1']).flags).toEqual({ principal: 'agent', to: 'a1' });
-    expect(parseArgs(['connect', 'x', '--input={"region":"eu"}']).flags).toEqual({ input: '{"region":"eu"}' });
-    expect(parseInput(parseArgs(['connect', 'x', '--input={"region":"eu"}']).flags)).toEqual({ region: 'eu' });
+    expect(parseArgs(['add', 'x', '--input={"region":"eu"}']).flags).toEqual({ input: '{"region":"eu"}' });
+    expect(parseInput(parseArgs(['add', 'x', '--input={"region":"eu"}']).flags)).toEqual({ region: 'eu' });
   });
 
   it('keeps an empty value an empty value', () => {
-    expect(parseArgs(['connect', 'x', '--name=']).flags).toEqual({ name: '' });
+    expect(parseArgs(['add', 'x', '--name=']).flags).toEqual({ name: '' });
   });
 
   it('pins the exit-code table every almyty CLI shares', () => {
