@@ -310,7 +310,6 @@ export function GatewaysPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All kinds</SelectItem>
-                  <SelectItem value="tools">Shared tools</SelectItem>
                   <SelectItem value="mcp">MCP</SelectItem>
                   <SelectItem value="utcp">UTCP</SelectItem>
                   <SelectItem value="skills">Skills</SelectItem>
