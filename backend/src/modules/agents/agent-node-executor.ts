@@ -103,6 +103,12 @@ export interface NodeExecutionOptions {
    */
   signal?: AbortSignal;
   /**
+   * The agent's machine label requirements (agentConfig.runnerLabels),
+   * handed to every runner-backed tool call so it runs on a matching
+   * runner. Set once per run by the engine.
+   */
+  runnerLabels?: Record<string, string>;
+  /**
    * The agent's roles, filled once for this run (L4). A node naming a
    * roleKey reads its model from here rather than deciding again, which
    * is what keeps a pinned role away from the router and lets a run
@@ -691,6 +697,7 @@ export class AgentNodeExecutor {
       // tool executor so its axios call honours a disconnected
       // client or parent-cancelled run.
       signal: options.signal,
+      runnerLabels: options.runnerLabels,
     });
 
     const executionTime = Date.now() - startTime;

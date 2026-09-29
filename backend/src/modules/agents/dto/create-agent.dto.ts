@@ -93,6 +93,8 @@ export class CreateAgentDto {
   agentConfig?: {
     canCallAgents?: boolean;
     canCreateAgents?: boolean;
+    /** Machine label requirements, as `gpu=yes, os=mac` or an object; see Agent.agentConfig. */
+    runnerLabels?: Record<string, string> | string;
   };
 
   // Shape checked in AgentsService (collaborationProblems) so a bad

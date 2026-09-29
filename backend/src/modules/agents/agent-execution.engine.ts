@@ -563,6 +563,8 @@ export class AgentExecutionEngine {
                     // would let two nodes of the same run answer from
                     // different models.
                     resolvedRoles,
+                    // The machine this agent's runner-backed tools run on.
+                    runnerLabels: agent.agentConfig?.runnerLabels,
                   },
                 ),
             );

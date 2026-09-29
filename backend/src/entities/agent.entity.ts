@@ -184,6 +184,13 @@ export class Agent {
     canCallAgents?: boolean;
     canCreateAgents?: boolean;
     /**
+     * Label requirements for the machine the agent's runner-backed tools
+     * run on (`{ gpu: 'yes' }`). Each such call goes to an online runner
+     * the run's principal may use whose labels include all of them
+     * (RunnerService.resolveByLabels). Absent: the tool's own runner.
+     */
+    runnerLabels?: Record<string, string>;
+    /**
      * Autonomous verify: a refute-only checker panel reviews the agent's final
      * answer. On failure (within the revision budget) the failures are fed back
      * as synthetic user feedback and the agent loops again. Checkers pick their
