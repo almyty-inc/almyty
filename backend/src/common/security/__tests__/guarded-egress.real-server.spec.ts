@@ -240,8 +240,13 @@ describe('response size', () => {
 describe('a slow response', () => {
   it('is cut at the total deadline even though bytes keep arriving', async () => {
     const started = Date.now();
-    const res = await safeFetch(url('origin.test', '/drip'), { privateHost: 'origin.test', timeoutMs: 600 });
-    await expect(res.text()).rejects.toThrow();
+    // The deadline may fire before the headers or while the body drips in;
+    // either way the fetch as a whole must fail within it.
+    const fetchAll = async () => {
+      const res = await safeFetch(url('origin.test', '/drip'), { privateHost: 'origin.test', timeoutMs: 600 });
+      return res.text();
+    };
+    await expect(fetchAll()).rejects.toThrow();
     expect(Date.now() - started).toBeLessThan(3000);
   });
 
