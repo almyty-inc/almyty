@@ -22,10 +22,10 @@ Your UTCP endpoint follows this pattern:
 https://api.almyty.com/{org}/{gateway-slug}
 ```
 
-There is no `/utcp` path segment. Every gateway is served from the same
-`{org}/{gateway-slug}` URL, and `/manual`, `/execute` and `/.well-known/utcp` are the
-UTCP paths under it. A gateway made before the protocol pick answers MCP and Agent Skills
-there too.
+There is no `/utcp` path segment. Every gateway is served from its own
+`{org}/{gateway-slug}` URL, and on a UTCP gateway `/manual`, `/execute` and
+`/.well-known/utcp` are the paths under it. A UTCP gateway serves UTCP only: the same tools
+over MCP or as Agent Skills need a gateway of that protocol.
 
 ## Endpoints
 

@@ -192,7 +192,7 @@ for that gateway type. The handler resolves the named tool, and
 credentials resolved through a grant, a JavaScript tool runs in the worker
 sandbox, an LLM tool goes back out through the provider layer.
 
-One endpoint, every protocol: the gateway type decides the dialect, not the URL
+One gateway, one protocol: the gateway type decides the dialect, not the URL
 shape.
 
 ### 3. An agent run

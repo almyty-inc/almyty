@@ -84,7 +84,7 @@ Two ways to self-host:
 
 **Build** agents visually or let them run autonomously. 12 node types, 39 LLM providers. ([docs](https://docs.almyty.com/agents))
 
-**Deploy** tools and agents behind gateways. One endpoint, every protocol. ([docs](https://docs.almyty.com/gateways/mcp))
+**Deploy** tools and agents behind gateways, one protocol each: MCP, UTCP, Agent Skills, A2A. ([docs](https://docs.almyty.com/gateways/mcp))
 
 ## CLI
 

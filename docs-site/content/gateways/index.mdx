@@ -45,9 +45,9 @@ paste into any client:
 
 ## Protocols
 
-Each gateway speaks the protocol it was created for, at `api.almyty.com/{org}/{gateway}`.
-A gateway made before the protocol pick serves all three at one address: a JSON-RPC POST
-is MCP, `/manual` and `/execute` are UTCP, and `/skills` lists the Agent Skills.
+Each gateway serves one protocol, the one it was created for, at
+`api.almyty.com/{org}/{gateway}`. To reach the same tools over MCP, UTCP and Agent Skills,
+create a gateway for each and pick the same tools.
 
 | Protocol | Reach it with | Endpoint |
 |----------|---------------|----------|
