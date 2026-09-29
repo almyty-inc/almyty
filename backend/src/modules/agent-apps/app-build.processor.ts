@@ -23,7 +23,7 @@ import { BuildStatus } from '../../entities/app-build.entity';
 import { hostedChatUrl } from '../gateways/channels/hosted-chat.config';
 import { writeIcon } from './build-icon';
 import { resolveClientEntry } from './build-client-entry';
-import { defaultBundleId } from './agent-app.rules';
+import { buildVersionError, bundleIdError, defaultBundleId } from './agent-app.rules';
 
 interface BuildJob {
   buildId: string;
@@ -276,6 +276,10 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
   ): Promise<{ ok: boolean; log: string; error?: string }> {
     const bundleId = options.bundleId ?? '';
     const version = build.version ?? '';
+    // Both reach electron-builder's command line and the signer's; checked
+    // when the build was requested, and again here where they are used.
+    const refused = (bundleId && bundleIdError(bundleId)) || buildVersionError(build.version);
+    if (refused) return { ok: false, log: '', error: refused };
     const target = ELECTRON_TARGETS[build.platform];
     if (!target) {
       return { ok: false, log: '', error: `Desktop apps cannot be built for ${build.platform}.` };
