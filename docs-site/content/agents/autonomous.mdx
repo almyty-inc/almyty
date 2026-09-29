@@ -19,31 +19,39 @@ $ npx @almyty/agents run support-orchestrator \
 `--watch` streams each step (tool calls, verifier verdicts, revisions) as the run
 unfolds. See the [Agents CLI](/cli/agents) for the full command set.
 
-## Multiple models in one agent
+## Work mode: how it works, and which models do it
 
-An autonomous agent's **Models** card lists its roles, each filled by a model
-(picked, or routed by policy) or, for a panelist or a teammate, by another of
-your agents. **How they work together** picks the strategy that decides which
-role answers which step:
+The **Work mode** section comes first on the agent's edit page. Pick the mode
+from the dropdown, and the model slots under it follow from the mode: each
+slot asks for exactly the model that mode needs.
 
-| Strategy | What happens | Roles |
+| Work mode | What happens | Slots it shows |
 |---|---|---|
 | **Single** | The main model does it all. | Main |
-| **Cascade** | A cheaper model answers first and a checker double-checks it; the main model steps in only when the check fails. | Main, Drafter, Checker |
-| **Best of N** | The main model writes several answers and the checker picks the best. | Main, Checker |
-| **Panel** | Panelists answer too, and a judge writes one answer from all of them. | Main, two or more Panelists; Judge optional |
-| **Explore, extract, patch** | Explorers look around with the tools, a summariser sums up what they found, the main model works from that, and a checker checks the answer. | Main, Explorers, Summariser, Checker |
+| **Cascade** | A cheaper model answers first and a checker double-checks it; the main model steps in only when the check fails. | Drafter, Checker, Main |
+| **Best of N** | The main model writes several answers and the checker picks the best. You set how many (2 to 5). | Main, Checker |
+| **Panel** | Panelists answer too, and a judge writes one answer from all of them. | Main, two or more Panelists, Judge (optional) |
+| **Explore, extract, patch** *(experimental)* | Explorers look around with the tools, a summariser sums up what they found, the main model works from that, and a checker checks the answer. | Explorers, Summariser, Main, Checker |
 
-The **Judge** is added with the same role picker as any other role. It is
+Each slot picks its model the same way as everywhere else in almyty: one
+searchable list of the models your connected providers offer, or
+**Automatic**, which routes each call by policy. A panelist can instead be
+another of your agents, answering with a run of its own. The **Judge** is
 optional: without one, the main model judges the panel. A judge is always a
-model, never another agent.
+model.
 
-Whatever the strategy, the visitor, the API caller or **Try it** gets one
-answer: the checked draft or the main model's fix, the picked candidate, the
-judge's answer, or the main model's answer from the brief. Each step on the
-run records which role took it and which model answered, including, for a
-routed role, what the router picked and why.
+Switching the mode keeps what you picked for the other slots while you edit,
+so switching back brings them back; a save keeps only the slots the chosen
+mode uses. Each slot's name, temperature, token limit and extra instructions
+sit under its **Advanced**. Under the section's own **Advanced**, add other
+models the main model can hand a piece of work to, in any mode. Other agents
+it may call are picked under [Capabilities](#capabilities).
 
+Whatever the mode, the visitor, the API caller or **Try it** gets one answer:
+the checked draft or the main model's fix, the picked answer, the judge's
+answer, or the main model's answer from the brief. Each step on the run
+records which role took it and which model answered, including, for an
+automatic slot, what the router picked and why.
 ## Verification
 
 Open the **Models & Verification** panel and click **Configure** to set up
@@ -75,37 +83,29 @@ When verification runs:
 Workflow agents get the same capability as a verify node; the logic is shared
 between the two modes.
 
-## Collaboration
+## Capabilities
 
-Verification puts several models inside one agent. Collaboration goes the other
-way: give an agent a set of participants and choose how they work together. A
-participant is either another agent (with its own tools and loop) or a model: a
-provider and model, or a routing policy that lets the catalog pick one. A model
-participant is a single call and can carry its own instructions, temperature and
-token limit, so you can compose several models without creating an agent for
-each.
+**Capabilities** says what the agent may use and reach while it works.
+Anything it is not given here is refused when its model asks for it, with
+nothing run.
 
-![Agents collaborating in a debate](/screenshots/agent-collab-debate.png)
+- **Tools and APIs**: pick single tools, or tick **All tools** on an API. An
+  API picked this way gives the agent every active tool of it, including
+  tools added to the API later.
+- **Other agents it can call**: tick the agents it may hand work to. Its
+  model is offered each one as a tool and gets that agent's answer back. No
+  other agent is reachable; with none ticked, it calls none.
+- **Machine**: the labels of the machine its runner tools run on, such as
+  `gpu=yes`. The page lists the machines that carry them. Work goes only to
+  an online machine with all of the labels; see
+  [Send work to a matching machine](/runner#send-work-to-a-matching-machine).
+- **Temporary agents**: let it create helper agents for part of a task, with
+  a limit per run and a limit on how many may exist at once across its runs.
+  A helper only gets tools this agent has, and is removed when its run ends.
 
-| Mode | What it does |
-|------|--------------|
-| Sequential | The agent itself runs first, then each participant in order, each fed the previous one's output (a chain). |
-| Parallel | All participants run at once on the same input. A judge merges their outputs into one answer; without a judge they are returned together. |
-| Race | All participants run at once; the first to finish wins. Losing model calls are aborted, losing agents cancelled, and every racer's cost is still counted, so a budget cap holds. |
-| Debate | Participants argue over several rounds, each round seeing all prior responses. A judge then reads the debate and writes the final answer. |
-
-The judge is a participant too, agent or model, so a Claude debate can be
-settled by GPT-4o, or the reverse.
-
-The rules of engagement apply to every participant. The shared brief, role,
-output format, escalation and conflict-resolution rules go into each
-participant's prompt, and the total cost cap is checked before each participant
-starts: once the collaboration has spent it, the run stops with a
-"Collaboration total cost limit reached" error instead of making the next call.
-
-(Workflow agents have a separate **consensus** merge node: a judge that combines
-branch outputs. That is a node, not a collaboration mode.)
-
+Several models working together inside one agent is the
+[work mode](#work-mode-how-it-works-and-which-models-do-it); several agents
+working together is this list.
 ## Constraints
 
 Constraints are per-agent rules that keep an agent from repeating mistakes. Add
@@ -138,9 +138,19 @@ so the skill captures the real steps.
 
 ## Memory
 
-With memory enabled, the agent stores facts, preferences, and context and recalls
-them on later runs by embedding search. See [Memory](/memory) for the full model.
+Turn on **Remember between conversations** and the agent looks up what it
+saved earlier before it answers. Then choose:
 
+| Setting | Choices |
+|---|---|
+| **Memory account** | almyty's own memory, or an outside memory account (Mem0, Zep, Supermemory and others) your organization has set up. **Add a memory account** connects one in place. |
+| **Whose memory** | **Each person has their own**, **This agent's own**, or **Shared by all agents**. |
+| **What it saves** | **Facts it learns** (after each conversation, the agent's main model picks out what is worth keeping), **Whole conversations** (each exchange as said), or **Only when asked**. |
+| **Never save** | Rules, one per line, such as "payment details". Every save is checked by the agent's main model first, and what the rules cover is taken out. |
+| **How long it keeps memories** | **Until deleted**, or **For a number of days**. |
+
+See [Memory](/memory#an-agents-memory-settings) for what each setting does
+at run time.
 ## Context compaction
 
 Long runs can outgrow the model's context window. Turn on compaction and almyty
@@ -150,9 +160,10 @@ automatically; there is nothing to watch.
 
 ## Create an autonomous agent
 
-In the UI: **Agents -> Create Agent -> Autonomous**, enter instructions, attach
-tools, enable memory, add constraints, and configure the verifier panel, all from
-the form.
+In the UI: **Agents -> Create Agent -> Autonomous**. Write the instructions,
+pick the work mode and the models for its slots, then set memory and
+capabilities, all on one page. Constraints and the verifier panel are on the
+agent's own page once it is saved.
 
 ![Autonomous agent form in the builder](/screenshots/agent-builder-autonomous.png)
 

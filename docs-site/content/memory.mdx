@@ -63,7 +63,33 @@ A scope can mirror to a second backend. Every write is best-effort mirrored, and
 
 ## Scoping
 
-Every memory belongs to a scope (`user`, `workspace`, `project`, or `collab`) and every query filters on it. That scope is the isolation boundary: an agent only ever reads memory it is entitled to.
+Every memory belongs to a scope (`user`, `workspace`, `project`, `collab`, or `agent`) and every query filters on it. That scope is the isolation boundary: an agent only ever reads memory it is entitled to. A `user` scope is one member's (or one visitor's), an `agent` scope one agent's own.
+
+## An agent's memory settings
+
+An autonomous agent's **Memory** section decides what its runs read and write. Every setting is applied by the server on each run; none of it is only shown.
+
+**Memory account.** almyty's own memory, or an outside account your organization set up (on the Memory page, or with **Add a memory account** on the agent). The agent reads and writes through that account, signed in with the organization's credential for it.
+
+**Whose memory.**
+
+| Choice | The memory a run reads and writes |
+|---|---|
+| Each person has their own | The member the run is for. A visitor on a hosted chat or widget gets a memory of their own too, but it is written only when the agent's visitor settings allow keeping visitor memory. A run for nobody (a heartbeat, an A2A call without a person) has no memory. |
+| This agent's own | This agent's alone; no other agent reads it. It is on the agent's **Memory** tab. |
+| Shared by all agents | The organization's memory, read and written by every agent that shares it. |
+
+**What it saves.**
+
+- **Facts it learns**: when a run finishes, the agent's main model reads the exchange and picks out up to five lasting facts, each saved as its own long-term memory.
+- **Whole conversations**: each exchange is saved as it was said.
+- **Only when asked**: nothing is saved on its own; the agent saves something only when the person asks it to remember it.
+
+In every case the agent can also save a memory with its `store_memory` tool while it works. What a run saves after it ends is a `memory_save` step on the run, with its cost.
+
+**Never save.** Rules, one per line. Before anything is written (a fact, a conversation, or the agent's own save) the agent's main model takes out what the rules cover; when nothing is left, nothing is saved, and when the check cannot be made, the save is not made either.
+
+**How long it keeps memories.** Until deleted, or for a number of days. In almyty's own memory a memory older than that stops being used and shown (it is closed, not erased, like any expired memory). In an outside account almyty deletes it through that service's API, about once an hour; a service with no way to delete one memory (Vertex AI Memory Bank) can only keep memories until deleted. Changing the number applies to what the agent already saved.
 
 ## Add a memory
 

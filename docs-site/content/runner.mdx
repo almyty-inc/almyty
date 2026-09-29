@@ -61,10 +61,10 @@ agent can call them: one you built, or a Claude Code session over MCP.
 Labels say what a machine has, such as `os=mac` or `gpu=yes`. Work that asks
 for labels runs only on an online runner that carries all of them:
 
-- **An agent**: on its edit page, under **Agent capabilities**, fill
-  **Machine labels** (for example `gpu=yes, os=mac`). Every runner tool the
-  agent calls then runs on a matching online runner, the tool's own runner
-  when it matches.
+- **An agent**: on its edit page, under **Capabilities > Machine**, fill
+  **Machine labels** (for example `gpu=yes, os=mac`). The page lists the
+  machines that carry them. Every runner tool the agent calls then runs on a
+  matching online runner, the tool's own runner when it matches.
 - **A workspace**: one created with `labels` is placed on a matching online
   runner. Work inside a workspace always stays on that workspace's runner.
 

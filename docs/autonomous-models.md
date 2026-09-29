@@ -38,15 +38,19 @@ agent's model (readiness, the model-issue banner, compaction, a compat
 request's sampling override) therefore reads the model the loop uses, and
 the loop reads the main role's call settings from `modelConfig`.
 
-Teammates replace the old collaboration roster. Another agent is added as
-a teammate (or a panelist) role; the loop's model hands it work through
-its tool and gets the answer back as the tool result.
+Teammates replace the old collaboration roster. The page offers model
+teammates under the work mode's Advanced; other agents the agent may call
+are picked once, under Capabilities (`agentConfig.callableAgentIds`, offered
+as `call_agent_*` tools, see `agent-capabilities.ts`). An agent teammate
+role saved through the API still runs as `ask_<key>`; the page moves it
+into the Capabilities list when it opens the agent.
 
 ## Strategies
 
-The keys are `AUTONOMOUS_STRATEGY_KEYS`. The page offers exactly these,
-and a frontend source guard fails if it offers one the engine does not
-run or misses one it does. A strategy whose slots are not filled is
+The keys are `AUTONOMOUS_STRATEGY_KEYS`. The page calls the strategy the
+**work mode**: one dropdown offering exactly these, with the slots each needs
+under it (`WORK_MODE_SLOTS`), and a frontend source guard fails if it offers
+one the engine does not run or misses one it does. A strategy whose slots are not filled is
 refused at save time (`Invalid models: Cascade needs a drafter role`) and,
 should one reach a run anyway, fails the run with the same sentence rather
 than running as something else.
@@ -168,6 +172,46 @@ what each costs:
   plus one judge call.
 - Explore, extract, patch: one child run per explorer plus one summariser
   call, then the main role's calls plus one checker call per answer.
+
+## Memory and capabilities
+
+The agent's other two sections are read by the same loop, on every step.
+
+**Memory** (`agents.memoryConfig`, `agent-memory-settings.ts`,
+`AgentMemoryKeeper` in `agent-memory.keeper.ts`):
+
+- `whose` picks the scope a run reads and writes (`memoryScopeFor`):
+  `shared` the workspace, `agent` the agent's own (`<org>:agent:<id>`,
+  scope type `agent`), `person` the run's member (`user` scope) or visitor
+  (`<org>:user:visitor:<endUserId>`); a run for nobody has no memory.
+  Writes follow `runMayWriteSharedMemory`: a visitor's only when the
+  surface carried `visitorMemory: true`.
+- `account` is almyty's own store or an outside backend the organization
+  has a credential for (`MemoryAccountsService.accounts`); reads and writes
+  go through it (`MemoryRouter.putOn` / `searchOn`), signed in with the
+  workspace's credential. Unknown accounts are refused at save.
+- `save`: `facts` makes one call on the main role after a completed run
+  and saves each fact (tier `long`); `conversations` saves the exchange
+  (tier `project`); `asked` saves nothing on its own, and `store_memory`
+  says so to the model. The after-run save is a `memory_save` step, and its
+  calls are the run's cost.
+- `neverSave` rules screen every write with a main-role call first (the
+  facts call carries them in its own prompt); `NOTHING` or a failed check
+  means nothing is written.
+- `retentionDays` is `ttl_seconds` in almyty's own store; outside, a
+  `memory_expiries` row per write that the hourly `expire-outside` job
+  deletes through the backend (`MemoryBackend.nativeId`). A backend without
+  `nativeId` refuses a time limit. A change applies to what the agent
+  already saved (`setAgentRetention`).
+
+**Capabilities** (`agents.agentConfig`, `agent-capabilities.ts`):
+`toolIds` plus `apiIds` (every active tool of the API, resolved per step,
+so later tools are included) are the only tools offered, and a call to any
+other name is "not found". `callableAgentIds` are the only `call_agent_*`
+tools offered and the only agents `invoke_agent` starts (an API client
+that sets only `canCallAgents` still means every agent). `runnerLabels` go
+with every tool call. `create_agent` refuses past `maxTemporaryAgents` in
+the run or `maxTemporaryAgentsAlive` across the agent's runs.
 
 ## Migration
 
