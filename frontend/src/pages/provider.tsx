@@ -543,9 +543,8 @@ export function removeDescription(names: string[], others: number): string {
   const base = 'Its key and its models go with it.'
   const total = names.length + others
   if (total === 0) return `${base} No agent uses its models.`
-  const shown = names.map((n) => `"${n}"`).join(', ')
-  const rest = others > 0 ? pluralized(others, 'other agent') : ''
-  const who = shown && rest ? `${shown} and ${rest}` : shown || rest
+  const parts = [...names.map((n) => `"${n}"`), ...(others > 0 ? [pluralized(others, 'other agent')] : [])]
+  const who = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0]
   const one = total === 1
   return `${base} ${who} ${one ? 'uses' : 'use'} its models and ${one ? 'stops' : 'stop'} working until given another model; their owners are told.`
 }

@@ -36,7 +36,7 @@ export const PAGE_INTROS = {
     page: '/credentials',
     // Adds to the subtitle rather than repeating it: where keys are kept,
     // and that a key typed anywhere else lands here too.
-    text: 'Keys are stored encrypted and never shown again once saved. A key you add while setting up an API, a tool or a channel lands here too. Model provider keys are added on Models.',
+    text: 'Keys are stored encrypted and never shown again once saved. A key you add while setting up an API, a tool or a channel lands here too, and so do model providers.',
   },
   models: {
     page: '/models',

@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 
 import { renderAtRoute } from '@/test/render-at-route'
-import { ProviderPage } from '../provider'
+import { ProviderPage, removeDescription } from '../provider'
 import { llmProvidersApi, organizationsApi } from '@/lib/api'
 import { modelsApi } from '@/lib/models-api'
 import { modelAdaptersApi, modelDeploymentsApi } from '@/lib/deployments-api'
@@ -245,6 +245,12 @@ describe('ProviderPage', () => {
       expect(confirm).toHaveTextContent('"Support triage", "Nightly digest" and 1 other agent use its models and stop working until given another model; their owners are told.')
       fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }))
       expect(llmProvidersApi.delete).not.toHaveBeenCalled()
+    })
+
+    it('reads the agents as a list', () => {
+      expect(removeDescription(['Support triage'], 0)).toBe('Its key and its models go with it. "Support triage" uses its models and stops working until given another model; their owners are told.')
+      expect(removeDescription(['A', 'B', 'C'], 0)).toContain('"A", "B" and "C" use its models')
+      expect(removeDescription([], 2)).toContain('2 other agents use its models')
     })
   })
 

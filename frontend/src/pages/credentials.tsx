@@ -25,6 +25,7 @@ import { credentialsApi } from '@/lib/api'
 import { formatRelativeTime, pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { connectProviderPath } from '@/components/llm-providers/paths'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 /**
  * Credentials: every key, token and signed-in account almyty keeps for you,
@@ -95,9 +96,11 @@ function useCredentialRows() {
     queryFn: async () => asStoredCredentials(await credentialsApi.getAll()),
     enabled: !!orgId,
   })
+  // Model provider connections, one row each, keyless ones included.
+  const providersQuery = useQuery({ ...llmProvidersQuery, enabled: !!orgId })
   const data = useMemo(
-    () => credentialRows(connectionsQuery.data ?? [], storedQuery.data ?? [], connectorsQuery.data ?? []),
-    [connectionsQuery.data, storedQuery.data, connectorsQuery.data],
+    () => credentialRows(connectionsQuery.data ?? [], storedQuery.data ?? [], connectorsQuery.data ?? [], providersQuery.data ?? []),
+    [connectionsQuery.data, storedQuery.data, connectorsQuery.data, providersQuery.data],
   )
   return {
     data,
@@ -107,6 +110,7 @@ function useCredentialRows() {
     refetch: () => {
       connectionsQuery.refetch()
       storedQuery.refetch()
+      providersQuery.refetch()
     },
   }
 }
@@ -150,7 +154,7 @@ function CredentialLists({ rows }: { rows: ReturnType<typeof useCredentialRows> 
             searchPlaceholder="Search credentials"
             hideSelectionCount
             hideColumnsButton
-            emptyState={<EmptyState variant="inline" icon={KeyRound} title="No credentials yet" description="Model provider keys are listed below." />}
+            emptyState={<EmptyState variant="inline" icon={KeyRound} title="No credentials yet" description="Model providers are listed below." />}
           />
         </CardContent>
       </Card>
