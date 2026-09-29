@@ -7,6 +7,8 @@ import { Organization } from '../../entities/organization.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { Credential } from '../../entities/credential.entity';
 import { Tool } from '../../entities/tool.entity';
+import { Agent } from '../../entities/agent.entity';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
 import { CredentialsModule } from '../credentials/credentials.module';
 
@@ -70,6 +72,7 @@ import { MemoryAccountsService } from './canonical/memory-accounts.service';
       CanonicalMemoryWorkspaceConfig,
       CanonicalMemorySoftcapWarning,
       MemoryExpiry,
+      Agent,
       Organization,
       LlmProvider,
       Credential,
@@ -83,6 +86,7 @@ import { MemoryAccountsService } from './canonical/memory-accounts.service';
     ),
     forwardRef(() => LlmProvidersModule),
     forwardRef(() => CredentialsModule),
+    AuthorizationModule,
   ],
   providers: [
     EmbeddingService,
