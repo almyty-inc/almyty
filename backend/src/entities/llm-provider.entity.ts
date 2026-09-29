@@ -639,7 +639,7 @@ export class LlmProvider {
         // hosted almyty the URL must be publicly reachable — private and
         // loopback ranges are refused by the SSRF gate unless the
         // self-hosting escape hatch OLLAMA_ALLOW_PRIVATE_URLS=true is set.
-        const ollamaBase = (this.configuration.apiUrl || 'http://localhost:11434').replace(/\/+$/, '');
+        const ollamaBase = (this.configuration.apiUrl || 'http://localhost:11434').replace(/(?<!\/)\/+$/, '');
         return ollamaBase.toLowerCase().endsWith('/v1') ? ollamaBase : `${ollamaBase}/v1`;
       }
       case LlmProviderType.CUSTOM:
@@ -668,7 +668,7 @@ export class LlmProvider {
    * failure surfaces as NO_MODEL_CONFIGURED rather than a guessed model id.
    */
   getModelsUrl(): string {
-    const base = this.getApiUrl().replace(/\/+$/, '');
+    const base = this.getApiUrl().replace(/(?<!\/)\/+$/, '');
     if (!this.configuration?.apiUrl) {
       if (this.type === LlmProviderType.DEEPINFRA) return 'https://api.deepinfra.com/v1/models';
       if (this.type === LlmProviderType.COHERE) return 'https://api.cohere.com/v1/models';
@@ -681,9 +681,9 @@ export class LlmProvider {
    * GET /api/tags (models) and POST /api/embed (embeddings).
    */
   getOllamaBaseUrl(): string {
-    const base = (this.configuration?.apiUrl || 'http://localhost:11434').replace(/\/+$/, '');
+    const base = (this.configuration?.apiUrl || 'http://localhost:11434').replace(/(?<!\/)\/+$/, '');
     return base.toLowerCase().endsWith('/v1')
-      ? base.slice(0, -3).replace(/\/+$/, '')
+      ? base.slice(0, -3).replace(/(?<!\/)\/+$/, '')
       : base;
   }
 

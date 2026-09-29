@@ -22,6 +22,7 @@ import { AgentAppsService, CreateAppDto, UpdateAppDto } from './agent-apps.servi
 import { AppBuildsService, RequestBuildDto } from './app-builds.service';
 import {
   CreateAppBodyDto,
+  RecordBuildBodyDto,
   RequestBuildBodyDto,
   UpdateAppBodyDto,
 } from './dto/agent-apps-controller.dto';
@@ -225,21 +226,18 @@ export class AgentAppsController {
   async recordBuild(
     @Param('slug') slug: string,
     @Param('target') target: DistributionTarget,
-    @Body()
-    body: {
-      version?: string;
-      platform?: string;
-      checksum?: string;
-      signed?: boolean;
-      error?: string;
-    },
+    @Body() body: RecordBuildBodyDto,
     @Request() req: any,
   ) {
     return {
       success: true,
       data: publicDistribution(
         await this.apps.recordBuild(this.org(req), slug, target, {
-          ...body,
+          version: body.version,
+          platform: body.platform,
+          checksum: body.checksum,
+          signed: body.signed,
+          error: body.error,
           builtBy: req.user?.email ?? req.user?.id,
         }),
       ),

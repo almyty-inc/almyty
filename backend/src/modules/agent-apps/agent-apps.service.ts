@@ -39,6 +39,7 @@ import {
   appSlugError,
   defaultBundleId,
   isPackagedTarget,
+  buildVersionError,
 } from './agent-app.rules';
 
 import {
@@ -779,15 +780,26 @@ export class AgentAppsService {
     organizationId: string,
     slug: string,
     target: DistributionTarget,
-    build: NonNullable<AppDistribution['lastBuild']>,
+    build: Omit<NonNullable<AppDistribution['lastBuild']>, 'builtAt'>,
   ): Promise<AppDistribution> {
+    // Checked here as well as by the DTO, so no caller stores a version
+    // a later build could not be handed.
+    const versionError = buildVersionError(build.version);
+    if (versionError) throw new BadRequestException(versionError);
+
     const app = await this.findOne(organizationId, slug);
     const distribution = await this.distributionRepository.findOne({
       where: { appId: app.id, target },
     });
     if (!distribution) throw new NotFoundException('This app does not ship to that target');
 
-    distribution.lastBuild = { ...build, builtAt: build.builtAt ?? new Date().toISOString() };
+    // Named fields only, stamped here: the body used to be spread in whole.
+    const { version, platform, checksum, signed, error, builtBy } = build;
+    distribution.lastBuild = Object.fromEntries(
+      Object.entries({ version, platform, checksum, signed, error, builtBy, builtAt: new Date().toISOString() }).filter(
+        ([, value]) => value !== undefined,
+      ),
+    );
     distribution.status = build.error ? DistributionStatus.FAILED : DistributionStatus.BUILT;
     return this.distributionRepository.save(distribution);
   }

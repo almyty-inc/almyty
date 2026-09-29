@@ -219,7 +219,7 @@ export function MessageView({ msg }: { msg: Message }) {
       // reads apart from agent/chat messages.
       return (
         <Box paddingLeft={2} flexDirection="column">
-          {msg.text.replace(/\n+$/, '').split('\n').map((line, i) => (
+          {msg.text.replace(/(?<!\n)\n+$/, '').split('\n').map((line, i) => (
             <Text key={i} wrap="truncate-end">
               <Text color="#22d3ee">▍ </Text>
               <Text dimColor>{line || ' '}</Text>

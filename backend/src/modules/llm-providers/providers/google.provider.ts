@@ -109,7 +109,7 @@ export async function callGoogle(
  * used as it is.
  */
 export function customChatUrl(apiUrl: string, requestFormat: string): string {
-  const base = (apiUrl || '').replace(/\/+$/, '');
+  const base = (apiUrl || '').replace(/(?<!\/)\/+$/, '');
   if (requestFormat !== 'openai') return apiUrl;
   if (/\/chat\/completions$/.test(base)) return base;
   return `${base}/chat/completions`;

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { replaceDelimited } from '../../common/security/linear-text';
 
 export interface ExecutionContext {
   input: Record<string, any>;
@@ -109,7 +110,8 @@ export class AgentTemplateResolver {
       );
     }
 
-    return template.replace(/\{\{([^}]+)\}\}/g, (match, path: string) => {
+    // replaceDelimited is /\{\{([^}]+)\}\}/g in one pass (linear-text.ts).
+    return replaceDelimited(template, '{{', '}}', (match, path: string) => {
       const trimmedPath = path.trim();
 
       // Validate expression before resolving

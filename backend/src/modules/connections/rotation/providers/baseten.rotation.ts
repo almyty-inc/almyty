@@ -40,7 +40,7 @@ export class BasetenRotation implements ConnectorRotation {
   }
 
   async rotate(current: DecryptedSecrets, ctx: RotationContext): Promise<RotateResult> {
-    const name = keyLabel(ctx).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+    const name = keyLabel(ctx).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|(?<!-)-+$/g, '');
     const reply = await callJson(this.http, `${BASETEN_API}/api_keys`, { method: 'POST', headers: this.headers(current), body: JSON.stringify({ name, type: BASETEN_KEY_TYPE }) });
     failOn(reply, 'baseten key create');
     const apiKey = reply.json?.api_key;

@@ -1,4 +1,5 @@
 import { Plugin, PluginContext, PluginCondition, PluginHookType } from './types/plugin.types';
+import { compileSafeRegex } from '../../common/security/regex-safety';
 
 /**
  * Race a promise against a timeout, clearing the timer on either path
@@ -54,15 +55,21 @@ function evaluateOne(condition: PluginCondition, context: PluginContext): boolea
     case 'contains':
       if (Array.isArray(actual)) return actual.includes(condition.value);
       return String(actual ?? '').includes(String(condition.value));
-    case 'regex':
+    case 'regex': {
+      // Through compileSafeRegex like the scanner's and PII filter's custom
+      // patterns: 10 KB of subject does not bound a nested quantifier,
+      // and `(a+)+$` on thirty `a` and a `b` already hangs.
+      const compiled = compileSafeRegex(String(condition.value ?? ''));
+      if (!compiled.regex) return false;
       try {
         const subject = String(actual ?? '').slice(0, MAX_REGEX_INPUT);
-        return new RegExp(condition.value).test(subject);
+        return compiled.regex.test(subject);
       } catch {
         // An invalid pattern can't match anything — fail the condition
         // rather than throwing out of the hook dispatch.
         return false;
       }
+    }
     case 'custom':
     default:
       // No safe in-process evaluator for arbitrary custom predicates;

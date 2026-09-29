@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { promises as fs } from 'fs';
 
 /**
  * Hard cap on how many bytes of an uploaded text file we turn
@@ -51,6 +52,29 @@ export class TextExtractorService {
     } catch (error) {
       this.logger.warn(`Text extraction failed for ${fileName}: ${error.message}`);
       return null;
+    }
+  }
+
+  /**
+   * extract() for an upload spooled to disk (files/temp-upload.ts): reads
+   * no more of the file than the extraction cap plus one byte, which is
+   * all extract() looks at, so a 50 MB upload is never held whole.
+   */
+  async extractFromFile(filePath: string, size: number, mimeType: string, fileName: string): Promise<string | null> {
+    if (!(this.isTextFile(mimeType, fileName) || mimeType === 'text/csv' || mimeType === 'application/json')) {
+      return this.extract(Buffer.alloc(0), mimeType, fileName);
+    }
+    let handle: fs.FileHandle | undefined;
+    try {
+      handle = await fs.open(filePath, 'r');
+      const head = Buffer.alloc(Math.min(size, EXTRACT_MAX_BYTES + 1));
+      const { bytesRead } = await handle.read(head, 0, head.length, 0);
+      return this.extract(head.subarray(0, bytesRead), mimeType, fileName);
+    } catch (error: any) {
+      this.logger.warn(`Text extraction failed for ${fileName}: ${error.message}`);
+      return null;
+    } finally {
+      await handle?.close();
     }
   }
 

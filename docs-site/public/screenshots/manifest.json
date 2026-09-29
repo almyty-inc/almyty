@@ -479,7 +479,7 @@
       "title": "Chat CLI 1.5.0 help",
       "path": "screenshots/cli/chat-help.png",
       "capturedAt": "2026-09-22T13:42:14.000Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7bd2f9304e5fd0b835700609dd4fc65a2e1875070670e879c411b13507da17e4",
       "source": {
         "kind": "published-cli",
@@ -491,7 +491,8 @@
         "packages/chat-cli/package.json"
       ],
       "sourceDigest": "88395f17b7d2b46ab8ae4344a1dea58a9aa632b9ab7d7e4d77764a26d83426ba",
-      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
+      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved.",
+      "reason": "chat-cli source changed (linear trailing-newline trim, #853); help text likely unchanged, recapture from the next published @almyty/chat"
     },
     {
       "id": "cli-mcp-server-help",

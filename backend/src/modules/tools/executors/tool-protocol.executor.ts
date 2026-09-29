@@ -55,7 +55,7 @@ const MAX_BODY_LENGTH = 5 * 1024 * 1024;
  */
 function joinApiUrl(baseUrl: string, endpoint?: string): string {
   if (!endpoint) return baseUrl;
-  const base = (baseUrl || '').replace(/\/+$/, '');
+  const base = (baseUrl || '').replace(/(?<!\/)\/+$/, '');
   const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   if (base.endsWith(path)) return base;
   return `${base}${path}`;

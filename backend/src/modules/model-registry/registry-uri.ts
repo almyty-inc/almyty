@@ -74,7 +74,7 @@ export function parseRegistryUri(raw: string): ParsedRegistryUri {
   if (artifactScheme === 's3' || artifactScheme === 'gs') {
     const slash = body.indexOf('/');
     const bucket = slash === -1 ? body : body.slice(0, slash);
-    const prefix = slash === -1 ? '' : body.slice(slash + 1).replace(/\/+$/, '');
+    const prefix = slash === -1 ? '' : body.slice(slash + 1).replace(/(?<!\/)\/+$/, '');
     if (!bucket) throw new InvalidRegistryUriError(`${artifactScheme} registryUri needs a bucket`);
     return { scheme: artifactScheme, kind: 'artifact', location: bucket, prefix, pin, raw: value };
   }

@@ -37,6 +37,12 @@ import { InputSchemaViolation, schemaConstrainsAnything, schemaProblems } from '
 import { describeLimitTrip } from './run-limits';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import { bestOfNJudgePrompt, consensusJudgePrompt, parseBestOfNPick, parseConsensus } from './strategies/judging';
+import {
+  looksLikeMethodCall,
+  matchComparison,
+  matchMethodCondition,
+  singleReference,
+} from '../../common/utils/condition-expression';
 
 export interface NodeExecutionResult {
   output: any;
@@ -737,21 +743,19 @@ export class AgentNodeExecutor {
     let result: boolean;
     // Checked before the comparison form: this one is anchored to the whole
     // expression, so it cannot swallow a real comparison, while a haystack
-    // containing "==" could otherwise be mistaken for one.
-    const methodMatch = resolvedStr.match(
-      /^(!?)\s*(.+)\.(includes|startsWith|endsWith)\(\s*(.*?)\s*\)$/s,
-    );
+    // containing "==" could otherwise be mistaken for one. Both are read
+    // without a regex: the expression carries upstream output, and the
+    // regexes took seconds on a long run of spaces (condition-expression.ts).
+    const methodMatch = matchMethodCondition(resolvedStr);
     // Try to evaluate as a comparison expression (e.g. "overweight == overweight", "29.4 > 25")
-    const comparisonMatch = methodMatch
-      ? null
-      : resolvedStr.match(/^(.+?)\s*(===?|!==?|>=?|<=?)\s*(.+)$/);
+    const comparisonMatch = methodMatch ? null : matchComparison(resolvedStr);
 
     if (methodMatch) {
       // contains / does not contain / starts with / ends with. The builder
       // offers these four; nothing evaluated them, so they fell through to the
       // truthiness branch below and a non-empty string always took the true
       // branch -- the leading "!" included, since it is just a character.
-      const [, negate, receiver, method, rawArg] = methodMatch;
+      const [negate, receiver, method, rawArg] = methodMatch;
       const haystack = unquoteLiteral(receiver.trim());
       const needle = unquoteLiteral(rawArg.trim());
       const matched =
@@ -762,7 +766,7 @@ export class AgentNodeExecutor {
             : haystack.endsWith(needle);
       result = negate === '!' ? !matched : matched;
     } else if (comparisonMatch) {
-      const [, left, op, right] = comparisonMatch;
+      const [left, op, right] = comparisonMatch;
       // The visual builder emits the right-hand side as a quoted literal
       // ("{{...}} === 'positive'") while the template resolver substitutes the
       // left-hand side unquoted. Comparing them raw made every string equality
@@ -795,7 +799,7 @@ export class AgentNodeExecutor {
         default:
           result = Boolean(resolved);
       }
-    } else if (/^!?\s*.+\.\s*[A-Za-z_$][\w$]*\s*\(.*\)$/s.test(resolvedStr)) {
+    } else if (looksLikeMethodCall(resolvedStr)) {
       // The whole expression looks like a method call, but not one we
       // implement. Falling through to truthiness would make an expression we
       // could not evaluate silently take the true branch -- exactly how the
@@ -875,11 +879,9 @@ export class AgentNodeExecutor {
     // {{input.items}} were JSON-stringified and the loop would only iterate
     // a single-element array of the JSON string.
     const expression: string = config.iterableExpression;
-    const singleRefMatch =
-      typeof expression === 'string' &&
-      expression.match(/^\s*\{\{\s*([^}]+?)\s*\}\}\s*$/);
-    const resolved = singleRefMatch
-      ? this.templateResolver.resolveValue(singleRefMatch[1], context)
+    const singleRef = typeof expression === 'string' ? singleReference(expression) : null;
+    const resolved = singleRef
+      ? this.templateResolver.resolveValue(singleRef, context)
       : this.templateResolver.resolve(expression, context);
     const items = Array.isArray(resolved) ? resolved : [resolved];
 

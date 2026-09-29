@@ -8,12 +8,14 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
 } from 'class-validator';
 
 import { AppAuthMode } from '../../../entities/agent-app.entity';
 import { DistributionTarget } from '../../../entities/agent-app-distribution.entity';
 import type { MacPackaging } from '../build-targets';
+import { BUILD_VERSION_INVALID, BUILD_VERSION_PATTERN, MAX_BUILD_VERSION_LENGTH } from '../agent-app.rules';
 
 /**
  * The /apps write bodies, as classes.
@@ -104,11 +106,54 @@ export class RequestBuildBodyDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(64)
+  @MaxLength(MAX_BUILD_VERSION_LENGTH)
+  @Matches(BUILD_VERSION_PATTERN, { message: BUILD_VERSION_INVALID })
   version?: string;
 
   @ApiPropertyOptional({ enum: ['zip', 'dmg'] })
   @IsOptional()
   @IsIn(['zip', 'dmg'])
   macPackaging?: MacPackaging;
+}
+
+/**
+ * POST /apps/:slug/distributions/:target/build: what a build on the
+ * customer's own machine produced.
+ *
+ * This body was an inline type, so the global ValidationPipe saw `Object`
+ * and passed it through whole: any field, of any type and size, was
+ * spread into the distribution's `lastBuild` and stored.
+ */
+export class RecordBuildBodyDto {
+  @ApiPropertyOptional({ example: '1.2.3' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_BUILD_VERSION_LENGTH)
+  @Matches(BUILD_VERSION_PATTERN, { message: BUILD_VERSION_INVALID })
+  version?: string;
+
+  @ApiPropertyOptional({ example: 'darwin-arm64' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  @Matches(/^[a-z0-9][a-z0-9_-]*$/i, { message: 'platform is letters, digits, dashes and underscores' })
+  platform?: string;
+
+  @ApiPropertyOptional({ description: "The artifact's digest, hex or base64, optionally prefixed with its algorithm" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  @Matches(/^[A-Za-z0-9:+/=_.-]+$/, { message: 'checksum is a hex or base64 digest' })
+  checksum?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  signed?: boolean;
+
+  @ApiPropertyOptional({ description: 'Why the build failed, when it did' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  error?: string;
 }

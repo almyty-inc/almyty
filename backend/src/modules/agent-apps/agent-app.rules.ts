@@ -246,7 +246,44 @@ export function checkApp(
   return { ok: refusals.length === 0, refusals };
 }
 
-const BUNDLE_ID_PATTERN = /^[a-z0-9]+(\.[a-z0-9-]+)+$/;
+export const BUNDLE_ID_PATTERN = /^[a-z0-9]+(\.[a-z0-9-]+)+$/;
+
+/** Apple's ceiling for a bundle identifier; nothing we build to takes more. */
+export const MAX_BUNDLE_ID_LENGTH = 155;
+
+/** Why this bundle identifier cannot go into a build, or null when it can. */
+export function bundleIdError(bundleId: unknown): string | null {
+  return typeof bundleId === 'string' &&
+    bundleId.length <= MAX_BUNDLE_ID_LENGTH &&
+    BUNDLE_ID_PATTERN.test(bundleId)
+    ? null
+    : APP_REFUSALS.BUNDLE_ID_INVALID;
+}
+
+/**
+ * What a build version may look like: `1`, `1.2`, `1.2.3` or `1.2.3.4`,
+ * optionally followed by a `-prerelease` and a `+build` tag of letters,
+ * digits, dots and dashes. The version is written into the packager's
+ * command line (`--config.buildVersion=...`) and the artifact's metadata,
+ * so anything else is refused before a build is queued.
+ */
+export const BUILD_VERSION_PATTERN =
+  /^\d{1,9}(?:\.\d{1,9}){0,3}(?:-[0-9A-Za-z][0-9A-Za-z.-]{0,39})?(?:\+[0-9A-Za-z][0-9A-Za-z.-]{0,39})?$/;
+
+export const MAX_BUILD_VERSION_LENGTH = 64;
+
+export const BUILD_VERSION_INVALID =
+  'A build version is numbers separated by dots, such as 1.2.3, optionally with a -beta.1 or +build tag.';
+
+/** Why this build version cannot go into a build, or null when it can (or is absent). */
+export function buildVersionError(version: unknown): string | null {
+  if (version === undefined || version === null) return null;
+  return typeof version === 'string' &&
+    version.length <= MAX_BUILD_VERSION_LENGTH &&
+    BUILD_VERSION_PATTERN.test(version)
+    ? null
+    : BUILD_VERSION_INVALID;
+}
 
 /** Targets that produce a file someone installs, and so need an identity. */
 const PACKAGED_TARGETS: readonly DistributionTarget[] = Object.freeze([
@@ -291,7 +328,7 @@ export function checkDistribution(
 
   if (PACKAGED_TARGETS.includes(target as DistributionTarget)) {
     const bundleId = (configuration?.bundleId ?? '').trim();
-    if (!BUNDLE_ID_PATTERN.test(bundleId)) {
+    if (bundleIdError(bundleId)) {
       refusals.push({
         code: 'BUNDLE_ID_INVALID',
         message: APP_REFUSALS.BUNDLE_ID_INVALID,

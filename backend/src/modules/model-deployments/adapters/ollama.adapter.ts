@@ -96,7 +96,7 @@ export class OllamaAdapter implements ModelProviderAdapter {
    * ranges permitted only when the operator switched them on.
    */
   private base(cfg: Record<string, any>): string {
-    const raw = String(cfg.baseUrl ?? 'http://localhost:11434').replace(/\/+$/, '');
+    const raw = String(cfg.baseUrl ?? 'http://localhost:11434').replace(/(?<!\/)\/+$/, '');
     const check = ollamaPrivateUrlsAllowed() ? validateUrlAllowingPrivate(raw) : validateUrl(raw);
     if (!check.valid) {
       throw Object.assign(new Error(`Ollama server URL refused: ${check.error}`), {

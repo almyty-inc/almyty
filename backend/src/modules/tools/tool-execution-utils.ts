@@ -12,6 +12,7 @@
 import { BadRequestException } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { validateUrl } from '../../common/security/url-validator';
+import { EQUALITY_OPERATORS, matchComparison } from '../../common/utils/condition-expression';
 
 // ───── dot-path access ─────────────────────────────────────────────
 
@@ -233,9 +234,11 @@ export function evaluateHttpSuccessCondition(
   }
 
   // "data.foo === true"
-  const dataMatch = trimmed.match(/^data\.(.+?)\s*(===?|!==?)\s*(.+)$/);
+  // Read without a regex: /^data\.(.+?)\s*(===?|!==?)\s*(.+)$/ took seconds
+  // on a condition with a long run of spaces (condition-expression.ts).
+  const dataMatch = matchComparison(trimmed, EQUALITY_OPERATORS, 'data.');
   if (dataMatch) {
-    const [, path, op, rawVal] = dataMatch;
+    const [path, op, rawVal] = dataMatch;
     const actual = getByDotPath(data, path);
     let expected: any = rawVal.trim();
     if (expected === 'true') expected = true;

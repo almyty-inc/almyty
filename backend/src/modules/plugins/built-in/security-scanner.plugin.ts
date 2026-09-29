@@ -5,6 +5,12 @@ import {
   PluginResult,
 } from '../types/plugin.types';
 import { compileSafeRegex, boundRegexInput } from '../../../common/security/regex-safety';
+import {
+  LinearMatcher,
+  commandSubstitutionMatcher,
+  eventHandlerMatcher,
+  tagBlockMatcher,
+} from './security-scanner.matchers';
 
 type ThreatSeverity = 'low' | 'medium' | 'high' | 'critical';
 
@@ -34,15 +40,18 @@ export class SecurityScannerPlugin {
       /(\s|^)(or|and)\s+['"]?\d+['"]?\s*=\s*['"]?\d+/i,
       /'(\s|;|--|#|\*|\/\*)/i,
     ],
+    // The tag, event-handler and `$(` checks are linear matchers: as
+    // regexes they rescanned the body from every `<script`, `on` or `$(`
+    // (security-scanner.matchers.ts).
     xss: [
-      /<script[^>]*>.*?<\/script>/gi,
+      tagBlockMatcher('script'),
       /javascript:/gi,
-      /on\w+\s*=/gi,
-      /<iframe[^>]*>.*?<\/iframe>/gi,
+      eventHandlerMatcher,
+      tagBlockMatcher('iframe'),
     ],
     commandInjection: [
       /[;&|`](\s)*(rm|cat|ls|pwd|whoami|id|ps|kill|nc|netcat)/i,
-      /\$\(.*\)/g,
+      commandSubstitutionMatcher,
       /`.*`/g,
     ],
     pathTraversal: [
@@ -200,13 +209,13 @@ export class SecurityScannerPlugin {
 
       // Helper so every category can share the same match-push shape.
       const scan = (
-        patterns: RegExp[],
+        patterns: Array<RegExp | LinearMatcher>,
         type: SecurityThreat['type'],
         severity: ThreatSeverity,
         description: string,
       ) => {
         for (const pattern of patterns) {
-          const matches = dataToScan.match(pattern);
+          const matches = pattern instanceof RegExp ? dataToScan.match(pattern) : pattern.match(dataToScan);
           if (!matches) continue;
           if (allWhitelisted(matches)) continue;
           threats.push({
@@ -214,7 +223,7 @@ export class SecurityScannerPlugin {
             severity,
             description,
             location: scanType,
-            pattern: pattern.toString(),
+            pattern: pattern instanceof RegExp ? pattern.toString() : pattern.pattern,
           });
         }
       };

@@ -486,7 +486,7 @@ export class McpToolHandler {
 
     let sanitized = name.replace(/[^a-zA-Z0-9_-]/g, '_');
     sanitized = sanitized.replace(/[-_]{2,}/g, '_');
-    sanitized = sanitized.replace(/^[-_]+|[-_]+$/g, '');
+    sanitized = sanitized.replace(/^[-_]+|(?<![-_])[-_]+$/g, '');
 
     if (/^[0-9]/.test(sanitized)) {
       sanitized = `tool_${sanitized}`;
