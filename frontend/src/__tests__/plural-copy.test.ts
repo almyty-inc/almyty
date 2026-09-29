@@ -46,7 +46,7 @@ const NOUN = `(?:${[...new Set(PLURALS)].join('|')})`
  */
 const ALLOWED: Array<{ rel: string; text: string; why: string }> = [
   { rel: 'components/agent-apps/signing-credential-form.tsx', text: '{DISTRIBUTION_LABELS[target]} builds', why: 'a target name ("Desktop builds"), not a count' },
-  { rel: 'components/connections/connection-detail.tsx', text: "use${usedBy.length === 1 ? 's' : ''}", why: 'the verb agreeing with a pluralized() count, not a noun' },
+  { rel: 'components/credentials/credential-detail.tsx', text: "use${uses === 1 ? 's' : ''}", why: 'the verb agreeing with a pluralized() count, not a noun' },
 ]
 
 function lineOf(src: string, index: number): number {

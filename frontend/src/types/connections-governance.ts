@@ -36,7 +36,7 @@ export const POLICY_KIND_LABELS: Record<ConnectionPolicyKind, string> = {
 export const POLICY_KIND_DESCRIPTIONS: Record<ConnectionPolicyKind, string> = {
   connector_allowlist: 'Only these connectors may be connected. Several allow lists are unioned.',
   connector_denylist: 'These connectors may never be connected, whatever the allow lists say.',
-  scope_rule: 'What a kind of principal may resolve, for example: production agents only use organization connections from approved connectors.',
+  scope_rule: 'What a kind of principal may resolve, for example: production agents only use organization credentials from approved connectors.',
   expiry_rule: 'A secret older than the maximum age is expired. Owners are warned ahead; with enforcement, expiry also revokes the grants.',
   rotation_rule: 'Rotate secrets on a schedule through the provider API. Connectors without API rotation are reported to their owners.',
 }

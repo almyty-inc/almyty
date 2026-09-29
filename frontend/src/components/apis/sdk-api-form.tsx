@@ -89,12 +89,12 @@ export function SdkApiForm() {
 
   return (
     <FormPage
-      title="Import an npm package"
-      description="Its exported functions become tools your agents can call."
+      title="Connect an API"
+      description="SDK / npm: the exported functions of the packages you pick become tools your agents can call."
       back={{ to: '/apis/new', label: 'Connect an API' }}
       guard={guard}
       onSubmit={submit}
-      submitLabel="Create API"
+      submitLabel="Connect API"
       submitting={create.isPending}
     >
       <FormSection title="Packages">

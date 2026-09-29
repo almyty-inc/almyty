@@ -285,7 +285,7 @@ export function describePolicyRule(policy: Pick<ConnectionPolicy, 'kind' | 'rule
     case 'connector_allowlist':
     case 'connector_denylist': {
       if (!isConnectorListRule(rule)) return POLICY_KIND_LABELS[policy.kind]
-      const who = rule.owners?.length === 1 ? (rule.owners[0] === 'org' ? 'Organization connections' : 'Personal connections') : 'All connections'
+      const who = rule.owners?.length === 1 ? (rule.owners[0] === 'org' ? 'Organization credentials' : 'Personal credentials') : 'All credentials'
       const verb = policy.kind === 'connector_allowlist' ? 'may only use' : 'may never use'
       return `${who} ${verb} ${listWords(rule.connectorKeys.map(nameOf))}`
     }
@@ -294,7 +294,7 @@ export function describePolicyRule(policy: Pick<ConnectionPolicy, 'kind' | 'rule
       const kinds = listWords(rule.principalKinds.map((k) => SCOPE_PRINCIPAL_KIND_LABELS[k] ?? k))
       const where = rule.environments?.length ? ` in ${listWords(rule.environments)}` : ''
       const approved = rule.approvedConnectorsOnly ? ' from approved connectors' : ''
-      return `${kinds}${where} may only use organization connections${approved}`
+      return `${kinds}${where} may only use organization credentials${approved}`
     }
     case 'expiry_rule': {
       if (!isExpiryRule(rule)) return POLICY_KIND_LABELS[policy.kind]

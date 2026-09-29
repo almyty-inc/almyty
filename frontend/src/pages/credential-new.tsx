@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Brain, CheckCircle2 } from 'lucide-react'
+import { Brain, CheckCircle2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { PageHeader } from '@/components/layout/page-header'
+import { FormPage } from '@/components/layout/form-page'
 import { PickedService, ServiceTileGrid, type ServiceTileGroup } from '@/components/connect/service-tiles'
 import { StatusLabel } from '@/components/connect/status-label'
 import { isProviderType } from '@/components/llm-providers/provider-catalog'
 import { ConnectServiceForm, OTHER_SERVICE_KEY, connectorIcon, connectorTileGroups, useConnectors } from '@/components/connections/connect-flow'
 import { connectionCheck } from '@/components/connections/connection-status'
-import { CONNECTIONS_PATH, CONNECTIONS_QUERY_KEY, connectionPath } from '@/components/connections/paths'
+import { CONNECTIONS_QUERY_KEY, CREDENTIALS_PATH, CREDENTIALS_QUERY_KEY, credentialPath } from '@/components/credentials/paths'
 import { matchesConnectorSearch } from '@/lib/connections-api'
 import { safeReturnTo } from '@/lib/return-to'
 import type { Connection, Connector, ConnectorKind } from '@/types/connections'
@@ -34,18 +34,18 @@ function serviceTileGroups(connectors: Connector[], search: string): ServiceTile
   const models: ServiceTileGroup = {
     id: AI_MODELS_TILE,
     title: 'AI models',
-    tiles: [{ key: AI_MODELS_TILE, label: 'Connect AI models', hint: 'OpenAI, Anthropic and more', icon: <Brain className="h-4 w-4 text-primary" /> }],
+    tiles: [{ key: AI_MODELS_TILE, label: 'Model providers', hint: 'Added on Models', icon: <Brain className="h-4 w-4 text-primary" /> }],
   }
   return [models, ...services]
 }
 
 /**
- * Connect a service: pick its tile, give it its key or sign in, done. The
- * picked tile lives in the URL (?service=github) so a link can open
- * straight onto it. An AI model provider is connected on Models, where its
- * models come with it.
+ * Add credential: pick the service's tile, give it its key or sign in,
+ * done. The picked tile lives in the URL (?service=github) so a link can
+ * open straight onto it. A model provider key is added on Models, where
+ * its models come with it.
  */
-export function ConnectServicePage() {
+export function AddCredentialPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -59,7 +59,7 @@ export function ConnectServicePage() {
   const returnTo = safeReturnTo(searchParams.get('returnTo'))
 
   useEffect(() => {
-    document.title = 'Connect a service | almyty'
+    document.title = 'Add credential | almyty'
     return () => {
       document.title = 'almyty'
     }
@@ -82,13 +82,12 @@ export function ConnectServicePage() {
   if (modelsRoute) return <Navigate to={modelsRoute} replace />
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <Link to={CONNECTIONS_PATH} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-        Connections
-      </Link>
-      <PageHeader title="Connect a service" description="Connect a service once and use it anywhere in almyty." />
-
+    <FormPage
+      title="Add credential"
+      description="A key, a token or a sign-in at a service. Add it once and use it anywhere in almyty."
+      back={{ to: CREDENTIALS_PATH, label: 'Credentials' }}
+      width="wide"
+    >
       {connectorsQuery.isError && <p role="alert" className="text-sm text-destructive">The list of services could not be loaded. Reload the page to try again.</p>}
 
       {connector ? (
@@ -97,8 +96,8 @@ export function ConnectServicePage() {
             <Connected
               connection={connected}
               connector={connector}
-              onDone={() => navigate(returnTo ?? CONNECTIONS_PATH)}
-              onOpen={() => navigate(connectionPath(connected.id))}
+              onDone={() => navigate(returnTo ?? CREDENTIALS_PATH)}
+              onOpen={() => navigate(credentialPath(connected.id))}
             />
           ) : (
             <ConnectServiceForm
@@ -106,6 +105,7 @@ export function ConnectServicePage() {
               connector={connector}
               onConnected={(connection) => {
                 queryClient.invalidateQueries({ queryKey: CONNECTIONS_QUERY_KEY })
+                queryClient.invalidateQueries({ queryKey: CREDENTIALS_QUERY_KEY })
                 setConnected(connection)
               }}
             />
@@ -139,7 +139,7 @@ export function ConnectServicePage() {
           This service is not available.
         </p>
       )}
-    </div>
+    </FormPage>
   )
 }
 
@@ -157,15 +157,15 @@ function Connected({ connection, connector, onDone, onOpen }: { connection: Conn
     <div className="space-y-4" data-testid="connect-success">
       <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
         <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden />
-        {connection.name} is connected.
+        {connection.name} is saved.
         <StatusLabel check={check} testId="connection-status" />
       </p>
       {connection.accountLabel && <p className="text-sm text-muted-foreground">Account: {connection.accountLabel}</p>}
-      <p className="text-sm text-muted-foreground">Pick it in any API, tool, agent or chat that asks for a key.</p>
+      <p className="text-sm text-muted-foreground">Pick it in any API, tool, agent or channel that asks for a key.</p>
       <div className="flex flex-wrap gap-2">
         <Button onClick={onDone}>Done</Button>
         <Button variant="outline" onClick={onOpen}>
-          Open connection
+          Open credential
         </Button>
       </div>
     </div>

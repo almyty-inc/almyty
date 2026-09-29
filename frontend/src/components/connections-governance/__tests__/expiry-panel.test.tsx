@@ -41,7 +41,7 @@ describe('ExpiryPanel', () => {
     })
   })
 
-  it('lists expiring and due connections by name, with owner and status', async () => {
+  it('lists expiring and due credentials by name, with owner and status', async () => {
     render(<ExpiryPanel />)
     const warn = await screen.findByTestId('expiring-row-c1')
     await waitFor(() => expect(warn).toHaveTextContent('OpenAI prod'))
@@ -50,7 +50,7 @@ describe('ExpiryPanel', () => {
     expect(warn).toHaveTextContent('org')
     const expired = screen.getByTestId('expiring-row-c2')
     expect(expired).toHaveAttribute('data-status', 'expire')
-    expect(expired).toHaveTextContent('slack connection')
+    expect(expired).toHaveTextContent('slack credential')
     expect(expired).toHaveTextContent('personal')
     expect(expired).toHaveTextContent('past')
     expect(screen.getByText(/grants are revoked on expiry/)).toBeInTheDocument()

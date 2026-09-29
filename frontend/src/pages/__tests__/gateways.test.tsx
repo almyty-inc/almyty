@@ -170,9 +170,9 @@ describe('GatewaysPage', () => {
       renderGatewaysPage()
 
       await waitFor(() => {
-        // The shared <EmptyState/>: "Nothing shared yet" and a
-        // "Share tools" action; the header has one too.
-        expect(screen.getAllByRole('button', { name: 'Share tools' }).length).toBeGreaterThan(0)
+        // The shared <EmptyState/>: "No gateways yet" and a
+        // "Create gateway" action; the header has one too.
+        expect(screen.getAllByRole('button', { name: 'Create gateway' }).length).toBeGreaterThan(0)
       })
     })
   })
@@ -191,9 +191,9 @@ describe('GatewaysPage', () => {
       renderGatewaysPage()
 
       await waitFor(() => {
-        expect(screen.getAllByRole('button', { name: 'Share tools' })[0]).toBeInTheDocument()
+        expect(screen.getAllByRole('button', { name: 'Create gateway' })[0]).toBeInTheDocument()
       })
-      await user.click(screen.getAllByRole('button', { name: 'Share tools' })[0])
+      await user.click(screen.getAllByRole('button', { name: 'Create gateway' })[0])
 
       expect(mockNavigate).toHaveBeenCalledWith('/gateways/new')
       expect(screen.queryByRole('dialog')).toBeNull()
@@ -203,8 +203,8 @@ describe('GatewaysPage', () => {
       const user = userEvent.setup()
       renderGatewaysPage()
 
-      await screen.findByText('Nothing shared yet')
-      const buttons = screen.getAllByRole('button', { name: 'Share tools' })
+      await screen.findByText('No gateways yet')
+      const buttons = screen.getAllByRole('button', { name: 'Create gateway' })
       await user.click(buttons[buttons.length - 1])
 
       expect(mockNavigate).toHaveBeenCalledWith('/gateways/new')

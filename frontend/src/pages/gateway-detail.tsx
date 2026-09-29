@@ -298,8 +298,11 @@ export function GatewayDetailPage() {
   }
 
   const isSharedTools = gateway.type === 'tools'
+  // A gateway made on Create gateway serves tools over one protocol (or,
+  // made earlier, over all three): its setup per client shows up top.
+  const isToolGateway = !gateway.isSystem && ['tools', 'mcp', 'utcp', 'skills'].includes(gateway.type)
   const orgSlug = orgSlugOf(currentOrganization)
-  // What the Share tools page could not attach, handed over with the key.
+  // What the create page could not attach, handed over with the key.
   const skippedTools: Array<{ toolId: string; reason: string }> =
     (location.state as { sharedTools?: { skipped?: Array<{ toolId: string; reason: string }> } } | null)?.sharedTools?.skipped ?? []
 
@@ -415,9 +418,9 @@ export function GatewayDetailPage() {
         >
           <p className="flex items-center gap-2 font-medium">
             <KeyRound className="h-4 w-4" aria-hidden="true" />
-            {isSharedTools ? 'Your access key' : "Your gateway's first API key"}
+            {isToolGateway ? 'Your access key' : "Your gateway's first API key"}
           </p>
-          <CopyField value={initialApiKey} label={isSharedTools ? 'Access key' : 'API key'} />
+          <CopyField value={initialApiKey} label={isToolGateway ? 'Access key' : 'API key'} />
           <p className="text-sm text-amber-800 dark:text-amber-300">
             Copy it now. You won't see it again: once you leave this page, only its first characters are shown.
           </p>
@@ -427,7 +430,7 @@ export function GatewayDetailPage() {
       {skippedTools.length > 0 && (
         <div data-testid="shared-tools-skipped" className="space-y-1 rounded-lg border border-amber-400/60 bg-amber-50 p-4 text-sm dark:bg-amber-950/30">
           <p className="font-medium">
-            {skippedTools.length} tool{skippedTools.length === 1 ? " wasn't" : "s weren't"} shared
+            {skippedTools.length} tool{skippedTools.length === 1 ? " wasn't" : "s weren't"} added
           </p>
           <ul className="list-inside list-disc text-amber-800 dark:text-amber-300">
             {[...new Set(skippedTools.map((s) => s.reason))].slice(0, 3).map((reason) => (
@@ -437,7 +440,7 @@ export function GatewayDetailPage() {
         </div>
       )}
 
-      {isSharedTools && <ConnectSnippets gateway={gateway} orgSlug={orgSlug} accessKey={initialApiKey} />}
+      {isToolGateway && <ConnectSnippets gateway={gateway} orgSlug={orgSlug} accessKey={initialApiKey} />}
 
       {/*
         Webhook registration failed and nothing said so.
@@ -529,13 +532,13 @@ export function GatewayDetailPage() {
 
       {isSharedTools ? (
         <>
-          {/* Shared tools: what is shared, then everything else folded
-              away. Keys, extra sign-in methods, usage and events are
-              there for whoever needs them; the address and snippets
+          {/* A gateway of every protocol: its tools, then everything else
+              folded away. Keys, extra sign-in methods, usage and events
+              are there for whoever needs them; the address and snippets
               above are all a first visit needs. */}
           <section aria-labelledby="shared-tools-heading" className="space-y-3">
             <h2 id="shared-tools-heading" className="text-lg font-semibold">
-              Shared tools <span className="text-sm font-normal text-muted-foreground">({gatewayTools.length})</span>
+              Tools <span className="text-sm font-normal text-muted-foreground">({gatewayTools.length})</span>
             </h2>
             {toolsTab}
           </section>

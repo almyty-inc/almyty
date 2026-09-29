@@ -19,10 +19,9 @@ import {
   Sun,
   Moon,
   Monitor,
-  Plug,
   Database,
   Cpu,
-  FolderGit2,
+  KeyRound,
   Package,
   Shield,
 } from 'lucide-react'
@@ -100,8 +99,7 @@ const navigation: { name: string; href: string; icon: any }[] = [
   { name: 'Agents', href: '/agents', icon: Bot },
   { name: 'Apps', href: '/apps', icon: Package },
   { name: 'Runners', href: '/runners', icon: Cpu },
-  { name: 'Workspaces', href: '/workspaces', icon: FolderGit2 },
-  { name: 'Connections', href: '/connections', icon: Plug },
+  { name: 'Credentials', href: '/credentials', icon: KeyRound },
   { name: 'Approvals', href: '/approvals', icon: Shield },
   // Configuration
   { name: 'divider', href: '', icon: null as any },

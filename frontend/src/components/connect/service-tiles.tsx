@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 
 /**
  * The connect pages' building blocks, shared by Models (/models/connect)
- * and Connections (/connections/connect): a searchable grid of tiles, the
+ * and Credentials (/credentials/new): a searchable grid of tiles, the
  * card a picked tile opens into, and the list of what is connected.
  */
 

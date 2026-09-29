@@ -6,12 +6,14 @@
  */
 import { forwardRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { KeyRound } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { QueryError } from '@/components/ui/query-error'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { credentialPath } from '@/components/credentials/paths'
 import { apisApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
@@ -101,6 +103,11 @@ export const ApiKeyCard = forwardRef<HTMLDivElement, { apiId: string; apiName: s
                 <button type="button" className="text-primary hover:underline" onClick={() => setEditing(true)}>
                   {hasKey ? 'Replace key' : 'Add a key'}
                 </button>
+                {view.source === 'connection' && view.connection && (
+                  <Link to={credentialPath(view.connection.id)} className="text-primary hover:underline" data-testid="api-key-credential-link">
+                    Open credential
+                  </Link>
+                )}
                 {hasKey && (
                   <button
                     type="button"

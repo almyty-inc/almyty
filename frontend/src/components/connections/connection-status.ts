@@ -3,7 +3,7 @@ import type { Visibility } from '@/components/ui/visibility-field'
 import type { Connection, Connector } from '@/types/connections'
 
 /**
- * A connection's health in the words the Connections page uses: it works,
+ * A credential's health in the words the Credentials page uses: it works,
  * it needs attention, or nobody checked yet. A service nobody can ask (the
  * check is shape only, like "Other service") is "Saved", never "Works".
  */

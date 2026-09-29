@@ -13,7 +13,7 @@ export interface ServiceCheck {
 /**
  * The status line every connected thing shows: green when it works, red
  * when it needs attention, grey when nobody checked yet. Models says "Key
- * works" / "Key rejected"; Connections says "Works" / "Needs attention".
+ * works" / "Key rejected"; Credentials says "Works" / "Needs attention".
  */
 export function StatusLabel({ check, className, testId = 'service-status' }: { check: ServiceCheck; className?: string; testId?: string }) {
   const Icon = check.state === 'ok' ? CheckCircle2 : check.state === 'unchecked' ? CircleDashed : XCircle

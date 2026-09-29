@@ -7,8 +7,7 @@ import { ServiceIcon } from './service-tiles'
 /**
  * What is connected, as cards: a logo, the name, and one line under it
  * (whether the key works, and whatever else the page counts). Each card
- * opens the thing's own page. Models lists providers this way, Connections
- * lists services.
+ * opens the thing's own page.
  */
 export function ConnectedCardGrid({ children, loading, label }: { children?: ReactNode; loading?: boolean; label?: string }) {
   if (loading) {

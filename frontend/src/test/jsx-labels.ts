@@ -149,6 +149,7 @@ export const LABEL_PROPER_NOUNS = new Set([
   'Microsoft', 'OAuth', 'OIDC', 'Ollama', 'OpenAI', 'OpenAPI', 'PDF', 'PNG', 'Protobuf',
   'RBAC', 'REST', 'S3', 'SAML', 'SDK', 'SMS', 'SOAP', 'SQL', 'SSO', 'SVG', 'Signal', 'Slack', 'Stripe',
   'TOTP', 'Teams', 'Telegram', 'UTCP', 'URL', 'URLs', 'Vertex', 'WhatsApp', 'YAML', 'gRPC',
+  'Swagger', 'WSDL',
 ])
 
 /** Multi-word names that keep their capitals: named surfaces and specs. */
