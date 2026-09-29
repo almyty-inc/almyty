@@ -12,6 +12,8 @@ export interface StorageProvider {
    */
   readonly canPresign: boolean;
   upload(key: string, data: Buffer, contentType: string): Promise<string>;
+  /** The same for a file already on disk, streamed rather than read whole. */
+  uploadFile(key: string, filePath: string, contentType: string): Promise<string>;
   download(key: string): Promise<Buffer>;
   /**
    * The same bytes as a stream.
@@ -105,6 +107,13 @@ class LocalStorageProvider implements StorageProvider {
     return `${this.baseUrl}/files/${key}`;
   }
 
+  async uploadFile(key: string, filePath: string, _contentType: string): Promise<string> {
+    const target = this.resolveSafe(key);
+    await fs.promises.mkdir(path.dirname(target), { recursive: true });
+    await fs.promises.copyFile(filePath, target);
+    return `${this.baseUrl}/files/${key}`;
+  }
+
   async download(key: string): Promise<Buffer> {
     const filePath = this.resolveSafe(key);
     return fs.readFileSync(filePath);
@@ -180,6 +189,21 @@ class S3StorageProvider implements StorageProvider {
       Bucket: this.bucket,
       Key: key,
       Body: data,
+      ContentType: contentType,
+      ACL: 'private',
+    }));
+    return this.cdnUrl ? `${this.cdnUrl}/${key}` : key;
+  }
+
+  async uploadFile(key: string, filePath: string, contentType: string): Promise<string> {
+    assertSafeStorageKey(key);
+    const { PutObjectCommand } = require('@aws-sdk/client-s3');
+    const { size } = await fs.promises.stat(filePath);
+    await this.s3Client.send(new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: fs.createReadStream(filePath),
+      ContentLength: size,
       ContentType: contentType,
       ACL: 'private',
     }));
@@ -276,6 +300,11 @@ export class StorageService {
 
   async upload(key: string, data: Buffer, contentType: string): Promise<string> {
     return this.provider.upload(key, data, contentType);
+  }
+
+  /** Store a file already on disk (an upload multer spooled), streamed rather than read whole. */
+  async uploadFile(key: string, filePath: string, contentType: string): Promise<string> {
+    return this.provider.uploadFile(key, filePath, contentType);
   }
 
   async downloadStream(key: string): Promise<Readable> {

@@ -20,7 +20,8 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { readFile } from 'fs/promises';
+import { TempFileInterceptor } from '../files/temp-upload';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -83,7 +84,7 @@ export class ApisController {
    */
   @Post('import')
   @Roles('admin', 'owner')
-  @UseInterceptors(FileInterceptor('schema'))
+  @UseInterceptors(TempFileInterceptor('schema', 10 * 1024 * 1024))
   async connect(@Request() req, @Body() dto: ConnectApiDto, @UploadedFile() file?: any) {
     const organizationId = req.user.currentOrganizationId;
     if (!organizationId) throw new BadRequestException('Organization context required');
@@ -92,7 +93,7 @@ export class ApisController {
     const result = await this.apiConnect.connect({
       organizationId,
       userId,
-      file: file ? { buffer: file.buffer, originalname: file.originalname } : undefined,
+      file: file ? { buffer: await readFile(file.path), originalname: file.originalname } : undefined,
       url: dto.url,
       content: dto.content,
       name: dto.name,
@@ -231,7 +232,7 @@ export class ApisController {
 
   @Post(':id/import-schema')
   @Roles('admin', 'owner')
-  @UseInterceptors(FileInterceptor('schema'))
+  @UseInterceptors(TempFileInterceptor('schema', 10 * 1024 * 1024))
   async importSchema(
     @Request() req,
     @Param('id') id: string,
@@ -253,7 +254,7 @@ export class ApisController {
     // endpoint link works here too, and a description of another kind is
     // refused in words before anything is queued.
     const detected = await this.apiConnect.describe({
-      file: file ? { buffer: file.buffer, originalname: file.originalname } : undefined,
+      file: file ? { buffer: await readFile(file.path), originalname: file.originalname } : undefined,
       url: importSchemaDto.schemaUrl,
       content: importSchemaDto.schemaContent,
     });

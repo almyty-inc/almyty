@@ -41,7 +41,7 @@ export class FilesService {
 
   async upload(
     organizationId: string,
-    file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
+    file: { path: string; originalname: string; mimetype: string; size: number },
     options?: { agentId?: string; runId?: string; uploadedBy?: string; extractText?: boolean },
   ): Promise<AgentFile> {
     // agentId becomes a storage-key segment. Unchecked, `../<other org>/x`
@@ -62,13 +62,14 @@ export class FilesService {
     const safeName = this.sanitizeStoredFilename(file.originalname);
     const storageKey = `${organizationId}/${options?.agentId || 'general'}/${fileId}/${safeName}`;
 
-    // Upload to storage
-    const storageUrl = await this.storageService.upload(storageKey, file.buffer, file.mimetype);
+    // Upload to storage, from the temp file multer spooled it to: the
+    // bytes are streamed, never held whole (files/temp-upload.ts).
+    const storageUrl = await this.storageService.uploadFile(storageKey, file.path, file.mimetype);
 
     // Extract text if requested and possible
     let extractedText: string | null = null;
     if (options?.extractText !== false) {
-      extractedText = await this.textExtractor.extract(file.buffer, file.mimetype, file.originalname);
+      extractedText = await this.textExtractor.extractFromFile(file.path, file.size, file.mimetype, file.originalname);
     }
 
     const agentFile = this.fileRepository.create({

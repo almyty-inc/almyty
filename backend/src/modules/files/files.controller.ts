@@ -3,14 +3,13 @@ import {
   ParseUUIDPipe, HttpStatus, HttpException, Logger, UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
 import { FilesService } from './files.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { uploadLimits } from './upload-limits';
+import { TempFileInterceptor } from './temp-upload';
 
 @Controller('files')
 @ApiTags('Files')
@@ -142,7 +141,7 @@ export class FilesController {
 
   @Post('upload')
   @Roles('member', 'admin', 'owner')
-  @UseInterceptors(FileInterceptor('file', { limits: uploadLimits(50 * 1024 * 1024) }))
+  @UseInterceptors(TempFileInterceptor('file', 50 * 1024 * 1024))
   async upload(
     @UploadedFile() file: any,
     @Query('agentId', new ParseUUIDPipe({ optional: true })) agentId: string,

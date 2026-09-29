@@ -10,6 +10,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+/** Uploads reach the service as a file multer spooled to disk (files/temp-upload.ts). */
+const spoolDir = fs.mkdtempSync(path.join(os.tmpdir(), 'almyty-test-spool-'));
+afterAll(() => fs.rmSync(spoolDir, { recursive: true, force: true }));
+let spoolCount = 0;
+function spooled(buffer: Buffer): string {
+  const file = path.join(spoolDir, `upload-${spoolCount++}`);
+  fs.writeFileSync(file, buffer);
+  return file;
+}
+
 /**
  * Integration tests for FilesService + StorageService + TextExtractorService.
  *
@@ -121,7 +131,7 @@ describe('FilesService (integration)', () => {
       const buffer = Buffer.from(content);
 
       const result = await filesService.upload('org-1', {
-        buffer,
+        path: spooled(buffer),
         originalname: 'test.txt',
         mimetype: 'text/plain',
         size: buffer.length,
@@ -145,7 +155,7 @@ describe('FilesService (integration)', () => {
       const buffer = Buffer.from(content);
 
       const result = await filesService.upload('org-1', {
-        buffer,
+        path: spooled(buffer),
         originalname: 'readme.txt',
         mimetype: 'text/plain',
         size: buffer.length,
@@ -159,7 +169,7 @@ describe('FilesService (integration)', () => {
       const buffer = Buffer.from(jsonContent);
 
       const result = await filesService.upload('org-1', {
-        buffer,
+        path: spooled(buffer),
         originalname: 'data.json',
         mimetype: 'application/json',
         size: buffer.length,
@@ -173,7 +183,7 @@ describe('FilesService (integration)', () => {
       const buffer = Buffer.from(mdContent);
 
       const result = await filesService.upload('org-1', {
-        buffer,
+        path: spooled(buffer),
         originalname: 'notes.md',
         mimetype: 'text/markdown',
         size: buffer.length,
@@ -187,7 +197,7 @@ describe('FilesService (integration)', () => {
       const buffer = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
 
       const result = await filesService.upload('org-1', {
-        buffer,
+        path: spooled(buffer),
         originalname: 'photo.png',
         mimetype: 'image/png',
         size: buffer.length,
@@ -201,7 +211,7 @@ describe('FilesService (integration)', () => {
       const buffer = Buffer.from(content);
 
       const result = await filesService.upload('org-1', {
-        buffer,
+        path: spooled(buffer),
         originalname: 'skip.txt',
         mimetype: 'text/plain',
         size: buffer.length,
@@ -214,7 +224,7 @@ describe('FilesService (integration)', () => {
       const buffer = Buffer.from('agent file');
 
       const result = await filesService.upload('org-1', {
-        buffer,
+        path: spooled(buffer),
         originalname: 'agent-doc.txt',
         mimetype: 'text/plain',
         size: buffer.length,
@@ -231,7 +241,7 @@ describe('FilesService (integration)', () => {
       const buffer = Buffer.from(originalContent);
 
       const uploaded = await filesService.upload('org-1', {
-        buffer,
+        path: spooled(buffer),
         originalname: 'download-test.txt',
         mimetype: 'text/plain',
         size: buffer.length,
@@ -249,7 +259,7 @@ describe('FilesService (integration)', () => {
       const buffer = Buffer.from('delete me');
 
       const uploaded = await filesService.upload('org-1', {
-        buffer,
+        path: spooled(buffer),
         originalname: 'to-delete.txt',
         mimetype: 'text/plain',
         size: buffer.length,
