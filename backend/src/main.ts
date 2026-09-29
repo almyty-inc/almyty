@@ -13,6 +13,7 @@ import { CorrelatedConsoleLogger } from './common/logging/correlated-console.log
 import { requestContextMiddleware } from './common/middleware/request-context.middleware';
 import { sentryInitOptions } from './common/observability/sentry-options';
 import { SurfaceCorsService } from './modules/gateways/channels/surface-cors';
+import { csrfOriginCheck } from './common/security/csrf-origin';
 // No global response interceptor — each controller is responsible for consistent {success, data} format
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { RequestLog } from './entities/request-log.entity';
@@ -143,6 +144,10 @@ async function bootstrap() {
       exposedHeaders: ['Mcp-Session-Id'],
     }),
   );
+
+  // Cookie-authenticated writes must come from an origin we serve: the
+  // same allowlist, plus the API's own origin. See csrf-origin.ts.
+  app.use(csrfOriginCheck(allowedOrigins));
 
   // No API prefix - this is a pure API backend
 

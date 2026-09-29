@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
 import { Compass } from 'lucide-react'
 
-import { cn } from '@/lib/utils'
+import { cn, pluralized } from '@/lib/utils'
 import { captureEvent } from '@/lib/analytics'
 import type { OnboardingState } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
@@ -52,7 +52,7 @@ export function GuidePill({ collapsed }: GuidePillProps) {
   const total = ALL_STEPS.length
   const done = data ? stepsDone(data) : 0
   const showProgress = !!data && done < total
-  const label = showProgress ? `Guide, ${done} of ${total} steps done` : 'Guide'
+  const label = showProgress ? `Guide, ${done} of ${pluralized(total, 'step')} done` : 'Guide'
 
   return (
     <NavLink

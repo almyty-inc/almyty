@@ -8,18 +8,21 @@ import { APP_SURFACE_GATEWAY_TYPES, APP_SURFACE_NEEDS_APP, isAppSurfaceGatewayTy
 import { GatewayType } from '../../../entities/gateway.entity';
 
 /**
- * Apps are the one place an agent is put in front of people. A web chat
- * or a messaging channel is a place on an app: publishing the place
- * stands up its gateway and records it on the distribution. So no such
- * gateway is made any other way -- not through POST /gateways, not
- * through the platform's own MCP tools, not through the CLI -- and the
- * service refuses one that names no app.
+ * Apps are the one place an agent is put in front of people or other
+ * systems. A web chat, a website widget, a messaging channel or an A2A
+ * endpoint is a place on an app: publishing the place stands up its
+ * gateway and records it on the distribution. So no such gateway is made
+ * any other way -- not through POST /gateways, not through the platform's
+ * own MCP tools, not through the CLI -- and the service refuses one that
+ * names no app.
  */
-describe('every web chat and messaging gateway belongs to an app', () => {
-  it('names the web chat and every messaging platform an app ships to, and nothing else', () => {
+describe('every app place gateway belongs to an app', () => {
+  it('names the web chat, the website widget, A2A and every messaging platform an app ships to, and nothing else', () => {
     expect([...APP_SURFACE_GATEWAY_TYPES].sort()).toEqual(
       [
         GatewayType.HOSTED_CHAT,
+        GatewayType.CHAT_WIDGET,
+        GatewayType.A2A,
         GatewayType.SLACK,
         GatewayType.DISCORD,
         GatewayType.TELEGRAM,
@@ -35,7 +38,7 @@ describe('every web chat and messaging gateway belongs to an app', () => {
         GatewayType.IRC,
       ].sort(),
     );
-    for (const type of [GatewayType.TOOLS, GatewayType.MCP, GatewayType.UTCP, GatewayType.A2A, GatewayType.OPENAI_CHAT]) {
+    for (const type of [GatewayType.TOOLS, GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS, GatewayType.ACP, GatewayType.OPENAI_CHAT]) {
       expect(isAppSurfaceGatewayType(type)).toBe(false);
     }
   });

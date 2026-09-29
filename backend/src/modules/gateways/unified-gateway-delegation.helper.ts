@@ -29,6 +29,7 @@ import { isPrivateGateway } from './private-gateway';
 import { findServableGatewayAgent } from './gateway-servable';
 import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
 import { SkillGeneratorService } from '../tools/skill-generator.service';
+import { assertOAuthScope } from '../mcp/services/mcp-oauth-scope';
 
 /**
  * Per-protocol delegation for gateways exposed under
@@ -182,6 +183,8 @@ export class UnifiedGatewayDelegation {
         { organization, gateway },
       );
       auth = result.auth;
+      // An MCP OAuth token reaches only what its scope was granted for.
+      assertOAuthScope(gateway.type, auth, body);
     }
 
     if (isChannel) {

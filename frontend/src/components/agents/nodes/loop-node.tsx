@@ -1,6 +1,7 @@
 import React from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { Repeat } from 'lucide-react'
+import { pluralized } from '@/lib/utils'
 
 export function LoopNode({ data, selected }: NodeProps) {
   return (
@@ -15,7 +16,7 @@ export function LoopNode({ data, selected }: NodeProps) {
           {data.iterableExpression ? String(data.iterableExpression).substring(0, 30) : 'No iterable set'}
         </div>
         <div className="text-xs text-muted-foreground mt-1">
-          Max: {String(data.maxIterations || 100)} iterations
+          Max: {pluralized(Number(data.maxIterations) || 100, 'iteration')}
         </div>
       </div>
       <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-rose-500 !border-rose-600" />

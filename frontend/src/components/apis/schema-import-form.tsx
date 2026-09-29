@@ -31,6 +31,7 @@ import { useNotifications } from '@/store/app'
 import { Api } from '@/types'
 
 import { SourceBox, readSource } from './source-box'
+import { pluralized } from '@/lib/utils'
 
 export function SchemaImportForm({ api }: { api: Api }) {
   const queryClient = useQueryClient()
@@ -58,7 +59,7 @@ export function SchemaImportForm({ api }: { api: Api }) {
     const jobResult = result?.result || result
     const opCount = jobResult?.operations?.length || jobResult?.operationCount || 0
     const toolCount = jobResult?.tools?.length || jobResult?.toolCount || 0
-    success('Description updated', `${opCount} operations found, ${toolCount} tools made.`)
+    success('Description updated', `${pluralized(opCount, 'operation')} found, ${pluralized(toolCount, 'tool')} made.`)
     guard.leave(detailPath)
   }
 

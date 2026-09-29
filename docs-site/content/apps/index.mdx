@@ -1,6 +1,6 @@
 # Agent Factory
 
-The **Apps** screen takes an agent you have already built and turns it into a product you ship under your own name: a hosted chat on its own address, a Slack or WhatsApp presence, a terminal command, a desktop app, or a standalone binary.
+The **Apps** screen takes an agent you have already built and turns it into a product you ship under your own name: a hosted chat on its own address, a chat widget on your own website, a Slack or WhatsApp presence, an A2A endpoint other agents call, a terminal command, a desktop app, or a standalone binary.
 
 ![The Apps list with a customer-facing product](/screenshots/apps-list.png)
 
@@ -15,15 +15,17 @@ Most ways to ship an agent keep your users tethered to the vendor: a hosted widg
    capability     ->     product          ->    where it reaches people
    ---------             ---------              ---------
    what it knows         what it is called      web       (hosted chat)
-   which models          who may use it         slack, telegram, ...
-   which tools           branding               tui       (terminal)
-   how its loop runs     cost + rate limits     desktop   (installable)
+   which models          who may use it         widget    (on your website)
+   which tools           branding               slack, telegram, ...
+   how its loop runs     cost + rate limits     a2a       (other agents)
+                                                tui       (terminal)
+                                                desktop   (installable)
                                                 binary    (one executable)
 ```
 
 - An **agent** is a capability: what it knows, which models and tools it uses, how its loop runs.
 - An **app** is a product decision: a name, a set of agents, branding, an auth mode, and spending limits.
-- A **place** (a distribution, in the API) is where that product reaches people. There is exactly one per target. The app is the only place an agent is put in front of people.
+- A **place** (a distribution, in the API) is where that product reaches people or other systems. There is exactly one per target. The app is the only place an agent is put in front of people or other agents.
 
 The separation is deliberate. The same agent can appear in an internal app and a customer-facing one at once, under different names, different auth, and different limits, without being duplicated.
 
@@ -43,6 +45,6 @@ Everything is addressed by name: `/apps/acme-support`, `/apps/acme-support/distr
 
 ## Where to go next
 
-- **[Where people use it](/apps/distributions)**: put your product on the web, in Slack, or in another chat app.
+- **[Where people use it](/apps/distributions)**: put your product on the web or your own website, in Slack or another chat app, or in front of other agents over A2A.
 - **[Downloadable Apps](/apps/builds)**: compile a terminal, desktop, or binary app on our machines.
 - **[Signing](/apps/signing)**: ship builds signed with your own certificate.

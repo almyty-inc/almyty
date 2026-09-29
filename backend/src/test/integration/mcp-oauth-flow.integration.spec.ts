@@ -27,6 +27,7 @@ import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
 import { Gateway, GatewayType, GatewayKind, GatewayStatus } from '../../entities/gateway.entity';
 import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity';
+import { OAuthClient } from '../../entities/oauth-client.entity';
 import { AuthService } from '../../modules/auth/auth.service';
 import { useIsolatedSchema, ensureSchema } from './isolated-schema.helper';
 
@@ -450,6 +451,132 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
         .expect(200);
 
       expect(res.body.error.code).toBe(-32601);
+    });
+  });
+
+  // The consent screen shows the user the scope the token will hold; the
+  // gateway has to hold the token to it. A token granted mcp:resources
+  // used to call every tool.
+  describe('OAuth scope at the gateway', () => {
+    async function tokenWithScope(scope: string): Promise<string> {
+      const reg = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/register`)
+        .send({
+          client_name: `scope-${scope}`,
+          redirect_uris: ['http://localhost:12345/callback'],
+          token_endpoint_auth_method: 'none',
+        })
+        .expect(201);
+      const verifier = crypto.randomBytes(32).toString('base64url');
+      const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+      const code = await app.get(McpOAuthService).createAuthorizationCode(reg.body.client_id, user.id, gateway.id, org.id, {
+        redirectUri: 'http://localhost:12345/callback',
+        codeChallenge: challenge,
+        codeChallengeMethod: 'S256',
+        scope,
+      });
+      const res = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/token`)
+        .send({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'http://localhost:12345/callback',
+          client_id: reg.body.client_id,
+          code_verifier: verifier,
+        })
+        .expect(200);
+      expect(res.body.scope).toBe(scope);
+      return res.body.access_token;
+    }
+
+    const call = (token: string, body: object) =>
+      request(app.getHttpServer()).post(`/${ORG_SLUG}/almyty`).set('Authorization', `Bearer ${token}`).send(body);
+
+    it('refuses tools to a token granted resources only, and says which scope it lacks', async () => {
+      const token = await tokenWithScope('mcp:resources');
+
+      const res = await call(token, {
+        jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_apis', arguments: {} },
+      }).expect(403);
+      expect(res.body).toMatchObject({ error: 'insufficient_scope', scope: 'mcp:tools' });
+
+      await call(token, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }).expect(403);
+      await call(token, { jsonrpc: '2.0', id: 1, method: 'prompts/list', params: {} }).expect(403);
+    });
+
+    it('lets that token do what it was granted, and hold the session', async () => {
+      const token = await tokenWithScope('mcp:resources');
+
+      await call(token, { jsonrpc: '2.0', id: 1, method: 'resources/list', params: {} }).expect(200);
+      await call(token, {
+        jsonrpc: '2.0', id: 1, method: 'initialize',
+        params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 't', version: '1' } },
+      }).expect(200);
+    });
+
+    it('does not let a batch smuggle a tool call past the check', async () => {
+      const token = await tokenWithScope('mcp:resources');
+
+      await call(token, [
+        { jsonrpc: '2.0', id: 1, method: 'resources/list', params: {} },
+        { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_apis', arguments: {} } },
+      ]).expect(403);
+    });
+
+    it('lets a tools token call tools', async () => {
+      const token = await tokenWithScope('mcp:tools');
+
+      const res = await call(token, {
+        jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_apis', arguments: {} },
+      }).expect(200);
+      expect(res.body.result.isError).toBeUndefined();
+    });
+  });
+
+  // Registration is anonymous. Filling a gateway's 500 client slots with
+  // throwaway registrations used to lock every real client out of it for
+  // good; unused registrations now make room, authorized ones never do.
+  describe('dynamic registration at the per-gateway cap', () => {
+    it('makes room by retiring the oldest never-authorized clients, never an authorized one', async () => {
+      const clients = ds.getRepository(OAuthClient);
+      const active = await clients.count({ where: { gatewayId: gateway.id, isActive: true } });
+      const filler = Array.from({ length: 500 - active }, (_, i) =>
+        clients.create({
+          clientId: `filler-${SUFFIX}-${i}`,
+          clientName: 'filler',
+          redirectUris: ['https://filler.example/cb'],
+          grantTypes: ['authorization_code'],
+          responseTypes: ['code'],
+          scope: 'mcp:tools',
+          tokenEndpointAuthMethod: 'none',
+          gatewayId: gateway.id,
+          organizationId: org.id,
+          isActive: true,
+        }),
+      );
+      await clients.save(filler, { chunk: 100 });
+      expect(await clients.count({ where: { gatewayId: gateway.id, isActive: true } })).toBe(500);
+
+      const authorized: Array<{ clientId: string }> = await ds.query(
+        'SELECT DISTINCT "clientId" FROM oauth_authorization_codes WHERE "gatewayId" = $1',
+        [gateway.id],
+      );
+      expect(authorized.length).toBeGreaterThan(0);
+
+      const res = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/register`)
+        .send({
+          client_name: 'real-client',
+          redirect_uris: ['http://localhost:12345/callback'],
+          token_endpoint_auth_method: 'none',
+        })
+        .expect(201);
+
+      expect(await clients.count({ where: { gatewayId: gateway.id, isActive: true } })).toBe(500);
+      expect((await clients.findOneByOrFail({ clientId: res.body.client_id })).isActive).toBe(true);
+      for (const { clientId } of authorized) {
+        expect((await clients.findOneByOrFail({ clientId })).isActive).toBe(true);
+      }
     });
   });
 });

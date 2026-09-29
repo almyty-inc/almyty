@@ -3,7 +3,12 @@ import { Client } from 'pg';
 import { EveryChatSurfaceHasAnApp1750812800000 } from '../../migrations/1750812800000-EveryChatSurfaceHasAnApp';
 import { AppAuthMode } from '../../entities/agent-app.entity';
 import { defaultLimitsFor } from '../../modules/agent-apps/agent-app.rules';
-import { APP_SURFACE_GATEWAY_TYPES } from '../../modules/gateways/app-surface';
+
+/** The types this migration wraps: the web chat and thirteen messaging platforms, frozen with it. */
+const CHAT_SURFACES = [
+  'hosted_chat', 'slack', 'discord', 'telegram', 'whatsapp', 'whatsapp_cloud', 'sms',
+  'email', 'webhook', 'google_chat', 'microsoft_teams', 'signal', 'matrix', 'irc',
+];
 
 /**
  * The EveryChatSurfaceHasAnApp migration against a real Postgres: every web
@@ -247,7 +252,7 @@ describeOrSkip('every chat surface has an app migration (real Postgres)', () => 
   });
 
   it('leaves no web chat or channel without an app, and a second run changes nothing', async () => {
-    for (const type of APP_SURFACE_GATEWAY_TYPES) await gateway(type);
+    for (const type of CHAT_SURFACES) await gateway(type);
 
     await up();
     const snapshot = async () =>
@@ -259,11 +264,11 @@ describeOrSkip('every chat surface has an app migration (real Postgres)', () => 
     const { rows } = await db.query(
       `SELECT count(*)::int AS n FROM gateways g
         WHERE g."type" = ANY($1) AND NOT EXISTS (SELECT 1 FROM agent_app_distributions d WHERE d."gatewayId" = g.id)`,
-      [[...APP_SURFACE_GATEWAY_TYPES]],
+      [CHAT_SURFACES],
     );
     expect(rows[0].n).toBe(0);
     // One agent, one app per platform: fourteen places on one app.
     expect((await db.query('SELECT count(*)::int AS n FROM agent_apps')).rows[0].n).toBe(1);
-    expect(first).toHaveLength(APP_SURFACE_GATEWAY_TYPES.size);
+    expect(first).toHaveLength(CHAT_SURFACES.length);
   });
 });

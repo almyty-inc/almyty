@@ -27,6 +27,7 @@ import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import type { ConnectionGrant, GrantPermission, GrantPrincipalType } from '@/types/connections'
+import { formatDateTime } from '@/lib/utils'
 
 export const grantsQueryKey = (connectionId: string) => ['connections', connectionId, 'grants'] as const
 
@@ -81,7 +82,7 @@ export function toPrincipalOptions(type: GrantPrincipalType, rows: unknown): Pri
 export function formatExpiry(iso: string | null | undefined): string {
   if (!iso) return 'Never'
   const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString()
+  return Number.isNaN(d.getTime()) ? iso : formatDateTime(d)
 }
 
 export interface GrantsEditorProps {

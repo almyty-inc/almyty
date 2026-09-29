@@ -5,14 +5,44 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/** Returns 'word' when n === 1, else 'words' (or a custom plural form). */
-export function pluralize(n: number, word: string, plural?: string): string {
-  return n === 1 ? word : (plural ?? word + 's');
+/** Plurals English does not form with a trailing s. */
+const IRREGULAR_PLURALS: Record<string, string> = {
+  person: 'people',
+  child: 'children',
+  ms: 'ms',
 }
 
-/** Returns 'n word(s)' with correct pluralization. */
-export function pluralized(n: number, word: string, plural?: string): string {
-  return n + ' ' + pluralize(n, word, plural);
+function pluralOf(word: string): string {
+  // Only the last word of a phrase takes the plural: "short-term note".
+  const m = /^(.*?)([A-Za-z]+)$/.exec(word)
+  if (!m) return word + 's'
+  const [, head, last] = m
+  const lower = last.toLowerCase()
+  if (IRREGULAR_PLURALS[lower]) return head + IRREGULAR_PLURALS[lower]
+  // Acronyms take a bare s: "API" -> "APIs".
+  if (last.length > 1 && last === last.toUpperCase()) return word + 's'
+  if (/[^aeiou]y$/.test(lower)) return head + last.slice(0, -1) + 'ies'
+  if (/(s|x|z|ch|sh)$/.test(lower)) return word + 'es'
+  return word + 's'
+}
+
+/**
+ * The noun alone, singular for exactly one and plural otherwise:
+ * pluralize(1, 'policy') -> 'policy', pluralize(2, 'policy') -> 'policies'.
+ * Pass `plural` for a form the rules above do not produce.
+ */
+export function pluralize(n: number, word: string, plural?: string): string {
+  return n === 1 ? word : (plural ?? pluralOf(word));
+}
+
+/**
+ * The count and its noun: pluralized(1, 'member') -> '1 member',
+ * pluralized(3, 'member') -> '3 members'. Every "{n} things" in the UI
+ * goes through here; plural-copy.test.ts holds the source to that.
+ */
+export function pluralized(n: number | null | undefined, word: string, plural?: string): string {
+  const count = n ?? 0
+  return count + ' ' + pluralize(count, word, plural);
 }
 
 export function formatDate(date: Date | string): string {

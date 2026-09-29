@@ -10,6 +10,7 @@ import { gatewaysApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
+import { pluralized } from '@/lib/utils'
 
 /**
  * The sites allowed to call a public chat surface from the browser.
@@ -85,7 +86,7 @@ export function AllowedOriginsCard({ gateway }: AllowedOriginsCardProps) {
       return
     }
     if (origins.length >= MAX_ALLOWED_ORIGINS) {
-      setDraftError(`At most ${MAX_ALLOWED_ORIGINS} sites.`)
+      setDraftError(`At most ${pluralized(MAX_ALLOWED_ORIGINS, 'site')}.`)
       return
     }
     if (!origins.includes(parsed.origin)) setOrigins([...origins, parsed.origin])

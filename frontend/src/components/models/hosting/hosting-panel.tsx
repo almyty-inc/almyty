@@ -298,7 +298,7 @@ function TimelineItem({ at, label }: { at: string; label: string }) {
       <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
       <div>
         <div>{label}</div>
-        <div className="text-muted-foreground" title={at}>
+        <div className="text-muted-foreground" title={formatDateTime(at)}>
           {formatDateTime(at)} ({formatRelativeTime(at)})
         </div>
       </div>

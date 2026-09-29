@@ -32,7 +32,7 @@ export function AgentStats({ agent }: AgentStatsProps) {
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-2">
             <Activity className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Total Runs</span>
+            <span className="text-sm text-muted-foreground">Total runs</span>
           </div>
           <div className="text-2xl font-bold mt-1">{agent.totalExecutions}</div>
         </CardContent>
@@ -41,7 +41,7 @@ export function AgentStats({ agent }: AgentStatsProps) {
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <span className="text-sm text-muted-foreground">Success Rate</span>
+            <span className="text-sm text-muted-foreground">Success rate</span>
           </div>
           <div className="text-2xl font-bold mt-1">{successRate}%</div>
         </CardContent>
@@ -50,7 +50,7 @@ export function AgentStats({ agent }: AgentStatsProps) {
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Avg Run Time</span>
+            <span className="text-sm text-muted-foreground">Avg run time</span>
           </div>
           <div className="text-2xl font-bold mt-1">
             {agent.averageExecutionTime > 0
@@ -63,7 +63,7 @@ export function AgentStats({ agent }: AgentStatsProps) {
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-2">
             <DollarSign className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Total Cost</span>
+            <span className="text-sm text-muted-foreground">Total cost</span>
           </div>
           <div className="text-2xl font-bold mt-1">
             {agent.totalCost > 0 ? `$${agent.totalCost.toFixed(4)}` : '--'}

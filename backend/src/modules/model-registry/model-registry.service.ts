@@ -2,8 +2,6 @@ import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { promises as fs } from 'fs';
-import { join } from 'path';
 
 import { Credential, CredentialType } from '../../entities/credential.entity';
 import { Organization } from '../../entities/organization.entity';
@@ -13,6 +11,7 @@ import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { ModelManifest, manifestSha, totalSizeBytes, validateManifest } from './manifest';
 import { ParsedRegistryUri, parseRegistryUri } from './registry-uri';
 import { hfFetch } from './hf-fetch';
+import { readRegistryFile } from './registry-file';
 
 /** The registry connection's credential type. */
 export const REGISTRY_CREDENTIAL_TYPE = CredentialType.S3_COMPATIBLE;
@@ -372,8 +371,8 @@ export class ModelRegistryService implements OnModuleInit {
         return object.body.toString('utf8');
       }
       case 'file': {
-        const path = join(parsed.location, file);
-        return fs.readFile(path, 'utf8');
+        // Only under the operator's MODEL_REGISTRY_FILE_ROOT; see registry-file.ts.
+        return readRegistryFile(parsed.location, file);
       }
       case 'hf': {
         // Read-only, optional: the hub serves raw files over HTTPS.

@@ -29,6 +29,16 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { CaptchaService } from './captcha.service';
 import { normalizeEmail, isDisposableEmail } from './email-normalization';
 import { effectiveMemberships, isEffectiveMembership } from '../../common/authorization/membership';
+import { AuthSession } from '../../entities/auth-session.entity';
+import { AuthSessionService } from './auth-session.service';
+import { EMAIL_VERIFY_TOKEN_AUDIENCE, REFRESH_TOKEN_AUDIENCE, isAccessTokenPayload } from './token-kinds';
+
+/**
+ * A bcrypt hash (cost 12, same as every stored hash) of a random password
+ * nobody knows. validateUser() compares against it when there is no usable
+ * account, so an unknown address costs the same hash as a known one.
+ */
+const TIMING_DUMMY_HASH = '$2b$12$/L3/Es14ZGOIcLxbLdji.edavmjGlw0H052FUUWXbK4jkVKBG30Eu';
 
 export interface JwtPayload {
   sub: string;
@@ -44,6 +54,8 @@ export interface JwtPayload {
   tv?: number;
   /** Set on an SSO session: the one organization it may act in. See sso-session.ts. */
   sso?: string;
+  /** The server-side session (AuthSession) the token belongs to. */
+  sid?: string;
   iat?: number;
   exp?: number;
 }
@@ -69,6 +81,7 @@ export class AuthService {
     private readonly auditLogService: AuditLogService,
     private readonly mailService: MailService,
     private readonly referralsService: ReferralsService,
+    private readonly authSessions: AuthSessionService,
     // CAPTCHA verification (ships dark; no-op unless a secret is configured).
     // @Optional() so unit tests and community builds that don't provide it
     // fall back to "no CAPTCHA enforced".
@@ -346,12 +359,17 @@ export class AuthService {
       relations: { organizationMemberships: { organization: true } },
     });
 
-    if (!user || !user.isActive) {
-      return null;
-    }
-
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    if (!isPasswordValid) {
+    // One bcrypt comparison on every path. Returning early for an unknown
+    // or inactive address answered in a few milliseconds where a real
+    // account took a cost-12 hash, so the response time said which
+    // addresses have accounts. The comparison against TIMING_DUMMY_HASH
+    // (same cost, a password nobody knows) always fails.
+    const usable = !!user && user.isActive && !!user.passwordHash;
+    const isPasswordValid = await bcrypt.compare(
+      typeof password === 'string' ? password : '',
+      usable ? user.passwordHash : TIMING_DUMMY_HASH,
+    );
+    if (!usable || !isPasswordValid) {
       return null;
     }
 
@@ -411,10 +429,16 @@ export class AuthService {
    * `ssoOrganizationId` marks a session minted from that organization's
    * SSO assertion: the token lists that organization only and carries the
    * `sso` claim JwtStrategy confines the session with (see sso-session.ts).
+   *
+   * Every call without `session` starts a new server-side session (see
+   * AuthSession); both tokens name it in `sid`, which is what logout and
+   * refresh-reuse detection revoke. refreshToken() passes the session it
+   * just rotated, so a refresh continues the session rather than forking
+   * one, and keeps its SSO scope.
    */
   async generateTokens(
     user: User,
-    options: { ssoOrganizationId?: string } = {},
+    options: { ssoOrganizationId?: string; session?: AuthSession } = {},
   ): Promise<AuthTokens> {
     // Load user organizations for JWT payload
     const userWithOrgs = await this.userRepository.findOne({
@@ -422,7 +446,10 @@ export class AuthService {
       relations: { organizationMemberships: { organization: true } },
     });
 
-    const sso = options.ssoOrganizationId;
+    const session =
+      options.session ??
+      (await this.authSessions.start(user.id, { ssoOrganizationId: options.ssoOrganizationId }));
+    const sso = session.ssoOrganizationId ?? undefined;
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -436,13 +463,14 @@ export class AuthService {
           role: membership.role,
         })),
       tv: userWithOrgs.tokenVersion ?? 0,
+      sid: session.id,
       ...(sso ? { sso } : {}),
     };
 
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = this.jwtService.sign(
-      { sub: user.id, type: 'refresh', tv: userWithOrgs.tokenVersion ?? 0 },
-      { expiresIn: '7d' }
+      { sub: user.id, type: 'refresh', tv: userWithOrgs.tokenVersion ?? 0, sid: session.id, jti: session.refreshJti },
+      { expiresIn: '7d', audience: REFRESH_TOKEN_AUDIENCE },
     );
 
     return {
@@ -452,11 +480,16 @@ export class AuthService {
     };
   }
 
+  /**
+   * Redeem a refresh token for a new pair. The token is single use: its
+   * `jti` is swapped for a new one on the session, and presenting a
+   * redeemed one again revokes the session (AuthSessionService.rotate).
+   */
   async refreshToken(refreshToken: string): Promise<AuthTokens> {
     try {
-      const payload = this.jwtService.verify(refreshToken);
-      
-      if (payload.type !== 'refresh') {
+      const payload = this.jwtService.verify(refreshToken, { audience: REFRESH_TOKEN_AUDIENCE });
+
+      if (payload.type !== 'refresh' || typeof payload.sid !== 'string' || typeof payload.jti !== 'string') {
         throw new UnauthorizedException('Invalid refresh token');
       }
 
@@ -470,15 +503,38 @@ export class AuthService {
       }
 
       // Reject refresh tokens minted before a tokenVersion bump (password
-      // change/reset). Missing claim => 0 for legacy-token compatibility.
+      // change/reset). Missing claim => 0.
       if ((payload.tv ?? 0) !== (user.tokenVersion ?? 0)) {
         throw new UnauthorizedException('Refresh token has been revoked');
       }
 
-      return this.generateTokens(user);
+      const session = await this.authSessions.rotate(payload.sid, user.id, payload.jti);
+      return this.generateTokens(user, { session });
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
+  }
+
+  /**
+   * End the session the presented access token belongs to. Clearing the
+   * cookie alone left the token itself good for the rest of its 24 hours,
+   * so a copy taken before logout (a shared machine, a proxy log) kept
+   * working. The token is read without its expiry so an expired session
+   * cookie still ends its session; its signature is still checked, so
+   * nobody can log out a session they never held.
+   */
+  async logout(accessToken: string | undefined | null): Promise<void> {
+    if (!accessToken) return;
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(accessToken, { ignoreExpiration: true });
+    } catch {
+      return;
+    }
+    if (!isAccessTokenPayload(payload) || typeof payload.sid !== 'string' || typeof payload.sub !== 'string') {
+      return;
+    }
+    await this.authSessions.revoke(payload.sid, 'logout', payload.sub);
   }
 
   async createApiKey(userId: string, createApiKeyDto: CreateApiKeyDto): Promise<{ apiKey: string; keyData: ApiKey }> {
@@ -600,9 +656,19 @@ export class AuthService {
     return crypto.createHash('sha256').update(key).digest('hex');
   }
 
+  /**
+   * The stored form of a password-reset token. Only the SHA-256 is kept:
+   * the token is a bearer credential for the account for an hour, and a
+   * copy of the users table (a backup, a read replica, a support query)
+   * must not be one. 32 random bytes need no salt or slow hash.
+   */
+  static hashResetToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
   async resetPassword(email: string): Promise<void> {
     const user = await this.userRepository.findOne({ where: { email } });
-    
+
     if (!user) {
       // Don't reveal whether user exists
       return;
@@ -612,31 +678,31 @@ export class AuthService {
     const resetExpires = new Date();
     resetExpires.setHours(resetExpires.getHours() + 1); // 1 hour expiry
 
-    user.resetPasswordToken = resetToken;
-    user.resetPasswordExpires = resetExpires;
-    
-    await this.userRepository.save(user);
+    await this.userRepository.update(
+      { id: user.id },
+      { resetPasswordToken: AuthService.hashResetToken(resetToken), resetPasswordExpires: resetExpires },
+    );
 
-    // Deliver the reset link. MailService fails soft (logs in dev, returns
-    // false on provider error, never throws), so a mail outage can't break
-    // the request or leak whether the address exists.
-    await this.mailService.sendPasswordReset(user.email, resetToken);
+    // Deliver the reset link. Not awaited: the response must take as long
+    // for an unknown address as for a known one, and a provider round trip
+    // is exactly the difference an attacker would time. MailService fails
+    // soft (logs, returns false), so nothing is lost by not waiting.
+    this.mailService.sendPasswordReset(user.email, resetToken).catch(() => {});
   }
 
   async confirmPasswordReset(token: string, newPassword: string): Promise<void> {
     // Defense-in-depth: an empty/null token would `WHERE resetPasswordToken IS NULL`
-    // and match any user that doesn't currently have a reset in flight. That
-    // attack only works if such a user ALSO has a non-null resetPasswordExpires
-    // (which today is guarded by the null-expires check below) — but the
-    // invariant is brittle and easy to violate later. Reject empty tokens up
-    // front so the brittle invariant is never the only thing protecting us.
+    // and match any user that doesn't currently have a reset in flight.
+    // Reject empty tokens up front so that is never the only thing
+    // protecting us.
     if (!token || typeof token !== 'string') {
       throw new BadRequestException('Invalid or expired reset token');
     }
 
+    const tokenHash = AuthService.hashResetToken(token);
     const user = await this.userRepository.findOne({
       where: {
-        resetPasswordToken: token,
+        resetPasswordToken: tokenHash,
       },
     });
 
@@ -645,18 +711,28 @@ export class AuthService {
     }
 
     const saltRounds = 12;
-    user.passwordHash = await bcrypt.hash(newPassword, saltRounds);
-    user.resetPasswordToken = null;
-    user.resetPasswordExpires = null;
-    // Revoke all outstanding access/refresh tokens for this user.
-    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
-
-    await this.userRepository.save(user);
+    const passwordHash = await bcrypt.hash(newPassword, saltRounds);
+    // Single use under concurrency too: only the request that still finds
+    // this token on the row consumes it. Two simultaneous submissions of
+    // one link cannot both set a password.
+    const consumed = await this.userRepository.update(
+      { id: user.id, resetPasswordToken: tokenHash },
+      {
+        passwordHash,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+        // Revoke all outstanding access/refresh tokens for this user.
+        tokenVersion: (user.tokenVersion ?? 0) + 1,
+      },
+    );
+    if (!consumed.affected) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
-    
+
     if (!user) {
       throw new BadRequestException('User not found');
     }
@@ -670,57 +746,48 @@ export class AuthService {
     user.passwordHash = await bcrypt.hash(newPassword, saltRounds);
     // Revoke all outstanding access/refresh tokens for this user.
     user.tokenVersion = (user.tokenVersion ?? 0) + 1;
-    
+    // And any reset link still in flight: it was issued for the old
+    // password, and would otherwise set a new one for an hour after this.
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+
     await this.userRepository.save(user);
   }
 
   /**
-   * Verify an email address from a token link. Primary path: a
-   * purpose-scoped signed JWT minted by requestEmailVerification()
-   * (carries its own expiry, no DB token storage needed). Legacy
-   * fallback: match the stored `verificationToken` column so any
-   * previously issued DB tokens keep working.
+   * Verify an email address from a token link: a purpose-scoped signed
+   * JWT minted by requestEmailVerification(), carrying its own expiry and
+   * the address it was sent to.
    *
-   * Verification is NON-BLOCKING: login and every other flow work for
-   * unverified users; only verification-gated features (e.g. referral
-   * rewards) check `verifiedAt`.
+   * There used to be a second path that matched the token against the
+   * `users.verificationToken` column in plaintext. Nothing has written that
+   * column for a long time, so it verified no one, but it was a lookup by a
+   * bearer secret stored in the clear; it is gone.
    */
   async verifyEmail(token: string): Promise<void> {
-    // Same defense-in-depth as confirmPasswordReset: an empty/null
-    // token would `WHERE verificationToken IS NULL` under TypeORM
-    // and match any user who has already verified (i.e. had their
-    // token cleared to null). Reject empty tokens up front.
     if (!token || typeof token !== 'string') {
       throw new BadRequestException('Invalid verification token');
     }
 
-    let user: User | null = null;
-
-    // Signed-JWT path.
+    let payload: any;
     try {
-      const payload: any = this.jwtService.verify(token);
-      if (payload?.purpose === 'email_verify' && payload?.sub) {
-        user = await this.userRepository.findOne({ where: { id: payload.sub } });
-        // The link is bound to the address it was sent to — if the user
-        // changed their email since, the old link must not verify the
-        // new address.
-        if (user && payload.email && user.email !== payload.email) {
-          throw new BadRequestException('Verification link is for a different email address');
-        }
-      }
-    } catch (err) {
-      if (err instanceof BadRequestException) throw err;
-      // Not a (valid) JWT — fall through to the legacy DB-token path.
+      payload = this.jwtService.verify(token, { audience: EMAIL_VERIFY_TOKEN_AUDIENCE });
+    } catch {
+      throw new BadRequestException('Invalid verification token');
+    }
+    if (payload?.purpose !== 'email_verify' || typeof payload?.sub !== 'string') {
+      throw new BadRequestException('Invalid verification token');
     }
 
-    if (!user) {
-      user = await this.userRepository.findOne({
-        where: { verificationToken: token },
-      });
-    }
-
+    const user = await this.userRepository.findOne({ where: { id: payload.sub } });
     if (!user) {
       throw new BadRequestException('Invalid verification token');
+    }
+    // The link is bound to the address it was sent to — if the user
+    // changed their email since, the old link must not verify the new
+    // address.
+    if (user.email !== payload.email) {
+      throw new BadRequestException('Verification link is for a different email address');
     }
 
     const wasAlreadyVerified = !!user.verifiedAt;
@@ -783,14 +850,21 @@ export class AuthService {
       return;
     }
     const token = this.mintEmailVerificationToken(user);
-    await this.mailService.sendEmailVerification(user.email, token, user.firstName);
+    // Not awaited: the response must take as long for an address with no
+    // unverified account as for one that gets a mail, or the delivery time
+    // is the oracle the neutral message was meant to remove.
+    this.mailService.sendEmailVerification(user.email, token, user.firstName).catch(() => {});
   }
 
-  /** Purpose-scoped signed verification token (7 day expiry). */
+  /**
+   * Purpose-scoped signed verification token (7 day expiry). Its own
+   * audience, so it verifies nowhere but verifyEmail(): the link travels
+   * in a URL and a mailbox, and must never work as a session.
+   */
   private mintEmailVerificationToken(user: User): string {
     return this.jwtService.sign(
       { sub: user.id, email: user.email, purpose: 'email_verify' },
-      { expiresIn: '7d' },
+      { expiresIn: '7d', audience: EMAIL_VERIFY_TOKEN_AUDIENCE },
     );
   }
 
@@ -827,6 +901,10 @@ export class AuthService {
       user.isVerified = moved.isVerified;
       user.verifiedAt = moved.verifiedAt;
       user.verificationToken = moved.verificationToken;
+      // The row read above still holds the reset link changeEmail just
+      // killed; the save below would write it back.
+      user.resetPasswordToken = moved.resetPasswordToken;
+      user.resetPasswordExpires = moved.resetPasswordExpires;
     }
 
     return this.userRepository.save(user);
@@ -877,10 +955,20 @@ export class AuthService {
 
     const previous = user.email;
     // Only these columns, and only while the address is still the one the
-    // password was checked against.
+    // password was checked against. A reset link already mailed to the old
+    // address dies with the move: it would otherwise hand the account back
+    // to whoever reads that mailbox.
     const moved = await this.userRepository.update(
       { id: userId, email: previous },
-      { email: next, normalizedEmail: normalized, isVerified: false, verifiedAt: null, verificationToken: null },
+      {
+        email: next,
+        normalizedEmail: normalized,
+        isVerified: false,
+        verifiedAt: null,
+        verificationToken: null,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+      },
     );
     if (!moved.affected) {
       throw new BadRequestException('Your account changed while saving. Reload and try again.');

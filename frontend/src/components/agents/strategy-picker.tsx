@@ -3,7 +3,7 @@ import { Check, Workflow } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
-import { cn } from '@/lib/utils'
+import { cn, pluralized } from '@/lib/utils'
 
 /**
  * Choosing an execution shape.
@@ -150,7 +150,7 @@ export function StrategyPicker({
                   {slot}
                 </span>
               ))}
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{s.steps} steps</span>
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{pluralized(s.steps, 'step')}</span>
             </div>
 
             {unfillable.length > 0 && (

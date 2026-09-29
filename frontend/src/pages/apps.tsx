@@ -128,7 +128,7 @@ export function AppsPage() {
                     <p className="text-xs text-muted-foreground">
                       {app.agentIds.length === 0
                         ? 'No agents yet'
-                        : `${app.agentIds.length} agent${app.agentIds.length === 1 ? '' : 's'}`}
+                        : pluralized(app.agentIds.length, 'agent')}
                       {shipped.length > 0 && (
                         <>
                           {' · '}

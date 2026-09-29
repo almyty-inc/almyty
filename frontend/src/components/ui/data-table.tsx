@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
+import { pluralized } from '@/lib/utils'
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -260,7 +261,7 @@ export function DataTable<TData, TValue>({
           {!hideSelectionCount && (
             <div className="flex-1 text-sm text-muted-foreground">
               {table.getFilteredSelectedRowModel().rows.length} of{" "}
-              {table.getFilteredRowModel().rows.length} row(s) selected.
+              {pluralized(table.getFilteredRowModel().rows.length, 'row')} selected.
             </div>
           )}
           {hideSelectionCount && manualPagination && pageCount !== undefined && pageIndex !== undefined ? (

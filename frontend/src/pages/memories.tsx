@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { memoriesApi, type MemoryTier, type MemoryMode } from '@/lib/api'
-import { formatDateTime } from '@/lib/utils'
+import { formatDateTime, pluralized } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { TeamFilter, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
@@ -673,7 +673,7 @@ function ConsolidationCard({ orgId }: { orgId: string }) {
       } else {
         notify.success(
           'Memories tidied',
-          `${r.consolidated_facts} lasting fact(s) written, ${r.superseded} short-term note(s) folded in`,
+          `${pluralized(r.consolidated_facts, 'lasting fact')} written, ${pluralized(r.superseded, 'short-term note')} folded in`,
         )
       }
       // The toast counts rows that the Memories tab was still listing unchanged.
@@ -701,7 +701,7 @@ function ConsolidationCard({ orgId }: { orgId: string }) {
         <div className="text-xs text-muted-foreground">
           Last run: {last.skipped
             ? <>skipped: {last.reason}</>
-            : <>{last.consolidated_facts} facts written, {last.superseded} notes folded in</>
+            : <>{pluralized(last.consolidated_facts, 'fact')} written, {pluralized(last.superseded, 'note')} folded in</>
           }
         </div>
       )}

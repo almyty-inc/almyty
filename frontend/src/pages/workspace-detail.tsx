@@ -10,7 +10,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { workspacesApi } from '@/lib/api'
-import { cn, formatRelativeTime } from '@/lib/utils'
+import { cn, formatRelativeTime, formatDateTime } from '@/lib/utils'
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { useNotifications } from '@/store/app'
 import { workspaceStatusVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
@@ -139,11 +139,11 @@ export function WorkspaceDetailPage() {
           <Row
             label="TTL"
             value={ws.ttlAt
-              ? <span title={ws.ttlAt}>{ws.status === 'active' ? `expires ${formatRelativeTime(ws.ttlAt)}` : ws.ttlAt}</span>
+              ? <span title={formatDateTime(ws.ttlAt)}>{ws.status === 'active' ? `expires ${formatRelativeTime(ws.ttlAt)}` : formatDateTime(ws.ttlAt)}</span>
               : <span className="text-muted-foreground">none</span>}
           />
-          <Row label="Created" value={<span title={ws.createdAt}>{formatRelativeTime(ws.createdAt)}</span>} />
-          {ws.closedAt && <Row label="Closed" value={<span title={ws.closedAt}>{formatRelativeTime(ws.closedAt)}</span>} />}
+          <Row label="Created" value={<span title={formatDateTime(ws.createdAt)}>{formatRelativeTime(ws.createdAt)}</span>} />
+          {ws.closedAt && <Row label="Closed" value={<span title={formatDateTime(ws.closedAt)}>{formatRelativeTime(ws.closedAt)}</span>} />}
         </CardContent>
       </Card>
 

@@ -23,7 +23,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
-import { formatDateTime } from '@/lib/utils'
+import { formatDateTime, pluralized } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/empty-state'
 import { runStatusVariant, formatDuration } from './constants'
 import type { AgentRun } from '@/types'
@@ -46,7 +46,7 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Autonomous runs</CardTitle>
-          <Badge variant="outline">{runs.length} run{runs.length !== 1 ? 's' : ''}</Badge>
+          <Badge variant="outline">{pluralized(runs.length, 'run')}</Badge>
         </div>
         <CardDescription className="text-xs">
           Runs this agent made in autonomous mode, step by step
@@ -56,14 +56,14 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
         {runs.length === 0 ? (
           // A tab called "Runs" that never shows the run you just made is a
           // trap. This one only ever lists autonomous runs; a workflow agent's
-          // runs land under Recent Runs on Overview, so say so.
+          // runs land under Recent runs on Overview, so say so.
           <EmptyState
             icon={Bot}
             title="No autonomous runs yet"
             description={
               <>
                 Runs appear here once this agent runs in autonomous mode. A workflow agent&rsquo;s runs
-                are listed under <span className="font-medium">Recent Runs</span> on the Overview tab
+                are listed under <span className="font-medium">Recent runs</span> on the Overview tab
                 instead.
               </>
             }

@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -17,6 +16,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { organizationsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
+import { pluralized, formatDate } from '@/lib/utils'
 
 interface MembersAndTeamsTabProps {
   organizationId?: string
@@ -297,13 +297,10 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
 
   return (
     <>
-    <Tabs defaultValue="members" className="space-y-4">
-      <TabsList>
-        <TabsTrigger value="members">Members</TabsTrigger>
-        <TabsTrigger value="teams">Teams</TabsTrigger>
-      </TabsList>
-
-      <TabsContent value="members" className="space-y-4">
+    {/* Members and teams on one page, members first: two short lists do
+        not need a third row of tabs under the settings sections. */}
+    <div className="space-y-6">
+      <section aria-label="Members" className="space-y-4" data-testid="members-section">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
@@ -424,7 +421,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                     <div>
                       <div className="font-medium">{invite.email}</div>
                       <div className="text-sm text-muted-foreground">
-                        {invite.isExpired ? 'Expired' : `Expires ${new Date(invite.inviteExpiresAt).toLocaleDateString()}`}
+                        {invite.isExpired ? 'Expired' : `Expires ${formatDate(invite.inviteExpiresAt)}`}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -455,9 +452,9 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
             </CardContent>
           </Card>
         )}
-      </TabsContent>
+      </section>
 
-      <TabsContent value="teams" className="space-y-4">
+      <section aria-label="Teams" className="space-y-4" data-testid="teams-section">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
@@ -537,12 +534,12 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                         )}
                         {team.createdAt && (
                           <p className="text-xs text-muted-foreground mt-1">
-                            Created {new Date(team.createdAt).toLocaleDateString()}
+                            Created {formatDate(team.createdAt)}
                           </p>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline">{team.members?.length || 0} members</Badge>
+                        <Badge variant="outline">{pluralized(team.members?.length, 'member')}</Badge>
                         <Button 
                           variant="ghost" 
                           size="sm"
@@ -652,7 +649,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                     
                     {team.members && team.members.length > 0 && (
                       <div className="mt-4 pt-4 border-t space-y-3">
-                        <div className="text-sm font-medium">Team Members</div>
+                        <div className="text-sm font-medium">Team members</div>
                         <div className="space-y-2">
                           {team.members.map((member: any) => (
                             <div key={member.userId} className="flex items-center justify-between p-3 bg-muted rounded-lg">
@@ -716,8 +713,8 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
             )}
           </CardContent>
         </Card>
-      </TabsContent>
-    </Tabs>
+      </section>
+    </div>
       {confirmDialog}
     </>
   )

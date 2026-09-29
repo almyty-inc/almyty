@@ -37,7 +37,7 @@ import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { AdapterRefusal, CreateModelDeploymentBody, ModelAdapter, ModelDeployment } from '@/types/deployments'
 import type { ModelCard, UpdateModelBody } from '@/types/models'
-import { cn } from '@/lib/utils'
+import { cn, pluralized } from '@/lib/utils'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 type CheckOutcome = { ok: true; models: number } | { ok: false; message: string }
@@ -199,7 +199,7 @@ export function ProviderPage() {
             outcome.ok ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200' : 'border-destructive/30 bg-destructive/5 text-destructive',
           )}
         >
-          {outcome.ok ? `Key works. ${outcome.models} model${outcome.models === 1 ? '' : 's'}.` : outcome.message}
+          {outcome.ok ? `Key works. ${pluralized(outcome.models, 'model')}.` : outcome.message}
         </p>
       )}
 

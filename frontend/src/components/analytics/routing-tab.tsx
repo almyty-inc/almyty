@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
+import { pluralized } from '@/lib/utils'
 
 /**
  * All-model failure rate: the share of requests where EVERY model tried
@@ -89,7 +90,7 @@ export function RoutingTab({ agentNames = {} }: { agentNames?: Record<string, st
         <CardContent>
           {reportable.length === 0 ? (
             <p className="text-sm text-muted-foreground" data-testid="routing-no-reportable">
-              Not enough comparable requests yet. An agent needs {data?.minimumRequests} requests where more than one model
+              Not enough comparable requests yet. An agent needs {pluralized(data?.minimumRequests, 'request')} where more than one model
               was tried before a rate means anything.
             </p>
           ) : (

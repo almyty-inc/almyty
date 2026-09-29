@@ -19,6 +19,7 @@ import {
 import { useOnboarding, useOnboardingPreferences } from '@/components/onboarding/use-onboarding'
 import { useOrganizationStore } from '@/store/organization'
 import { orgSlugOf } from '@/lib/gateway-connect'
+import { pluralized } from '@/lib/utils'
 
 /**
  * The guide to the whole platform, organised by the jobs people come to
@@ -60,7 +61,7 @@ export function GuidePage() {
     <div className="space-y-6">
       <PageHeader
         title="Guide"
-        description={`What you can do with almyty, and how far you are: ${done} of ${total} steps done. Steps tick themselves off when the thing exists, however you made it.`}
+        description={`What you can do with almyty, and how far you are: ${done} of ${pluralized(total, 'step')} done. Steps tick themselves off when the thing exists, however you made it.`}
         actions={
           <Button
             variant="outline"

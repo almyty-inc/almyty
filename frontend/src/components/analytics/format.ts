@@ -1,5 +1,7 @@
 /* Shared formatting helpers for the analytics tabs. */
 
+import { formatDate as calendarDate } from '@/lib/utils'
+
 export function formatMs(ms: number): string {
   if (!ms || ms === 0) return '--'
   if (ms < 1) return '<1ms'
@@ -15,7 +17,7 @@ export function formatDate(date: string | null): string {
   if (diff < 60000) return 'Just now'
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-  return d.toLocaleDateString()
+  return calendarDate(d)
 }
 
 export function formatNumber(n: number): string {

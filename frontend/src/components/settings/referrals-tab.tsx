@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/table'
 import { referralsApi } from '@/lib/api'
 import { useCopy } from '@/lib/clipboard'
+import { formatDate } from '@/lib/utils'
 
 const STATUS_LABELS: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   pending: { label: 'Pending', variant: 'secondary' },
@@ -111,13 +112,13 @@ export function ReferralsTab() {
                   const status = STATUS_LABELS[referral.status] ?? STATUS_LABELS.pending
                   return (
                     <TableRow key={referral.id}>
-                      <TableCell>{new Date(referral.createdAt).toLocaleDateString()}</TableCell>
+                      <TableCell>{formatDate(referral.createdAt)}</TableCell>
                       <TableCell>
                         <Badge variant={status.variant}>{status.label}</Badge>
                       </TableCell>
                       <TableCell>
                         {referral.qualifiedAt
-                          ? new Date(referral.qualifiedAt).toLocaleDateString()
+                          ? formatDate(referral.qualifiedAt)
                           : '—'}
                       </TableCell>
                       <TableCell className="text-right">{referral.rewardDays}</TableCell>

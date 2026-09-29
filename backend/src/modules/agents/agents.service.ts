@@ -15,6 +15,7 @@ import { User } from '../../entities/user.entity';
 import { AgentAuditService } from './agent-audit.service';
 import { AgentCollaboration, collaborationProblems } from './collaboration-participants';
 import { AgentModels, agentModelsProblems, syncMainRole } from './autonomous-models';
+import { parseLabelRequirements } from '../runner/runner-labels';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
 import {
   assertAttachable,
@@ -54,7 +55,7 @@ export interface CreateAgentInput {
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
   memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
-  agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean };
+  agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean; runnerLabels?: Record<string, string> | string };
   collaboration?: AgentCollaboration | null;
   models?: AgentModels | null;
   variables?: Record<string, any>;
@@ -78,7 +79,7 @@ export interface UpdateAgentInput {
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
   memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
-  agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean };
+  agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean; runnerLabels?: Record<string, string> | string };
   collaboration?: AgentCollaboration | null;
   models?: AgentModels | null;
   variables?: Record<string, any>;
@@ -370,6 +371,7 @@ export class AgentsService {
 
       this.assertWebhookUrl(createDto.webhookUrl);
       this.assertCollaboration(createDto.collaboration);
+      normaliseRunnerLabels(createDto.agentConfig);
       this.assertModels(createDto.models);
       await this.assertToolsInOrg(createDto.toolIds, organizationId);
 
@@ -453,7 +455,8 @@ export class AgentsService {
         modelConfig: next.modelConfig,
         models: next.models,
         memoryConfig: createDto.memoryConfig || null,
-        agentConfig: createDto.agentConfig || null,
+        // runnerLabels is an object by now (normaliseRunnerLabels, above).
+        agentConfig: (createDto.agentConfig as Agent['agentConfig']) || null,
         collaboration: createDto.collaboration || null,
         variables: createDto.variables || {},
         settings: createDto.settings || {},
@@ -652,6 +655,7 @@ export class AgentsService {
 
     this.assertWebhookUrl(updateDto.webhookUrl);
     this.assertCollaboration(updateDto.collaboration);
+    normaliseRunnerLabels(updateDto.agentConfig);
     this.assertModels(updateDto.models);
     await this.assertToolsInOrg(updateDto.toolIds, agent.organizationId);
 
@@ -1003,4 +1007,16 @@ export class AgentsService {
    * - Parallel nodes should have 2+ outgoing edges
    * - Sub-agent references must exist and not reference self
    */
+}
+
+/**
+ * The machine an agent's runner-backed tools run on: label requirements
+ * (`gpu=yes`) typed as text or sent as an object, stored as an object.
+ * Empty clears them. A malformed entry is a 400 naming it.
+ */
+export function normaliseRunnerLabels(agentConfig: { runnerLabels?: Record<string, string> | string } | null | undefined): void {
+  if (!agentConfig || agentConfig.runnerLabels === undefined) return;
+  const labels = parseLabelRequirements(agentConfig.runnerLabels);
+  if (Object.keys(labels).length > 0) agentConfig.runnerLabels = labels;
+  else delete agentConfig.runnerLabels;
 }

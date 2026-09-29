@@ -85,10 +85,10 @@ export function ApisPage() {
       if (failed > 0) {
         warning(
           'Some tools could not be generated',
-          `${generated} created, ${failed} failed out of ${(result as any)?.total ?? generated + failed} operations.`,
+          `${generated} created, ${failed} failed out of ${pluralized((result as any)?.total ?? generated + failed, 'operation')}.`,
         )
       } else {
-        success('Tools generated', `${generated} tools have been generated successfully.`)
+        success('Tools generated', `${pluralized(generated, 'tool')} generated.`)
       }
     },
     onError: (err: any) => {

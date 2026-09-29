@@ -40,7 +40,7 @@ import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 // Import related modules
 import { ToolsModule } from '../tools/tools.module';
 import { GatewaysModule } from '../gateways/gateways.module';
-import { DEV_ONLY_JWT_SECRET } from '../auth/dev-jwt-secret';
+import { jwtSecretOrDevFallback } from '../auth/dev-jwt-secret';
 
 @Module({
   imports: [
@@ -66,17 +66,11 @@ import { DEV_ONLY_JWT_SECRET } from '../auth/dev-jwt-secret';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const secret = config.get<string>('JWT_SECRET');
-        if (!secret && process.env.NODE_ENV === 'production') {
-          throw new Error(
-            'JWT_SECRET environment variable is required in production. ' +
-              'Refusing to start the MCP module with an undefined signing key.',
-          );
-        }
+        const secret = jwtSecretOrDevFallback(config.get<string>('JWT_SECRET'), 'McpModule');
         return {
-          secret: secret || DEV_ONLY_JWT_SECRET,
-          signOptions: { issuer: 'almyty', audience: 'almyty-api' },
-          verifyOptions: { issuer: 'almyty', audience: 'almyty-api' },
+          secret,
+          signOptions: { issuer: 'almyty', audience: 'almyty-api', algorithm: 'HS256' },
+          verifyOptions: { issuer: 'almyty', audience: 'almyty-api', algorithms: ['HS256'] },
         };
       },
     }),

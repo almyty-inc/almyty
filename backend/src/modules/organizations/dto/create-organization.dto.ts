@@ -4,8 +4,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OrganizationSettings } from '../../../entities/organization.entity';
 import { OrganizationSettingsConstraint } from './organization-settings.dto';
 
-const stripHtml = ({ value }: { value: unknown }) =>
-  typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
+import { stripHtmlTransform as stripHtml } from '../../../common/security/strip-tags';
 
 export class CreateOrganizationDto {
   @ApiProperty({

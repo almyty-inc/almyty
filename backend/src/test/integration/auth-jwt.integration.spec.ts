@@ -22,12 +22,41 @@
  */
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
-
 import { AuthService, JwtPayload } from '../../modules/auth/auth.service';
+import { AuthSessionService } from '../../modules/auth/auth-session.service';
+import { randomUUID } from 'crypto';
 import { User } from '../../entities/user.entity';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 
 const TEST_SECRET = 'test-jwt-secret-0123456789abcdef';
+
+// Stands in for AuthSessionService (the Postgres-backed original is
+// exercised in auth-session-lifecycle.integration.spec.ts): one session
+// per start(), rotate() swaps the refresh id and revokes on a stale one.
+const sessionRows = new Map<string, any>();
+const memorySessions = {
+  start: async (userId: string, options: { ssoOrganizationId?: string } = {}) => {
+    const row = {
+      id: randomUUID(),
+      userId,
+      refreshJti: AuthSessionService.newJti(),
+      ssoOrganizationId: options.ssoOrganizationId ?? null,
+      revokedAt: null as Date | null,
+    };
+    sessionRows.set(row.id, row);
+    return { ...row };
+  },
+  rotate: async (sessionId: string, userId: string, jti: string) => {
+    const row = sessionRows.get(sessionId);
+    if (!row || row.userId !== userId || row.revokedAt) throw new UnauthorizedException();
+    if (row.refreshJti !== jti) {
+      row.revokedAt = new Date();
+      throw new UnauthorizedException();
+    }
+    row.refreshJti = AuthSessionService.newJti();
+    return { ...row };
+  },
+};
 
 // Build an AuthService that:
 //   - uses a REAL @nestjs/jwt JwtService (with a test secret)
@@ -80,6 +109,7 @@ function buildService(opts: {
     { log: jest.fn(), logCreate: jest.fn(), logUpdate: jest.fn(), logDelete: jest.fn() } as any,
     { sendPasswordReset: jest.fn().mockResolvedValue(true) } as any, // mailService
     { attributeSignup: jest.fn().mockResolvedValue(null) } as any, // referralsService
+    memorySessions as any,
   );
 
   return { service, jwt };
@@ -137,6 +167,26 @@ describe('AuthService — real JWT integration', () => {
       // one (same payload + same iat second) — we don't pin equality.
     });
 
+    it('redeems a refresh token once; a replay ends the session for both holders', async () => {
+      const { service } = buildService({ planteduser: plantedUser });
+      const first = await service.generateTokens(plantedUser as any);
+
+      const second = await service.refreshToken(first.refreshToken);
+      await expect(service.refreshToken(first.refreshToken)).rejects.toThrow(UnauthorizedException);
+      // The replay revoked the session, so the legitimate newer token is
+      // refused too: whichever holder was the thief keeps nothing.
+      await expect(service.refreshToken(second.refreshToken)).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('does not accept a refresh token without the refresh audience', async () => {
+      const { service, jwt } = buildService({ planteduser: plantedUser });
+      const first = await service.generateTokens(plantedUser as any);
+      const claims: any = jwt.decode(first.refreshToken);
+      const { aud: _aud, exp: _exp, iat: _iat, ...rest } = claims;
+      const wrongAudience = jwt.sign(rest, { audience: 'almyty-api' });
+
+      await expect(service.refreshToken(wrongAudience)).rejects.toThrow(UnauthorizedException);
+    });
     it('rejects an ACCESS token presented as a refresh token', async () => {
       // Critical: without the payload.type === 'refresh' check, any
       // access token could be used to refresh itself indefinitely,

@@ -23,6 +23,7 @@ import { HostedStatusBadge } from '@/components/models/hosting/hosted-status-bad
 import { modelsApi } from '@/lib/models-api'
 import { modelSearchScorer, rankBy } from '@/lib/model-search'
 import type { ModelCard } from '@/types/models'
+import { pluralized } from '@/lib/utils'
 
 /** Shared with every other reader of the full model list (the model chooser too). */
 export const MODELS_QUERY_KEY = ['models', 'catalog'] as const
@@ -173,7 +174,7 @@ export function ModelsPage() {
                   <ConnectedCard key={p.id} to={`/models/providers/${p.id}`} testId={`provider-card-${p.id}`} icon={providerLogos[p.type] || '⚙️'} name={p.name}>
                     <ProviderStatus check={check} />
                     <span data-testid="provider-model-count">
-                      {cardsQuery.isLoading ? 'Models loading' : `${own.length} model${own.length === 1 ? '' : 's'}`}
+                      {cardsQuery.isLoading ? 'Models loading' : pluralized(own.length, 'model')}
                     </span>
                   </ConnectedCard>
                 )

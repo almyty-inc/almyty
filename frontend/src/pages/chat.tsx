@@ -19,7 +19,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ModelPicker } from '@/components/model-picker'
 import { llmProvidersApi } from '@/lib/api'
 import { toolsQuery } from '@/lib/list-queries'
-import { formatDate } from '@/lib/utils'
+import { formatDate, pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
@@ -332,7 +332,7 @@ export function ChatPage() {
                 {selectedToolIds.length > 0 && (
                   <>
                     <span className="text-xs text-muted-foreground">
-                      {selectedToolIds.length} tool{selectedToolIds.length !== 1 ? 's' : ''} selected
+                      {pluralized(selectedToolIds.length, 'tool')} selected
                     </span>
                     <Button variant="ghost" size="sm" onClick={() => setSelectedToolIds([])}>
                       Clear all
@@ -386,7 +386,7 @@ export function ChatPage() {
               <p className="text-sm text-muted-foreground max-w-md">
                 Chat with {selectedProvider?.name || 'your AI provider'}.
                 {selectedToolIds.length > 0
-                  ? ` ${selectedToolIds.length} tool${selectedToolIds.length !== 1 ? 's' : ''} attached for agentic use.`
+                  ? ` ${pluralized(selectedToolIds.length, 'tool')} attached for agentic use.`
                   : ' Attach tools to enable agentic capabilities.'}
               </p>
             </div>

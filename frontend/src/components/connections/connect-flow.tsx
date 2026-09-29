@@ -29,7 +29,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { JsonSchemaForm, isSecretProperty, schemaDefaults, validateSchemaValues, type SchemaFormValues } from '@/components/ui/json-schema-form'
 import type { VisibilityValue } from '@/components/ui/visibility-field'
-import { ServiceIcon, ServiceTileGrid, type ServiceTileGroup } from '@/components/connect/service-tiles'
+import { ServiceIcon, ServiceTileGrid, splitTileName, type ServiceTileGroup } from '@/components/connect/service-tiles'
 import { WhoCanUse } from '@/components/connect/who-can-use'
 import { providerLogos } from '@/components/llm-providers/provider-type-config'
 import { useOrganizationRole } from '@/hooks/use-organization-role'
@@ -98,12 +98,12 @@ export function connectorTileGroups(connectors: Connector[], search: string): Se
   for (const kind of CONNECTOR_KINDS) {
     const tiles = shown
       .filter((c) => c.kind === kind && c.key !== OTHER_SERVICE_KEY)
-      .map((c) => ({ key: c.key, label: c.displayName, icon: connectorIcon(c) }))
+      .map((c) => ({ key: c.key, ...splitTileName(c.displayName), icon: connectorIcon(c) }))
     if (tiles.length > 0) groups.push({ id: kind, title: CONNECTOR_KIND_LABELS[kind], tiles })
   }
   const other = connectors.find((c) => c.key === OTHER_SERVICE_KEY)
   // "Other service" is the answer to a search that found nothing, so it stays.
-  if (other) groups.push({ id: 'other', title: 'Something else', tiles: [{ key: other.key, label: other.displayName, icon: connectorIcon(other) }] })
+  if (other) groups.push({ id: 'other', title: 'Something else', tiles: [{ key: other.key, ...splitTileName(other.displayName), icon: connectorIcon(other) }] })
   return groups
 }
 

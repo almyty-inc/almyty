@@ -20,7 +20,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { gatewayBackendUrl, orgSlugOf } from '@/lib/gateway-connect'
 import { toolsQuery } from '@/lib/list-queries'
 import { readableToolName } from '@/lib/tool-names'
-import { cn } from '@/lib/utils'
+import { cn, pluralized } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 
@@ -243,7 +243,7 @@ export function ShareToolsForm() {
       back={{ to: '/gateways', label: 'Gateways' }}
       guard={guard}
       width="wide"
-      submitLabel={count > 0 ? `Share ${count} tool${count === 1 ? '' : 's'}` : 'Share tools'}
+      submitLabel={count > 0 ? `Share ${pluralized(count, 'tool')}` : 'Share tools'}
       submitting={share.isPending}
       onSubmit={onSubmit}
     >
@@ -281,8 +281,8 @@ export function ShareToolsForm() {
                           state === 'some'
                             ? `${n} of ${ready} picked`
                             : ready === source.tools.length
-                              ? `${ready} tool${ready === 1 ? '' : 's'}`
-                              : `${ready} of ${source.tools.length} tools ready`
+                              ? pluralized(ready, 'tool')
+                              : `${ready} of ${pluralized(source.tools.length, 'tool')} ready`
                         }
                         selected={state === 'all'}
                         disabled={ready === 0}
@@ -320,7 +320,7 @@ export function ShareToolsForm() {
                       key={source.id}
                       testId={`share-picked-${source.id}`}
                       title={source.name}
-                      summary={`${n === ready ? n : `${n} of ${ready}`} tool${ready === 1 ? '' : 's'} · Choose which`}
+                      summary={`${n === ready ? '' : `${n} of `}${pluralized(ready, 'tool')} · Choose which`}
                       bodyClassName="p-0"
                     >
                       <ToolRows tools={source.tools} picked={picked} onToggle={toggleTool} bare />

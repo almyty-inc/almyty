@@ -54,7 +54,7 @@ export function FilesTab({ agentId, files, error, onRetry }: FilesTabProps) {
       return filesApi.upload(file, agentId)
     },
     onSuccess: () => {
-      success('File Uploaded', 'File has been uploaded.')
+      success('File uploaded', 'File has been uploaded.')
       queryClient.invalidateQueries({ queryKey: ['agent-files', agentId] })
     },
     onError: (err: any) => {

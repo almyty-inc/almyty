@@ -63,7 +63,7 @@ export function ChannelInstallationsPanel({ gateway }: ChannelInstallationsPanel
     mutationFn: (installationId: string) =>
       gatewaysApi.revokeInstallation(gateway.id, installationId),
     onSuccess: () => {
-      success('Installation Revoked', 'The workspace token has been cleared.')
+      success('Installation revoked', 'The workspace token has been cleared.')
       queryClient.invalidateQueries({ queryKey: ['gateway-installations', gateway.id] })
     },
     onError: (err: any) => {

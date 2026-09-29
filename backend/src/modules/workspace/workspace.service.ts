@@ -5,6 +5,8 @@ import {
   NotFoundException,
   ConflictException,
   Optional,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual, EntityManager } from 'typeorm';
@@ -12,6 +14,14 @@ import { Repository, LessThanOrEqual, EntityManager } from 'typeorm';
 import { Runner, RunnerIsolationTier } from '../../entities/runner.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { canAcceptWork } from '../runner/runner-state';
+import { RunnerService } from '../runner/runner.service';
+import {
+  type LabelRequirements,
+  describeLabelRequirements,
+  hasLabelRequirements,
+  labelsMatch,
+  parseLabelRequirements,
+} from '../runner/runner-labels';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import type { ExecutionPrincipal, GatewayPrincipal } from '../../common/authorization/execution-access.service';
 
@@ -27,12 +37,15 @@ export interface CreateWorkspaceInput {
   /** Time-to-live in milliseconds. Default 1 hour, max 24 hours. */
   ttlMs?: number;
   /**
-   * Optional explicit runner id. v1.0 ignores this beyond verifying
-   * ownership; the user's single registered runner is always picked.
-   * The field exists so call sites can pass it forward when v1.x
-   * scheduler logic ships.
+   * Optional explicit runner id: one of the caller's own runners.
    */
   runnerId?: string;
+  /**
+   * Label requirements for the machine (`gpu=yes, os=mac` or an object).
+   * Without a runnerId the workspace goes on an online runner the caller
+   * may use whose labels include all of them.
+   */
+  labels?: Record<string, string> | string;
 }
 
 @Injectable()
@@ -48,6 +61,10 @@ export class WorkspaceService {
     // Optional only for hand-built specs; without it a team gateway is
     // covered by no workspace (fail closed).
     @Optional() private readonly accessPolicy?: AccessPolicyService,
+    // Label routing for a workspace created with label requirements.
+    // forwardRef: RunnerModule and WorkspaceModule import each other.
+    // Optional only for hand-built specs; without it such a create is refused.
+    @Optional() @Inject(forwardRef(() => RunnerService)) private readonly runnerService?: RunnerService,
   ) {}
 
   /**
@@ -70,7 +87,7 @@ export class WorkspaceService {
     if (!input.cwd || typeof input.cwd !== 'string') {
       throw new BadRequestException('cwd is required');
     }
-    const runner = await this.pickRunner(ownerUserId, organizationId, input.runnerId);
+    const runner = await this.pickRunner(ownerUserId, organizationId, input.runnerId, parseLabelRequirements(input.labels));
     if (!canAcceptWork(runner.state)) {
       throw new ConflictException(`runner ${runner.name} is ${runner.state}; cannot create workspace`);
     }
@@ -319,17 +336,36 @@ export class WorkspaceService {
 
   // ── internals ───────────────────────────────────────────────────────
 
+  /**
+   * Which runner a new workspace goes on.
+   *
+   * - With label requirements and no runnerId: an online runner the
+   *   caller may use whose labels include every one, which can be another
+   *   member's org or team runner (RunnerService.resolveByLabels, the same
+   *   rules as dispatch). None: "No machine with gpu=yes is online".
+   * - With a runnerId: that runner of the caller's; with requirements too,
+   *   it must carry them.
+   * - Otherwise the caller's single runner.
+   */
   private async pickRunner(
     ownerUserId: string,
     organizationId: string,
     requestedId?: string,
+    required: LabelRequirements = {},
   ): Promise<Runner> {
     if (requestedId) {
       const runner = await this.runners.findOne({
         where: { id: requestedId, ownerUserId, organizationId },
       });
       if (!runner) throw new NotFoundException('runner not found');
+      if (!labelsMatch(runner.labels, required)) {
+        throw new BadRequestException(`${runner.name} does not have ${describeLabelRequirements(required)}`);
+      }
       return runner;
+    }
+    if (hasLabelRequirements(required)) {
+      if (!this.runnerService) throw new ConflictException('label routing is not available here');
+      return this.runnerService.resolveByLabels(required, ownerUserId, organizationId);
     }
     const owned = await this.runners.find({ where: { ownerUserId, organizationId } });
     if (owned.length === 0) {

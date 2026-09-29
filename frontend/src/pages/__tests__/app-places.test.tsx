@@ -49,6 +49,8 @@ vi.mock('@/lib/api', async () => {
       getVisitorOAuth: vi.fn(),
       getHostedChatSso: vi.fn(),
       getInstallations: vi.fn(),
+      getAuthConfigs: vi.fn(),
+      listApiKeys: vi.fn(),
     },
   }
 })
@@ -216,5 +218,65 @@ describe('the Slack page', () => {
     renderAt('/apps/support/distributions/slack')
     expect(await screen.findByTestId('slack-install-url')).toHaveTextContent('https://api.example.com/gateways/gw-slack/install/slack')
     expect(screen.getByText('https://api.example.com/gateways/gw-slack/install/slack/callback')).toBeInTheDocument()
+  })
+})
+
+describe('the website widget page', () => {
+  const widget = (over: Partial<AppDistribution> = {}, appOver: Partial<AgentApp> = {}) =>
+    app(appOver, [place({ id: 'd-widget', target: 'widget', ...over })])
+
+  it('says publishing gives the line for the site, with nothing to save', async () => {
+    api.getById.mockResolvedValue(widget())
+    renderAt('/apps/support/distributions/widget')
+    expect(await screen.findByRole('heading', { name: 'On your website' })).toBeInTheDocument()
+    expect(await screen.findByTestId('widget-pending')).toHaveTextContent(/line to add to your site/i)
+    expect(screen.getByRole('button', { name: 'Publish' })).toBeInTheDocument()
+    expect(screen.queryByTestId('form-page-footer')).toBeNull()
+  })
+
+  it('gives the embed snippet, the look from the app and the allowed sites once published', async () => {
+    api.getById.mockResolvedValue(widget({ status: 'live', gatewayId: 'gw-widget' }))
+    gw.getById.mockResolvedValue({ id: 'gw-widget', type: 'chat_widget', configuration: { allowedOrigins: ['https://www.acme.com'] } })
+    renderAt('/apps/support/distributions/widget')
+    expect(await screen.findByText('<script src="https://api.example.com/gateways/gw-widget/widget.js" async></script>')).toBeInTheDocument()
+    expect(screen.getByText(/come from the app/i)).toBeInTheDocument()
+    expect(await screen.findByText('Allowed sites')).toBeInTheDocument()
+    expect(screen.getByTestId('widget-who')).toHaveTextContent('Who can use it: anyone on the sites you allow')
+  })
+
+  it('says why it cannot go on an app people sign in to', async () => {
+    api.getById.mockResolvedValue(widget({}, { authMode: 'email_otp' }))
+    api.checkDistribution.mockResolvedValue({
+      ok: false,
+      refusals: [{ code: 'WIDGET_HAS_NO_SIGN_IN', message: 'The website widget has no sign-in, so it only goes on an app anyone can use.' }],
+    })
+    renderAt('/apps/support/distributions/widget')
+    expect(await screen.findByText(/has no sign-in/)).toBeInTheDocument()
+    // Its own reason, not the generic "the app is not ready".
+    expect(screen.queryByText(/The app itself is not ready/)).toBeNull()
+  })
+})
+
+describe('the A2A page', () => {
+  const a2a = (over: Partial<AppDistribution> = {}) => app({}, [place({ id: 'd-a2a', target: 'a2a', ...over })])
+
+  it('says where other agents will find it before it is published', async () => {
+    api.getById.mockResolvedValue(a2a())
+    renderAt('/apps/support/distributions/a2a')
+    expect(await screen.findByRole('heading', { name: 'Other agents (A2A)' })).toBeInTheDocument()
+    expect(await screen.findByTestId('a2a-pending')).toHaveTextContent('https://api.example.com/acme/apps/support/a2a')
+    expect(screen.getByRole('button', { name: 'Publish' })).toBeInTheDocument()
+  })
+
+  it('gives the endpoint and agent card at the gateway address, and how callers sign in', async () => {
+    api.getById.mockResolvedValue(a2a({ status: 'live', gatewayId: 'gw-a2a' }))
+    gw.getById.mockResolvedValue({ id: 'gw-a2a', type: 'a2a', endpoint: '/support-agent', configuration: {} })
+    gw.getAuthConfigs.mockResolvedValue([{ id: 'auth-1', type: 'api_key', isActive: true, isRequired: true, configuration: {} }])
+    gw.listApiKeys.mockResolvedValue([])
+    renderAt('/apps/support/distributions/a2a')
+    expect(await screen.findByText('https://api.example.com/acme/support-agent')).toBeInTheDocument()
+    expect(screen.getByText('https://api.example.com/acme/support-agent/.well-known/agent-card.json')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'How other agents sign in' })).toBeInTheDocument()
+    expect(gw.getAuthConfigs).toHaveBeenCalledWith('gw-a2a')
   })
 })
