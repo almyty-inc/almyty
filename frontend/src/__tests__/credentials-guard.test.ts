@@ -134,8 +134,8 @@ describe('one Credentials page', () => {
 })
 
 describe('one pick-or-create control', () => {
-  it('is what the API key, tool auth, MCP server token and memory accounts use', () => {
-    for (const rel of ['components/apis/api-key-form.tsx', 'components/tools/tool-form.tsx', 'components/tools/mcp-server-form.tsx', 'pages/memories.tsx']) {
+  it('is what the API key, tool auth, MCP server token, npm registry token and memory accounts use', () => {
+    for (const rel of ['components/apis/api-key-form.tsx', 'components/tools/tool-form.tsx', 'components/tools/mcp-server-form.tsx', 'components/apis/sdk-api-form.tsx', 'pages/memories.tsx']) {
       const source = read(rel)
       expect(importsFrom(source, '@/components/credentials/credential-picker'), rel).toContain('CredentialPicker')
       expect(importsFrom(source, '@/components/connections/connect-flow'), rel).not.toContain('ConnectAccountButton')
@@ -157,6 +157,23 @@ describe('one pick-or-create control', () => {
       'components/llm-providers/credential-slot.tsx',
       'pages/provider.tsx',
     ])
+  })
+
+  it('leaves no secret to be typed into an API, tool or package form itself', () => {
+    // Basic auth, an OAuth sign-in and a registry token are credentials too.
+    // The only secret fields left are an OAuth app's client secret (the
+    // sign-in that makes the credential) and a tool's custom header values.
+    const apiKey = read('components/apis/api-key-form.tsx')
+    expect(apiKey).not.toMatch(/id="api-key-value"|id="api-key-username"/)
+    expect(apiKey).toMatch(/BASIC_AUTH_SERVICE = 'basic-auth'/)
+    expect(apiKey).toMatch(/OAUTH2_SIGN_IN_SERVICE = 'oauth2'/)
+    expect(apiKey).toMatch(/createPanel=/)
+    const toolForm = read('components/tools/tool-form.tsx')
+    expect(toolForm).not.toMatch(/auth-password|auth-username|authConfig\.password/)
+    expect(toolForm).toMatch(/'basic-auth'/)
+    const sdkForm = read('components/apis/sdk-api-form.tsx')
+    expect(importsFrom(sdkForm, '@/components/ui/secret-input')).toEqual([])
+    expect(sdkForm).toMatch(/credentialId: registryCredentialId/)
   })
 
   it('creates inline with the same add flow as the Credentials page, and links to what was picked', () => {
