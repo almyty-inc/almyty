@@ -118,7 +118,7 @@ describe('hosted-chat address claims', () => {
     it('turns the slug index violation on create into a conflict, not a 500', async () => {
       gatewayRepository.save.mockRejectedValue(uniqueViolation(HOSTED_CHAT_SLUG_INDEX));
 
-      const attempt = service.createGateway(createDto as any, 'org-1', 'user-1');
+      const attempt = service.createGateway(createDto as any, 'org-1', 'user-1', { forApp: { appId: 'app-1' } });
 
       await expect(attempt).rejects.toBeInstanceOf(ConflictException);
       await expect(attempt).rejects.toThrow("The web address 'acme' is already in use");
@@ -155,7 +155,7 @@ describe('hosted-chat address claims', () => {
       gatewayRepository.save.mockRejectedValue(uniqueViolation('UQ_gateways_org_endpoint'));
 
       await expect(
-        service.createGateway(createDto as any, 'org-1', 'user-1'),
+        service.createGateway(createDto as any, 'org-1', 'user-1', { forApp: { appId: 'app-1' } }),
       ).rejects.not.toBeInstanceOf(ConflictException);
     });
 
@@ -174,6 +174,7 @@ describe('hosted-chat address claims', () => {
           { ...createDto, configuration: { ...hostedChatConfig, customDomain: forged } } as any,
           'org-1',
           'user-1',
+          { forApp: { appId: 'app-1' } },
         );
 
         const saved = gatewayRepository.save.mock.calls[0][0];

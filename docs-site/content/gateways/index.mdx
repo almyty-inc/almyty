@@ -1,9 +1,9 @@
 # Gateways
 
 Publish your tools once, reach them from any agent or client. A gateway takes the
-tools you have already built and exposes them over MCP, A2A, UTCP, and Agent Skills,
-each from its own authenticated endpoint. You pick which tools a gateway serves, so
-every endpoint has a focused, purpose-built surface.
+tools you have already built and exposes them from one authenticated address that
+speaks MCP, UTCP and Agent Skills; an A2A gateway serves an agent. You pick which tools
+a gateway serves, so every address has a focused, purpose-built surface.
 
 ![A gateway detail page with its assigned tools, endpoint, and auth](/screenshots/gateway-detail-tools.png)
 
@@ -22,18 +22,18 @@ claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
   Claude calls getPetById via almyty -> "Rosie", available
 ```
 
-Point a second gateway at the same tools and it answers over UTCP or Agent Skills
-instead, so other frameworks and coding agents reach the identical tools without a
-rebuild. A2A is the agent-facing counterpart: it serves one of your agents rather than a
-tool bundle. Each gateway speaks one protocol — the one you pick when you create it.
+The same address answers MCP, UTCP and Agent Skills, so other frameworks and coding
+agents reach the identical tools without a second gateway. A2A is the agent-facing
+counterpart: it serves one of your agents rather than a set of tools. Web chats and
+messaging channels are places on an app, set up under **Apps**.
 
-## Create one
+## Share tools
 
-1. Open **Gateways** in the sidebar and click **Create gateway** to open `/gateways/new`
-2. Pick a kind — **Tools** for MCP, UTCP, or Skills; **Agent** for A2A and the chat channels
-3. Pick the protocol, name it, and set an endpoint path (the slug in the URL)
-4. Click **Create gateway**, then for a tools gateway open **Tool scoping** and assign the tools it should serve
-5. For MCP, UTCP or A2A, configure the **Authentication** section on the detail page before exposing the endpoint
+1. Open **Gateways** in the sidebar and click **Share tools** to open `/gateways/new`
+2. Under **What to share**, pick a whole API or single tools (a draft can't be shared until it is active)
+3. Name it; the address follows from the name, and **Advanced** changes the path and who can use it
+4. Click **Share**, then copy the access key: it is shown once
+5. Change which tools it serves from **Tool scoping** on the gateway page, and its auth from the **Authentication** section
 
 The gateway's **Integrations** tab gives you the live endpoint plus discovery URLs to
 paste into any client:

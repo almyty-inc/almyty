@@ -525,15 +525,17 @@ export class UnifiedGatewayDelegation {
     res: Response,
     body: any,
   ) {
+    const baseUrl =
+      this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
+    const orgSlug = organization.slug || organization.id;
+
     if (action === '.well-known/utcp') {
-      const baseUrl =
-        this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
       return res.json(
         this.utcpService.getDiscoveryInfo({
           organizationId: organization.id,
           gateway,
           baseUrl,
-          orgSlug: organization.slug || organization.id,
+          orgSlug,
         }),
       );
     }
@@ -542,6 +544,8 @@ export class UnifiedGatewayDelegation {
       const manual = await this.utcpService.generateManual({
         organizationId: organization.id,
         gateway,
+        baseUrl,
+        orgSlug,
       });
       this.metrics?.record(MetricType.UTCP_MANUAL, {
         organizationId: organization.id,
@@ -550,17 +554,23 @@ export class UnifiedGatewayDelegation {
       return res.json(manual);
     }
 
-    if (action === 'execute' && req.method === 'POST') {
+    const toolId = utcpExecuteToolId(action);
+    if ((action === 'execute' || toolId) && req.method === 'POST') {
       const userId = auth?.userId || (req as any).user?.sub || null;
-      const result = await this.utcpService.executeUtcpTool(
-        body,
-        organization.id,
-        userId,
-        gateway.id,
-        // Runs in the gateway's scope: the gateway serves only what its own
-        // visibility covers.
-        gatewayPrincipal(gateway, userId),
-      );
+      // Runs in the gateway's scope: the gateway serves only what its own
+      // visibility covers.
+      const principal = gatewayPrincipal(gateway, userId);
+      const result = toolId
+        // A tool's own execute address, the one its call template names.
+        ? await this.utcpService.executeServedTool(
+            toolId,
+            { query: req.query, body },
+            organization.id,
+            userId,
+            gateway.id,
+            principal,
+          )
+        : await this.utcpService.executeUtcpTool(body, organization.id, userId, gateway.id, principal);
       this.metrics?.record(MetricType.UTCP_DIRECT_CALL, {
         organizationId: organization.id,
         gatewayId: gateway.id,
@@ -605,6 +615,7 @@ export class UnifiedGatewayDelegation {
  *   ''                          MCP (JSON-RPC over Streamable HTTP)
  *   '.well-known/utcp'          UTCP discovery
  *   'manual', 'execute'         UTCP
+ *   'execute/<toolId>'          UTCP, one tool's own call template
  *   'skills'                    Agent Skills
  *   any other '.well-known/...' MCP, as on an MCP gateway
  *
@@ -613,7 +624,14 @@ export class UnifiedGatewayDelegation {
 export function toolsGatewayProtocol(action: string): 'mcp' | 'utcp' | 'skills' | null {
   if (action === '') return 'mcp';
   if (action === '.well-known/utcp' || action === 'manual' || action === 'execute') return 'utcp';
+  if (utcpExecuteToolId(action)) return 'utcp';
   if (action === 'skills') return 'skills';
   if (action.startsWith('.well-known/')) return 'mcp';
   return null;
+}
+
+/** The tool id of an `execute/<toolId>` path: one plain segment, or null. */
+export function utcpExecuteToolId(action: string): string | null {
+  const match = /^execute\/([A-Za-z0-9_-]+)$/.exec(action);
+  return match ? match[1] : null;
 }

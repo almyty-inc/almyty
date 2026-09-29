@@ -4,14 +4,14 @@ Call your tools over a plain REST API. A UTCP (Universal Tool Call Protocol) gat
 
 ![Gateway detail page](/screenshots/gateway-detail.png)
 
-## Create the gateway
+## Share the tools
 
-1. Open **Gateways → Create gateway** (`/gateways/new`)
-2. Choose **Tools**, then **UTCP** as the protocol
-3. Enter a name, slug, and optional description
-4. Choose visibility and click **Create gateway**
+1. Open **Gateways → Share tools** (`/gateways/new`)
+2. Under **What to share**, pick a whole API or single tools
+3. Name it; the address follows from the name (**Advanced** changes the path and who can use it)
+4. Click **Share** and copy the access key
 
-Assign tools from **Tool scoping** on the gateway detail page, then configure the **Authentication** section.
+Change which tools it serves from **Tool scoping** on the gateway detail page, and its auth from the **Authentication** section.
 
 ![Assigning tools on the gateway Tools tab](/screenshots/gateway-detail-tools.png)
 
@@ -22,21 +22,22 @@ https://api.almyty.com/{org}/{gateway-slug}
 ```
 
 There is no `/utcp` path segment. Every gateway is served from the same
-`{org}/{gateway-slug}` URL, and the protocol is decided by the gateway's type, which you
-set at creation time — not by a query parameter or an `Accept` header. A gateway created
-as UTCP answers UTCP there; an MCP gateway answers MCP at the same URL shape.
+`{org}/{gateway-slug}` URL. A shared-tools gateway answers MCP, UTCP and Agent Skills
+there at once, and which one a request speaks follows from its path: `/manual`,
+`/execute` and `/.well-known/utcp` are UTCP.
 
 ## Endpoints
 
 UTCP is a manual-driven protocol: you fetch one manual that describes every tool and how
-to call it. There is no per-tool REST surface, and no `/health` on the gateway path
-(platform health lives at `/health` on the API root).
+to call it. There is no `/health` on the gateway path (platform health lives at `/health`
+on the API root).
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/.well-known/utcp` | public | Discovery: where the manual and execute URLs are, and what auth the gateway wants |
 | `GET` | `/manual` | required | The UTCP manual — every tool on this gateway, with its call template |
 | `POST` | `/execute` | required | Run a tool through almyty (proxy mode, an almyty extension) |
+| `POST` | `/execute/{toolId}` | required | Run one tool, arguments as query string or JSON body: the address a hand-made tool's call template names |
 
 Any other sub-path returns `404 Unknown UTCP action`.
 
@@ -107,9 +108,28 @@ Secrets are never inlined: an API key, password, or client secret in the call te
 `auth` block is replaced with a `{{...}}` placeholder, because the manual is served to
 anyone with gateway access.
 
-Only tools backed by an API operation appear in the manual. A hand-written JavaScript or
-LLM tool has no HTTP target to describe, so it has no call template and is omitted — reach
-those through `/execute`, or through an MCP or Skills gateway.
+The manual lists every tool the gateway shares, the same tools MCP `tools/list` and the
+Skills list show. What differs is where a tool's call template points:
+
+- A tool generated from an API operation points at that API, as above.
+- A tool made by hand (HTTP, JavaScript, GraphQL, LLM) runs on almyty: a JavaScript or LLM
+  tool has no address of its own, and an HTTP or GraphQL tool carries stored auth, a body
+  template or a GraphQL document that only almyty applies. Its template points at the
+  tool's own execute address on this gateway, with the gateway's auth:
+
+```json
+{
+  "call_template_type": "http",
+  "url": "https://api.almyty.com/acme/tools-api/execute/d3b0...-tool-uuid",
+  "http_method": "POST",
+  "content_type": "application/json",
+  "auth": { "auth_type": "api_key", "api_key": "{{GATEWAY_..._API_KEY}}", "var_name": "x-api-key", "location": "header" }
+}
+```
+
+A UTCP client sends the tool's arguments to that address as query parameters; almyty reads
+each one back to the type the tool's input schema declares. A JSON body with the arguments
+works too, and wins where both name the same argument.
 
 The manual is cached for five minutes per gateway.
 

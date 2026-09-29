@@ -29,7 +29,6 @@ import { PrivateGatewayGuard } from './private-gateway.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { maskChannelConfigSecrets } from './channels/channel-config.helper';
-import { SURFACE_CATALOG } from './surface-catalog';
 import { Gateway, GatewayKind } from '../../entities/gateway.entity';
 
 import {
@@ -193,22 +192,6 @@ export class GatewaysController {
         error.status || HttpStatus.BAD_REQUEST,
       );
     }
-  }
-
-  @Get('surfaces')
-  @Roles('member', 'admin', 'owner')
-  @ApiOperation({
-    summary: 'List every surface an agent can be published to',
-    description:
-      'The publish canvas renders one node per entry. Surfaces that are not usable yet come back with available=false and a one-line unavailableReason, so the client never hardcodes that knowledge.',
-  })
-  @ApiResponse({ status: 200, description: 'Surface catalog retrieved successfully' })
-  async listSurfaces() {
-    return {
-      success: true,
-      data: SURFACE_CATALOG,
-      message: 'Surfaces retrieved successfully',
-    };
   }
 
   @Get(':gatewayId')

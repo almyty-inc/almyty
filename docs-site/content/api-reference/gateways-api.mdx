@@ -46,7 +46,7 @@ curl -X POST https://api.almyty.com/gateways \
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | string | Yes | Gateway name |
-| `type` | string | Yes | `mcp`, `a2a`, `utcp`, `skills` |
+| `type` | string | Yes | `tools` (MCP, UTCP and Skills from one address), `mcp`, `utcp`, `skills`, `a2a`. A web chat or messaging channel is a place on an app, and is refused here (`APP_SURFACE_NEEDS_APP`) |
 | `endpoint` | string | Yes | URL path (unique within org) |
 | `description` | string | No | Description |
 | `configuration` | object | No | Type-specific config |

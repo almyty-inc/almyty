@@ -21,7 +21,7 @@ import { Gateway, GatewayKind, GatewayStatus, GatewayType } from '../../../entit
 import { GatewayAuth, GatewayAuthType } from '../../../entities/gateway-auth.entity';
 import { GatewayTool } from '../../../entities/gateway-tool.entity';
 import { ApiKey } from '../../../entities/api-key.entity';
-import { Tool, ToolStatus, ToolType } from '../../../entities/tool.entity';
+import { Tool, ToolExecutionMethod, ToolStatus, ToolType } from '../../../entities/tool.entity';
 import { fakeManager, fakeRepository } from '../../../test/fake-repository';
 import { CAST, castFixture } from '../../../test/execution-access.fixture';
 
@@ -86,6 +86,42 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
   const SERVABLE = [TOOLS.weather.name, TOOLS.cities.name].sort();
   const NOT_SERVABLE = [TOOLS.unpublished, TOOLS.switchedOff, TOOLS.draft, TOOLS.team];
 
+  // One tool of each type, shared on one gateway: generated from an API
+  // operation, and the four made by hand (HTTP, JavaScript, GraphQL, LLM).
+  const handMade = { operationId: null, httpConfig: null, executionMethod: null } as Partial<Tool>;
+  const EACH_TYPE = {
+    api: toolRow('api_forecast'),
+    http: toolRow('http_lookup', {
+      ...handMade,
+      type: ToolType.FUNCTION,
+      executionMethod: ToolExecutionMethod.HTTP,
+      httpConfig: { method: 'GET', path: 'https://hooks.example.com/lookup' },
+      parameters: {
+        type: 'object',
+        properties: { city: { type: 'string' }, days: { type: 'integer' }, exact: { type: 'boolean' } },
+      },
+    }),
+    javascript: toolRow('js_reverse', {
+      ...handMade,
+      type: ToolType.FUNCTION,
+      executionMethod: ToolExecutionMethod.CUSTOM,
+      code: 'return input.text.split("").reverse().join("")',
+    }),
+    graphql: toolRow('gql_viewer', {
+      ...handMade,
+      type: ToolType.QUERY,
+      executionMethod: ToolExecutionMethod.GRAPHQL,
+      graphqlConfig: { endpoint: 'https://graph.example.com/graphql', query: '{ viewer { id } }' },
+    }),
+    llm: toolRow('llm_summarize', {
+      ...handMade,
+      type: ToolType.FUNCTION,
+      executionMethod: ToolExecutionMethod.LLM,
+      llmConfig: { providerId: 'provider-1', promptTemplate: 'Summarize {{text}}', outputMode: 'text' },
+    }),
+  };
+  const EACH_TYPE_NAMES = Object.values(EACH_TYPE).map((t) => t.name).sort();
+
   const apiKeyAuth = (gatewayId: string) =>
     Object.assign(new GatewayAuth(), {
       id: `auth-${gatewayId}`,
@@ -121,12 +157,14 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
     shared: gatewayRow('gw-shared', GatewayType.TOOLS, '/shared'),
     soloMcp: gatewayRow('gw-solo-mcp', GatewayType.MCP, '/solo-mcp'),
     soloUtcp: gatewayRow('gw-solo-utcp', GatewayType.UTCP, '/solo-utcp'),
+    eachType: gatewayRow('gw-each-type', GatewayType.TOOLS, '/each-type'),
   };
 
   const KEYS = {
     shared: 'shared_key_0123456789abcdefghijklmnop',
     soloMcp: 'solo_mcp_key_0123456789abcdefghijklm',
     soloUtcp: 'solo_utcp_key_0123456789abcdefghijkl',
+    eachType: 'each_type_key_0123456789abcdefghijkl',
   };
 
   const keyRow = (raw: string, gatewayId: string) =>
@@ -161,15 +199,20 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
 
     const m = castFixture();
     const organizations = fakeRepository<any>([organization, { id: CAST.otherOrg, slug: 'globex', name: 'Globex' }]);
-    const tools = fakeRepository<Tool>({ seed: Object.values(TOOLS), make: () => new Tool() });
+    const tools = fakeRepository<Tool>({ seed: [...Object.values(TOOLS), ...Object.values(EACH_TYPE)], make: () => new Tool() });
     const gatewayTable = fakeRepository<Gateway>({ seed: Object.values(GATEWAYS), make: () => new Gateway() });
     gatewayTools = fakeRepository<GatewayTool>({ make: () => new GatewayTool() });
     const apiKeys = fakeRepository<ApiKey>({
-      seed: [keyRow(KEYS.shared, GATEWAYS.shared.id), keyRow(KEYS.soloMcp, GATEWAYS.soloMcp.id), keyRow(KEYS.soloUtcp, GATEWAYS.soloUtcp.id)],
+      seed: [
+        keyRow(KEYS.shared, GATEWAYS.shared.id),
+        keyRow(KEYS.soloMcp, GATEWAYS.soloMcp.id),
+        keyRow(KEYS.soloUtcp, GATEWAYS.soloUtcp.id),
+        keyRow(KEYS.eachType, GATEWAYS.eachType.id),
+      ],
       make: () => new ApiKey(),
     });
     const operations = fakeRepository<any>(
-      Object.values(TOOLS).map((t) => ({
+      [...Object.values(TOOLS), EACH_TYPE.api].map((t) => ({
         id: t.operationId,
         method: 'GET',
         endpoint: `/${t.name}`,
@@ -209,6 +252,7 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
     attach(GATEWAYS.shared, TOOLS.team);
     attach(GATEWAYS.soloMcp, TOOLS.unpublished);
     attach(GATEWAYS.soloUtcp, TOOLS.unpublished);
+    for (const tool of Object.values(EACH_TYPE)) attach(GATEWAYS.eachType, tool);
 
     const executor = new ToolExecutorService(
       tools as any,
@@ -318,7 +362,7 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
   /** One request through the unified endpoint, the way Express hands it over. */
   const send = async (
     slug: string,
-    opts: { method?: string; action?: string; key?: string | null; body?: any } = {},
+    opts: { method?: string; action?: string; key?: string | null; body?: any; query?: Record<string, any> } = {},
   ): Promise<{ status: number; body: any }> => {
     const method = opts.method ?? 'POST';
     const action = opts.action ?? '';
@@ -326,7 +370,7 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
       method,
       path: `/acme/${slug}${action ? `/${action}` : ''}`,
       headers: opts.key ? { 'x-api-key': opts.key } : {},
-      query: {},
+      query: opts.query ?? {},
       ip: '127.0.0.1',
       body: opts.body,
       get: () => 'api.test',
@@ -395,6 +439,81 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
     });
   });
 
+  describe('every tool type, on every protocol', () => {
+    /** The tool each skill is for, by the toolId its frontmatter carries. */
+    const skillToolNames = (skills: Array<{ content: string }>) =>
+      skills
+        .map((s) => /toolId: "([^"]+)"/.exec(s.content)?.[1])
+        .map((id) => Object.values(EACH_TYPE).find((t) => t.id === id)?.name)
+        .sort();
+
+    it('lists the same tools on MCP tools/list, the UTCP manual and the Skills list', async () => {
+      const mcp = await mcpList('each-type', KEYS.eachType);
+      const utcp = await utcpManual('each-type', KEYS.eachType);
+      const skills = skillToolNames(await skillsList('each-type', KEYS.eachType));
+
+      expect(mcp).toEqual(EACH_TYPE_NAMES);
+      expect(utcp).toEqual(EACH_TYPE_NAMES);
+      expect(skills).toEqual(EACH_TYPE_NAMES);
+    });
+
+    it('gives each tool a call template: the API for a generated tool, this gateway for the rest', async () => {
+      const manual = (await send('each-type', { key: KEYS.eachType, method: 'GET', action: 'manual' })).body;
+      const template = (name: string) => manual.tools.find((t: any) => t.name === name).tool_call_template;
+
+      expect(template(EACH_TYPE.api.name)).toMatchObject({
+        call_template_type: 'http',
+        http_method: 'GET',
+        url: `https://upstream.example.com/${EACH_TYPE.api.name}`,
+      });
+      for (const tool of [EACH_TYPE.http, EACH_TYPE.javascript, EACH_TYPE.graphql, EACH_TYPE.llm]) {
+        expect(template(tool.name)).toEqual({
+          call_template_type: 'http',
+          url: `https://api.test/acme/each-type/execute/${tool.id}`,
+          http_method: 'POST',
+          content_type: 'application/json',
+          // The gateway's own key, as a placeholder: never the key itself.
+          auth: {
+            auth_type: 'api_key',
+            api_key: `{{GATEWAY_${GATEWAYS.eachType.id.toUpperCase()}_API_KEY}}`,
+            var_name: 'x-api-key',
+            location: 'header',
+          },
+        });
+      }
+    });
+
+    it('runs a hand-made tool through the address its template names, arguments typed by its schema', async () => {
+      const out = await send('each-type', {
+        key: KEYS.eachType,
+        action: `execute/${EACH_TYPE.http.id}`,
+        // What a UTCP client sends for arguments that are not a body.
+        query: { city: 'Paris', days: '3', exact: 'true' },
+      });
+
+      expect(out.body.success).toBe(true);
+      expect(mockedAxios).toHaveBeenCalledTimes(1);
+      const request = mockedAxios.mock.calls[0][0];
+      expect(request.url).toBe('https://hooks.example.com/lookup');
+      expect(request.params).toEqual({ city: 'Paris', days: 3, exact: true });
+    });
+
+    it('answers a tool this gateway does not serve as not found on its execute address, off the network', async () => {
+      for (const tool of [TOOLS.weather, TOOLS.unpublished]) {
+        const out = await send('each-type', { key: KEYS.eachType, action: `execute/${tool.id}`, body: {} });
+        expect(out.body).toMatchObject({ success: false, error: { code: 'TOOL_NOT_FOUND' } });
+      }
+      expect(mockedAxios).not.toHaveBeenCalled();
+    });
+
+    it('refuses the execute address without this gateway\'s key', async () => {
+      const action = `execute/${EACH_TYPE.http.id}`;
+      expect((await send('each-type', { key: null, action })).status).toBe(401);
+      expect((await send('each-type', { key: KEYS.shared, action })).status).toBe(403);
+      expect(mockedAxios).not.toHaveBeenCalled();
+    });
+  });
+
   describe('auth on every protocol', () => {
     const requests = [
       ['MCP tools/list', { body: rpc('tools/list') }],
@@ -447,6 +566,9 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
       ['.well-known/utcp', 'utcp'],
       ['manual', 'utcp'],
       ['execute', 'utcp'],
+      ['execute/0d000000-0000-4000-8000-000000000001', 'utcp'],
+      ['execute/a/b', null],
+      ['execute/../manual', null],
       ['skills', 'skills'],
       ['skills/../manual', null],
       ['admin', null],
