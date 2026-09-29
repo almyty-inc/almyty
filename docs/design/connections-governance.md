@@ -121,7 +121,7 @@ smallest `everyDays` among the matching ones wins.
 
 ## HTTP
 
-All under `/ee/connections`, owner/admin, entitlement
+All under `/ee/credentials`, owner/admin, entitlement
 `credentials_governance` (402 without it), org from the JWT user or the
 `X-Organization-Id` header.
 
@@ -143,7 +143,7 @@ full rule in `details`.
 
 ## Audit export and retention
 
-`GET /ee/connections/audit-export` collects, newest first and capped at
+`GET /ee/credentials/audit-export` collects, newest first and capped at
 50,000 rows, every audit row on resources `connection` and `connector`
 plus the `connection_policy:*` rows above. JSON wraps the events in the
 same envelope as the agent technical documentation export
@@ -173,7 +173,7 @@ a user removed from an IdP group stops matching the team's grants on
 the next resolve. `syncGroups(organizationId)` re-reads the org's
 groups through `ScimService.listGroups` and activates or deactivates
 `user_teams` rows to match; it is exposed as `POST
-/ee/connections/principals/sync` for an admin who wants to force it
+/ee/credentials/principals/sync` for an admin who wants to force it
 between IdP pushes.
 
 ## Scheduler

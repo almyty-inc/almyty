@@ -1,12 +1,12 @@
-# Connections (the Credentials page)
+# Credentials
 
-A connection is a credential with a connector: every key, token and
-account almyty uses on your behalf (inference vendors, deployment
-providers, memory backends, MCP servers, chat channels, clouds, model
-registries, and any other key). In the product they are called
-**Credentials**; the code, the REST routes (`/connections`,
-`/connectors`) and the CLI keep the name connection. Add one once;
-agents, models, deployments and the registry use it.
+A credential is every key, token and account almyty uses on your behalf
+(inference vendors, deployment providers, memory backends, MCP servers,
+chat channels, clouds, model registries, APIs and tools, and any other
+key). The routes are under `/credentials` and the CLI is
+`@almyty/credentials`. In the code a credential added for a service is a
+"connection" and the service a "connector". Add one once; agents,
+models, deployments, APIs, tools and the registry use it.
 
 ## The Credentials page
 
@@ -37,9 +37,8 @@ Check again, then Overview (the account, Replace key (a rotate), who can
 use it, Delete credential) and Used by. The admins' Advanced tab
 (`/credentials/advanced`) holds the grants of each credential, whether
 members may keep personal keys, custom connectors and the governance
-rules. `/connections/*` and `/settings/connections/*` redirect to the
-same place under `/credentials`, and a sign-in comes back to
-`/credentials?connection=<id>`, which opens what it made.
+rules. A sign-in comes back to `/credentials?connection=<id>`, which
+opens what it made.
 
 Access keys, the keys other programs use to call almyty, are not
 credentials: they are made on the gateway or agent they unlock.
@@ -52,22 +51,38 @@ select of the org's credentials (of one kind, when the form says so, the
 service's own first), "Create one here", which opens the same add form
 inline without a nested form or a dialog, and "Open <name>" to the
 picked credential's page. A credential made there is a connection like
-any other and comes back picked. An API's key (Finish connecting and its
-Key card), an HTTP tool's key (`tool.authConfig.config.credentialId`,
-resolved at call time as the caller by `ToolAuthService.applyToolAuth`),
-an MCP server's token and a memory account use it; chat channels and
-model providers move to it with their own forms.
+any other and comes back picked. Every provider key is listed in every
+picker. Where it is used:
+
+- An API's key (Finish connecting and its Key card). A key sent in a
+  header or as a bearer token is an "Other service" credential; a
+  username and password is a `basic-auth` credential; an OAuth 2.0
+  sign-in is an `oauth2` credential. For an API whose description
+  declares an OAuth 2.0 sign-in, "Create one here" is the sign-in
+  itself (the client ID and secret of the app at the provider); the
+  credential it makes carries the refresh token and renews itself when
+  a tool calls the API. No secret is typed into the API form.
+- An HTTP tool's key, bearer token or username and password
+  (`tool.authConfig.config.credentialId`, resolved at call time as the
+  caller by `ToolAuthService.applyToolAuth`).
+- An SDK API's private npm registry token
+  (`npmRegistry.credentialId`, read when the tool's packages are
+  installed).
+- A ready-made provider API on Connect an API (OpenAI, Mistral,
+  Hugging Face Hub), which starts on the key the organization already
+  keeps for that provider.
+- An MCP server's token and a memory account.
 
 ## Connect
 
-Open the catalog (`GET /connectors`) and pick a connector. Each one
+Open the catalog (`GET /credentials/services`) and pick a service. Each one
 offers one or more ways to connect, best first:
 
 - Sign in at the provider (OpenRouter today): you are sent to the
   provider, approve, and come back connected. Nothing to paste. From a
   terminal or a machine without a browser, start with `mode:
   'headless'`; the provider shows a code and you paste it into
-  `POST /connections/connect/openrouter/complete`.
+  `POST /credentials/connect/openrouter/complete`.
 - Paste an API key: the form links straight to the page where the key
   is created. The key is checked against the provider before it is
   saved.
@@ -110,14 +125,14 @@ never returned, not even masked.
 
 ## Validate
 
-`POST /connections/:id/validate` runs the connector's check again:
+`POST /credentials/:id/validate` runs the connector's check again:
 `GET /models` for most inference vendors, a whoami for Hugging Face and
 DigitalOcean, STS for AWS, a HeadBucket for a registry. Health and the
 account label are refreshed.
 
 ## Rotate
 
-`POST /connections/:id/rotate` replaces the secret in place, so
+`POST /credentials/:id/rotate` replaces the secret in place, so
 everything that points at the connection keeps working. For a pasted
 key the call returns the form; send it back with the new value. For a
 sign-in connector it returns a new authorize URL; completing it swaps
@@ -125,7 +140,7 @@ the key on the same connection.
 
 ## Disconnect
 
-`DELETE /connections/:id` removes the connection. When the connector
+`DELETE /credentials/:id` removes the credential. When the connector
 declares a revoke endpoint the key is revoked at the provider first;
 otherwise revoke it in the provider's console as well.
 
@@ -202,27 +217,27 @@ opening a connection.
 
 ## CLI
 
-`@almyty/connections`, documented in `packages/connections-cli/README.md`.
+`@almyty/credentials`, documented in `packages/credentials-cli/README.md`.
 Every read command takes `--json`.
 
 ```
-npx @almyty/connections connectors [--kind inference|deployment|memory|mcp|tool_source|channel|cloud|registry]
-npx @almyty/connections list
-npx @almyty/connections get <id>
-npx @almyty/connections connect <connectorKey> [--method m] [--owner org|user] [--name n]
-                               [--input-file <path>] [--input-stdin] [--input '<json>']
-                               [--headless] [--open]
-npx @almyty/connections complete <connectorKey> --state s --code c
-npx @almyty/connections validate <id>
-npx @almyty/connections rotate <id> [--input-file <path>] [--input-stdin] [--headless] [--open]
-npx @almyty/connections disconnect <id>
-npx @almyty/connections grants <id>
-npx @almyty/connections grant <id> --principal user|team|role|agent|workspace --to <principalId>
-                               [--permission use|manage] [--expires <iso8601>]
-npx @almyty/connections revoke <id> <grantId>
+npx @almyty/credentials services [--kind inference|deployment|memory|mcp|tool_source|channel|cloud|registry]
+npx @almyty/credentials list
+npx @almyty/credentials get <id>
+npx @almyty/credentials add <service> [--method m] [--owner org|user] [--name n]
+                           [--input-file <path>] [--input-stdin] [--input '<json>']
+                           [--headless] [--open]
+npx @almyty/credentials complete <service> --state s --code c
+npx @almyty/credentials validate <id>
+npx @almyty/credentials rotate <id> [--input-file <path>] [--input-stdin] [--headless] [--open]
+npx @almyty/credentials delete <id>
+npx @almyty/credentials grants <id>
+npx @almyty/credentials grant <id> --principal user|team|role|agent|workspace --to <principalId>
+                           [--permission use|manage] [--expires <iso8601>]
+npx @almyty/credentials revoke <id> <grantId>
 ```
 
-`connect` picks the connector's best method unless `--method` names another,
+`add` picks the service's best method unless `--method` names another,
 which is the same "best first" order the connect form offers. For a form
 method it prints the connector's own guidance and the page where the key is
 created, then prompts for each field.
@@ -237,7 +252,7 @@ fields are read without echo), `--input-file <path>`, or `--input-stdin`.
 and the safe alternatives without repeating the value.
 
 Unattended runs are handled rather than hung. Without a terminal to prompt on,
-`connect` and `rotate` say so and name the two input flags, instead of reading
+`add` and `rotate` say so and name the two input flags, instead of reading
 end-of-file and submitting an empty form the provider then rejects for an
 unrelated reason. `--input-stdin` with a terminal on stdin is refused for the
 same reason.
@@ -265,7 +280,7 @@ Exit codes are the suite's shared table: 0 success, 1 unexpected, 2 usage,
 
 Admins can add connectors the catalog does not have: any
 OpenAI-compatible endpoint, any MCP server, any memory service, any
-bucket. `POST /connectors` takes the same shape as a built-in entry: a
+bucket. `POST /credentials/services` takes the same shape as a built-in entry: a
 key, a kind, the form fields (secret ones marked `x-secret`) and how to
 validate.
 

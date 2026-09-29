@@ -136,7 +136,7 @@ the successor.
 `ConnectionsService` is the one writer and calls it like this:
 
 ```ts
-// POST /connections/:id/rotate
+// POST /credentials/:id/rotate
 const row = await this.load(organizationId, id);
 this.assertCanManage(principal, row);
 const connector = await this.catalog.require(organizationId, row.connectorKey);
@@ -167,7 +167,7 @@ if (outcome.manual) {
 ```
 
 ```ts
-// DELETE /connections/:id
+// DELETE /credentials/:id
 const result = await this.rotation.revoke(
   { id: row.id, organizationId, connectorKey: row.connectorKey, name: row.name, secrets: await this.decryptConfig(row) },
   { userId: principal.id },

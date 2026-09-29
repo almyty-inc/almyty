@@ -7,7 +7,7 @@ constructor arguments, method and inputs.
 ## Create one in the UI
 
 1. Open **APIs → Connect an API** (`/apis/new`) and pick **SDK / npm** (`/apis/new/sdk`).
-2. Add the package names and versions. If needed, expand the private-registry settings and provide the registry URL, scope and credential.
+2. Add the package names and versions. For a private registry, tick **Use a private npm registry** and give its URL, its scope and its token, picked from Credentials or created there.
 3. Create the API and wait for package analysis to finish. Its SDK maps describe the available exports, methods and parameter types.
 4. Open **Tools → Create tool** (`/tools/new`) and select **SDK / npm package**.
 5. Name the tool, choose its **SDK API**, then select a package, class or export, and method from the discovered map.
@@ -37,7 +37,7 @@ mappings for constructor or method arguments that need them. A mapping stores
 a reference such as `credentialName.field`, not the secret itself. Use literals
 for non-secret constants and parameters for values callers should supply.
 
-Private registry credentials are configured on the SDK API. They authorize
+The private registry's token is a credential the SDK API points at. It authorizes
 package retrieval and are separate from the credentials a method needs when
 it calls an upstream service.
 

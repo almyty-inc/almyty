@@ -22,9 +22,8 @@ const pkg = JSON.parse(
 
 describe('subcommand table', () => {
   it('only delegates to packages @almyty/cli actually depends on', () => {
-    // `almyty models` and `almyty connections` were advertised in --help
-    // while the umbrella did not depend on either package, so both
-    // answered "package is not installed".
+    // A command --help advertises answers "package is not installed"
+    // unless the umbrella depends on the package it runs.
     for (const [name, sub] of Object.entries(SUBCOMMANDS)) {
       expect(pkg.dependencies[sub.pkg], `${name} -> ${sub.pkg}`).toBeDefined();
     }

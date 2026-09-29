@@ -104,7 +104,7 @@ almyty agents run my-agent --watch        # run one, streaming, with cost and th
 almyty chat my-agent                      # interactive REPL with an agent
 almyty models list --selectable           # model cards the router may pick
 almyty models route --objective cheapest  # what the router would choose, and what it passed over
-almyty connections connectors             # what can be connected, and how
+almyty credentials services               # what a credential can be added for, and how
 almyty skills install @acme/petstore      # install tools as Agent Skills into Claude Code, Cursor, etc.
 almyty mcp                                # run almyty as an MCP server proxy
 almyty acp                                # run almyty as an ACP agent
