@@ -16,6 +16,8 @@ import {
   retentionSeconds,
 } from './agent-memory-settings';
 import { runMayWriteSharedMemory } from './memory-autosave.policy';
+import { principalOfRun } from '../../common/authorization/execution-access.service';
+import type { AgentAccountUse } from '../memory/canonical/memory-accounts.service';
 
 /** The most facts one run adds. */
 export const FACTS_PER_RUN_MAX = 5;
@@ -211,10 +213,15 @@ export class AgentMemoryKeeper {
     return kept;
   }
 
+  /** The agent's own account, when it has one, used as the run's principal. */
+  private accountUse(agent: Agent, run: AgentRun, s: MemorySettings): AgentAccountUse {
+    return s.credentialId ? { credentialId: s.credentialId, agentId: agent.id, principal: principalOfRun(run) } : {};
+  }
+
   private search(agent: Agent, run: AgentRun, scope: ScopeRef, query: string, topK: number): Promise<RankedItem[]> {
     const s = this.settings(agent);
     const q = { scope, query, mode: 'memory' as const, top_k: topK };
-    if (this.s.memoryAccounts) return this.s.memoryAccounts.search(run.organizationId, s.account, q);
+    if (this.s.memoryAccounts) return this.s.memoryAccounts.search(run.organizationId, s.account, q, this.accountUse(agent, run, s));
     if (s.account !== NATIVE_MEMORY_ACCOUNT) throw new Error(`The memory account "${s.account}" is not reachable here`);
     return this.s.memoryService.search(q);
   }
@@ -251,7 +258,11 @@ export class AgentMemoryKeeper {
     const actor = { user_id: run.userId ?? undefined };
     const ttl = retentionSeconds(s);
     if (this.s.memoryAccounts) {
-      return this.s.memoryAccounts.put(run.organizationId, s.account, input, actor, { agentId: agent.id, expiresInSeconds: ttl });
+      return this.s.memoryAccounts.put(run.organizationId, s.account, input, actor, {
+        agentId: agent.id,
+        expiresInSeconds: ttl,
+        ...this.accountUse(agent, run, s),
+      });
     }
     if (s.account !== NATIVE_MEMORY_ACCOUNT) throw new Error(`The memory account "${s.account}" is not reachable here`);
     return this.s.memoryService.put({ ...input, ttl_seconds: ttl }, actor);

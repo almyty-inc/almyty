@@ -205,4 +205,16 @@ describe("an agent's memory settings at run time", () => {
     expect(seen.memoryAccounts.put).not.toHaveBeenCalled();
     expect(seen.memoryAccounts.search).not.toHaveBeenCalled();
   });
+
+  it("an account of the agent's own: every read and write names its connection, used as the run's principal", async () => {
+    const seen = await run(
+      { enabled: true, whose: 'agent', save: 'conversations', account: 'mem0', credentialId: 'cred-own' },
+      [anthropicText('claude-sonnet-5', 100, [ANSWER], 8)],
+    );
+    const use = { credentialId: 'cred-own', agentId: 'agent-1', principal: expect.objectContaining({ kind: 'user' }) };
+    expect((seen.memoryAccounts.search.mock.calls[0] as any[])[3]).toEqual(use);
+    expect(saves(seen.memoryAccounts)).toEqual([
+      expect.objectContaining({ account: 'mem0', opts: { agentId: 'agent-1', expiresInSeconds: null, ...use } }),
+    ]);
+  });
 });

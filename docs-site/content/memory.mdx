@@ -69,14 +69,14 @@ Every memory belongs to a scope (`user`, `workspace`, `project`, `collab`, or `a
 
 An autonomous agent's **Memory** section decides what its runs read and write. Every setting is applied by the server on each run; none of it is only shown.
 
-**Memory account.** almyty's own memory, or an outside account your organization set up (on the Memory page, or with **Add a memory account** on the agent). The agent reads and writes through that account, signed in with the organization's credential for it.
+**Memory account.** almyty's own memory, an outside account your organization set up on the Memory page, or an account of the agent's own: anyone who can edit the agent can connect one with **Add a memory account**, without changing the organization's memory settings. An organization account is used with the organization's credential for it; the agent's own account is used as the run, so its connection's scope applies (a private connection only for an agent private to the same owner, a team one only for that team's agents; the server refuses any other).
 
 **Whose memory.**
 
 | Choice | The memory a run reads and writes |
 |---|---|
 | Each person has their own | The member the run is for. A visitor on a hosted chat or widget gets a memory of their own too, but it is written only when the agent's visitor settings allow keeping visitor memory. A run for nobody (a heartbeat, an A2A call without a person) has no memory. |
-| This agent's own | This agent's alone; no other agent reads it. It is on the agent's **Memory** tab. |
+| This agent's own | This agent's alone; no other agent reads it. It is on the agent's **Memory** tab, and only the people who can see the agent can see it (on the page and through the Memory API): its owner for a private agent, its team for a team agent, the organization for the rest. |
 | Shared by all agents | The organization's memory, read and written by every agent that shares it. |
 
 **What it saves.**

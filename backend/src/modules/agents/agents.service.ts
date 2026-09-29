@@ -20,6 +20,8 @@ import { AgentMemoryConfig, memoryConfigProblems, memorySettings, retentionSecon
 import { capabilityProblems, normaliseCapabilities } from './agent-capabilities';
 import { MemoryAccountsService } from '../memory/canonical/memory-accounts.service';
 import { Api } from '../../entities/api.entity';
+import { CredentialType } from '../../entities/credential.entity';
+import { CredentialRefResolver, SystemActor } from '../credentials/credential-ref.resolver';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
 import {
   assertAttachable,
@@ -201,7 +203,25 @@ export class AgentsService {
     // The organization's memory accounts, to check the one an agent names
     // and to apply its retention to what it already saved.
     @Optional() private readonly memoryAccounts?: MemoryAccountsService,
+    @Optional() private readonly credentialRefs?: CredentialRefResolver,
   ) {}
+
+  /** See the call sites: an agent's own memory account must be one the agent may use. */
+  private async assertMemoryConnection(
+    memoryConfig: AgentMemoryConfig | null | undefined,
+    target: SystemActor,
+    actorId: string | null | undefined,
+  ): Promise<void> {
+    const credentialId = memoryConfig?.credentialId;
+    if (!credentialId) return;
+    if (!this.credentialRefs) throw new BadRequestException("Invalid settings: the agent's memory account cannot be checked here");
+    const row = await this.credentialRefs.load(target.organizationId, credentialId).catch(() => null);
+    if (!row) throw new BadRequestException('Invalid settings: The memory account connection was not found');
+    if (row.type !== CredentialType.MEMORY_BACKEND) {
+      throw new BadRequestException('Invalid settings: That connection is not a memory account');
+    }
+    await this.credentialRefs.assertAttachable(row, { ...target, noun: 'agent' }, { actorId: actorId ?? null });
+  }
 
   /**
    * Refuse a Memory or Capabilities section the runtime could not honour:
@@ -219,7 +239,13 @@ export class AgentsService {
     const problems: string[] = [];
     const mc = memoryConfig as AgentMemoryConfig | null | undefined;
     const outside = !!mc && typeof mc === 'object' && typeof mc.account === 'string' && mc.account !== '' && mc.account !== NATIVE_MEMORY_ACCOUNT;
-    const accounts = outside && this.memoryAccounts ? await this.memoryAccounts.accounts(organizationId) : undefined;
+    let accounts = outside && this.memoryAccounts ? await this.memoryAccounts.accounts(organizationId) : undefined;
+    // An account of the agent's own (a connection added from its page) is
+    // for any memory service, whether or not the organization has one.
+    if (accounts && mc?.credentialId && !accounts.some((a) => a.id === mc.account)) {
+      const own = this.memoryAccounts!.describe(mc.account as string);
+      if (own) accounts = [...accounts, own];
+    }
     problems.push(...memoryConfigProblems(memoryConfig, accounts));
 
     normaliseCapabilities(agentConfig as any);
@@ -464,7 +490,11 @@ export class AgentsService {
         callerId: userId,
         noun: 'agent',
       });
-
+      await this.assertMemoryConnection(
+        createDto.memoryConfig,
+        { organizationId, visibility: scope.visibility, teamId: scope.teamId, ownerUserId: userId },
+        userId,
+      );
       // Validate pipeline (only for workflow mode)
       const mode = createDto.mode || 'workflow';
       if (mode === 'workflow' && createDto.pipeline) {
@@ -774,6 +804,23 @@ export class AgentsService {
           agentConfig: updateDto.agentConfig !== undefined ? (updateDto.agentConfig as Agent['agentConfig']) : agent.agentConfig,
         },
         organizationId,
+      );
+    }
+    // An account of the agent's own must be one the agent may use: its
+    // connection's scope covers the agent's (a private connection only for
+    // an agent private to the same owner, a team one for that team's), and
+    // whoever attaches it must be able to use it themselves.
+    if (scopeChanging || updateDto.memoryConfig !== undefined) {
+      const mc = updateDto.memoryConfig !== undefined ? updateDto.memoryConfig : agent.memoryConfig;
+      await this.assertMemoryConnection(
+        mc,
+        {
+          organizationId,
+          visibility: scope?.visibility ?? agent.visibility,
+          teamId: scope ? scope.teamId : agent.teamId,
+          ownerUserId: scope?.ownerId ?? agent.createdBy,
+        },
+        mc?.credentialId && mc.credentialId !== agent.memoryConfig?.credentialId ? userId : null,
       );
     }
     // Narrowing it (to private, to a team, or to another team) would detach

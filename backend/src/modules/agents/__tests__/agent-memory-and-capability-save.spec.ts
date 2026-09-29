@@ -48,6 +48,28 @@ describe('saving the memory and capabilities sections', () => {
         { id: 'vertex-memory-bank', name: 'Vertex AI Memory Bank', canExpire: false, expiresItself: false },
       ]),
       setAgentRetention: jest.fn(async () => undefined),
+      describe: jest.fn((id: string) => (id === 'zep' ? { id: 'zep', name: 'Zep', canExpire: true, expiresItself: false } : null)),
+    };
+    // The connections: a team one, a private one of user-1's, and a key of another kind.
+    const connections: Record<string, any> = {
+      'cred-team': { id: 'cred-team', organizationId: 'org-1', type: 'memory_backend', visibility: 'team', teamId: 'team-1' },
+      'cred-mine': { id: 'cred-mine', organizationId: 'org-1', type: 'memory_backend', visibility: 'private', ownerUserId: 'user-1' },
+      'cred-llm': { id: 'cred-llm', organizationId: 'org-1', type: 'api_key', visibility: 'org' },
+    };
+    const credentialRefs = {
+      load: jest.fn(async (_org: string, id: string) => {
+        if (!connections[id]) throw new Error('credential not found');
+        return connections[id];
+      }),
+      // The real rule, in short: a scoped connection only for a resource of the same scope.
+      assertAttachable: jest.fn(async (row: any, target: any) => {
+        if (row.visibility === 'private' && !(target.visibility === 'private' && target.ownerUserId === row.ownerUserId)) {
+          throw new BadRequestException(`The connection is private to its owner, so nobody else who uses this ${target.noun} could use it.`);
+        }
+        if (row.visibility === 'team' && !(target.visibility === 'team' && target.teamId === row.teamId)) {
+          throw new BadRequestException('The connection belongs to its team only.');
+        }
+      }),
     };
     const svc = new AgentsService(
       agents as any,
@@ -59,8 +81,9 @@ describe('saving the memory and capabilities sections', () => {
       orgMembersPolicy('org-1', { 'user-1': OrganizationRole.MEMBER }) as any,
       { assertReady: async () => undefined } as any,
       memoryAccounts as any,
+      credentialRefs as any,
     );
-    return { svc, agents, memoryAccounts };
+    return { svc, agents, memoryAccounts, credentialRefs };
   };
 
   const refusal = (p: Promise<unknown>) =>
@@ -129,5 +152,47 @@ describe('saving the memory and capabilities sections', () => {
     expect(memoryAccounts.setAgentRetention).toHaveBeenCalledWith('org-1', 'ag-1', 7 * 86400);
     await svc.updateAgent('ag-1', { memoryConfig: { enabled: true, retentionDays: null } }, 'org-1', 'user-1');
     expect(memoryAccounts.setAgentRetention).toHaveBeenLastCalledWith('org-1', 'ag-1', null);
+  });
+
+  describe("an account of the agent's own (added from its page by whoever can edit it)", () => {
+    it('is saved for any memory service, checked as usable by the agent and by whoever attaches it', async () => {
+      const { svc, agents, credentialRefs } = service();
+      const memoryConfig = { enabled: true, account: 'zep', credentialId: 'cred-mine' };
+      const saved = await svc.createAgent({ name: 'Mine', mode: 'autonomous', visibility: 'private', memoryConfig }, 'org-1', 'user-1');
+      expect(agents.row(saved.id)!.memoryConfig).toEqual(memoryConfig);
+      expect(credentialRefs.assertAttachable).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'cred-mine' }),
+        { organizationId: 'org-1', visibility: 'private', teamId: null, ownerUserId: 'user-1', noun: 'agent' },
+        { actorId: 'user-1' },
+      );
+    });
+
+    it("refuses a connection the agent's scope does not cover: a private one on an org agent", async () => {
+      const { svc } = service();
+      expect(
+        await refusal(svc.updateAgent('ag-1', { memoryConfig: { enabled: true, account: 'mem0', credentialId: 'cred-mine' } }, 'org-1', 'user-1')),
+      ).toMatch(/private to its owner/);
+    });
+
+    it('checks it again when the agent changes scope', async () => {
+      const { svc, agents } = service();
+      const saved = await svc.createAgent(
+        { name: 'Mine', mode: 'autonomous', visibility: 'private', memoryConfig: { enabled: true, account: 'mem0', credentialId: 'cred-mine' } },
+        'org-1',
+        'user-1',
+      );
+      expect(await refusal(svc.updateAgent(saved.id, { visibility: 'org' }, 'org-1', 'user-1'))).toMatch(/private to its owner/);
+      expect(agents.row(saved.id)!.visibility).toBe('private');
+    });
+
+    it('refuses a connection that is not a memory account, one that does not exist, and one for almyty itself', async () => {
+      const { svc } = service();
+      const save = (memoryConfig: any) => refusal(svc.updateAgent('ag-1', { memoryConfig }, 'org-1', 'user-1'));
+      expect(await save({ enabled: true, account: 'mem0', credentialId: 'cred-llm' })).toBe('Invalid settings: That connection is not a memory account');
+      expect(await save({ enabled: true, account: 'mem0', credentialId: 'cred-gone' })).toBe('Invalid settings: The memory account connection was not found');
+      expect(await save({ enabled: true, account: 'almyty-native', credentialId: 'cred-mine' })).toBe(
+        "Invalid settings: almyty's own memory needs no account: choose the service the connection is for",
+      );
+    });
   });
 });

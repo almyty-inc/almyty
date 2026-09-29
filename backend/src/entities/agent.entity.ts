@@ -188,6 +188,7 @@ export class Agent {
     save?: 'facts' | 'conversations' | 'asked';
     neverSave?: string;
     retentionDays?: number | null;
+    credentialId?: string | null;
   };
 
   @Column({ type: 'json', nullable: true })

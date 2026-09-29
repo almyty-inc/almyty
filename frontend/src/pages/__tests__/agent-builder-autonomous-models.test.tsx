@@ -397,6 +397,7 @@ describe('the autonomous agent page', () => {
         enabled: true,
         autoSave: false,
         account: 'mem0',
+        credentialId: null,
         whose: 'person',
         save: 'conversations',
         neverSave: 'Payment details',

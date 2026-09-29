@@ -24,6 +24,7 @@ import { TeamFilter, filterByTeamVisibility, type TeamFilterValue } from '@/comp
 import { ConnectAccountButton } from '@/components/connections/connect-flow'
 import type { Connection } from '@/types/connections'
 import { MEMORY_TIER_LABELS, memoryBackendName } from '@/components/memory/memory-words'
+import { memoryConnectionsQuery } from '@/components/memory/memory-connections'
 
 /**
  * Memory, in plain words.
@@ -161,15 +162,7 @@ export function MemoriesPage() {
   })
 
   // Credentials list — for the "wire credential to backend" picker.
-  const credsQ = useQuery({
-    queryKey: ['credentials', 'memory-backend'],
-    queryFn: async () => {
-      const res: any = await import('@/lib/api').then((m) => m.credentialsApi.getAll())
-      const list = (res?.data ?? res ?? []) as any[]
-      return list.filter((c) => c?.type === 'memory_backend')
-    },
-    enabled: tab === 'storage',
-  })
+  const credsQ = useQuery({ ...memoryConnectionsQuery, enabled: tab === 'storage' })
 
   // ── render ──────────────────────────────────────────────────────────
   if (!orgId) {

@@ -1,7 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, LessThan, Repository } from 'typeorm';
 
+import { Agent } from '../../../entities/agent.entity';
+import { CredentialRefResolver, ResolveOptions, SystemActor } from '../../credentials/credential-ref.resolver';
 import { CanonicalMemoryService } from './canonical-memory.service';
 import { CanonicalMemoryWorkspaceConfig } from './canonical-memory-config.entity';
 import { CanonicalMemory } from './canonical-memory.entity';
@@ -9,6 +11,8 @@ import { MemoryExpiry } from './memory-expiry.entity';
 import { MemoryRouter } from './memory-router.service';
 import { PutInput } from './dto/canonical-memory.dto';
 import { MemoryItem, RankedItem, ScopeRef, SearchQuery } from './canonical.types';
+import { BackendCredentials } from './backends/memory-backend.interface';
+import { pickKnownFields } from './backend-credentials.resolver';
 
 /** almyty's own store: always there, needs no account. */
 export const NATIVE_MEMORY_ACCOUNT = 'almyty-native';
@@ -46,6 +50,19 @@ export interface MemoryAccount {
 }
 
 /**
+ * An agent that keeps its memories in an account of its own (a connection
+ * added from the agent's page) rather than the organization's: which
+ * connection, and who the use is for.
+ */
+export interface AgentAccountUse {
+  credentialId?: string | null;
+  agentId?: string | null;
+  /** The run's principal; null for the sweep, which acts for the agent (systemFor). */
+  principal?: ResolveOptions['principal'];
+  systemFor?: SystemActor;
+}
+
+/**
  * The memory accounts of an organization, and an agent's reads and writes
  * through the one it chose.
  *
@@ -69,6 +86,9 @@ export class MemoryAccountsService {
     private readonly expiryRepo: Repository<MemoryExpiry>,
     @InjectRepository(CanonicalMemory)
     private readonly memoryRepo: Repository<CanonicalMemory>,
+    // An agent's own memory account is a connection of its own, read
+    // through the one seam every consumer uses.
+    @Optional() private readonly credentialRefs?: CredentialRefResolver,
   ) {}
 
   /** almyty's own store, then every outside service the organization has an account for. */
@@ -102,7 +122,7 @@ export class MemoryAccountsService {
     accountId: string,
     input: PutInput,
     actor: { user_id?: string },
-    opts: { agentId?: string | null; expiresInSeconds?: number | null } = {},
+    opts: { agentId?: string | null; expiresInSeconds?: number | null } & AgentAccountUse = {},
   ): Promise<MemoryItem> {
     const ttl = opts.expiresInSeconds ?? null;
     if (!accountId || accountId === NATIVE_MEMORY_ACCOUNT) {
@@ -111,7 +131,8 @@ export class MemoryAccountsService {
     const backend = this.router.backend(accountId);
     if (!backend) throw new Error(`The memory account "${accountId}" does not exist`);
     const item = this.memory.draftItem({ ...input, ttl_seconds: null });
-    const saved = await this.router.putOn(accountId, item, orgScope(organizationId));
+    const creds = await this.ownCredentials(organizationId, opts);
+    const saved = await this.router.putOn(accountId, item, orgScope(organizationId), creds);
     const nativeId = backend.nativeId?.(saved) ?? null;
     // Kept even without a time limit, so a retention set later still
     // reaches what the agent saved before it.
@@ -125,6 +146,7 @@ export class MemoryAccountsService {
           scopeId: item.scope_id,
           nativeId,
           memoryId: item.id,
+          credentialId: opts.credentialId ?? null,
           expiresAt: ttl ? new Date(Date.now() + ttl * 1000) : null,
         }),
       );
@@ -132,10 +154,53 @@ export class MemoryAccountsService {
     return saved;
   }
 
-  /** Search one scope through `accountId`. */
-  async search(organizationId: string, accountId: string, query: SearchQuery): Promise<RankedItem[]> {
+  /** Search one scope through `accountId` (with the agent's own account when it has one). */
+  async search(organizationId: string, accountId: string, query: SearchQuery, opts: AgentAccountUse = {}): Promise<RankedItem[]> {
     if (!accountId || accountId === NATIVE_MEMORY_ACCOUNT) return this.memory.search(query);
-    return this.router.searchOn(accountId, query, orgScope(organizationId));
+    const creds = await this.ownCredentials(organizationId, opts);
+    return this.router.searchOn(accountId, query, orgScope(organizationId), creds);
+  }
+
+  /** What a memory service can do about retention, for an account an agent names itself. */
+  describe(backendId: string): MemoryAccount | null {
+    const backend = this.router.backend(backendId);
+    if (!backend || backendId === NATIVE_MEMORY_ACCOUNT || !backend.supported_modes.has('memory')) return null;
+    const expiresItself = backend.capabilities.has('ttl');
+    return { id: backendId, name: memoryAccountName(backendId), canExpire: expiresItself || typeof backend.nativeId === 'function', expiresItself };
+  }
+
+  /**
+   * The agent's own account's credentials, for a run: resolved as the run's
+   * principal, so the usual who-can-use rules of that connection apply.
+   * undefined when the agent uses the organization's account.
+   */
+  private async ownCredentials(organizationId: string, opts: AgentAccountUse): Promise<BackendCredentials | undefined> {
+    if (!opts.credentialId) return undefined;
+    if (!this.credentialRefs) throw new Error("The agent's memory account cannot be reached here");
+    const resolved = await this.credentialRefs.resolve(organizationId, opts.credentialId, {
+      principal: opts.principal ?? null,
+      ...(opts.systemFor ? { systemFor: opts.systemFor } : {}),
+      context: { purpose: 'memory_backend', resourceType: 'agent', resourceId: opts.agentId ?? undefined },
+    });
+    return pickKnownFields(resolved.config ?? {});
+  }
+
+  /** For the sweep: the agent's own account, as the system acting for that agent. */
+  private async agentCredentials(row: MemoryExpiry): Promise<BackendCredentials | undefined> {
+    const agent = row.agentId
+      ? await this.expiryRepo.manager.getRepository(Agent).findOne({
+          where: { id: row.agentId, organizationId: row.organizationId },
+          select: { id: true, organizationId: true, visibility: true, teamId: true, createdBy: true },
+        })
+      : null;
+    return this.ownCredentials(row.organizationId, {
+      credentialId: row.credentialId,
+      agentId: row.agentId,
+      principal: null,
+      systemFor: agent
+        ? { organizationId: row.organizationId, visibility: agent.visibility, teamId: agent.teamId, ownerUserId: agent.createdBy }
+        : undefined,
+    });
   }
 
   /**
@@ -175,7 +240,8 @@ export class MemoryAccountsService {
     const done: string[] = [];
     for (const row of due) {
       try {
-        await this.router.deleteOn(row.backendId, row.nativeId, orgScope(row.organizationId));
+        const creds = row.credentialId ? await this.agentCredentials(row) : undefined;
+        await this.router.deleteOn(row.backendId, row.nativeId, orgScope(row.organizationId), creds);
         done.push(row.id);
         deleted++;
       } catch (e: any) {

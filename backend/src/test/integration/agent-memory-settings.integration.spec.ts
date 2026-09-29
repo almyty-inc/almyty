@@ -136,7 +136,8 @@ describeIfDb('agent memory settings in the store (real Postgres)', () => {
       expiries.create({ organizationId: ORG, agentId: AGENT, backendId: 'mem0', scopeType: 'agent', scopeId: 's', nativeId: 'later-1', memoryId: 'l1', expiresAt: new Date(Date.now() + 86_400_000) }),
     ]);
     expect(await accounts.sweepExpired()).toEqual({ deleted: 1, failed: 0 });
-    expect(deleteOn).toHaveBeenCalledWith('mem0', 'due-1', { scope_type: 'workspace', scope_id: ORG });
+    // The organization's account: no connection of the agent's own.
+    expect(deleteOn).toHaveBeenCalledWith('mem0', 'due-1', { scope_type: 'workspace', scope_id: ORG }, undefined);
     expect((await expiries.find()).map((r) => r.nativeId)).toEqual(['later-1']);
   });
 });

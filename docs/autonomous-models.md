@@ -189,7 +189,14 @@ The agent's other two sections are read by the same loop, on every step.
 - `account` is almyty's own store or an outside backend the organization
   has a credential for (`MemoryAccountsService.accounts`); reads and writes
   go through it (`MemoryRouter.putOn` / `searchOn`), signed in with the
-  workspace's credential. Unknown accounts are refused at save.
+  workspace's credential. Unknown accounts are refused at save. With
+  `credentialId` the agent has an account of its own (connected from its
+  page by anyone who can edit it): resolved as the run's principal, checked
+  at save with `CredentialRefResolver.assertAttachable` against the
+  agent's scope and the saver, again when the agent's scope changes, and
+  used by the sweep as the system acting for the agent. An `agent` scope
+  is readable through the Memory API only by those who can see the agent
+  (`CanonicalMemoryController.scopeFor`).
 - `save`: `facts` makes one call on the main role after a completed run
   and saves each fact (tier `long`); `conversations` saves the exchange
   (tier `project`); `asked` saves nothing on its own, and `store_memory`

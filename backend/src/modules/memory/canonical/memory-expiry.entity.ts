@@ -38,6 +38,10 @@ export class MemoryExpiry {
   @Column({ name: 'native_id', type: 'text' })
   nativeId: string;
 
+  /** The agent's own account it was saved with (a connection); null for the organization's. */
+  @Column({ name: 'credential_id', type: 'uuid', nullable: true })
+  credentialId: string | null;
+
   /** The canonical id the memory was saved under. */
   @Column({ name: 'memory_id', type: 'text' })
   memoryId: string;

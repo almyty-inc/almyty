@@ -30,6 +30,7 @@ describe('memory settings', () => {
       save: 'asked',
       neverSave: [],
       retentionDays: null,
+      credentialId: null,
     });
   });
 

@@ -33,6 +33,7 @@ export class AgentMemorySettings1750813700000 implements MigrationInterface {
         scope_id TEXT NOT NULL,
         native_id TEXT NOT NULL,
         memory_id TEXT NOT NULL,
+        credential_id UUID,
         expires_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       )

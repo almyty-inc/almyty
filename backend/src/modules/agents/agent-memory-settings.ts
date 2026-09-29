@@ -42,6 +42,12 @@ export interface AgentMemoryConfig {
   save?: MemorySave;
   neverSave?: string;
   retentionDays?: number | null;
+  /**
+   * An account of the agent's own for `account` (a connection added from the
+   * agent's page), instead of the organization's for that service. Who can
+   * use it follows the connection's own scope.
+   */
+  credentialId?: string | null;
 }
 
 export interface MemorySettings {
@@ -51,6 +57,8 @@ export interface MemorySettings {
   save: MemorySave;
   neverSave: string[];
   retentionDays: number | null;
+  /** The agent's own account (a connection) for `account`; null uses the organization's. */
+  credentialId: string | null;
 }
 
 /** The settings with every default filled in. */
@@ -65,6 +73,7 @@ export function memorySettings(cfg: AgentMemoryConfig | null | undefined): Memor
       ? c.neverSave.split('\n').map((l) => l.trim()).filter(Boolean)
       : [],
     retentionDays: typeof c.retentionDays === 'number' && c.retentionDays > 0 ? c.retentionDays : null,
+    credentialId: typeof c.credentialId === 'string' && c.credentialId ? c.credentialId : null,
   };
 }
 
@@ -122,6 +131,10 @@ export function memoryConfigProblems(cfg: unknown, accounts?: Array<Pick<MemoryA
   if (c.neverSave !== undefined && c.neverSave !== null) {
     if (typeof c.neverSave !== 'string') problems.push('The never-save rules must be text, one rule per line');
     else if (c.neverSave.length > NEVER_SAVE_MAX_CHARS) problems.push(`Keep the never-save rules under ${NEVER_SAVE_MAX_CHARS} characters`);
+  }
+  if (c.credentialId !== undefined && c.credentialId !== null) {
+    if (typeof c.credentialId !== 'string' || !c.credentialId) problems.push("The agent's own memory account must be a connection id");
+    else if (!c.account || c.account === NATIVE_MEMORY_ACCOUNT) problems.push("almyty's own memory needs no account: choose the service the connection is for");
   }
   if (c.account !== undefined && c.account !== null && typeof c.account !== 'string') {
     problems.push('The memory account must be an account id');

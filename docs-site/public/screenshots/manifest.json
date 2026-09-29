@@ -35,7 +35,7 @@
       "path": "screenshots/agent-collab-debate.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Collaboration is no longer on the autonomous form: other agents are picked under Capabilities, and several models work together through the work mode. The image shows the old debate collaboration and needs a new subject. Tracked for #675, not verified current.",
+      "reason": "Collaboration is no longer on the autonomous form: several models work together through the work mode, and the cross-vendor contract review example now describes Panel. Recapture as the Work mode section set to Panel, with panelists on different providers and a judge (the example page and autonomous page use this image). Tracked for #675, not verified current.",
       "sha256": "0151ac29672c9601e031e34476a394c11370c36883f61a1cd0feff3cbf85436b"
     },
     {

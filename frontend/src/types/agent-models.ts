@@ -73,6 +73,8 @@ export interface AgentMemoryConfig {
   neverSave?: string
   /** Days a memory is kept; null or absent until deleted. */
   retentionDays?: number | null
+  /** An account of the agent's own for `account` (a connection added from its page). */
+  credentialId?: string | null
 }
 
 /** A memory account an agent can keep its memories in (GET /memory/canonical/accounts). */

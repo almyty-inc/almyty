@@ -69,7 +69,7 @@ describe('MemoryAccountsService', () => {
     const { svc, router, expiries } = build();
     const before = Date.now();
     await svc.put('org-1', 'mem0', input, { user_id: 'u-1' }, { agentId: 'a-1', expiresInSeconds: 3600 });
-    expect(router.putOn).toHaveBeenCalledWith('mem0', expect.objectContaining({ content: 'Dana prefers email' }), { scope_type: 'workspace', scope_id: 'org-1' });
+    expect(router.putOn).toHaveBeenCalledWith('mem0', expect.objectContaining({ content: 'Dana prefers email' }), { scope_type: 'workspace', scope_id: 'org-1' }, undefined);
     const [row] = expiries.rows();
     expect(row).toMatchObject({ organizationId: 'org-1', agentId: 'a-1', backendId: 'mem0', nativeId: 'm0-77', memoryId: 'mem-1', scopeType: 'agent' });
     expect(row.expiresAt!.getTime()).toBeGreaterThanOrEqual(before + 3600_000);
@@ -85,7 +85,7 @@ describe('MemoryAccountsService', () => {
     const { svc, memory, router } = build();
     const q = { scope: input.scope, query: 'email', mode: 'memory' as const };
     expect((await svc.search('org-1', 'mem0', q))[0].item.content).toBe('mem0 hit');
-    expect(router.searchOn).toHaveBeenCalledWith('mem0', q, { scope_type: 'workspace', scope_id: 'org-1' });
+    expect(router.searchOn).toHaveBeenCalledWith('mem0', q, { scope_type: 'workspace', scope_id: 'org-1' }, undefined);
     expect((await svc.search('org-1', 'almyty-native', q))[0].item.content).toBe('native hit');
     expect(memory.search).toHaveBeenCalledWith(q);
   });
@@ -100,7 +100,55 @@ describe('MemoryAccountsService', () => {
       { organizationId: 'org-1', agentId: 'a-1', backendId: 'mem0', scopeType: 'agent', scopeId: 's', nativeId: 'm0-3', memoryId: 'x3', expiresAt: future },
     ] as any);
     expect(await svc.sweepExpired()).toEqual({ deleted: 1, failed: 1 });
-    expect(router.deleteOn).toHaveBeenCalledWith('mem0', 'm0-1', { scope_type: 'workspace', scope_id: 'org-1' });
+    expect(router.deleteOn).toHaveBeenCalledWith('mem0', 'm0-1', { scope_type: 'workspace', scope_id: 'org-1' }, undefined);
     expect(expiries.rows().map((r) => r.nativeId).sort()).toEqual(['m0-3', 'm0-broken']);
+  });
+
+  describe("an agent's own account (a connection added from its page)", () => {
+    function withConnection() {
+      const built = build({});
+      const resolve = jest.fn(async () => ({ config: { apiKey: 'own-key', baseUrl: 'https://mem0.example' } }));
+      const agents = fakeRepository([{ id: 'a-1', organizationId: 'org-1', visibility: 'team', teamId: 'team-1', createdBy: 'u-1' }] as any);
+      (built.expiries as any).manager = { getRepository: () => agents };
+      const svc = new MemoryAccountsService(
+        built.memory as any,
+        built.router as any,
+        fakeRepository([]) as any,
+        built.expiries as any,
+        fakeRepository([]) as any,
+        { resolve } as any,
+      );
+      return { ...built, svc, resolve };
+    }
+
+    it('signs in with it, as the run, whatever the organization has set up', async () => {
+      const { svc, router, resolve, expiries } = withConnection();
+      const principal: any = { kind: 'user', userId: 'u-1', source: 'session' };
+      await svc.put('org-1', 'mem0', input, {}, { agentId: 'a-1', expiresInSeconds: 60, credentialId: 'cred-own', principal });
+      expect(resolve).toHaveBeenCalledWith('org-1', 'cred-own', {
+        principal,
+        context: { purpose: 'memory_backend', resourceType: 'agent', resourceId: 'a-1' },
+      });
+      expect(router.putOn).toHaveBeenCalledWith('mem0', expect.anything(), { scope_type: 'workspace', scope_id: 'org-1' }, { apiKey: 'own-key', baseUrl: 'https://mem0.example' });
+      expect(expiries.rows()[0].credentialId).toBe('cred-own');
+
+      await svc.search('org-1', 'mem0', { scope: input.scope, query: 'q', mode: 'memory' }, { credentialId: 'cred-own', agentId: 'a-1', principal });
+      expect((router.searchOn.mock.calls[0] as any[])[3]).toEqual({ apiKey: 'own-key', baseUrl: 'https://mem0.example' });
+    });
+
+    it("the sweep deletes with it as the system acting for the agent, within the agent's scope", async () => {
+      const { svc, router, resolve, expiries } = withConnection();
+      await expiries.save({
+        organizationId: 'org-1', agentId: 'a-1', backendId: 'mem0', scopeType: 'agent', scopeId: 's', nativeId: 'm0-9',
+        memoryId: 'x9', credentialId: 'cred-own', expiresAt: new Date(Date.now() - 1000),
+      } as any);
+      expect(await svc.sweepExpired()).toEqual({ deleted: 1, failed: 0 });
+      expect(resolve).toHaveBeenCalledWith('org-1', 'cred-own', {
+        principal: null,
+        systemFor: { organizationId: 'org-1', visibility: 'team', teamId: 'team-1', ownerUserId: 'u-1' },
+        context: { purpose: 'memory_backend', resourceType: 'agent', resourceId: 'a-1' },
+      });
+      expect(router.deleteOn).toHaveBeenCalledWith('mem0', 'm0-9', { scope_type: 'workspace', scope_id: 'org-1' }, { apiKey: 'own-key', baseUrl: 'https://mem0.example' });
+    });
   });
 });
