@@ -1,0 +1,270 @@
+# Anthropic Compatible API
+
+> This is the HTTP API reference. For UI walkthroughs, see [Getting Started](/) and the feature guides above.
+
+An almyty agent can be called through an Anthropic-compatible Messages API,
+so an application built on the official Anthropic SDK (Python or TypeScript)
+reaches an agent by changing the base URL and the key. Workflow and
+autonomous agents both answer. The endpoint runs agents exactly as the
+[OpenAI-compatible API](/api-reference/openai-compatible) does: the same keys
+reach the same agents, under the same rate limit, and the answer streams the
+same way. Only the wire shapes differ.
+
+```python
+from anthropic import Anthropic
+
+client = Anthropic(
+    base_url="https://api.almyty.com",
+    api_key="your-almyty-api-key",
+)
+
+message = client.messages.create(
+    model="agent:my-agent",
+    max_tokens=1024,
+    system="Answer in one sentence.",
+    messages=[
+        {"role": "user", "content": "My name is Frane."},
+        {"role": "assistant", "content": "Noted."},
+        {"role": "user", "content": "What is my name?"},
+    ],
+)
+print(message.content[0].text)
+```
+
+An agent is not a model: it runs its own pipeline and its own tools and hands
+back the finished answer. Fields that would change that (client-declared tools,
+sampling the agent does not take per request, extended thinking) are refused
+with a 400 naming the field rather than accepted and ignored.
+
+Claude Code is not a client this endpoint serves: it always declares tools,
+and client-declared tools are refused for the reason under [Tools](#tools).
+
+## Endpoint
+
+```
+POST https://api.almyty.com/v1/messages
+```
+
+The SDKs append `/v1/messages` to the base URL themselves, so the base URL is
+the bare host, without `/v1`.
+
+Authenticate with an almyty platform API key, sent as `x-api-key` (what the
+SDKs send) or as `Authorization: Bearer ...`. The `anthropic-version` and
+`anthropic-beta` headers are accepted and have no effect.
+
+## Which agents a key can call
+
+The same rules as the OpenAI-compatible API, decided by the same code:
+
+- only **active** agents; a draft or paused agent is refused with a 400;
+- agents of the **key's organization** only;
+- **org-visible** agents, **team** agents when the key's user is in the team
+  (or an org owner or admin), and **private** agents of the key's own user;
+- a key minted for **one agent** runs that agent only.
+
+A key is refused with a 401 when it is a gateway key, carries scopes, has
+expired or been revoked, or belongs to someone who is no longer an active
+member of the organization. Any agent outside the set is the same 404
+(`not_found_error`) an agent that does not exist gets. To list the agents a key
+can call, use `GET /v1/models` from the OpenAI-compatible API; it answers in
+the OpenAI shape.
+
+## Request
+
+```bash
+curl https://api.almyty.com/v1/messages \
+  -H "x-api-key: $ALMYTY_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{
+    "model": "agent:my-agent",
+    "max_tokens": 1024,
+    "system": "You are a helpful assistant.",
+    "messages": [{ "role": "user", "content": "What is the weather in Berlin?" }]
+  }'
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `model` | string | Yes | The agent: `agent:<id>`, `agent:<name>`, a bare id or name, or the name as a slug (`my-agent` for "My Agent") |
+| `max_tokens` | number | Yes | Applied to the run's LLM steps for this request only. Required, as it is by Anthropic |
+| `messages` | array | Yes | The conversation. This endpoint is stateless: send the whole history every turn |
+| `system` | string or text blocks | No | Folded into the conversation the agent reads; it does not replace the agent's own system prompt |
+| `temperature` | number | No | Applied to the run's LLM steps for this request only |
+| `stream` | boolean | No | Stream the answer as Anthropic's event stream |
+
+`metadata`, a `tool_choice` of `{"type": "none"}` and a `thinking` of
+`{"type": "disabled"}` are accepted and have no effect.
+
+The whole conversation reaches the agent. Because an agent prompt binds one
+string, it is rendered into it as a labelled transcript (`[system]`, `[user]`,
+`[assistant]` blocks); a single user message with no `system` is passed
+through unchanged. A `tool_result` block stays a tool turn rather than being
+flattened into user text.
+
+### Fields that are refused
+
+These come back as a `400` `invalid_request_error` before the agent runs. The
+message starts with the field's name, the way Anthropic's own validation
+errors do:
+
+`tools`, `tool_choice` (other than `none`), `top_p`, `top_k`,
+`stop_sequences`, `thinking` (other than `disabled`).
+
+```json
+{
+  "type": "error",
+  "error": {
+    "type": "invalid_request_error",
+    "message": "top_k: top_k is not supported by this endpoint."
+  }
+}
+```
+
+## Response
+
+### Non-streaming
+
+```json
+{
+  "id": "msg_4b0f...",
+  "type": "message",
+  "role": "assistant",
+  "model": "agent:my-agent",
+  "content": [{ "type": "text", "text": "It is 12°C and partly cloudy in Berlin." }],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": { "input_tokens": 31, "output_tokens": 12 }
+}
+```
+
+`model` echoes the request. `stop_reason` is `end_turn`: the answer is the
+agent's finished output. A pipeline whose output carries tool calls comes back
+as `tool_use` blocks with `stop_reason: "tool_use"`.
+
+For a workflow agent `input_tokens` and `output_tokens` are what the providers
+reported, summed over the run's LLM steps. An autonomous run records only its
+total, so both come back as `0`. The `x-almyty-usage-split` header says which
+you are looking at: `measured`, `unavailable`, or `in-stream` on a streamed
+response (read the usage in `message_delta`).
+
+### Streaming
+
+With `stream: true` the response is Anthropic's event stream:
+
+```
+event: message_start
+data: {"type":"message_start","message":{"id":"msg_...","type":"message","role":"assistant","model":"agent:my-agent","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":0,"output_tokens":0}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"It is 12°C"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" and partly cloudy."}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":31,"output_tokens":12}}
+
+event: message_stop
+data: {"type":"message_stop"}
+```
+
+`message_start` goes out before the run starts, so its usage is zero; the
+run's usage arrives in `message_delta`, which the SDKs take over it. While the
+run works, a `ping` event goes out every 15 seconds so a proxy does not close
+an idle stream.
+
+The text is the agent's answer and nothing else, and it arrives token by token
+or whole on exactly the terms the OpenAI-compatible API describes under
+[Streaming](/api-reference/openai-compatible#streaming): token by token when
+the answer is one model call's text (a workflow `llm_call` feeding the output
+node unchanged, or an autonomous agent's answer step), in one piece when the
+run finishes otherwise. Should the agent revise its answer after part of it
+went out, the stream ends with an error rather than a wrong answer.
+
+A run that fails after the stream has started ends with an `error` event,
+which the SDKs raise as an `APIError`:
+
+```
+event: error
+data: {"type":"error","error":{"type":"api_error","message":"..."}}
+```
+
+```typescript
+import Anthropic from "@anthropic-ai/sdk";
+
+const client = new Anthropic({
+  baseURL: "https://api.almyty.com",
+  apiKey: process.env.ALMYTY_API_KEY,
+});
+
+const stream = client.messages.stream({
+  model: "agent:my-agent",
+  max_tokens: 1024,
+  messages: [{ role: "user", content: "Summarize today's news" }],
+});
+stream.on("text", (text) => process.stdout.write(text));
+const message = await stream.finalMessage();
+console.log(message.usage);
+```
+
+## Autonomous agents
+
+An autonomous agent runs on the autonomous runtime and the request waits for
+the run to finish, up to 10 minutes; after that the run is cancelled and the
+request fails with a `504`. A run that stops to wait on a person (it asks the
+user a question, or reaches an approval gate) is cancelled and the request
+fails with a `409`: a stateless request has no turn on which anyone could
+answer it. Put what it needs in the next message, or use the agent runs API
+for human-in-the-loop work.
+
+## Tools
+
+An agent runs its own tools. A `tool_call` node executes inside the run and
+the answer comes back finished, so there is no turn at which a tool could be
+handed back for you to run. A request carrying `tools` is refused rather than
+answered as though the tools did not exist. Give the agent the tools instead.
+
+## Errors
+
+Every error has the Anthropic shape, so the SDKs raise their usual typed
+errors:
+
+```json
+{ "type": "error", "error": { "type": "not_found_error", "message": "Agent not found: agent:nope" } }
+```
+
+| Status | `error.type` | When | SDK error |
+|--------|--------------|------|-----------|
+| 400 | `invalid_request_error` | A refused field, a missing `max_tokens` or `model`, bad `messages`, an agent that is not active | `BadRequestError` |
+| 400 | `invalid_request_error` | An organization spend budget set to reject is used up, as Anthropic answers an exhausted usage limit | `BadRequestError` |
+| 401 | `authentication_error` | Missing, unknown, expired, gateway or scoped key | `AuthenticationError` |
+| 404 | `not_found_error` | An agent that does not exist or that this key may not run | `NotFoundError` |
+| 409 | `invalid_request_error` | An autonomous run stopped to wait on a person | `ConflictError` |
+| 429 | `rate_limit_error` | More than 60 requests a minute on this key | `RateLimitError` |
+| 502 | `api_error` | The run failed | `InternalServerError` |
+| 504 | `api_error` | An autonomous run did not finish in time | `InternalServerError` |
+
+Every response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and
+`X-RateLimit-Reset`, and a 429 carries `Retry-After`, which the SDKs wait for
+before their automatic retry. The window is 60 requests per key per minute,
+counted separately from the OpenAI-compatible route's.
+
+## Limitations
+
+- An agent's pipeline decides which model runs each step; `temperature` and
+  `max_tokens` are the only sampling controls a request can set
+- Token-by-token streaming covers the answer shapes described above; any other
+  agent streams its answer in one piece when the run finishes
+- Client-declared tools and extended thinking are refused, not ignored
+- `stop_reason` is `end_turn` even when a step hit its token ceiling: the run
+  does not carry a step's stop reason out to the response
+- Token counting, batches, files and the Models API in Anthropic's shape are
+  not served

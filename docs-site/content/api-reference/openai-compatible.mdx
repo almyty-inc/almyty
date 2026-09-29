@@ -188,10 +188,33 @@ final usage chunk).
 ### Streaming
 
 With `stream: true` the response is Server-Sent Events. The content is the
-agent's final answer, the same text the non-streaming call returns, sent when
-the run finishes. Intermediate steps are never streamed as content. While the
-run works, a `: keep-alive` comment line goes out every 15 seconds so a proxy
-does not close an idle stream; the SDKs skip it.
+agent's answer, the same text the non-streaming call returns, and nothing
+else: intermediate steps are never streamed as content. How it arrives
+depends on the agent:
+
+- **Token by token, as the model writes it**, when the answer is one model
+  call's text. For a workflow agent that is an `llm_call` node feeding the
+  output node directly, with the output mapping exactly
+  `{{nodes.<llm node>.output}}`, no tools on that node and no routing policy
+  (a stream cannot fall over to the next routed candidate once tokens are
+  out). For an autonomous agent it is the answer step: a streamed request asks
+  the run to write its answer with a final call that offers no tools, and that
+  call's tokens stream while the steps before it (tool calls and the narration
+  around them) are never sent. This costs the run one extra model call.
+- **In one piece when the run finishes**, for every other shape: an output
+  node that wraps or reshapes the text, a verify node or merge before the
+  output, a model call with tools, a loop, and an autonomous agent with a
+  verify panel on its final output or a strategy that judges candidate
+  answers, where no answer exists until the choice is made.
+
+The finished output is always the answer. Anything the token stream did not
+carry is sent before the stream ends; should the agent revise its answer after
+part of it went out (an answer call that is retried, say), the stream ends with
+an `answer_superseded` error rather than with a wrong answer, and a retry is
+the right response.
+
+While the run works, a `: keep-alive` comment line goes out every 15 seconds
+so a proxy does not close an idle stream; the SDKs skip it.
 
 ```
 data: {"id":"chatcmpl-1711234567000","object":"chat.completion.chunk","created":1711234567,"model":"agent:0d6f1c2e-...","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}
@@ -268,6 +291,7 @@ Every error has the OpenAI shape, so the SDKs raise their usual typed errors:
 | 429 | `rate_limit_error` / `rate_limit_exceeded` | More than 60 completions a minute on this key | `RateLimitError` |
 | 429 | `insufficient_quota` / `insufficient_quota` | An organization spend budget set to reject is used up | `RateLimitError` |
 | 502 | `api_error` / `agent_execution_failed` | The run failed | `InternalServerError` |
+| 502 | `api_error` / `answer_superseded` | Streaming only: the agent revised its answer after part of it had gone out (see [Streaming](#streaming)) | `APIError` |
 | 504 | `api_error` / `agent_timeout` | An autonomous run did not finish in time | `InternalServerError` |
 
 Every completion response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining`
@@ -280,6 +304,8 @@ minute.
 - An agent's pipeline decides which model runs each step; `temperature` and
   `max_completion_tokens` / `max_tokens` are the only sampling controls a
   request can set
-- The streamed answer arrives whole when the run finishes, not token by token
+- Token-by-token streaming covers the answer shapes listed under
+  [Streaming](#streaming); any other agent streams its answer in one piece
+  when the run finishes
 - Client-declared tools and structured-output modes are refused, not ignored
 - `/v1/responses`, embeddings and the other OpenAI endpoints are not served
