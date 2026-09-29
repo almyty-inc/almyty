@@ -146,6 +146,8 @@ export function ChoiceTile({
       <button
         type="button"
         data-testid={testId}
+        // The label and hint are cut to one line each; the whole text shows on hover.
+        title={hint ? `${label}: ${hint}` : label}
         aria-pressed={selected}
         disabled={disabled}
         onClick={onClick}

@@ -188,11 +188,11 @@ export const DISTRIBUTION_LABELS: Record<DistributionTarget, string> = {
 }
 
 export const DISTRIBUTION_BLURBS: Record<DistributionTarget, string> = {
-  web: 'A branded chat app on its own address',
-  tui: 'A command your users run in a terminal',
-  desktop: 'An installable windowed app',
+  web: 'A chat site of its own',
+  tui: 'Runs in a terminal',
+  desktop: 'An installable app',
   binary: 'One executable, no runtime to install',
-  widget: 'A chat bubble on your own site',
+  widget: 'A chat bubble on your site',
   a2a: 'Callable by other agents',
   slack: 'In your Slack workspace',
   discord: 'In your Discord server',

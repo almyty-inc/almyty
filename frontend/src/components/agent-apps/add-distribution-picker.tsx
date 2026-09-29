@@ -136,7 +136,8 @@ export function AddDistributionPicker({ app }: { app: AgentApp }) {
                   testId={`place-${target}`}
                   icon={pending === target ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : iconFor(target)}
                   label={DISTRIBUTION_LABELS[target]}
-                  hint={already ? 'Already added' : DISTRIBUTION_BLURBS[target]}
+                  // A platform's name says what it is; the other places get one line.
+                  hint={already ? 'Already added' : isChannelTarget(target) ? undefined : DISTRIBUTION_BLURBS[target]}
                   disabled={add.isPending}
                   onClick={() => {
                     if (already) {
