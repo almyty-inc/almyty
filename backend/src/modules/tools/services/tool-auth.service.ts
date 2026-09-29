@@ -14,8 +14,9 @@
  *   2. If no credential exists, fall back to api.authentication
  *      (legacy inline config on the Api entity).
  *
- * For an inline (no api) tool, applyInlineToolAuth() can be used
- * to apply `tool.authConfig` directly.
+ * For an inline (no api) tool, applyToolAuth() sends the credential the
+ * tool points at (`tool.authConfig.config.credentialId`), or an older
+ * inline `tool.authConfig` directly.
  *
  * Applying a credential also refreshes expired OAuth2 tokens
  * transparently via the credential service.
@@ -153,9 +154,34 @@ export class ToolAuthService {
   }
 
   /**
-   * Apply inline tool.authConfig (used for standalone HTTP tools
-   * without an Api relation).
+   * Auth for a standalone HTTP tool (no Api relation). A tool pointed at a
+   * credential keeps no secret of its own: the key is read from Credentials
+   * at call time, as the call's principal, and sent the way the tool says.
+   * A credential that cannot be used fails the call rather than sending it
+   * unsigned. An older tool with its key inline sends that.
    */
+  async applyToolAuth(config: AxiosRequestConfig, tool: { id: string; authConfig?: any }, options: ToolExecutionOptions): Promise<void> {
+    const authConfig = tool.authConfig;
+    if (!authConfig) return;
+    const credentialId = authConfig.config?.credentialId as string | undefined;
+    if (credentialId && this.credentialRefs) {
+      const resolved = await this.credentialRefs.resolve(options.organizationId, credentialId, {
+        principal: options.principal ?? userPrincipal(options.userId),
+        context: { purpose: 'tool_call', resourceType: 'tool', resourceId: tool.id },
+      });
+      const secret = connectionAuthConfig(resolved.config);
+      const filled =
+        authConfig.type === 'bearer' ? { token: secret.token }
+        : authConfig.type === 'apiKey' ? { key: secret.apiKey, headerName: authConfig.config?.headerName }
+        : authConfig.type === 'basic' ? { username: secret.username, password: secret.password }
+        : {};
+      this.applyInlineToolAuth(config, { type: authConfig.type, config: filled });
+      return;
+    }
+    this.applyInlineToolAuth(config, authConfig);
+  }
+
+  /** Put an inline tool `{ type, config }` (secret filled in) onto the request. */
   applyInlineToolAuth(config: AxiosRequestConfig, authConfig: any): void {
     config.headers = config.headers || {};
     const headers = config.headers as Record<string, string>;

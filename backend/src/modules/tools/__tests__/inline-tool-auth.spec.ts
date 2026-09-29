@@ -50,3 +50,63 @@ describe('applyInlineToolAuth', () => {
     expect(headersFor({ type: 'none' })).toEqual({});
   });
 });
+
+/**
+ * A tool pointed at a credential (picked or created in the tool form's
+ * "pick or create" control) keeps no secret of its own: the key is read
+ * from Credentials at call time, as the caller, and sent the way the tool
+ * says. The form used to keep the picked id in state and never send it.
+ */
+describe('applyToolAuth with a credential', () => {
+  const principal = { kind: 'user', userId: 'u1', source: 'session' } as any;
+  const options = { organizationId: 'org-1', userId: 'u1', principal } as any;
+
+  const serviceWith = (config: Record<string, any>) => {
+    const resolve = jest.fn().mockResolvedValue({ config });
+    const service = new ToolAuthService(null as any, null as any, null as any, { resolve } as any);
+    return { service, resolve };
+  };
+
+  const headersFor = async (service: ToolAuthService, authConfig: any) => {
+    const config: any = {};
+    await service.applyToolAuth(config, { id: 'tool-1', authConfig } as any, options);
+    return config.headers as Record<string, string>;
+  };
+
+  it('resolves the credential as the caller, for this tool', async () => {
+    const { service, resolve } = serviceWith({ apiKey: 'sk-live' });
+    await headersFor(service, { type: 'bearer', config: { credentialId: 'cred-1' } });
+    expect(resolve).toHaveBeenCalledWith('org-1', 'cred-1', {
+      principal,
+      context: { purpose: 'tool_call', resourceType: 'tool', resourceId: 'tool-1' },
+    });
+  });
+
+  it('sends the key as a bearer token', async () => {
+    const { service } = serviceWith({ apiKey: 'sk-live' });
+    expect(await headersFor(service, { type: 'bearer', config: { credentialId: 'cred-1' } })).toEqual({ Authorization: 'Bearer sk-live' });
+  });
+
+  it('sends the key under the header the tool names', async () => {
+    const { service } = serviceWith({ apiKey: 'sk-live' });
+    expect(await headersFor(service, { type: 'apiKey', config: { credentialId: 'cred-1', headerName: 'X-Acme-Key' } })).toEqual({ 'X-Acme-Key': 'sk-live' });
+  });
+
+  it('sends a username and password', async () => {
+    const { service } = serviceWith({ username: 'ada', password: 'hunter2' });
+    const headers = await headersFor(service, { type: 'basic', config: { credentialId: 'cred-1' } });
+    expect(headers.Authorization).toBe(`Basic ${Buffer.from('ada:hunter2').toString('base64')}`);
+  });
+
+  it('fails the call when the credential cannot be used, rather than sending it unsigned', async () => {
+    const resolve = jest.fn().mockRejectedValue(new Error('credential not found'));
+    const service = new ToolAuthService(null as any, null as any, null as any, { resolve } as any);
+    await expect(headersFor(service, { type: 'bearer', config: { credentialId: 'cred-1' } })).rejects.toThrow('credential not found');
+  });
+
+  it('still sends an older inline key', async () => {
+    const { service, resolve } = serviceWith({});
+    expect(await headersFor(service, { type: 'bearer', config: { token: 't0ken' } })).toEqual({ Authorization: 'Bearer t0ken' });
+    expect(resolve).not.toHaveBeenCalled();
+  });
+});
