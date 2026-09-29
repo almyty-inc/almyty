@@ -9,7 +9,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 
 import { renderAtRoute } from '../../../test/render-at-route'
 import { RunnerWorkspacesTab, runnerWorkspaces, timeLeft, workspacePath } from '../runner-workspaces-tab'
-import { WorkspaceAddressRedirect, WorkspaceDetailPage } from '../../../pages/workspace-detail'
+import { WorkspaceDetailPage } from '../../../pages/workspace-detail'
 import { workspacesApi } from '../../../lib/api'
 
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
@@ -77,20 +77,6 @@ describe('a workspace page under its runner', () => {
     vi.mocked(workspacesApi.getById).mockResolvedValue(workspace({ runnerId: 'r2' }))
     const { router } = renderAtRoute(<WorkspaceDetailPage />, { path: '/runners/:runnerId/workspaces/:id', url: '/runners/r1/workspaces/ws-1' })
     await waitFor(() => expect(router.state.location.pathname).toBe('/runners/r2/workspaces/ws-1'))
-  })
-})
-
-describe('the old /workspaces addresses', () => {
-  it('send a workspace to its runner', async () => {
-    vi.mocked(workspacesApi.getById).mockResolvedValue(workspace({ runnerId: 'r7' }))
-    const { router } = renderAtRoute(<WorkspaceAddressRedirect />, { path: '/workspaces/:id', url: '/workspaces/ws-1', paths: ['/runners/:runnerId/workspaces/:id'] })
-    await waitFor(() => expect(router.state.location.pathname).toBe('/runners/r7/workspaces/ws-1'))
-  })
-
-  it('send a workspace that is gone to Runners', async () => {
-    vi.mocked(workspacesApi.getById).mockRejectedValue(new Error('404'))
-    const { router } = renderAtRoute(<WorkspaceAddressRedirect />, { path: '/workspaces/:id', url: '/workspaces/nope', paths: ['/runners'] })
-    await waitFor(() => expect(router.state.location.pathname).toBe('/runners'))
   })
 })
 

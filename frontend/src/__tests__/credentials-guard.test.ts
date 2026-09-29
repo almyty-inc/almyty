@@ -115,21 +115,18 @@ describe('one Credentials page', () => {
     expect(existsSync(join(SRC, rel))).toBe(false)
   })
 
-  it('nothing links to the old addresses, which only redirect', () => {
-    const OLD = /['"`]\/(connections|settings\/connections)(\/|['"`?])/
+  it('nothing calls or links to a /connections address, on the page or the server', () => {
+    const CONNECTIONS = /['"`]\/(connections|connectors|settings\/connections|ee\/connections)(\/|['"`?])/
     const hits = sourceFiles(SRC)
-      // Server paths, not page addresses: the /connections endpoints the
-      // credential flows call.
-      .filter((f) => !f.endsWith('App.tsx') && !f.endsWith(join('pages', 'credential-pages.tsx')) && !f.endsWith(join('lib', 'api.ts')) && !f.endsWith(join('lib', 'connections-api.ts')))
-      .filter((f) => OLD.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')))
+      .filter((f) => CONNECTIONS.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')))
       .map((f) => relative(SRC, f))
     expect(hits).toEqual([])
   })
 
-  it('keeps the old addresses working', () => {
+  it('has no route for /connections, /settings/connections or /workspaces', () => {
     const app = read('App.tsx')
-    expect(app).toMatch(/<Route path="\/connections\/\*" element=\{<OldCredentialsAddressRedirect \/>\} \/>/)
-    expect(app).toMatch(/<Route path="\/settings\/connections\/\*" element=\{<OldCredentialsAddressRedirect \/>\} \/>/)
+    expect(app).not.toMatch(/path="\/(connections|settings\/connections|workspaces)[/"]/)
+    expect(app + read('pages/credential-pages.tsx') + read('pages/workspace-detail.tsx')).not.toMatch(/AddressRedirect|AccessKeysRedirect/)
   })
 })
 

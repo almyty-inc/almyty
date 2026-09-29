@@ -11,7 +11,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { renderAtRoute } from '../../../test/render-at-route'
 import { CredentialsPage } from '../../../pages/credentials'
 import { AddCredentialPage } from '../../../pages/credential-new'
-import { AccessKeysRedirect, CredentialDetailRoutePage, OldCredentialsAddressRedirect, credentialsTarget } from '../../../pages/credential-pages'
+import { CredentialDetailRoutePage } from '../../../pages/credential-pages'
 import { connectionsApi, connectorsApi } from '../../../lib/connections-api'
 import { credentialsApi, organizationsApi } from '../../../lib/api'
 import type { Connection, Connector } from '@/types/connections'
@@ -390,28 +390,3 @@ describe('/credentials/:id', () => {
   })
 })
 
-describe('where credentials used to live', () => {
-  it('maps every Connections and Settings > Connections address onto Credentials', () => {
-    for (const base of ['/connections', '/settings/connections']) {
-      expect(credentialsTarget(base, '')).toBe('/credentials')
-      expect(credentialsTarget(`${base}/advanced`, '')).toBe('/credentials/advanced')
-      expect(credentialsTarget(`${base}/connect`, '')).toBe('/credentials/new')
-      expect(credentialsTarget(`${base}/connect`, '?service=github')).toBe('/credentials/new?service=github')
-      expect(credentialsTarget(`${base}/connect/github`, '?returnTo=%2Fguide')).toBe('/credentials/new?service=github&returnTo=%2Fguide')
-      expect(credentialsTarget(`${base}/custom/new`, '')).toBe('/credentials/custom/new')
-      expect(credentialsTarget(`${base}/policies/p1`, '')).toBe('/credentials/policies/p1')
-      expect(credentialsTarget(`${base}/policies/new`, '?kind=expiry_rule')).toBe('/credentials/policies/new?kind=expiry_rule')
-      expect(credentialsTarget(`${base}/conn-1`, '')).toBe('/credentials/conn-1')
-    }
-    // A sign-in that came back to the old address opens what it made.
-    expect(credentialsTarget('/connections', '?connection=conn-9&status=valid')).toBe('/credentials/conn-9')
-  })
-
-  it('redirects under a router, and sends access keys to the gateways they unlock', async () => {
-    const old = renderAtRoute(<OldCredentialsAddressRedirect />, { path: '/connections/*', url: '/connections/conn-1', paths: PATHS })
-    await waitFor(() => expect(old.router.state.location.pathname).toBe('/credentials/conn-1'))
-    old.unmount()
-    const keys = renderAtRoute(<AccessKeysRedirect />, { path: '/credentials/access-keys/*', url: '/credentials/access-keys', paths: PATHS })
-    await waitFor(() => expect(keys.router.state.location.pathname).toBe('/gateways'))
-  })
-})

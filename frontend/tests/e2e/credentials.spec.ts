@@ -136,21 +136,3 @@ hooked.describe('Credentials - where a key is used', () => {
   })
 })
 
-hooked.describe('Credentials - the older addresses', () => {
-  hooked('Connections lands on Credentials', async ({ authenticatedPage: page }) => {
-    await page.goto('/connections')
-    await expect(page).toHaveURL(/\/credentials$/)
-    await expect(page.getByRole('heading', { name: 'Credentials', level: 1 })).toBeVisible()
-  })
-
-  hooked('connecting a service lands on Add credential', async ({ authenticatedPage: page }) => {
-    await page.goto('/connections/connect?service=other')
-    await expect(page).toHaveURL(/\/credentials\/new\?service=other$/)
-    await expect(page.getByRole('heading', { name: 'Add credential', level: 1 })).toBeVisible()
-  })
-
-  hooked('access keys land on the gateways they unlock', async ({ authenticatedPage: page }) => {
-    await page.goto('/credentials/access-keys/new')
-    await expect(page).toHaveURL(/\/gateways$/)
-  })
-})
