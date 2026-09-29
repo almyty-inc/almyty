@@ -1,36 +1,21 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
-import { Button } from '@/components/ui/button'
-import { PageHeader } from '@/components/layout/page-header'
-import { PickedService, ServiceTileGrid, splitTileName, type ServiceTileGroup } from '@/components/connect/service-tiles'
-import { ConnectProviderForm, type ConnectResult } from '@/components/llm-providers/connect-provider-form'
-import { PROVIDER_TILE_GROUPS, isProviderType, providerTileLabel } from '@/components/llm-providers/provider-catalog'
-import { providerLogos } from '@/components/llm-providers/provider-type-config'
+import { FormPage } from '@/components/layout/form-page'
+import { ProviderConnectionCreate } from '@/components/llm-providers/provider-connection-create'
 import { safeReturnTo } from '@/lib/return-to'
-import { pluralized } from '@/lib/utils'
-
-/** How many model names the success panel lists before "and N more". */
-const SHOWN_MODELS = 8
 
 /**
- * Connect a provider: pick it from the tiles, paste its key, done. Its
- * models show up on /models and in every model chooser. The picked tile
+ * Add a provider connection: pick the provider, name the connection, paste
+ * its key, then untick any model it should not offer. The picked tile
  * lives in the URL (?type=openai) so a link can open straight onto it.
+ * Done goes back to the page that sent you (?returnTo=), else to the new
+ * connection.
  */
 export function ConnectProviderPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const [search, setSearch] = useState('')
-  const [result, setResult] = useState<ConnectResult | null>(null)
-
-  const picked = searchParams.get('type')
-  const type = isProviderType(picked) ? picked : null
-  // Where Done goes: back to the guide or page that sent you, else Models.
-  const returnTo = safeReturnTo(searchParams.get('returnTo')) ?? '/models'
+  const returnTo = safeReturnTo(searchParams.get('returnTo'))
 
   useEffect(() => {
     document.title = 'Connect a provider | almyty'
@@ -40,103 +25,25 @@ export function ConnectProviderPage() {
   }, [])
 
   const pick = (next: string | null) => {
-    setResult(null)
     const params = new URLSearchParams(searchParams)
     if (next) params.set('type', next)
     else params.delete('type')
     setSearchParams(params)
   }
 
-  const groups: ServiceTileGroup[] = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return PROVIDER_TILE_GROUPS.map((g) => ({
-      id: g.id,
-      title: g.title,
-      tiles: g.types
-        .filter((t) => !q || providerTileLabel(t).toLowerCase().includes(q) || t.includes(q))
-        .map((t) => ({ key: t, ...splitTileName(providerTileLabel(t)), icon: providerLogos[t] || '⚙️' })),
-    })).filter((g) => g.tiles.length > 0)
-  }, [search])
-
-  const onConnected = (next: ConnectResult) => {
-    setResult(next)
-    // The new provider and its models, everywhere they are listed.
-    queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
-    queryClient.invalidateQueries({ queryKey: ['models'] })
-  }
-
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <Link to="/models" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-        Models
-      </Link>
-      <PageHeader title="Connect a provider" description="Connect a provider once and its models show up everywhere in almyty." />
-
-      {type ? (
-        <PickedService
-          icon={providerLogos[type] || '⚙️'}
-          title={providerTileLabel(type)}
-          onChooseAnother={result ? undefined : () => pick(null)}
-          chooseAnotherLabel="Choose another provider"
-        >
-          {result ? (
-            <ConnectedSummary result={result} onDone={() => navigate(returnTo)} onOpen={() => navigate(`/models/providers/${result.provider.id}`)} />
-          ) : (
-            <ConnectProviderForm key={type} type={type} onConnected={onConnected} />
-          )}
-        </PickedService>
-      ) : (
-        <ServiceTileGrid
-          groups={groups}
-          search={search}
-          onSearch={setSearch}
-          onPick={pick}
-          searchLabel="Search providers"
-          testIdPrefix="provider-tile"
-          empty={
-            <p className="text-sm text-muted-foreground">
-              No provider matches &ldquo;{search}&rdquo;. If it speaks the OpenAI API, connect it as{' '}
-              <button type="button" className="text-primary hover:underline" onClick={() => pick('custom')}>
-                your own server
-              </button>
-              .
-            </p>
-          }
-        />
-      )}
-    </div>
-  )
-}
-
-function ConnectedSummary({ result, onDone, onOpen }: { result: ConnectResult; onDone: () => void; onOpen: () => void }) {
-  const models = Array.isArray(result.models) ? result.models : []
-  const shown = models.slice(0, SHOWN_MODELS)
-  const more = models.length - shown.length
-  return (
-    <div className="space-y-4" data-testid="connect-success">
-      <p className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-        <CheckCircle2 className="h-4 w-4" aria-hidden />
-        {result.provider.name} is connected.{' '}
-        {models.length === 0 ? 'It lists no models yet.' : `${pluralized(models.length, 'model')} found.`}
-      </p>
-      {shown.length > 0 && (
-        <ul className="flex flex-wrap gap-1.5" aria-label="Models found">
-          {shown.map((m) => (
-            <li key={m.id} className="rounded-md border bg-muted/40 px-2 py-0.5 font-mono text-xs">
-              {m.vendorModelId || m.name}
-            </li>
-          ))}
-          {more > 0 && <li className="px-1 py-0.5 text-xs text-muted-foreground">and {more} more</li>}
-        </ul>
-      )}
-      <p className="text-sm text-muted-foreground">Pick any of them in an agent, a tool or a chat.</p>
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={onDone}>Done</Button>
-        <Button variant="outline" onClick={onOpen}>
-          Open provider
-        </Button>
-      </div>
-    </div>
+    <FormPage
+      title="Connect a provider"
+      description="Name the connection, paste its key and choose which of its models to offer. Several connections of one provider are fine."
+      back={{ to: returnTo ?? '/models', label: returnTo ? 'Back' : 'Models' }}
+      width="wide"
+    >
+      <ProviderConnectionCreate
+        type={searchParams.get('type')}
+        onTypeChange={pick}
+        onDone={(provider) => navigate(returnTo ?? `/models/providers/${provider.id}`)}
+        idPrefix="connect"
+      />
+    </FormPage>
   )
 }

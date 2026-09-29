@@ -40,7 +40,9 @@ function importsFrom(source: string, from: string): string[] {
 }
 
 describe('Connections and Models are built from the same pieces', () => {
-  const modelsConnect = read('pages/models-connect.tsx')
+  // The models connect page hands the whole flow to this component, which a
+  // model chooser opens inline too.
+  const modelsConnect = read('components/llm-providers/provider-connection-create.tsx')
   const servicesConnect = read('pages/connections-connect.tsx')
   const modelsList = read('pages/models.tsx')
   const connectionsList = read('pages/connections.tsx')
@@ -53,10 +55,9 @@ describe('Connections and Models are built from the same pieces', () => {
     }
   })
 
-  it('both lists use the shared connected cards', () => {
-    for (const source of [modelsList, connectionsList]) {
-      expect(importsFrom(source, '@/components/connect/connected-card')).toEqual(expect.arrayContaining(['ConnectedCard', 'ConnectedCardGrid']))
-    }
+  it('Connections lists with the shared connected cards; the Models catalog is the shared data table', () => {
+    expect(importsFrom(connectionsList, '@/components/connect/connected-card')).toEqual(expect.arrayContaining(['ConnectedCard', 'ConnectedCardGrid']))
+    expect(importsFrom(modelsList, '@/components/ui/data-table')).toContain('DataTable')
   })
 
   it('both forms ask "who can use it" with the same one-liner', () => {

@@ -1,5 +1,6 @@
 /**
- * /models/connect: pick a provider tile, paste its key, see its models.
+ * /models/connect: pick a provider tile, name the connection, paste its
+ * key, then untick any model it should not offer.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
@@ -11,14 +12,25 @@ import { LlmProviderType } from '@/types'
 
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 vi.mock('@/lib/api', () => ({
-  llmProvidersApi: { connect: vi.fn(), providerTypes: vi.fn() },
+  llmProvidersApi: { connect: vi.fn(), providerTypes: vi.fn(), update: vi.fn() },
   organizationsApi: { getTeams: vi.fn().mockResolvedValue([]) },
 }))
 
 const at = (url = '/models/connect') =>
   renderAtRoute(<ConnectProviderPage />, { path: '/models/connect', url, paths: ['/models', '/models/providers/:id', '/guide'] })
 
-const MODELS = ['gpt-4o', 'gpt-4.1', 'o3', 'o4-mini', 'gpt-4o-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'o3-pro', 'gpt-image-1'].map((id) => ({ id: `card-${id}`, name: id, vendorModelId: id, selectable: true }))
+const MODELS = ['gpt-4o', 'gpt-4.1', 'o3', 'o4-mini', 'gpt-4o-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'o3-pro', 'gpt-image-1'].map((id) => ({
+  id: `card-${id}`,
+  name: id,
+  vendorModelId: id,
+  selectable: true,
+  status: 'active',
+  validationStatus: 'passed',
+  pricing: null,
+  pricingOverride: null,
+  contextLength: null,
+  metadata: null,
+}))
 
 async function openTile(type: string) {
   fireEvent.click(await screen.findByTestId(`provider-tile-${type}`))
@@ -53,7 +65,8 @@ describe('ConnectProviderPage', () => {
     const form = await openTile('openai')
     expect(router.state.location.search).toBe('?type=openai')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    // Only the key and who can use it; nothing about the model up front.
+    // A name, the key and who can use it; nothing about the model up front.
+    expect(within(form).getByLabelText('Name')).toHaveValue('OpenAI')
     expect(within(form).getByLabelText('API key')).toBeInTheDocument()
     for (const label of [/model id/i, /^Model$/, /privacy/i, /^Region/, /context/i, /capabilit/i, /provider name/i, /provider type/i]) {
       expect(within(form).queryByLabelText(label)).not.toBeInTheDocument()
@@ -63,39 +76,45 @@ describe('ConnectProviderPage', () => {
     expect(within(form).getByRole('button', { name: /Connect an account/ })).toBeInTheDocument()
   })
 
-  it('connects with the tile type, its name and org-wide by default, then lists the models found', async () => {
+  it('connects under the name given, org-wide by default, then lists every model found, all ticked', async () => {
     let resolve!: (v: unknown) => void
     vi.mocked(llmProvidersApi.connect).mockReturnValue(new Promise((r) => (resolve = r)))
     at('/models/connect?type=openai')
     const form = await screen.findByRole('form', { name: 'Connect OpenAI' })
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'OpenAI - research team' } })
     fireEvent.change(within(form).getByLabelText('API key'), { target: { value: 'sk-test-1234567890' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Connect' }))
 
     expect(await screen.findByRole('button', { name: /Checking your key/ })).toBeDisabled()
     expect(llmProvidersApi.connect).toHaveBeenCalledWith({
-      name: 'OpenAI',
+      name: 'OpenAI - research team',
       type: 'openai',
       visibility: 'org',
       teamId: null,
       configuration: { apiKey: 'sk-test-1234567890' },
     })
 
-    resolve({ provider: { id: 'p-new', name: 'OpenAI', type: 'openai' }, models: MODELS, check: { ok: true } })
+    resolve({ provider: { id: 'p-new', name: 'OpenAI - research team', type: 'openai' }, models: MODELS, check: { ok: true } })
     const done = await screen.findByTestId('connect-success')
-    expect(done).toHaveTextContent('OpenAI is connected. 10 models found.')
-    expect(within(done).getByText('gpt-4o')).toBeInTheDocument()
-    expect(within(done).getByText('and 2 more')).toBeInTheDocument()
-    expect(within(done).getByRole('button', { name: 'Open provider' })).toBeInTheDocument()
+    expect(done).toHaveTextContent('OpenAI - research team is connected. 10 models found, all ticked.')
+    expect(within(done).getByTestId('ticked-count')).toHaveTextContent('10 of 10 models ticked')
+    // Nothing unticked: Done goes to the new connection without another request.
     fireEvent.click(within(done).getByRole('button', { name: 'Done' }))
-    expect(await screen.findByText('at /models')).toBeInTheDocument()
+    expect(await screen.findByText('at /models/providers/p-new')).toBeInTheDocument()
+    expect(llmProvidersApi.update).not.toHaveBeenCalled()
   })
 
-  it('opens the new provider from the result', async () => {
-    vi.mocked(llmProvidersApi.connect).mockResolvedValue({ provider: { id: 'p-new', name: 'OpenAI', type: 'openai' }, models: [], check: { ok: true } })
+  it('unticking models before Done keeps them out of that connection', async () => {
+    vi.mocked(llmProvidersApi.connect).mockResolvedValue({ provider: { id: 'p-new', name: 'OpenAI', type: 'openai' }, models: MODELS.slice(0, 3), check: { ok: true } })
+    vi.mocked(llmProvidersApi.update).mockResolvedValue({ id: 'p-new', name: 'OpenAI' } as any)
     at('/models/connect?type=openai')
     fireEvent.change(await screen.findByLabelText('API key'), { target: { value: 'sk-test-1234567890' } })
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Open provider' }))
+    const done = await screen.findByTestId('connect-success')
+    fireEvent.click(within(done).getByRole('checkbox', { name: 'Allow o3' }))
+    expect(within(done).getByTestId('ticked-count')).toHaveTextContent('2 of 3 models ticked')
+    fireEvent.click(within(done).getByRole('button', { name: 'Done' }))
+    await waitFor(() => expect(llmProvidersApi.update).toHaveBeenCalledWith('p-new', { allowNewModels: true, hiddenModels: ['o3'], allowedModels: null }))
     expect(await screen.findByText('at /models/providers/p-new')).toBeInTheDocument()
   })
 
@@ -194,11 +213,37 @@ describe('ConnectProviderPage', () => {
     expect(vi.mocked(llmProvidersApi.connect).mock.calls[0][0].configuration).not.toHaveProperty('apiKey')
   })
 
-  it('lets Ollama connect with nothing but the defaults', async () => {
+  it('asks Ollama for an Ollama Cloud key by default, and sends it with ollama.com', async () => {
     vi.mocked(llmProvidersApi.connect).mockResolvedValue({ provider: { id: 'p', name: 'Ollama', type: 'ollama' }, models: [] })
     at('/models/connect?type=ollama')
-    fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
-    await waitFor(() => expect(llmProvidersApi.connect).toHaveBeenCalledWith(expect.objectContaining({ type: 'ollama', configuration: {} })))
+    const form = await screen.findByRole('form', { name: /^Connect / })
+    expect(within(form).getByTestId('connect-ollama-cloud')).toHaveAttribute('aria-pressed', 'true')
+    expect(within(form).queryByLabelText('Server URL')).not.toBeInTheDocument()
+    expect(within(form).getByRole('link', { name: /Get a key/ })).toHaveAttribute('href', 'https://ollama.com/settings/keys')
+    fireEvent.click(within(form).getByRole('button', { name: 'Connect' }))
+    expect(await screen.findByText('Paste your Ollama Cloud API key')).toBeInTheDocument()
+    expect(llmProvidersApi.connect).not.toHaveBeenCalled()
+
+    fireEvent.change(within(form).getByLabelText('Ollama Cloud API key'), { target: { value: 'ollama-key-1234567890' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Connect' }))
+    await waitFor(() => expect(llmProvidersApi.connect).toHaveBeenCalled())
+    expect(vi.mocked(llmProvidersApi.connect).mock.calls[0][0]).toMatchObject({ type: 'ollama', configuration: { apiKey: 'ollama-key-1234567890', apiUrl: 'https://ollama.com' } })
+  })
+
+  it('takes the URL of an Ollama you run instead, with the key optional', async () => {
+    vi.mocked(llmProvidersApi.connect).mockResolvedValue({ provider: { id: 'p', name: 'Ollama', type: 'ollama' }, models: [] })
+    at('/models/connect?type=ollama')
+    const form = await screen.findByRole('form', { name: /^Connect / })
+    fireEvent.click(within(form).getByTestId('connect-ollama-own'))
+    expect(within(form).getByLabelText('API key (optional)')).toBeInTheDocument()
+    expect(within(form).getByText(/OLLAMA_ALLOW_PRIVATE_URLS=true/)).toBeInTheDocument()
+    fireEvent.click(within(form).getByRole('button', { name: 'Connect' }))
+    expect(await screen.findByText(/Enter the server URL/)).toBeInTheDocument()
+    fireEvent.change(within(form).getByLabelText('Server URL'), { target: { value: 'http://build-box:11434' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Connect' }))
+    await waitFor(() => expect(llmProvidersApi.connect).toHaveBeenCalled())
+    expect(vi.mocked(llmProvidersApi.connect).mock.calls[0][0]).toMatchObject({ type: 'ollama', configuration: { apiUrl: 'http://build-box:11434' } })
+    expect(vi.mocked(llmProvidersApi.connect).mock.calls[0][0].configuration).not.toHaveProperty('apiKey')
   })
 
   describe('providers that list no models', () => {
@@ -259,7 +304,7 @@ describe('ConnectProviderPage', () => {
       fireEvent.change(key, { target: { value: 'sk-test-1234567890' } })
       fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
 
-      expect(await screen.findByTestId('connect-model-failure')).toHaveTextContent('OpenAI does not list its models. Enter the model you want to use.')
+      expect(await screen.findByText('OpenAI does not list its models. Enter the model you want to use.')).toBeInTheDocument()
       const model = screen.getByLabelText('Model')
       await waitFor(() => expect(model).toHaveFocus())
       // It is about the model, not the key.

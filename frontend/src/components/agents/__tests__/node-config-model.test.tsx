@@ -87,7 +87,8 @@ describe('LLM node model field', () => {
     const onUpdateNode = renderPanel(SAVED_BUT_UNLISTED)
     const list = await openPicker()
     expect(screen.queryByTestId('node-model-input')).not.toBeInTheDocument()
-    fireEvent.click(within(list).getByRole('option', { name: LISTED }))
+    // An option reads the model, then its price and status.
+    fireEvent.click(within(list).getByRole('option', { name: new RegExp(`^${LISTED}(?!-)`) }))
     expect(onUpdateNode).toHaveBeenLastCalledWith('llm_1', expect.objectContaining({ providerId: 'prov-1', model: LISTED }))
   })
 

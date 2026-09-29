@@ -313,6 +313,19 @@ export interface LlmProvider {
   credentialRef?: LlmProviderCredentialRef | null
   /** The connection behind the usage/admin key, when it is one. */
   usageCredentialRef?: LlmProviderCredentialRef | null
+  /**
+   * Which models this connection may be used for (lib/model-access.ts). On:
+   * every model except `hiddenModels`, new ones too. Off: only `allowedModels`.
+   */
+  allowNewModels?: boolean
+  hiddenModels?: string[] | null
+  allowedModels?: string[] | null
+  /** Private to its owner, a team's, or everyone's in the organization. */
+  visibility?: 'org' | 'team' | 'private'
+  teamId?: string | null
+  ownerUserId?: string | null
+  /** The key check passed and the connection is on: every model it lists is usable. */
+  keyChecked?: boolean
   configuration: {
     apiKey?: string
     usageApiKey?: string

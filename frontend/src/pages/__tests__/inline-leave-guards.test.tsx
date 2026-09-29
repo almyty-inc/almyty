@@ -127,7 +127,7 @@ describe('provider settings', () => {
   const at = () =>
     renderAtRoute(<ProviderPage />, {
       path: '/models/providers/:id',
-      url: '/models/providers/p1',
+      url: '/models/providers/p1?tab=settings',
       paths: ['/elsewhere'],
     })
 
