@@ -21,6 +21,7 @@ import { UserOrganization } from '../../../src/entities/user-organization.entity
 import { isEffectiveMembership } from '../../../src/common/authorization/membership';
 import { DecryptedSsoConfig, SsoConfigService, provisioningRole } from './sso-config.service';
 import { SamlReplayCache, assertionReplayFacts } from './saml-replay-cache';
+import { OrgDomainService } from './org-domain.service';
 import {
   MemoryOidcLoginStateStore,
   OIDC_LOGIN_TTL_SECONDS,
@@ -62,6 +63,8 @@ export class SsoService {
     // the service bare; they get a per-instance memory store.
     @Optional() loginStateFactory?: OidcLoginStateStoreFactory,
     @Optional() @Inject(OIDC_LOGIN_STATE_STORE) loginStates?: OidcLoginStateStore,
+    // Absent (a spec constructing the service bare), JIT creates nobody.
+    @Optional() private readonly domains?: OrgDomainService,
   ) {
     this.loginStates = loginStates ?? loginStateFactory?.create() ?? new MemoryOidcLoginStateStore();
   }
@@ -502,8 +505,9 @@ export class SsoService {
 
   /**
    * Map an asserted identity to an existing org member by email. When the user
-   * is not a member: JIT-provision if the config allows it, otherwise reject
-   * (deferring provisioning to SCIM / manual invite).
+   * is not a member: JIT-provision if the config allows it and the address
+   * is on one of the org's verified domains, otherwise reject (deferring
+   * provisioning to SCIM / manual invite).
    *
    * JIT may only CREATE a user, never adopt one.
    *
@@ -512,10 +516,10 @@ export class SsoService {
    * globally and then handing the row to `issueSession` meant any org
    * owner could self-sign an assertion for someone else's address and
    * receive a full dashboard session as that person -- with a token
-   * carrying every organization the victim belongs to. Nothing binds an
-   * asserted email to the asserting organization: there is no verified
-   * domain here, so an IdP is not entitled to name an identity that
-   * already exists outside its own membership.
+   * carrying every organization the victim belongs to. A verified domain
+   * vouches for addresses nobody holds an account for yet; it never lets
+   * an IdP name an identity that already exists outside its own
+   * membership.
    *
    * The legitimate version of "this person already has an almyty account"
    * is an invite or a SCIM assignment, both of which the account holder
@@ -559,6 +563,16 @@ export class SsoService {
     if (!config.jitProvisioning) {
       throw new UnauthorizedException(
         'No account exists for this identity in this organization',
+      );
+    }
+    // Only for an address on a domain this organization has proven it
+    // controls. The org owner configures the IdP and can have it assert
+    // any address; without this, an owner could mint an account for a
+    // mailbox they do not hold (and, on an existing-account-free address,
+    // pre-empt its real owner) and sign into it at will.
+    if (!this.domains || !(await this.domains.coversEmail(orgId, email))) {
+      throw new UnauthorizedException(
+        'This address is not on a domain your organization has verified, so no account is created for it. Ask an admin to verify the domain or to invite you.',
       );
     }
     user = await this.provisionUser(profile);

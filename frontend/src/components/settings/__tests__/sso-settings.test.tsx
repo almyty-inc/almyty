@@ -14,6 +14,7 @@ vi.mock('../../../lib/api', () => ({
     saveConfig: vi.fn(),
     rotateScimToken: vi.fn(),
     revealScimToken: vi.fn(),
+    listDomains: vi.fn(async () => []),
   },
 }))
 

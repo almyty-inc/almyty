@@ -21,6 +21,10 @@ function makeService() {
     membershipRepo as any,
     configService,
     new SamlReplayCache(new FakeRedis()),
+    undefined,
+    undefined,
+    // Addresses on a domain the org has verified (see provisioning-needs-a-verified-domain.spec.ts).
+    { coversEmail: async () => true } as any,
   );
   return { service, userRepo, membershipRepo, configService };
 }

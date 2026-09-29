@@ -48,13 +48,22 @@ Per-org, unauthenticated by design:
 | `GET /sso/:orgId/oidc/login` | start the OIDC flow (state cookie, 10 min) |
 | `GET /sso/:orgId/oidc/callback` | code exchange, then cookie + redirect |
 
-SAML sign-in is SP-initiated only: start it from the login URL, not from a tile in the IdP's portal. The ACS accepts a response only if it answers the request that login URL sent (`InResponseTo`, single use, 10 minutes) and is addressed to this ACS (`Recipient` and `Destination`); an IdP-initiated (unsolicited) response is refused. The session is issued on the `complete` step, and only in the browser holding the relay-state cookie from the login, so a response posted into someone else's browser signs nobody in.
-
 On a verified assertion the user is resolved by email:
 
 - **Existing active member**: logged in.
 - **Deactivated member**: 401.
-- **Unknown user**: created with the org's `defaultRole`, but only if `jitProvisioning` is on. Otherwise 401, deferring membership to SCIM or invites.
+- **Unknown user**: created with the org's `defaultRole`, but only if `jitProvisioning` is on and the address is on one of the organization's verified email domains (below). Otherwise 401, deferring membership to SCIM or invites.
+- **Existing account that is not a member**: 401. SSO never adds an existing account to an organization; invite it instead.
+
+## Verified email domains
+
+SSO creates accounts only for addresses on a domain your organization has proven it controls, so an identity provider cannot mint an account for someone else's mailbox. Under **Settings → People and access → Single sign-on → Email domains**, add a domain (for example `example.com`), publish the TXT record shown at your DNS provider, and select **Check DNS**:
+
+| Record | Name | Value |
+|---|---|---|
+| TXT | `_almyty-verify.example.com` | `almyty-domain-verification=<token>` |
+
+A verified domain also covers its subdomains (`people@eng.example.com`). One organization can hold a domain verified at a time. The same rule applies to SCIM: creating a user at an address outside the verified domains is refused.
 
 ## SCIM provisioning
 
