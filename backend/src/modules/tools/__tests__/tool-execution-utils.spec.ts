@@ -230,8 +230,9 @@ describe('tool-execution-utils', () => {
     // /^data\.(.+?)\s*(===?|!==?)\s*(.+)$/ took 7-23 s on 100 KB of spaces
     // or `=`; the condition is read without it now.
     it.each([
-      ['spaces', `data.${' '.repeat(100_000)}\n`],
-      ['equals signs', `data.${'='.repeat(100_000)}\n`],
+      // The condition is trimmed first, so the runs sit inside it.
+      ['spaces', `data.a${' '.repeat(100_000)}x`],
+      ['equals signs', `data.${'='.repeat(100_000)}\nx`],
     ])('reads a 100 KB condition of %s in linear time', (_label, condition) => {
       const started = Date.now();
       evaluateHttpSuccessCondition(condition, 200, {});
