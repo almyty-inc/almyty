@@ -32,7 +32,7 @@ Enterprise features are named **entitlements**, and what you buy is a **plan**. 
 | `approval_policy` | [Multi-step, conditional and quorum approval policies](/enterprise/approval-policies) | – | – | ✓ | ✓ |
 | `compliance_pack` | [Org-enforced guardrail policy + compliance posture report](/enterprise/compliance-pack) | – | – | ✓ | ✓ |
 | `audit_export` | [Audit log export (JSON/CSV) + SIEM streaming](/enterprise/audit-export) | – | – | ✓ | ✓ |
-| `connections_governance` | [Connector allowlists, scope rules, expiry and rotation schedules, grant budgets](/credentials#advanced) | – | – | ✓ | ✓ |
+| `credentials_governance` | [Connector allowlists, scope rules, expiry and rotation schedules, grant budgets](/credentials#advanced) | – | – | ✓ | ✓ |
 | `byo_kms` | Customer-managed KMS keys ([below](#byo-kms)) | – | – | – | ✓ |
 | `chargeback` | Per-team cost attribution + spend forecast ([below](#chargeback)) | – | – | – | ✓ |
 | `white_label` | Removes the almyty mark from a [hosted chat app](/hosted-chat) or a packaged [app](/apps), and unlocks the `sso` auth mode on a surface | – | – | – | ✓ |
@@ -41,7 +41,7 @@ Two things to read off that table before you pick a plan.
 
 **Pro grants no enterprise entitlements at all.** It is a hosted tier, not a feature tier: unlimited resources, managed credits, email support. Everything in its feature list (scheduling, webhooks, analytics, the basic audit log) is already in the free, open-source edition, so upgrading Free to Pro unlocks no gated feature. If you are shopping for governance, the tier you want is Business.
 
-**Business is the governance tier**, and it includes connections governance. Only customer-managed keys, chargeback and white label are Enterprise-only.
+**Business is the governance tier**, and it includes credentials governance. Only customer-managed keys, chargeback and white label are Enterprise-only.
 
 The free tier is a floor, not a trial: core roles (owner/admin/member, team leads), the basic audit log, single-gate [approvals](/approvals), and [spend budgets](/cost-governance) all stay in the open-source edition.
 

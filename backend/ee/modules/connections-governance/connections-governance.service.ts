@@ -146,7 +146,7 @@ export interface ExportFilters {
 }
 
 /**
- * Connections governance (EE, `connections_governance`). Policies are
+ * Credentials governance (EE, `credentials_governance`). Policies are
  * org data; evaluation is the pure `policy-evaluator`; this service
  * loads rows, applies decisions and writes the audit trail.
  */

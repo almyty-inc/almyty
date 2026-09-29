@@ -1,5 +1,5 @@
 /**
- * Credentials > Advanced > Governance (EE, `connections_governance`).
+ * Credentials > Advanced > Governance (EE, `credentials_governance`).
  * Locked without the entitlement; with it, a sub-navigation over the
  * policies table, the review dashboard, and expiry, rotation and export.
  */

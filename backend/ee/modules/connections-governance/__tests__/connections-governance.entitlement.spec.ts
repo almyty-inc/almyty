@@ -19,9 +19,9 @@ describe('ConnectionsGovernanceController entitlement gate', () => {
   const reflector = new Reflector();
   const methods = ['listPolicies', 'createPolicy', 'getPolicy', 'updatePolicy', 'removePolicy', 'review', 'revokeGrants', 'expiring', 'enforceExpiry', 'rotationCandidates', 'rotateDue', 'syncPrincipals', 'auditExport'];
 
-  it('declares connections_governance on the whole controller', () => {
-    expect(EE_ENTITLEMENTS.CONNECTIONS_GOVERNANCE).toBe('connections_governance');
-    expect(reflector.get<string[]>(ENTITLEMENT_KEY, ConnectionsGovernanceController)).toEqual([EE_ENTITLEMENTS.CONNECTIONS_GOVERNANCE]);
+  it('declares credentials_governance on the whole controller', () => {
+    expect(EE_ENTITLEMENTS.CREDENTIALS_GOVERNANCE).toBe('credentials_governance');
+    expect(reflector.get<string[]>(ENTITLEMENT_KEY, ConnectionsGovernanceController)).toEqual([EE_ENTITLEMENTS.CREDENTIALS_GOVERNANCE]);
     for (const method of methods) expect(typeof ConnectionsGovernanceController.prototype[method]).toBe('function');
   });
 
@@ -35,14 +35,14 @@ describe('ConnectionsGovernanceController entitlement gate', () => {
         fail(`expected 402 for ${method}`);
       } catch (e) {
         expect((e as HttpException).getStatus()).toBe(HttpStatus.PAYMENT_REQUIRED);
-        expect(((e as HttpException).getResponse() as any).requiredEntitlements).toEqual([EE_ENTITLEMENTS.CONNECTIONS_GOVERNANCE]);
+        expect(((e as HttpException).getResponse() as any).requiredEntitlements).toEqual([EE_ENTITLEMENTS.CREDENTIALS_GOVERNANCE]);
       }
     }
   });
 
-  it('allows when the org license grants connections_governance', async () => {
+  it('allows when the org license grants credentials_governance', async () => {
     const svc = new LicenseService();
-    const resolver = { entitlementsForOrg: jest.fn().mockResolvedValue({ entitlements: [EE_ENTITLEMENTS.CONNECTIONS_GOVERNANCE] }), hasForOrg: jest.fn() } as any;
+    const resolver = { entitlementsForOrg: jest.fn().mockResolvedValue({ entitlements: [EE_ENTITLEMENTS.CREDENTIALS_GOVERNANCE] }), hasForOrg: jest.fn() } as any;
     const guard = new EntitlementGuard(reflector, svc, resolver);
     expect(await guard.canActivate(ctxFor(ConnectionsGovernanceController, 'review', { user: { currentOrganizationId: 'org-1' } }))).toBe(true);
     expect(resolver.entitlementsForOrg).toHaveBeenCalledWith('org-1');

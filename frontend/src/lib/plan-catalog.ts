@@ -67,14 +67,14 @@ export const PLANS: Record<PlanKey, PlanMeta> = {
 export const PLAN_ENTITLEMENTS: Record<PlanKey, string[]> = {
   free: [],
   pro: [],
-  business: ['sso', 'advanced_rbac', 'approval_policy', 'compliance_pack', 'audit_export', 'connections_governance'],
+  business: ['sso', 'advanced_rbac', 'approval_policy', 'compliance_pack', 'audit_export', 'credentials_governance'],
   enterprise: [
     'sso',
     'advanced_rbac',
     'approval_policy',
     'compliance_pack',
     'audit_export',
-    'connections_governance',
+    'credentials_governance',
     'byo_kms',
     'chargeback',
     // Removing the almyty mark. Granted by PLAN_ENTERPRISE on the
@@ -110,7 +110,7 @@ export const FEATURE_MATRIX: FeatureRow[] = [
   { label: 'Approval policies', entitlement: 'approval_policy' },
   { label: 'PII filtering / compliance pack', entitlement: 'compliance_pack' },
   { label: 'Audit export', entitlement: 'audit_export' },
-  { label: 'Credentials governance', entitlement: 'connections_governance' },
+  { label: 'Credentials governance', entitlement: 'credentials_governance' },
   { label: 'BYO-KMS (customer-managed keys)', entitlement: 'byo_kms' },
   { label: 'Cost attribution / chargeback', entitlement: 'chargeback' },
   { label: 'White label (remove the almyty mark)', entitlement: 'white_label' },

@@ -1,4 +1,4 @@
-# Connections governance (EE)
+# Credentials governance (EE)
 
 The Connections layer follows one rule: safety is free, governance is
 paid. Everything a single team needs to connect safely ships in the
@@ -6,7 +6,7 @@ Apache core: the connector catalog and connect methods, the single
 credential store, validation and health, grants with user and agent
 principals, the `allowUserScopedConnections` toggle, audit events,
 manual rotation and disconnect. What an organization needs to govern
-many teams ships under the `connections_governance` entitlement in
+many teams ships under the `credentials_governance` entitlement in
 `backend/ee/modules/connections-governance` (Business and Enterprise
 plans):
 
@@ -122,7 +122,7 @@ smallest `everyDays` among the matching ones wins.
 ## HTTP
 
 All under `/ee/connections`, owner/admin, entitlement
-`connections_governance` (402 without it), org from the JWT user or the
+`credentials_governance` (402 without it), org from the JWT user or the
 `X-Organization-Id` header.
 
 | Route | Does |

@@ -44,7 +44,7 @@ token resolves to community, never to allowed.
 | `approval_policy` | Multi-step and quorum approval gates. Without it, a request is decided by a single approver. |
 | `compliance_pack` | Org-enforced plugin policy — PII filtering and the security scanner applied to every run rather than per agent. |
 | `audit_export` | Bulk export of the org's audit trail as CSV or JSON, lifting the in-app 200-row cap, plus streaming to a customer SIEM. |
-| `connections_governance` | Policy over which connectors may be connected, by whom, and how their grants are used. |
+| `credentials_governance` | Policy over which connectors may be connected, by whom, and how their grants are used. |
 
 ## Enterprise
 

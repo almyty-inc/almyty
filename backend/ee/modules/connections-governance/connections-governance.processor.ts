@@ -27,7 +27,7 @@ export interface SweepSummary {
 /**
  * Nightly governance sweep: expiry enforcement, scheduled rotation and
  * the audit retention window, per organization that holds the
- * `connections_governance` entitlement and has a matching enabled
+ * `credentials_governance` entitlement and has a matching enabled
  * rule. Cadence via CONNECTIONS_GOVERNANCE_CRON (or `off`), always off
  * under NODE_ENV=test. `POST /ee/credentials/rotate-due` and the
  * expiry endpoint run the same handlers on demand for one org.
@@ -55,7 +55,7 @@ export class ConnectionsGovernanceProcessor implements OnApplicationBootstrap {
 
   async onApplicationBootstrap(): Promise<void> {
     if (!this.isEnabled()) {
-      this.logger.log(`Connections governance sweep disabled (NODE_ENV=test or ${CRON_ENV}=off)`);
+      this.logger.log(`Credentials governance sweep disabled (NODE_ENV=test or ${CRON_ENV}=off)`);
       return;
     }
     const cron = this.cron() as string;
@@ -68,16 +68,16 @@ export class ConnectionsGovernanceProcessor implements OnApplicationBootstrap {
       }
       await this.queue.add(EXPIRY_JOB, {}, { jobId: EXPIRY_REPEAT_JOB_ID, repeat: { cron }, removeOnComplete: true, removeOnFail: true });
       await this.queue.add(ROTATION_JOB, {}, { jobId: ROTATION_REPEAT_JOB_ID, repeat: { cron }, removeOnComplete: true, removeOnFail: true });
-      this.logger.log(`Connections governance sweep registered: "${cron}"`);
+      this.logger.log(`Credentials governance sweep registered: "${cron}"`);
     } catch (error: any) {
       // Scheduling is best-effort; a Redis hiccup at bootstrap must not take the API down.
-      this.logger.error(`Failed to schedule connections governance sweep: ${error.message}`);
+      this.logger.error(`Failed to schedule credentials governance sweep: ${error.message}`);
     }
   }
 
   private async licensed(organizationId: string): Promise<boolean> {
     try {
-      return await this.licenses.hasForOrg(organizationId, EE_ENTITLEMENTS.CONNECTIONS_GOVERNANCE);
+      return await this.licenses.hasForOrg(organizationId, EE_ENTITLEMENTS.CREDENTIALS_GOVERNANCE);
     } catch {
       return false;
     }
@@ -121,6 +121,6 @@ export class ConnectionsGovernanceProcessor implements OnApplicationBootstrap {
 
   @OnQueueFailed()
   onFailed(job: Job, error: Error): void {
-    this.logger.error(`Connections governance job ${job?.id} failed: ${error.message}`);
+    this.logger.error(`Credentials governance job ${job?.id} failed: ${error.message}`);
   }
 }
