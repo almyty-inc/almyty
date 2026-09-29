@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
   BadRequestException,
   Optional,
   Inject,
@@ -22,6 +23,7 @@ import { Team } from '../../../src/entities/team.entity';
 import { UserTeam, TeamRole } from '../../../src/entities/user-team.entity';
 import { ConnectionOffboardingService } from '../../../src/modules/connections/connection-offboarding.service';
 import { SsoConfigService, provisioningRole } from './sso-config.service';
+import { OrgDomainService } from './org-domain.service';
 import { isEffectiveMembership } from '../../../src/common/authorization/membership';
 
 const USER_SCHEMA = 'urn:ietf:params:scim:schemas:core:2.0:User';
@@ -83,6 +85,9 @@ export class ScimService {
     // positionally and never deprovision still compile.
     @Inject(forwardRef(() => ConnectionOffboardingService))
     private readonly connectionOffboarding?: ConnectionOffboardingService,
+    // New identities only on the org's verified domains. Absent (a spec
+    // building the service positionally), SCIM creates nobody.
+    @Optional() private readonly domains?: OrgDomainService,
   ) {}
 
   // ── Users ─────────────────────────────────────────────────────────
@@ -119,6 +124,15 @@ export class ScimService {
       }
     }
     if (!user) {
+      // The IdP is the org owner's to configure: without a verified
+      // domain behind the address, SCIM could create an account for a
+      // mailbox the organization does not run, which its IdP then signs
+      // into.
+      if (!this.domains || !(await this.domains.coversEmail(orgId, email))) {
+        throw new ForbiddenException(
+          'This address is not on a domain your organization has verified. Verify the domain under Settings, Single sign-on, or invite the person instead.',
+        );
+      }
       const passwordHash = await bcrypt.hash(randomBytes(24).toString('hex'), 12);
       user = await this.userRepo.save(
         this.userRepo.create({

@@ -1,6 +1,7 @@
 import { HttpException } from '@nestjs/common';
 
 import { HostedChatSsoController } from '../hosted-chat-sso.controller';
+import { SamlSignInStore } from '../saml-sign-in.store';
 import { HostedChatService } from '../../../../src/modules/gateways/channels/hosted-chat.service';
 import { FakeRedis } from '../../../../src/test/fake-redis';
 
@@ -28,7 +29,7 @@ describe('HostedChatSsoController', () => {
       protocolFor: jest.fn(async () => 'oidc'),
     };
     orgLicense = { hasForOrg: jest.fn(async () => true) };
-    controller = new HostedChatSsoController(hostedChat, sso, orgLicense, new FakeRedis() as any);
+    controller = new HostedChatSsoController(hostedChat, sso, orgLicense, new SamlSignInStore(new FakeRedis() as any));
   });
 
   afterEach(() => {

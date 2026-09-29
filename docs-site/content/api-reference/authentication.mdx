@@ -24,6 +24,7 @@ the route level, on top of the global 100 req/60s throttle:
 |----------|-------|
 | `POST /auth/register` | 10 per hour per IP |
 | `POST /auth/login` | 10 per 5 minutes per IP |
+| `POST /auth/token` | 10 per 5 minutes per IP |
 | `POST /auth/forgot-password` | 5 per hour per IP |
 | `POST /auth/refresh` | 20 per 5 minutes per IP |
 | `GET /auth/check-organization-name` | 30 per minute per IP |
@@ -57,31 +58,51 @@ curl -X POST https://api.almyty.com/auth/register \
 
 ### Response
 
+The session is the `access_token` cookie in the `Set-Cookie` header. The
+body carries no token:
+
 ```json
 {
   "success": true,
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIs...",
-    "user": {
-      "id": "user-uuid",
-      "email": "user@example.com",
-      "firstName": "Jane",
-      "lastName": "Doe"
-    },
-    "organization": {
-      "id": "org-uuid",
-      "name": "Acme Corp"
-    }
-  }
+  "data": { "expiresIn": 86400 },
+  "message": "Registration successful"
 }
 ```
 
 ## Login
 
-Authenticate with existing credentials:
+`POST /auth/login` is the browser login. It sets the `httpOnly`
+`access_token` cookie and returns no token in the body, so nothing a
+script on the page can read ever holds one:
 
 ```bash
 curl -X POST https://api.almyty.com/auth/login \
+  -H "Content-Type: application/json" \
+  -c cookies.txt \
+  -d '{
+    "email": "user@example.com",
+    "password": "SecurePass123!"
+  }'
+```
+
+```json
+{
+  "success": true,
+  "data": { "expiresIn": 86400 },
+  "message": "Login successful"
+}
+```
+
+## Login for non-browser clients
+
+`POST /auth/token` takes the same body and returns an access token and a
+refresh token in the body, and sets no cookie. It refuses any request
+that carries an `Origin` header, which every browser sends on a POST, so a
+page cannot call it. For scripts and CI, an API key (below) is usually the
+better fit.
+
+```bash
+curl -X POST https://api.almyty.com/auth/token \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@example.com",
@@ -89,26 +110,21 @@ curl -X POST https://api.almyty.com/auth/login \
   }'
 ```
 
-### Response
-
 ```json
 {
   "success": true,
   "data": {
-    "token": "eyJhbGciOiJIUzI1NiIs...",
-    "user": {
-      "id": "user-uuid",
-      "email": "user@example.com",
-      "firstName": "Jane",
-      "lastName": "Doe"
-    }
-  }
+    "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIs...",
+    "expiresIn": 86400
+  },
+  "message": "Login successful"
 }
 ```
 
 ## Using the Token
 
-Include the JWT in the `Authorization` header of all API requests:
+Include the access token in the `Authorization` header of API requests:
 
 ```bash
 curl https://api.almyty.com/apis \
@@ -117,7 +133,11 @@ curl https://api.almyty.com/apis \
 
 ## Token Expiration
 
-JWT tokens expire after 24 hours. For long-lived programmatic access, use API keys instead.
+Access tokens expire after 24 hours. A client that signed in with
+`/auth/token` redeems its refresh token at `POST /auth/refresh` for a new
+pair; each refresh token works once, and presenting a spent one ends the
+session. Like `/auth/token`, `/auth/refresh` refuses browser pages. For
+long-lived programmatic access, use API keys instead.
 
 ## API Keys
 
