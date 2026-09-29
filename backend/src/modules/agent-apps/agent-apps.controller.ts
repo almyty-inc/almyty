@@ -135,6 +135,16 @@ export class AgentAppsController {
    * continuously while someone is still editing, rather than letting
    * them discover the list when a publish is rejected.
    */
+  /**
+   * What the app has spent today and this month against its spend caps,
+   * and whether visitors are being told it has reached its limit.
+   */
+  @Get(':slug/spend')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'What this app has spent against its spend limits' })
+  async spend(@Param('slug') slug: string, @Request() req: any) {
+    return { success: true, data: await this.apps.spend(this.org(req), slug) };
+  }
   @Get(':slug/check')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'What is stopping this app from shipping' })

@@ -41,6 +41,10 @@ export class UserOrganization {
   @Column({ nullable: true })
   invitedBy: string;
 
+  /**
+   * SHA-256 of a pending invite's token (hashInviteToken). The token itself
+   * is only ever in the invitation email. Null once accepted or revoked.
+   */
   @Column({ nullable: true })
   inviteToken: string;
 

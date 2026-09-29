@@ -56,6 +56,11 @@ describe('SSO JIT provisioning never adopts an existing account', () => {
       membershipRepo as any,
       { getDecrypted: jest.fn() } as any,
       new SamlReplayCache(new FakeRedis()),
+      undefined,
+      undefined,
+      // Every address counts as on a verified domain: what is under test
+      // here is adopting an existing account, which no domain permits.
+      { coversEmail: async () => true } as any,
     );
     return { service, userRepo, membershipRepo };
   }

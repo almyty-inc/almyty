@@ -43,7 +43,7 @@ describe('AppSettingsPanel look and Advanced', () => {
     render(<AppSettingsPanel app={app()} onSaved={vi.fn()} />)
     expect(screen.queryByLabelText(/Spend limit per run/)).toBeNull()
     expect(screen.getByRole('button', { name: /^Advanced/ })).toHaveTextContent(
-      'No spend limit · No visitor limit · visitor data kept per organization policy · no local access',
+      'No spend limit · App limit 5 a day, 50 a month · No visitor limit · visitor data kept per organization policy · no local access',
     )
   })
 
@@ -55,7 +55,7 @@ describe('AppSettingsPanel look and Advanced', () => {
       />,
     )
     expect(screen.getByRole('button', { name: /^Advanced/ })).toHaveTextContent(
-      'Spend limit 0.5 per run · 60 messages per visitor an hour · visitor data deleted after 30 days · no local access',
+      'Spend limit 0.5 per run · App limit 5 a day, 50 a month · 60 messages per visitor an hour · visitor data deleted after 30 days · no local access',
     )
   })
 
@@ -130,7 +130,41 @@ describe('AppSettingsPanel limits', () => {
       costCapCents: null,
       perUserRateLimit: null,
       perIpRateLimit: null,
+      // The whole-app caps start filled with the defaults, so they are sent.
+      dailySpendCapCents: 500,
+      monthlySpendCapCents: 5000,
     })
+  })
+
+  it('caps what the whole app may spend, five dollars a day and fifty a month to start', async () => {
+    show(<AppSettingsPanel app={app()} onSaved={onSaved} />)
+    expect(screen.getByLabelText('Spend limit per day')).toHaveValue('5')
+    expect(screen.getByLabelText('Spend limit per month')).toHaveValue('50')
+    expect(screen.getByText(/This app has reached its limit for today/)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Spend limit per day'), { target: { value: '12.50' } })
+    fireEvent.change(screen.getByLabelText('Spend limit per month'), { target: { value: '' } })
+    save()
+
+    await waitFor(() => expect(agentAppsApi.update).toHaveBeenCalled())
+    // Cents, and an emptied field is "no limit" (null), not the default.
+    expect(sent().limits).toMatchObject({ dailySpendCapCents: 1250, monthlySpendCapCents: null })
+  })
+
+  it('shows a cleared spend cap as empty and says so in the summary', () => {
+    render(
+      <AppSettingsPanel
+        app={app({ limits: { costCapCents: 50, dailySpendCapCents: null, monthlySpendCapCents: null } })}
+        onSaved={onSaved}
+      />,
+    )
+    expect(screen.getByRole('button', { name: /^Advanced/ })).toHaveTextContent('No app limit')
+  })
+
+  it('starts an app only the organization directory can reach with no spend cap', () => {
+    show(<AppSettingsPanel app={app({ authMode: 'sso' })} onSaved={onSaved} />)
+    expect(screen.getByLabelText('Spend limit per day')).toHaveValue('')
+    expect(screen.getByLabelText('Spend limit per month')).toHaveValue('')
   })
 
   it('keeps both rate ceilings separate', async () => {

@@ -131,6 +131,24 @@ describe('ChannelWidgetController', () => {
     it('stays comfortably under the 15KB embed budget', () => {
       expect(Buffer.byteLength(buildWidgetScript(ID_A), 'utf-8')).toBeLessThan(15 * 1024);
     });
+
+    it('offers the visitor a download and a delete, behind the app flags and with no dialog', () => {
+      const script = buildWidgetScript(ID_A);
+      expect(script).toContain("'/widget/threads'");
+      expect(script).toContain('Download my chat');
+      expect(script).toContain('Delete my chat');
+      expect(script).toContain('cfg.visitorCanDelete');
+      expect(script).toContain('cfg.visitorCanExport');
+      // Off until the config fetch says the app allows it.
+      expect(script).toMatch(/visitorCanDelete: false,\s+visitorCanExport: false/);
+      expect(script).not.toContain('confirm(');
+    });
+
+    it('shows the server sentence when a message is refused (rate limit, spend limit)', () => {
+      const script = buildWidgetScript(ID_A);
+      expect(script).toContain('if (!res.ok)');
+      expect(script).toContain('res.out.message');
+    });
   });
 
   describe('POST :id/widget/messages', () => {
@@ -146,7 +164,7 @@ describe('ChannelWidgetController', () => {
         message: 'hi there',
         sessionId: undefined,
         threadId: 'thread-1',
-      });
+      }, null);
       expect(out).toEqual({ success: true, data: { runId: 'run-1', threadId: 'thread-1' } });
     });
 
@@ -262,6 +280,8 @@ describe('ChannelWidgetController', () => {
           theme: 'dark',
           aiDisclosure: WIDGET_DEFAULT_AI_DISCLOSURE,
           poweredBy: false,
+          visitorCanDelete: true,
+          visitorCanExport: true,
         },
       });
       // Nothing outside the whitelist may leak — not credentials, not
@@ -312,6 +332,8 @@ describe('ChannelWidgetController', () => {
         aiDisclosure: 'You are talking to a bot.',
         position: 'bottom-left',
         launcherIcon: 'help',
+        visitorCanDelete: true,
+        visitorCanExport: true,
       });
     });
 
@@ -323,6 +345,18 @@ describe('ChannelWidgetController', () => {
       const out = await owned.widgetConfig(GATEWAY_UUID, res as any);
 
       expect(out.data).toMatchObject({ title: 'Acme', aiDisclosure: WIDGET_DEFAULT_AI_DISCLOSURE, poweredBy: true });
+    });
+
+    it('says which visitor rights the app grants, off when the app turned them off', async () => {
+      channelGatewayService.findWidgetGateway.mockResolvedValueOnce({ id: GATEWAY_UUID, organizationId: 'org-1', type: 'chat_widget', configuration: {} });
+      const appLink = {
+        distributionFor: jest.fn(async () => ({ app: { name: 'Acme', branding: {}, privacy: { visitorCanDelete: false, visitorCanExport: true } } })),
+      };
+      const owned = new ChannelWidgetController(channelGatewayService as any, gatewayRateLimit as any, appLink as any);
+
+      const out = await owned.widgetConfig(GATEWAY_UUID, res as any);
+
+      expect(out.data).toMatchObject({ visitorCanDelete: false, visitorCanExport: true });
     });
   });
 
@@ -379,6 +413,8 @@ describe('ChannelWidgetController', () => {
         'primaryColor',
         'theme',
         'title',
+        'visitorCanDelete',
+        'visitorCanExport',
       ]);
       expect(out.primaryColor).toBe('#123456');
     });

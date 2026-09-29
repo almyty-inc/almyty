@@ -21,7 +21,7 @@ import { AlmytyMcpService } from '../mcp/almyty-mcp.service';
 import { McpOAuthService } from '../mcp/services/mcp-oauth.service';
 import { UtcpService } from '../mcp/utcp.service';
 import { GatewayResolverService } from '../mcp/services/gateway-resolver.service';
-import { A2AServerService } from '../a2a/a2a-server.service';
+import { A2AServerService, A2A_RUN_METHODS } from '../a2a/a2a-server.service';
 import { A2AAgentCardService } from '../a2a/a2a-agent-card.service';
 import { AcpServerService } from '../acp/acp-server.service';
 import { AcpDiscoveryService } from '../acp/acp-discovery.service';
@@ -30,6 +30,9 @@ import { findServableGatewayAgent } from './gateway-servable';
 import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
 import { SkillGeneratorService } from '../tools/skill-generator.service';
 import { assertOAuthScope } from '../mcp/services/mcp-oauth-scope';
+import { AppPlace, AppPlacePolicyService, a2aCallerId } from './app-place-policy.service';
+import { HostedChatService } from './channels/hosted-chat.service';
+import { trustedClientIp } from '../../common/security/client-ip';
 
 /**
  * Per-protocol delegation for gateways exposed under
@@ -112,6 +115,10 @@ export class UnifiedGatewayDelegation {
     // A shared-tools gateway's Skills listing. Optional for the same reason;
     // without it /skills answers not found rather than an empty list.
     @Optional() private readonly skills?: SkillGeneratorService,
+    // The app an A2A place belongs to: its spend cap, per-run cost cap and
+    // visitor memory rule. Optional for the same reason; Nest always
+    // injects it (app-place-policy.guard.spec.ts).
+    @Optional() private readonly places?: AppPlacePolicyService,
   ) {}
 
   async handleGatewayRequest(
@@ -201,7 +208,7 @@ export class UnifiedGatewayDelegation {
         return out;
       }
       case GatewayType.A2A: {
-        const out = await this.delegateA2A(gateway, organization, action, req, res, body);
+        const out = await this.delegateA2A(gateway, organization, action, req, res, body, auth);
         this.bumpGatewayCounters(gateway.id, res.statusCode < 400);
         return out;
       }
@@ -387,6 +394,7 @@ export class UnifiedGatewayDelegation {
     req: Request,
     res: Response,
     body: any,
+    auth: any = null,
   ) {
     if (
       action === '.well-known/agent-card.json' ||
@@ -422,13 +430,51 @@ export class UnifiedGatewayDelegation {
     if (!agent) {
       throw new HttpException('Agent not found for this A2A gateway', HttpStatus.NOT_FOUND);
     }
+    // A message that starts or continues a task spends against the app:
+    // the caller's own share first (per credential, and per address), then
+    // the app's allowance across every place. Reads and cancels do not.
+    const place = A2A_RUN_METHODS.has(body?.method) ? await this.admitA2ACall(gateway, auth, req, res) : null;
+
     const baseUrl =
       this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
     await this.a2aServerService.handleJsonRpc(gateway, req, body, res, {
       agent,
       org: organization,
       baseUrl,
+      place,
     });
+  }
+
+  /**
+   * One A2A caller's share, and the app's allowance.
+   *
+   * A2A callers are machines holding a credential, so each credential (API
+   * key, OAuth client, signed-in user) is a visitor with its own bucket,
+   * the app's per-visitor limit, as well as the per-address one. Before
+   * this an A2A place had only the surface ceiling: one caller could use
+   * the whole hour for every other caller. Then the app's spend cap, and
+   * the run options (per-run cost cap, app stamp, visitor memory rule)
+   * the task's run starts with.
+   */
+  private async admitA2ACall(gateway: Gateway, auth: any, req: Request, res: Response): Promise<AppPlace | null> {
+    const own = await this.gatewayRateLimit.checkVisitor(gateway, {
+      endUserId: a2aCallerId(auth),
+      clientHash: HostedChatService.hashClient(trustedClientIp(req as any)),
+    });
+    if (own.limited) {
+      if (own.retryAfterSeconds) res.setHeader('Retry-After', String(own.retryAfterSeconds));
+      throw new HttpException(
+        {
+          message: own.message ?? 'Too many requests from this caller.',
+          code: own.code ?? 'VISITOR_RATE_LIMITED',
+          errorCode: own.code ?? 'VISITOR_RATE_LIMITED',
+          ...(own.retryAfterSeconds ? { retryAfter: own.retryAfterSeconds } : {}),
+          ...(own.bucket ? { bucket: own.bucket } : {}),
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    return this.places ? this.places.admit(gateway) : null;
   }
 
   private async delegateACP(

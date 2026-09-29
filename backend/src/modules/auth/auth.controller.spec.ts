@@ -124,7 +124,7 @@ describe('AuthController', () => {
 
       expect(result).toEqual({
         success: true,
-        data: mockTokens,
+        data: { expiresIn: 86400 },
         message: 'Registration successful',
       });
       expect(mockResponse.cookie).toHaveBeenCalledWith(
@@ -202,7 +202,7 @@ describe('AuthController', () => {
 
       expect(result).toEqual({
         success: true,
-        data: mockTokens,
+        data: { expiresIn: 86400 },
         message: 'Login successful',
       });
       expect(mockResponse.cookie).toHaveBeenCalledWith(
@@ -210,6 +210,49 @@ describe('AuthController', () => {
         'access-token',
         expect.objectContaining({ httpOnly: true, path: '/' }),
       );
+    });
+
+    // Tokens are httpOnly-cookie only in the browser: the login response
+    // a page receives must hold nothing a script could lift.
+    it('puts no token in the browser login response body', async () => {
+      authService.completeLogin.mockResolvedValue({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        expiresIn: 86400,
+      });
+
+      const result = await controller.login({ user: { id: 'user-1' } }, mockResponse);
+
+      const body = JSON.stringify(result);
+      expect(body).not.toContain('access-token');
+      expect(body).not.toContain('refresh-token');
+      expect(result.data).not.toHaveProperty('accessToken');
+      expect(result.data).not.toHaveProperty('refreshToken');
+    });
+  });
+
+  describe('token (non-browser login)', () => {
+    const tokens = { accessToken: 'access-token', refreshToken: 'refresh-token', expiresIn: 86400 };
+
+    it('returns both tokens in the body and sets no cookie', async () => {
+      authService.completeLogin.mockResolvedValue(tokens);
+
+      const result = await controller.token({ user: { id: 'user-1' }, headers: {} });
+
+      expect(result.data).toEqual(tokens);
+      expect(mockResponse.cookie).not.toHaveBeenCalled();
+    });
+
+    it('refuses a browser page, which sends Origin', async () => {
+      await expect(
+        controller.token({ user: { id: 'user-1' }, headers: { origin: 'https://app.example.com' } }),
+      ).rejects.toThrow(BadRequestException);
+      expect(authService.completeLogin).not.toHaveBeenCalled();
+    });
+
+    it('is rate limited like the browser login', () => {
+      const read = (v: any): number => (typeof v === 'function' ? v() : v);
+      expect(read(Reflect.getMetadata('THROTTLER:LIMITdefault', AuthController.prototype.token))).toBe(10);
     });
   });
 
@@ -231,7 +274,9 @@ describe('AuthController', () => {
   });
 
   describe('refresh', () => {
-    it('should refresh tokens successfully', async () => {
+    const cli: any = { headers: {} };
+
+    it('should refresh tokens successfully for a non-browser client', async () => {
       const refreshToken = 'refresh-token';
 
       const mockTokens = {
@@ -242,30 +287,32 @@ describe('AuthController', () => {
 
       authService.refreshToken.mockResolvedValue(mockTokens);
 
-      const result = await controller.refresh(refreshToken, mockResponse);
+      const result = await controller.refresh(refreshToken, cli);
 
       expect(result).toEqual({
         success: true,
         data: mockTokens,
         message: 'Token refreshed successfully',
       });
-      expect(mockResponse.cookie).toHaveBeenCalledWith(
-        'access_token',
-        'new-access-token',
-        expect.objectContaining({ httpOnly: true, path: '/' }),
-      );
+    });
+
+    it('refuses a browser page', async () => {
+      await expect(
+        controller.refresh('refresh-token', { headers: { origin: 'https://app.example.com' } } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(authService.refreshToken).not.toHaveBeenCalled();
     });
 
     it('should throw error when refresh token is missing', async () => {
-      await expect(controller.refresh('', mockResponse)).rejects.toThrow('Refresh token is required');
+      await expect(controller.refresh('', cli)).rejects.toThrow('Refresh token is required');
     });
 
     it('should throw error when refresh token is undefined', async () => {
-      await expect(controller.refresh(undefined, mockResponse)).rejects.toThrow('Refresh token is required');
+      await expect(controller.refresh(undefined, cli)).rejects.toThrow('Refresh token is required');
     });
 
     it('should throw error when refresh token is null', async () => {
-      await expect(controller.refresh(null, mockResponse)).rejects.toThrow('Refresh token is required');
+      await expect(controller.refresh(null, cli)).rejects.toThrow('Refresh token is required');
     });
   });
 

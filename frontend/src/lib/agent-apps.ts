@@ -764,6 +764,9 @@ export const agentAppsApi = {
   /** What is stopping this product from shipping, while it is still editable. */
   check: (id: string) => apiGet(`/apps/${id}/check`).then((r) => unwrap<AppCheck>(r)),
 
+  /** What the app has spent today and this month against its spend caps. */
+  spend: (id: string) => apiGet(`/apps/${id}/spend`).then((r) => unwrap<AppSpendStatus>(r)),
+
   create: (data: Partial<AgentApp>) => apiPost('/apps', data).then((r) => unwrap<AgentApp>(r)),
 
   update: (id: string, data: Partial<AgentApp>) =>
@@ -871,6 +874,53 @@ export interface AppLimits {
   costCapCents?: number | null
   perUserRateLimit?: number | null
   perIpRateLimit?: number | null
+  /** Whole-app spend per UTC day, in cents. Missing = the default; null = none. */
+  dailySpendCapCents?: number | null
+  /** Whole-app spend per UTC month, in cents. Missing = the default; null = none. */
+  monthlySpendCapCents?: number | null
+}
+
+/** Mirrors the backend defaults (agent-app.rules.ts): five dollars a day, fifty a month. */
+export const DEFAULT_PUBLIC_DAILY_SPEND_CAP_CENTS = 500
+export const DEFAULT_PUBLIC_MONTHLY_SPEND_CAP_CENTS = 5000
+
+export interface AppSpendCaps {
+  dailyCents: number | null
+  monthlyCents: number | null
+}
+
+/**
+ * The effective spend caps, as the backend applies them. A missing field
+ * takes the default for the auth mode: every mode but SSO lets strangers
+ * in, so every mode but SSO starts capped. Null or zero is no cap.
+ */
+export function appSpendCapsFrom(app: Pick<AgentApp, 'limits' | 'authMode'>): AppSpendCaps {
+  const open = (app.authMode ?? 'public_link') !== 'sso'
+  const cap = (value: number | null | undefined, fallback: number | null) => {
+    if (value === undefined) return fallback
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null
+    return Math.floor(value)
+  }
+  return {
+    dailyCents: cap(app.limits?.dailySpendCapCents, open ? DEFAULT_PUBLIC_DAILY_SPEND_CAP_CENTS : null),
+    monthlyCents: cap(app.limits?.monthlySpendCapCents, open ? DEFAULT_PUBLIC_MONTHLY_SPEND_CAP_CENTS : null),
+  }
+}
+
+/** What the app has spent against its caps (GET /apps/:slug/spend). */
+export interface AppSpendStatus {
+  caps: AppSpendCaps
+  todayCents: number
+  monthCents: number
+  /** The cap currently reached; visitors are told the app has reached its limit. */
+  reached: 'day' | 'month' | null
+  resetsAt: string | null
+}
+
+/** Cents as the owner reads money: "$5", "$0.50". */
+export function formatCents(cents: number): string {
+  const dollars = cents / 100
+  return `$${Number.isInteger(dollars) ? dollars : dollars.toFixed(2)}`
 }
 
 export function grantsLocalAccess(capabilities: AppCapabilities | null | undefined): boolean {

@@ -17,8 +17,19 @@ interface InviteDetails {
 export function AcceptInvitePage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  // The emailed link carries the token; the in-app notification names the
+  // membership row instead, which only the invited account can open.
   const token = searchParams.get('token')
-  const { user } = useAuthStore()
+  const membership = searchParams.get('membership')
+  const invitePath = token
+    ? `/invites/${encodeURIComponent(token)}`
+    : membership
+      ? `/invites/membership/${encodeURIComponent(membership)}`
+      : null
+  const returnTo = token
+    ? `/invite/accept?token=${encodeURIComponent(token)}`
+    : `/invite/accept?membership=${encodeURIComponent(membership ?? '')}`
+  const { user, authChecked } = useAuthStore()
 
   const [details, setDetails] = useState<InviteDetails | null>(null)
   const [loading, setLoading] = useState(true)
@@ -26,31 +37,39 @@ export function AcceptInvitePage() {
   const [error, setError] = useState<string | null>(null)
   const [accepted, setAccepted] = useState(false)
 
+  // Only the invited account can open a membership link, so it waits for
+  // the session check and sends a signed-out visitor to sign in first.
+  const waitForSession = !!membership && !token && !user
   useEffect(() => {
-    if (!token) {
+    if (!invitePath) {
       setError('No invitation token provided')
       setLoading(false)
       return
     }
+    if (waitForSession) {
+      if (authChecked) navigate(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`)
+      return
+    }
 
-    apiGet<InviteDetails>(`/invites/${token}`)
+    apiGet<InviteDetails>(invitePath)
       .then((data) => setDetails(data))
       .catch((err) => setError(getApiErrorMessage(err, 'Invalid invitation')))
       .finally(() => setLoading(false))
-  }, [token])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invitePath, waitForSession, authChecked])
 
   const handleAccept = async () => {
-    if (!token) return
+    if (!invitePath) return
 
     if (!user) {
       // Not logged in — redirect to login with return URL
-      navigate(`/auth/login?returnTo=${encodeURIComponent(`/invite/accept?token=${token}`)}`)
+      navigate(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`)
       return
     }
 
     setAccepting(true)
     try {
-      await apiPost(`/invites/${token}/accept`, {})
+      await apiPost(`${invitePath}/accept`, {})
       setAccepted(true)
     } catch (err: any) {
       setError(getApiErrorMessage(err, 'Failed to accept invitation'))
