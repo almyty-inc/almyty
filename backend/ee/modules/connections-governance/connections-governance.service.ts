@@ -476,7 +476,7 @@ export class ConnectionsGovernanceService {
 
     for (const action of actions.warn) {
       const connection = byId.get(action.connectionId)!;
-      await this.notifyOwners(connection, CONNECTIONS_EXPIRING_EVENT, `Connection ${connection.name} expires soon`,
+      await this.notifyOwners(connection, CONNECTIONS_EXPIRING_EVENT, `Credential ${connection.name} expires soon`,
         `The secret behind ${connection.name} (${connection.connectorKey}) is ${action.ageDays} days old and expires on ${action.expiresOn.toISOString().slice(0, 10)} under your organization's expiry rule. Rotate it before then.`,
         { connectionId: connection.id, expiresOn: action.expiresOn.toISOString(), ageDays: action.ageDays, maxAgeDays: action.maxAgeDays });
       result.warned++;
@@ -504,7 +504,7 @@ export class ConnectionsGovernanceService {
         resourceName: connection.name,
         details: { connectorKey: connection.connectorKey, status: 'expired', source: 'governance.expiry', policyId: action.policyId, ageDays: action.ageDays, maxAgeDays: action.maxAgeDays, enforce: actions.enforce, revokedGrants: revoked },
       });
-      await this.notifyOwners(connection, CONNECTIONS_EXPIRED_EVENT, `Connection ${connection.name} has expired`,
+      await this.notifyOwners(connection, CONNECTIONS_EXPIRED_EVENT, `Credential ${connection.name} has expired`,
         actions.enforce
           ? `The secret behind ${connection.name} (${connection.connectorKey}) is ${action.ageDays} days old. It was marked expired and its ${revoked} grant(s) were revoked. Rotate it to bring it back.`
           : `The secret behind ${connection.name} (${connection.connectorKey}) is ${action.ageDays} days old and was marked expired. Rotate it.`,
@@ -573,8 +573,8 @@ export class ConnectionsGovernanceService {
     for (const candidate of manualToo) {
       const connection = await this.credentials.findOne({ where: { id: candidate.connectionId, organizationId } });
       if (!connection) continue;
-      await this.notifyOwners(connection, CONNECTIONS_ROTATION_EVENT, `Rotate connection ${connection.name}`,
-        `The secret behind ${connection.name} (${connection.connectorKey}) is ${candidate.ageDays} days old; your organization's rotation rule asks for a rotation every ${candidate.everyDays} days. ${connection.connectorKey} has no provider-side rotation, so rotate it by hand from the Connections page.`,
+      await this.notifyOwners(connection, CONNECTIONS_ROTATION_EVENT, `Rotate credential ${connection.name}`,
+        `The secret behind ${connection.name} (${connection.connectorKey}) is ${candidate.ageDays} days old; your organization's rotation rule asks for a rotation every ${candidate.everyDays} days. ${connection.connectorKey} has no provider-side rotation, so replace its key by hand on the Credentials page.`,
         { connectionId: connection.id, ageDays: candidate.ageDays, everyDays: candidate.everyDays });
       result.manual++;
     }
@@ -718,7 +718,7 @@ export class ConnectionsGovernanceService {
         roleTarget: connection.ownerUserId ? undefined : { orgRoles: [OrganizationRole.OWNER, OrganizationRole.ADMIN] },
         title,
         body,
-        link: '/connections',
+        link: '/credentials',
         email: { template: type, params: { connectionName: connection.name, connectorKey: connection.connectorKey, ...params } },
       });
     } catch (error: any) {
