@@ -79,7 +79,7 @@ describe('new app', () => {
       expect(targetForGatewayType(GatewayType.MICROSOFT_TEAMS)).toBe(DistributionTarget.MICROSOFT_TEAMS);
       expect(targetForGatewayType(GatewayType.CHAT_WIDGET)).toBe(DistributionTarget.WIDGET);
       expect(targetForGatewayType(GatewayType.A2A)).toBe(DistributionTarget.A2A);
-      expect(targetForGatewayType(GatewayType.TOOLS)).toBeNull();
+      expect(targetForGatewayType(GatewayType.MCP)).toBeNull();
       expect(targetForGatewayType(GatewayType.ACP)).toBeNull();
     });
   });

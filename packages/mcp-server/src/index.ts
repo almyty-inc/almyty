@@ -161,10 +161,10 @@ async function main() {
     },
     {
       name: 'almyty_create_gateway',
-      description: 'Share tools at one address. Type "tools" serves MCP, UTCP and Skills together. An agent is put in front of people or other agents (web, chat apps, A2A) through an app, not here.',
+      description: 'Share tools over one protocol: MCP, UTCP or Skills (one gateway each). An agent is put in front of people or other agents (web, chat apps, A2A) through an app, not here.',
       shape: {
         name: z.string().describe('Gateway name'),
-        type: z.enum(['tools', 'mcp', 'utcp', 'skills']).default('tools').describe('Protocol type; "tools" serves all three'),
+        type: z.enum(['mcp', 'utcp', 'skills']).default('mcp').describe('The one protocol this gateway serves'),
         endpoint: z.string().describe('URL slug for the gateway endpoint'),
       },
       run: (args) =>

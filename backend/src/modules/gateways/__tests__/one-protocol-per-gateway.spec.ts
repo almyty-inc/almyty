@@ -1,11 +1,9 @@
 import axios from 'axios';
 import * as crypto from 'crypto';
 import { HttpException } from '@nestjs/common';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 
 import { UnifiedEndpointController } from '../unified-endpoint.controller';
-import { UnifiedGatewayDelegation, toolsGatewayProtocol } from '../unified-gateway-delegation.helper';
+import { UnifiedGatewayDelegation } from '../unified-gateway-delegation.helper';
 import { GatewayAuthService } from '../gateway-auth.service';
 import { GatewayAuthValidators } from '../gateway-auth-validators.helper';
 import { GatewayResolverService } from '../../mcp/services/gateway-resolver.service';
@@ -32,25 +30,23 @@ jest.mock('axios', () => {
 });
 
 /**
- * One address, three protocols, one set of tools.
- *
- * A shared-tools gateway (type `tools`) is what the Share tools page makes:
- * the person picks tools and gets one address, never a protocol. A JSON-RPC
- * POST to it is MCP, /manual and /execute are UTCP, /skills lists the Agent
- * Skills. These specs drive the real unified endpoint, the real gateway
- * auth (API keys hashed and looked up in a table), and the real MCP, UTCP
- * and Skills services over truthful tables; only the upstream HTTP call is
- * a double.
+ * One gateway, one protocol. Sharing a set of tools over MCP, UTCP and
+ * Agent Skills means three gateways, each attached to the same tools: the
+ * MCP one answers JSON-RPC at its address, the UTCP one serves /manual and
+ * /execute at its own, and the Skills one is what `npx @almyty/skills`
+ * installs from. These specs drive the real unified endpoint, the real
+ * gateway auth (API keys hashed and looked up in a table), and the real MCP,
+ * UTCP and Skills services over truthful tables; only the upstream HTTP call
+ * is a double.
  *
  * What must hold:
- *  - every protocol lists exactly the gateway's servable set
+ *  - each protocol lists exactly its gateway's servable set
  *    (`servableToolsOnGateway`: attached, attachment on, tool active, scope
  *    fits), and calls resolve against that same set;
- *  - every protocol refuses a request without this gateway's key;
- *  - the single-protocol MCP and UTCP gateways answer as they always did,
- *    and do not pick up the other protocols.
+ *  - each gateway refuses a request without its own key;
+ *  - each gateway speaks its protocol and nothing else.
  */
-describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', () => {
+describe('each gateway serves one protocol', () => {
   const mockedAxios = axios as unknown as jest.Mock;
   const organization = { id: CAST.org, slug: 'acme', name: 'Acme' };
 
@@ -86,7 +82,7 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
   const SERVABLE = [TOOLS.weather.name, TOOLS.cities.name].sort();
   const NOT_SERVABLE = [TOOLS.unpublished, TOOLS.switchedOff, TOOLS.draft, TOOLS.team];
 
-  // One tool of each type, shared on one gateway: generated from an API
+  // One tool of each type, shared on one gateway per protocol: generated from an API
   // operation, and the four made by hand (HTTP, JavaScript, GraphQL, LLM).
   const handMade = { operationId: null, httpConfig: null, executionMethod: null } as Partial<Tool>;
   const EACH_TYPE = {
@@ -154,17 +150,20 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
     });
 
   const GATEWAYS = {
-    shared: gatewayRow('gw-shared', GatewayType.TOOLS, '/shared'),
-    soloMcp: gatewayRow('gw-solo-mcp', GatewayType.MCP, '/solo-mcp'),
-    soloUtcp: gatewayRow('gw-solo-utcp', GatewayType.UTCP, '/solo-utcp'),
-    eachType: gatewayRow('gw-each-type', GatewayType.TOOLS, '/each-type'),
+    mcp: gatewayRow('gw-mcp', GatewayType.MCP, '/weather'),
+    utcp: gatewayRow('gw-utcp', GatewayType.UTCP, '/weather-utcp'),
+    skills: gatewayRow('gw-skills', GatewayType.SKILLS, '/weather-skills'),
+    eachMcp: gatewayRow('gw-each-mcp', GatewayType.MCP, '/each-type'),
+    eachUtcp: gatewayRow('gw-each-utcp', GatewayType.UTCP, '/each-type-utcp'),
+    eachSkills: gatewayRow('gw-each-skills', GatewayType.SKILLS, '/each-type-skills'),
   };
 
   const KEYS = {
-    shared: 'shared_key_0123456789abcdefghijklmnop',
-    soloMcp: 'solo_mcp_key_0123456789abcdefghijklm',
-    soloUtcp: 'solo_utcp_key_0123456789abcdefghijkl',
-    eachType: 'each_type_key_0123456789abcdefghijkl',
+    mcp: 'mcp_key_0123456789abcdefghijklmnopqrs',
+    utcp: 'utcp_key_0123456789abcdefghijklmnopqr',
+    skills: 'skills_key_0123456789abcdefghijklmnop',
+    eachMcp: 'each_mcp_key_0123456789abcdefghijklm',
+    eachUtcp: 'each_utcp_key_0123456789abcdefghijkl',
   };
 
   const keyRow = (raw: string, gatewayId: string) =>
@@ -186,6 +185,7 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
     });
 
   let controller: UnifiedEndpointController;
+  let skills: SkillGeneratorService;
   let gatewayTools: ReturnType<typeof fakeRepository<GatewayTool>>;
   let counterBumps: string[];
 
@@ -204,10 +204,11 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
     gatewayTools = fakeRepository<GatewayTool>({ make: () => new GatewayTool() });
     const apiKeys = fakeRepository<ApiKey>({
       seed: [
-        keyRow(KEYS.shared, GATEWAYS.shared.id),
-        keyRow(KEYS.soloMcp, GATEWAYS.soloMcp.id),
-        keyRow(KEYS.soloUtcp, GATEWAYS.soloUtcp.id),
-        keyRow(KEYS.eachType, GATEWAYS.eachType.id),
+        keyRow(KEYS.mcp, GATEWAYS.mcp.id),
+        keyRow(KEYS.utcp, GATEWAYS.utcp.id),
+        keyRow(KEYS.skills, GATEWAYS.skills.id),
+        keyRow(KEYS.eachMcp, GATEWAYS.eachMcp.id),
+        keyRow(KEYS.eachUtcp, GATEWAYS.eachUtcp.id),
       ],
       make: () => new ApiKey(),
     });
@@ -243,16 +244,19 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
       },
     });
 
-    // Servable on the shared gateway: two tools. Attached but not servable:
-    // a switched-off attachment, a draft, a team tool on an org-wide gateway.
-    attach(GATEWAYS.shared, TOOLS.weather);
-    attach(GATEWAYS.shared, TOOLS.cities);
-    attach(GATEWAYS.shared, TOOLS.switchedOff, false);
-    attach(GATEWAYS.shared, TOOLS.draft);
-    attach(GATEWAYS.shared, TOOLS.team);
-    attach(GATEWAYS.soloMcp, TOOLS.unpublished);
-    attach(GATEWAYS.soloUtcp, TOOLS.unpublished);
-    for (const tool of Object.values(EACH_TYPE)) attach(GATEWAYS.eachType, tool);
+    // The same tools on the MCP, UTCP and Skills gateway. Servable: two.
+    // Attached but not servable: a switched-off attachment, a draft, a team
+    // tool on an org-wide gateway. `unpublished` is on no gateway here.
+    for (const gateway of [GATEWAYS.mcp, GATEWAYS.utcp, GATEWAYS.skills]) {
+      attach(gateway, TOOLS.weather);
+      attach(gateway, TOOLS.cities);
+      attach(gateway, TOOLS.switchedOff, false);
+      attach(gateway, TOOLS.draft);
+      attach(gateway, TOOLS.team);
+    }
+    for (const gateway of [GATEWAYS.eachMcp, GATEWAYS.eachUtcp, GATEWAYS.eachSkills]) {
+      for (const tool of Object.values(EACH_TYPE)) attach(gateway, tool);
+    }
 
     const executor = new ToolExecutorService(
       tools as any,
@@ -298,7 +302,7 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
       executor,
       redis as any,
     );
-    const skills = new SkillGeneratorService(tools as any, gateways, gatewayTools as any, new SkillRendererHelper());
+    skills = new SkillGeneratorService(tools as any, gateways, gatewayTools as any, new SkillRendererHelper());
 
     const validators = new GatewayAuthValidators(gateways, {} as any, apiKeys as any, {} as any, {} as any);
     const authService = new GatewayAuthService(fakeRepository<GatewayAuth>([]) as any, gateways, apiKeys as any, validators);
@@ -319,10 +323,6 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
       { get: jest.fn().mockReturnValue(null) } as any,
       { check: jest.fn().mockResolvedValue({ limited: false }) } as any,
       { getAdapter: jest.fn(), handleInboundMessage: jest.fn() } as any,
-      undefined,
-      undefined,
-      undefined,
-      skills,
     );
     controller = new UnifiedEndpointController(
       organizations as any,
@@ -393,26 +393,28 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
     (await send(slug, { key, body: rpc('tools/list') })).body.result.tools.map((t: any) => t.name).sort();
   const utcpManual = async (slug: string, key: string) =>
     (await send(slug, { key, method: 'GET', action: 'manual' })).body.tools.map((t: any) => t.name).sort();
-  const skillsList = async (slug: string, key: string) => (await send(slug, { key, method: 'GET', action: 'skills' })).body.data.skills;
+  /** What `npx @almyty/skills` installs from a Skills gateway (GET /gateways/:id/skills/individual). */
+  const skillsList = (gateway: Gateway) =>
+    skills.generateIndividualSkills(gateway.id, CAST.org, { orgSlug: 'acme', gatewaySlug: gateway.endpoint.replace(/^\/+/, '') });
 
-  describe('one servable set on every protocol', () => {
+  describe('the same tools on each protocol, one gateway each', () => {
     it('lists exactly the servable tools on MCP tools/list, the UTCP manual and the Skills list', async () => {
-      expect(await mcpList('shared', KEYS.shared)).toEqual(SERVABLE);
-      expect(await utcpManual('shared', KEYS.shared)).toEqual(SERVABLE);
+      expect(await mcpList('weather', KEYS.mcp)).toEqual(SERVABLE);
+      expect(await utcpManual('weather-utcp', KEYS.utcp)).toEqual(SERVABLE);
 
-      const skills = await skillsList('shared', KEYS.shared);
-      expect(skills).toHaveLength(SERVABLE.length);
-      const text = skills.map((s: any) => s.content).join('\n');
+      const list = await skillsList(GATEWAYS.skills);
+      expect(list).toHaveLength(SERVABLE.length);
+      const text = list.map((s: any) => s.content).join('\n');
       for (const name of SERVABLE) expect(text).toContain(name);
       for (const tool of NOT_SERVABLE) expect(text).not.toContain(tool.name);
     });
 
     it('runs a listed tool through MCP tools/call and UTCP /execute', async () => {
-      const viaMcp = await send('shared', { key: KEYS.shared, body: rpc('tools/call', { name: TOOLS.weather.name, arguments: {} }) });
+      const viaMcp = await send('weather', { key: KEYS.mcp, body: rpc('tools/call', { name: TOOLS.weather.name, arguments: {} }) });
       expect(viaMcp.body.result.isError).toBe(false);
 
-      const viaUtcp = await send('shared', {
-        key: KEYS.shared,
+      const viaUtcp = await send('weather-utcp', {
+        key: KEYS.utcp,
         action: 'execute',
         body: { toolId: TOOLS.cities.id, parameters: {} },
       });
@@ -423,42 +425,38 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
     it.each(NOT_SERVABLE.map((t) => [t.name, t] as const))(
       'answers %s as not found on MCP and UTCP, off the network',
       async (_name, tool) => {
-        const viaMcp = await send('shared', { key: KEYS.shared, body: rpc('tools/call', { name: tool.name, arguments: {} }) });
+        const viaMcp = await send('weather', { key: KEYS.mcp, body: rpc('tools/call', { name: tool.name, arguments: {} }) });
         expect(viaMcp.body.error).toMatchObject({ code: JsonRpcErrorCode.TOOL_NOT_FOUND });
 
-        const viaUtcp = await send('shared', { key: KEYS.shared, action: 'execute', body: { toolId: tool.id, parameters: {} } });
+        const viaUtcp = await send('weather-utcp', { key: KEYS.utcp, action: 'execute', body: { toolId: tool.id, parameters: {} } });
         expect(viaUtcp.body).toMatchObject({ success: false, error: { code: 'TOOL_NOT_FOUND' } });
         expect(mockedAxios).not.toHaveBeenCalled();
       },
     );
 
-    it('counts each request against the gateway', async () => {
-      await send('shared', { key: KEYS.shared, method: 'GET', action: 'manual' });
-      await send('shared', { key: KEYS.shared, method: 'GET', action: 'skills' });
-      expect(counterBumps).toEqual([GATEWAYS.shared.id, GATEWAYS.shared.id]);
+    it('counts each request against the gateway it reached', async () => {
+      await send('weather-utcp', { key: KEYS.utcp, method: 'GET', action: 'manual' });
+      await send('weather-utcp', { key: KEYS.utcp, action: 'execute', body: { toolId: TOOLS.cities.id, parameters: {} } });
+      expect(counterBumps).toEqual([GATEWAYS.utcp.id, GATEWAYS.utcp.id]);
     });
   });
 
-  describe('every tool type, on every protocol', () => {
+  describe('every tool type, on each protocol', () => {
     /** The tool each skill is for, by the toolId its frontmatter carries. */
-    const skillToolNames = (skills: Array<{ content: string }>) =>
-      skills
+    const skillToolNames = (list: Array<{ content: string }>) =>
+      list
         .map((s) => /toolId: "([^"]+)"/.exec(s.content)?.[1])
         .map((id) => Object.values(EACH_TYPE).find((t) => t.id === id)?.name)
         .sort();
 
     it('lists the same tools on MCP tools/list, the UTCP manual and the Skills list', async () => {
-      const mcp = await mcpList('each-type', KEYS.eachType);
-      const utcp = await utcpManual('each-type', KEYS.eachType);
-      const skills = skillToolNames(await skillsList('each-type', KEYS.eachType));
-
-      expect(mcp).toEqual(EACH_TYPE_NAMES);
-      expect(utcp).toEqual(EACH_TYPE_NAMES);
-      expect(skills).toEqual(EACH_TYPE_NAMES);
+      expect(await mcpList('each-type', KEYS.eachMcp)).toEqual(EACH_TYPE_NAMES);
+      expect(await utcpManual('each-type-utcp', KEYS.eachUtcp)).toEqual(EACH_TYPE_NAMES);
+      expect(skillToolNames(await skillsList(GATEWAYS.eachSkills))).toEqual(EACH_TYPE_NAMES);
     });
 
     it('gives each tool a call template: the API for a generated tool, this gateway for the rest', async () => {
-      const manual = (await send('each-type', { key: KEYS.eachType, method: 'GET', action: 'manual' })).body;
+      const manual = (await send('each-type-utcp', { key: KEYS.eachUtcp, method: 'GET', action: 'manual' })).body;
       const template = (name: string) => manual.tools.find((t: any) => t.name === name).tool_call_template;
 
       expect(template(EACH_TYPE.api.name)).toMatchObject({
@@ -469,13 +467,13 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
       for (const tool of [EACH_TYPE.http, EACH_TYPE.javascript, EACH_TYPE.graphql, EACH_TYPE.llm]) {
         expect(template(tool.name)).toEqual({
           call_template_type: 'http',
-          url: `https://api.test/acme/each-type/execute/${tool.id}`,
+          url: `https://api.test/acme/each-type-utcp/execute/${tool.id}`,
           http_method: 'POST',
           content_type: 'application/json',
           // The gateway's own key, as a placeholder: never the key itself.
           auth: {
             auth_type: 'api_key',
-            api_key: `{{GATEWAY_${GATEWAYS.eachType.id.toUpperCase()}_API_KEY}}`,
+            api_key: `{{GATEWAY_${GATEWAYS.eachUtcp.id.toUpperCase()}_API_KEY}}`,
             var_name: 'x-api-key',
             location: 'header',
           },
@@ -484,8 +482,8 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
     });
 
     it('runs a hand-made tool through the address its template names, arguments typed by its schema', async () => {
-      const out = await send('each-type', {
-        key: KEYS.eachType,
+      const out = await send('each-type-utcp', {
+        key: KEYS.eachUtcp,
         action: `execute/${EACH_TYPE.http.id}`,
         // What a UTCP client sends for arguments that are not a body.
         query: { city: 'Paris', days: '3', exact: 'true' },
@@ -500,7 +498,7 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
 
     it('answers a tool this gateway does not serve as not found on its execute address, off the network', async () => {
       for (const tool of [TOOLS.weather, TOOLS.unpublished]) {
-        const out = await send('each-type', { key: KEYS.eachType, action: `execute/${tool.id}`, body: {} });
+        const out = await send('each-type-utcp', { key: KEYS.eachUtcp, action: `execute/${tool.id}`, body: {} });
         expect(out.body).toMatchObject({ success: false, error: { code: 'TOOL_NOT_FOUND' } });
       }
       expect(mockedAxios).not.toHaveBeenCalled();
@@ -508,87 +506,56 @@ describe('a shared-tools gateway serves MCP, UTCP and Skills from one address', 
 
     it('refuses the execute address without this gateway\'s key', async () => {
       const action = `execute/${EACH_TYPE.http.id}`;
-      expect((await send('each-type', { key: null, action })).status).toBe(401);
-      expect((await send('each-type', { key: KEYS.shared, action })).status).toBe(403);
+      expect((await send('each-type-utcp', { key: null, action })).status).toBe(401);
+      expect((await send('each-type-utcp', { key: KEYS.utcp, action })).status).toBe(403);
       expect(mockedAxios).not.toHaveBeenCalled();
     });
   });
 
-  describe('auth on every protocol', () => {
+  describe('auth on each gateway', () => {
     const requests = [
-      ['MCP tools/list', { body: rpc('tools/list') }],
-      ['MCP tools/call', { body: rpc('tools/call', { name: 'get_weather', arguments: {} }) }],
-      ['UTCP manual', { method: 'GET', action: 'manual' }],
-      ['UTCP execute', { action: 'execute', body: { toolId: TOOLS.weather.id, parameters: {} } }],
-      ['Skills list', { method: 'GET', action: 'skills' }],
+      ['MCP tools/list', 'weather', { body: rpc('tools/list') }],
+      ['MCP tools/call', 'weather', { body: rpc('tools/call', { name: 'get_weather', arguments: {} }) }],
+      ['UTCP manual', 'weather-utcp', { method: 'GET', action: 'manual' }],
+      ['UTCP execute', 'weather-utcp', { action: 'execute', body: { toolId: TOOLS.weather.id, parameters: {} } }],
     ] as const;
 
-    it.each(requests)('refuses %s without a key', async (_label, request) => {
-      const out = await send('shared', { ...request, key: null });
+    it.each(requests)('refuses %s without a key', async (_label, slug, request) => {
+      const out = await send(slug, { ...request, key: null });
       expect(out.status).toBe(401);
       expect(mockedAxios).not.toHaveBeenCalled();
     });
 
-    it.each(requests)('refuses %s with another gateway\'s key', async (_label, request) => {
-      const out = await send('shared', { ...request, key: KEYS.soloMcp });
+    it.each(requests)('refuses %s with another gateway\'s key', async (_label, slug, request) => {
+      const out = await send(slug, { ...request, key: KEYS.eachMcp });
       expect(out.status).toBe(403);
       expect(mockedAxios).not.toHaveBeenCalled();
     });
 
-    it.each(requests)('refuses %s with a made-up key', async (_label, request) => {
-      const out = await send('shared', { ...request, key: 'not_a_real_key_0123456789abcdefghijk' });
+    it.each(requests)('refuses %s with a made-up key', async (_label, slug, request) => {
+      const out = await send(slug, { ...request, key: 'not_a_real_key_0123456789abcdefghijk' });
       expect(out.status).toBe(403);
     });
   });
 
-  describe('single-protocol gateways are unchanged', () => {
-    it('an MCP gateway still answers MCP with its own tools and nothing else', async () => {
-      expect(await mcpList('solo-mcp', KEYS.soloMcp)).toEqual([TOOLS.unpublished.name]);
-      const manual = await send('solo-mcp', { key: KEYS.soloMcp, method: 'GET', action: 'manual' });
-      // An MCP gateway speaks MCP whatever the path: a GET for "manual"
-      // is an MCP request with no JSON-RPC body, not a UTCP manual.
+  describe('each gateway speaks only its protocol', () => {
+    it('an MCP gateway answers MCP whatever the path, never a UTCP manual or a skills list', async () => {
+      const manual = await send('weather', { key: KEYS.mcp, method: 'GET', action: 'manual' });
+      // A GET for "manual" is an MCP request with no JSON-RPC body.
       expect(manual.body?.tools).toBeUndefined();
-      const skills = await send('solo-mcp', { key: KEYS.soloMcp, method: 'GET', action: 'skills' });
-      expect(skills.body?.data?.skills).toBeUndefined();
+      const list = await send('weather', { key: KEYS.mcp, method: 'GET', action: 'skills' });
+      expect(list.body?.data?.skills).toBeUndefined();
     });
 
-    it('a UTCP gateway still serves its manual and refuses a JSON-RPC POST and a skills request', async () => {
-      expect(await utcpManual('solo-utcp', KEYS.soloUtcp)).toEqual([TOOLS.unpublished.name]);
-      expect((await send('solo-utcp', { key: KEYS.soloUtcp, body: rpc('tools/list') })).status).toBe(404);
-      expect((await send('solo-utcp', { key: KEYS.soloUtcp, method: 'GET', action: 'skills' })).status).toBe(404);
-    });
-  });
-
-  describe('which protocol a path speaks', () => {
-    it.each([
-      ['', 'mcp'],
-      ['.well-known/oauth-protected-resource', 'mcp'],
-      ['.well-known/utcp', 'utcp'],
-      ['manual', 'utcp'],
-      ['execute', 'utcp'],
-      ['execute/0d000000-0000-4000-8000-000000000001', 'utcp'],
-      ['execute/a/b', null],
-      ['execute/../manual', null],
-      ['skills', 'skills'],
-      ['skills/../manual', null],
-      ['admin', null],
-    ])('%j -> %s', (action, protocol) => {
-      expect(toolsGatewayProtocol(action)).toBe(protocol);
+    it('a UTCP gateway refuses a JSON-RPC POST and a skills request', async () => {
+      expect((await send('weather-utcp', { key: KEYS.utcp, body: rpc('tools/list') })).status).toBe(404);
+      expect((await send('weather-utcp', { key: KEYS.utcp, method: 'GET', action: 'skills' })).status).toBe(404);
     });
 
-    it('answers an unknown path on a shared gateway with not found, after auth', async () => {
-      expect((await send('shared', { key: null, method: 'GET', action: 'admin' })).status).toBe(401);
-      expect((await send('shared', { key: KEYS.shared, method: 'GET', action: 'admin' })).status).toBe(404);
+    it('a Skills gateway is installed from, not called: its address answers neither MCP nor UTCP', async () => {
+      expect((await send('weather-skills', { key: KEYS.skills, body: rpc('tools/list') })).status).toBe(400);
+      expect((await send('weather-skills', { key: KEYS.skills, method: 'GET', action: 'manual' })).status).toBe(400);
+      expect(mockedAxios).not.toHaveBeenCalled();
     });
-  });
-
-  // The Skills service is @Optional on the delegation (positional specs
-  // build it by hand), so a missing provider would boot fine and answer
-  // every /skills with not found. The module has to bring it in.
-  it('is wired: the unified endpoint module imports the module that exports SkillGeneratorService', () => {
-    const unified = readFileSync(join(__dirname, '../unified-endpoint.module.ts'), 'utf8');
-    expect(unified).toMatch(/imports:\s*\[[\s\S]*forwardRef\(\(\) => ToolsModule\)[\s\S]*\]/);
-    const tools = readFileSync(join(__dirname, '../../tools/tools.module.ts'), 'utf8');
-    expect(tools.slice(tools.indexOf('exports:'))).toMatch(/SkillGeneratorService/);
   });
 });

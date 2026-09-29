@@ -27,9 +27,9 @@ describe('an MCP OAuth token reaches only what its scope grants', () => {
     expect(missingOAuthScope(GatewayType.MCP, oauth('mcp:resources'), batch)).toBe('mcp:tools');
   });
 
-  it('holds the tool protocols that are not MCP to mcp:tools', () => {
+  it('holds UTCP, the tool protocol that is not MCP, to mcp:tools', () => {
     expect(missingOAuthScope(GatewayType.UTCP, oauth('mcp:resources'), {})).toBe('mcp:tools');
-    expect(missingOAuthScope(GatewayType.TOOLS, oauth('mcp:prompts'), {})).toBe('mcp:tools');
+    expect(missingOAuthScope(GatewayType.UTCP, oauth('mcp:prompts'), {})).toBe('mcp:tools');
     expect(missingOAuthScope(GatewayType.UTCP, oauth('mcp:tools'), {})).toBeNull();
   });
 

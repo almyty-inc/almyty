@@ -315,7 +315,6 @@ run('app place limits and visitor rights (real Postgres)', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       places,
     );
   });

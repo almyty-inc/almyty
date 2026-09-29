@@ -29,13 +29,6 @@ export enum GatewayType {
   MCP = 'mcp',
   UTCP = 'utcp',
   SKILLS = 'skills',
-  /**
-   * One address that serves a set of tools over MCP, UTCP and Agent
-   * Skills at once. The caller never picks a protocol: a JSON-RPC POST
-   * to the address is MCP, /manual and /execute are UTCP, /skills lists
-   * the Agent Skills. Every protocol lists and runs the same servable set.
-   */
-  TOOLS = 'tools',
   // Agent-kind types
   A2A = 'a2a',
   ACP = 'acp',
@@ -392,7 +385,7 @@ export class Gateway {
   }
 
   static kindForType(type: GatewayType): GatewayKind {
-    const toolTypes: GatewayType[] = [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS, GatewayType.TOOLS];
+    const toolTypes: GatewayType[] = [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS];
     return toolTypes.includes(type) ? GatewayKind.TOOL : GatewayKind.AGENT;
   }
 
@@ -424,8 +417,6 @@ export class Gateway {
         return ['http', 'tcp'].includes(protocol);
       case GatewayType.SKILLS:
         return ['cli', 'file'].includes(protocol);
-      case GatewayType.TOOLS:
-        return ['http', 'sse', 'cli', 'file'].includes(protocol);
       case GatewayType.OPENAI_CHAT:
         return ['http'].includes(protocol);
       default:
@@ -481,12 +472,6 @@ export class Gateway {
           ...baseConfig,
           format: 'skill-md',
           installCommand: `npx @almyty/skills install --gateway ${this.id}`,
-        };
-
-      case GatewayType.TOOLS:
-        return {
-          ...baseConfig,
-          protocols: ['mcp', 'utcp', 'skills'],
         };
 
       default:
