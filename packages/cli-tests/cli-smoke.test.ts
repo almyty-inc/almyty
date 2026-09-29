@@ -396,8 +396,8 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
       const out = run('models-cli', ['--help']);
       for (const command of [
         'list', 'get <id>', 'register ', 'set <id>', 'sync', 'validate <id>',
-        'delete <id>', 'route ', 'versions', 'register-version', 'adapters', 'deploy ',
-        'deployments', 'deployment <id>', 'scale ', 'teardown ',
+        'delete <id>', 'route ', 'versions', 'register-version', 'adapters', 'host ',
+        'hosted', 'hosted <id>', 'scale ', 'teardown ',
       ]) {
         expect(out, `--help should document ${command}`).toContain(command);
       }
@@ -437,8 +437,8 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
       for (const r of plan.rejected) expect(r.reason).toBeTruthy();
     });
 
-    it('deployments --json returns an array', () => {
-      const out = run('models-cli', ['deployments', '--json']);
+    it('hosted --json returns an array', () => {
+      const out = run('models-cli', ['hosted', '--json']);
       expect(Array.isArray(JSON.parse(out))).toBe(true);
     });
 

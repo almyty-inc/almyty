@@ -1,5 +1,5 @@
 /**
- * Inline forms on the approvals, organization and provider-edit pages ask
+ * Inline forms on the approvals, organization and provider pages ask
  * before a navigation throws away what was typed into them. A clean form,
  * a cancelled one and a save that lands all leave without asking.
  */
@@ -10,7 +10,7 @@ import { renderAtRoute } from '@/test/render-at-route'
 import { expectLeaveAsks, expectLeavesWithoutAsking } from '@/test/leave-guard'
 import { ApprovalsPage } from '../approvals'
 import { OrganizationDetailPage } from '../organization-pages'
-import { LlmProviderEditPage } from '../llm-provider-edit'
+import { ProviderPage } from '../provider'
 import { approvalsApi, llmProvidersApi, organizationsApi } from '@/lib/api'
 
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
@@ -26,7 +26,7 @@ vi.mock('@/lib/api', () => ({
     removeMember: vi.fn(),
     updateMemberRole: vi.fn(),
   },
-  llmProvidersApi: { getById: vi.fn(), update: vi.fn() },
+  llmProvidersApi: { getById: vi.fn(), update: vi.fn(), test: vi.fn(), delete: vi.fn() },
 }))
 vi.mock('@/store/app', () => ({
   useNotifications: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
@@ -40,23 +40,9 @@ vi.mock('@/store/organization', () => ({
     removeOrganization: vi.fn(),
   }),
 }))
-// The provider form's fields are its own business; the page owns the form
-// state and the guard, so one registered field is enough to dirty it.
-vi.mock('@/components/llm-providers/edit-provider-form', () => ({
-  EditProviderForm: ({ editForm, updateProviderMutation, providerToEdit }: any) => (
-    <form
-      onSubmit={editForm.handleSubmit((data: any) =>
-        updateProviderMutation.mutate({ id: providerToEdit.id, data }),
-      )}
-    >
-      <label>
-        Provider name
-        <input {...editForm.register('name')} />
-      </label>
-      <button type="submit">Save provider</button>
-    </form>
-  ),
-}))
+// The pickers on the provider page have their own tests.
+vi.mock('@/components/model-picker', () => ({ ModelPicker: () => <div data-testid="model-picker" /> }))
+vi.mock('@/lib/models-api', () => ({ modelsApi: { list: vi.fn().mockResolvedValue([]), sync: vi.fn(), update: vi.fn() } }))
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -137,40 +123,43 @@ describe('organization settings and invite', () => {
   })
 })
 
-describe('edit provider', () => {
+describe('provider settings', () => {
   const at = () =>
-    renderAtRoute(<LlmProviderEditPage />, {
-      path: '/llm-providers/:id/edit',
-      url: '/llm-providers/p1/edit',
-      paths: ['/llm-providers/:id', '/elsewhere'],
+    renderAtRoute(<ProviderPage />, {
+      path: '/models/providers/:id',
+      url: '/models/providers/p1',
+      paths: ['/elsewhere'],
     })
 
   beforeEach(() => {
-    vi.mocked(llmProvidersApi.getById).mockResolvedValue({ id: 'p1', name: 'OpenAI', configuration: {} } as any)
+    vi.mocked(llmProvidersApi.getById).mockResolvedValue({ id: 'p1', name: 'OpenAI', type: 'openai', configuration: { temperature: 0.7 } } as any)
   })
 
-  it('asks while an edit is unsaved', async () => {
+  const openAdvanced = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Advanced' }))
+    return screen.getByLabelText('Temperature')
+  }
+
+  it('asks while a setting is changed and not saved', async () => {
     const { router } = at()
-    const name = await screen.findByLabelText('Provider name')
-    await waitFor(() => expect(name).toHaveValue('OpenAI'))
-    fireEvent.change(name, { target: { value: 'OpenAI prod' } })
+    const temperature = await openAdvanced()
+    fireEvent.change(temperature, { target: { value: '0.2' } })
     await expectLeaveAsks(router)
   })
 
   it('leaves unchanged settings without asking', async () => {
     const { router } = at()
-    await waitFor(() => expect(screen.getByLabelText('Provider name')).toHaveValue('OpenAI'))
+    await openAdvanced()
     await expectLeavesWithoutAsking(router)
   })
 
-  it('goes to the provider without asking once the save lands', async () => {
+  it('leaves without asking once the save lands', async () => {
     vi.mocked(llmProvidersApi.update).mockResolvedValue({} as any)
     const { router } = at()
-    const name = await screen.findByLabelText('Provider name')
-    await waitFor(() => expect(name).toHaveValue('OpenAI'))
-    fireEvent.change(name, { target: { value: 'OpenAI prod' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save provider' }))
-    await waitFor(() => expect(router.state.location.pathname).toBe('/llm-providers/p1'))
-    expect(screen.queryByText('Discard unsaved changes?')).not.toBeInTheDocument()
+    const temperature = await openAdvanced()
+    fireEvent.change(temperature, { target: { value: '0.2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+    await waitFor(() => expect(llmProvidersApi.update).toHaveBeenCalledWith('p1', expect.objectContaining({ configuration: expect.objectContaining({ temperature: 0.2 }) })))
+    await expectLeavesWithoutAsking(router)
   })
 })

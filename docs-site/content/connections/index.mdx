@@ -1,6 +1,6 @@
 # Connections
 
-Connections is where almyty keeps every key, token and account it uses on your behalf: inference providers, the cloud accounts you run models on, model buckets, other clouds, memory backends, MCP servers, tool sources and chat channels. You connect once; agents, [models](/models) and [models on your cloud account](/models/your-cloud) use the connection. The secret itself never leaves the backend.
+Connections is where almyty keeps every key, token and account it uses on your behalf: model providers, the cloud accounts you run models on, model buckets, other clouds, memory backends, MCP servers, tool sources and chat channels. You connect once; agents, [models](/models) and [models on your cloud account](/models/your-cloud) use the connection. The secret itself never leaves the backend.
 
 ```
 Connector (catalog, data)   ->   Connection (credential + account label + health)   ->   used by agents, models, your cloud accounts
@@ -9,6 +9,8 @@ Connector (catalog, data)   ->   Connection (credential + account label + health
 ```
 
 ## Connect
+
+![Connections catalog under Settings, showing connector methods and existing connection health](/screenshots/connections.png)
 
 Open **Settings**, then **Connections**, and pick a connector from the catalog. Each one offers one or more ways to connect, best first:
 
@@ -103,5 +105,5 @@ Secrets are stored in one place, the organization's credential store, encrypted 
 
 - [Grants](/connections/grants): who may use a connection beyond its owner
 - [Credentials](/credentials): the vault the connections live in, and API access keys
-- [Inference providers](/models/providers): the vendors behind inference connections
+- [Providers](/models/providers): the vendors behind provider connections
 - [Connections API](/api-reference/connections-api)

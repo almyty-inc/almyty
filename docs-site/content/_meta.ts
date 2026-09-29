@@ -9,7 +9,7 @@ export default {
   agents: 'Agents',
   'agentic-loops': 'Agentic Loops',
   models: 'Models',
-  'llm-providers': 'Inference Providers',
+  'llm-providers': 'Connect a provider',
   apps: 'Agent Factory',
   interfaces: 'Chat Interfaces',
   'hosted-chat': 'Hosted Chat App',

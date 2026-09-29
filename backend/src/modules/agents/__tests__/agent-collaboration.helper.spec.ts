@@ -1,6 +1,7 @@
 import { AgentCollaborationHelper } from '../agent-collaboration.helper';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { Agent } from '../../../entities/agent.entity';
+import { principalOfRun } from '../../../common/authorization/execution-access.service';
 
 /**
  * Per-strategy unit tests for the four collaboration modes the product exposes:
@@ -257,7 +258,8 @@ describe('AgentCollaborationHelper', () => {
       expect(req.temperature).toBe(0.2);
       expect(req.maxTokens).toBe(300);
       expect(org).toBe('org-1');
-      expect(user).toBe('user-1');
+      // As the orchestrating run's principal, inherited (principalOfRun).
+      expect(user).toEqual(principalOfRun(run));
       expect(req.messages.find((m: any) => m.role === 'user').content).toBe('out:orchestrator');
       // ... with the shared collaboration context and its own instructions.
       const system = req.messages.find((m: any) => m.role === 'system').content;

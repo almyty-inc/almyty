@@ -652,3 +652,9 @@ jobs:
       # shape as the checks above: Node + a checkout, no install.
       - name: Check no build/deploy value was eaten
         run: node scripts/check-empty-values.js
+
+      - name: Test screenshot evidence validation
+        run: node --test docs-site/scripts/check-screenshots.test.mjs
+
+      - name: Check screenshot inventory and source freshness
+        run: node docs-site/scripts/check-screenshots.mjs

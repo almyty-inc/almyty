@@ -161,6 +161,11 @@ export interface Gateway {
   successfulRequests: number
   lastRequestAt?: string
   lastHealthCheckAt?: string
+  /**
+   * The key check ran and passed and the provider is on: the rule that makes
+   * every model it lists usable, and what "Key works" shows.
+   */
+  keyChecked?: boolean
   /** Set with lastError; the error is current when it is newer than lastSuccessAt. */
   lastErrorAt?: string
   lastSuccessAt?: string
@@ -196,6 +201,8 @@ export enum GatewayType {
   ACP = 'acp',
   UTCP = 'utcp',
   SKILLS = 'skills',
+  /** One address serving shared tools over MCP, UTCP and Skills at once. */
+  TOOLS = 'tools',
   OPENAI_CHAT = 'openai_chat',
   SLACK = 'slack',
   DISCORD = 'discord',
@@ -577,3 +584,4 @@ export * from './usage';
 export * from './runtime';
 export * from './models';
 export * from './notification';
+export * from './agent-models';

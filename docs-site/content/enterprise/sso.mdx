@@ -1,10 +1,14 @@
 # SSO & SCIM
 
-Enterprise (`sso` entitlement). Let your team sign in with the identity provider you already run, and keep the member list in sync automatically. Per-organization single sign-on via **SAML 2.0** or **OIDC**, plus **SCIM 2.0** for user and group provisioning from your IdP (Okta, Entra ID, and compatible).
+Requires the `sso` entitlement (Business or Enterprise on the hosted platform). Let your team sign in with the identity provider you already run, and keep the member list in sync automatically. Per-organization single sign-on via **SAML 2.0** or **OIDC**, plus **SCIM 2.0** for user and group provisioning from your IdP (Okta, Entra ID, and compatible).
 
 SSO issues the same httpOnly `access_token` cookie as password login. There is no parallel session mechanism, and everything downstream (RBAC, teams, audit) works identically.
 
 ## Configuration
+
+With the entitlement enabled, **Settings → SSO** provides identity-provider configuration and SCIM provisioning controls. The demo below has access to these controls, but SSO remains off until an administrator configures and enables it.
+
+![Enabled SSO and SCIM configuration controls with SSO still switched off](/screenshots/settings-sso-enabled.png)
 
 Each org has one SSO config, managed by org owners/admins under **Settings**. Configure OIDC (discovery-based) with just-in-time provisioning:
 

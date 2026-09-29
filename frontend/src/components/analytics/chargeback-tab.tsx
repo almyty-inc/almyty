@@ -11,7 +11,7 @@ import { EntitlementGate } from '@/components/entitlement-gate'
 import { UpgradePrompt } from '@/components/plan-indicator'
 import { useTeamLookup } from '@/components/ui/team-filter'
 import { useOrganizationStore } from '@/store/organization'
-import { agentsApi } from '@/lib/api'
+import { agentsQuery } from '@/lib/list-queries'
 
 /**
  * Who spent what: cost per team and per agent, plus a projection.
@@ -81,8 +81,7 @@ function ChargebackReportView({
   const { currentOrganization } = useOrganizationStore()
   const { byId: teamsById } = useTeamLookup(currentOrganization?.id)
   const { data: agentList } = useQuery({
-    queryKey: ['agents', currentOrganization?.id],
-    queryFn: () => agentsApi.getAll(),
+    ...agentsQuery(currentOrganization?.id),
     enabled: !!currentOrganization,
   })
 
@@ -92,8 +91,7 @@ function ChargebackReportView({
   )
   const agentNames = useMemo(() => {
     if (agentNamesProp) return agentNamesProp
-    const list = Array.isArray(agentList) ? agentList : ((agentList as any)?.agents ?? [])
-    return Object.fromEntries(list.map((a: any) => [a.id, a.name]))
+    return Object.fromEntries((agentList ?? []).map((a: any) => [a.id, a.name]))
   }, [agentNamesProp, agentList])
 
   const { data, isLoading, isError, error, refetch } = useQuery({

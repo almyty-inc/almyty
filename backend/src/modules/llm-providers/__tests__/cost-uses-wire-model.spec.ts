@@ -115,7 +115,7 @@ describe('guard: the routed streaming fallback keeps the caller s policy', () =>
   it('hands the original request to chat() when the provider cannot stream', () => {
     const branch = source.slice(source.indexOf('if (!supportsStreaming)'));
     const call = branch.slice(0, branch.indexOf('\n      }') + 1);
-    expect(call).toContain('this.chat(providerId, originalRequest, organizationId, userId)');
+    expect(call).toContain('this.chat(providerId, originalRequest, organizationId, principal)');
   });
 
   it('never hands it the request whose routing policy was erased', () => {

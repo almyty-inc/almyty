@@ -83,6 +83,12 @@ export class AgentRun {
   @Column({ type: 'json', default: [] })
   steps: Array<{
     type: string;
+    /**
+     * The role that made this step, on an autonomous run: which slot of
+     * the agent's models (main, drafter, checker, ...) acted, so a run
+     * shows which model did what and what each cost.
+     */
+    role?: { key: string; name: string; purpose: string; kind: 'model' | 'agent' };
     input?: any;
     output?: any;
     cost?: number;

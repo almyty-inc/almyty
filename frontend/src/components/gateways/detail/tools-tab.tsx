@@ -43,6 +43,8 @@ export interface GatewayToolsTabProps {
   /** Persist one tool's policy; resolves once saved so the row can close. */
   onSaveSecurity: (target: SecurityTarget) => Promise<unknown> | void
   securitySaving?: boolean
+  /** Leave out the preset buttons (read only, admin, ...) and just list the tools. */
+  hidePresets?: boolean
 }
 
 interface ToolGroup {
@@ -85,6 +87,7 @@ export function GatewayToolsTab({
   onRemove,
   onSaveSecurity,
   securitySaving = false,
+  hidePresets = false,
 }: GatewayToolsTabProps) {
   const [search, setSearch] = useState('')
   // The tool whose security policy is open for editing, under its row.
@@ -161,7 +164,9 @@ export function GatewayToolsTab({
 
   return (
     <>
-      {/* Scoping Status */}
+      {/* Scoping presets. A shared-tools page leaves them out: its list
+          below is the whole story. */}
+      {!hidePresets && (
       <Card>
         <CardHeader>
           <CardTitle>Tool scoping</CardTitle>
@@ -209,6 +214,7 @@ export function GatewayToolsTab({
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Available Tools */}
       {isLoadingGatewayTools || isLoadingAllTools ? (

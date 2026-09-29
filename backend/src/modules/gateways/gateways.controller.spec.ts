@@ -661,7 +661,8 @@ describe('GatewaysController', () => {
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockExecutionResult);
       expect(result.message).toBe('Skill executed successfully');
-      expect(gatewaysService.getGateway).toHaveBeenCalledWith('gw-1', 'org-1', true);
+      // Read as the caller: the service applies the read rule too, not only the guard.
+      expect(gatewaysService.getGateway).toHaveBeenCalledWith('gw-1', 'org-1', true, { id: 'user-1' });
       expect(toolExecutorService.executeTool).toHaveBeenCalledWith(
         'tool-1',
         { key: 'value' },

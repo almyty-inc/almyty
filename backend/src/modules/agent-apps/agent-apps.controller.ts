@@ -109,6 +109,18 @@ export class AgentAppsController {
     return { success: true, data: await this.apps.create(this.org(req), body as CreateAppDto) };
   }
 
+  /**
+   * Where an agent is in front of people: every app that carries it, and
+   * the places in each where it is the one answering. Declared before
+   * `:slug` routes so the literal segment wins.
+   */
+  @Get('used-by/:agentId')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'The apps an agent is used in, and where in each it answers' })
+  async usedBy(@Param('agentId', ParseUUIDPipe) agentId: string, @Request() req: any) {
+    return { success: true, data: await this.apps.usedBy(this.org(req), agentId) };
+  }
+
   @Get(':slug')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get one app with its distributions' })

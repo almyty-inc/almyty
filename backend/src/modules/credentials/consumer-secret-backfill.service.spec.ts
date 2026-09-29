@@ -64,8 +64,8 @@ describe('ConsumerSecretBackfillService', () => {
     const headerRow = store.rows.find((r) => r.id === headers.credentialId)!;
     expect(bearerRow.type).toBe('bearer_token');
     expect(isEncrypted(bearerRow.config.token)).toBe(true);
-    expect((await store.resolver.resolve('org-1', bearerRow.id)).config.token).toBe('tok');
-    expect((await store.resolver.resolve('org-1', headerRow.id)).config.headers).toEqual({ 'X-K': 'v' });
+    expect((await store.resolver.resolve('org-1', bearerRow.id, { principal: null })).config.token).toBe('tok');
+    expect((await store.resolver.resolve('org-1', headerRow.id, { principal: null })).config.headers).toEqual({ 'X-K': 'v' });
     expect(bearerRow.metadata.managedBy).toEqual({ kind: 'mcp_source', id: 's-1' });
   });
 
@@ -83,7 +83,7 @@ describe('ConsumerSecretBackfillService', () => {
     expect(active.credentialId).toBe(row.id);
     expect(isEncrypted(row.config.bot_token)).toBe(true);
     expect(row.config.bot_user_id).toBe('U1');
-    expect((await store.resolver.resolve('org-1', row.id)).config).toEqual({ bot_token: 'xoxb', bot_user_id: 'U1' });
+    expect((await store.resolver.resolve('org-1', row.id, { principal: null })).config).toEqual({ bot_token: 'xoxb', bot_user_id: 'U1' });
   });
 
   it('moves inline API authentication into a row bound to the API and keeps the public part with a reference', async () => {
@@ -121,7 +121,7 @@ describe('ConsumerSecretBackfillService', () => {
     expect(row.connectorKey).toBe('channel-slack');
     expect(row.metadata.managedBy).toEqual({ kind: 'gateway_channel', id: 'g-1:slack' });
     expect(legacy.configuration).toEqual({ client_id: 'A1', aiDisclosure: true, credentialId: row.id, credentialKeys: ['bot_token', 'signing_secret'] });
-    expect((await store.resolver.resolve('org-1', row.id)).config).toEqual({ bot_token: 'xoxb-1', signing_secret: 'sig' });
+    expect((await store.resolver.resolve('org-1', row.id, { principal: null })).config).toEqual({ bot_token: 'xoxb-1', signing_secret: 'sig' });
     expect(gateways.save).toHaveBeenCalledTimes(1);
   });
 

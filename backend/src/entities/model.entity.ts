@@ -20,8 +20,8 @@ import { LlmProvider } from './llm-provider.entity';
  * itself.
  *
  * "Supported" is a property of this data, never of a code list: a model
- * is selectable when its card has a working dispatch path (the provider),
- * a pricing source, and a passing validation run. Nothing else confers it.
+ * is selectable when its card has a working dispatch path (the provider)
+ * and that provider's key check has passed. Nothing else confers it.
  */
 
 export type ModelPrivacyTier = 'local' | 'private_cloud' | 'public';
@@ -164,7 +164,7 @@ export class Model {
   @Column({ type: 'varchar', default: 'active' })
   status: ModelStatus;
 
-  /** Requirement (d): a passing validation run recorded on the card. */
+  /** Whether the card is checked: its provider's key check passed (or, for an endpoint card, its own call); failed when the vendor said the model is gone. */
   @Column({ type: 'varchar', default: 'never' })
   validationStatus: ModelValidationStatus;
 
@@ -183,7 +183,14 @@ export class Model {
   @UpdateDateColumn({ type: 'timestamp with time zone' })
   updatedAt: Date;
 
-  /** A card is selectable only when every requirement of the support rule holds. */
+  /**
+   * Usable: active, callable, and checked. A provider's models are checked
+   * together when the provider's key check passes (the catalog writes
+   * `validationStatus: passed` with `metadata.checkedBy: provider_check`),
+   * and go back to waiting when the vendor later rejects the key. A model
+   * the vendor answers MODEL_NOT_FOUND for is `failed` on its own. An
+   * endpoint card with no provider is checked by its own call.
+   */
   isSelectable(): boolean {
     return (
       this.status === 'active' &&

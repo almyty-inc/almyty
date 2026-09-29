@@ -1,34 +1,40 @@
-# Inference Providers
+# Connect a provider
 
-Bring your own model keys and every agent, Model Call node, and Model Prompt tool can use them. An inference provider is a vendor key almyty calls models with, or the address of an OpenAI-compatible server you run. almyty supports every provider in the table below out of the box, including local models via Ollama, plus any OpenAI-compatible endpoint, so you are never locked to one vendor.
+Bring your own model keys and every agent, workflow step and Model Prompt tool can use them. A provider is a vendor key almyty calls models with, the address of an OpenAI-compatible server you run, Ollama, or a cloud account. Connect one and its models appear in [Models](/models) by themselves; there is nothing to add per model.
 
 ![Models page](/screenshots/models.png)
 
-## Add an inference provider in the UI
+## In the dashboard
 
-1. Open **Models** in the sidebar and click **Inference providers** in the page header.
-2. Add a provider.
+1. Open **Models** in the sidebar and click **Connect a provider** (`/models/connect`).
+2. Search or scroll the grid and click your provider. Your own OpenAI-compatible server and Ollama have their own tiles.
+3. Paste the API key, or click **Connect an account** to use a saved connection or a sign-in flow instead. Your own server and Ollama ask for the base URL and an optional key. A provider that needs something more asks only for that: AWS Bedrock the region, Azure the resource and the model name in Azure, Vertex AI the project and the model, RunPod the endpoint. A provider that serves no model list (Qwen, Z.ai, Fireworks, SambaNova, Doubao Ark, Spark, Vertex AI) asks for the model to use.
+4. **Who can use it** reads "everyone in your organization". Click **Change** to make it yours alone or a team's.
+5. Click **Connect**.
 
-![Add Provider dialog](/screenshots/llm-providers-create.png)
+almyty checks the key with one real call and lists the models it found; they are usable at once. If the check fails you see one plain line, such as "OpenAI rejected this key.", next to the key field, with the vendor's own words under **Details** and a link to get a key. Nothing is saved until the key works.
 
-3. Select the provider type.
-4. Enter a display name and your API key.
-5. Choose a default model from the dropdown.
-6. Optionally adjust temperature, max tokens, and top-p.
-7. Click **Test Connection**. almyty sends a lightweight request to verify the key and model.
-8. Click **Save**.
+The provider is named after itself; rename it on its page. Other setup pages can link to `/models/connect?type=openai` (open with that tile chosen) and `?returnTo=` to come back when done.
 
-Its models now appear in the Models list, ready for Model Call nodes and Model Prompt tools. You can also set one up without leaving the Models page: **Add model**, then **A provider's API**, offers to set up a new inference provider before you pick the model.
+## A provider's page
 
-> **Pick from the live model list.** The dropdown is populated from the
-> provider's current models, not a hardcoded list. Providers deprecate models
-> quickly, so prefer the live list over pasting a model string by hand: a name
-> that worked last quarter may already 404.
+Click a provider on the Models page (`/models/providers/:id`) to:
+
+- see whether its key works, and **Check again** (a new check, then a fresh read of its model list)
+- **Replace key**
+- see its models, with price, context length and whether each is available
+- choose the **default model** it answers with when a step names none
+- change **who can use it**
+- open **Advanced**: per-model overrides (price, context length, privacy tier, region, capabilities), an admin key for usage reconciliation (OpenAI, Anthropic), and default generation parameters
+- **Remove** it, after one confirmation; its models stay in past runs
+
+A cloud account provider also has **Start a model**; see [Your cloud account](/models/your-cloud).
+
+Old addresses still work: `/llm-providers` opens Models, `/llm-providers/new` and `/models/new` open the connect page, and `/llm-providers/:id` opens the provider's page.
 
 ## From your AI assistant
 
 The native MCP control plane exposes `add_provider` and `list_providers`, so you can wire up a provider from Claude Code or Cursor without opening the dashboard. See [Control almyty via MCP](/control-via-mcp).
-
 ## Supported providers
 
 {/* generated:providers start */}
@@ -74,11 +80,11 @@ OpenAI-compatible endpoint you point it at.
 
 {/* generated:providers end */}
 
-Each native type ships with the right default base URL; set `configuration.apiUrl` to point at a compatible proxy instead. For `custom`, set `configuration.apiUrl` to the server's OpenAI-compatible endpoint; see [A server you run](/models/providers#a-server-you-run). The `configuration.apiKey` field accepts whatever token the provider expects.
+Each native type ships with the right default base URL; set `configuration.apiUrl` to point at a compatible proxy instead. For `custom` (Your own server), set `configuration.apiUrl` to the server's OpenAI-compatible endpoint; see [Your own server](/models/providers#your-own-server). The `configuration.apiKey` field accepts whatever token the provider expects.
 
 ### Types not in the table above
 
-Four more provider types ship and are selectable in the create form, but have no row above: the table is generated from the provider registry, and these four are still served by the older per-vendor code path. Nothing about configuring them differs. The [vendor reference](/models/providers) carries base URL, auth and model-listing detail for each.
+Four more provider types ship and have tiles on the connect page, but no row above: the table is generated from the provider registry, and these four are still served by the older per-vendor code path. Nothing about connecting them differs. The [vendor reference](/models/providers) carries base URL, auth and model-listing detail for each.
 
 | Type | Vendor | Notes |
 |------|--------|-------|
@@ -89,7 +95,7 @@ Four more provider types ship and are selectable in the create form, but have no
 
 ### Local models with Ollama
 
-The `ollama` type talks to an [Ollama](https://ollama.com) server. Chat, streaming, and tool calling ride Ollama's OpenAI-compatible `/v1` endpoint; the model dropdown is populated from the native `GET /api/tags` (your locally pulled models); memory embeddings use the native `POST /api/embed`. No API key is required. If you front Ollama with an authenticating reverse proxy, configure a key and it is sent as a Bearer token.
+The `ollama` type talks to an [Ollama](https://ollama.com) server. Chat, streaming, and tool calling ride Ollama's OpenAI-compatible `/v1` endpoint; its models are read from the native `GET /api/tags` (your locally pulled models); memory embeddings use the native `POST /api/embed`. No API key is required. If you front Ollama with an authenticating reverse proxy, configure a key and it is sent as a Bearer token.
 
 Because Ollama usually listens on localhost or a private network, almyty's SSRF protection blocks such URLs by default. Self-hosted installations opt in with `OLLAMA_ALLOW_PRIVATE_URLS=true` on the backend (see [Self-hosting](/self-hosting#local-models-with-ollama)). On hosted almyty the Ollama server must be reachable at a public URL.
 
@@ -112,7 +118,7 @@ The same provider type also works with [Ollama's hosted service](https://ollama.
 | `configuration.temperature` | number | no | Sent when set; otherwise the vendor's own default applies |
 | `configuration.topP` | number | no | Sent when set; otherwise the vendor's own default applies |
 
-There is no top-level `baseUrl`, `apiKey` or `model` field: all three nest under `configuration`, and the base-URL override is named `apiUrl`. See the [Inference Providers API](/api-reference/llm-providers-api) for the full body.
+There is no top-level `baseUrl`, `apiKey` or `model` field: all three nest under `configuration`, and the base-URL override is named `apiUrl`. See the [Providers API](/api-reference/llm-providers-api) for the full body.
 
 ## Cost tracking
 
@@ -126,8 +132,8 @@ The [Memory](/memory) module embeds content with the organization's own provider
 
 ## Usage in agents
 
-When building an agent pipeline, Model Call nodes reference a provider by ID. The provider's default model and parameters are used unless overridden in the node configuration. See [Agents](/agents) for details.
+Every model step (an agent, a workflow Model Call node, a role) picks its model from one search box listing every available model grouped by provider, or chooses **Automatic** to let almyty pick the cheapest model that fits. See [Routing](/models/routing) and [Agents](/agents).
 
 ## API
 
-Provider CRUD, connection tests, and chat sessions are available over REST. See the [Inference Providers API reference](/api-reference/llm-providers-api).
+Connecting (`POST /llm-providers/connect`), provider CRUD, key checks and chat sessions are available over REST. See the [Providers API reference](/api-reference/llm-providers-api).

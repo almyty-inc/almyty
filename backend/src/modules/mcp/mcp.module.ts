@@ -18,6 +18,7 @@ import { McpOAuthResolveHelper } from './controllers/mcp-oauth-resolve.helper';
 import { McpToolHandler } from './services/mcp-tool.handler';
 import { McpContentHandler } from './services/mcp-content.handler';
 import { PromotedSkillsModule } from '../promoted-skills/promoted-skills.module';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 import { McpServerRequestService } from './services/mcp-server-request.service';
 import { SseTransport } from './transports/sse.transport';
 import { StreamableHttpTransport } from './transports/streamable-http.transport';
@@ -60,6 +61,7 @@ import { DEV_ONLY_JWT_SECRET } from '../auth/dev-jwt-secret';
     forwardRef(() => ToolsModule),
     forwardRef(() => GatewaysModule),
     PromotedSkillsModule,
+    AuthorizationModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

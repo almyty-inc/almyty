@@ -233,4 +233,11 @@ describe('the coach-mark tour is gone', () => {
   it('does not import driver.js anywhere', () => {
     expect(files.filter((f) => /from 'driver\.js'|driver\.js\/dist/.test(readFileSync(f, 'utf8')))).toEqual([])
   })
+
+  it('does not depend on driver.js', () => {
+    // Nothing imports it, so keeping it in package.json only ships an
+    // unused dependency and invites the tour back.
+    const pkg = JSON.parse(readFileSync(join(SRC, '..', 'package.json'), 'utf8'))
+    expect({ ...pkg.dependencies, ...pkg.devDependencies }).not.toHaveProperty(['driver.js'])
+  })
 })

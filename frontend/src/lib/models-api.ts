@@ -36,7 +36,8 @@ export const modelsApi = {
 
 /** Formats a per-million-token price pair for a table cell. */
 export function formatModelPrice(pricing: { inPerMTok: number; outPerMTok: number; currency?: string } | null | undefined): string {
-  if (!pricing) return 'Unpriced'
+  if (!pricing) return 'Price unknown'
+  if (pricing.inPerMTok === 0 && pricing.outPerMTok === 0) return 'Free'
   const unit = pricing.currency && pricing.currency !== 'USD' ? ` ${pricing.currency}` : ''
   return `$${trimPrice(pricing.inPerMTok)} in / $${trimPrice(pricing.outPerMTok)} out${unit}`
 }
@@ -54,5 +55,5 @@ export const PRICING_SOURCE_LABELS: Record<string, string> = {
   native: 'Provider',
   adapter: 'Reported by your cloud',
   manual: 'Override',
-  unpriced: 'No price',
+  unpriced: 'Price unknown',
 }

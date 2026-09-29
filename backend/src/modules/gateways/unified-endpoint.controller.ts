@@ -26,6 +26,7 @@ import { A2AAgentCardService } from '../a2a/a2a-agent-card.service';
 import { UnifiedAgentHelper } from './unified-agent.helper';
 import { UnifiedGatewayDelegation } from './unified-gateway-delegation.helper';
 import { isPrivateGateway } from './private-gateway';
+import { findServableGatewayAgent } from './gateway-servable';
 
 /**
  * Unified endpoint controller that provides GitHub-style URLs:
@@ -109,11 +110,18 @@ export class UnifiedEndpointController {
           })
         : null;
       if (defaultGw) {
-        const agent = await this.agentRepository.findOne({ where: { id: defaultGw.agentId } });
-        const org = await this.organizationRepository.findOne({ where: { id: defaultGw.organizationId } });
-        if (agent && org) {
+        // The gateway's own agent, in the gateway's own organization, and
+        // only while it is active: a card served to anyone never describes
+        // another tenant's agent (agentId is a bare column) or a draft /
+        // switched-off one. Nor one the gateway could not serve (a private
+        // or team agent behind a wider gateway). Anything else is the same
+        // 404 as no gateway at all. findServableGatewayAgent is the rule
+        // every card and discovery document is built from.
+        const servable = await findServableGatewayAgent(this.agentRepository, defaultGw);
+        const org = servable ? await this.organizationRepository.findOne({ where: { id: defaultGw.organizationId } }) : null;
+        if (servable && org) {
           const baseUrl = this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
-          const card = this.a2aAgentCardService.buildAgentCard(defaultGw, agent, org, baseUrl);
+          const card = this.a2aAgentCardService.buildAgentCard(defaultGw, servable, org, baseUrl);
           // Public card omits security details — clients get full card via authenticated request
           delete card.securitySchemes;
           delete card.security;
@@ -158,9 +166,11 @@ export class UnifiedEndpointController {
       throw new HttpException('No agent gateway found for this key', HttpStatus.NOT_FOUND);
     }
 
-    const agent = await this.agentRepository.findOne({
-      where: { id: gateway.agentId, organizationId: apiKey.organizationId },
-    });
+    // Only an active agent this gateway may serve has a card; a draft,
+    // inactive or out-of-scope agent is the not-found a missing one gets.
+    const agent = gateway.organizationId === apiKey.organizationId
+      ? await findServableGatewayAgent(this.agentRepository, gateway)
+      : null;
 
     if (!agent) {
       throw new HttpException('Agent not found', HttpStatus.NOT_FOUND);

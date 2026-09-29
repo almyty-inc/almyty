@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { QueryError } from '@/components/ui/query-error'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { CONNECTIONS_QUERY_KEY } from '@/components/connections/connection-detail'
+import { CONNECTIONS_QUERY_KEY } from '@/components/connections/paths'
 import { connectionsApi, errorMessage } from '@/lib/connections-api'
 import {
   EXPIRING_QUERY_KEY,

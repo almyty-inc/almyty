@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Agent } from '../../entities/agent.entity';
@@ -9,7 +9,8 @@ import { AgentValidationHelper } from './agent-validation.helper';
 import { StrategyPipelineResolver } from './strategies/strategy-pipeline.resolver';
 import { StrategyCompileError } from './strategies/strategy-compiler';
 import { ModelRouterService } from '../model-catalog/routing/model-router.service';
-import { providerUsableBy } from '../llm-providers/private-provider';
+import { providerUsableByUser } from '../llm-providers/private-provider';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 /** Read-only configuration preflight. Never invokes a model or orchestrator. */
 @Injectable()
@@ -21,6 +22,7 @@ export class AgentReadinessService {
     private readonly router: ModelRouterService,
     @InjectRepository(LlmProvider) private readonly providers: Repository<LlmProvider>,
     @InjectRepository(Organization) private readonly organizations: Repository<Organization>,
+    @Optional() private readonly accessPolicy?: AccessPolicyService,
   ) {}
 
   async inspect(agent: Agent, userId?: string): Promise<{ ready: boolean; message?: string }> {
@@ -92,14 +94,15 @@ export class AgentReadinessService {
           }
         }
       } else if (config.providerId) {
-        // Another member's private provider reads as missing: the run
-        // would refuse it for this user, and saying anything else would
-        // tell them it exists. No known user cannot own one (fail closed).
+        // Another member's private provider, or a team provider outside the
+        // user's teams, reads as missing: the run would refuse it for this
+        // user, and saying anything else would tell them it exists. No
+        // known user can use neither (fail closed).
         const provider = await this.providers.findOne({
           where: { id: config.providerId, organizationId: agent.organizationId },
-          select: { id: true, status: true, visibility: true, ownerUserId: true },
+          select: { id: true, organizationId: true, status: true, visibility: true, ownerUserId: true, teamId: true },
         });
-        if (!provider || !providerUsableBy(provider, userId) || provider.status !== LlmProviderStatus.ACTIVE) {
+        if (!provider || !(await providerUsableByUser(this.accessPolicy, provider, userId)) || provider.status !== LlmProviderStatus.ACTIVE) {
           throw new BadRequestException(`Not ready: ${label} needs an available provider in this organization. Edit that node's model configuration.`);
         }
       } else {

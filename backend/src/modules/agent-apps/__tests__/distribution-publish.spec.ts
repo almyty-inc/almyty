@@ -104,6 +104,21 @@ describe('missingCredentials', () => {
   it('is satisfied by a complete set', () => {
     expect(missingCredentials(DistributionTarget.SLACK, slackCreds)).toEqual([]);
   });
+
+  it('takes the Slack app client id and secret in place of a bot token, for Add to Slack', () => {
+    // Each workspace that installs it brings its own token.
+    expect(
+      missingCredentials(DistributionTarget.SLACK, { client_id: '123.456', signing_secret: 's', credentialKeys: ['client_secret'] }),
+    ).toEqual([]);
+    // Half an app is not an app: the bot token is still asked for.
+    expect(missingCredentials(DistributionTarget.SLACK, { client_id: '123.456', signing_secret: 's' })).toEqual(['bot_token']);
+    // The signing secret is needed either way.
+    expect(missingCredentials(DistributionTarget.SLACK, { client_id: '1', client_secret: 'x' })).toEqual(['signing_secret']);
+  });
+
+  it('offers the alternative to Slack only', () => {
+    expect(missingCredentials(DistributionTarget.DISCORD, { client_id: '1', client_secret: 'x' })).toEqual(['bot_token']);
+  });
 });
 
 describe('checkPublish', () => {
@@ -280,9 +295,11 @@ describe('gatewayConfigurationFor', () => {
     expect(config).toMatchObject(slackCreds);
   });
 
-  it('carries the product branding, so no copy has to be kept in step', () => {
-    const config = gatewayConfigurationFor(DistributionTarget.SLACK, product, null);
-    expect(config.branding).toEqual(product.branding);
+  it('keeps the branding on the app, not on the gateway', () => {
+    // One home for branding: the hosted chat reads it from the app.
+    const config = gatewayConfigurationFor(DistributionTarget.WEB, product, { branding: { appName: 'stale' } });
+    expect(config.branding).toBeUndefined();
+    expect(Object.keys(config.hostedChat).sort()).toEqual(['authMode', 'slug']);
     expect(config.appId).toBe('app-1');
   });
 
@@ -302,33 +319,6 @@ describe('gatewayConfigurationFor', () => {
       null,
     );
     expect(config.hostedChat.slug).toBe('acme-support');
-  });
-
-  it('fills the hosted chat from the product branding', () => {
-    const config = gatewayConfigurationFor(DistributionTarget.WEB, product, null);
-    expect(config.hostedChat).toMatchObject({
-      appName: 'Acme',
-      primaryColor: '#0f766e',
-      greeting: 'Hi',
-      authMode: 'public_link',
-    });
-  });
-
-  it('falls back to the product name when no display name is set', () => {
-    const config = gatewayConfigurationFor(
-      DistributionTarget.WEB,
-      { ...product, branding: {} },
-      null,
-    );
-    expect(config.hostedChat.appName).toBe('Acme Support');
-  });
-
-  it('leaves the AI disclosure null, which means the default wording', () => {
-    // Clearing it entirely is gated on white-label and audited, so an
-    // unset value must not read as a removal.
-    const config = gatewayConfigurationFor(DistributionTarget.WEB, product, null);
-    expect(config.hostedChat.aiDisclosure).toBeNull();
-    expect(config.hostedChat.whiteLabel).toBe(false);
   });
 
   it('does not put a hostedChat block on anything else', () => {

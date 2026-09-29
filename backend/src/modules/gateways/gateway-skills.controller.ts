@@ -44,6 +44,20 @@ export class GatewaySkillsController {
     private readonly codegenService: CodegenService,
   ) {}
 
+  /**
+   * The gateway a route names, read as the caller. PrivateGatewayGuard
+   * already refuses a gateway the caller may not read; this asks the
+   * service again (getGateway with the caller: assertGatewayReadable), so
+   * a route added here without the guard -- or a guard reordered away --
+   * still answers the 404 a missing gateway gets rather than handing out
+   * its skills, CLI, SDK or a run. Every route in this controller starts
+   * here; read-before-manage.guard.spec.ts holds it to that.
+   */
+  private readableGateway(gatewayId: string, organizationId: string, req: any, withTools: boolean) {
+    const userId: string | undefined = req?.user?.sub || req?.user?.id;
+    return this.gatewaysService.getGateway(gatewayId, organizationId, withTools, userId ? { id: userId } : null);
+  }
+
   // === Gateway Export Endpoints ===
 
   @Get(':gatewayId/skills')
@@ -62,6 +76,7 @@ export class GatewaySkillsController {
           HttpStatus.BAD_REQUEST,
         );
       }
+      await this.readableGateway(gatewayId, organizationId, req, false);
       const skills = await this.skillGeneratorService.generateGatewaySkills(gatewayId, organizationId);
       return {
         success: true,
@@ -98,7 +113,7 @@ export class GatewaySkillsController {
       }
 
       let context: { orgSlug?: string; gatewaySlug?: string } | undefined;
-      const gateway = await this.gatewaysService.getGateway(gatewayId, organizationId, false);
+      const gateway = await this.readableGateway(gatewayId, organizationId, req, false);
       // One row, by primary key. This read `gateways[0]?.organization`
       // off getAllUserGateways(organizationId) -- every active gateway of
       // the org with every Tool on each -- to use that single field.
@@ -154,7 +169,7 @@ export class GatewaySkillsController {
       // Only a tool the gateway serves -- the servable predicate its skill
       // bundle is built from. Anything else is not found, whether it does
       // not exist or is simply not published here.
-      const gateway = await this.gatewaysService.getGateway(gatewayId, organizationId, true);
+      const gateway = await this.readableGateway(gatewayId, organizationId, req, true);
       const gatewayTool = gateway.tools?.find(
         (gt) => gt.toolId === toolId && isServableGatewayTool(Object.assign(new GatewayTool(), gt, { gateway })),
       );
@@ -226,6 +241,7 @@ export class GatewaySkillsController {
           HttpStatus.BAD_REQUEST,
         );
       }
+      await this.readableGateway(gatewayId, organizationId, req, false);
       const cli = await this.cliGeneratorService.generateGatewayCliBunde(gatewayId, format, organizationId);
       return {
         success: true,
@@ -260,6 +276,7 @@ export class GatewaySkillsController {
           HttpStatus.BAD_REQUEST,
         );
       }
+      await this.readableGateway(gatewayId, organizationId, req, false);
       const sdk = await this.codegenService.generateGatewaySdk(gatewayId, organizationId);
       return {
         success: true,

@@ -83,25 +83,37 @@ export function testDbConnection(): {
 }
 
 /**
- * Throws when a test extension has left `public`. Run after every
- * DB-integration spec file (src/test/setup.ts): a spec whose migrations
- * or DDL put an extension in its own schema fails right there, instead of
- * a later spec failing with "function uuid_generate_v4() does not exist".
+ * Throws when a test extension has left `public`. Run once, by the jest
+ * globalTeardown (src/test/integration-global-teardown.ts), after every
+ * worker has finished: a spec whose migrations or DDL put an extension in
+ * its own schema fails the run, and the schema named in the message is
+ * that spec's.
+ *
+ * It ran after every integration spec file (an afterAll in
+ * src/test/setup.ts). An extension's placement is database-wide state, and
+ * the spec files run in parallel workers, so that check read whatever some
+ * other worker's DDL had in flight at that moment and blamed the spec that
+ * happened to be finishing -- rbac-guard.integration.spec, which never
+ * touches Postgres, failed that way. Read once, when nothing else is
+ * running, the answer is about the run and nothing else.
  */
-export async function assertExtensionsInPublic(specPath: string): Promise<void> {
-  // Required here, not imported: the setup file loads this module for every
-  // unit spec too, and a unit run needs no Postgres driver.
+export async function assertExtensionsInPublic(
+  connection: ReturnType<typeof testDbConnection> = testDbConnection(),
+): Promise<void> {
+  // Required here, not imported: this module is loaded by unit specs too,
+  // and a unit run needs no Postgres driver.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { Client } = require('pg');
-  const client = new Client(testDbConnection());
+  const client = new Client(connection);
   await client.connect();
   try {
     const misplaced = await extensionsOutsidePublic((sql, params) => client.query(sql, params));
     if (misplaced.length > 0) {
       throw new Error(
-        `${specPath} left Postgres extensions outside public: ` +
+        'The DB-integration run left Postgres extensions outside public: ' +
           misplaced.map((m) => `${m.extension} in ${m.schema}`).join(', ') +
-          '. Integration specs create extensions only WITH SCHEMA public (see test-db-extensions.ts).',
+          ' (the schema is the spec that created it).' +
+          ' Integration specs create extensions only WITH SCHEMA public (see test-db-extensions.ts).',
       );
     }
   } finally {

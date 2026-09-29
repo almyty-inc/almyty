@@ -269,7 +269,7 @@ describe('ModelRouterService', () => {
 
     const plan = await withRefs.plan('org', {}, { id: 'u-1' });
     expect(plan.candidates).toHaveLength(1);
-    expect(credentialRefs.tryResolve).toHaveBeenCalledWith('org', 'cred-1', { principal: { id: 'u-1' }, context: { purpose: 'llm_call', resourceType: 'model', resourceId: 'e' } });
+    expect(credentialRefs.tryResolve).toHaveBeenCalledWith('org', 'cred-1', { principal: { kind: 'user', userId: 'u-1', source: 'session' }, context: { purpose: 'llm_call', resourceType: 'model', resourceId: 'e' } });
 
     // Revoked, expired, or not granted to this caller: the card drops out
     // rather than being called without the key.

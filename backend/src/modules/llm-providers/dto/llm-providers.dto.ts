@@ -56,6 +56,16 @@ export interface CreateLlmProviderDto {
   teamId?: string | null;
 }
 
+/** Connect a provider in one step (POST /llm-providers/connect); the name defaults to the provider's own. */
+export interface ConnectProviderInput {
+  type: LlmProviderType;
+  name?: string;
+  configuration?: LlmProviderConfig;
+  credentialId?: string | null;
+  visibility?: ResourceVisibility;
+  teamId?: string | null;
+}
+
 export interface UpdateLlmProviderDto {
   name?: string;
   description?: string;

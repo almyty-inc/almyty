@@ -2,24 +2,11 @@ import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { budgetsApi } from '@/lib/api'
-import { llmProvidersQuery } from '@/lib/llm-providers-query'
 import { getApiErrorMessage as errorMessage } from '@/lib/api-error'
 import { DEPLOYMENT_POLL_MS, isInFlightState, modelAdaptersApi, modelDeploymentsApi, modelVersionsApi } from '@/lib/deployments-api'
-import type { ProviderInfo } from '@/lib/model-hosting'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { ModelAdapter, ModelDeployment, ModelVersion, SpendBudgetSummary } from '@/types/deployments'
-
-/** Inference providers, keyed by id, with the base URL a server you run is reached at. */
-export function useProviderMap() {
-  const query = useQuery(llmProvidersQuery)
-  const providers = useMemo(() => {
-    const out: Record<string, ProviderInfo> = {}
-    for (const p of query.data || []) out[p.id] = { id: p.id, name: p.name, type: p.type, apiUrl: p.configuration?.apiUrl ?? null }
-    return out
-  }, [query.data])
-  return { providers, rows: (query.data || []) as any[], query }
-}
 
 /**
  * Everything about the models hosted on this organization's cloud

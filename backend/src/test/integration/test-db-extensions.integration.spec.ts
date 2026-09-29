@@ -1,6 +1,6 @@
 import { Client } from 'pg';
 
-import { provisionExtensionsInPublic } from './test-db-extensions';
+import { assertExtensionsInPublic, provisionExtensionsInPublic } from './test-db-extensions';
 
 /**
  * Extension placement no longer depends on which spec migrates first.
@@ -84,5 +84,19 @@ describeIfDb('test database extensions are provisioned in public', () => {
     await provisionExtensionsInPublic((sql, params) => setup.query(sql, params as any[]));
     await provisionExtensionsInPublic((sql, params) => setup.query(sql, params as any[]));
     await setup.end();
+  });
+
+  it('the end-of-run check names an extension left outside public, and passes once it is back', async () => {
+    const connection = { ...base, database: DB };
+    const setup = await connect();
+    await setup.query('CREATE SCHEMA IF NOT EXISTS spec_b');
+    await setup.query('ALTER EXTENSION pg_trgm SET SCHEMA spec_b');
+    await setup.end();
+    await expect(assertExtensionsInPublic(connection)).rejects.toThrow(/pg_trgm in spec_b/);
+
+    const fix = await connect();
+    await provisionExtensionsInPublic((sql, params) => fix.query(sql, params as any[]));
+    await fix.end();
+    await expect(assertExtensionsInPublic(connection)).resolves.toBeUndefined();
   });
 });

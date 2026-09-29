@@ -149,6 +149,12 @@ export interface ModelProviderAdapter {
   readonly key: string;
   /** Human name for forms. */
   readonly displayName: string;
+  /**
+   * A test double (the in-memory stub). It still deploys when a test or a
+   * dev install asks for it by key, but it is never offered in a list a
+   * user picks from outside a dev or test install: see `listsInternalAdapters`.
+   */
+  readonly internal?: boolean;
   capabilities(): AdapterCapabilities;
   /** JSON schema for providerConfig; secret fields carry `"x-secret": true`. Forms render from this. */
   configSchema(): Record<string, any>;

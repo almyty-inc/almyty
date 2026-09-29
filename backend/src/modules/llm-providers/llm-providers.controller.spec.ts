@@ -1,4 +1,6 @@
-import { HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
+import { LlmProvider } from '../../entities/llm-provider.entity';
+import { Model } from '../../entities/model.entity';
 import { Test, TestingModule } from '@nestjs/testing';
 import { LlmSessionsController } from './llm-sessions.controller';
 import { LlmModelsHelper } from './llm-models.helper';
@@ -57,6 +59,50 @@ describe('LlmProvidersController', () => {
     sessionsController = module.get<LlmSessionsController>(LlmSessionsController);
     llmProvidersService = module.get(LlmProvidersService);
     modelsHelper = module.get(LlmModelsHelper);
+  });
+
+  describe('connectProvider', () => {
+    const req = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+
+    it('answers with the provider public view, its models (with whether each is usable) and the check', async () => {
+      const provider = Object.assign(new LlmProvider(), { id: 'p1', name: 'OpenAI', type: 'openai', configuration: {}, credential: null, usageCredential: null });
+      const model = Object.assign(new Model(), { id: 'm1', vendorModelId: 'gpt-5', providerId: 'p1', status: 'active', validationStatus: 'passed', pricing: null, pricingOverride: null });
+      (llmProvidersService as any).connectProvider = jest.fn().mockResolvedValue({ provider, models: [model], check: { ok: true, responseTime: 12 } });
+
+      const res = await controller.connectProvider({ type: 'openai' as any, configuration: { apiKey: 'sk-good' } }, req);
+
+      expect((llmProvidersService as any).connectProvider).toHaveBeenCalledWith({ type: 'openai', configuration: { apiKey: 'sk-good' } }, 'org-1', 'user-1');
+      expect(res.data.provider).toMatchObject({ id: 'p1', name: 'OpenAI' });
+      expect(res.data.models).toEqual([expect.objectContaining({ id: 'm1', vendorModelId: 'gpt-5', selectable: true })]);
+      expect(res.data.check).toEqual({ ok: true, responseTime: 12 });
+    });
+
+    it('passes a refused key through as one plain sentence with a 400, never the vendor 401', async () => {
+      (llmProvidersService as any).connectProvider = jest.fn().mockRejectedValue(
+        new BadRequestException({ code: 'KEY_REJECTED', message: 'OpenAI rejected this key.', detail: 'Request failed with status code 401', keyUrl: 'https://platform.openai.com/api-keys' }),
+      );
+
+      const failure = await controller.connectProvider({ type: 'openai' as any }, req).catch((e: HttpException) => e);
+
+      expect(failure).toBeInstanceOf(HttpException);
+      expect((failure as HttpException).getStatus()).toBe(HttpStatus.BAD_REQUEST);
+      expect((failure as HttpException).getResponse()).toEqual({
+        success: false,
+        error: 'KEY_REJECTED',
+        message: 'OpenAI rejected this key.',
+        detail: 'Request failed with status code 401',
+        keyUrl: 'https://platform.openai.com/api-keys',
+      });
+    });
+
+    it('a configuration the provider cannot use is INVALID_CONFIGURATION with its own words', async () => {
+      (llmProvidersService as any).connectProvider = jest.fn().mockRejectedValue(new BadRequestException('aws_bedrock provider requires a region'));
+
+      const failure = (await controller.connectProvider({ type: 'aws_bedrock' as any }, req).catch((e: HttpException) => e)) as HttpException;
+
+      expect(failure.getStatus()).toBe(HttpStatus.BAD_REQUEST);
+      expect(failure.getResponse()).toMatchObject({ error: 'INVALID_CONFIGURATION', message: 'aws_bedrock provider requires a region' });
+    });
   });
 
   describe('createProvider', () => {

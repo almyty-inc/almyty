@@ -40,6 +40,7 @@ import { RunsTab } from '@/components/agents/detail/runs-tab'
 import { MemoryTab } from '@/components/agents/detail/memory-tab'
 import { FilesTab } from '@/components/agents/detail/files-tab'
 import { InterfacesTab } from '@/components/agents/detail/interfaces-tab'
+import { AgentAccessKeysSection } from '@/components/access-keys/access-keys-section'
 import { PromotedSkillsTab } from '@/components/agents/detail/promoted-skills-tab'
 import { ConstraintsTab } from '@/components/agents/detail/constraints-tab'
 import { RunPanel } from '@/components/agents/detail/run-panel'
@@ -394,7 +395,12 @@ export function AgentDetailPage() {
         </TabsList>
 
         <TabsContent value="execution" className="space-y-6">
-          <ExecutionTab agentId={agent.id} mode={agent.mode === 'autonomous' ? 'autonomous' : 'workflow'} />
+          <ExecutionTab
+            agentId={agent.id}
+            mode={agent.mode === 'autonomous' ? 'autonomous' : 'workflow'}
+            models={agent.models}
+            modelConfig={agent.modelConfig}
+          />
         </TabsContent>
 
         <TabsContent value="overview" className="space-y-6">
@@ -433,6 +439,7 @@ export function AgentDetailPage() {
 
         <TabsContent value="interfaces" className="space-y-4">
           <InterfacesTab agentId={id!} agentName={agent?.name} />
+          <AgentAccessKeysSection agentId={id!} agentName={agent?.name} />
         </TabsContent>
 
         <TabsContent value="skills" className="space-y-4">

@@ -1,10 +1,10 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 
 import { Model, ModelCapabilities, ModelPricing, ModelPrivacyTier } from '../../entities/model.entity';
 import { ModelVersion } from '../../entities/model-version.entity';
-import { LlmProvider, LlmProviderStatus, LlmProviderType } from '../../entities/llm-provider.entity';
+import { LlmProvider, LlmProviderStatus, LlmProviderType, isSelfHostedOllama } from '../../entities/llm-provider.entity';
 import { Conversation } from '../../entities/conversation.entity';
 import { MessageRole } from '../../entities/message.entity';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
@@ -16,7 +16,10 @@ import { LlmModelsHelper } from '../llm-providers/llm-models.helper';
 import { PriceFeedService } from './pricing/price-feed.service';
 import { ModelRouterService } from './routing/model-router.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
-import { providerUsableBy } from '../llm-providers/private-provider';
+import { providerUsableByUser, usableProviders } from '../llm-providers/private-provider';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { providerChecked } from './readiness';
+import { isKeyRejection } from '../llm-providers/model-errors';
 
 /** Override as the API accepts it; currency defaults to USD when omitted. */
 export type ModelPricingInput = Omit<ModelPricing, 'currency'> & { currency?: string };
@@ -80,11 +83,13 @@ export interface ValidationOutcome {
 }
 
 /**
- * The catalog is data: a card exists because someone registered it (by
- * hand, from a provider's list, or from a deployment we made), and it is
- * selectable only once a real call has gone through. There is no code
- * list of supported models anywhere; this service is where "supported"
- * is decided, per org, by evidence.
+ * The catalog is data: a card exists because a connected provider lists
+ * the model (or someone registered it by hand, or a model started on the
+ * customer's cloud made one), and it is selectable once a real call has
+ * gone through: for a provider's models, the provider's key check; for an
+ * endpoint with no provider, a check of its own. There is no code list of
+ * supported models anywhere; this service is where "supported" is decided,
+ * per org, by evidence.
  */
 @Injectable()
 export class ModelCatalogService {
@@ -92,6 +97,8 @@ export class ModelCatalogService {
   /** Per provider id: the sync currently running, and when the last one finished (see syncInBackground). */
   private readonly syncInFlight = new Map<string, Promise<ProviderSyncResult | null>>();
   private readonly syncedAt = new Map<string, number>();
+  /** Per org: the background run pricing cards a sync created unpriced (see pricePendingCards). */
+  private readonly pricingInFlight = new Map<string, Promise<void>>();
 
   constructor(
     @InjectRepository(Model) private readonly models: Repository<Model>,
@@ -103,11 +110,13 @@ export class ModelCatalogService {
     @Optional() private readonly priceFeed?: PriceFeedService,
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
     @Optional() private readonly auditLog?: AuditLogService,
+    @Optional() private readonly accessPolicy?: AccessPolicyService,
   ) {}
 
   /**
    * The org's cards. With `viewerId` (a person asking; null for nobody),
-   * cards served by another user's private provider are left out: the
+   * cards served by a provider the viewer may not use -- another user's
+   * private one, a team one outside their teams -- are left out: the
    * provider is not theirs to see, and neither is what it serves.
    */
   async list(
@@ -135,13 +144,18 @@ export class ModelCatalogService {
     return card;
   }
 
-  /** Ids of the org's private providers that `viewerId` may not see. */
+  /**
+   * Ids of the org's scoped providers that `viewerId` may not use: another
+   * user's private ones, and team ones whose team the viewer is not on
+   * (every team one, for nobody). What a provider serves is scoped with it.
+   */
   private async hiddenProviderIds(organizationId: string, viewerId: string | null): Promise<Set<string>> {
     const rows = await this.providers.find({
-      where: { organizationId, visibility: 'private' },
-      select: { id: true, visibility: true, ownerUserId: true },
+      where: { organizationId, visibility: In(['private', 'team']) },
+      select: { id: true, organizationId: true, visibility: true, ownerUserId: true, teamId: true },
     });
-    return new Set(rows.filter((p) => !providerUsableBy(p, viewerId)).map((p) => p.id));
+    const usable = new Set((await usableProviders(this.accessPolicy, organizationId, viewerId, rows)).map((p) => p.id));
+    return new Set(rows.filter((p) => !usable.has(p.id)).map((p) => p.id));
   }
 
   async register(organizationId: string, input: RegisterModelInput, userId?: string): Promise<Model> {
@@ -149,10 +163,17 @@ export class ModelCatalogService {
       throw new BadRequestException({ code: 'MODEL_NOT_CALLABLE', message: 'A model needs a providerId or an endpointRef.url to be called through' });
     }
     let providerType: string | null = null;
+    let checkedProvider = false;
+    let providerRow: LlmProvider | null = null;
     if (input.providerId) {
       const provider = await this.providers.findOne({ where: { id: input.providerId, organizationId } });
-      if (!provider) throw new NotFoundException('Provider not found');
+      // A person registering a card on another member's private provider, or
+      // on a team provider outside their teams, is told it does not exist,
+      // like everywhere else that provider is named.
+      if (!provider || (userId && !(await providerUsableByUser(this.accessPolicy, provider, userId)))) throw new NotFoundException('Provider not found');
+      providerRow = provider;
       providerType = provider.type;
+      checkedProvider = providerChecked(provider);
     } else {
       providerType = input.endpointRef?.providerType ?? LlmProviderType.CUSTOM;
     }
@@ -186,10 +207,14 @@ export class ModelCatalogService {
       pricingSource: input.pricingOverride ? 'manual' : 'unpriced',
 
       status: 'active',
-      validationStatus: 'never',
-      metadata: input.metadata ?? null,
+      // Usable at once when its provider's key check has passed: the
+      // readiness rule is the provider's, not a step per model. A card
+      // for an endpoint (no provider) waits for its own check.
+      validationStatus: checkedProvider ? 'passed' : 'never',
+      lastValidatedAt: checkedProvider ? new Date() : null,
+      metadata: checkedProvider ? { ...(input.metadata ?? {}), checkedBy: 'provider_check' } : input.metadata ?? null,
     });
-    this.applyFeedPrice(card);
+    this.applyFeedPrice(card, providerRow);
     let saved: Model;
     try {
       saved = await this.models.save(card);
@@ -222,8 +247,9 @@ export class ModelCatalogService {
   async syncFromProvider(organizationId: string, providerId: string, userId?: string): Promise<ProviderSyncResult> {
     const provider = await this.providers.findOne({ where: { id: providerId, organizationId } });
     // A person asking (userId given) is told another user's private
-    // provider does not exist; lifecycle syncs run with no user.
-    if (!provider || (userId && !providerUsableBy(provider, userId))) throw new NotFoundException('Provider not found');
+    // provider, or a team provider outside their teams, does not exist;
+    // lifecycle syncs run with no user.
+    if (!provider || (userId && !(await providerUsableByUser(this.accessPolicy, provider, userId)))) throw new NotFoundException('Provider not found');
     const listed = await this.modelsHelper.fetchModelsFromProvider(provider);
     const existing = await this.models.find({ where: { organizationId, providerId } });
     const byVendorId = new Map(existing.map((m) => [m.vendorModelId, m]));
@@ -270,6 +296,18 @@ export class ModelCatalogService {
     if (created.length) this.audit(created[0], AuditAction.MODEL_REGISTERED, userId, { providerId, count: created.length, source: 'provider_list' });
     if (retired.length) this.audit(retired[0], AuditAction.UPDATE, userId, { providerId, retired: retired.map((c) => c.vendorModelId), reason: 'not listed by provider' });
     if (reinstated.length) this.audit(reinstated[0], AuditAction.UPDATE, userId, { providerId, reinstated: reinstated.map((c) => c.vendorModelId) });
+    // An empty list means the vendor could not be asked, so only a list
+    // with models in it counts as synced (see CatalogWarmupService).
+    if (listed.length > 0) await this.markModelsSynced(organizationId, providerId);
+    // A model the feed could not price when its card was made: the feed may
+    // be empty on this replica or older than the model.
+    if (created.some((c) => !c.pricing && !c.pricingOverride)) this.pricePendingCards(organizationId);
+    // A key check that finished while this sync was listing only marked
+    // the cards that existed then; the ones just created missed it.
+    if (created.some((c) => c.validationStatus === 'never')) {
+      const now = await this.providers.findOne({ where: { id: providerId, organizationId } });
+      if (now && providerChecked(now)) await this.applyProviderCheck(organizationId, providerId, { passed: true });
+    }
     return { created, skipped, retired, reinstated };
   }
 
@@ -279,8 +317,9 @@ export class ModelCatalogService {
     const summary: CatalogSyncSummary = { created: [], skipped: 0, retired: [], reinstated: [], providers: [] };
     for (const provider of providers) {
       // A person syncing the org's catalog never reaches another user's
-      // private provider (its key is not theirs to spend).
-      if (userId && !providerUsableBy(provider, userId)) continue;
+      // private provider, nor a team's they are not on (its key is not
+      // theirs to spend).
+      if (userId && !(await providerUsableByUser(this.accessPolicy, provider, userId))) continue;
       try {
         const r = await this.syncFromProvider(organizationId, provider.id, userId);
         summary.created.push(...r.created);
@@ -327,24 +366,44 @@ export class ModelCatalogService {
   }
 
   /**
-   * One-shot on boot (see CatalogSyncProcessor): every active provider
-   * that has no cards yet gets its list imported, so an org set up before
-   * the catalog existed can route without anyone syncing by hand.
-   * Idempotent, so replicas racing on it do no harm.
+   * Record that the provider's models have been synced (llm_providers
+   * .modelsSyncedAt). A sync that imported a list does this itself; the
+   * boot and on-load sync (CatalogWarmupService) calls it for a vendor
+   * that serves no list, once its key check has passed.
    */
-  async backfill(): Promise<{ providers: number; synced: number; created: number; failed: number }> {
-    const providers = await this.providers.find({ where: { status: LlmProviderStatus.ACTIVE } });
-    const result = { providers: providers.length, synced: 0, created: 0, failed: 0 };
+  async markModelsSynced(organizationId: string, providerId: string): Promise<void> {
+    await this.providers.update({ id: providerId, organizationId }, { modelsSyncedAt: new Date() });
+  }
+
+  /**
+   * The periodic sweep (CatalogSyncProcessor, MODEL_CATALOG_SYNC_CRON):
+   * every active provider of every organization lists its models again,
+   * so a model a vendor adds appears and one it retires is marked
+   * unavailable without anyone opening a page. Listing costs nothing at
+   * the vendor, unlike the health check's chat call, which is why this and
+   * not that runs by default. A listing the vendor refuses for the key
+   * takes that provider's models out of the lists, the same as a failed
+   * key check would; any other failure is logged and left for next time.
+   */
+  async syncEveryProvider(): Promise<{ providers: number; synced: number; failed: number; keyRejected: number }> {
+    const providers = await this.providers.find({ where: { status: LlmProviderStatus.ACTIVE }, order: { createdAt: 'ASC' } });
+    const result = { providers: providers.length, synced: 0, failed: 0, keyRejected: 0 };
     for (const provider of providers) {
-      const any = await this.models.findOne({ where: { organizationId: provider.organizationId, providerId: provider.id } });
-      if (any) continue;
       try {
-        const r = await this.syncFromProvider(provider.organizationId, provider.id);
+        await this.syncFromProvider(provider.organizationId, provider.id);
+        this.syncedAt.set(provider.id, Date.now());
         result.synced++;
-        result.created += r.created.length;
       } catch (error: any) {
         result.failed++;
-        this.logger.warn(`catalog backfill for provider ${provider.id} failed: ${error?.message ?? error}`);
+        if (isKeyRejection(error)) {
+          result.keyRejected++;
+          await this.applyProviderCheck(provider.organizationId, provider.id, {
+            passed: false,
+            keyRejected: true,
+            error: String(error?.message ?? error).slice(0, 500),
+          });
+        }
+        this.logger.warn(`scheduled catalog sync for provider ${provider.id} failed: ${error?.message ?? error}`);
       }
     }
     return result;
@@ -399,8 +458,13 @@ export class ModelCatalogService {
     return retired;
   }
 
-  /** A card for a vendor model as the provider lists it: unvalidated, priced from the feed. */
+  /**
+   * A card for a vendor model as the provider lists it, priced from the
+   * feed. It is usable at once when the provider's key check has passed
+   * (see providerChecked); otherwise it waits for that check.
+   */
   private newProviderCard(provider: LlmProvider, listed: { id: string; name?: string }, metadata: Record<string, any>): Model {
+    const checked = providerChecked(provider);
     const card = this.models.create({
       organizationId: provider.organizationId,
       name: listed.name || listed.id,
@@ -408,18 +472,114 @@ export class ModelCatalogService {
       providerId: provider.id,
       providerType: provider.type,
       capabilities: {},
-      privacyTier: provider.type === LlmProviderType.OLLAMA ? 'local' : 'public',
+      // Local only for an Ollama server someone runs; Ollama Cloud is a public service.
+      privacyTier: isSelfHostedOllama(provider) ? 'local' : 'public',
       pricingSource: 'unpriced',
       status: 'active',
-      validationStatus: 'never',
-      metadata,
+      validationStatus: checked ? 'passed' : 'never',
+      lastValidatedAt: checked ? provider.lastHealthCheckAt ?? new Date() : null,
+      metadata: checked ? { ...metadata, checkedBy: 'provider_check' } : metadata,
     });
-    this.applyFeedPrice(card);
+    this.applyFeedPrice(card, provider);
     return card;
   }
 
+  /**
+   * Bring the cards in step with the readiness rule, with no vendor call:
+   * every card still waiting ('never') of a provider whose key check has
+   * passed is marked checked, as applyProviderCheck would have when that
+   * check passed. It covers the cards the check never saw: ones created
+   * before the rule existed, when a model was usable only after a check of
+   * its own, and ones a sync created while the provider read as unchecked.
+   * Without it those stay "Not available" under a provider that shows "Key
+   * works" until someone checks the key again.
+   *
+   * Run at boot, before each sweep, and by GET /models whenever it would
+   * show a waiting card. Returns how many cards changed.
+   */
+  async reconcileReadiness(organizationId?: string): Promise<number> {
+    const where: Record<string, any> = { status: LlmProviderStatus.ACTIVE, isHealthy: true, lastHealthCheckAt: Not(IsNull()) };
+    if (organizationId) where.organizationId = organizationId;
+    const providers = await this.providers.find({ where, order: { createdAt: 'ASC' } });
+    let changed = 0;
+    for (const provider of providers) {
+      if (!providerChecked(provider)) continue;
+      changed += await this.applyProviderCheck(provider.organizationId, provider.id, { passed: true });
+    }
+    return changed;
+  }
+
+  /**
+   * The readiness rule. A provider's models become usable when the
+   * provider's key check passes, all of them at once: the check is a real
+   * call with that key, and the list the models came from is the vendor's
+   * own statement that it serves them. There is no per-model step.
+   *
+   * Passed: every card of this provider still waiting on the check is
+   * marked checked. A card that failed on its own (the vendor answered
+   * MODEL_NOT_FOUND for it) keeps its failure; a retired card stays
+   * retired, since `status` is what takes it out.
+   *
+   * Key rejected: the provider's checked cards go back to waiting, with
+   * the reason, so nothing served by a key the vendor refuses is offered.
+   * Any other failure (an outage, a timeout) changes nothing here: the
+   * router already skips an unhealthy provider, and a blip must not make
+   * every model look unavailable.
+   */
+  async applyProviderCheck(
+    organizationId: string,
+    providerId: string,
+    outcome: { passed: boolean; keyRejected?: boolean; error?: string },
+  ): Promise<number> {
+    if (!outcome.passed && !outcome.keyRejected) return 0;
+    const cards = await this.models.find({ where: { organizationId, providerId } });
+    const now = new Date();
+    const changed: Model[] = [];
+    for (const card of cards) {
+      if (outcome.passed && card.validationStatus === 'never') {
+        card.validationStatus = 'passed';
+        card.lastValidatedAt = now;
+        card.lastValidationError = null;
+        card.metadata = { ...(card.metadata ?? {}), checkedBy: 'provider_check' };
+      } else if (!outcome.passed && card.validationStatus === 'passed' && card.metadata?.checkedBy === 'provider_check') {
+        card.validationStatus = 'never';
+        card.lastValidatedAt = now;
+        card.lastValidationError = (outcome.error ?? 'The provider rejected its key').slice(0, 1000);
+      } else {
+        continue;
+      }
+      changed.push(await this.models.save(card));
+    }
+    if (changed.length) {
+      this.audit(changed[0], AuditAction.MODEL_VALIDATED, undefined, {
+        providerId,
+        passed: outcome.passed,
+        count: changed.length,
+        source: 'provider_check',
+        ...(outcome.passed ? {} : { error: outcome.error }),
+      });
+    }
+    return changed.length;
+  }
+
+  /**
+   * Connect-time sync: import what the provider lists and hand back its
+   * cards, for the page that just checked the key to show. Unlike the
+   * lifecycle hook this waits and throws, because the person is looking.
+   */
+  async syncAndListProvider(organizationId: string, providerId: string): Promise<Model[]> {
+    const inFlight = this.syncInFlight.get(providerId);
+    if (inFlight) await inFlight;
+    await this.syncFromProvider(organizationId, providerId);
+    this.syncedAt.set(providerId, Date.now());
+    return this.models.find({ where: { organizationId, providerId }, order: { createdAt: 'ASC' } });
+  }
+
   async update(organizationId: string, id: string, input: UpdateModelInput, userId?: string): Promise<Model> {
-    const card = await this.get(organizationId, id);
+    // A person (userId) acting on a card served by another member's private
+    // provider gets the not-found a missing card gets; internal callers
+    // (the deployment auto-validation) pass no user.
+    const card = await this.get(organizationId, id, userId);
     const before = { privacyTier: card.privacyTier, region: card.region, status: card.status, pricingOverride: card.pricingOverride };
     if (input.name !== undefined) card.name = input.name;
     if (input.capabilities !== undefined) card.capabilities = input.capabilities ?? {};
@@ -450,7 +610,10 @@ export class ModelCatalogService {
   }
 
   async remove(organizationId: string, id: string, userId?: string): Promise<void> {
-    const card = await this.get(organizationId, id);
+    // A person (userId) acting on a card served by another member's private
+    // provider gets the not-found a missing card gets; internal callers
+    // (the deployment auto-validation) pass no user.
+    const card = await this.get(organizationId, id, userId);
     await this.models.remove(card);
     this.audit(Object.assign(card, { id }), AuditAction.DELETE, userId, {});
   }
@@ -458,13 +621,18 @@ export class ModelCatalogService {
   /**
    * The gate to selectability: one real, short chat call through the card's
    * provider with its vendor model id. Passing flips validationStatus; a
-   * failure records why. Nothing else marks a card validated.
+   * failure records why. Nothing else marks a card validated. `source`
+   * says in the audit row who asked, when it was not a person.
    */
-  async validate(organizationId: string, id: string, userId?: string): Promise<ValidationOutcome> {
-    const card = await this.get(organizationId, id);
-    const provider = await this.router.providerFor(card);
+  async validate(organizationId: string, id: string, userId?: string, source?: string): Promise<ValidationOutcome> {
+    // A person (userId) acting on a card served by another member's private
+    // provider, or a team provider whose team they are not on, gets the
+    // not-found a missing card gets; the call itself is made as that person.
+    // Internal callers (the deployment auto-validation) pass no user.
+    const card = await this.get(organizationId, id, userId);
+    const provider = await this.router.providerFor(card, userId ? { id: userId } : undefined);
     if (!provider) {
-      return this.recordValidation(card, false, 'This model has no callable provider', userId);
+      return this.recordValidation(card, false, 'This model has no callable provider', userId, undefined, source);
     }
     const session = Conversation.createConversation({
       providerId: provider.id.startsWith('endpoint:') ? undefined : provider.id,
@@ -483,10 +651,10 @@ export class ModelCatalogService {
       if (typeof response.usage?.inputTokens === 'number') {
         card.measuredLatencyMs = { p50: latencyMs, p95: latencyMs, updatedAt: new Date().toISOString() };
       }
-      return this.recordValidation(card, true, undefined, userId, latencyMs);
+      return this.recordValidation(card, true, undefined, userId, latencyMs, source);
     } catch (error: any) {
       const message = error?.message ?? String(error);
-      return this.recordValidation(card, false, message.slice(0, 1000), userId, Date.now() - started);
+      return this.recordValidation(card, false, message.slice(0, 1000), userId, Date.now() - started, source);
     }
   }
 
@@ -501,10 +669,14 @@ export class ModelCatalogService {
     return { passed, model: saved, latencyMs, error: saved.lastValidationError ?? undefined };
   }
 
-  /** Feed price at registration time; the daily job keeps it fresh afterwards. */
-  private applyFeedPrice(card: Model): void {
+  /**
+   * Price a new card from the feed. `provider` is the row the card is
+   * served by: an Ollama server someone runs is free per token, Ollama
+   * Cloud is not, and only the row can tell them apart.
+   */
+  private applyFeedPrice(card: Model, provider?: Pick<LlmProvider, 'type' | 'configuration'> | null): void {
     if (card.pricingOverride || !this.priceFeed || !card.providerType) return;
-    const quote = this.priceFeed.lookup(card.providerType, card.vendorModelId);
+    const quote = this.priceFeed.lookup(card.providerType, card.vendorModelId, { selfHosted: provider ? isSelfHostedOllama(provider) : undefined });
     if (!quote) return;
     card.pricing = { inPerMTok: quote.inPerMTok, outPerMTok: quote.outPerMTok, currency: quote.currency ?? 'USD' };
     card.pricingSource = quote.source;
@@ -512,6 +684,33 @@ export class ModelCatalogService {
     if (!card.contextLength && quote.contextLength) card.contextLength = quote.contextLength;
 
     card.metadata = { ...(card.metadata ?? {}), pricingFeedSource: quote.source };
+  }
+
+  /**
+   * Cards a sync just created that the feed could not price: refresh the
+   * feed when it is empty or stale, then price the org's catalog, in the
+   * background (one run per org at a time). Without this a newly listed
+   * model stayed unpriced until the daily refresh.
+   */
+  private pricePendingCards(organizationId: string): void {
+    if (!this.priceFeed || this.pricingInFlight.has(organizationId)) return;
+    const feed = this.priceFeed;
+    const run = (async () => {
+      try {
+        await feed.ensureFresh();
+        await feed.applyToCatalog(organizationId);
+      } catch (err: any) {
+        this.logger.warn(`pricing new models for org ${organizationId} failed: ${err?.message ?? err}`);
+      } finally {
+        this.pricingInFlight.delete(organizationId);
+      }
+    })();
+    this.pricingInFlight.set(organizationId, run);
+  }
+
+  /** The background pricing run started for an org, if any (tests await it). */
+  pricingRun(organizationId: string): Promise<void> | undefined {
+    return this.pricingInFlight.get(organizationId);
   }
 
   private audit(card: Model, action: AuditAction, userId: string | undefined, details: Record<string, any>): void {

@@ -6,6 +6,9 @@ import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { Tool } from '../../entities/tool.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
+import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
+import { UserTeam } from '../../entities/user-team.entity';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { RunnerService } from '../../modules/runner/runner.service';
 import { RunnerCapabilityPublisher } from '../../modules/runner/runner-capability.publisher';
 import { WorkspaceService } from '../../modules/workspace/workspace.service';
@@ -89,6 +92,14 @@ describeIfDb('Runner + Workspace (real Postgres)', () => {
       lastName: 'T',
     } as any));
     userId = (user as any).id;
+    // The runner's owner is a current member: dispatch refuses a runner
+    // whose registering member is not (see resolveForDispatch).
+    await ds.getRepository(UserOrganization).save({
+      userId,
+      organizationId,
+      role: OrganizationRole.OWNER,
+      isActive: true,
+    } as any);
 
     const toolRepo = ds.getRepository(Tool);
     runners = new RunnerService(
@@ -96,10 +107,8 @@ describeIfDb('Runner + Workspace (real Postgres)', () => {
       ds.getRepository(RunnerSession),
       ds.getRepository(Workspace),
       new RunnerCapabilityPublisher(toolRepo),
-      {
-        canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
-        assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined),
-      } as any,
+      // The real policy over this database, so membership decides.
+      new AccessPolicyService(ds.getRepository(UserOrganization), ds.getRepository(UserTeam)),
     );
     workspaces = new WorkspaceService(
       ds.getRepository(Workspace),

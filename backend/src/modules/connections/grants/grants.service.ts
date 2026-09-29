@@ -24,6 +24,7 @@ import {
   canManage,
   canUse,
   ConnectionLike,
+  connectionHiddenFrom,
   GrantContext,
   GrantDecision,
   GrantPrincipal,
@@ -175,9 +176,12 @@ export class GrantsService {
     const grants = await this.grantsFor(connection.id);
     const decision = canUse(connection, who, grants, ctx);
     if (!decision.allowed) {
-      // Another member's private connection is not found, not "not granted":
-      // the not-granted answer would confirm it exists.
-      if (connection.visibility === 'private') throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
+      // Another member's private connection, and a team connection whose
+      // team the principal is not on, are not found, not "not granted":
+      // the not-granted answer would confirm they exist.
+      const hidden = connection.visibility === 'private'
+        || (connection.visibility === 'team' && connectionHiddenFrom(connection, who, grants, ctx));
+      if (hidden) throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
       throw new ConnectionNotGrantedError(connection.id, decision.reason);
     }
     return decision;
@@ -261,10 +265,14 @@ export class GrantsService {
     const connection = await this.loadConnection(connectionId, organizationId);
     const principal = await this.principalFor(actor, connection.organizationId);
     const existing = await this.grants.find({ where: { connectionId } });
-    const decision = canManage(connection, principal, existing, { now: new Date(this.now()) });
+    const now = new Date(this.now());
+    // The read rule first: someone else's private connection, a team one
+    // outside the caller's team, one they may not see and hold no grant on,
+    // does not exist for them -- 404, not a 403 that confirms the id.
+    if (connectionHiddenFrom(connection, principal, existing, { now })) {
+      throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
+    }
     if (connection.visibility === 'private') {
-      // Someone else's private connection does not exist for this caller.
-      if (!decision.allowed) throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
       // Its owner cannot share it either: a grant is a share, and private
       // means not shared. Personal is the tier that can be shared.
       throw new BadRequestException({
@@ -272,6 +280,7 @@ export class GrantsService {
         message: 'a private connection cannot be shared; reconnect it as a personal or organization connection to grant access',
       });
     }
+    const decision = canManage(connection, principal, existing, { now });
     if (!decision.allowed) throw new ForbiddenException({ code: 'CONNECTION_GRANT_FORBIDDEN', message: decision.reason });
 
     const principalType = input.principalType;
@@ -398,15 +407,19 @@ export class GrantsService {
   // Internals
   // ------------------------------------------------------------------
 
-  /** canManage, or the admin oversight exception for list / revoke on user-scoped connections. */
+  /**
+   * canManage, or the admin oversight exception for list / revoke on
+   * user-scoped connections. The read rule runs first: a connection the
+   * caller cannot see (connectionHiddenFrom) is the 404 a missing one
+   * gets; only one they can see is refused with a 403.
+   */
   private assertOversight(connection: Credential, principal: GrantPrincipal, grants: ConnectionGrant[], what: 'list' | 'revoke'): GrantDecision {
-    const decision = canManage(connection, principal, grants, { now: new Date(this.now()) });
-    if (decision.allowed) return decision;
-    // No oversight exception for a private connection: it does not exist
-    // for anyone but its owner, admins included.
-    if (connection.visibility === 'private') {
+    const now = new Date(this.now());
+    if (connectionHiddenFrom(connection, principal, grants, { now })) {
       throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
     }
+    const decision = canManage(connection, principal, grants, { now });
+    if (decision.allowed) return decision;
     if (connection.ownerUserId && hasManagePermission(principal)) {
       return { allowed: true, reason: `connections:manage may ${what} grants on a user-scoped connection`, via: 'connections:manage' };
     }

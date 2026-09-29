@@ -21,7 +21,7 @@ export const RESERVED_APP_SLUGS = Object.freeze([
 
 export function appSlugError(slug: string): string | null {
   const value = (slug || '').trim().toLowerCase();
-  if (!value) return 'Pick a name for the product.';
+  if (!value) return 'Pick a name for the app.';
   if (value.length < 3) return 'Must be at least 3 characters.';
   if (value.length > 63) return 'Must be 63 characters or fewer.';
   if (!SLUG_PATTERN.test(value)) {
@@ -37,21 +37,21 @@ export function appSlugError(slug: string): string | null {
  * limits and the hosted chat rules use.
  */
 export const APP_REFUSALS = Object.freeze({
-  SLUG_INVALID: 'The product name is missing or not usable as an address.',
+  SLUG_INVALID: 'The app name is missing or not usable as an address.',
   NO_AGENTS:
-    'A product needs at least one agent. Add one before publishing, or there is nothing for a user to talk to.',
+    'An app needs an agent. Add one before publishing, or there is nothing for people to talk to.',
   PUBLIC_NEEDS_COST_CAP:
     'Anyone with the link or the binary can use this, so it needs a cost cap first. Without one, a stranger can spend against your model keys.',
   PUBLIC_NEEDS_RATE_LIMIT:
-    'A product open to anyone needs a per-user and a per-IP rate limit, so one user cannot exhaust it for everyone else.',
+    'An app open to anyone needs a per-user and a per-IP rate limit, so one user cannot exhaust it for everyone else.',
   SSO_NOT_ENTITLED: 'Signing in with your own directory requires a commercial licence.',
   WHITE_LABEL_NOT_ENTITLED: 'Removing the almyty mark requires a commercial licence.',
   DISCLOSURE_REMOVAL_NOT_ENTITLED:
     'Removing the AI disclosure requires the white-label entitlement (EU AI Act Art. 50).',
   LOCAL_ACCESS_NEEDS_APPROVAL_GATE:
-    'A product that can run local commands must ask the user before it does. Add an approval requirement, or turn shell access off.',
+    'An app that can run local commands must ask the user before it does. Add an approval requirement, or turn shell access off.',
   LOCAL_ACCESS_ON_PUBLIC:
-    'A product anyone can download must not have local filesystem or shell access. Restrict who can use it, or remove the access.',
+    'An app anyone can download must not have local filesystem or shell access. Restrict who can use it, or remove the access.',
   MISSING_CREDENTIALS: 'This platform still needs its credentials before it can go live: ',
   BUNDLE_ID_INVALID:
     'Desktop and binary builds need a reverse-domain identifier such as com.acme.assistant.',

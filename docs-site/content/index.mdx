@@ -4,6 +4,8 @@ almyty turns any API into tools your AI agents can call, served over MCP, A2A, U
 
 Do every step in the UI or from the CLI. Start on the [hosted platform](https://app.almyty.com) (no card required), or [self-host](/self-hosting) with one container.
 
+In the app, open **Guide** in the sidebar footer (`/guide`). It groups the setup into four jobs: give an AI your API, build an agent, publish an app, or connect your own machine. Progress comes from the resources and successful calls in your organization, so work done through the CLI counts too. You can hide the dashboard guide card or page introductions without losing access to the guide.
+
 ```bash
 npm install -g @almyty/cli
 almyty login
@@ -11,9 +13,9 @@ almyty login
 
 ## 1. Turn an API into tools
 
-Open **APIs → Connect API**, give it a name, and paste a schema URL. OpenAPI, GraphQL, SOAP, Protobuf, or an npm SDK all work. Leave **Generate Tools** checked.
+Open **APIs → Connect an API** (`/apis/new`). Paste a link to the API's description, drop the file, or paste its content, then click **Import**. almyty works out the format (OpenAPI 3, Swagger 2, GraphQL, WSDL or .proto) and reads the name, address and sign-in scheme from it. For GraphQL you can also paste the endpoint's own URL. The import runs in the background, and the next page asks only for what is missing: usually your key, and the address when the description has none. **Advanced** lets you set the name, address, sign-in type and who can use it yourself.
 
-![Import an API](/screenshots/apis-import-dialog.png)
+To replace the description later, open the API and click **Update the description**. For an npm package, pick **Import an npm package** under **Other ways**. For a single HTTP call, create a [tool](/tools/http-tools) instead.
 
 Every operation in the schema becomes a typed, validated tool. No code.
 
@@ -21,11 +23,11 @@ Every operation in the schema becomes a typed, validated tool. No code.
 
 ## 2. Publish a gateway
 
-Tools reach your AI through a gateway. Open **Gateways → Create Gateway**, pick **MCP**, and assign the tools you just made from the **Tool Scoping** tab.
+Tools reach your AI through a gateway. Open **Gateways → Create gateway** (`/gateways/new`), choose a tool gateway and **MCP**, and assign the tools you just made from the **Tool scoping** tab.
 
 ![A gateway with tools assigned](/screenshots/gateway-detail-tools.png)
 
-One gateway is reachable over every protocol at once:
+Each gateway serves its selected protocol. Reuse the same tools in additional gateways for other tool protocols; an A2A gateway serves an agent:
 
 | Protocol | For |
 |----------|-----|
@@ -68,7 +70,7 @@ Agents serve over the same protocols and an OpenAI-compatible endpoint, so anyth
 
 ## Where to next
 
-- [Connect an LLM provider](/llm-providers): bring your own keys, mix vendors
+- [Connect a provider](/llm-providers): bring your own keys, mix vendors
 - [Drive almyty from the CLI](/cli): agents, chat, skills, runners, one login
 - [Build agents](/agents): the visual builder and autonomous mode
 - [Gateways in depth](/gateways/mcp): auth, scoping, every protocol

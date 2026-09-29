@@ -9,6 +9,8 @@ import { ApisService } from './apis.service';
 import { ApisImportHelper } from './apis-import.helper';
 import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
 import { CredentialService } from './credential.service';
+import { ApiConnectService } from './api-connect.service';
+import { ApiKeyService } from './api-key.service';
 
 // Entities
 import { Api } from '../../entities/api.entity';
@@ -66,7 +68,7 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     AuthorizationModule,
   ],
   controllers: [ApisController, ApisCredentialsController],
-  providers: [ApisService, ApisImportHelper, ApisToolGeneratorHelper, CredentialService],
+  providers: [ApisService, ApisImportHelper, ApisToolGeneratorHelper, CredentialService, ApiConnectService, ApiKeyService],
   exports: [ApisService, CredentialService],
 })
 export class ApisModule {}

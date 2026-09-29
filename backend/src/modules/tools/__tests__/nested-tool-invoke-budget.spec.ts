@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { buildHarness, httpTool, jsTool } from './nested-tool-invoke.harness';
+import { restoreEnv } from '../../../test/env';
 
 jest.mock('axios', () => {
   const fn: any = jest.fn();
@@ -107,9 +108,7 @@ describe('nested tools.invoke - depth, fan-out and the pool', () => {
     process.env.SANDBOX_MAX_WORKERS_PER_ORG = '1';
     try {
       const { service } = buildHarness({
-        outer: jsTool('outer', "const r = await tools.invoke('inner', { x: 21 }); return r * 2;", {
-          configuration: { timeout: 6000 },
-        }),
+        outer: jsTool('outer', "const r = await tools.invoke('inner', { x: 21 }); return r * 2;"),
         inner: jsTool('inner', 'return parameters.x;'),
       });
 
@@ -119,9 +118,8 @@ describe('nested tools.invoke - depth, fan-out and the pool', () => {
       expect(result.success).toBe(true);
       expect(result.data).toBe(42);
     } finally {
-      process.env.SANDBOX_MAX_WORKERS = prev;
-      if (prevOrg === undefined) delete process.env.SANDBOX_MAX_WORKERS_PER_ORG;
-      else process.env.SANDBOX_MAX_WORKERS_PER_ORG = prevOrg;
+      restoreEnv('SANDBOX_MAX_WORKERS', prev);
+      restoreEnv('SANDBOX_MAX_WORKERS_PER_ORG', prevOrg);
     }
   });
 

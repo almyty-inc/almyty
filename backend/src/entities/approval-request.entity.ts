@@ -49,8 +49,17 @@ export class ApprovalRequest {
   @Column({ type: 'uuid', nullable: true })
   teamId: string | null;
 
+  /**
+   * 'private' when the requesting agent is private: the request is then
+   * `ownerUserId`'s alone to see and decide, org admins included in
+   * "nobody else" (AccessPolicyService.canAccess).
+   */
   @Column({ type: 'varchar', length: 8, default: 'org' })
-  visibility: 'org' | 'team';
+  visibility: 'org' | 'team' | 'private';
+
+  /** The private agent's owner; set only when visibility is 'private'. */
+  @Column({ type: 'uuid', nullable: true })
+  ownerUserId: string | null;
 
   /** The agent run that paused on this approval gate. */
   @Column()

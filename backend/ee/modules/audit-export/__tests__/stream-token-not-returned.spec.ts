@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import { listenOnLoopback } from '../../../../src/test/http';
 
 import { AuditExportController } from '../audit-export.controller';
 import { JwtAuthGuard } from '../../../../src/modules/auth/guards/jwt-auth.guard';
@@ -47,7 +48,7 @@ describe('GET /audit-export/streams', () => {
       .compile();
 
     app = moduleRef.createNestApplication();
-    await app.init();
+    await listenOnLoopback(app);
   });
 
   afterAll(async () => await app?.close());

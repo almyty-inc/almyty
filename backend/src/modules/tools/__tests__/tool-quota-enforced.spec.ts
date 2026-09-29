@@ -13,6 +13,7 @@ import { ToolGeneratorService } from '../tool-generator.service';
 import { ApisToolGeneratorHelper } from '../../apis/apis-tool-generator.helper';
 import { McpSourcesService } from '../../mcp-sources/mcp-sources.service';
 import { ToolHubService } from '../../tool-hub/tool-hub.service';
+import { orgMembersPolicy } from '../../../test/execution-access.fixture';
 import { RunnerCapabilityPublisher } from '../../runner/runner-capability.publisher';
 import {
   MAX_GENERATED_DESCRIPTION_LENGTH,
@@ -413,7 +414,8 @@ describe('Tool Hub install (ToolHubService.installTemplate)', () => {
       increment: jest.fn(),
     };
     const apiRepo: any = { find: jest.fn().mockResolvedValue([]), create: jest.fn((x: any) => x), save: jest.fn(async (x: any) => x) };
-    const service = new ToolHubService(templateRepo, toolRepo, apiRepo, { log: jest.fn(), logCreate: jest.fn() } as any);
+    // Install only: the access policy is never consulted, so a policy over an empty membership table.
+    const service = new ToolHubService(templateRepo, toolRepo, apiRepo, { log: jest.fn(), logCreate: jest.fn() } as any, orgMembersPolicy('org-none'));
     return { service, toolRepo, apiRepo };
   }
 

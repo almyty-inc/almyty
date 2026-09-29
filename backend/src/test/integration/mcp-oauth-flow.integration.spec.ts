@@ -17,6 +17,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { McpOAuthService } from '../../modules/mcp/services/mcp-oauth.service';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
+import { listenOnLoopback } from '../http';
 import cookieParser from 'cookie-parser';
 import { DataSource } from 'typeorm';
 
@@ -76,7 +77,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     app = module.createNestApplication();
     app.use(cookieParser());
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-    await app.init();
+    await listenOnLoopback(app);
 
     ds = module.get(DataSource);
     const authService = module.get(AuthService);

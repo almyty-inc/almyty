@@ -1,5 +1,5 @@
 /**
- * Settings > Connections > Governance (EE, `connections_governance`).
+ * Connections > Advanced > Governance (EE, `connections_governance`).
  * Locked without the entitlement; with it, a sub-navigation over the
  * policies table, the review dashboard, and expiry, rotation and export.
  */

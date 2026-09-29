@@ -13,9 +13,9 @@ import { ToolsStatsHelper } from '../../tools/tools-stats.helper';
  */
 describe('trend calculators are one pass over the rows', () => {
   const gateways = new GatewaysStatsHelper(
-    null as any, null as any, null as any, null as any,
+    null as any, null as any, null as any, null as any, null as any,
   );
-  const tools = new ToolsStatsHelper(null as any, null as any);
+  const tools = new ToolsStatsHelper(null as any, null as any, null as any);
 
   /** Count Date construction and toDateString() while `fn` runs. */
   function countDateWork<T>(fn: () => T): { result: T; toDateStrings: number } {

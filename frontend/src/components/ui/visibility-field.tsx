@@ -32,6 +32,8 @@ interface Props {
   disabled?: boolean
   /** What the thing is called in the option copy ("runner", "agent"...). */
   noun?: string
+  /** Which choices to offer; all three when absent. */
+  options?: Visibility[]
 }
 
 /**
@@ -47,7 +49,9 @@ interface Props {
  * second key of its own over the same endpoint, which no mutation
  * invalidated, so a team you had just created was missing here.
  */
-export function VisibilityField({ organizationId, value, onChange, teamAdminOf, disabled, noun = 'this' }: Props) {
+export function VisibilityField({ organizationId, value, onChange, teamAdminOf, disabled, noun = 'this', options }: Props) {
+  const offered = (v: Visibility) => !options || options.includes(v)
+  const columns = ['sm:grid-cols-1', 'sm:grid-cols-1', 'sm:grid-cols-2', 'sm:grid-cols-3'][options ? options.length : 3]
   const teamsQuery = useQuery<Team[]>({
     queryKey: ['organization-teams', organizationId],
     queryFn: () => organizationsApi.getTeams(organizationId),
@@ -71,60 +75,66 @@ export function VisibilityField({ organizationId, value, onChange, teamAdminOf, 
     <div className="space-y-3">
       <div>
         <Label className="text-sm font-medium" id="visibility-label">Visibility</Label>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2" role="radiogroup" aria-labelledby="visibility-label">
-          <button
-            type="button"
-            role="radio"
-            aria-checked={value.visibility === 'private'}
-            disabled={disabled}
-            className={optionClass(value.visibility === 'private')}
-            onClick={() => onChange({ visibility: 'private', teamId: null })}
-          >
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Lock className="h-4 w-4" /> Private
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Only you can see and use {noun}. Not even org admins.
-            </p>
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={value.visibility === 'team'}
-            disabled={disabled || pickableTeams.length === 0}
-            className={optionClass(value.visibility === 'team')}
-            onClick={() => {
-              const first = pickableTeams[0]
-              onChange({ visibility: 'team', teamId: first?.id ?? null })
-            }}
-          >
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Users className="h-4 w-4" /> Team
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Only members of the team can see and use {noun}.
-              {pickableTeams.length === 0 && (
-                <span className="block text-amber-600 dark:text-amber-400 mt-1">
-                  You're not a team_admin of any team.
-                </span>
-              )}
-            </p>
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={value.visibility === 'org'}
-            disabled={disabled}
-            className={optionClass(value.visibility === 'org')}
-            onClick={() => onChange({ visibility: 'org', teamId: null })}
-          >
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Globe className="h-4 w-4" /> Org-wide
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Everyone in the organization can see and use {noun}.
-            </p>
-          </button>
+        <div className={`grid grid-cols-1 ${columns} gap-2 mt-2`} role="radiogroup" aria-labelledby="visibility-label">
+          {offered('private') && (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={value.visibility === 'private'}
+              disabled={disabled}
+              className={optionClass(value.visibility === 'private')}
+              onClick={() => onChange({ visibility: 'private', teamId: null })}
+            >
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Lock className="h-4 w-4" /> Private
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Only you can see and use {noun}. Not even org admins.
+              </p>
+            </button>
+          )}
+          {offered('team') && (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={value.visibility === 'team'}
+              disabled={disabled || pickableTeams.length === 0}
+              className={optionClass(value.visibility === 'team')}
+              onClick={() => {
+                const first = pickableTeams[0]
+                onChange({ visibility: 'team', teamId: first?.id ?? null })
+              }}
+            >
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Users className="h-4 w-4" /> Team
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Only members of the team can see and use {noun}.
+                {pickableTeams.length === 0 && (
+                  <span className="block text-amber-600 dark:text-amber-400 mt-1">
+                    You're not a team_admin of any team.
+                  </span>
+                )}
+              </p>
+            </button>
+          )}
+          {offered('org') && (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={value.visibility === 'org'}
+              disabled={disabled}
+              className={optionClass(value.visibility === 'org')}
+              onClick={() => onChange({ visibility: 'org', teamId: null })}
+            >
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Globe className="h-4 w-4" /> Org-wide
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Everyone in the organization can see and use {noun}.
+              </p>
+            </button>
+          )}
         </div>
       </div>
 

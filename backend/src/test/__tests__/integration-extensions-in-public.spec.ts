@@ -9,9 +9,10 @@ import { join } from 'path';
  * and every other spec then fails with "function uuid_generate_v4() does
  * not exist". Specs create extensions only `WITH SCHEMA public`.
  *
- * This is the source half of the guard; the run half is the afterAll in
- * src/test/setup.ts, which fails an integration spec file that left an
- * extension outside public however it got there (its migrations included).
+ * This is the source half of the guard; the run half is the jest
+ * globalTeardown (src/test/integration-global-teardown.ts), which fails a
+ * run that left an extension outside public however it got there (a
+ * spec's migrations included).
  */
 
 // Creates a bare extension on purpose, in a throwaway database of its own,
@@ -35,5 +36,30 @@ describe('integration specs create extensions only in public', () => {
       .filter((line) => /CREATE EXTENSION/i.test(line))
       .filter((line) => !/WITH SCHEMA public\b/i.test(line));
     expect(bare).toEqual([]);
+  });
+});
+
+/**
+ * The run half of the guard reads database-wide state, so it runs once, in
+ * the jest globalTeardown, after every worker has finished. As an afterAll
+ * in the per-file setup it ran in parallel with other workers' migrations
+ * and failed whichever spec was finishing when another's DDL had an
+ * extension in flight (rbac-guard.integration.spec, which touches no
+ * database, among them).
+ */
+describe('the extension check runs once, after the whole run', () => {
+  const testDir = join(__dirname, '..');
+
+  it('the per-file setup reads no database-wide extension state', () => {
+    const setup = readFileSync(join(testDir, 'setup.ts'), 'utf8');
+    expect(setup).not.toMatch(/assertExtensionsInPublic|extensionsOutsidePublic/);
+  });
+
+  it('the jest globalTeardown asserts it', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const jestConfig = require(join(testDir, '..', '..', 'package.json')).jest;
+    expect(jestConfig.globalTeardown).toBe('<rootDir>/test/integration-global-teardown.ts');
+    const teardown = readFileSync(join(testDir, 'integration-global-teardown.ts'), 'utf8');
+    expect(teardown).toMatch(/await assertExtensionsInPublic\(\)/);
   });
 });

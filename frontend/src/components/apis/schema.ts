@@ -1,54 +1,29 @@
 /**
- * apis/schema — zod schemas + form types for the Connect/Edit API flow.
+ * apis/schema -- zod schema + form types for the Edit API page.
  *
- * Used by `components/apis/api-form.tsx`. Kept in its own file so
- * the long comment about the three-generic `useForm<Input, any, Output>`
- * pattern lives next to the types it explains.
+ * Used by `components/apis/api-form.tsx`. Connecting an API has no form
+ * to validate: it is one box, read on the server.
  */
 import { z } from 'zod'
-import { ApiAuthType, ApiType } from '@/types'
 
-export const createApiSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name must be 100 characters or fewer'),
+export const editApiSchema = z.object({
+  name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100, 'Name must be 100 characters or fewer'),
   description: z.string().max(1000, 'Description must be 1000 characters or fewer').optional(),
-  type: z.nativeEnum(ApiType),
-  // NOT .optional() — `.default('')` already makes the input
-  // optional but produces a `string` output, which is what the
-  // form field and submit handler expect. Chaining `.optional()`
-  // on top confuses the `@hookform/resolvers/zod` v5 type inference
-  // into thinking the output is `string | undefined`, which then
-  // doesn't match `useForm<CreateApiFormData>` (where baseUrl is
-  // a plain `string`).
-  baseUrl: z.string().default(''),
+  // `.default('')` rather than `.optional()`: the field and the submit
+  // handler both want a plain string (see @hookform/resolvers v5 typing).
+  baseUrl: z.string().trim().default(''),
   version: z.string().optional(),
-  configuration: z.record(z.string(), z.any()).optional(),
-  authentication: z.object({
-    type: z.nativeEnum(ApiAuthType),
-    config: z.record(z.string(), z.any()),
-  }).optional(),
 }).refine((data) => {
-  // SDK type doesn't require a baseUrl
-  if (data.type === ApiType.SDK) return true
-  // All other types require a valid URL
-  try {
-    if (!data.baseUrl) return false
-    new URL(data.baseUrl)
-    return true
-  } catch {
-    return false
-  }
+  // Empty is allowed (an SDK API, or a .proto that named none yet); anything
+  // typed must be an http(s) address.
+  if (!data.baseUrl) return true
+  return /^https?:\/\/.+/i.test(data.baseUrl)
 }, {
-  message: 'Please enter a valid URL',
+  message: 'Enter an address starting with http:// or https://',
   path: ['baseUrl'],
 })
 
-// Two separate types: `Input` is the shape the form BINDS to
-// (with optional defaults still unfilled); `Output` is the shape
-// the submit handler RECEIVES after zod has applied defaults +
-// refinements. `@hookform/resolvers/zod` v5 requires both to be
-// passed to `useForm<Input, Context, Output>` so the resolver's
-// generics line up — otherwise it complains that the inferred
-// input shape (with `baseUrl?: string`) doesn't match a form
-// whose submit handler wants `baseUrl: string`.
-export type CreateApiFormInput = z.input<typeof createApiSchema>
-export type CreateApiFormData = z.output<typeof createApiSchema>
+// `Input` is what the form binds to (defaults not yet applied); `Output`
+// is what the submit handler receives. useForm<Input, Context, Output>.
+export type EditApiFormInput = z.input<typeof editApiSchema>
+export type EditApiFormData = z.output<typeof editApiSchema>

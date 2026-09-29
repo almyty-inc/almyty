@@ -59,7 +59,7 @@ describe('ChannelCredentialService', () => {
 
       await service.persistSecrets(gateway(configuration), configuration, configuration);
 
-      const resolved = await store.resolver.resolve('org-1', configuration.credentialId);
+      const resolved = await store.resolver.resolve('org-1', configuration.credentialId, { principal: null });
       expect(resolved.config).toEqual({ bot_token: 'xoxb-old', signing_secret: 'sig-old' });
       expect(configuration.botToken).toBeUndefined();
       expect(configuration.signingSecret).toBeUndefined();
@@ -77,7 +77,7 @@ describe('ChannelCredentialService', () => {
       expect(store.rows).toHaveLength(1);
       expect(next.credentialId).toBe(previous.credentialId);
       expect(next.credentialKeys).toEqual(['bot_token', 'signing_secret']);
-      const resolved = await store.resolver.resolve('org-1', next.credentialId);
+      const resolved = await store.resolver.resolve('org-1', next.credentialId, { principal: null });
       expect(resolved.config).toEqual({ bot_token: 'xoxb-2', signing_secret: 'sig-1' });
     });
 
@@ -128,8 +128,8 @@ describe('ChannelCredentialService', () => {
 
       expect(store.rows).toHaveLength(2);
       expect(next.credentialId).not.toBe(shared.id);
-      expect((await store.resolver.resolve('org-1', shared.id)).config.bot_token).toBe('xoxb-shared');
-      expect((await store.resolver.resolve('org-1', next.credentialId)).config.bot_token).toBe('xoxb-mine');
+      expect((await store.resolver.resolve('org-1', shared.id, { principal: null })).config.bot_token).toBe('xoxb-shared');
+      expect((await store.resolver.resolve('org-1', next.credentialId, { principal: null })).config.bot_token).toBe('xoxb-mine');
     });
 
     it('null clears the reference and deletes the managed row', async () => {

@@ -128,8 +128,8 @@ describe('CodegenService', () => {
     it('should generate a full SDK package for a gateway', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       gatewayToolRepository.find.mockResolvedValue([
-        { tool: mockTool, isActive: true },
-        { tool: mockMutationTool, isActive: true },
+        { tool: mockTool, gateway: mockGateway, isActive: true },
+        { tool: mockMutationTool, gateway: mockGateway, isActive: true },
       ]);
 
       const result = await service.generateGatewaySdk('gw-1', 'org-1');
@@ -149,7 +149,7 @@ describe('CodegenService', () => {
 
     it('should generate valid package.json', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.find.mockResolvedValue([{ tool: mockTool, isActive: true }]);
+      gatewayToolRepository.find.mockResolvedValue([{ tool: mockTool, gateway: mockGateway, isActive: true }]);
 
       const result = await service.generateGatewaySdk('gw-1', 'org-1');
       const pkgFile = result.files.find(f => f.path === 'package.json');
@@ -163,8 +163,8 @@ describe('CodegenService', () => {
     it('should generate index with exports for all tools', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       gatewayToolRepository.find.mockResolvedValue([
-        { tool: mockTool, isActive: true },
-        { tool: mockMutationTool, isActive: true },
+        { tool: mockTool, gateway: mockGateway, isActive: true },
+        { tool: mockMutationTool, gateway: mockGateway, isActive: true },
       ]);
 
       const result = await service.generateGatewaySdk('gw-1', 'org-1');
@@ -177,7 +177,7 @@ describe('CodegenService', () => {
 
     it('should generate client with callTool method', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.find.mockResolvedValue([{ tool: mockTool, isActive: true }]);
+      gatewayToolRepository.find.mockResolvedValue([{ tool: mockTool, gateway: mockGateway, isActive: true }]);
 
       const result = await service.generateGatewaySdk('gw-1', 'org-1');
       const clientFile = result.files.find(f => f.path === 'src/client.ts');
@@ -191,8 +191,8 @@ describe('CodegenService', () => {
     it('should generate types for all tools', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       gatewayToolRepository.find.mockResolvedValue([
-        { tool: mockTool, isActive: true },
-        { tool: mockMutationTool, isActive: true },
+        { tool: mockTool, gateway: mockGateway, isActive: true },
+        { tool: mockMutationTool, gateway: mockGateway, isActive: true },
       ]);
 
       const result = await service.generateGatewaySdk('gw-1', 'org-1');

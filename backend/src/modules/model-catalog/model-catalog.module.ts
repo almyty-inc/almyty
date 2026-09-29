@@ -10,11 +10,13 @@ import { ModelDeployment } from '../../entities/model-deployment.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { KmsModule } from '../kms/kms.module';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
 import { PriceFeedService } from './pricing/price-feed.service';
 import { MODEL_PRICE_FEED_QUEUE, PriceFeedProcessor } from './pricing/price-feed.processor';
 import { ModelRouterService } from './routing/model-router.service';
 import { MODEL_CATALOG_SYNC_QUEUE, CatalogSyncProcessor } from './catalog-sync.processor';
+import { CatalogWarmupService } from './catalog-warmup.service';
 import { ModelCatalogService } from './model-catalog.service';
 import { ModelCatalogController } from './model-catalog.controller';
 
@@ -31,9 +33,10 @@ import { ModelCatalogController } from './model-catalog.controller';
     BullModule.registerQueue({ name: MODEL_CATALOG_SYNC_QUEUE }),
     AuditLogModule,
     KmsModule,
+    AuthorizationModule,
     forwardRef(() => LlmProvidersModule),
   ],
-  providers: [PriceFeedService, PriceFeedProcessor, CatalogSyncProcessor, ModelRouterService, ModelCatalogService],
+  providers: [PriceFeedService, PriceFeedProcessor, CatalogSyncProcessor, CatalogWarmupService, ModelRouterService, ModelCatalogService],
   controllers: [ModelCatalogController, RoutingAnalyticsController],
   exports: [PriceFeedService, ModelRouterService, ModelCatalogService],
 })

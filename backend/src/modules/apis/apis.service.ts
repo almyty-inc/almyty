@@ -1,5 +1,5 @@
 import { Inject, forwardRef } from '@nestjs/common';
-import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import axios from 'axios';
@@ -20,11 +20,12 @@ import { AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
 import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
-import { assertNotOthersPrivate, nameTaken, resolveVisibilityWrite } from '../../common/authorization/private-visibility';
+import { nameTaken, resolveVisibilityWrite } from '../../common/authorization/private-visibility';
+import { assertManageable, assertReadable } from '../../common/authorization/read-rule';
 import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { Credential } from '../../entities/credential.entity';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
-import { hasInlineApiSecret, inlineApiAuthView, splitInlineApiAuth } from '../credentials/inline-api-auth.helper';
+import { connectionAuthConfig, hasInlineApiSecret, inlineApiAuthView, splitInlineApiAuth } from '../credentials/inline-api-auth.helper';
 
 import { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions } from './dto/apis.dto';
 export type { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions };
@@ -73,9 +74,12 @@ export class ApisService {
     const current = currentId ? await this.credentialRefs.load(api.organizationId, currentId).catch(() => null) : null;
     let row: Credential;
     if (current && CredentialRefResolver.isManagedBy(current, managedBy) && current.type === split.credentialType) {
-      row = await this.credentialRefs.rotateManaged(api.organizationId, current.id, { config: split.secretConfig, managedBy });
-      row.keyName = split.keyName;
-      row.keyLocation = split.keyLocation;
+      row = await this.credentialRefs.rotateManaged(api.organizationId, current.id, {
+        config: split.secretConfig,
+        managedBy,
+        keyName: split.keyName,
+        keyLocation: split.keyLocation,
+      });
     } else {
       row = await this.credentialRefs.createManaged(api.organizationId, {
         name: `${api.name} ${api.authentication.type} auth`,
@@ -97,12 +101,22 @@ export class ApisService {
    * in from the credential the API points at. Rows not yet moved still
    * carry the secret inline (shim).
    */
-  private async authenticationForRequest(api: Api): Promise<Api['authentication'] | null> {
+  private async authenticationForRequest(api: Api, principal: { id: string } | null): Promise<Api['authentication'] | null> {
     const auth = api.authentication;
     if (!auth || auth.type === 'none') return null;
+    const connectionId = auth.config?.connectionId as string | undefined;
+    if (connectionId) {
+      // A connection's fields are named by its connector; read its key out.
+      const resolved = await this.credentialRefs.resolve(api.organizationId, connectionId, {
+        principal,
+        context: { purpose: 'api_test', resourceType: 'api', resourceId: api.id },
+      });
+      return inlineApiAuthView(auth, connectionAuthConfig(resolved.config)) as Api['authentication'];
+    }
     const credentialId = auth.config?.credentialId as string | undefined;
     if (!credentialId) return auth;
     const resolved = await this.credentialRefs.resolve(api.organizationId, credentialId, {
+      principal,
       context: { purpose: 'api_test', resourceType: 'api', resourceId: api.id },
     });
     return inlineApiAuthView(auth, resolved.config) as Api['authentication'];
@@ -163,6 +177,9 @@ export class ApisService {
 
     const api = this.apiRepository.create({
       ...createApiData,
+      // An inline secret never reaches the row: it goes to the store right
+      // after the first save (the credential row needs the API id).
+      authentication: hasInlineApiSecret(createApiData.authentication) ? null : (createApiData.authentication as any),
       visibility: scope.visibility,
       teamId: scope.teamId,
       ownerUserId: userId ?? null,
@@ -170,12 +187,17 @@ export class ApisService {
     });
 
     // Enforced with the insert, under the organization API-quota lock.
-    const saved = await withApiQuota(this.apiRepository.manager, createApiData.organizationId, 1, (tx) =>
+    let saved = await withApiQuota(this.apiRepository.manager, createApiData.organizationId, 1, (tx) =>
       tx.getRepository(Api).save(api),
     );
+    if (hasInlineApiSecret(createApiData.authentication)) {
+      saved.authentication = createApiData.authentication as Api['authentication'];
+      await this.moveInlineAuth(saved);
+      saved = await this.apiRepository.save(saved);
+    }
 
     // Audit log (fire-and-forget)
-    this.auditLogService.logCreate(createApiData.organizationId, undefined, AuditResource.API, saved.id, saved.name, { type: saved.type });
+    this.auditLogService.logCreate(createApiData.organizationId, userId, AuditResource.API, saved.id, saved.name, { type: saved.type });
 
     return saved;
   }
@@ -194,7 +216,7 @@ export class ApisService {
    * implicitly trusting the id. Defence in depth now lives at
    * this layer.
    *
-   * With a `caller`, another member's private API is "not found".
+   * With a `caller`, an API they may not read (read-rule.ts) is "not found".
    */
   async findOne(id: string, organizationId: string, caller?: { id: string }): Promise<Api | null> {
     // Only eager-load `operations` — that's the one relation any
@@ -214,7 +236,7 @@ export class ApisService {
       where: { id, organizationId },
       relations: { operations: true },
     });
-    if (api && caller) await assertNotOthersPrivate(this.accessPolicy, caller, api, 'API');
+    if (api && caller) await assertReadable(this.accessPolicy, caller, api, 'API');
     return api;
   }
 
@@ -250,6 +272,17 @@ export class ApisService {
           .where('op."apiId" = api.id'),
       'api_operationCount',
     );
+    // Live tools from this API, linked directly or through one of its
+    // operations. The dashboard's "APIs without tools" used to guess this on
+    // the client from metadata copies and the first page of tools, and
+    // flagged APIs that had tools.
+    qb.addSelect(
+      `(SELECT COUNT(t.id) FROM tools t
+          WHERE t.status <> 'deleted'
+            AND (t."apiId" = api.id
+                 OR t."operationId" IN (SELECT o.id FROM operations o WHERE o."apiId" = api.id)))`,
+      'api_toolCount',
+    );
     // `id` is not decoration. `createdAt` is a millisecond timestamp, and
     // two APIs written in the same millisecond order arbitrarily between
     // one request and the next — so with `skip`/`take` a tied row can
@@ -261,6 +294,7 @@ export class ApisService {
     const { entities, raw } = await qb.getRawAndEntities();
     entities.forEach((api, i) => {
       api.operationCount = Number(raw[i]?.api_operationCount ?? 0);
+      api.toolCount = Number(raw[i]?.api_toolCount ?? 0);
     });
     return { apis: entities, total };
   }
@@ -380,20 +414,17 @@ export class ApisService {
     organizationId: string,
     userId?: string,
   ): Promise<Api> {
-    const api = await this.findOne(id, organizationId, userId ? { id: userId } : undefined);
+    const api = await this.findOne(id, organizationId);
 
     if (!api) {
       throw new NotFoundException('API not found');
     }
 
-    // Authorization: org owner/admin always, team-scoped requires team lead.
-    // The owner of a private API manages it (canAccess passes the owner).
-    if (userId) {
-      const decision = await this.accessPolicy.canAccess({ id: userId }, api, 'manage');
-      if (!decision.allowed) {
-        throw new ForbiddenException(decision.reason);
-      }
-    }
+    // Cannot read it (a private API of another member, a team API the
+    // caller is not on): 404. Can read it but not manage it: 403. The owner
+    // of a private API manages it (canAccess passes the owner). Internal
+    // callers with no user skip the gate.
+    if (userId) await assertManageable(this.accessPolicy, userId, api, 'API');
 
     // A rename is held to the same organization-wide uniqueness as create
     // (see nameTaken): the API's name seeds its generated tool names.
@@ -434,7 +465,7 @@ export class ApisService {
         `SELECT id FROM tools
           WHERE "organizationId" = $1 AND status <> 'deleted'
             AND ("apiId" = $2 OR "operationId" IN (SELECT id FROM operations WHERE "apiId" = $2))
-            AND ("createdBy" IS NULL OR "createdBy" = 'system' OR "createdBy" = $3::varchar)`,
+            AND (generated = true OR "createdBy" IS NULL OR "createdBy" = $3::varchar)`,
         [organizationId, api.id, scope.ownerId],
       );
       await assertNoSharedDependents(
@@ -466,7 +497,7 @@ export class ApisService {
         `UPDATE tools SET visibility = 'private', "teamId" = NULL, "createdBy" = $3::varchar
           WHERE "organizationId" = $1
             AND ("apiId" = $2 OR "operationId" IN (SELECT id FROM operations WHERE "apiId" = $2))
-            AND ("createdBy" IS NULL OR "createdBy" = 'system' OR "createdBy" = $3::varchar)`,
+            AND (generated = true OR "createdBy" IS NULL OR "createdBy" = $3::varchar)`,
         [organizationId, saved.id, saved.ownerUserId],
       );
     }
@@ -487,15 +518,9 @@ export class ApisService {
     if (!existing) {
       throw new NotFoundException('API not found');
     }
-    if (userId) await assertNotOthersPrivate(this.accessPolicy, { id: userId }, existing, 'API');
-
-    // Authorization: org owner/admin always, team-scoped requires team lead.
-    if (userId) {
-      const decision = await this.accessPolicy.canAccess({ id: userId }, existing, 'manage');
-      if (!decision.allowed) {
-        throw new ForbiddenException(decision.reason);
-      }
-    }
+    // Cannot read it: 404, like a missing API. Can read it but not manage
+    // it: 403. Internal callers with no user skip the gate.
+    if (userId) await assertManageable(this.accessPolicy, userId, existing, 'API');
 
     const result = await this.apiRepository.delete({ id, organizationId });
 
@@ -619,8 +644,9 @@ export class ApisService {
   async testApiConnection(
     apiId: string,
     organizationId: string,
+    userId?: string,
   ): Promise<{ success: boolean; statusCode?: number; responseTime?: number; error?: string }> {
-    const api = await this.findOne(apiId, organizationId);
+    const api = await this.findOne(apiId, organizationId, userId ? { id: userId } : undefined);
 
     if (!api) {
       throw new NotFoundException('API not found');
@@ -659,7 +685,9 @@ export class ApisService {
       // Add authentication if configured. The secret comes from the
       // credential store; the inline config is the shim for rows the
       // startup backfill has not moved yet.
-      const auth = await this.authenticationForRequest(api);
+      // Resolved as the person testing: a team or private credential they
+      // may not use is not sent on their behalf.
+      const auth = await this.authenticationForRequest(api, userId ? { id: userId } : null);
       if (auth && auth.type !== 'none') {
         this.toolGen.applyAuthentication(config, auth);
       }

@@ -57,26 +57,27 @@ describe('buildCustomConnectorBody', () => {
   })
 })
 
-describe('/settings/connections/custom/new', () => {
+describe('/connections/custom/new', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('posts the connector and goes straight on to connecting it', async () => {
     vi.mocked(connectorsApi.create).mockResolvedValue({ key: 'office-vllm', kind: 'inference', displayName: 'Office vLLM', connect: [] })
-    renderAtRoute(<CustomConnectorNewPage />, { path: '/settings/connections/custom/new' })
+    const { router } = renderAtRoute(<CustomConnectorNewPage />, { path: '/connections/custom/new' })
 
     fireEvent.change(screen.getByLabelText(/^Display name/), { target: { value: 'Office vLLM' } })
     fireEvent.change(screen.getByLabelText(/^Key/), { target: { value: 'office-vllm' } })
     fireEvent.change(screen.getByLabelText(/^Base URL/), { target: { value: 'https://models.example.com/v1' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Add connector' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add service' }))
 
     await waitFor(() => expect(connectorsApi.create).toHaveBeenCalledTimes(1))
     expect(vi.mocked(connectorsApi.create).mock.calls[0][0]).toMatchObject({ key: 'office-vllm', kind: 'inference', validation: { kind: 'http' } })
-    expect(await screen.findByText('at /settings/connections/connect/office-vllm')).toBeInTheDocument()
+    expect(await screen.findByText('at /connections/connect')).toBeInTheDocument()
+    expect(router.state.location.search).toBe('?service=office-vllm')
   })
 
   it('shows field errors and focuses the first one instead of posting', async () => {
-    renderAtRoute(<CustomConnectorNewPage />, { path: '/settings/connections/custom/new' })
-    fireEvent.click(screen.getByRole('button', { name: 'Add connector' }))
+    renderAtRoute(<CustomConnectorNewPage />, { path: '/connections/custom/new' })
+    fireEvent.click(screen.getByRole('button', { name: 'Add service' }))
     expect(await screen.findByText('Key is required')).toBeInTheDocument()
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^Display name/)))
     expect(connectorsApi.create).not.toHaveBeenCalled()

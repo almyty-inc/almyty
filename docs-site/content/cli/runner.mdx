@@ -1,11 +1,11 @@
 # Runner
 
-Connect one of your machines to almyty. Agents can then run tools, shell commands, and coding CLIs on it, while your code and credentials stay local.
+Connect one of your machines to almyty. Agents can then run tools, shell commands, and coding CLIs on it. Commands execute locally, but their results return to the agent; review the host-access limits below before exposing sensitive files or credentials.
 
 ```bash
 npm i -g @almyty/runner @almyty/auth
 almyty-auth login
-almyty-runner start --name my-laptop
+almyty-runner start --name my-laptop --org <org-id>
 ```
 
 Install once and call the installed `almyty-runner` binary: the runner is a
@@ -79,11 +79,10 @@ With a runner online, [`almyty chat`](/cli/chat) can dispatch tasks to coding ag
 ## Authentication
 
 Reads the shared `~/.almyty/credentials.json`. Log in first, or set `ALMYTY_TOKEN`:
-Reads the shared `~/.almyty/credentials.json`. Log in first, or set `ALMYTY_TOKEN`:
 
 ```bash
 almyty-auth login
-almyty-runner start --name my-laptop
+almyty-runner start --name my-laptop --org <org-id>
 ```
 
 That login is what identifies and authorises the runner: the backend attaches

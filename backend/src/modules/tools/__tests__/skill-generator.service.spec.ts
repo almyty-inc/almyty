@@ -6,6 +6,7 @@ import { SkillRendererHelper } from '../skill-renderer.helper';
 import { Tool, ToolType, ToolStatus } from '../../../entities/tool.entity';
 import { Gateway, GatewayType, GatewayStatus } from '../../../entities/gateway.entity';
 import { GatewayTool } from '../../../entities/gateway-tool.entity';
+import { fakeRepository } from '../../../test/fake-repository';
 
 describe('SkillGeneratorService', () => {
   let service: SkillGeneratorService;
@@ -69,6 +70,24 @@ describe('SkillGeneratorService', () => {
     status: GatewayStatus.ACTIVE,
   };
 
+  /**
+   * Attach tools to gateway gw-1 as gateway_tools rows. The service reads
+   * them through the servable rule, which evaluates the row, its tool and
+   * its gateway, so each row carries its (org-wide) gateway and each tool
+   * is active unless the test says otherwise.
+   */
+  const attach = (rows: Array<{ tool: any; isActive: boolean }>) => {
+    for (const row of rows) {
+      gatewayToolRepository.seed({
+        gatewayId: 'gw-1',
+        toolId: row.tool?.id,
+        isActive: row.isActive,
+        tool: row.tool ? { status: ToolStatus.ACTIVE, ...row.tool } : null,
+        gateway: { ...mockGateway, visibility: 'org' },
+      });
+    }
+  };
+
   beforeEach(async () => {
     toolRepository = {
       findOne: jest.fn(),
@@ -76,9 +95,7 @@ describe('SkillGeneratorService', () => {
     gatewayRepository = {
       findOne: jest.fn(),
     };
-    gatewayToolRepository = {
-      find: jest.fn(),
-    };
+    gatewayToolRepository = fakeRepository<any>([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -215,7 +232,7 @@ describe('SkillGeneratorService', () => {
   describe('generateGatewaySkills', () => {
     it('should generate a skill bundle for a gateway with tools', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.find.mockResolvedValue([
+      attach([
         { tool: mockTool, isActive: true },
         { tool: mockMutationTool, isActive: true },
       ]);
@@ -241,7 +258,7 @@ describe('SkillGeneratorService', () => {
 
     it('should generate an empty skill for a gateway with no tools', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.find.mockResolvedValue([]);
+      attach([]);
 
       const result = await service.generateGatewaySkills('gw-1', 'org-1');
 
@@ -258,7 +275,7 @@ describe('SkillGeneratorService', () => {
 
     it('should filter out null tools from gateway tools', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.find.mockResolvedValue([
+      attach([
         { tool: mockTool, isActive: true },
         { tool: null, isActive: true },
       ]);
@@ -270,7 +287,7 @@ describe('SkillGeneratorService', () => {
 
     it('should include parameter details in per-tool sections', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.find.mockResolvedValue([
+      attach([
         { tool: mockTool, isActive: true },
       ]);
 
@@ -285,7 +302,7 @@ describe('SkillGeneratorService', () => {
   describe('generateIndividualSkills', () => {
     it('multi-tool gateway: prefixes each skill name with the gateway slug', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.find.mockResolvedValue([
+      attach([
         { tool: mockTool, isActive: true },
         { tool: mockMutationTool, isActive: true },
       ]);
@@ -317,7 +334,7 @@ describe('SkillGeneratorService', () => {
         ...mockGateway,
         endpoint: '/open-meteo-skills',
       });
-      gatewayToolRepository.find.mockResolvedValue([
+      attach([
         { tool: mockTool, isActive: true },
       ]);
 
@@ -340,7 +357,7 @@ describe('SkillGeneratorService', () => {
         operation: { ...mockTool.operation, summary: 'Find pet by ID' },
       };
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.find.mockResolvedValue([
+      attach([
         { tool: toolWithSummary, isActive: true },
         { tool: mockMutationTool, isActive: true },
       ]);
@@ -366,7 +383,7 @@ describe('SkillGeneratorService', () => {
         ...mockGateway,
         endpoint: '/open-meteo-skills',
       });
-      gatewayToolRepository.find.mockResolvedValue([
+      attach([
         { tool: dupTool, isActive: true },
       ]);
 
@@ -381,7 +398,7 @@ describe('SkillGeneratorService', () => {
         operation: { ...mockTool.operation, summary: undefined },
       };
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.find.mockResolvedValue([
+      attach([
         { tool: longTool, isActive: true },
         { tool: mockMutationTool, isActive: true },
       ]);
@@ -441,7 +458,7 @@ describe('SkillGeneratorService', () => {
         ...mockGateway,
         endpoint: '/countries',
       });
-      gatewayToolRepository.find.mockResolvedValue([
+      attach([
         { tool: graphqlTool, isActive: true },
       ]);
 
@@ -487,7 +504,7 @@ describe('SkillGeneratorService', () => {
         } as any,
       };
       gatewayRepository.findOne.mockResolvedValue({ ...mockGateway, endpoint: '/legacy' });
-      gatewayToolRepository.find.mockResolvedValue([{ tool: graphqlTool, isActive: true }]);
+      attach([{ tool: graphqlTool, isActive: true }]);
       const result = await service.generateIndividualSkills('gw-1', 'org-1');
       expect(result[0].content).toContain('__typename');
     });
@@ -513,7 +530,7 @@ describe('SkillGeneratorService', () => {
         ...mockGateway,
         endpoint: '/translate-grpc',
       });
-      gatewayToolRepository.find.mockResolvedValue([
+      attach([
         { tool: detect, isActive: true },
         { tool: translate, isActive: true },
       ]);
@@ -537,7 +554,7 @@ describe('SkillGeneratorService', () => {
 
     it('should return empty array for gateway with no tools', async () => {
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.find.mockResolvedValue([]);
+      attach([]);
 
       const result = await service.generateIndividualSkills('gw-1', 'org-1');
 

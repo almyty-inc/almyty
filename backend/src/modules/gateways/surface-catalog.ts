@@ -133,6 +133,18 @@ export const SURFACE_CATALOG: readonly SurfaceDescriptor[] = Object.freeze([
     edition: 'core',
   },
   {
+    // One address for a set of tools, over MCP, UTCP and Agent Skills at once.
+    type: GatewayType.TOOLS,
+    label: 'Shared tools',
+    category: 'protocol',
+    kind: GatewayKind.TOOL,
+    available: true,
+    unavailableReason: null,
+    humanFacing: false,
+    inboundAuth: GATEWAY_AUTH,
+    edition: 'core',
+  },
+  {
     type: GatewayType.A2A,
     label: 'A2A',
     category: 'protocol',

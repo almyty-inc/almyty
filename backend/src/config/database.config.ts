@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { config } from 'dotenv';
 import { versionsConfig } from 'typeorm-versions';
 
+import { redactQueryErrorsAtSource } from '../common/errors/redact-query-error';
+import { dbSslOption } from './db-ssl';
 import { RedactedParametersQueryLogger } from './query-logger';
 
 // Load environment variables
@@ -20,7 +22,10 @@ const configService = new ConfigService();
 // failing statement with its SQL and error but never its parameters.
 export const MIGRATION_LOG_LEVELS: LoggerOptions = ['error', 'warn', 'migration', 'schema'];
 
-export const AppDataSource = new DataSource(versionsConfig({
+// Failed queries are rethrown without their parameters, so the CLI's
+// console.error of a failing migration cannot print the row it was writing
+// (see redact-query-error.ts).
+export const AppDataSource = redactQueryErrorsAtSource(new DataSource(versionsConfig({
   type: 'postgres',
   host: configService.get('DATABASE_HOST', 'localhost'),
   port: configService.get('DATABASE_PORT', 5433),
@@ -32,20 +37,5 @@ export const AppDataSource = new DataSource(versionsConfig({
   synchronize: false,
   logging: MIGRATION_LOG_LEVELS,
   logger: new RedactedParametersQueryLogger(MIGRATION_LOG_LEVELS),
-  ssl: configService.get('NODE_ENV') === 'production' ? { rejectUnauthorized: false } : false,
-}) as any);
-
-// Database configuration for NestJS - Using PostgreSQL
-export const databaseConfig = {
-  type: 'postgres' as const,
-  host: configService.get('DATABASE_HOST', 'localhost'),
-  port: configService.get('DATABASE_PORT', 5433),
-  username: configService.get('DATABASE_USERNAME', 'postgres'),
-  password: configService.get('DATABASE_PASSWORD', 'password'),
-  database: configService.get('DATABASE_NAME', 'almyty'),
-  entities: [__dirname + '/../entities/*.entity{.ts,.js}'],
-  synchronize: false,
-  logging: configService.get('NODE_ENV') === 'development',
-  autoLoadEntities: true,
-  ssl: configService.get('NODE_ENV') === 'production' ? { rejectUnauthorized: false } : false,
-};
+  ssl: dbSslOption((key) => configService.get<string>(key)),
+}) as any));

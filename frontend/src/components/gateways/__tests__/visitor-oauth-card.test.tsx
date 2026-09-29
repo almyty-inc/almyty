@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { readFileSync } from 'fs'
 import { join } from 'path'
@@ -121,10 +121,62 @@ describe('VisitorOAuthCard', () => {
     expect(await screen.findByText(/not in use/)).toBeInTheDocument()
   })
 
-  it('is on the gateway page, inline, with no dialog', () => {
-    const page = readFileSync(join(__dirname, '../../../pages/gateway-detail.tsx'), 'utf8')
-    expect(page).toMatch(/<VisitorOAuthCard gatewayId=\{gateway\.id\}/)
+  it('is on the web app page, inline, with no dialog', () => {
+    const web = readFileSync(join(__dirname, '../../agent-apps/web-place.tsx'), 'utf8')
+    expect(web).toMatch(/<VisitorOAuthCard gatewayId=\{gatewayId\}/)
     const card = readFileSync(join(__dirname, '../visitor-oauth-card.tsx'), 'utf8')
     expect(card).not.toMatch(/Dialog/)
+  })
+
+  it('offers Google, Microsoft and GitHub first, as tiles, and asks for a URL only for Other', async () => {
+    vi.mocked(gatewaysApi.getVisitorOAuth).mockResolvedValue({ provider: null, redirectUris: URIS })
+    const user = userEvent.setup()
+    render(<VisitorOAuthCard gatewayId={GW} authMode="oauth" />)
+
+    const tiles = within(await screen.findByRole('list', { name: 'Provider' })).getAllByRole('button')
+    expect(tiles.map((t) => t.textContent)).toEqual(['GGoogle', 'MMicrosoft', 'GHGitHub', '…Other'])
+    expect(screen.getByTestId('visitor-oauth-preset-google')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByLabelText('Issuer or discovery URL')).toBeNull()
+
+    await user.click(screen.getByTestId('visitor-oauth-preset-github'))
+    expect(screen.queryByLabelText('Issuer or discovery URL')).toBeNull()
+
+    await user.click(screen.getByTestId('visitor-oauth-preset-oidc'))
+    expect(screen.getByLabelText('Issuer or discovery URL')).toBeInTheDocument()
+  })
+
+  it('keeps endpoints, keys and scopes under Advanced', async () => {
+    vi.mocked(gatewaysApi.getVisitorOAuth).mockResolvedValue({ provider: null, redirectUris: URIS })
+    vi.mocked(gatewaysApi.setVisitorOAuth).mockResolvedValue(configured)
+    const user = userEvent.setup()
+    render(<VisitorOAuthCard gatewayId={GW} authMode="oauth" />)
+
+    await user.click(await screen.findByTestId('visitor-oauth-preset-oidc'))
+    expect(screen.queryByLabelText('Scopes')).toBeNull()
+    expect(screen.queryByLabelText('Token endpoint')).toBeNull()
+    expect(screen.queryByLabelText('JWKS URI')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /^Advanced/ }))
+    expect(screen.getByLabelText('Scopes')).toBeInTheDocument()
+    await user.click(screen.getByRole('switch', { name: 'Enter the endpoints by hand' }))
+    expect(screen.queryByLabelText('Issuer or discovery URL')).toBeNull()
+
+    await user.type(screen.getByLabelText('Issuer'), 'https://id.example.com')
+    await user.type(screen.getByLabelText('Authorization endpoint'), 'https://id.example.com/authorize')
+    await user.type(screen.getByLabelText('Token endpoint'), 'https://id.example.com/token')
+    await user.type(screen.getByLabelText('JWKS URI'), 'https://id.example.com/jwks')
+    await user.type(screen.getByLabelText('Client ID'), 'c')
+    await user.type(screen.getByLabelText('Client secret'), 's')
+    await user.click(screen.getByRole('button', { name: 'Save provider' }))
+
+    await waitFor(() => expect(gatewaysApi.setVisitorOAuth).toHaveBeenCalled())
+    expect(vi.mocked(gatewaysApi.setVisitorOAuth).mock.calls[0][1]).toMatchObject({
+      preset: 'oidc',
+      issuer: 'https://id.example.com',
+      authorizationEndpoint: 'https://id.example.com/authorize',
+      tokenEndpoint: 'https://id.example.com/token',
+      jwksUri: 'https://id.example.com/jwks',
+    })
+    expect(vi.mocked(gatewaysApi.setVisitorOAuth).mock.calls[0][1]).not.toHaveProperty('discoveryUrl')
   })
 })

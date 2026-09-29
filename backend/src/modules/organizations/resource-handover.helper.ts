@@ -1,12 +1,19 @@
-import { Inject, Injectable, forwardRef } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, forwardRef } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
 
 import { AuditAction, AuditLog, AuditResource } from '../../entities/audit-log.entity';
 import { Runner } from '../../entities/runner.entity';
+import { OrganizationRole, UserOrganization } from '../../entities/user-organization.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { RunnerService } from '../runner/runner.service';
 import { ConnectionOffboardingService } from '../connections/connection-offboarding.service';
 import { memberConnectionSql, WipedConnection } from '../connections/member-connection-offboarding';
+
+/**
+ * Why a person's resources are being handed over: removed by someone,
+ * left on their own, or their account was deleted.
+ */
+export type HandoverReason = 'member_removed' | 'member_left' | 'user_deleted';
 
 /**
  * The resource tables that carry the visibility tiers, with the column
@@ -70,7 +77,8 @@ export class ResourceHandoverHelper {
   ) {}
 
   /**
-   * A member is leaving `organizationId`. What they leave behind:
+   * A member is leaving `organizationId`: removed, left on their own, or
+   * their account was deleted. What they leave behind:
    *
    * - Private rows they own (agents, tools, APIs, gateways, providers,
    *   plain credentials) move to `toUserId` and stay private, so "just
@@ -105,7 +113,7 @@ export class ResourceHandoverHelper {
       fromUserId: string;
       toUserId: string;
       actorUserId: string;
-      reason: 'member_removed' | 'member_left';
+      reason: HandoverReason;
       /**
        * Receives the connections wiped here, secrets as they were, for
        * ConnectionOffboardingService.revokeAtProviders after commit.
@@ -177,6 +185,15 @@ export class ResourceHandoverHelper {
       }
     }
 
+    // Approvals their private agents asked for go with the agents: still
+    // private, now the new owner's to see and decide. Not audited apart:
+    // each follows an agent whose transfer is audited above.
+    await manager.query(
+      `UPDATE approval_requests SET "ownerUserId" = $1
+        WHERE "organizationId" = $2 AND visibility = 'private' AND "ownerUserId" = $3`,
+      [toUserId, organizationId, fromUserId],
+    );
+
     return audit;
   }
 
@@ -217,9 +234,43 @@ export class ResourceHandoverHelper {
    */
   revokeWipedConnectionsAtProviders(
     wiped: WipedConnection[],
-    ctx: { userId: string; actorUserId: string; reason: 'member_removed' | 'member_left' },
+    ctx: { userId: string; actorUserId: string; reason: HandoverReason },
   ): Promise<void> {
     return this.offboarding.revokeAtProviders(wiped, ctx);
+  }
+
+  /** Publish the audit rows a handover wrote, once its transaction committed. */
+  publishCommitted(audit: AuditLog[]): void {
+    this.auditLog.publishCommitted(audit);
+  }
+
+  /**
+   * Who receives a departing person's private rows when nobody in
+   * particular removed them (they left on their own, or the account was
+   * deleted by someone outside this organization): the organization's
+   * longest-standing active owner other than them. There always is one
+   * where the last owner cannot leave; where there is not, the handover
+   * is refused rather than the rows left to nobody.
+   */
+  async longestStandingOtherOwner(
+    manager: EntityManager,
+    organizationId: string,
+    excludeUserId: string,
+  ): Promise<string> {
+    const owner = await manager
+      .getRepository(UserOrganization)
+      .createQueryBuilder('m')
+      .where('m.organizationId = :organizationId', { organizationId })
+      .andWhere('m.role = :role', { role: OrganizationRole.OWNER })
+      .andWhere('m.isActive = true')
+      .andWhere('m.userId <> :excludeUserId', { excludeUserId })
+      .orderBy('m.joinedAt', 'ASC', 'NULLS LAST')
+      .addOrderBy('m.id', 'ASC')
+      .getOne();
+    if (!owner) {
+      throw new ForbiddenException('Cannot remove the last owner of the organization');
+    }
+    return owner.userId;
   }
 
   /**

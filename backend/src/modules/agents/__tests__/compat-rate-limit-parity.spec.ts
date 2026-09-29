@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import { listenOnLoopback } from '../../../test/http';
 import * as crypto from 'crypto';
 
 import { ApiKey } from '../../../entities/api-key.entity';
@@ -59,7 +60,7 @@ describe('compat-route rate limit parity', () => {
       ],
     }).compile();
     const app = moduleRef.createNestApplication();
-    await app.init();
+    await listenOnLoopback(app);
     return app;
   };
 

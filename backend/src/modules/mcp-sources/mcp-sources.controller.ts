@@ -77,9 +77,10 @@ export class McpSourcesController {
   async sync(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: any,
   ) {
     try {
-      const summary = await this.mcpSourcesService.sync(id, organizationId);
+      const summary = await this.mcpSourcesService.sync(id, organizationId, req.user?.id);
       return { success: true, data: summary, message: 'MCP source synced' };
     } catch (error) {
       throw this.mapError(error, 'MCP_SOURCE_SYNC_FAILED');

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Layers, Trash2 } from 'lucide-react'
@@ -8,16 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { workspacesApi } from '@/lib/api'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
@@ -43,7 +34,7 @@ export function WorkspaceDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
   const queryClient = useQueryClient()
   const { success, error: errNotif } = useNotifications()
-  const [confirmRelease, setConfirmRelease] = useState(false)
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
   const wsQuery = useQuery<Workspace>({
     queryKey: ['workspace', id],
@@ -119,7 +110,19 @@ export function WorkspaceDetailPage() {
           </div>
         </div>
         {ws.status === 'active' && (
-          <Button variant="destructive" onClick={() => setConfirmRelease(true)}>
+          <Button
+            variant="destructive"
+            onClick={async () => {
+              const ok = await confirm({
+                title: 'Release this workspace?',
+                description:
+                  'All processes the workspace owns on the runner will be terminated. The workspace row stays for audit; agents that hold the workspace id will get a structured error on the next call.',
+                confirmLabel: 'Release workspace',
+                destructive: true,
+              })
+              if (ok) releaseMutation.mutate()
+            }}
+          >
             <Trash2 className="mr-2 h-4 w-4" />
             Release workspace
           </Button>
@@ -165,24 +168,7 @@ export function WorkspaceDetailPage() {
         </Card>
       )}
 
-      <AlertDialog open={confirmRelease} onOpenChange={setConfirmRelease}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Release this workspace?</AlertDialogTitle>
-            <AlertDialogDescription>
-              All processes the workspace owns on the runner will be terminated.
-              The workspace row stays for audit; agents that hold the workspace
-              id will get a structured error on the next call.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => releaseMutation.mutate()}>
-              Release workspace
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {confirmDialog}
     </div>
   )
 }

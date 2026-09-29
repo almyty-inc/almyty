@@ -251,6 +251,7 @@ export function RunnersPage() {
               hideColumnsButton
               emptyState={
                 <EmptyState
+                  variant="inline"
                   icon={Cpu}
                   title="No runners match your filters"
                   description="Try changing the team filter or search."

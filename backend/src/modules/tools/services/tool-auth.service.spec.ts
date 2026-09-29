@@ -25,7 +25,7 @@ describe('ToolAuthService.applyApiAuth — api_key field-name compatibility', ()
       providers: [
         ToolAuthService,
         { provide: EnvelopeCryptoService, useValue: makeEnvelopeCryptoMock() },
-        { provide: getRepositoryToken(Credential), useValue: { findOne: jest.fn().mockResolvedValue(null) } },
+        { provide: getRepositoryToken(Credential), useValue: { findOne: jest.fn().mockResolvedValue(null), find: jest.fn().mockResolvedValue([]) } },
         { provide: ModuleRef, useValue: { get: jest.fn() } },
       ],
     }).compile();
@@ -96,7 +96,7 @@ describe('ToolAuthService.applyApiAuth — api_key field-name compatibility', ()
 
 /**
  * The stored-credential lookup is `where: { apiId, organizationId,
- * isActive: true }`. Every spec that reaches it stubs `findOne` with a
+ * isActive: true }`. Every spec that reaches it stubs the lookup with a
  * canned answer, so the `organizationId` half could go and an execution
  * in one tenant would pick up another tenant's credential for the same
  * api id. Here the credential table is real.

@@ -246,3 +246,90 @@ export class CreateSdkApiDto {
   @IsString()
   teamId?: string | null;
 }
+
+const toBoolean = ({ value }: { value: unknown }) =>
+  value === 'true' ? true : value === 'false' ? false : value;
+const emptyToUndefined = ({ value }: { value: unknown }) =>
+  typeof value === 'string' && value.trim() === '' ? undefined : value;
+
+/**
+ * POST /apis/import: connect an API from its description in one step.
+ * One of `url`, `content` or a multipart `schema` file; everything else is
+ * an optional override of what the description says. Multipart bodies
+ * arrive as strings, hence the transforms.
+ */
+export class ConnectApiDto {
+  @Transform(emptyToUndefined)
+  @IsOptional()
+  @Matches(/^https?:\/\/.+/i, { message: 'A link starts with http:// or https://.' })
+  @IsString()
+  @MaxLength(2048)
+  url?: string;
+
+  @IsOptional()
+  @IsString()
+  content?: string;
+
+  @Transform((arg) => emptyToUndefined({ value: stripHtml(arg) }))
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  name?: string;
+
+  @Transform(emptyToUndefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  baseUrl?: string;
+
+  @Transform(emptyToUndefined)
+  @IsOptional()
+  @IsEnum(['none', 'api_key', 'bearer', 'basic', 'oauth2'])
+  authType?: 'none' | 'api_key' | 'bearer' | 'basic' | 'oauth2';
+
+  @Transform(toBoolean)
+  @IsOptional()
+  @IsBoolean()
+  generateTools?: boolean;
+
+  @Transform(emptyToUndefined)
+  @IsOptional()
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
+
+  @Transform(emptyToUndefined)
+  @IsOptional()
+  @IsString()
+  teamId?: string | null;
+}
+
+/** PUT /apis/:id/key: the one secret the API's tools send, or a connection to send instead. */
+export class SetApiKeyDto {
+  @IsOptional()
+  @IsEnum(['none', 'api_key', 'bearer', 'basic', 'oauth2'])
+  type?: 'none' | 'api_key' | 'bearer' | 'basic' | 'oauth2';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(16 * 1024)
+  key?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  username?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  @Matches(/^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/, { message: 'A header name has no spaces or special characters.' })
+  headerName?: string;
+
+  @IsOptional()
+  @IsEnum(['header', 'query'])
+  location?: 'header' | 'query';
+
+  @IsOptional()
+  @IsString()
+  connectionId?: string;
+}

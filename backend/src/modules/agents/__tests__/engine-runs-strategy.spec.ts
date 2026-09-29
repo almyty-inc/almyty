@@ -167,9 +167,13 @@ describe('AgentExecutionEngine and a chosen strategy', () => {
     const roles = { resolveRoles: jest.fn().mockResolvedValue([{ key: 'principal', modelId: 'm1', via: 'resolved' }]) };
     const { engine, nodeExecutor } = makeEngine(resolver, roles);
 
-    await engine.execute(agent, 'org-1', 'user-1', { input: {} });
+    // A gateway run: the row names no user, the principal is the gateway's.
+    const principal = { kind: 'gateway' as const, gatewayId: 'g1', organizationId: 'org-1', visibility: 'org' as const, teamId: null, ownerUserId: null };
+    await engine.execute(agent, 'org-1', null as any, { input: {}, principal });
 
-    expect(roles.resolveRoles).toHaveBeenCalledWith('org-1', 'a1', {}, { id: 'user-1' });
+    // Roles are filled, and the strategy chosen, as the run's principal.
+    expect(roles.resolveRoles).toHaveBeenCalledWith('org-1', 'a1', {}, principal);
+    expect(resolver.pipelineFor).toHaveBeenCalledWith(agent, expect.any(String), principal);
     const options = (nodeExecutor.execute.mock.calls[0] as any[])[4];
     expect(options.resolvedRoles).toEqual([{ key: 'principal', modelId: 'm1', via: 'resolved' }]);
   });

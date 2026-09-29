@@ -73,9 +73,9 @@ export const JOURNEYS: Journey[] = [
         key: 'api',
         title: 'Import an API',
         description: () =>
-          'Upload, link or paste an OpenAPI, GraphQL, SOAP or Protobuf schema. Every operation becomes a tool.',
+          'Paste a link to its OpenAPI, GraphQL, WSDL or proto description, or drop the file. Every operation becomes a tool.',
         cta: 'Import an API',
-        target: () => ({ to: '/apis/new', place: 'APIs › Connect API' }),
+        target: () => ({ to: '/apis/new', place: 'APIs › Connect an API' }),
       },
       {
         key: 'tools',
@@ -87,11 +87,11 @@ export const JOURNEYS: Journey[] = [
       },
       {
         key: 'gateway',
-        title: 'Publish tools through a gateway',
+        title: 'Share your tools',
         description: () =>
-          'A gateway serves the tools you pick at one address, over MCP, A2A, UTCP or Agent Skills. Done once a gateway has at least one tool.',
-        cta: 'Create a gateway',
-        target: () => ({ to: '/gateways/new', place: 'Gateways › Create gateway' }),
+          'Pick tools and get one address that works in any MCP, UTCP or Skills client. Done once it shares at least one tool.',
+        cta: 'Share tools',
+        target: () => ({ to: '/gateways/new', place: 'Gateways › Share tools' }),
       },
       {
         key: 'external_client',
@@ -120,13 +120,13 @@ export const JOURNEYS: Journey[] = [
     steps: [
       {
         key: 'provider',
-        title: 'Connect an inference provider',
+        title: 'Connect a provider',
         description: () =>
-          'Add a key for OpenAI, Anthropic, Gemini, Mistral, a local Ollama or another provider. Done once one is active and its last health check did not fail.',
-        cta: 'Add a provider',
+          'Paste a key for OpenAI, Anthropic, Gemini, Mistral or another provider, or point almyty at a local Ollama. Done once one is connected and its last check did not fail.',
+        cta: 'Connect a provider',
         target: () => ({
-          to: '/llm-providers/new?returnTo=%2Fguide',
-          place: 'Inference providers › Add inference provider',
+          to: '/models/connect?returnTo=%2Fguide',
+          place: 'Models › Connect a provider',
         }),
       },
       {
@@ -217,10 +217,10 @@ export const JOURNEYS: Journey[] = [
 /** The rest of the platform, for when you need it. Links, not steps. */
 export const SUPPORTING: GuideLink[] = [
   {
-    title: 'Credentials',
-    description: 'Keys and accounts your tools use to reach other services, stored encrypted.',
-    to: '/credentials',
-    place: 'Credentials',
+    title: 'Connections',
+    description: 'The keys and accounts almyty uses for you, stored encrypted.',
+    to: '/connections',
+    place: 'Connections',
   },
   {
     title: 'Models',

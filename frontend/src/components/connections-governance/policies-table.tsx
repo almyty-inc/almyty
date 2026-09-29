@@ -23,7 +23,7 @@ import { QueryError } from '@/components/ui/query-error'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { CONNECTORS_QUERY_KEY } from '@/components/connections/connect-sheet'
+import { CONNECTORS_QUERY_KEY } from '@/components/connections/connect-flow'
 import { connectorsApi, errorMessage } from '@/lib/connections-api'
 import { POLICIES_QUERY_KEY, connectionPoliciesApi, describePolicyRule } from '@/lib/connections-governance-api'
 import { cn } from '@/lib/utils'
@@ -32,7 +32,7 @@ import { POLICY_KIND_LABELS, type ConnectionPolicy, type ConnectionPolicyKind } 
 import { Link } from 'react-router-dom'
 
 /** The connection policy create/edit page (policy-form.tsx). */
-export const POLICIES_PAGE_PATH = '/settings/connections/policies'
+export const POLICIES_PAGE_PATH = '/connections/policies'
 
 const KIND_BADGE_CLASS: Record<ConnectionPolicyKind, string> = {
   connector_allowlist: 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400',

@@ -52,11 +52,11 @@ beforeEach(() => {
 describe('create flows are pages', () => {
   // The entry points are links to the create page (open in a new tab,
   // copy the address), and clicking one opens no dialog.
-  it('"Connect API" links to /apis/new instead of opening a dialog', async () => {
+  it('"Connect an API" links to /apis/new instead of opening a dialog', async () => {
     const user = userEvent.setup()
     render(<ApisPage />)
 
-    const links = await screen.findAllByRole('link', { name: 'Connect API' })
+    const links = await screen.findAllByRole('link', { name: 'Connect an API' })
     for (const link of links) expect(link).toHaveAttribute('href', '/apis/new')
     await user.click(links[0])
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()

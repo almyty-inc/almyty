@@ -30,6 +30,7 @@ import type { AgentRun } from '@/types'
 import { VerifyStepCard, VerifySummary } from './verify-step'
 import { PromoteRunSection } from './promote-run-section'
 import { RouteTraceTimeline } from './route-trace-timeline'
+import { RoleCostTable, StepRoleLine, hasStepSummary, stepSummary } from './run-roles'
 
 interface RunsTabProps {
   runs: AgentRun[]
@@ -145,27 +146,31 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                                 <RouteTraceTimeline agentId={agentId} executionId={run.id} />
                               </div>
                             )}
+                            {/* Which role spent what, for runs of an agent with several models */}
+                            <RoleCostTable run={run} />
                             {/* Steps */}
                             {run.steps && run.steps.length > 0 && (
                               <div>
                                 <h4 className="text-sm font-medium mb-2">Steps</h4>
                                 <div className="space-y-2">
-                                  {run.steps.map((step, idx) => (
-                                    step.type === 'verify' ? (
-                                      <VerifyStepCard key={idx} step={step} index={idx} />
-                                    ) : (
-                                    <div key={idx} className="flex items-start gap-3 p-2 rounded bg-background border text-sm">
+                                  {run.steps.map((step, idx) => {
+                                    if (step.type === 'verify') return <VerifyStepCard key={idx} step={step} index={idx} />
+                                    const summary = stepSummary(step)
+                                    return (
+                                    <div key={idx} className="flex items-start gap-3 p-2 rounded bg-background border text-sm" data-testid={`run-step-${idx}`}>
                                       <div className="flex items-center gap-2 shrink-0">
                                         <span className="text-xs font-mono text-muted-foreground">#{idx + 1}</span>
                                         <Badge variant="outline" className="text-[10px]">{step.type}</Badge>
                                       </div>
-                                      <div className="min-w-0 flex-1">
-                                        {step.input && (
+                                      <div className="min-w-0 flex-1 space-y-0.5">
+                                        <StepRoleLine step={step} />
+                                        {summary && <div className="text-xs">{summary}</div>}
+                                        {step.input && !hasStepSummary(step) && (
                                           <div className="text-xs text-muted-foreground truncate">
                                             In: {typeof step.input === 'string' ? step.input : JSON.stringify(step.input)}
                                           </div>
                                         )}
-                                        {step.output && (
+                                        {step.output && !hasStepSummary(step) && (
                                           <div className="text-xs truncate">
                                             Out: {typeof step.output === 'string' ? step.output : JSON.stringify(step.output)}
                                           </div>
@@ -182,7 +187,7 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                                       </div>
                                     </div>
                                     )
-                                  ))}
+                                  })}
                                 </div>
                               </div>
                             )}

@@ -13,7 +13,7 @@ import type { ConnectionPolicy } from '@/types/connections-governance'
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 
 const renderForm = (el: ReactElement) =>
-  renderAtRoute(el, { path: '/settings/connections/policies/new', paths: ['/settings/connections'] })
+  renderAtRoute(el, { path: '/connections/policies/new', paths: ['/connections/advanced'] })
 
 vi.mock('../../../lib/connections-governance-api', async () => {
   const actual = await vi.importActual<typeof import('../../../lib/connections-governance-api')>('../../../lib/connections-governance-api')
@@ -59,7 +59,7 @@ describe('PolicyForm', () => {
     await waitFor(() =>
       expect(connectionPoliciesApi.create).toHaveBeenCalledWith({ kind: 'connector_allowlist', name: 'Approved vendors', rule: { connectorKeys: ['openai'], owners: ['org'] }, enabled: true }),
     )
-    expect(await screen.findByText('at /settings/connections')).toBeInTheDocument()
+    expect(await screen.findByText('at /connections/advanced')).toBeInTheDocument()
     expect(notify.success).toHaveBeenCalledWith('Policy added', expect.any(String))
   })
 
@@ -136,24 +136,24 @@ describe('PolicyForm', () => {
     await waitFor(() => expect(connectionPoliciesApi.update).toHaveBeenCalledWith('p1', { name: 'Quarterly', rule: { maxAgeDays: 60, warnDays: 7, enforce: true } }))
     expect(await screen.findByTestId('policy-errors')).toHaveTextContent('warnDays must be smaller than maxAgeDays')
     // A refused save stays on the form.
-    expect(screen.queryByText('at /settings/connections')).not.toBeInTheDocument()
+    expect(screen.queryByText('at /connections/advanced')).not.toBeInTheDocument()
   })
 })
 
-describe('/settings/connections/policies pages', () => {
+describe('/connections/policies pages', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(connectorsApi.list).mockResolvedValue([{ key: 'openai', kind: 'inference', displayName: 'OpenAI', connect: [] }])
   })
 
   it('/new?kind= starts on that kind', async () => {
-    renderAtRoute(<ConnectionPolicyPage />, { path: '/settings/connections/policies/new', url: '/settings/connections/policies/new?kind=expiry_rule' })
+    renderAtRoute(<ConnectionPolicyPage />, { path: '/connections/policies/new', url: '/connections/policies/new?kind=expiry_rule' })
     expect(((await screen.findByLabelText('Kind')) as HTMLSelectElement).value).toBe('expiry_rule')
   })
 
   it('/:policyId loads the policy, fixes the kind and seeds the stored values', async () => {
     vi.mocked(connectionPoliciesApi.get).mockResolvedValue(saved({ id: 'p1', name: 'Approved vendors', rule: { connectorKeys: ['openai'], owners: ['org'] } }))
-    renderAtRoute(<ConnectionPolicyPage />, { path: '/settings/connections/policies/:policyId', url: '/settings/connections/policies/p1' })
+    renderAtRoute(<ConnectionPolicyPage />, { path: '/connections/policies/:policyId', url: '/connections/policies/p1' })
     expect(await screen.findByRole('heading', { name: 'Edit policy' })).toBeInTheDocument()
     expect(connectionPoliciesApi.get).toHaveBeenCalledWith('p1')
     const kind = screen.getByLabelText('Kind') as HTMLSelectElement

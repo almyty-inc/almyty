@@ -147,6 +147,17 @@ export interface WorkerOutput {
   error?: string;
 }
 
+/**
+ * Sent by the worker once its bootstrap is done (net guard sealed, env
+ * scrubbed, require hooks in place), immediately before the tool's code
+ * is compiled and run. The host starts the tool's timeout on this, not on
+ * spawning the worker, so worker start-up under load is not charged to
+ * the tool.
+ */
+export interface WorkerReadyMessage {
+  type: 'ready';
+}
+
 /** Configuration for a private npm registry */
 export interface NpmRegistryConfig {
   url: string;

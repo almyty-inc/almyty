@@ -12,8 +12,10 @@ import { DataSource, EntityTarget, ObjectLiteral } from 'typeorm';
 import { Agent } from '../../entities/agent.entity';
 import { Api } from '../../entities/api.entity';
 import { Tool } from '../../entities/tool.entity';
-import { ResourceLike } from './access-policy.service';
-import { isOthersPrivate } from './private-visibility';
+import { UserOrganization } from '../../entities/user-organization.entity';
+import { UserTeam } from '../../entities/user-team.entity';
+import { AccessPolicyService, ResourceLike } from './access-policy.service';
+import { canRead } from './read-rule';
 
 /**
  * The resources a route parameter can name. Each maps to its entity and
@@ -30,8 +32,8 @@ const KINDS: Record<PrivateResourceKind, { entity: EntityTarget<ObjectLiteral>; 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Route guard: refuse (404) any request whose path names another user's
- * private agent / tool / API.
+ * Route guard: refuse (404) any request whose path names an agent / tool /
+ * API the caller may not read.
  *
  * Every controller under `agents/:id/...`, `.../tools/:toolId/...` and
  * `apis/:id/...` resolves its row a little differently -- some through
@@ -41,9 +43,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * (not by the org in the path), so a mismatched org id cannot route
  * around it.
  *
- * The decision is the private tier's own rule (the owner and nobody else,
- * org admins included), which needs no membership lookup: a private row
- * that is not the caller's is refused whatever the caller's role.
+ * The decision is the read rule (read-rule.ts, AccessPolicyService.canAccess
+ * 'read'): another member's private row is refused whatever the caller's
+ * role, org admins included; a team row is refused to anyone outside the
+ * team who is not an org owner or admin; a row of an organization the
+ * caller is not a member of is refused. The answer is the 404 a missing
+ * row gets, so a caller probing ids cannot tell "not yours" from "absent".
  *
  * Non-UUID values pass through so literal sub-routes (`agents/templates`)
  * and ParseUUIDPipe keep answering as before, and a missing row passes so
@@ -54,7 +59,14 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export function PrivateResourceGuard(params: Record<string, PrivateResourceKind>): Type<CanActivate> {
   @Injectable()
   class PrivateResourceGuardMixin implements CanActivate {
+    private policy?: AccessPolicyService;
+
     constructor(@Optional() readonly dataSource?: DataSource) {}
+
+    private accessPolicy(ds: DataSource): AccessPolicyService {
+      this.policy ??= new AccessPolicyService(ds.getRepository(UserOrganization), ds.getRepository(UserTeam));
+      return this.policy;
+    }
 
     async canActivate(context: ExecutionContext): Promise<boolean> {
       if (!this.dataSource) return true;
@@ -66,9 +78,11 @@ export function PrivateResourceGuard(params: Record<string, PrivateResourceKind>
         const spec = KINDS[kind];
         const row = (await this.dataSource.getRepository(spec.entity).findOne({
           where: { id },
-          select: { id: true, organizationId: true, visibility: true, [spec.owner]: true } as any,
+          select: { id: true, organizationId: true, visibility: true, teamId: true, [spec.owner]: true } as any,
         })) as ResourceLike | null;
-        if (row && isOthersPrivate(row, userId)) {
+        // No user is nobody, who reads no row by id here: these routes
+        // all sit behind JwtAuthGuard, so a missing user is a wiring fault.
+        if (row && (!userId || !(await canRead(this.accessPolicy(this.dataSource), { id: userId }, row)))) {
           throw new NotFoundException(`${spec.label} not found`);
         }
       }

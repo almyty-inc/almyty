@@ -8,6 +8,7 @@ import { Strategy } from '../../../entities/strategy.entity';
 import { STRATEGY_SEEDS } from './strategy-seeds';
 import { compileStrategy, StrategyCompileError } from './strategy-compiler';
 import { OrchestratorService } from './orchestrator.service';
+import type { ExecutionPrincipal } from '../../../common/authorization/execution-access.service';
 
 /**
  * Turn the strategy an agent has chosen into the pipeline the engine runs.
@@ -41,11 +42,16 @@ export class StrategyPipelineResolver {
     @Optional() private readonly orchestrator?: OrchestratorService,
   ) {}
 
-  /** The chosen shape compiled, or null when the agent runs its own graph. */
-  async pipelineFor(agent: Agent, request = ''): Promise<CompiledStrategy | null> {
+  /**
+   * The chosen shape compiled, or null when the agent runs its own graph.
+   * `caller` is who the run acts as -- its ExecutionPrincipal; the
+   * orchestrator's model call is made as it, so it reaches only providers
+   * that principal may use.
+   */
+  async pipelineFor(agent: Agent, request = '', caller?: string | ExecutionPrincipal | null): Promise<CompiledStrategy | null> {
     // A model picking the shape per request overrides the standing
     // choice, which is the whole point of switching it on.
-    const choice = (await this.orchestrator?.choose(agent, request)) ?? null;
+    const choice = (await this.orchestrator?.choose(agent, request, caller)) ?? null;
     const strategyKey = choice?.strategyKey ?? ((agent.settings as any)?.execution?.strategyKey as string | undefined | null);
     if (!strategyKey) return null;
 

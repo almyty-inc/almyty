@@ -5,9 +5,12 @@ import { join } from 'path'
 import {
   claudeCodeCommand,
   connectCommandFor,
+  gatewayClientName,
   mcpEndpointFor,
   orgSlugOf,
+  sharedToolsSnippets,
   skillsInstallCommand,
+  slugify,
 } from '../gateway-connect'
 
 const gw = { name: 'Weather API', type: 'mcp', endpoint: '/weather-api' }
@@ -45,5 +48,40 @@ describe('gateway connect commands', () => {
     )
     expect(src).toContain("from '@/lib/gateway-connect'")
     expect(src).not.toMatch(/`claude mcp add \$\{/)
+  })
+  it('slugifies to lowercase a-z0-9 with single dashes, trimmed', () => {
+    expect(slugify('Swagger Petstore - OpenAPI 3.0')).toBe('swagger-petstore-openapi-3-0')
+    expect(slugify('  (Copy) My API!  ')).toBe('copy-my-api')
+    expect(slugify('---')).toBe('')
+  })
+
+  it('names the client after the address slug, else a clean slug of the name', () => {
+    const petstore = { name: 'Swagger Petstore - OpenAPI 3.0', type: 'mcp', endpoint: '/petstore' }
+    expect(gatewayClientName(petstore)).toBe('petstore')
+    expect(gatewayClientName({ ...petstore, endpoint: null })).toBe('swagger-petstore-openapi-3-0')
+    expect(gatewayClientName({ ...petstore, endpoint: '/Swagger_Petstore v2' })).toBe('swagger-petstore-v2')
+    expect(gatewayClientName({ name: '', endpoint: '' })).toBe('gateway')
+  })
+
+  it('never puts a raw name into claude mcp add or the client JSON keys', () => {
+    const petstore = { name: 'Swagger Petstore - OpenAPI 3.0', type: 'mcp', endpoint: null }
+    expect(claudeCodeCommand(petstore, 'acme', 'https://x')).toMatch(/^claude mcp add swagger-petstore-openapi-3-0 /)
+    for (const snippet of sharedToolsSnippets(petstore, 'acme', 'k', 'https://x')) {
+      expect(snippet.value).not.toContain('---')
+      if (snippet.language === 'json') expect(Object.keys(JSON.parse(snippet.value).mcpServers)).toEqual(['swagger-petstore-openapi-3-0'])
+    }
+  })
+
+  it('installs Skills by the address the server resolves, not the display name', () => {
+    // GET /gateways/resolve/:org/:slug matches the endpoint first.
+    const skills = { name: 'Swagger Petstore - OpenAPI 3.0', type: 'skills', endpoint: '/petstore-skills' }
+    expect(skillsInstallCommand(skills, 'acme')).toBe('npx @almyty/skills install @acme/petstore-skills')
+  })
+
+  it('leaves no hand-rolled name slug in the gateway screens', () => {
+    for (const file of ['components/gateways/detail/integrations-section.tsx', 'components/gateways/detail/gateway-configuration-card.tsx', 'pages/tool-detail.tsx']) {
+      const src = readFileSync(join(__dirname, '..', '..', file), 'utf8')
+      expect(src, file).not.toMatch(/(gateway|mcpGateway)\.name[^\n]*\.toLowerCase\(\)\.replace\(\/\\s\+\/g/)
+    }
   })
 })

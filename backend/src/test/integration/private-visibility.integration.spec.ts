@@ -225,7 +225,7 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
         { ensureSystemGateway: jest.fn().mockResolvedValue(undefined), validateGatewayConfiguration: jest.fn() } as any,
         policy,
       );
-      stats = new GatewaysStatsHelper(repo(Gateway), repo(Organization), repo(UsageMetric), service);
+      stats = new GatewaysStatsHelper(repo(Gateway), repo(Organization), repo(UsageMetric), service, policy);
       (service as any).statsHelper = stats;
     });
 
@@ -260,7 +260,7 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
     });
 
     it.each(others)('the dashboard route guard answers 404 for %s', async (who) => {
-      const guard = new PrivateGatewayGuard(repo(Gateway));
+      const guard = new PrivateGatewayGuard(repo(Gateway), policy);
       const ctx = (userId: string) => ({
         switchToHttp: () => ({ getRequest: () => ({ params: { gatewayId: privateGateway.id }, user: { id: userId } }) }),
       }) as any;
@@ -386,7 +386,7 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
 
     it('MCP skills/get naming the private gateway is not found for anyone else', async () => {
       const skills = { generateGatewaySkills: jest.fn().mockResolvedValue({ name: 'x', content: 'y' }) };
-      const handler = new McpContentHandler(repo(require('../../entities/tool.entity').Tool), repo(require('../../entities/resource.entity').Resource), repo(GatewayTool), skills as any, {} as any, {} as any);
+      const handler = new McpContentHandler(repo(require('../../entities/tool.entity').Tool), repo(require('../../entities/resource.entity').Resource), repo(GatewayTool), skills as any, {} as any, {} as any, policy);
       for (const who of others) {
         await expect(handler.handleSkillGet({ gatewayId: privateGateway.id }, organizationId, { id: users[who] }))
           .rejects.toMatchObject({ message: expect.stringMatching(/Gateway not found/) });
@@ -444,7 +444,7 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
     });
 
     it.each(others)('the dashboard route guard (usage, models, chat, sessions) answers 404 for %s', async (who) => {
-      const guard = new PrivateProviderGuard(repo(LlmProvider), repo(Conversation));
+      const guard = new PrivateProviderGuard(repo(LlmProvider), repo(Conversation), policy);
       const ctx = (userId: string) => ({
         switchToHttp: () => ({ getRequest: () => ({ params: { providerId: privateProvider.id }, user: { id: userId } }) }),
       }) as any;
@@ -508,7 +508,7 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
         await expect(resolver.resolve(organizationId, privateCredential.id, { principal: { id: users[who] } }))
           .rejects.toMatchObject({ response: { code: 'CREDENTIAL_NOT_FOUND' } });
       }
-      await expect(resolver.resolve(organizationId, privateCredential.id, {}))
+      await expect(resolver.resolve(organizationId, privateCredential.id, { principal: null }))
         .rejects.toMatchObject({ response: { code: 'CREDENTIAL_NOT_FOUND' } });
       await expect(resolver.resolve(organizationId, privateCredential.id, { principal: { id: users.owner } }))
         .resolves.toMatchObject({ credential: { id: privateCredential.id } });
@@ -546,6 +546,7 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
           .rejects.toMatchObject({ response: { code: 'CREDENTIAL_NOT_FOUND' } });
       }
       await expect(refs.resolve(organizationId, managed.id, {
+        principal: null,
         context: { purpose: 'health_check', resourceType: 'llm_provider', resourceId: privateProvider.id },
       })).resolves.toMatchObject({ credential: { id: managed.id } });
       await repo(Credential).delete({ id: managed.id });

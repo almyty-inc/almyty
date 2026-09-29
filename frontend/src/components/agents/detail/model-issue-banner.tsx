@@ -33,7 +33,7 @@ export function ModelIssueBanner({ agent }: { agent: Agent }) {
           Pick a current model in the {agent.mode === 'autonomous' ? 'agent configuration' : 'model call node'}
           {issue.providerId && (
             <>
-              {' '}or on the <Link className="underline" to={`/llm-providers/${issue.providerId}`}>provider</Link>
+              {' '}or on the <Link className="underline" to={`/models/providers/${issue.providerId}`}>provider</Link>
             </>
           )}
           {schedulePaused && <>, then enable the schedule again</>}.

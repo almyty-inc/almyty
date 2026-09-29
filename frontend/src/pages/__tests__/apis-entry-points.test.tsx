@@ -7,7 +7,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { ApisPage } from '@/pages/apis'
 import { apisApi } from '@/lib/api'
 
-// Entry points into the Connect API page: the real router.
+// Entry points into the Connect an API page: the real router.
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 
 vi.mock('@/lib/api', () => ({
@@ -26,7 +26,7 @@ function renderAt(url: string) {
   const router = createMemoryRouter(
     [
       { path: '/apis', element: <ApisPage /> },
-      { path: '/apis/new', element: <p>Connect API page</p> },
+      { path: '/apis/new', element: <p>Connect an API page</p> },
     ],
     { initialEntries: [url] },
   )
@@ -43,20 +43,20 @@ describe('APIs page entry points', () => {
     vi.mocked(apisApi.getAll).mockResolvedValue([] as any)
   })
 
-  it('Connect API links to /apis/new, from the header and the empty state', async () => {
+  it('Connect an API links to /apis/new, from the header and the empty state', async () => {
     renderAt('/apis')
     await screen.findByText('No APIs yet')
-    const links = screen.getAllByRole('link', { name: /Connect API/ })
+    const links = screen.getAllByRole('link', { name: /Connect an API/ })
     expect(links).toHaveLength(2)
     for (const link of links) expect(link).toHaveAttribute('href', '/apis/new')
   })
 
-  it('following Connect API lands on the page, not a dialog', async () => {
+  it('following Connect an API lands on the page, not a dialog', async () => {
     const user = userEvent.setup()
     const router = renderAt('/apis')
-    await user.click((await screen.findAllByRole('link', { name: /Connect API/ }))[0])
+    await user.click((await screen.findAllByRole('link', { name: /Connect an API/ }))[0])
     await waitFor(() => expect(router.state.location.pathname).toBe('/apis/new'))
-    expect(screen.getByText('Connect API page')).toBeInTheDocument()
+    expect(screen.getByText('Connect an API page')).toBeInTheDocument()
   })
 
   it('an old ?new=1 link redirects to /apis/new', async () => {

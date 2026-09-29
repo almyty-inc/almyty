@@ -102,6 +102,10 @@ function makeQueryBuilder(returnTools: Tool[] = [], total = 0) {
     getMany: jest.fn().mockResolvedValue(returnTools),
     select: jest.fn().mockReturnThis(),
     getRawMany: jest.fn().mockResolvedValue([]),
+    // As a subquery (the org-wide tool stats' visible-tools filter, whose
+    // SQL overview-stats-scope.integration.spec.ts runs against Postgres).
+    getQuery: jest.fn().mockReturnValue('SELECT 1'),
+    getParameters: jest.fn().mockReturnValue({}),
   };
   // clone returns a copy that also has getCount
   qb.clone.mockReturnValue({ ...qb });
@@ -519,7 +523,9 @@ describe('ToolsService', () => {
 
       toolRepo.findOne.mockResolvedValue(tool);
       userRepo.findOne.mockResolvedValue(user);
-      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
+      // Readable, not manageable: the manage decision is the one that says no.
+      accessPolicy.canAccess.mockImplementation(async (_u: any, _r: any, action: string) =>
+        action === 'manage' ? { allowed: false, reason: 'denied' } : { allowed: true, reason: 'ok' });
 
       await expect(service.updateTool('tool-1', updateDto, 'org-1', 'user-1')).rejects.toThrow(ForbiddenException);
     });
@@ -703,7 +709,9 @@ describe('ToolsService', () => {
 
       toolRepo.findOne.mockResolvedValue(tool);
       userRepo.findOne.mockResolvedValue(user);
-      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
+      // Readable, not manageable: the manage decision is the one that says no.
+      accessPolicy.canAccess.mockImplementation(async (_u: any, _r: any, action: string) =>
+        action === 'manage' ? { allowed: false, reason: 'denied' } : { allowed: true, reason: 'ok' });
 
       await expect(service.deleteTool('tool-1', 'org-1', 'user-1')).rejects.toThrow(ForbiddenException);
     });
@@ -764,7 +772,9 @@ describe('ToolsService', () => {
 
       toolRepo.findOne.mockResolvedValue(tool);
       userRepo.findOne.mockResolvedValue(user);
-      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
+      // Readable, not manageable: the manage decision is the one that says no.
+      accessPolicy.canAccess.mockImplementation(async (_u: any, _r: any, action: string) =>
+        action === 'manage' ? { allowed: false, reason: 'denied' } : { allowed: true, reason: 'ok' });
 
       await expect(service.activateTool('tool-1', 'org-1', 'user-1')).rejects.toThrow(ForbiddenException);
     });
@@ -815,7 +825,9 @@ describe('ToolsService', () => {
 
       toolRepo.findOne.mockResolvedValue(tool);
       userRepo.findOne.mockResolvedValue(user);
-      accessPolicy.canAccess.mockResolvedValueOnce({ allowed: false, reason: 'denied' });
+      // Readable, not manageable: the manage decision is the one that says no.
+      accessPolicy.canAccess.mockImplementation(async (_u: any, _r: any, action: string) =>
+        action === 'manage' ? { allowed: false, reason: 'denied' } : { allowed: true, reason: 'ok' });
 
       await expect(service.deactivateTool('tool-1', 'org-1', 'user-1')).rejects.toThrow(ForbiddenException);
     });
@@ -1252,9 +1264,9 @@ describe('ToolsService', () => {
   // ─── createFromOperation ───────────────────────────────────────────────────
 
   describe('createFromOperation', () => {
-    it('should auto-generate a tool from an operation', async () => {
+    it('should auto-generate a tool from an operation, recorded as the importing user\'s', async () => {
       const op = makeOperation();
-      const tool = makeTool({ status: ToolStatus.ACTIVE, createdBy: 'system' });
+      const tool = makeTool({ status: ToolStatus.ACTIVE, createdBy: 'user-importer', generated: true } as any);
 
       operationRepo.findOne.mockResolvedValue(op);
       toolRepo.create.mockReturnValue(tool);
@@ -1266,6 +1278,7 @@ describe('ToolsService', () => {
         name: 'listPets',
         description: 'List all pets',
         organizationId: 'org-1',
+        createdBy: 'user-importer',
       });
 
       expect(result).toBe(tool);
@@ -1273,9 +1286,30 @@ describe('ToolsService', () => {
         expect.objectContaining({
           operationId: op.id,
           status: ToolStatus.ACTIVE,
-          createdBy: 'system',
+          createdBy: 'user-importer',
+          generated: true,
         }),
       );
+      expect(toolVersionRepo.create).toHaveBeenCalledWith(expect.objectContaining({ createdBy: 'user-importer' }));
+    });
+
+    it('records no creator, never a sentinel, when no user is known', async () => {
+      const op = makeOperation();
+      operationRepo.findOne.mockResolvedValue(op);
+      toolRepo.create.mockImplementation((row: any) => row);
+      toolRepo.save.mockImplementation(async (row: any) => row);
+      toolVersionRepo.create.mockImplementation((row: any) => row);
+      toolVersionRepo.save.mockImplementation(async (row: any) => row);
+
+      const result = await service.createFromOperation(op, {
+        name: 'listPets',
+        description: 'List all pets',
+        organizationId: 'org-1',
+      });
+
+      expect(result.createdBy).toBeNull();
+      expect(result.generated).toBe(true);
+      expect(toolVersionRepo.create).toHaveBeenCalledWith(expect.objectContaining({ createdBy: null }));
     });
 
     it('should throw NotFoundException when operation is not found', async () => {

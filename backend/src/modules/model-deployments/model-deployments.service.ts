@@ -106,14 +106,14 @@ export class ModelDeploymentsService {
 
   async get(organizationId: string, id: string): Promise<ModelDeployment> {
     const d = await this.deployments.findOne({ where: { id, organizationId } });
-    if (!d) throw new NotFoundException('Deployment not found');
+    if (!d) throw new NotFoundException('Hosted model not found');
     return d;
   }
 
   /** Validate against the adapter's capabilities and schema, persist desired state, enqueue a reconcile. */
   async create(organizationId: string, userId: string | null, dto: CreateDeploymentDto): Promise<ModelDeployment> {
     const adapter = this.adapters.get(dto.providerType);
-    if (!adapter) throw new BadRequestException({ code: 'ADAPTER_UNKNOWN', message: `Unknown deployment provider: ${dto.providerType}` });
+    if (!adapter) throw new BadRequestException({ code: 'ADAPTER_UNKNOWN', message: `Unknown hosting provider: ${dto.providerType}` });
     // A registered version is optional. Naming the model is configuration.
     const version = dto.modelVersionId
       ? await this.versions.findOne({ where: { id: dto.modelVersionId, organizationId } })
@@ -370,7 +370,7 @@ export class ModelDeploymentsService {
       try {
         if (this.credentialRefs) {
           const resolved = await this.credentialRefs.resolve(organizationId, dto.credentialId, {
-            principal: userId ? { id: userId } : undefined,
+            principal: userId ? { id: userId } : null,
             context: { purpose: 'deploy', resourceType: 'model_deployment' },
           });
           stored = resolved.config ?? {};
@@ -444,7 +444,7 @@ export class ModelDeploymentsService {
         // reconcile, so a personal connection is checked against their
         // grants rather than silently allowed.
         const resolved = await this.credentialRefs.resolve(deployment.organizationId, config.credentialId, {
-          principal: deployment.createdBy ? { id: deployment.createdBy } : undefined,
+          principal: deployment.createdBy ? { id: deployment.createdBy } : null,
           context: { purpose: 'deploy', resourceType: 'model_deployment', resourceId: deployment.id },
         });
         creds = { ...(resolved.config as Record<string, string>) };

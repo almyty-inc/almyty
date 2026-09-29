@@ -6,7 +6,8 @@ import { Zap } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { QueryError } from '@/components/ui/query-error'
-import { analyticsApi, gatewaysApi } from '@/lib/api'
+import { analyticsApi } from '@/lib/api'
+import { gatewaysQuery } from '@/lib/list-queries'
 import { cn } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import type { Gateway, GatewayUsageEntry } from '@/types'
@@ -24,16 +25,11 @@ export function GatewaysTab() {
     enabled: !!currentOrganization,
   })
 
-  const { data: gatewaysRaw } = useQuery({
-    queryKey: ['gateways', currentOrganization?.id],
-    queryFn: async () => {
-      const d = await gatewaysApi.getAll()
-      const result = d?.gateways || (Array.isArray(d) ? d : [])
-      return Array.isArray(result) ? result : []
-    },
+  const { data: gatewaysPage } = useQuery({
+    ...gatewaysQuery(currentOrganization?.id),
     enabled: !!currentOrganization,
   })
-  const gateways: Gateway[] = Array.isArray(gatewaysRaw) ? gatewaysRaw : []
+  const gateways: Gateway[] = gatewaysPage?.items ?? []
   const gatewayMap = Object.fromEntries(gateways.map((g: Gateway) => [g.id, g]))
 
   return (

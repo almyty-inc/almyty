@@ -64,7 +64,7 @@ describe('AppDetailPage', () => {
     // The product name and slug in a header.
     expect(await screen.findByRole('heading', { name: 'Customer Care Console' })).toBeInTheDocument()
     // Tabbed sections, like every other detail page.
-    expect(screen.getByRole('tab', { name: /Distributions/ })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Where people use it/ })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /Agents/ })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /Settings/ })).toBeInTheDocument()
     // Distributions as cards with their status, not nodes on a graph.
@@ -98,13 +98,13 @@ describe('AppDetailPage', () => {
 
   it('offers to add a distribution from the header', async () => {
     render(<AppDetailPage />)
-    expect(await screen.findAllByRole('link', { name: /Add distribution/ })).not.toHaveLength(0)
+    expect(await screen.findAllByRole('link', { name: /Add a place/ })).not.toHaveLength(0)
   })
 
   it('invites a first distribution when there are none', async () => {
     ;(agentAppsApi.getById as any).mockResolvedValue(app({ distributions: [] }))
     render(<AppDetailPage />)
 
-    expect(await screen.findByText(/No distributions yet/)).toBeInTheDocument()
+    expect(await screen.findByText(/Not in front of anyone yet/)).toBeInTheDocument()
   })
 })

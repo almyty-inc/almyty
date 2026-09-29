@@ -7,6 +7,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { Throttle, ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import request from 'supertest';
+import { listenOnLoopback } from '../../../test/http';
 
 import { buildThrottlerOptions } from '../throttler-options';
 
@@ -79,7 +80,7 @@ describe('the global ThrottlerGuard, end to end', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    await app.init();
+    await listenOnLoopback(app);
   });
 
   afterAll(async () => {

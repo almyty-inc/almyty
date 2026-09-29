@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { safeFetch } from '../../common/security/safe-fetch';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -14,7 +14,8 @@ import {
   providerUsageCapability,
 } from './provider-usage.capability';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
-import { providerUsableBy } from '../llm-providers/private-provider';
+import { usableProviders } from '../llm-providers/private-provider';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 /** One normalized daily usage/cost bucket, provider-agnostic. */
 export interface NormalizedUsageBucket {
@@ -93,6 +94,7 @@ export class ProviderUsageService {
     @InjectRepository(Conversation)
     private readonly conversationRepo: Repository<Conversation>,
     private readonly envelopeCrypto: EnvelopeCryptoService,
+    @Optional() private readonly accessPolicy?: AccessPolicyService,
   ) {}
 
   getCapability(type: LlmProviderType | string): ProviderUsageCapability {
@@ -413,9 +415,10 @@ export class ProviderUsageService {
   }>> {
     const where: any = { organizationId };
     if (providerId) where.id = providerId;
-    // Another user's private provider is not synced on their behalf.
-    const providers = (await this.providerRepo.find({ where }))
-      .filter((p) => viewerId === undefined || providerUsableBy(p, viewerId));
+    // Another user's private provider, or a team's the viewer is not on, is
+    // not synced on their behalf.
+    const found = await this.providerRepo.find({ where });
+    const providers = viewerId === undefined ? found : await usableProviders(this.accessPolicy, organizationId, viewerId, found);
 
     const out = [];
     for (const p of providers) {
@@ -437,10 +440,10 @@ export class ProviderUsageService {
     opts: { from: Date; to?: Date },
     viewerId?: string | null,
   ): Promise<ReconciliationRow[]> {
-    // Another user's private provider is not in anyone else's breakdown.
-    const providers = (await this.providerRepo.find({
-      where: { organizationId },
-    })).filter((p) => viewerId === undefined || providerUsableBy(p, viewerId));
+    // Another user's private provider, or a team's the viewer is not on, is
+    // not in their breakdown.
+    const all = await this.providerRepo.find({ where: { organizationId } });
+    const providers = viewerId === undefined ? all : await usableProviders(this.accessPolicy, organizationId, viewerId, all);
 
     const [estimates, actuals] = await Promise.all([
       this.estimateByProvider(organizationId, opts.from, opts.to),

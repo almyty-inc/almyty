@@ -1,13 +1,15 @@
 import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 import { MoreThanOrEqual } from 'typeorm';
 import { GatewayStats } from './gateways.service';
 
 import { Gateway, GatewayStatus } from '../../entities/gateway.entity';
+import { ToolStatus } from '../../entities/tool.entity';
 import { Organization } from '../../entities/organization.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { GatewaysService } from './gateways.service';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 /**
  * How many metric rows one gateway's stats will look at.
@@ -26,11 +28,18 @@ const METRIC_SAMPLE_LIMIT = 50_000;
 const SKILL_SEARCH_LIMIT = 200;
 
 /**
- * A `gateway` alias row the caller may see: anything not private, or a
- * private gateway of their own. Binds `:callerId`.
+ * The SQL twin of gateway-servable's scope rule
+ * (`resourceServableThroughGateway`) over the `gateway` and `tool`
+ * aliases: an org tool on any gateway, a team tool only on a gateway of
+ * that team or a private one, a private tool only on a gateway private to
+ * the tool's owner. A search result is a skill the gateway serves, so it
+ * is held to what the gateway would list.
  */
-const PRIVATE_GATEWAY_CLAUSE =
-  `(gateway.visibility <> 'private' OR gateway."ownerUserId" = :callerId)`;
+export const SERVABLE_TOOL_SCOPE_CLAUSE =
+  `((tool.visibility IS NULL OR tool.visibility NOT IN ('team', 'private'))` +
+  ` OR (tool.visibility = 'team' AND (gateway.visibility = 'private'` +
+  ` OR (gateway.visibility = 'team' AND gateway."teamId" = tool."teamId")))` +
+  ` OR (tool.visibility = 'private' AND gateway.visibility = 'private' AND gateway."ownerUserId"::text = tool."createdBy"))`;
 
 /** The slug form used for org, gateway and tool segments of a skillRef. */
 function slugify(value: string): string {
@@ -50,6 +59,7 @@ export class GatewaysStatsHelper {
     private usageMetricRepository: Repository<UsageMetric>,
     @Inject(forwardRef(() => GatewaysService))
     private readonly service: GatewaysService,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async getGatewayStats(
@@ -128,17 +138,18 @@ export class GatewaysStatsHelper {
       requestCount: number;
     }>;
   }> {
-    // Get gateway counts. Another user's private gateway is not counted:
-    // a number that moves when someone else makes a "just me" gateway is
-    // a way to learn that it exists.
-    const gatewayCounts = await this.gatewayRepository
+    // Only the gateways this caller may see are part of their numbers, by
+    // the rule the gateway list applies: another member's private gateway
+    // and another team's gateway are not counted -- a number that moves
+    // when someone else adds one is a way to learn that it exists.
+    const caller = { id: callerId };
+    const countQuery = this.gatewayRepository
       .createQueryBuilder('gateway')
       .select('gateway.status')
       .addSelect('COUNT(*)', 'count')
-      .where('gateway.organizationId = :organizationId', { organizationId })
-      .andWhere(PRIVATE_GATEWAY_CLAUSE, { callerId })
-      .groupBy('gateway.status')
-      .getRawMany();
+      .where('gateway.organizationId = :organizationId', { organizationId });
+    await this.accessPolicy.applyListFilter(countQuery, caller, organizationId, 'gateway', { ownerColumn: 'ownerUserId' });
+    const gatewayCounts = await countQuery.groupBy('gateway.status').getRawMany();
 
     const statusCounts: Record<string, number> = gatewayCounts.reduce((acc, row) => {
       acc[row.gateway_status] = parseInt(row.count);
@@ -147,34 +158,29 @@ export class GatewaysStatsHelper {
 
     const totalGateways = Object.values(statusCounts).reduce((sum: number, count) => sum + (count as number), 0);
 
-    // Get all gateways for organization
+    // The same gateways, for the request totals and the top ten.
     const gateways = await this.gatewayRepository.find({
-      where: [
-        { organizationId, visibility: Not('private') },
-        { organizationId, visibility: 'private', ownerUserId: callerId },
-      ],
+      where: await this.accessPolicy.visibleWhere<Gateway>(caller, organizationId, {}, { ownerColumn: 'ownerUserId' }),
     });
 
     const totalRequests = gateways.reduce((sum, g) => sum + g.totalRequests, 0);
     const successfulRequests = gateways.reduce((sum, g) => sum + g.successfulRequests, 0);
     const successRate = totalRequests > 0 ? (successfulRequests / totalRequests) * 100 : 0;
 
-    // One average, computed by the database.
-    //
-    // This loaded every usage_metrics row the organization had ever
-    // written -- no window, no take -- to compute a single mean. The
-    // global request-logging interceptor writes two rows per HTTP
-    // request, each with a metadata json blob, so the table grows at
-    // twice the request rate: ~1.7M rows/day at a modest 10 req/s. One
-    // call to this endpoint was enough to OOM the pod within days of an
-    // org going live, and the sibling method above already windows its
-    // own query.
-    const { avg } = await this.usageMetricRepository
-      .createQueryBuilder('metric')
-      .select('AVG(metric.value)', 'avg')
-      .where('metric.organizationId = :organizationId', { organizationId })
-      .andWhere('metric.type = :type', { type: 'response_time' })
-      .getRawOne<{ avg: string | null }>() ?? { avg: null };
+    // One average, computed by the database, over the response times of
+    // those gateways only. The org's other response_time rows carry the
+    // latency of gateways the caller cannot see and of non-gateway
+    // requests; a figure that moves with their traffic is another leak.
+    const gatewayIds = gateways.map((g) => g.id);
+    const { avg } = gatewayIds.length === 0
+      ? { avg: null }
+      : (await this.usageMetricRepository
+          .createQueryBuilder('metric')
+          .select('AVG(metric.value)', 'avg')
+          .where('metric.organizationId = :organizationId', { organizationId })
+          .andWhere('metric.type = :type', { type: 'response_time' })
+          .andWhere('metric.gatewayId IN (:...gatewayIds)', { gatewayIds })
+          .getRawOne<{ avg: string | null }>()) ?? { avg: null };
     const averageResponseTime = avg ? Number(avg) : 0;
 
     // Get top gateways by request count
@@ -270,6 +276,14 @@ export class GatewaysStatsHelper {
     // needs.
     const escaped = query.replace(/[\\%_]/g, (c) => `\\${c}`);
 
+    const gatewayIds = (
+      await this.gatewayRepository.find({
+        where: await this.visibleActiveGateways(organizationId, callerId),
+        select: { id: true },
+      })
+    ).map((gateway) => gateway.id);
+    if (gatewayIds.length === 0) return [];
+
     const rows = await this.gatewayRepository
       .createQueryBuilder('gateway')
       .innerJoin('gateway.tools', 'gatewayTool')
@@ -283,9 +297,13 @@ export class GatewaysStatsHelper {
       .where('gateway.organizationId = :organizationId', { organizationId })
       .andWhere('gateway.status = :status', { status: GatewayStatus.ACTIVE })
       .andWhere('gatewayTool.isActive = true')
-      // Another user's private gateway is not searched, and neither is
-      // another user's private tool sitting behind a shared one.
-      .andWhere(PRIVATE_GATEWAY_CLAUSE, { callerId })
+      // Only gateways the caller's gateway list shows them (team scope and
+      // the private rule, from the same AccessPolicyService filter).
+      .andWhere('gateway.id IN (:...gatewayIds)', { gatewayIds })
+      // Only what each gateway serves: the tool active and in its scope.
+      .andWhere('tool.status = :toolStatus', { toolStatus: ToolStatus.ACTIVE })
+      .andWhere(SERVABLE_TOOL_SCOPE_CLAUSE)
+      // Another user's private tool sitting behind a shared gateway.
       .andWhere(`(tool.visibility <> 'private' OR tool."createdBy" = :callerId)`, { callerId })
       .andWhere('(tool.name ILIKE :q OR tool.description ILIKE :q)', { q: `%${escaped}%` })
       .orderBy('gateway.name', 'ASC')
@@ -430,7 +448,8 @@ export class GatewaysStatsHelper {
   }
 
   /**
-   * Every active gateway of an organization, with the organization.
+   * Every active gateway of an organization the caller's gateway list
+   * shows them, with the organization.
    *
    * Without its tools: this carried `relations: { tools: { tool: true } }`
    * and neither caller ever read them. `gateway-info`'s all-skills route
@@ -441,13 +460,25 @@ export class GatewaysStatsHelper {
    */
   async getAllUserGateways(organizationId: string, callerId: string): Promise<Gateway[]> {
     return this.gatewayRepository.find({
-      where: [
-        { organizationId, status: GatewayStatus.ACTIVE, visibility: Not('private') },
-        // Private gateways: the caller's own only.
-        { organizationId, status: GatewayStatus.ACTIVE, visibility: 'private', ownerUserId: callerId },
-      ],
+      where: await this.visibleActiveGateways(organizationId, callerId),
       relations: { organization: true },
     });
+  }
+
+  /**
+   * The active gateways `callerId` may see, as find-options: the gateway
+   * list's own filter (AccessPolicyService.visibleWhere is the twin of the
+   * applyListFilter getGateways runs). A team gateway only for its team's
+   * members and org owners/admins, a private one only for its owner, and a
+   * non-member of the organization is refused.
+   */
+  private visibleActiveGateways(organizationId: string, callerId: string): Promise<FindOptionsWhere<Gateway>[]> {
+    return this.accessPolicy.visibleWhere<Gateway>(
+      { id: callerId },
+      organizationId,
+      { status: GatewayStatus.ACTIVE },
+      { ownerColumn: 'ownerUserId' },
+    );
   }
 
   /**

@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProviderUsageSnapshot } from '../../entities/provider-usage-snapshot.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { Conversation } from '../../entities/conversation.entity';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
 import { ProviderUsageService } from './provider-usage.service';
 import { ProviderUsageController } from './provider-usage.controller';
@@ -21,6 +22,7 @@ import { ProviderUsageController } from './provider-usage.controller';
       LlmProvider,
       Conversation,
     ]),
+    AuthorizationModule,
   ],
   providers: [ProviderUsageService],
   controllers: [ProviderUsageController],

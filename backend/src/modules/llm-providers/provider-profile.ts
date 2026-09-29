@@ -880,6 +880,19 @@ export function providerProfile(type: LlmProviderType): ProviderProfile | undefi
   return BY_KEY.get(type);
 }
 
+/**
+ * Whether this vendor serves a model list, so its models can be found
+ * rather than named. When it does not (Qwen, Z.ai, Fireworks, SambaNova,
+ * Ark, Spark on their compatible surfaces; Vertex AI, which has no
+ * profile), connecting it needs the one model to use. Types without a
+ * profile otherwise list through their own code path.
+ */
+export function providerListsModels(type: LlmProviderType): boolean {
+  const profile = BY_KEY.get(type);
+  if (profile) return profile.protocols.some((b) => !!b.listingPath);
+  return type !== LlmProviderType.VERTEX_AI;
+}
+
 /** The binding a call uses by default: the preferred one, else the first. */
 export function preferredBinding(profile: ProviderProfile): ProtocolBinding {
   return profile.protocols.find((b) => b.preferred) ?? profile.protocols[0];

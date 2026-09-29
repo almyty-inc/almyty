@@ -1,24 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useState } from 'react'
-import { screen, waitFor, fireEvent } from '@testing-library/react'
+import { screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { render } from '@/test/setup'
-import { SecurityTab } from '../security-tab'
 import { SchemaTab } from '../schema-tab'
 import { OperationsTab } from '../operations-tab'
-import { CredentialsTab } from '../credentials-tab'
-import { apisApi } from '@/lib/api'
 import type { Api, ApiOperation } from '@/types'
 
 vi.mock('@/lib/api', () => ({
   apisApi: {
     update: vi.fn(),
     getParsedSchema: vi.fn(),
-    getCredentials: vi.fn(),
-    createCredential: vi.fn(),
-    deleteCredential: vi.fn(),
-    testCredential: vi.fn(),
   },
 }))
 
@@ -42,50 +34,6 @@ const API = {
   authentication: { type: 'none', config: {} },
   schemas: [{ id: 'schema-1', rawSchema: 'openapi: 3.0.0' }],
 } as unknown as Api
-
-function Security() {
-  const [editing, setEditing] = useState(false)
-  return <SecurityTab api={API} editing={editing} onEditingChange={setEditing} />
-}
-
-describe('SecurityTab (inline authentication)', () => {
-  it('shows the method, and Edit turns the section into a form that saves', async () => {
-    vi.mocked(apisApi.update).mockResolvedValue({} as any)
-    const user = userEvent.setup()
-    render(<Security />)
-    expect(screen.getByTestId('api-auth-summary')).toHaveTextContent('No authentication')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Edit' }))
-    const form = screen.getByRole('form', { name: 'Configure authentication' })
-    expect(form).toBeInTheDocument()
-    await user.click(screen.getByRole('combobox', { name: 'Authentication type' }))
-    await user.click(await screen.findByRole('option', { name: 'Bearer token' }))
-
-    const token = screen.getByLabelText('Bearer token')
-    // A secret: masked, and password managers keep out.
-    expect(token).toHaveAttribute('type', 'password')
-    expect(token).toHaveAttribute('data-1p-ignore', 'true')
-    await user.type(token, 'tok-123')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() =>
-      expect(apisApi.update).toHaveBeenCalledWith('api-1', {
-        authentication: { type: 'bearer_token', config: { token: 'tok-123' } },
-      }),
-    )
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Configure authentication' })).not.toBeInTheDocument())
-  })
-
-  it('Cancel folds the form away without saving', async () => {
-    const user = userEvent.setup()
-    render(<Security />)
-    await user.click(screen.getByRole('button', { name: 'Edit' }))
-    await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('form', { name: 'Configure authentication' })).not.toBeInTheDocument()
-    expect(apisApi.update).not.toHaveBeenCalled()
-  })
-})
 
 describe('SchemaTab (inline viewer)', () => {
   it('renders nothing closed, the raw schema open, and Close closes it', async () => {
@@ -120,48 +68,5 @@ describe('OperationsTab (inline operation details)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     await user.click(row)
     expect(screen.queryByTestId('operation-details')).not.toBeInTheDocument()
-  })
-})
-
-describe('CredentialsTab (inline add)', () => {
-  beforeEach(() => {
-    vi.mocked(apisApi.getCredentials).mockResolvedValue([] as any)
-  })
-
-  it('adds a credential from a form in the section', async () => {
-    vi.mocked(apisApi.createCredential).mockResolvedValue({ id: 'c1' } as any)
-    const user = userEvent.setup()
-    render(<CredentialsTab apiId="api-1" apiName="Northwind" />)
-    await user.click(screen.getByRole('button', { name: 'Add credential' }))
-    expect(screen.getByRole('form', { name: 'Add credential' })).toBeInTheDocument()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('combobox', { name: /Type/ }))
-    await user.click(await screen.findByRole('option', { name: 'API Key' }))
-    const key = screen.getByLabelText('API key')
-    expect(key).toHaveAttribute('data-1p-ignore', 'true')
-    await user.type(key, 'sk-1')
-    await user.click(screen.getByRole('button', { name: 'Save credential' }))
-
-    await waitFor(() =>
-      expect(apisApi.createCredential).toHaveBeenCalledWith('api-1', {
-        name: 'Northwind API Key',
-        type: 'API_KEY',
-        config: { apiKey: 'sk-1' },
-      }),
-    )
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Add credential' })).not.toBeInTheDocument())
-  })
-
-  it('without a type, says so on the field and focuses it', async () => {
-    const user = userEvent.setup()
-    render(<CredentialsTab apiId="api-1" apiName="Northwind" />)
-    await user.click(screen.getByRole('button', { name: 'Add credential' }))
-    await user.click(screen.getByRole('button', { name: 'Save credential' }))
-    const type = screen.getByRole('combobox', { name: /Type/ })
-    expect(type).toHaveAttribute('aria-invalid', 'true')
-    expect(document.activeElement).toBe(type)
-    expect(screen.getByText('Choose the kind of credential the API expects.')).toBeInTheDocument()
-    expect(apisApi.createCredential).not.toHaveBeenCalled()
   })
 })

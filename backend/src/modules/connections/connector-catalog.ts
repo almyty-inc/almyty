@@ -333,6 +333,33 @@ export const REGISTRY_S3_CONNECTOR: ConnectorDefinition = {
   docsUrl: 'https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadBucket.html',
 };
 
+/**
+ * "Other service": any key the catalog has no entry for, stored under a
+ * name the person gives it (the connect body's `name`). There is nobody to
+ * ask whether it works, so the check is shape only: it is saved as given.
+ * The secret is an ordinary api_key row, `apiKey` like every other form.
+ */
+export const OTHER_SERVICE_CONNECTOR: ConnectorDefinition = {
+  key: 'other',
+  kind: 'tool_source',
+  displayName: 'Other service',
+  description: 'Any other key or token, saved under a name you choose.',
+  connect: [{
+    type: 'api_key',
+    label: 'Key',
+    schema: {
+      type: 'object',
+      properties: {
+        apiKey: { type: 'string', title: 'Key', 'x-secret': true },
+      },
+      required: ['apiKey'],
+    },
+  }],
+  validation: { kind: 'format' },
+  keyPageUrl: null,
+  docsUrl: null,
+};
+
 const OTHER_CONNECTORS: ConnectorDefinition[] = [
   REGISTRY_S3_CONNECTOR,
   {
@@ -415,6 +442,7 @@ const OTHER_CONNECTORS: ConnectorDefinition[] = [
     keyPageUrl: null,
     docsUrl: null,
   },
+  OTHER_SERVICE_CONNECTOR,
 ];
 
 // ---------------------------------------------------------------------------

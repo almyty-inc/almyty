@@ -2,6 +2,7 @@ import { ModelDeployment } from '../../../../entities/model-deployment.entity';
 import { AdapterRegistry } from '../../adapters/adapter.registry';
 import { assertAdapterContract } from '../../adapters/adapter.interface';
 import { ModelDeploymentsModule } from '../../model-deployments.module';
+import { restoreEnv } from '../../../../test/env';
 
 // The global test setup mocks axios without `create`; the module builds
 // adapters with their default HTTP clients, so give it one that is inert.
@@ -57,7 +58,7 @@ describe('gate 3: every registered adapter is contract-clean in fixture mode', (
   });
 
   afterAll(() => {
-    process.env.NODE_ENV = previousEnv;
+    restoreEnv('NODE_ENV', previousEnv);
   });
 
   it('registers the Phase A adapters plus the wrappers and the stub outside production', () => {

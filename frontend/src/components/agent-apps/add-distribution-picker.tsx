@@ -85,14 +85,14 @@ export function AddDistributionPicker({ app }: { app: AgentApp }) {
     },
     onError: (err: unknown) => {
       setPending(null)
-      errorNotif('Could not add the distribution', getApiErrorMessage(err, 'Please try again.'))
+      errorNotif('Could not add it', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
   return (
     <FormPage
-      title="Add a distribution"
-      description="Choose where this app is published."
+      title="Where people use it"
+      description="Pick a place. You can add more later."
       back={{ to: `/apps/${app.slug}`, label: app.branding?.appName || app.name }}
     >
       {DISTRIBUTION_GROUPS.map((group) => (

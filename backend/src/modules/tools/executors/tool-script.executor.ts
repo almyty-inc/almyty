@@ -83,7 +83,9 @@ export class ToolScriptExecutor {
           temperature: tool.llmConfig!.temperature,
         },
         options.organizationId,
-        options.userId,
+        // As the call's principal (the run's, inherited), so an LLM tool
+        // reaches only a provider that principal may use.
+        options.principal ?? options.userId,
       );
 
       let responseData: any = chatResponse.message?.content || '';

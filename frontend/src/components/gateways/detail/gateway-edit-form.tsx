@@ -1,7 +1,7 @@
 /**
- * GatewayEditForm -- a gateway's name, path, description, status and who
- * can see it. Rendered on its own page (/gateways/:id/edit), not in a
- * modal.
+ * GatewayEditForm -- a gateway's name, path, description and who can see
+ * it. Rendered on its own page (/gateways/:id/edit), not in a modal. Pause
+ * and resume live on the gateway's page as a switch, not here.
  *
  * Owns its react-hook-form + zod validation. The page supplies the
  * gateway, the save handler that runs the update mutation, and what
@@ -16,15 +16,8 @@ import { Field, FormSection, InlineFormActions, focusFirstInvalid } from '@/comp
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { VisibilityField, type Visibility, type VisibilityValue } from '@/components/ui/visibility-field'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { PRIVATE_CAPABLE_GATEWAY_TYPES } from '@/components/gateways/create-gateway-form'
+import { PRIVATE_CAPABLE_GATEWAY_TYPES } from '@/components/gateways/schema'
 import { useOrganizationStore } from '@/store/organization'
 
 export const editGatewaySchema = z.object({
@@ -34,7 +27,6 @@ export const editGatewaySchema = z.object({
     .min(1, 'Endpoint is required')
     .transform((val) => (val.startsWith('/') ? val : `/${val}`)),
   description: z.string().optional(),
-  status: z.enum(['active', 'inactive', 'maintenance', 'error']),
 })
 
 export type EditGatewayForm = z.infer<typeof editGatewaySchema>
@@ -59,7 +51,6 @@ export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSyste
       name: gateway?.name || '',
       endpoint: gateway?.endpoint || '',
       description: gateway?.description || '',
-      status: gateway?.status || 'active',
     },
   })
   const { errors } = form.formState
@@ -93,9 +84,9 @@ export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSyste
     <form
       ref={formRef}
       noValidate
-      onSubmit={form.handleSubmit(submit, () =>
-        requestAnimationFrame(() => focusFirstInvalid(formRef.current)),
-      )}
+      onSubmit={(e) =>
+        form.handleSubmit(submit, () => requestAnimationFrame(() => focusFirstInvalid(formRef.current)))(e)
+      }
       className="space-y-6"
       aria-label="Edit gateway"
     >
@@ -134,22 +125,6 @@ export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSyste
           <Textarea placeholder="What this gateway is for" rows={3} {...form.register('description')} />
         </Field>
 
-        <Field id="edit-status" label="Status" hint="Only an active gateway answers requests.">
-          <Select
-            onValueChange={(value) => form.setValue('status', value as EditGatewayForm['status'], { shouldDirty: true })}
-            value={form.watch('status')}
-          >
-            <SelectTrigger id="edit-status" className="sm:max-w-xs">
-              <SelectValue placeholder="Select status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
-              <SelectItem value="maintenance">Maintenance</SelectItem>
-              <SelectItem value="error">Error</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
       </FormSection>
 
       {!isSystem && (

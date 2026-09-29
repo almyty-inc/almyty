@@ -98,17 +98,18 @@ export class AgentExecutionSettingsController {
   ) {
     const agent = await this.load(req, agentId);
 
-    // A strategy compiles to a pipeline graph, and only the pipeline engine
-    // runs one. An autonomous agent runs the ReAct loop, which never reads
-    // settings.execution (docs/strategies.md: strategies are not a second
-    // execution model), so the choice would save and then do nothing.
-    // Clearing is still allowed, so an agent switched from workflow can
-    // shed a leftover choice.
+    // A strategy here compiles to a pipeline graph, and only the pipeline
+    // engine runs one. An autonomous agent's strategy is part of its models
+    // (`agents.models`, set on its page and read by the loop every step;
+    // docs/autonomous-models.md), so a choice made here would save and then
+    // do nothing. Clearing is still allowed, so an agent switched from
+    // workflow can shed a leftover choice.
     if (agent.mode === 'autonomous' && (body.strategyKey || body.orchestrator?.enabled)) {
       throw new HttpException(
         {
           success: false,
-          message: 'Strategies apply to workflow agents. An autonomous agent runs its own loop and would ignore this choice.',
+          message:
+            "This agent is autonomous: choose how its models work together in its Models section. Strategies here compile to a workflow graph.",
           // `code`, not `error`: the global filter keeps a payload's code
           // and replaces its `error`, so only this reaches the client.
           code: 'STRATEGY_WORKFLOW_ONLY',

@@ -9,7 +9,7 @@ See what every protocol, tool, agent, and model is doing in real time. Eleven ta
 1. Open **Analytics** in the sidebar.
 2. The **Overview** tab loads by default, showing aggregate metrics.
 3. Click any tab to drill into a specific area. Each tab has its own address (`/analytics/tools`, `/analytics/budgets`, and so on), so a view is linkable.
-4. Tabs that cover a period — Tools, Gateways, Models, Agents — carry their own timeframe selector; Cost switches between today and this month.
+4. Tools, Gateways, and Models carry their own timeframe selector; Agents shows fixed 24-hour and 7-day counts, and Cost switches between today and this month.
 5. Use **Export CSV** or **Export JSON** in the page header to download the request log.
 
 ## Tabs
@@ -32,7 +32,7 @@ Per-tool breakdown: execution count, success rate, average time, and last-used t
 
 Per-gateway breakdown: protocol, total requests, success and error counts, and success rate. Useful for spotting misconfigured or underused gateways.
 
-![Gateways tab](/screenshots/analytics-gateways.png)
+![Gateways tab with no requests in the selected seven-day window](/screenshots/analytics-gateways.png)
 
 ### Models
 
@@ -46,7 +46,7 @@ How well multi-model routing is holding up, per agent. The headline number is th
 
 Per-agent execution metrics: status, total executions, 24h and 7d counts, success rate, average time, and cost, with a recent-failures list below the table.
 
-![Agents tab](/screenshots/analytics-agents.png)
+![Agents tab showing seeded demo agents and their execution metrics](/screenshots/analytics-agents.png)
 
 ### Cost
 

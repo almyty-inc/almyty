@@ -1,8 +1,11 @@
 import { Repository } from 'typeorm';
 
+import { Agent } from '../../entities/agent.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
+import type { ResourceVisibility } from '../../common/authorization/access-policy.service';
+import { agentIsInvokable } from '../agents/agent-invocation';
 import { resourceServableThroughGateway } from './private-gateway';
 
 /**
@@ -105,4 +108,36 @@ export async function findGatewayRun(
     where: { ...by, organizationId: gateway.organizationId, agentId: gateway.agentId },
     ...('conversationId' in by ? { order: { createdAt: 'DESC' as const } } : {}),
   });
+}
+
+/**
+ * The agent an agent gateway (A2A, ACP, the root agent card) serves, or
+ * null. The gateway names its agent by id; that agent is served only when
+ * it belongs to the gateway's organization, is active (a draft, inactive
+ * or errored agent is not published: its card would advertise an agent no
+ * call can run), and its scope fits the gateway's
+ * (`resourceServableThroughGateway`: a private agent only on its owner's
+ * private gateway, a team agent only on that team's gateway). Every card
+ * and discovery document is built from this; callers answer null with the
+ * same not-found a missing agent gets.
+ */
+type AgentFinder = Pick<Repository<Agent>, 'findOne'>;
+
+export interface AgentServingGatewayLike extends AgentGatewayLike {
+  visibility?: ResourceVisibility | null;
+  ownerUserId?: string | null;
+  teamId?: string | null;
+}
+
+export async function findServableGatewayAgent(
+  agents: AgentFinder,
+  gateway: AgentServingGatewayLike | null | undefined,
+): Promise<Agent | null> {
+  if (!gateway?.agentId || !gateway.organizationId) return null;
+  const agent = await agents.findOne({
+    where: { id: gateway.agentId, organizationId: gateway.organizationId },
+  });
+  if (!agent || !agentIsInvokable(agent)) return null;
+  if (!resourceServableThroughGateway(gateway, agent)) return null;
+  return agent;
 }

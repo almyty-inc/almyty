@@ -82,7 +82,7 @@ describe('VisitorOAuthConfigService', () => {
     expect(CredentialRefResolver.isManagedBy(row, visitorOAuthManagedBy('gw-a'))).toBe(true);
     // Encrypted at rest, and it resolves back to the pasted value.
     expect(JSON.stringify(row.config)).not.toContain(SECRET);
-    const resolved = await refs.resolve('org-a', row.id);
+    const resolved = await refs.resolve('org-a', row.id, { principal: null });
     expect(resolved.config.client_secret).toBe(SECRET);
   });
 
@@ -120,12 +120,12 @@ describe('VisitorOAuthConfigService', () => {
 
     await service.set('gw-a', 'org-a', 'u1', { ...google, clientSecret: undefined, allowedEmailDomains: ['acme.com'] });
     expect(gateways[0].visitorOAuth!.credentialId).toBe(firstId);
-    expect((await refs.resolve('org-a', firstId!)).config.client_secret).toBe(SECRET);
+    expect((await refs.resolve('org-a', firstId!, { principal: null })).config.client_secret).toBe(SECRET);
 
     await service.set('gw-a', 'org-a', 'u1', { ...google, clientSecret: 'rotated' });
     expect(gateways[0].visitorOAuth!.credentialId).toBe(firstId);
     expect(credentials.rows()).toHaveLength(1);
-    expect((await refs.resolve('org-a', firstId!)).config.client_secret).toBe('rotated');
+    expect((await refs.resolve('org-a', firstId!, { principal: null })).config.client_secret).toBe('rotated');
   });
 
   it('refuses a first save without a secret', async () => {

@@ -215,7 +215,7 @@ export class GatewayAuthController {
       }
 
       // Verify gateway belongs to org
-      const gateway = await this.gatewaysService.getGateway(gatewayId, organizationId);
+      const gateway = await this.gatewaysService.getGateway(gatewayId, organizationId, true, { id: userId });
       if (!gateway) {
         throw new HttpException(
           { success: false, message: 'Gateway not found', error: 'GATEWAY_NOT_FOUND' },

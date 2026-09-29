@@ -1,6 +1,6 @@
 # Your cloud account
 
-A model you run on your own cloud account is still just a model. Name where its weights come from, pick the cloud, choose a size and a budget, and almyty starts it there. It appears in the [Models](/models) list like every other model, with **Runs on** saying where, for example "Your Hugging Face account (Inference Endpoint)" or "Your AWS account (Bedrock)", and its running state, hourly cost and budget on the model itself. The [router](/models/routing) picks it like any vendor model.
+A model you run on your own cloud account is still just a model. Connect the cloud account like any other provider, click **Start a model** on its page and say which model; almyty starts it there. It appears in the [Models](/models) list like every other model, and its running state, hourly cost and budget show on the cloud account's page. The [router](/models/routing) picks it like any vendor model.
 
 almyty does not host anything. The model runs on the cloud's own managed product, in your account, billed by that cloud to you. Weight files never pass through almyty.
 
@@ -10,23 +10,26 @@ hf://Qwen/Qwen3-14B          ->      started, sized, watched      ->      Runs o
 bedrock://...                        every 2 min                          status, cost, budget
 ```
 
-## Add one
+## Start one
 
-1. Open **Models** and click **Add model**.
-2. Under **Where does it run?** choose **Your cloud account**.
-3. Name the model source: a Hugging Face repository such as `hf://meta-llama/Llama-3.1-8B-Instruct`, a bucket prefix such as `s3://acme-models/qwen3-14b-support@e3b0c442`, or a model the cloud already hosts. See [Model sources](#model-sources).
-4. Pick the cloud: Hugging Face Inference Endpoints, Modal, AWS Bedrock, SageMaker, Google Vertex AI, Microsoft Foundry, Baseten, Together, Fireworks, Nebius, RunPod or DigitalOcean. A cloud that cannot read the source you named is not offered.
-5. Choose the account (a saved [connection](/connections), or the cloud's own fields), the size (hardware, replicas, region) and, optionally, a [budget](/cost-governance).
+A cloud account is a provider like any other, so there is one place to begin: **Models → Connect a provider**.
 
-The model is in the list at once, with status **Starting**. It turns active when the endpoint is ready, and usable once a validation run passes, the same rule as every other model. Validate it from its detail page when it reads **Running**.
+1. Connect the cloud account from its tile (Hugging Face, Modal, AWS, Google Vertex AI, Azure and the rest), with its key or a saved [connection](/connections).
+2. On the provider's page, click **Start a model**.
+3. Say which model: a Hugging Face repository such as `Qwen/Qwen3-14B`. A cloud that reads weights only from a bucket (AWS Bedrock import, Fireworks) asks for the bucket location instead. See [Model sources](#model-sources).
+4. Click **Start**.
 
-## On the model
+Everything else has a sensible default and sits under **Advanced**: where the weights come from (a bucket such as `s3://acme-models/qwen3-14b-support@e3b0c442` instead of the Hub), the region, dedicated or serverless, hardware and replicas, scale to zero, adapters (LoRA) and a [budget](/cost-governance).
 
-Click a model that runs on your cloud to see, next to its usual facts:
+The model is in the list at once, marked as starting. When the cloud reports it ready, almyty makes one short call through it and it becomes usable by itself, the same rule as every other model: nothing to press.
+
+## On the provider's page
+
+The cloud account's page lists the models running there with, next to their usual facts:
 
 | | |
 |---|---|
-| **Status** | Starting, Running, Scaled to zero, Resizing, Needs attention, Shutting down, Shut down or Failed, with the cloud's last message when there is one |
+| **State** | Starting, Running, Scaled to zero, Resizing, Needs attention, Shutting down, Shut down or Failed, with the cloud's last message when there is one |
 | **Cost** | Spend so far and the current hourly rate |
 | **Budget** | The limit it is tied to and how much of it is used |
 | **Endpoint** | The URL the cloud serves it on |
@@ -43,14 +46,14 @@ The cloud's account details hold secrets, so they come from a file, from stdin o
 $ cat > hf.json <<'JSON'
 {"token":"hf_...","namespace":"acme","region":"eu-west-1","instanceType":"nvidia-a10g"}
 JSON
-$ npx @almyty/models deploy hf://Qwen/Qwen3-14B --adapter huggingface-endpoints \
+$ npx @almyty/models host hf://Qwen/Qwen3-14B --adapter huggingface-endpoints \
     --config-file hf.json \
     --desired '{"replicas":1,"privacyTier":"private_cloud","region":"eu-west-1"}'
 Queued.
 c07b...  huggingface-endpoints  pending  replicas ?/1
 ```
 
-The model is in `npx @almyty/models list` straight away. Once it is running, validate it and it is selectable:
+The model is in `npx @almyty/models list` straight away. When the endpoint is ready, almyty checks it with one short call, and it is selectable once that passes. `validate` runs the check again, for instance after a failure you have fixed:
 
 ```bash
 $ npx @almyty/models validate 4f2a...
@@ -60,7 +63,7 @@ Passed in 1210 ms.
 A model the cloud already hosts starts the same way, with its reference as the source:
 
 ```bash
-$ npx @almyty/models deploy fireworks://accounts/acme/models/qwen3-tuned --adapter fireworks
+$ npx @almyty/models host fireworks://accounts/acme/models/qwen3-tuned --adapter fireworks
 ```
 
 Every flag is on [the CLI page](/models/cli#your-cloud-account); the HTTP calls are in the [Models API](/api-reference/models-api#your-cloud-account).
@@ -118,7 +121,7 @@ What differs between clouds is the account you need, which sources it reads, wha
 
 ### Hugging Face Inference Endpoints
 
-`providerType`: `huggingface-endpoints`. The only dedicated product Hugging Face runs for you (its serverless offer, Inference Providers, routes to a third party and runs nothing of yours, so it is an [inference provider](/models/providers), not a cloud here). Needs a Hugging Face token with the Inference Endpoints write scope and your namespace (user or organization); choose the vendor (`aws`, `gcp`, `azure`), region, accelerator, instance type and size, and the endpoint type (`public`, `authenticated` or `private`). Source: Hugging Face only. There is no field anywhere in the create body for object storage, a URL or an upload, so an `s3://` source is refused with `ADAPTER_UNSUPPORTED_SOURCE`. almyty sends the Hub `repository` and the pinned `revision`; a gated or third-party repo's token goes in the container secret `HF_TOKEN`, held by Hugging Face, not by us. Regions as read on 2026-09-09: aws `eu-west-1`, `us-east-1`, `us-east-2`, `us-west-2`; azure `eastus`; gcp `us-east4`. Stop calls the endpoint's scale-to-zero (nothing billed, resumed on Start); the endpoint also scales to zero on its own after its configured idle timeout. Cost is `hourlyRateCents` times running time, priced from Hugging Face's public `GET /v2/provider` list, since there is no usage API.
+`providerType`: `huggingface-endpoints`. The only dedicated product Hugging Face runs for you (its serverless offer, Inference Providers, routes to a third party and runs nothing of yours, so it is a pay-per-call [provider](/models/providers), not a cloud here). Needs a Hugging Face token with the Inference Endpoints write scope and your namespace (user or organization); choose the vendor (`aws`, `gcp`, `azure`), region, accelerator, instance type and size, and the endpoint type (`public`, `authenticated` or `private`). Source: Hugging Face only. There is no field anywhere in the create body for object storage, a URL or an upload, so an `s3://` source is refused with `ADAPTER_UNSUPPORTED_SOURCE`. almyty sends the Hub `repository` and the pinned `revision`; a gated or third-party repo's token goes in the container secret `HF_TOKEN`, held by Hugging Face, not by us. Regions as read on 2026-09-09: aws `eu-west-1`, `us-east-1`, `us-east-2`, `us-west-2`; azure `eastus`; gcp `us-east4`. Stop calls the endpoint's scale-to-zero (nothing billed, resumed on Start); the endpoint also scales to zero on its own after its configured idle timeout. Cost is `hourlyRateCents` times running time, priced from Hugging Face's public `GET /v2/provider` list, since there is no usage API.
 
 ### Modal
 
@@ -162,20 +165,20 @@ What differs between clouds is the account you need, which sources it reads, wha
 
 ### DigitalOcean
 
-`providerType`: `digitalocean`. DigitalOcean Gradient AI Dedicated Inference: a managed service DigitalOcean operates, serving a model on dedicated GPUs behind an OpenAI-compatible endpoint. **It is a DigitalOcean public preview**: enable it from the Feature Preview page in your control panel first, and expect the API to change. A token that works everywhere else on the DigitalOcean API is still refused here until you do, so that refusal is reported as `ADAPTER_PREVIEW_NOT_ENABLED` naming the opt-in rather than as a bad key, and the cloud is labelled as a preview in the **Add model** form. Needs a DigitalOcean API token; choose the region (`atl1`, `nyc2`, `tor1`), the accelerator type and scale count (AMD MI300X, MI300X 8x, MI325X, MI350X; NVIDIA H100, H100 8x, H200, H200 8x, B300, B300 8x), and an optional VPC. Source: a Hugging Face repository (`model_slug` with `model_provider: hugging_face`, and `access_tokens.hugging_face_token` for a gated repo), or a model already imported into DigitalOcean's own Model Catalog through Bring Your Own Model. BYOM import has no REST route: import once from the Control Panel (from Hugging Face or your own Spaces bucket), and name the resulting catalog entry with `providerConfig.modelSlug`. Architecture is gated by DigitalOcean itself at create time (documented support includes `Qwen2ForCausalLM` and `Qwen3ForCausalLM`); an unsupported one comes back as `ADAPTER_UNSUPPORTED_ARCHITECTURE`. The create response returns a dedicated inference bearer token, which is the only credential the data plane accepts (not the account token) and the only secret almyty keeps for the model. Scale to zero is unverified and reported unsupported: billing is per GPU-hour for the accelerators that exist, and only Shut down reliably stops it. Cost multiplies the published per-accelerator hourly rate by the current scale; there is no usage API.
+`providerType`: `digitalocean`. DigitalOcean Gradient AI Dedicated Inference: a managed service DigitalOcean operates, serving a model on dedicated GPUs behind an OpenAI-compatible endpoint. **It is a DigitalOcean public preview**: enable it from the Feature Preview page in your control panel first, and expect the API to change. A token that works everywhere else on the DigitalOcean API is still refused here until you do, so that refusal is reported as `ADAPTER_PREVIEW_NOT_ENABLED` naming the opt-in rather than as a bad key, and the cloud is labelled as a preview in the **Start a model** form. Needs a DigitalOcean API token; choose the region (`atl1`, `nyc2`, `tor1`), the accelerator type and scale count (AMD MI300X, MI300X 8x, MI325X, MI350X; NVIDIA H100, H100 8x, H200, H200 8x, B300, B300 8x), and an optional VPC. Source: a Hugging Face repository (`model_slug` with `model_provider: hugging_face`, and `access_tokens.hugging_face_token` for a gated repo), or a model already imported into DigitalOcean's own Model Catalog through Bring Your Own Model. BYOM import has no REST route: import once from the Control Panel (from Hugging Face or your own Spaces bucket), and name the resulting catalog entry with `providerConfig.modelSlug`. Architecture is gated by DigitalOcean itself at create time (documented support includes `Qwen2ForCausalLM` and `Qwen3ForCausalLM`); an unsupported one comes back as `ADAPTER_UNSUPPORTED_ARCHITECTURE`. The create response returns a dedicated inference bearer token, which is the only credential the data plane accepts (not the account token) and the only secret almyty keeps for the model. Scale to zero is unverified and reported unsupported: billing is per GPU-hour for the accelerators that exist, and only Shut down reliably stops it. Cost multiplies the published per-accelerator hourly rate by the current scale; there is no usage API.
 
 ### From the API and CLI only
 
-Two more `providerType` values are not offered in **Add model**:
+Two more `providerType` values are not offered by **Start a model**:
 
-- **`ollama`**: an Ollama server you already run, on your own machine or a box you rent. almyty never provisions the machine, installs Ollama, or moves weights; it talks to the server at the URL you give. Needs the server URL and, only behind a reverse proxy that checks one, a bearer token. Sources: `hf://` (pulled by Ollama itself as `hf.co/org/repo[:quant]`) and `file://` (a GGUF file or a directory of safetensors already on the server's own filesystem, or a library tag such as `qwen3:8b`). `s3://` is refused, because mirroring a bucket onto the host would make almyty the delivery route for the weights. Start pulls the Hub repo or creates the model from a host path, then loads it into memory; residency in VRAM is the closest thing Ollama has to a replica count, so 2 replicas is 1. Stop unloads with `keep_alive: 0`. Ollama bills nothing itself; set `hourlyRateCents` to account for a rented box, and it drops to zero while the model is unloaded. A private URL needs `OLLAMA_ALLOW_PRIVATE_URLS=true` on a self-hosted API. To call an Ollama server without almyty managing its models, add it as [a server you run](/models/providers#a-server-you-run) instead.
+- **`ollama`**: an Ollama server you already run, on your own machine or a box you rent. almyty never provisions the machine, installs Ollama, or moves weights; it talks to the server at the URL you give. Needs the server URL and, only behind a reverse proxy that checks one, a bearer token. Sources: `hf://` (pulled by Ollama itself as `hf.co/org/repo[:quant]`) and `file://` (a GGUF file or a directory of safetensors already on the server's own filesystem, or a library tag such as `qwen3:8b`). `s3://` is refused, because mirroring a bucket onto the host would make almyty the delivery route for the weights. Start pulls the Hub repo or creates the model from a host path, then loads it into memory; residency in VRAM is the closest thing Ollama has to a replica count, so 2 replicas is 1. Stop unloads with `keep_alive: 0`. Ollama bills nothing itself; set `hourlyRateCents` to account for a rented box, and it drops to zero while the model is unloaded. A private URL needs `OLLAMA_ALLOW_PRIVATE_URLS=true` on a self-hosted API. To call an Ollama server without almyty managing its models, add it as [your own server](/models/providers#your-own-server) instead.
 - **`stub`**: an in-memory stand-in for development and the conformance suite, with nothing behind it. Registered outside production, or in production with `MODEL_STUB_ADAPTER=true`. Its `simulate` field forces `quota_exceeded` or `fail_ready` outcomes for tests.
 
-An OpenAI-compatible server you already run (vLLM, TGI, llama.cpp, SGLang, a LiteLLM proxy) is not a cloud here: almyty does not start, size or stop it. Add it as [a server you run](/models/providers#a-server-you-run).
+An OpenAI-compatible server you already run (vLLM, TGI, llama.cpp, SGLang, a LiteLLM proxy) is not a cloud here: almyty does not start, size or stop it. Add it as [your own server](/models/providers#your-own-server).
 
 ## Related
 
-- [Models](/models): the list, the model detail, validation and pricing
+- [Models](/models): the list, when a model is usable, and pricing
 - [Routing](/models/routing): how a model on your cloud gets picked
 - [Connections](/connections): cloud accounts and the bucket connection
 - [Cost governance](/cost-governance): budgets a model can be tied to

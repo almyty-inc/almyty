@@ -62,7 +62,7 @@ Registering an `s3://` version reads and validates `almyty-manifest.json` at the
 
 The registry is the organization's own bucket. Every read and write resolves through the organization's registry connection: a credential of type `s3_compatible` with `endpoint` (for non-AWS S3), `region`, `bucket`, optional `prefix`, `accessKeyId` and `secretAccessKey`, encrypted like every other credential. `ModelRegistryService.connectionFor(organizationId)` is the single seam; adapters get the same keys through `ModelDeploymentsService.credentialsFor()` as `registryAccessKeyId`, `registrySecretAccessKey`, `registryEndpoint`, `registryRegion`, `registryBucket` whenever the version lives at an `s3://` URI.
 
-An organization without a connection cannot register an `s3://` version or deploy one: the API answers `REGISTRY_NOT_CONNECTED` and the UI opens the connect sheet. There is no shared bucket and no silent fallback. Nothing else needs a bucket, so an organization that only runs models from the hub, from a provider it already uses, or through a registered endpoint never meets this.
+An organization without a connection cannot register an `s3://` version or deploy one: the API answers `REGISTRY_NOT_CONNECTED` and the UI opens the connect form. There is no shared bucket and no silent fallback. Nothing else needs a bucket, so an organization that only runs models from the hub, from a provider it already uses, or through a registered endpoint never meets this.
 
 `MODEL_REGISTRY_S3_*` (falling back to `STORAGE_S3_*`) has one job: on first boot of a single-tenant self-host, when exactly one organization exists and it has no registry connection, they seed that organization's connection. With two or more organizations they are ignored and a warning is logged.
 

@@ -7,7 +7,7 @@
 
 ## Build it
 
-1. **Make your docs searchable.** Expose your help center or docs as a search tool, connect a search API (Algolia, your own endpoint) via *Connect API*, or wrap a retrieval endpoint as a JavaScript tool.
+1. **Make your docs searchable.** Expose your help center or docs as a search tool, connect a search API (Algolia, your own endpoint) via *Connect an API*, or wrap a retrieval endpoint as a JavaScript tool.
 2. **Create the agent** with the instruction: *answer only from the docs; always cite the page; if the docs don't cover it, say so and open a ticket.*
 3. **Add a constraint**: *never invent a feature or a limit that isn't in the docs*, so it can't hallucinate its way to a confident wrong answer.
 4. **Give it a fallback tool**: your ticket-create API, so an unanswerable question becomes a real ticket with the conversation attached.

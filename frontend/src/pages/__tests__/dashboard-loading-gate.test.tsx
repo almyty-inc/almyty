@@ -122,12 +122,12 @@ describe('the dashboard loading gate', () => {
   // at all. Real links put them back in the tab order.
   it('offers the Needs Attention warnings as real links', async () => {
     ;(gatewaysApi.getAll as any).mockResolvedValue({
-      gateways: [{ id: 'g1', name: 'Open Gateway', authConfig: { required: false } }],
+      gateways: [{ id: 'g1', name: 'Open Gateway', type: 'mcp', authConfigs: [] }],
       total: 1,
     })
     ;(toolsApi.getAll as any).mockResolvedValue({ tools: [] })
     ;(apisApi.getAll as any).mockResolvedValue({
-      apis: [{ id: 'a1', name: 'Bare API', tools: [] }],
+      apis: [{ id: 'a1', name: 'Bare API', toolCount: 0 }],
     })
     ;(agentsApi.getAll as any).mockResolvedValue({ agents: [] })
     ;(analyticsApi.getRequestLogs as any).mockResolvedValue({ logs: [] })
@@ -135,10 +135,10 @@ describe('the dashboard loading gate', () => {
     render(<DashboardPage />)
 
     expect(
-      await screen.findByRole('link', { name: /have no authentication configured/ }),
+      await screen.findByRole('link', { name: /open to anyone/ }),
     ).toHaveAttribute('href', '/gateways')
     expect(
-      screen.getByRole('link', { name: /have no generated tools/ }),
+      screen.getByRole('link', { name: /no tools yet/ }),
     ).toHaveAttribute('href', '/apis')
   })
 })

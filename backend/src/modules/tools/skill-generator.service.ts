@@ -5,7 +5,8 @@ import { Repository } from 'typeorm';
 import { Tool } from '../../entities/tool.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
-import { isOthersPrivate, servableOnGateway } from '../../common/authorization/private-visibility';
+import { isOthersPrivate } from '../../common/authorization/private-visibility';
+import { servableToolsOnGateway } from '../gateways/gateway-servable';
 import { SkillRendererHelper } from './skill-renderer.helper';
 import { dedupeSharedSegments } from './skill-graphql.helper';
 
@@ -81,7 +82,7 @@ export class SkillGeneratorService {
       throw new NotFoundException(`Gateway not found: ${gatewayId}`);
     }
 
-    const tools = await this.getGatewayTools(gatewayId, gateway);
+    const tools = await this.getGatewayTools(gatewayId);
 
     if (tools.length === 0) {
       return {
@@ -134,7 +135,7 @@ export class SkillGeneratorService {
       throw new NotFoundException(`Gateway not found: ${gatewayId}`);
     }
 
-    const tools = await this.getGatewayTools(gatewayId, gateway);
+    const tools = await this.getGatewayTools(gatewayId);
     const gatewaySlug = this.gatewayEndpointSlug(gateway);
 
     return tools.map((tool) => {
@@ -227,13 +228,10 @@ export class SkillGeneratorService {
    * The variable list comes from operation.parameters.body.variables;
    * when types are unknown we fall back to `String`.
    */
-  private async getGatewayTools(gatewayId: string, gateway: { visibility?: any; ownerUserId?: string | null }): Promise<Tool[]> {
-    const gatewayTools = await this.gatewayToolRepository.find({
-      where: { gatewayId, isActive: true },
-      relations: { tool: { categories: true, operation: { api: true } } },
-    });
-
-    // A private tool is served only on its owner's own private gateway.
-    return servableOnGateway(gatewayTools.map(gt => gt.tool).filter(Boolean), gateway);
+  private async getGatewayTools(gatewayId: string): Promise<Tool[]> {
+    // What the gateway serves, by the one rule every protocol applies
+    // (gateway-servable.ts): an active row, an active tool, a scope that
+    // fits the gateway. A skill bundle is a listing like tools/list.
+    return servableToolsOnGateway(this.gatewayToolRepository, gatewayId, { categories: true, operation: { api: true } });
   }
 }

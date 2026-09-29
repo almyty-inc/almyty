@@ -2,30 +2,31 @@
 
 Decide exactly which tools each gateway exposes. A gateway starts empty and you assign tools into it, so every gateway has a focused, purpose-built surface: a read-only public one, a full-access internal one, one per team. Nothing is exposed until you choose it.
 
-![Assigning tools on the gateway Tools tab](/screenshots/gateway-detail-tools.png)
+![Assigning tools on the gateway Tool scoping tab](/screenshots/gateway-detail-tools.png)
 
 ## Assign tools in the UI
 
-1. Open the gateway detail page and click the **Tools** tab
-2. Click **Add Tools** to see every tool in your organization
-3. Select one or more tools and click **Assign**
-4. Use the presets dropdown for quick selection (see below)
-5. Toggle individual tools on or off with the **Enabled** switch
-6. Click a tool row to set per-gateway rate limits and security policies
+1. Open the gateway detail page and click the **Tool scoping** tab.
+2. Search the available tools, grouped by API, and click **Assign** beside a tool. Inactive tools must be activated on the Tools page first.
+3. Use an API group's checkbox or the preset buttons for bulk assignment (see below).
+4. Click **Remove** to stop exposing an assigned tool.
+5. Use an assigned tool's shield button to expand its inline **Security policy** form.
+
+Only tools accessible to the gateway can be assigned; Private tools are not available for public gateway exposure.
 
 ## Presets
 
 | Preset | Description |
 |--------|-------------|
-| **All** | Assign every available tool |
-| **None** | Remove all assignments |
-| **Read Only** | Assign only GET/query operations |
-| **Admin** | Assign all CRUD operations |
-| **Public** | Assign tools suitable for public access |
+| **All tools** | Assign every available tool |
+| **Remove all** | Remove all assignments |
+| **Read only** | Assign only GET/query operations |
+| **Admin tools** | Assign all CRUD operations |
+| **Public API** | Assign tools suitable for public access |
 
 ## Per-gateway tool configuration
 
-Each assignment can carry gateway-specific overrides, set from the tool row on the **Tools** tab. The stored config looks like this:
+Each assignment can carry gateway-specific overrides. Edit the security policy from the **Tool scoping** tab; use the API for other assignment fields such as `rateLimit`. The stored config looks like this:
 
 ```json
 {

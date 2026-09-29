@@ -63,8 +63,8 @@ export function WithDistribution({
       <EmptyState
         variant="panel"
         icon={Package}
-        title={`${app.branding?.appName || app.name} does not ship to ${name ?? 'that'}`}
-        description="It may have been removed. Add it again from the app's distributions."
+        title={`${app.branding?.appName || app.name} is not on ${name ?? 'that'}`}
+        description="It may have been removed. Add it again under Where people use it."
         action={
           <Button asChild>
             <Link to={`/apps/${app.slug}`}>Back to the app</Link>

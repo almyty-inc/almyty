@@ -1,0 +1,33 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Store",
+    "description": "An online store.",
+    "version": "1.0.5"
+  },
+  "host": "store.example.com",
+  "basePath": "/api",
+  "schemes": ["http", "https"],
+  "securityDefinitions": {
+    "storeKey": { "type": "apiKey", "in": "query", "name": "api_key" }
+  },
+  "security": [{ "storeKey": [] }],
+  "paths": {
+    "/orders": {
+      "get": {
+        "operationId": "listOrders",
+        "summary": "List orders",
+        "produces": ["application/json"],
+        "responses": { "200": { "description": "Orders" } }
+      }
+    },
+    "/orders/{orderId}": {
+      "get": {
+        "operationId": "getOrder",
+        "summary": "Look up an order",
+        "parameters": [{ "name": "orderId", "in": "path", "required": true, "type": "string" }],
+        "responses": { "200": { "description": "The order" } }
+      }
+    }
+  }
+}

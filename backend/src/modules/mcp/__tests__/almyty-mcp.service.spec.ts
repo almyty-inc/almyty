@@ -481,7 +481,8 @@ describe('AlmytyMcpService', () => {
           apiId: 'api-1',
           organizationId: 'org-1',
           schemaContent: expect.any(String),
-          options: { generateTools: true },
+          // The import's generated tools are recorded as the caller's.
+          options: { generateTools: true, createdBy: 'user-1' },
         }),
         expect.any(Object),
       );

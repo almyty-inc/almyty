@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
 import { Request, Response } from 'express';
@@ -104,7 +104,7 @@ const CH_RESP = 'strm:resp'; // client->server responses, fan to the dispatching
  */
 
 @Injectable()
-export class StreamableHttpTransport extends EventEmitter {
+export class StreamableHttpTransport extends EventEmitter implements OnModuleDestroy {
   private readonly logger = new Logger(StreamableHttpTransport.name);
   private readonly sessions = new Map<string, StreamableSession>();
   private gcInterval?: NodeJS.Timeout;
@@ -447,10 +447,23 @@ export class StreamableHttpTransport extends EventEmitter {
     return { sessions: this.sessions.size, openStreams };
   }
 
+  /**
+   * Nest calls this when the context closes (a pod shutting down, a spec's
+   * moduleRef.close()). The constructor opened a subscriber connection and
+   * nothing else ever closed it, so a closed context kept a live socket:
+   * the app-boot integration spec passed and then jest never exited.
+   */
+  async onModuleDestroy(): Promise<void> {
+    await this.shutdown();
+  }
+
   async shutdown(): Promise<void> {
     if (this.gcInterval) clearInterval(this.gcInterval);
     if (this.subscriber) {
-      try { await this.subscriber.quit(); } catch { /* */ }
+      // disconnect, not quit: quit is a command, and ioredis holds commands
+      // while it is reconnecting, so quitting a subscriber whose Redis is
+      // gone would wait for as long as Redis stays gone.
+      try { this.subscriber.disconnect(); } catch { /* */ }
       this.subscriber = undefined;
     }
     for (const session of this.sessions.values()) {

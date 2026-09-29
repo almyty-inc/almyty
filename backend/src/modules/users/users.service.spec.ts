@@ -10,6 +10,7 @@ import { ApiKey } from '../../entities/api-key.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ConnectionOffboardingService } from '../connections/connection-offboarding.service';
+import { ResourceHandoverHelper } from '../organizations/resource-handover.helper';
 
 /**
  * bcrypt at cost 12 is deliberate work: roughly a quarter second idle,
@@ -25,6 +26,21 @@ describe('UsersService', () => {
   let userOrganizationRepository: any;
   let apiKeyRepository: any;
   let offboarding: { offboard: jest.Mock };
+  let handover: {
+    longestStandingOtherOwner: jest.Mock;
+    handOverPrivateResources: jest.Mock;
+    publishCommitted: jest.Mock;
+    revokeWipedConnectionsAtProviders: jest.Mock;
+  };
+  // The transaction account deletion runs its handover in: a manager
+  // whose membership lookup finds whatever the test seeds here.
+  let actorMemberships: Array<{ userId: string; organizationId: string; isActive: boolean; inviteAccepted: boolean }>;
+  const txManager = {
+    getRepository: () => ({
+      findOne: async ({ where }: any) =>
+        actorMemberships.find((m) => m.userId === where.userId && m.organizationId === where.organizationId) ?? null,
+    }),
+  };
 
 
   beforeEach(async () => {
@@ -41,12 +57,14 @@ describe('UsersService', () => {
             remove: jest.fn(),
             update: jest.fn(),
             createQueryBuilder: jest.fn(),
+            manager: { transaction: jest.fn(async (work: (m: unknown) => unknown) => work(txManager)) },
           },
         },
         {
           provide: getRepositoryToken(UserOrganization),
           useValue: {
-            find: jest.fn(),
+            // No membership rows unless a test seeds some.
+            find: jest.fn().mockResolvedValue([]),
           },
         },
         {
@@ -66,6 +84,15 @@ describe('UsersService', () => {
           },
         },
         { provide: ConnectionOffboardingService, useValue: { offboard: jest.fn(async () => undefined) } },
+        {
+          provide: ResourceHandoverHelper,
+          useValue: {
+            longestStandingOtherOwner: jest.fn(async () => 'founder-1'),
+            handOverPrivateResources: jest.fn(async () => []),
+            publishCommitted: jest.fn(),
+            revokeWipedConnectionsAtProviders: jest.fn(async () => undefined),
+          },
+        },
       ],
     }).compile();
 
@@ -74,6 +101,7 @@ describe('UsersService', () => {
     userOrganizationRepository = module.get(getRepositoryToken(UserOrganization));
     apiKeyRepository = module.get(getRepositoryToken(ApiKey));
     offboarding = module.get(ConnectionOffboardingService);
+    handover = module.get(ResourceHandoverHelper);
   });
 
   describe('findOne', () => {
@@ -438,6 +466,55 @@ describe('UsersService', () => {
   });
 
   describe('delete', () => {
+    beforeEach(() => {
+      actorMemberships = [];
+      userOrganizationRepository.find.mockResolvedValue([]);
+    });
+
+    /**
+     * Private rows have no foreign key to users: a deleted account's
+     * private agents, tools, APIs, gateways, providers and credentials
+     * stayed owned by an id that no longer exists -- nobody's, out of
+     * every admin's reach. Each organization the person has a membership
+     * row in hands them over first, the way a member removal does.
+     */
+    it('hands over in every organization with a membership row, to the deleter where they are a member, else the longest-standing owner', async () => {
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', email: 'test@test.com' });
+      userOrganizationRepository.find.mockResolvedValue([
+        { userId: 'user-1', organizationId: 'org-1', isActive: true },
+        { userId: 'user-1', organizationId: 'org-2', isActive: false },
+      ]);
+      actorMemberships = [{ userId: 'owner-1', organizationId: 'org-1', isActive: true, inviteAccepted: true }];
+      const order: string[] = [];
+      handover.handOverPrivateResources.mockImplementation(async (_m: unknown, args: any) => {
+        order.push(`handover ${args.organizationId}`);
+        return [{ id: `audit-${args.organizationId}` }];
+      });
+      offboarding.offboard.mockImplementation(async () => { order.push('offboard'); });
+      userRepository.remove.mockImplementation(async () => { order.push('remove'); });
+
+      await service.delete('user-1', 'owner-1');
+
+      expect(userOrganizationRepository.find).toHaveBeenCalledWith({ where: { userId: 'user-1' } });
+      const calls = handover.handOverPrivateResources.mock.calls.map(([manager, args]: any[]) => ({ manager, args }));
+      expect(calls.map((c) => c.manager)).toEqual([txManager, txManager]);
+      expect(calls.map((c) => c.args)).toEqual([
+        expect.objectContaining({ organizationId: 'org-1', fromUserId: 'user-1', toUserId: 'owner-1', actorUserId: 'owner-1', reason: 'user_deleted' }),
+        expect.objectContaining({ organizationId: 'org-2', fromUserId: 'user-1', toUserId: 'founder-1', actorUserId: 'owner-1', reason: 'user_deleted' }),
+      ]);
+      expect(handover.longestStandingOtherOwner).toHaveBeenCalledWith(txManager, 'org-2', 'user-1');
+      expect(handover.publishCommitted).toHaveBeenCalledWith([{ id: 'audit-org-1' }, { id: 'audit-org-2' }]);
+      expect(order).toEqual(['handover org-1', 'handover org-2', 'offboard', 'remove']);
+    });
+
+    it('keeps the account when a handover fails, so the delete can be retried', async () => {
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', email: 'test@test.com' });
+      userOrganizationRepository.find.mockResolvedValue([{ userId: 'user-1', organizationId: 'org-1', isActive: true }]);
+      handover.handOverPrivateResources.mockRejectedValue(new Error('last owner'));
+
+      await expect(service.delete('user-1', 'owner-1')).rejects.toThrow('last owner');
+      expect(userRepository.remove).not.toHaveBeenCalled();
+    });
     it('should delete user successfully', async () => {
       const mockUser = { id: 'user-1', email: 'test@test.com' };
 

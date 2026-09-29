@@ -6,16 +6,12 @@ Expose your tools to any MCP-compatible client. An MCP gateway serves your tools
 
 ## Create the gateway
 
-1. Open **Gateways** in the sidebar and click **Create Gateway**
-2. Select **MCP** as the protocol
+1. Open **Gateways → Create gateway** (`/gateways/new`)
+2. Choose **Tools**, then **MCP** as the protocol
+3. Enter a name, an endpoint path (used in the URL), and an optional description
+4. Choose visibility and click **Create gateway**
 
-![Create Gateway dialog](/screenshots/gateways-create-dialog.png)
-
-3. Enter a name, a slug (used in the endpoint URL), and an optional description
-4. Under **Transport**, choose HTTP (default), SSE, or WebSocket
-5. Click **Create**
-
-On the gateway detail page, open the **Tools** tab to assign the tools this gateway should expose, then use the **Authentication** tab to add an auth method before going live.
+On the gateway detail page, open **Tool scoping** to assign the tools this gateway should expose, then use the **Authentication** section to add an auth method before going live. The **Integrations** tab provides the client endpoints.
 
 ![Assigning tools on the gateway Tools tab](/screenshots/gateway-detail-tools.png)
 

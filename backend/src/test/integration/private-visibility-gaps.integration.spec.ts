@@ -137,7 +137,7 @@ describeIfDb('private visibility gaps (real Postgres)', () => {
     tools = new ToolsService(
       repo(Tool), repo(ToolVersion), repo(ToolCategory), repo(ToolExecution), repo(Api), repo(Operation),
       repo(ApiSchema), repo(User), repo(Organization), audit, null as any,
-      new ToolsStatsHelper(repo(Tool), repo(ToolExecution)), policy,
+      new ToolsStatsHelper(repo(Tool), repo(ToolExecution), policy), policy,
     );
     agents = new AgentsService(
       repo(Agent), repo(AgentExecution), repo(Organization), repo(User), { log: jest.fn() } as any,

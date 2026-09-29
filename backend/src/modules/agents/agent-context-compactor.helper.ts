@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 
 import { AgentRun } from '../../entities/agent-run.entity';
 import { LlmProvidersService } from '../llm-providers/llm-providers.service';
+import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 
 /**
  * Per-agent context-compaction config (lives in `agent.modelConfig.compaction`,
@@ -56,7 +57,8 @@ export class AgentContextCompactor {
     run: AgentRun,
     config: CompactionConfig,
     organizationId: string,
-    userId?: string,
+    /** Who the summarizer call acts as: the run's principal (see LlmChatHelper.chat). */
+    userId?: string | ExecutionPrincipal,
     signal?: AbortSignal,
   ): Promise<{ messages: any[]; cost: number; tokens: number; compacted: boolean }> {
     const noop = { messages, cost: 0, tokens: 0, compacted: false };
@@ -165,7 +167,7 @@ export class AgentContextCompactor {
     toCompact: any[],
     config: CompactionConfig,
     organizationId: string,
-    userId: string | undefined,
+    userId: string | ExecutionPrincipal | undefined,
     signal?: AbortSignal,
   ): Promise<{ text: string; cost: number; tokens: number }> {
     const providerId = config.providerId;

@@ -18,7 +18,7 @@ export const PAGE_INTROS = {
   },
   gateways: {
     page: '/gateways',
-    text: 'A gateway serves the tools you pick at one address, so Claude Code, Cursor or another agent can use them. Create one, then choose its tools.',
+    text: 'A gateway serves the tools you pick at one address, so Claude Code, Cursor or another agent can use them. Share tools to make one.',
   },
   agents: {
     page: '/agents',
@@ -33,16 +33,19 @@ export const PAGE_INTROS = {
     text: 'A runner connects a machine you control so agents can do work on it. Set one up; it shows here once it checks in.',
   },
   credentials: {
-    page: '/credentials',
-    text: 'Keys and passwords your tools use to reach other services, stored encrypted. Add one here, then pick it when you set up a tool or an API.',
+    page: '/connections',
+    // Adds to the subtitle rather than repeating it: where keys go, and
+    // where AI providers are connected instead.
+    text: 'Keys are stored encrypted and never shown again once saved. AI model providers are connected on Models, where their models come with them.',
   },
   models: {
     page: '/models',
-    text: 'Every model your agents can call, where it runs and what it costs. Connect an inference provider first (Inference providers, above); then add the models you want with Add model.',
+    // Adds to the subtitle rather than repeating it: prices, and when a model can be picked.
+    text: 'Prices fill in by themselves and stay current. A new model can be picked once a first test call to it has worked.',
   },
   memories: {
     page: '/memories',
-    text: 'What your agents remember from one run to the next. Entries appear as agents save them, and you can review or remove them here.',
+    text: 'Entries appear as agents save them. Open one to review it or remove it.',
   },
 } as const
 

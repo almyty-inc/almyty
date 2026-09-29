@@ -193,11 +193,20 @@ export class McpToolHandler {
 
     const tools = await this.getToolsForScope(organizationId, gatewayId, caller);
 
-    const categories = await this.toolCategoryRepository.find({
+    const allCategories = await this.toolCategoryRepository.find({
       where: { organizationId, isActive: true },
       relations: { tools: true },
       order: { sortOrder: 'ASC', name: 'ASC' },
     });
+
+    // Through a gateway, count only what it serves -- the tools/list set.
+    // A count taken over the org would disclose the existence and number of
+    // tools the gateway never published, so a category holding none of the
+    // gateway's tools is not shown at all (and reads like an unknown one).
+    const servedIds = gatewayId ? new Set(tools.map((t) => t.id)) : null;
+    const categories = servedIds
+      ? allCategories.filter((cat) => (cat.tools ?? []).some((t) => servedIds.has(t.id)))
+      : allCategories;
 
     if (depth === 'categories') {
       const categoryList = categories.map(cat => ({
@@ -206,7 +215,9 @@ export class McpToolHandler {
         slug: cat.slug,
         description: cat.description,
         icon: cat.icon,
-        toolCount: withoutOthersPrivate(cat.tools ?? [], caller?.id).filter(t => t.status === ToolStatus.ACTIVE).length,
+        toolCount: servedIds
+          ? (cat.tools ?? []).filter((t) => servedIds.has(t.id)).length
+          : withoutOthersPrivate(cat.tools ?? [], caller?.id).filter(t => t.status === ToolStatus.ACTIVE).length,
       }));
 
       const categorizedToolIds = new Set(categories.flatMap(c => c.tools?.map(t => t.id) || []));
@@ -259,20 +270,33 @@ export class McpToolHandler {
       throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'Missing required parameter: query');
     }
 
-    const result = await this.toolsService.getTools({
-      organizationId,
-      search: query,
-      status: ToolStatus.ACTIVE,
-      page,
-      limit,
-      ...this.listScope(gatewayId, caller),
-    });
-
-    let tools = withoutOthersPrivate(result.tools, caller?.id);
+    let tools: Tool[];
+    let total: number;
     if (gatewayId) {
-      // Search inside what the gateway serves, never around it.
-      const servable = new Set((await servableToolsOnGateway(this.gatewayToolRepository, gatewayId)).map((t) => t.id));
-      tools = tools.filter((t) => servable.has(t.id));
+      // Search inside what the gateway serves, never around it: match, count
+      // and page over the servable set (the tools/list set). Searching the
+      // org and filtering the page afterwards leaked the org-wide `total`
+      // and `hasMore`, and dropped servable hits that fell on another page.
+      const needle = query.toLowerCase();
+      const matches = withoutOthersPrivate(
+        await servableToolsOnGateway(this.gatewayToolRepository, gatewayId),
+        caller?.id,
+      )
+        .filter((t) => t.name?.toLowerCase().includes(needle) || t.description?.toLowerCase().includes(needle))
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      tools = matches.slice((page - 1) * limit, page * limit);
+      total = matches.length;
+    } else {
+      const result = await this.toolsService.getTools({
+        organizationId,
+        search: query,
+        status: ToolStatus.ACTIVE,
+        page,
+        limit,
+        ...this.listScope(gatewayId, caller),
+      });
+      tools = withoutOthersPrivate(result.tools, caller?.id);
+      total = result.total;
     }
 
     return {
@@ -284,9 +308,9 @@ export class McpToolHandler {
         usageCount: tool.usageCount || 0,
         successRate: tool.successRate || 0,
       })),
-      total: result.total,
+      total,
       page,
-      hasMore: page * limit < result.total,
+      hasMore: page * limit < total,
     };
   }
 

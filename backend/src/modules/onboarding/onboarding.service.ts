@@ -20,16 +20,17 @@ import {
   PageIntroTopic,
 } from './dto/onboarding.dto';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
-import { notOthersPrivateGateway, notOthersPrivateTool } from '../monitoring/private-rows';
+import { inViewerScopeGateway, inViewerScopeTool } from '../monitoring/private-rows';
 
 type Viewer = { id: string };
 
 /**
  * A request log the viewer may count: not traffic through another
- * member's private gateway or tool. Binds :privateViewerId.
+ * member's private gateway or tool, nor through a team gateway or tool
+ * outside the viewer's teams. Binds :privateViewerId.
  */
 function visibleLog(alias: string): string {
-  return `${notOthersPrivateGateway(`${alias}."gatewayId"`)} AND ${notOthersPrivateTool(`${alias}."toolId"`)}`;
+  return `${inViewerScopeGateway(`${alias}."gatewayId"`)} AND ${inViewerScopeTool(`${alias}."toolId"`)}`;
 }
 
 /**

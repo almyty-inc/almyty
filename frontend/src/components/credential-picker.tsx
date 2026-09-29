@@ -1,10 +1,12 @@
-import React, { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Key } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+
 import { Label } from '@/components/ui/label'
+import { SecretInput } from '@/components/ui/secret-input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
+import { ConnectAccountButton, OTHER_SERVICE_KEY } from '@/components/connections/connect-flow'
+import { CONNECTIONS_QUERY_KEY } from '@/components/connections/paths'
 import { credentialsApi } from '@/lib/api'
 import type { VaultCredential } from '@/types'
 
@@ -18,16 +20,22 @@ interface CredentialPickerProps {
   filterType?: string // filter credentials by type
 }
 
+/**
+ * The key an API or a tool signs in with: paste one, or pick a key saved
+ * on Connections. "Save a new key" opens the same inline connect form the
+ * Connections page uses, so a key saved here is a connection like any other.
+ */
 export function CredentialPicker({
-  label = 'API Key',
+  label = 'API key',
   value,
   onSelect,
   onNewKey,
   newKeyValue = '',
-  placeholder = 'Enter your API key',
+  placeholder = 'Paste the key',
   filterType,
 }: CredentialPickerProps) {
-  const [mode, setMode] = useState<'select' | 'new'>(value ? 'select' : 'new')
+  const queryClient = useQueryClient()
+  const [mode, setMode] = useState<'saved' | 'paste'>(value ? 'saved' : 'paste')
 
   const { data: credentialsRaw } = useQuery({
     queryKey: ['credentials'],
@@ -44,39 +52,45 @@ export function CredentialPicker({
         <button
           type="button"
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          onClick={() => setMode(mode === 'select' ? 'new' : 'select')}
+          onClick={() => setMode(mode === 'saved' ? 'paste' : 'saved')}
         >
-          {mode === 'select' ? '+ Enter new key' : 'Use existing secret'}
+          {mode === 'saved' ? 'Paste a key instead' : 'Use a saved key'}
         </button>
       </div>
 
-      {mode === 'select' ? (
-        <Select value={value} onValueChange={onSelect}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select a secret from vault..." />
-          </SelectTrigger>
-          <SelectContent>
-            {credentials.length === 0 && (
-              <div className="px-3 py-2 text-sm text-muted-foreground">No secrets in vault</div>
-            )}
-            {credentials.map((cred) => (
-              <SelectItem key={cred.id} value={cred.id}>
-                <div className="flex items-center gap-2">
-                  <Key className="h-3 w-3 text-muted-foreground" />
-                  <span>{cred.name}</span>
-                  <Badge variant="outline" className="text-[10px] ml-1">{cred.type}</Badge>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {mode === 'saved' ? (
+        <div className="space-y-2">
+          <Select value={value} onValueChange={onSelect}>
+            <SelectTrigger aria-label={label}>
+              <SelectValue placeholder="Pick a saved key" />
+            </SelectTrigger>
+            <SelectContent>
+              {credentials.length === 0 && (
+                <div className="px-3 py-2 text-sm text-muted-foreground">No saved keys yet</div>
+              )}
+              {credentials.map((cred) => (
+                <SelectItem key={cred.id} value={cred.id}>
+                  <div className="flex items-center gap-2">
+                    <Key className="h-3 w-3 text-muted-foreground" aria-hidden />
+                    <span>{cred.name}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <ConnectAccountButton
+            connectorKey={OTHER_SERVICE_KEY}
+            label="Save a new key"
+            variant="ghost"
+            onConnected={(connection) => {
+              queryClient.invalidateQueries({ queryKey: ['credentials'] })
+              queryClient.invalidateQueries({ queryKey: CONNECTIONS_QUERY_KEY })
+              onSelect(connection.id)
+            }}
+          />
+        </div>
       ) : (
-        <Input
-          type="password"
-          value={newKeyValue}
-          onChange={(e) => onNewKey(e.target.value)}
-          placeholder={placeholder}
-        />
+        <SecretInput value={newKeyValue} onChange={(e) => onNewKey(e.target.value)} placeholder={placeholder} aria-label={label} />
       )}
     </div>
   )

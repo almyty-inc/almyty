@@ -486,7 +486,7 @@ describe('CredentialsService', () => {
       expect(result.apis[0].name).toBe('Weather API');
       expect(llmProviderRepository.find).toHaveBeenCalledWith({
         where: { credentialId: 'cred-1', organizationId: 'org-1' },
-        select: { id: true, name: true, type: true, status: true, visibility: true, ownerUserId: true },
+        select: { id: true, name: true, type: true, status: true, organizationId: true, visibility: true, ownerUserId: true, teamId: true },
       });
     });
 

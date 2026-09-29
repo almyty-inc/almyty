@@ -2,7 +2,7 @@ import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentReadinessService } from './agent-readiness.service';
 import { AgentTemplate, getAgentTemplates } from './agent-templates';
 import { EstimatedCost, estimateAgentCost } from './agent-cost-estimator';
-import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { validateUrl } from '../../common/security/url-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -14,16 +14,17 @@ import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { AgentAuditService } from './agent-audit.service';
 import { AgentCollaboration, collaborationProblems } from './collaboration-participants';
+import { AgentModels, agentModelsProblems, syncMainRole } from './autonomous-models';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
 import {
   assertAttachable,
-  assertNotOthersPrivate,
   resolveVisibilityWrite,
 } from '../../common/authorization/private-visibility';
+import { assertManageable, canRead } from '../../common/authorization/read-rule';
 import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { collectAgentReferences, collectProviderReferences } from './agent-references';
 import { LlmProvider } from '../../entities/llm-provider.entity';
-import { providerUsableBy } from '../llm-providers/private-provider';
+import { usableProviders } from '../llm-providers/private-provider';
 
 export interface AgentSearchFilters {
   search?: string;
@@ -55,6 +56,7 @@ export interface CreateAgentInput {
   memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
   agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean };
   collaboration?: AgentCollaboration | null;
+  models?: AgentModels | null;
   variables?: Record<string, any>;
   settings?: Record<string, any>;
   metadata?: Record<string, any>;
@@ -78,6 +80,7 @@ export interface UpdateAgentInput {
   memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
   agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean };
   collaboration?: AgentCollaboration | null;
+  models?: AgentModels | null;
   variables?: Record<string, any>;
   settings?: Record<string, any>;
   metadata?: Record<string, any>;
@@ -151,6 +154,7 @@ export const AGENT_LIST_COLUMNS = [
   'isTemporary',
   'parentRunId',
   'collaboration',
+  'models',
   'webhookUrl',
   'totalExecutions',
   'successfulExecutions',
@@ -197,6 +201,37 @@ export class AgentsService {
     if (problems.length) {
       throw new BadRequestException(`Invalid collaboration: ${problems.join('; ')}`);
     }
+  }
+
+  /**
+   * Refuse models the autonomous engine cannot run: a strategy whose slots
+   * are not all filled, a role with nothing to call, an agent where a model
+   * has to be. Checked at save time, where somebody is looking, so the page
+   * and the API get the same sentences (agentModelsProblems).
+   */
+  private assertModels(models: unknown): void {
+    const problems = agentModelsProblems(models);
+    if (problems.length) {
+      throw new BadRequestException(`Invalid models: ${problems.join('; ')}`);
+    }
+  }
+
+  /**
+   * The models and modelConfig an agent is saved with. On an autonomous
+   * agent the main role and modelConfig are kept equal (syncMainRole), so
+   * a client that still writes modelConfig alone moves the main role, and
+   * the page, which writes models, moves modelConfig. A workflow agent has
+   * no models: its multi-model shape is its graph.
+   */
+  private modelsFor(
+    mode: 'workflow' | 'autonomous',
+    models: AgentModels | null | undefined,
+    modelConfig: Agent['modelConfig'] | null | undefined,
+    modelsWritten: boolean,
+  ): { models: AgentModels | null; modelConfig: Agent['modelConfig'] | null } {
+    if (mode !== 'autonomous') return { models: null, modelConfig: modelConfig ?? null };
+    const synced = syncMainRole({ models, modelConfig, modelsWritten });
+    return { models: synced.models, modelConfig: (synced.modelConfig as Agent['modelConfig']) ?? null };
   }
 
   /**
@@ -267,6 +302,7 @@ export class AgentsService {
       toolIds?: string[] | null;
       pipeline?: AgentPipeline | null;
       collaboration?: Agent['collaboration'] | null;
+      models?: AgentModels | null;
     },
     organizationId: string,
   ): Promise<void> {
@@ -312,9 +348,9 @@ export class AgentsService {
     if (added.length === 0) return;
     const found = await this.agentRepository.manager.getRepository(LlmProvider).find({
       where: { id: In(added), organizationId },
-      select: { id: true, visibility: true, ownerUserId: true },
+      select: { id: true, organizationId: true, visibility: true, ownerUserId: true, teamId: true },
     });
-    const usable = new Set(found.filter((p) => providerUsableBy(p, userId)).map((p) => p.id));
+    const usable = new Set((await usableProviders(this.accessPolicy, organizationId, userId, found)).map((p) => p.id));
     const refused = added.filter((id) => !usable.has(id));
     if (refused.length) {
       throw new BadRequestException(
@@ -334,6 +370,7 @@ export class AgentsService {
 
       this.assertWebhookUrl(createDto.webhookUrl);
       this.assertCollaboration(createDto.collaboration);
+      this.assertModels(createDto.models);
       await this.assertToolsInOrg(createDto.toolIds, organizationId);
 
       // Verify organization
@@ -370,6 +407,13 @@ export class AgentsService {
         this.validation.validatePipeline(createDto.pipeline);
       }
 
+      const next = this.modelsFor(
+        mode,
+        createDto.models,
+        createDto.modelConfig as Agent['modelConfig'],
+        createDto.models !== undefined,
+      );
+
       await this.assertPrivateReferencesAllowed(
         {
           visibility: scope.visibility,
@@ -377,15 +421,17 @@ export class AgentsService {
           toolIds: createDto.toolIds,
           pipeline: createDto.pipeline,
           collaboration: createDto.collaboration as Agent['collaboration'],
+          models: next.models,
         },
         organizationId,
       );
       await this.assertProvidersUsable(
         {
-          modelConfig: createDto.modelConfig as Agent['modelConfig'],
+          modelConfig: next.modelConfig,
           pipeline: createDto.pipeline,
           agentConfig: createDto.agentConfig as Agent['agentConfig'],
           collaboration: createDto.collaboration as Agent['collaboration'],
+          models: next.models,
         },
         null,
         organizationId,
@@ -404,7 +450,8 @@ export class AgentsService {
         personality: createDto.personality || null,
         heartbeat: createDto.heartbeat || null,
         toolIds: createDto.toolIds || [],
-        modelConfig: createDto.modelConfig || null,
+        modelConfig: next.modelConfig,
+        models: next.models,
         memoryConfig: createDto.memoryConfig || null,
         agentConfig: createDto.agentConfig || null,
         collaboration: createDto.collaboration || null,
@@ -437,21 +484,21 @@ export class AgentsService {
   }
 
   /**
-   * Fetch an agent by id within an organization. With a `caller`,
-   * another member's private agent is "not found" (404, never 403, so
-   * its existence is not confirmed). System paths that act on an agent
-   * as its owner (scheduler, heartbeat, runtime) call without a caller.
+   * Fetch an agent by id within an organization. With a `caller`, an
+   * agent they may not read (read-rule.ts: another member's private agent,
+   * a team agent outside their teams) is "not found" -- the same 404 a
+   * missing id gets, never a 403, so its existence is not confirmed. A
+   * `null` caller (nobody) reads organization-wide agents only. System
+   * paths that act on an agent as its owner (scheduler, heartbeat,
+   * runtime) call without a caller.
    */
   async getAgent(id: string, organizationId: string, caller?: { id: string } | null): Promise<Agent> {
     const agent = await this.agentRepository.findOne({
       where: { id, organizationId },
     });
 
-    if (!agent) {
+    if (!agent || (caller !== undefined && !(await canRead(this.accessPolicy, caller, agent)))) {
       throw new NotFoundException(`Agent not found: ${id}`);
-    }
-    if (caller !== undefined) {
-      await assertNotOthersPrivate(this.accessPolicy, caller, agent, 'Agent');
     }
 
     return agent;
@@ -575,7 +622,7 @@ export class AgentsService {
 
     // Permission check: admin+ can update any agent, members can only update their own
     if (userId) {
-      await this.checkAgentPermission(agent, organizationId, userId, 'edit_agents');
+      await this.checkAgentPermission(agent, userId);
     }
 
     // Re-validate team scoping if it's being changed on this update.
@@ -605,7 +652,17 @@ export class AgentsService {
 
     this.assertWebhookUrl(updateDto.webhookUrl);
     this.assertCollaboration(updateDto.collaboration);
+    this.assertModels(updateDto.models);
     await this.assertToolsInOrg(updateDto.toolIds, agent.organizationId);
+
+    // An autonomous agent's main role and its modelConfig say the same
+    // thing, whichever of the two this update writes (syncMainRole).
+    const next = this.modelsFor(
+      effectiveMode,
+      updateDto.models !== undefined ? updateDto.models : agent.models,
+      updateDto.modelConfig !== undefined ? (updateDto.modelConfig as Agent['modelConfig']) : agent.modelConfig,
+      updateDto.models !== undefined,
+    );
 
     // Only the agent's owner may make it (or keep it) private; an agent
     // with no recorded owner becomes the caller's.
@@ -625,7 +682,10 @@ export class AgentsService {
     // one when the agent itself stops being private). Checked whenever
     // the scope or any reference changes.
     const referencesChanging =
-      updateDto.toolIds !== undefined || updateDto.pipeline !== undefined || updateDto.collaboration !== undefined;
+      updateDto.toolIds !== undefined ||
+      updateDto.pipeline !== undefined ||
+      updateDto.collaboration !== undefined ||
+      updateDto.models !== undefined;
     if (scopeChanging || referencesChanging) {
       await this.assertPrivateReferencesAllowed(
         {
@@ -635,6 +695,7 @@ export class AgentsService {
           toolIds: updateDto.toolIds ?? agent.toolIds,
           pipeline: updateDto.pipeline ?? agent.pipeline,
           collaboration: (updateDto.collaboration as Agent['collaboration']) ?? agent.collaboration,
+          models: next.models,
         },
         organizationId,
       );
@@ -651,10 +712,11 @@ export class AgentsService {
     }
     await this.assertProvidersUsable(
       {
-        modelConfig: updateDto.modelConfig !== undefined ? (updateDto.modelConfig as Agent['modelConfig']) : agent.modelConfig,
+        modelConfig: next.modelConfig as Agent['modelConfig'],
         pipeline: updateDto.pipeline ?? agent.pipeline,
         agentConfig: updateDto.agentConfig !== undefined ? (updateDto.agentConfig as Agent['agentConfig']) : agent.agentConfig,
         collaboration: updateDto.collaboration !== undefined ? (updateDto.collaboration as Agent['collaboration']) : agent.collaboration,
+        models: next.models,
       },
       agent,
       organizationId,
@@ -663,6 +725,8 @@ export class AgentsService {
 
     const { visibility: _v, teamId: _t, ...rest } = updateDto;
     Object.assign(agent, rest);
+    agent.modelConfig = next.modelConfig as Agent['modelConfig'];
+    agent.models = next.models;
     if (scope) {
       agent.visibility = scope.visibility;
       agent.teamId = scope.teamId;
@@ -691,7 +755,7 @@ export class AgentsService {
 
     // Permission check: admin+ can delete any agent, members can only delete their own
     if (userId) {
-      await this.checkAgentPermission(agent, organizationId, userId, 'delete_agents');
+      await this.checkAgentPermission(agent, userId);
     }
 
     // Log before removal since the agent won't exist after
@@ -711,7 +775,7 @@ export class AgentsService {
 
   async activateAgent(id: string, organizationId: string, userId?: string): Promise<Agent> {
     const agent = await this.getAgent(id, organizationId, userId ? { id: userId } : undefined);
-    if (userId) await this.checkAgentPermission(agent, organizationId, userId, 'edit_agents');
+    if (userId) await this.checkAgentPermission(agent, userId);
     await this.readiness.assertReady(agent, userId);
 
     agent.status = AgentStatus.ACTIVE;
@@ -727,6 +791,7 @@ export class AgentsService {
 
   async deactivateAgent(id: string, organizationId: string, userId?: string): Promise<Agent> {
     const agent = await this.getAgent(id, organizationId, userId ? { id: userId } : undefined);
+    if (userId) await this.checkAgentPermission(agent, userId);
     agent.status = AgentStatus.INACTIVE;
     const saved = await this.agentRepository.save(agent);
     this.logger.log(`[DEACTIVATE_AGENT] Agent deactivated: id=${id}`);
@@ -739,9 +804,9 @@ export class AgentsService {
   }
 
   async getReadiness(id: string, organizationId: string, userId: string) {
+    // Reading the readiness takes reading the agent: getAgent answers an
+    // agent the caller may not read with the not-found a missing one gets.
     const agent = await this.getAgent(id, organizationId, { id: userId });
-    const decision = await this.accessPolicy.canAccess({ id: userId }, agent, 'read');
-    if (!decision.allowed) throw new ForbiddenException(decision.reason);
     return this.readiness.inspect(agent, userId);
   }
 
@@ -792,7 +857,8 @@ export class AgentsService {
   // ── Version Management ──
 
   async saveVersion(agentId: string, organizationId: string, changelog?: string, userId?: string): Promise<void> {
-    const agent = await this.getAgent(agentId, organizationId);
+    const agent = await this.getAgent(agentId, organizationId, userId ? { id: userId } : undefined);
+    if (userId) await this.checkAgentPermission(agent, userId);
     const versions: AgentVersionSnapshot[] = agent.metadata?.versions || [];
     versions.push({
       version: agent.version,
@@ -815,7 +881,8 @@ export class AgentsService {
   }
 
   async rollbackToVersion(agentId: string, organizationId: string, versionIndex: number, userId?: string): Promise<Agent> {
-    const agent = await this.getAgent(agentId, organizationId);
+    const agent = await this.getAgent(agentId, organizationId, userId ? { id: userId } : undefined);
+    if (userId) await this.checkAgentPermission(agent, userId);
     const versions: AgentVersionSnapshot[] = agent.metadata?.versions || [];
     if (versionIndex < 0 || versionIndex >= versions.length) {
       throw new BadRequestException('Invalid version index');
@@ -910,26 +977,13 @@ export class AgentsService {
   }
 
   /**
-   * Check if user has permission to modify an agent.
-   * Creator can always modify their own agent. Otherwise the
-   * AccessPolicyService two-tier rule applies: org owner/admin pass,
-   * team-scoped agents require team lead, others are denied.
+   * The manage gate for an agent (read-rule.ts): an agent the caller may
+   * not read is the not-found a missing agent gets; one they may read but
+   * not manage is a 403. The creator can always modify their own agent;
+   * otherwise org owner/admin pass, team-scoped agents need a team lead.
    */
-  private async checkAgentPermission(
-    agent: Agent,
-    organizationId: string,
-    userId: string,
-    _permission: string,
-  ): Promise<void> {
-    // If the user created the agent, they can always modify it
-    if (agent.createdBy === userId) {
-      return;
-    }
-
-    const decision = await this.accessPolicy.canAccess({ id: userId }, agent, 'manage');
-    if (!decision.allowed) {
-      throw new ForbiddenException(decision.reason);
-    }
+  private async checkAgentPermission(agent: Agent, userId: string): Promise<void> {
+    await assertManageable(this.accessPolicy, userId, agent, 'Agent', { ownerManages: true });
   }
 
   /**

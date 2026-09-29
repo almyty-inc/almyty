@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { appPrivacyFrom, type AppPrivacySettings } from '../../../entities/agent-app.entity';
+
 /**
  * Hosted chat: a tenant's own branded chat app on {slug}.<base domain>.
  *
@@ -180,6 +182,78 @@ export function hostedChatConfigFrom(
   };
   const parsed = hostedChatConfigSchema.safeParse(merged);
   return parsed.success ? parsed.data : { ...HOSTED_CHAT_DEFAULTS };
+}
+
+/**
+ * The fields of the hostedChat block that are branding. They belong to
+ * the app that owns the surface and are never read off the gateway.
+ */
+export const HOSTED_CHAT_BRANDING_KEYS = Object.freeze([
+  'appName',
+  'primaryColor',
+  'greeting',
+  'theme',
+  'logoUrl',
+  'suggestedPrompts',
+  'aiDisclosure',
+  'whiteLabel',
+] as const);
+
+/** What a hosted chat needs to know about the app that owns it. */
+export interface HostedChatOwner {
+  name: string;
+  branding?: Partial<{
+    appName: string;
+    primaryColor: string;
+    greeting: string;
+    theme: 'dark' | 'light' | 'auto';
+    logoUrl: string | null;
+    suggestedPrompts: string[];
+    aiDisclosure: string | null;
+    whiteLabel: boolean;
+  }> | null;
+  authMode?: string | null;
+  privacy?: AppPrivacySettings | null;
+}
+
+/**
+ * The hostedChat block a surface answers with.
+ *
+ * The gateway keeps only its address (the slug). Branding, who may use
+ * it and what visitors may do with their data come from the app, read
+ * every time, so a change on the app shows on the page without
+ * republishing and there is no second copy to drift. A surface no app
+ * owns keeps its address and its sign-in rule but gets the default
+ * look: branding has one home, and it is not the gateway.
+ */
+export function hostedChatBlockFor(
+  owner: HostedChatOwner | null,
+  gatewayBlock: Record<string, any> | null | undefined,
+): Record<string, any> {
+  const stored = gatewayBlock && typeof gatewayBlock === 'object' && !Array.isArray(gatewayBlock) ? gatewayBlock : {};
+  const kept: Record<string, any> = {};
+  for (const [key, value] of Object.entries(stored)) {
+    if (!(HOSTED_CHAT_BRANDING_KEYS as readonly string[]).includes(key)) kept[key] = value;
+  }
+  if (!owner) return kept;
+
+  const branding = owner.branding ?? {};
+  const privacy = appPrivacyFrom(owner.privacy);
+  return {
+    ...kept,
+    appName: branding.appName || owner.name,
+    primaryColor: branding.primaryColor ?? HOSTED_CHAT_DEFAULTS.primaryColor,
+    greeting: branding.greeting ?? '',
+    theme: branding.theme ?? 'auto',
+    logoUrl: branding.logoUrl ?? null,
+    suggestedPrompts: branding.suggestedPrompts ?? [],
+    aiDisclosure: branding.aiDisclosure ?? null,
+    whiteLabel: branding.whiteLabel ?? false,
+    authMode: owner.authMode ?? kept.authMode ?? 'public_link',
+    visitorCanDelete: privacy.visitorCanDelete,
+    visitorCanExport: privacy.visitorCanExport,
+    visitorMemory: privacy.visitorMemory,
+  };
 }
 
 /**

@@ -1,7 +1,10 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { ConfigService } from '@nestjs/config';
 import { AdvancedConsoleLogger } from 'typeorm';
 
+import { snapshotEnv } from '../test/env';
+import { appTypeOrmOptions } from './app-typeorm.options';
 import { appQueryLogging, RedactedParametersQueryLogger } from './query-logger';
 
 /**
@@ -69,7 +72,21 @@ describe('app DataSource query logging', () => {
   it('is the logger the app TypeORM module is configured with', () => {
     const source = readFileSync(join(__dirname, '..', 'app.module.ts'), 'utf8');
     const factory = source.slice(source.indexOf('TypeOrmModule.forRootAsync'));
-    expect(factory).toMatch(/\.\.\.appQueryLogging\(configService\.get<string>\('NODE_ENV'\)\)/);
-    expect(factory.slice(0, factory.indexOf('TypeOrmModule.forFeature'))).not.toMatch(/\blogging:/);
+    expect(factory.slice(0, factory.indexOf('TypeOrmModule.forFeature'))).toMatch(
+      /useFactory:\s*\(configService: ConfigService\)\s*=>\s*appTypeOrmOptions\(configService\)/,
+    );
+
+    const restore = snapshotEnv('NODE_ENV');
+    try {
+      process.env.NODE_ENV = 'development';
+      const dev = appTypeOrmOptions(new ConfigService());
+      expect(dev.logging).toBe(true);
+      expect(dev.logger).toBeInstanceOf(RedactedParametersQueryLogger);
+
+      process.env.NODE_ENV = 'production';
+      expect(appTypeOrmOptions(new ConfigService()).logging).toBe(false);
+    } finally {
+      restore();
+    }
   });
 });

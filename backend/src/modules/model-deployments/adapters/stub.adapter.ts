@@ -32,6 +32,7 @@ interface StubEndpoint {
 export class StubAdapter implements ModelProviderAdapter {
   readonly key = 'stub';
   readonly displayName = 'Stub (in-memory)';
+  readonly internal = true;
   readonly endpoints = new Map<string, StubEndpoint>();
   private seq = 0;
 

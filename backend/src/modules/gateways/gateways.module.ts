@@ -17,6 +17,10 @@ import { ChannelEvent } from '../../entities/channel-event.entity';
 import { EndUser } from '../../entities/end-user.entity';
 import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
+import { AgentApp } from '../../entities/agent-app.entity';
+import { AppDistribution } from '../../entities/agent-app-distribution.entity';
+import { GatewayAppLinkService } from './gateway-app-link.service';
+import { GatewayAppLinkController } from './gateway-app-link.controller';
 import { GatewaysService } from './gateways.service';
 import { GatewayProtocolService } from './gateway-protocol.service';
 import { GatewayRateLimitService } from './gateway-rate-limit.service';
@@ -101,6 +105,8 @@ import { ChannelInstallationsController } from './channels/channel-installations
       Conversation,
       Message,
       VisitorEmailCode,
+      AppDistribution,
+      AgentApp,
     ]),
     JwtModule,
     ToolsModule,
@@ -109,6 +115,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
   ],
   providers: [
     HostedChatService,
+    GatewayAppLinkService,
     VisitorEmailOtpService,
     CustomDomainService,
     { provide: CUSTOM_DOMAIN_STORE, useClass: PgCustomDomainStore },
@@ -152,6 +159,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
     // any non-UUID path segment and 400 with 'uuid is expected'.
     GatewayInfoController,
     GatewaysController,
+    GatewayAppLinkController,
     GatewayAuthController,
     GatewayToolsController,
     GatewaySkillsController,
@@ -174,6 +182,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
     GatewayRateLimitService,
     GatewayAuthService, GatewayAuthValidators, GatewaysStatsHelper,
     GatewayToolService,
+    GatewayAppLinkService,
     ChannelGatewayService,
     DiscordGatewayTransport,
     ChannelWebhookRegistrar,

@@ -4,15 +4,14 @@ import { Repository } from 'typeorm';
 
 import { AuditLog } from '../../entities/audit-log.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
+import { inViewerScopeAgent } from './private-rows';
 
 /**
- * Runs of agents that are private to somebody other than :_privateMe.
- * `(owner = me) IS NOT TRUE` fails closed: an ownerless private agent, or
- * no known caller, leaves the runs hidden (IS DISTINCT FROM would have
- * matched null against null and shown them).
+ * Runs of agents the caller may see (binds :privateViewerId): not another
+ * member's private agent -- failing closed on an ownerless one or no known
+ * caller -- and not a team agent outside the caller's teams.
  */
-const NOT_OTHERS_PRIVATE_AGENT_RUN =
-  `NOT EXISTS (SELECT 1 FROM agents pa WHERE pa.id = run."agentId" AND pa.visibility = 'private' AND (pa."createdBy" = :_privateMe) IS NOT TRUE)`;
+const AGENT_RUN_IN_VIEWER_SCOPE = inViewerScopeAgent('run."agentId"');
 
 /**
  * A fallback that remembers it was used.
@@ -154,7 +153,7 @@ export class AnalyticsSummariesHelper {
         .select('run.status', 'status')
         .addSelect('COUNT(*)', 'count')
         .where('run.organizationId = :orgId', { orgId: organizationId })
-        .andWhere(NOT_OTHERS_PRIVATE_AGENT_RUN, { _privateMe: callerId ?? null })
+        .andWhere(AGENT_RUN_IN_VIEWER_SCOPE, { privateViewerId: callerId ?? null })
         .andWhere('run.createdAt >= :since', { since: last7d })
         .groupBy('run.status')
         .getRawMany()
@@ -176,7 +175,7 @@ export class AnalyticsSummariesHelper {
         .createQueryBuilder('run')
         .select('AVG(run.executionTime)', 'avg')
         .where('run.organizationId = :orgId', { orgId: organizationId })
-        .andWhere(NOT_OTHERS_PRIVATE_AGENT_RUN, { _privateMe: callerId ?? null })
+        .andWhere(AGENT_RUN_IN_VIEWER_SCOPE, { privateViewerId: callerId ?? null })
         .andWhere('run.createdAt >= :since', { since: last7d })
         .andWhere('run.executionTime > 0')
         .getRawOne()
@@ -186,7 +185,7 @@ export class AnalyticsSummariesHelper {
         .createQueryBuilder('run')
         .select('SUM(run.totalCost)', 'total')
         .where('run.organizationId = :orgId', { orgId: organizationId })
-        .andWhere(NOT_OTHERS_PRIVATE_AGENT_RUN, { _privateMe: callerId ?? null })
+        .andWhere(AGENT_RUN_IN_VIEWER_SCOPE, { privateViewerId: callerId ?? null })
         .andWhere('run.createdAt >= :since', { since: last7d })
         .getRawOne()
         .then(r => parseFloat(r?.total || '0'))
@@ -200,7 +199,7 @@ export class AnalyticsSummariesHelper {
         .addSelect('AVG(run.executionTime)', 'avgDuration')
         .addSelect('SUM(run.totalCost)', 'cost')
         .where('run.organizationId = :orgId', { orgId: organizationId })
-        .andWhere(NOT_OTHERS_PRIVATE_AGENT_RUN, { _privateMe: callerId ?? null })
+        .andWhere(AGENT_RUN_IN_VIEWER_SCOPE, { privateViewerId: callerId ?? null })
         .andWhere('run.createdAt >= :since', { since: last7d })
         .groupBy('run.agentId')
         .orderBy('COUNT(*)', 'DESC')
@@ -214,7 +213,7 @@ export class AnalyticsSummariesHelper {
         .addSelect("SUM(CASE WHEN run.status = 'completed' THEN 1 ELSE 0 END)", 'completed')
         .addSelect("SUM(CASE WHEN run.status = 'failed' THEN 1 ELSE 0 END)", 'failed')
         .where('run.organizationId = :orgId', { orgId: organizationId })
-        .andWhere(NOT_OTHERS_PRIVATE_AGENT_RUN, { _privateMe: callerId ?? null })
+        .andWhere(AGENT_RUN_IN_VIEWER_SCOPE, { privateViewerId: callerId ?? null })
         .andWhere('run.createdAt >= :since', { since: last7d })
         .groupBy('bucket')
         .orderBy('bucket', 'ASC')

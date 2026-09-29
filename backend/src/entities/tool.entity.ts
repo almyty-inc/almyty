@@ -311,8 +311,16 @@ export class Tool {
   @Column({ default: 0 })
   averageResponseTime: number; // In milliseconds
 
+  // The user who made it; for a generated tool, whoever ran the import
+  // (null when no user is known, never a sentinel like 'system').
   @Column({ nullable: true })
   createdBy: string;
+
+  // Generated from an API operation or an MCP source rather than written
+  // by a person. Code that means "the generated tools" asks this, not
+  // who created them.
+  @Column({ default: false })
+  generated: boolean;
 
   @Column({ nullable: true })
   updatedBy: string;

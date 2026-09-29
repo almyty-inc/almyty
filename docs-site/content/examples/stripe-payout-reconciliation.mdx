@@ -8,7 +8,7 @@
 ## Build it
 
 1. **Add Stripe as tools.** Add the `stripe` npm package as an [SDK tool](/tools/sdk-tools) (Tools → Create → SDK → `stripe` → *Discover*), you get typed tools for payouts, charges, and refunds without writing wrappers.
-2. **Connect your ledger** via *Connect API* (a read-only query endpoint over your accounting DB).
+2. **Connect your ledger** via *Connect an API* (a read-only query endpoint over your accounting DB; paste its spec link and click **Import**), or as an [HTTP tool](/tools/http-tools) if it is a single call.
 3. **Store the Stripe key** in the [Credentials](/credentials) vault; the SDK tool reads it at run time, never in a prompt.
 4. **Create the agent** with: *pull yesterday's payouts and charges, match to the ledger by amount and reference, and report only unmatched or anomalous items.*
 5. **Constrain it**: *read-only; never issue or modify a charge or refund*, reconciliation observes, it doesn't act.

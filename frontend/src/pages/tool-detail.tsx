@@ -18,12 +18,14 @@ import { QueryError } from '@/components/ui/query-error'
 
 import { CodeBlock } from '@/components/ui/code-block'
 import { toolsApi, workspacesApi } from '@/lib/api'
+import { toolQuery } from '@/lib/list-queries'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { formatDateTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { GatewayToolAssociation } from '@/types'
 import { isPublishable } from '@/components/tools/publish-tool-form'
+import { gatewayClientName } from '@/lib/gateway-connect'
 
 export function ToolDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -44,11 +46,7 @@ export function ToolDetailPage() {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('')
 
   const { data: toolData, isLoading, isError, error: toolError, refetch: refetchTool } = useQuery({
-    queryKey: ['tool', id],
-    queryFn: async () => {
-      if (!currentOrganization?.id) throw new Error('No organization selected')
-      return await toolsApi.getById(id!, currentOrganization.id)
-    },
+    ...toolQuery(id, currentOrganization?.id),
     enabled: !!id && !!currentOrganization,
   })
 
@@ -807,7 +805,7 @@ function ExportsSection({ toolId, gateways }: { toolId: string; gateways: Gatewa
                 <div>
                   <Label className="text-xs text-muted-foreground">Claude Code</Label>
                   <div className="mt-1">
-                    <CodeBlock value={`"mcpServers": {\n  "${mcpGateway.name.toLowerCase().replace(/\s+/g, '-')}": {\n    "url": "${apiBase}/${orgSlug}${mcpGateway.endpoint}",\n    "headers": { "X-API-Key": "YOUR_KEY" }\n  }\n}`} language="json" maxHeight="120px" />
+                    <CodeBlock value={`"mcpServers": {\n  "${gatewayClientName(mcpGateway)}": {\n    "url": "${apiBase}/${orgSlug}${mcpGateway.endpoint}",\n    "headers": { "X-API-Key": "YOUR_KEY" }\n  }\n}`} language="json" maxHeight="120px" />
                   </div>
                 </div>
               </div>

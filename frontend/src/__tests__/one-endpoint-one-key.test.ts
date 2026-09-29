@@ -41,8 +41,10 @@ describe('tool lists share one key prefix', () => {
   it('the builder picker and the gateway assigner read under the same prefix', () => {
     expect(read('pages/agent-builder.tsx')).toContain("queryKey: ['tools', currentOrganization?.id, 'all']")
     // The assigner lives on the gateway's own page now (the list page's
-    // sheet is gone); its key sits under the ['tools'] prefix too.
-    expect(read('pages/gateway-detail.tsx')).toContain("queryKey: ['tools', currentOrganization?.id]")
+    // sheet is gone); it reads the shared toolsQuery, whose key sits under
+    // the ['tools'] prefix too.
+    expect(read('pages/gateway-detail.tsx')).toContain('...toolsQuery(currentOrganization?.id)')
+    expect(read('lib/list-queries.ts')).toContain("queryKey: ['tools', organizationId]")
   })
 
   it('the tools page invalidates the prefix that covers all of them', () => {
@@ -53,12 +55,20 @@ describe('tool lists share one key prefix', () => {
   })
 })
 
-describe('the model catalog invalidates the models prefix', () => {
-  it('does not invalidate only its own sibling key', () => {
-    const source = read('components/models/models-catalog.tsx')
-    expect(source).toContain("invalidateQueries({ queryKey: ['models'] })")
-    expect(source).not.toMatch(
-      /const invalidate = \(\) => queryClient\.invalidateQueries\(\{ queryKey: MODELS_QUERY_KEY \}\)/,
-    )
+describe('connecting and checking a provider invalidates the models prefix', () => {
+  it('does not invalidate only one sibling key', () => {
+    // ['models','catalog'] (Models page, every picker) and
+    // ['models','by-provider',id] (a provider page) are siblings: only the
+    // prefix reaches both.
+    for (const file of ['pages/models-connect.tsx', 'pages/provider.tsx']) {
+      const source = read(file)
+      expect(source, file).toContain("invalidateQueries({ queryKey: ['models'] })")
+      expect(source, file).not.toMatch(/invalidateQueries\(\{ queryKey: MODELS_QUERY_KEY \}\)/)
+    }
+  })
+
+  it('the Models page and the model picker read one cache entry', () => {
+    expect(read('pages/models.tsx')).toContain("MODELS_QUERY_KEY = ['models', 'catalog'] as const")
+    expect(read('components/model-picker.tsx')).toContain("PICKER_MODELS_KEY = ['models', 'catalog'] as const")
   })
 })

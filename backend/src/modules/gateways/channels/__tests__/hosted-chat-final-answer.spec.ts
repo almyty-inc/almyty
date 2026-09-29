@@ -199,6 +199,7 @@ describe('hosted chat: the answer is a no-tools call that streams', () => {
       } as any,
       { bumpSessionStats: async () => undefined, bumpProviderStats: jest.fn(async () => undefined) } as any,
       {
+        resolveProviderSecrets: async () => undefined,
         planRouteHead: async () => {
           throw new UnmodelledQueryError('these runs name a provider, not a routing policy');
         },
@@ -459,7 +460,12 @@ describe('hosted chat: the answer is a no-tools call that streams', () => {
     // The panel judged the reply that became the answer, and no extra call
     // was made for a stream nobody would see.
     expect(seen.bodies).toHaveLength(2);
-    expect(runPanel).toHaveBeenCalledWith(expect.objectContaining({ target: 'Your order ships Monday.' }), 'org-1', null);
+    // As the run's principal: a hosted-chat run is its gateway's, not nobody's.
+    expect(runPanel).toHaveBeenCalledWith(
+      expect.objectContaining({ target: 'Your order ships Monday.' }),
+      'org-1',
+      expect.objectContaining({ kind: 'gateway', gatewayId: 'gw-1' }),
+    );
     expect(seen.run.output).toBe('Your order ships Monday.');
   });
 

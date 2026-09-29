@@ -11,6 +11,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
 import { CorrelatedConsoleLogger } from './common/logging/correlated-console.logger';
 import { requestContextMiddleware } from './common/middleware/request-context.middleware';
+import { sentryInitOptions } from './common/observability/sentry-options';
 import { SurfaceCorsService } from './modules/gateways/channels/surface-cors';
 // No global response interceptor — each controller is responsible for consistent {success, data} format
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -22,18 +23,13 @@ import { UsageMetric } from './entities/usage-metric.entity';
 // the GlobalExceptionFilter's 5xx reports have a client to send to. Ships
 // dark: with no DSN nothing loads, no network, no error. Environment is
 // tagged from SENTRY_ENVIRONMENT (falling back to NODE_ENV) so staging and
-// production stay separable in one project.
-if (process.env.SENTRY_DSN) {
+// production stay separable in one project. Events and breadcrumbs are
+// stripped of failed-query parameters (see sentry-options.ts).
+const sentryOptions = sentryInitOptions();
+if (sentryOptions) {
   try {
     const Sentry = require('@sentry/node');
-    Sentry.init({
-      dsn: process.env.SENTRY_DSN,
-      environment:
-        process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development',
-      // Error tracking only by default — no performance tracing until
-      // explicitly opted into. Keeps overhead negligible.
-      tracesSampleRate: 0,
-    });
+    Sentry.init(sentryOptions);
   } catch {
     // @sentry/node not installed — skip initialization (stays no-op).
   }

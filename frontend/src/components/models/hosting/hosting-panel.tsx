@@ -20,7 +20,7 @@ import { cloudAccountLabel, hostedStatus, hourlyCents, lineageFacts } from '@/li
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
 import type { ModelAdapter, ModelDeployment, ModelVersion, SpendBudgetSummary } from '@/types/deployments'
 import { HostedStatusBadge } from './hosted-status-badge'
-import { describeBudget } from './host-model-form'
+import { describeBudget } from './host-body'
 
 export interface HostingPanelProps {
   deployment: ModelDeployment

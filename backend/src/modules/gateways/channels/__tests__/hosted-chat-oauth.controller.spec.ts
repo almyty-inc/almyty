@@ -15,6 +15,7 @@ import { CredentialRefResolver } from '../../../credentials/credential-ref.resol
 import { fakeRepository } from '../../../../test/fake-repository';
 import { FakeRedis } from '../../../../test/fake-redis';
 import { FakeIdp } from '../../../../test/fake-oidc-provider';
+import { listenOnLoopback } from '../../../../test/http';
 import { makeEnvelopeCryptoMock } from '../../../../test/envelope-crypto.mock';
 import { ClauseModel, ExecutedQuery, RecordingQueryBuilder, matchingRows } from '../../__tests__/recording-query-builder';
 
@@ -144,7 +145,7 @@ async function harness(opts: { flavour?: 'oidc' | 'github'; allowedEmailDomains?
   }).compile();
   const app = moduleRef.createNestApplication();
   app.use(cookieParser());
-  await app.init();
+  await listenOnLoopback(app);
   return { app, idp, gateways, endUsers, credentials, redis, clock, hostedChat, configService };
 }
 

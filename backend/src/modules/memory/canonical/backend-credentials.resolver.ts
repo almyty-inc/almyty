@@ -6,7 +6,7 @@ import { CredentialRefResolver } from '../../credentials/credential-ref.resolver
 import { CanonicalMemoryWorkspaceConfig } from './canonical-memory-config.entity';
 import { BackendCredentials } from './backends/memory-backend.interface';
 import { ScopeRef } from './canonical.types';
-import { scopeToOrganizationId } from './canonical-memory.helpers';
+import { scopeToOrganizationId, scopeToUserId } from './canonical-memory.helpers';
 
 /**
  * Resolve a backend's credentials for a given (scope, backend_id)
@@ -66,8 +66,13 @@ export class BackendCredentialsResolver {
     if (!credentialId) return null;
 
     const organizationId = scopeToOrganizationId(scope.scope_type, scope.scope_id);
+    // Used as the scope's own member for a `user` scope, and as nobody
+    // for every shared scope: a team or private credential pinned to a
+    // scope the whole organization writes through is refused.
+    const userId = scopeToUserId(scope.scope_type, scope.scope_id);
     try {
       const resolved = await this.credentialRefs.resolve(organizationId, credentialId, {
+        principal: userId ? { id: userId } : null,
         context: { purpose: 'memory_backend', resourceType: 'memory_backend', resourceId: backendId },
       });
       return pickKnownFields(resolved.config ?? {});

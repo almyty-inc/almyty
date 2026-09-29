@@ -294,3 +294,38 @@ export class LlmProviderSearchQueryDto {
   @IsEnum(['ASC', 'DESC'])
   sortOrder?: 'ASC' | 'DESC';
 }
+
+/**
+ * POST /llm-providers/connect: connect a provider in one step. The type
+ * comes from the tile the person picked; the name defaults to the
+ * provider's own and can be changed later. There is no model field: the
+ * provider's models are listed from the provider once the key checks out.
+ */
+export class ConnectLlmProviderBodyDto {
+  @IsEnum(LlmProviderType)
+  type: LlmProviderType;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  name?: string;
+
+  /** The key and the few fields a provider needs to be reached (region, resource, base URL). */
+  @IsOptional()
+  @IsObject()
+  configuration?: CreateLlmProviderBodyDto['configuration'];
+
+  @IsOptional()
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
+
+  @IsOptional()
+  @IsString()
+  teamId?: string | null;
+
+  /** Use a connected account instead of pasting a key. */
+  @IsOptional()
+  @ValidateIf((o) => o.credentialId !== null)
+  @IsUUID()
+  credentialId?: string | null;
+}

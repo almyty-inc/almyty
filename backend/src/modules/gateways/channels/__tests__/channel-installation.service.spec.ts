@@ -123,6 +123,38 @@ describe('ChannelInstallationService', () => {
     });
   });
 
+  describe('first-install notification', () => {
+    const sent: any[] = [];
+    const notifications = { emit: async (input: any) => { sent.push(input); } };
+    const install = async (gw: Partial<Gateway>) => {
+      repo.findOne.mockResolvedValue(null);
+      const svc = new ChannelInstallationService(repo, platformEnvelope as any, store.resolver, notifications as any);
+      await svc.upsert({ id: 'gw-1', organizationId: 'org-1', ...gw } as Gateway, {
+        externalTenantId: 'T111', credentials: { bot_token: 'xoxb-1' }, metadata: { teamName: 'Acme' },
+      });
+    };
+    beforeEach(() => { sent.length = 0; });
+
+    it('tells the org owners and admins about an org or team gateway', async () => {
+      await install({ visibility: 'team', teamId: 'team-1', ownerUserId: 'u-1' });
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).toMatchObject({ type: 'security.sso_install', organizationId: 'org-1', roleTarget: { orgRoles: ['owner', 'admin'] } });
+      expect(sent[0].userIds).toBeUndefined();
+    });
+
+    it('tells only the owner of a private gateway, never the admins', async () => {
+      await install({ visibility: 'private', ownerUserId: 'u-1' });
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).toMatchObject({ userIds: ['u-1'], link: '/gateways/gw-1' });
+      expect(sent[0].roleTarget).toBeUndefined();
+    });
+
+    it('tells nobody about a private gateway with no recorded owner', async () => {
+      await install({ visibility: 'private', ownerUserId: null });
+      expect(sent).toEqual([]);
+    });
+  });
+
   describe('resolveCredentials', () => {
     it('returns decrypted credentials for an active installation through the reference', async () => {
       repo.findOne.mockResolvedValue(null);

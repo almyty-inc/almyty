@@ -15,6 +15,8 @@ import { ToolsService } from '../../tools/tools.service';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
 import { SkillGeneratorService } from '../../tools/skill-generator.service';
 import { PromotedSkillsService } from '../../promoted-skills/promoted-skills.service';
+import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
+import { orgMembersPolicy } from '../../../test/execution-access.fixture';
 
 /**
  * MCP wire conformance of McpService and the tools/list handler.
@@ -44,6 +46,7 @@ describe('MCP wire conformance', () => {
       providers: [
         McpToolHandler,
         McpContentHandler,
+        { provide: AccessPolicyService, useValue: orgMembersPolicy('org-1') },
         McpServerRequestService,
         McpService,
         { provide: PromotedSkillsService, useValue: { listForServing: jest.fn().mockResolvedValue([]), get: jest.fn() } },

@@ -10,7 +10,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { Organization } from '../../entities/organization.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
@@ -472,7 +472,7 @@ export class OrganizationsService {
       const toUserId =
         reason === 'member_removed'
           ? actorUserId
-          : await this.longestStandingOtherOwner(manager, organizationId, userId);
+          : await this.requireHandover().longestStandingOtherOwner(manager, organizationId, userId);
       const entries = await this.requireHandover().handOverPrivateResources(manager, {
         organizationId,
         fromUserId: userId,
@@ -493,31 +493,6 @@ export class OrganizationsService {
       actorUserId,
       reason,
     });
-  }
-
-  /**
-   * The owner who has been in the organization longest, other than
-   * `excludeUserId`. There always is one: the last owner cannot leave.
-   */
-  private async longestStandingOtherOwner(
-    manager: EntityManager,
-    organizationId: string,
-    excludeUserId: string,
-  ): Promise<string> {
-    const owner = await manager
-      .getRepository(UserOrganization)
-      .createQueryBuilder('m')
-      .where('m.organizationId = :organizationId', { organizationId })
-      .andWhere('m.role = :role', { role: OrganizationRole.OWNER })
-      .andWhere('m.isActive = true')
-      .andWhere('m.userId <> :excludeUserId', { excludeUserId })
-      .orderBy('m.joinedAt', 'ASC', 'NULLS LAST')
-      .addOrderBy('m.id', 'ASC')
-      .getOne();
-    if (!owner) {
-      throw new ForbiddenException('Cannot remove the last owner of the organization');
-    }
-    return owner.userId;
   }
 
   private requireHandover(): ResourceHandoverHelper {

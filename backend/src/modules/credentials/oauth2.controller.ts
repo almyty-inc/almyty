@@ -70,11 +70,13 @@ export class OAuth2Controller {
   ) {
     try {
       const result = await this.oauth2Service.handleCallback(code, state);
-      // Redirect to frontend with success
+      // Back to where the sign-in started (an API's page), else credentials.
       const frontendUrl =
         process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
+      const path = result.returnTo ?? '/credentials';
+      const sep = path.includes('?') ? '&' : '?';
       res.redirect(
-        `${frontendUrl}/credentials?oauth=success&credentialId=${result.credentialId}`,
+        `${frontendUrl}${path}${sep}oauth=success&credentialId=${result.credentialId}`,
       );
     } catch (error: any) {
       this.logger.error(`OAuth2 callback failed: ${error.message}`);

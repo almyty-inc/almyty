@@ -1,16 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, MoreThanOrEqual, Repository } from 'typeorm';
+import { In, MoreThanOrEqual, Repository, SelectQueryBuilder } from 'typeorm';
 
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
-
-/**
- * Executions of tools that are private to somebody other than :me. With
- * no caller (:me null) every private tool's executions are excluded.
- */
-const NOT_OTHERS_PRIVATE_EXECUTION =
-  `NOT EXISTS (SELECT 1 FROM tools pt WHERE pt.id = execution."toolId" AND pt.visibility = 'private' AND (pt."createdBy" IS NULL OR pt."createdBy" IS DISTINCT FROM :me))`;
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 export interface ToolUsageStats {
   totalExecutions: number;
@@ -45,6 +39,7 @@ export class ToolsStatsHelper {
     private readonly toolRepository: Repository<Tool>,
     @InjectRepository(ToolExecution)
     private readonly toolExecutionRepository: Repository<ToolExecution>,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
   async getToolUsageStats(
@@ -124,16 +119,16 @@ export class ToolsStatsHelper {
     averageExecutionTime: number;
     topUsedTools: Array<{ tool: Tool; executionCount: number }>;
   }> {
-    const toolCounts = await this.toolRepository
+    // Only the tools this caller may see are part of their numbers: another
+    // member's private tools and other teams' tools are not -- a count
+    // that moves when someone else adds one is a leak.
+    const countQuery = this.toolRepository
       .createQueryBuilder('tool')
       .select('tool.status')
       .addSelect('COUNT(*)', 'count')
-      .where('tool.organizationId = :organizationId', { organizationId })
-      // Another member's private tools are not part of this caller's
-      // numbers -- a count that moves when they add one is a leak.
-      .andWhere(`(tool.visibility IS DISTINCT FROM 'private' OR tool."createdBy" = :me)`, { me: callerId ?? null })
-      .groupBy('tool.status')
-      .getRawMany();
+      .where('tool.organizationId = :organizationId', { organizationId });
+    await this.scopeToCaller(countQuery, 'tool', organizationId, callerId);
+    const toolCounts = await countQuery.groupBy('tool.status').getRawMany();
 
     const statusCounts: Record<string, number> = toolCounts.reduce((acc, row) => {
       acc[row.tool_status] = parseInt(row.count);
@@ -153,20 +148,21 @@ export class ToolsStatsHelper {
     // A ToolExecution carries `parameters` and `result` as untruncated
     // json, and the HTTP executor allows 10MB responses, so individual
     // rows can be megabytes. This is the rawSchema OOM verbatim.
+    const visibleTools = await this.visibleToolIds(organizationId, callerId);
     const [totals, usageRows] = await Promise.all([
       this.toolExecutionRepository
         .createQueryBuilder('execution')
         .select('COUNT(*)', 'count')
         .addSelect('AVG(execution.executionTime)', 'avg')
         .where('execution.organizationId = :organizationId', { organizationId })
-        .andWhere(NOT_OTHERS_PRIVATE_EXECUTION, { me: callerId ?? null })
+        .andWhere(`execution."toolId" IN (${visibleTools.getQuery()})`, visibleTools.getParameters())
         .getRawOne<{ count: string; avg: string | null }>(),
       this.toolExecutionRepository
         .createQueryBuilder('execution')
         .select('execution.toolId', 'toolId')
         .addSelect('COUNT(*)', 'count')
         .where('execution.organizationId = :organizationId', { organizationId })
-        .andWhere(NOT_OTHERS_PRIVATE_EXECUTION, { me: callerId ?? null })
+        .andWhere(`execution."toolId" IN (${visibleTools.getQuery()})`, visibleTools.getParameters())
         .groupBy('execution.toolId')
         .orderBy('COUNT(*)', 'DESC')
         .limit(10)
@@ -199,6 +195,38 @@ export class ToolsStatsHelper {
       averageExecutionTime,
       topUsedTools,
     };
+  }
+
+  /**
+   * The caller's view of the org's tools, the rule the tools list applies
+   * (AccessPolicyService.applyListFilter): org-wide tools, their teams'
+   * tools, their own private tools; an org admin every non-private tool.
+   * With no caller, org-wide tools only.
+   */
+  private async scopeToCaller(
+    qb: SelectQueryBuilder<Tool>,
+    alias: string,
+    organizationId: string,
+    callerId: string | null | undefined,
+  ): Promise<void> {
+    if (callerId) {
+      await this.accessPolicy.applyListFilter(qb, { id: callerId }, organizationId, alias, { ownerColumn: 'createdBy' });
+    } else {
+      qb.andWhere(`${alias}.visibility = 'org'`);
+    }
+  }
+
+  /** A subquery of the ids of the tools scopeToCaller admits. */
+  private async visibleToolIds(
+    organizationId: string,
+    callerId: string | null | undefined,
+  ): Promise<SelectQueryBuilder<Tool>> {
+    const sub = this.toolRepository
+      .createQueryBuilder('visible_tool')
+      .select('visible_tool.id')
+      .where('visible_tool.organizationId = :visibleToolOrg', { visibleToolOrg: organizationId });
+    await this.scopeToCaller(sub, 'visible_tool', organizationId, callerId);
+    return sub;
   }
 
   /**

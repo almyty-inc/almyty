@@ -7,6 +7,7 @@ const protocolStyles: Record<string, string> = {
   acp: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30',
   utcp: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30',
   skills: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30',
+  tools: 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-500/20 dark:text-violet-300 dark:border-violet-500/30',
   soap: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30',
   graphql: 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/30',
   rest: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/30',
@@ -37,6 +38,7 @@ const protocolStyles: Record<string, string> = {
 
 const protocolLabels: Record<string, string> = {
   openai_chat: 'OpenAI Chat',
+  tools: 'MCP · UTCP · Skills',
   google_chat: 'Google Chat',
   microsoft_teams: 'Teams',
   chat_widget: 'Chat Widget',

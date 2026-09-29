@@ -30,6 +30,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { maskChannelConfigSecrets } from './channels/channel-config.helper';
 import { SURFACE_CATALOG } from './surface-catalog';
+import { Gateway, GatewayKind } from '../../entities/gateway.entity';
 
 import {
   CreateGatewayBodyDto,
@@ -87,11 +88,26 @@ export class GatewaysController {
       }
 
       const userId = req.user.sub || req.user.id;
+      const { toolIds, ...gatewayFields } = createGatewayDto;
       const gateway = await this.gatewaysService.createGateway(
-        createGatewayDto as CreateGatewayDto,
+        gatewayFields as CreateGatewayDto,
         organizationId,
         userId,
       );
+
+      // Tools picked on the Share tools page, attached by the same rules as
+      // the bulk endpoint. A refusal (a draft, a team tool on an org-wide
+      // gateway, ...) is reported per tool rather than failing the gateway,
+      // which already exists and is usable with whatever did attach.
+      let sharedTools: { associated: number; skipped: Array<{ toolId: string; reason: string }> } | undefined;
+      if (toolIds?.length && Gateway.kindForType(gateway.type) === GatewayKind.TOOL) {
+        try {
+          const result = await this.gatewayToolService.bulkAssociateTools(gateway.id, { toolIds }, organizationId, userId);
+          sharedTools = { associated: result.associated.length, skipped: result.skipped };
+        } catch (e) {
+          sharedTools = { associated: 0, skipped: toolIds.map((toolId) => ({ toolId, reason: e.message })) };
+        }
+      }
 
       // Auto-generate an API key for non-Skills gateways
       let initialApiKey: string | undefined;
@@ -116,6 +132,7 @@ export class GatewaysController {
         data: {
           ...this.maskGatewaySecrets(gateway),
           initialApiKey, // Only returned once at creation time
+          ...(sharedTools ? { sharedTools } : {}),
         },
         message: initialApiKey
           ? 'Gateway created with API key. Save the key — it will not be shown again.'

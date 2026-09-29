@@ -126,14 +126,32 @@ describe('deployment connectors derived from the adapter registry', () => {
 
   it('the catalog service reads the registry at runtime and skips adapters a built-in connector already covers', async () => {
     const registry = new AdapterRegistry();
-    registry.register(new StubAdapter({ architectures: 'any' }));
+    const acme = new StubAdapter({ architectures: 'any' });
+    Object.assign(acme, { key: 'acme', displayName: 'Acme GPUs', internal: false });
+    registry.register(acme);
     const service = new ConnectorCatalogService(fakeRepo<any>() as any, fakeAudit(), registry);
     const keys = service.builtIn().map((c) => c.key);
     expect(keys).toContain('modal');
     expect(keys).not.toContain('deploy-modal');
-    const stubSecrets = Object.values(new StubAdapter({ architectures: 'any' }).configSchema().properties ?? {}).some((p: any) => p['x-secret']);
-    expect(keys.includes('deploy-stub')).toBe(stubSecrets);
+    const secrets = Object.values(acme.configSchema().properties ?? {}).some((p: any) => p['x-secret']);
+    expect(keys.includes('deploy-acme')).toBe(secrets);
     for (const c of service.builtIn()) expect(validateConnectorDefinition(c)).toEqual([]);
+  });
+
+  it('never turns the stub adapter into a connector, even on a dev or test install', () => {
+    const prev = process.env.MODEL_STUB_ADAPTER;
+    process.env.MODEL_STUB_ADAPTER = 'true';
+    try {
+      const registry = new AdapterRegistry();
+      registry.register(new StubAdapter({ architectures: 'any' }));
+      const service = new ConnectorCatalogService(fakeRepo<any>() as any, fakeAudit(), registry);
+      const connectors = service.builtIn();
+      expect(connectors.map((c) => c.key)).not.toContain('deploy-stub');
+      expect(connectors.some((c) => /stub/i.test(c.displayName))).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env.MODEL_STUB_ADAPTER;
+      else process.env.MODEL_STUB_ADAPTER = prev;
+    }
   });
 });
 

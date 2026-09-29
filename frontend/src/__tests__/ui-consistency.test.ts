@@ -28,22 +28,9 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 const isTest = (f: string) => /(__tests__|\.test\.|\.spec\.)/.test(f)
-/**
- * Areas another workstream is restructuring right now (the Runner pages).
- * They are held to the same rules once that work lands; until then they
- * are listed here rather than edited twice.
- */
-const OTHER_WORKSTREAMS = [
-  /^pages\/runner/,
-  /^pages\/runners/,
-]
-
-const inScope = (rel: string) => !OTHER_WORKSTREAMS.some((re) => re.test(rel))
-
 const sources = walk(SRC)
   .filter((f) => !isTest(f))
   .map((f) => ({ rel: relative(SRC, f), src: readFileSync(f, 'utf8') }))
-  .filter(({ rel }) => inScope(rel))
 
 const pages = sources.filter(({ rel }) => rel.startsWith('pages/'))
 
@@ -129,6 +116,27 @@ describe('labels are sentence case', () => {
         for (const label of el.variants) {
           if (titleCaseWords(label).length) offenders.push(`${rel}:${el.line} <${el.tag}> "${label}"`)
         }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('holds for confirmations and empty states too', () => {
+    // useConfirm() takes its title and button as plain strings, and an
+    // EmptyState's title is an attribute, so neither is a JSX child the
+    // check above reads. "Delete Tool" in a confirm is the same drift.
+    const offenders: string[] = []
+    const literal = /\b(confirmLabel|cancelLabel|title):\s*(['"])([^'"\n]*)\2/g
+    for (const { rel, src } of sources) {
+      if (!/\buseConfirm\s*\(/.test(src)) continue
+      for (const m of src.matchAll(literal)) {
+        if (titleCaseWords(m[3]).length) offenders.push(`${rel} ${m[1]}: "${m[3]}"`)
+      }
+    }
+    for (const { rel, src } of sources) {
+      for (const el of jsxLabels(src, ['EmptyState'])) {
+        const title = /\btitle="([^"]*)"/.exec(el.attrs)?.[1]
+        if (title && titleCaseWords(title).length) offenders.push(`${rel}:${el.line} EmptyState: "${title}"`)
       }
     }
     expect(offenders).toEqual([])

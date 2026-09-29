@@ -19,7 +19,7 @@ describe('LlmChatRunnerHelper.callRouted', () => {
   const ok = (model: string) => ({ message: { role: 'assistant', content: 'hi' }, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, cost: 0, model, conversationId: 'conv', messageId: 'm', responseTime: 1 });
 
   function build(plan: { candidates: any[]; rejected: any[] }, dispatch: jest.Mock) {
-    const router = { plan: jest.fn().mockResolvedValue(plan), recordRoute: jest.fn(), recordLatency: jest.fn().mockResolvedValue(undefined) };
+    const router = { plan: jest.fn().mockResolvedValue(plan), recordRoute: jest.fn(), recordLatency: jest.fn().mockResolvedValue(undefined), markModelNotFound: jest.fn().mockResolvedValue(undefined) };
     const runner = new LlmChatRunnerHelper(
       {} as any, {} as any, {} as any,
       { warmOrg: jest.fn().mockResolvedValue(undefined) } as any,
@@ -58,11 +58,15 @@ describe('LlmChatRunnerHelper.callRouted', () => {
     const dispatch = jest.fn()
       .mockRejectedValueOnce({ response: { status: 404, data: { error: { message: 'model not found' } } } })
       .mockResolvedValueOnce(ok('dear'));
-    const { runner } = build({ candidates: [candidate('a', 'cheap'), candidate('b', 'dear', 'rank 2')], rejected: [] }, dispatch);
+    const { runner, router } = build({ candidates: [candidate('a', 'cheap'), candidate('b', 'dear', 'rank 2')], rejected: [] }, dispatch);
     const res = await runner.callLlmProvider(provider('x'), { messages: [], routing: {} }, session, []);
     expect(res.routing?.attempt).toBe(2);
     expect(res.routing?.modelId).toBe('b');
     expect(res.routing?.tried).toEqual([{ modelId: 'a', reason: 'MODEL_NOT_FOUND' }]);
+    // The retired model is marked unavailable, so no list offers it again;
+    // the one that answered is left alone.
+    expect(router.markModelNotFound).toHaveBeenCalledTimes(1);
+    expect(router.markModelNotFound).toHaveBeenCalledWith('org', 'p-a', 'cheap', expect.stringContaining('cheap'));
   });
 
   it('moves on after retries are exhausted on an outage', async () => {

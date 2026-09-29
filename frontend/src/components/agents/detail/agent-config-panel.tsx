@@ -1,17 +1,18 @@
 /**
- * Models & Verification panel for the agent detail Overview. Surfaces the
- * thing that makes almyty autonomous agents distinctive: ONE agent driven by a
- * primary LLM, with a verifier panel of OTHER LLMs (different vendors) checking
- * every answer — plus the failure-memory constraints and memory config. This is
- * the multi-LLM-in-one-agent story, which previously lived only in the DB.
+ * Models & verification panel for the agent detail Overview: the roles
+ * the agent runs and how they work together (the same `models` its edit
+ * page shows, read the same way), the verifier panel of other models that
+ * checks every final answer, and the constraints and memory switches.
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Cpu, ShieldCheck, ShieldAlert, Repeat, Brain, Settings2 } from 'lucide-react'
+import { Cpu, ShieldAlert, Repeat, Brain, Settings2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { VerifyConfigEditor } from './verify-config-editor'
+import { VerifierPanelHeading, VerifierPanelList, useProviderNames } from '@/components/agents/verifier-panel'
+import { PURPOSE_LABELS, STRATEGY_LABELS, modelsFromAgent } from '@/components/agents/builder/agent-models'
 import type { Agent } from '@/types'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
@@ -26,21 +27,17 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
     : providersData?.providers || []
   const provMap = new Map<string, any>(providers.map((p: any) => [p.id, p]))
   const vendorOf = (id?: string) => (id && provMap.get(id)?.type) || id || ''
-  const labelOf = (id?: string) => {
-    const p = id ? provMap.get(id) : undefined
-    return p ? p.name || p.type : id ? 'provider' : '—'
-  }
+  const nameOf = useProviderNames()
 
-  const mc = agent.modelConfig || {}
+  const models = modelsFromAgent(agent as Agent & { collaboration?: unknown })
   const verify = agent.agentConfig?.verify
   const constraints = agent.agentConfig?.constraints
   const memory = agent.memoryConfig
 
-  // Distinct vendors across primary + verifier checkers = the headline number.
+  // Distinct vendors across every role and every reviewer.
   const vendors = new Set<string>()
-  if (mc.providerId) vendors.add(vendorOf(mc.providerId))
+  for (const r of models.roles) if (r.kind === 'model' && r.providerId) vendors.add(vendorOf(r.providerId))
   if (verify?.enabled) (verify.checkers || []).forEach((c) => c.providerId && vendors.add(vendorOf(c.providerId)))
-  const multiVendor = vendors.size > 1
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -58,34 +55,43 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
             <Badge variant="outline" className="capitalize">{agent.mode} mode</Badge>
           </div>
         </div>
-        {multiVendor && (
-          <CardDescription className="text-xs">
-            {vendors.size} LLM vendors collaborating inside this one agent — a primary model plus a
-            cross-vendor verifier panel.
-          </CardDescription>
+        {vendors.size > 1 && (
+          <CardDescription className="text-xs">Uses models from {vendors.size} providers.</CardDescription>
         )}
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Edited in place, not in a modal. */}
         {editingVerify && <VerifyConfigEditor agent={agent} onDone={() => setEditingVerify(false)} />}
-        {/* Primary model */}
-        <div>
-          <div className="text-xs font-medium text-muted-foreground mb-1.5">Primary model</div>
-          <div className="flex items-center gap-2 text-sm">
-            <Badge variant="secondary" className="text-[10px]">{labelOf(mc.providerId)}</Badge>
-            <span className="font-mono text-xs">{mc.model || '—'}</span>
-            {typeof mc.temperature === 'number' && (
-              <span className="text-xs text-muted-foreground">· temp {mc.temperature}</span>
-            )}
+        {/* The roles, as the edit page shows them */}
+        <div data-testid="overview-models">
+          <div className="text-xs font-medium text-muted-foreground mb-1.5">
+            Models <span className="font-normal">· {STRATEGY_LABELS[models.strategy]}</span>
+          </div>
+          <div className="space-y-1">
+            {models.roles.map((r) => (
+              <div key={r.key} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-foreground">{r.name}</span>
+                {r.name !== PURPOSE_LABELS[r.purpose] && <span className="text-xs text-muted-foreground">{PURPOSE_LABELS[r.purpose]}</span>}
+                {r.kind === 'agent' ? (
+                  <Badge variant="secondary" className="text-[10px]">Another agent</Badge>
+                ) : r.routing ? (
+                  <Badge variant="secondary" className="text-[10px]">Automatic</Badge>
+                ) : (
+                  <>
+                    <Badge variant="secondary" className="text-[10px]">{nameOf(r.providerId)}</Badge>
+                    <span className="font-mono text-xs">{r.model || '—'}</span>
+                  </>
+                )}
+                {typeof r.temperature === 'number' && <span className="text-xs text-muted-foreground">· temp {r.temperature}</span>}
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Verifier panel */}
         {verify?.enabled && (
           <div>
-            <div className="text-xs font-medium text-muted-foreground mb-1.5 flex flex-wrap items-center gap-1.5">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-              Verifier panel
+            <VerifierPanelHeading>
               <Badge variant="outline" className="text-[10px]">{verify.policy || 'any_fail_blocks'}</Badge>
               {verify.maxReviseLoops != null && (
                 <Badge variant="outline" className="text-[10px] gap-1">
@@ -93,19 +99,8 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
                   {verify.maxReviseLoops} revisions
                 </Badge>
               )}
-            </div>
-            <div className="space-y-1">
-              {(verify.checkers || []).map((c, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-2 text-sm rounded border bg-background px-2 py-1"
-                >
-                  <span className="text-foreground">{c.name || `Reviewer ${i + 1}`}</span>
-                  <Badge variant="secondary" className="text-[10px]">{labelOf(c.providerId)}</Badge>
-                  {c.model && <span className="font-mono text-[11px] text-muted-foreground">{c.model}</span>}
-                </div>
-              ))}
-            </div>
+            </VerifierPanelHeading>
+            <VerifierPanelList verify={verify} />
             {verify.triggers && verify.triggers.length > 0 && (
               <div className="text-[10px] text-muted-foreground mt-1.5">
                 Triggers: {verify.triggers.join(', ')}

@@ -7,7 +7,7 @@
 
 ## Build it
 
-1. **Expose a read-only query tool.** Put a read-replica behind a small query endpoint (or a stored-proc API) and *Connect API* to it, never point it at a writable primary.
+1. **Expose a read-only query tool.** Put a read-replica behind a small query endpoint (or a stored-proc API). Connect it in *Connect an API* by pasting its OpenAPI link, or, for a single call, create an [HTTP tool](/tools/http-tools). Never point it at a writable primary.
 2. **Give the agent the schema.** Attach a schema-description tool or include table/column docs in its instructions so it writes correct queries.
 3. **Create the agent** with: *translate the question to SQL, run it read-only, and answer with the number and the query used.*
 4. **Constrain it hard**: *SELECT only; never UPDATE/DELETE/DROP; cap rows and time range*, the guardrail that makes this safe to open up.

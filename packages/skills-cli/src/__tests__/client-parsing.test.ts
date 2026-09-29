@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AlmytyClient } from '../client.js';
+import { AlmytyClient, gatewayRefSlug } from '../client.js';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -163,5 +163,15 @@ describe('AlmytyClient response parsing', () => {
         client.executeSkill('gw-3', 'something-not-installed', {}),
       ).rejects.toThrow(/not found in gateway/);
     });
+  });
+});
+
+describe('gatewayRefSlug', () => {
+  it('prefers the address slug the server resolves first', () => {
+    expect(gatewayRefSlug({ name: 'Swagger Petstore - OpenAPI 3.0', endpoint: '/petstore' })).toBe('petstore');
+  });
+
+  it('falls back to the name as a clean slug', () => {
+    expect(gatewayRefSlug({ name: 'Swagger Petstore - OpenAPI 3.0' })).toBe('swagger-petstore-openapi-3-0');
   });
 });

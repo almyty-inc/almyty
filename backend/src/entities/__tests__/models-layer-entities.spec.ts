@@ -14,7 +14,12 @@ describe('Model card', () => {
       ...over,
     });
 
-  it('is selectable only with a dispatch path, active status and a passing validation', () => {
+  // The readiness rule (docs/models.md): a card is usable when it can be
+  // called, is active, and is checked. For a provider's models "checked"
+  // is written for all of them at once when the provider's key check
+  // passes; a card still waiting on that check, or one the vendor said is
+  // gone, is not usable.
+  it('is selectable only with a dispatch path, active status and a passed check', () => {
     expect(card().isSelectable()).toBe(true);
     expect(card({ validationStatus: 'never' }).isSelectable()).toBe(false);
     expect(card({ validationStatus: 'failed' }).isSelectable()).toBe(false);

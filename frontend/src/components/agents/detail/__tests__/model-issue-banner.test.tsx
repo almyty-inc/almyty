@@ -29,7 +29,7 @@ describe('ModelIssueBanner', () => {
     expect(alert).toHaveTextContent('claude-sonnet-4-20250514')
     expect(alert).toHaveTextContent('no longer available')
     expect(alert).toHaveTextContent('model call node')
-    expect(screen.getByRole('link', { name: 'provider' })).toHaveAttribute('href', '/llm-providers/p1')
+    expect(screen.getByRole('link', { name: 'provider' })).toHaveAttribute('href', '/models/providers/p1')
     expect(alert).not.toHaveTextContent('schedule')
   })
 

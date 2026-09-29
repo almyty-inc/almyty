@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import { listenOnLoopback } from '../../../test/http';
 
 import { AgentRole } from '../../../entities/agent-role.entity';
 import { AgentRolesController } from '../agent-roles.controller';
@@ -43,7 +44,7 @@ describe('POST /agents/:id/roles/resolve when a role cannot be filled', () => {
       .compile();
 
     app = moduleRef.createNestApplication();
-    await app.init();
+    await listenOnLoopback(app);
   });
 
   afterAll(async () => await app?.close());

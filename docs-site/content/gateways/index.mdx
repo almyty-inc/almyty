@@ -9,7 +9,7 @@ every endpoint has a focused, purpose-built surface.
 
 ## The payoff
 
-Scope a gateway to the tools you want, generate a key on its Authentication tab, then
+Scope a gateway to the tools you want, generate a key in its Authentication section, then
 add it to Claude Code in one line:
 
 ```bash
@@ -29,13 +29,11 @@ tool bundle. Each gateway speaks one protocol — the one you pick when you crea
 
 ## Create one
 
-1. Open **Gateways** in the sidebar and click **Create Gateway**
+1. Open **Gateways** in the sidebar and click **Create gateway** to open `/gateways/new`
 2. Pick a kind — **Tools** for MCP, UTCP, or Skills; **Agent** for A2A and the chat channels
 3. Pick the protocol, name it, and set an endpoint path (the slug in the URL)
-4. For a tools gateway, open the **Tools** tab and assign the tools it should serve
-5. Open the **Authentication** tab and add an auth method before going live
-
-![The Create Gateway dialog](/screenshots/gateways-create-dialog.png)
+4. Click **Create gateway**, then for a tools gateway open **Tool scoping** and assign the tools it should serve
+5. For MCP, UTCP or A2A, configure the **Authentication** section on the detail page before exposing the endpoint
 
 The gateway's **Integrations** tab gives you the live endpoint plus discovery URLs to
 paste into any client:

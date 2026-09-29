@@ -7,7 +7,6 @@ import {
   normaliseVisibility,
   resourceOwnerId,
 } from './access-policy.service';
-import { resourceServableThroughGateway } from '../../modules/gateways/private-gateway';
 
 /**
  * Helpers for the 'private' ("just me") tier on agents, tools and APIs.
@@ -132,26 +131,6 @@ export function assertAttachable(
   );
 }
 
-/**
- * The tools a gateway may serve. A gateway is reached by whoever holds
- * its URL or key, not by a user the policy can check, so what it serves is
- * bounded by its own scope -- the membership-free part of the gateway rule
- * in ExecutionAccessService: a private tool only on a gateway private to
- * the tool's own owner, a team tool only on a gateway scoped to that team
- * (or a private gateway, whose owner's membership is checked per call).
- * Org tools pass. The rule itself is `resourceServableThroughGateway`, the
- * one every gateway listing and call applies (gateway-servable); a gateway
- * that is not given is treated as scoped to nothing.
- */
-export function servableOnGateway<T extends ResourceLike>(
-  tools: T[],
-  gateway:
-    | { visibility?: ResourceVisibility | null; ownerUserId?: string | null; teamId?: string | null }
-    | null
-    | undefined,
-): T[] {
-  return tools.filter((tool) => resourceServableThroughGateway(gateway ?? {}, tool));
-}
 /**
  * The one answer to "that name is taken", for APIs, tools and runners.
  *

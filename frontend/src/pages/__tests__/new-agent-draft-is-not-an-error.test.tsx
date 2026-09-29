@@ -68,7 +68,7 @@ describe('a new agent draft nobody has touched yet', () => {
 
     // The work that is left is on screen -- nothing is being hidden.
     const steps = await screen.findByTestId('builder-next-steps')
-    expect(steps).toHaveTextContent(/to finish this agent/i)
+    expect(steps).toHaveTextContent(/to finish:/i)
     expect(steps).toHaveTextContent(/model call: pick a model/i)
 
     // But it is not an error: no destructive banner, no alert role, and
@@ -116,7 +116,7 @@ describe('a new agent draft nobody has touched yet', () => {
 
     // Clearing the name is the user filling something in, badly, and that is
     // exactly when an error is the honest word for it. No save needed.
-    await user.clear(screen.getByDisplayValue('New Agent'))
+    await user.clear(screen.getByDisplayValue('New agent'))
 
     const banner = await screen.findByTestId('builder-validation-errors')
     expect(banner).toHaveTextContent(/name the agent/i)

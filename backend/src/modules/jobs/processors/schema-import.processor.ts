@@ -24,6 +24,8 @@ export interface SchemaImportJob {
     fileName?: string;
     description?: string;
     generateTools?: boolean;
+    /** Who queued the import; its generated tools are recorded as theirs. */
+    createdBy?: string | null;
   };
 }
 

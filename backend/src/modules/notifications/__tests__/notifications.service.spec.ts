@@ -54,6 +54,7 @@ describe('NotificationsService', () => {
       { userId: 'owner-1', organizationId: 'org-1', role: OrganizationRole.OWNER, isActive: true, inviteAccepted: true, inviteToken: null },
       { userId: 'admin-1', organizationId: 'org-1', role: OrganizationRole.ADMIN, isActive: true, inviteAccepted: true, inviteToken: null },
       { userId: 'user-1', organizationId: 'org-1', role: OrganizationRole.MEMBER, isActive: true, inviteAccepted: true, inviteToken: null },
+      { userId: 'lead-1', organizationId: 'org-1', role: OrganizationRole.MEMBER, isActive: true, inviteAccepted: true, inviteToken: null },
       // Pending invite (never accepted) — must NOT receive role-targeted rows.
       { userId: 'user-2', organizationId: 'org-1', role: OrganizationRole.ADMIN, isActive: true, inviteAccepted: false, inviteToken: 'tok' },
       // Revoked (deactivated) admin -- must NOT receive role-targeted rows either.
@@ -146,6 +147,7 @@ describe('NotificationsService', () => {
 
     it('skips users without an email address for the email channel', async () => {
       userRepo.seed({ id: 'no-mail', email: null, firstName: 'X' });
+      userOrgRepo.seed({ userId: 'no-mail', organizationId: 'org-1', role: OrganizationRole.MEMBER, isActive: true, inviteAccepted: true, inviteToken: null });
       await emitApproval({ userIds: ['no-mail'] });
       expect(notifRepo.rows()).toHaveLength(1);
       expect(mail.sendTemplate).not.toHaveBeenCalled();
@@ -185,6 +187,37 @@ describe('NotificationsService', () => {
 
       const recipients = notifRepo.rows().map((n) => n.userId).sort();
       expect(recipients).toEqual(['owner-1']);
+    });
+
+    it('drops explicit recipients who are not members of the organization now', async () => {
+      // A run's initiator, a schedule's owner or a resource's owner is
+      // named by id; by the time the event fires they may have been
+      // deactivated, left, or never accepted the invite. What the event
+      // names (an agent, a gateway, a run's error) is the organization's,
+      // and none of them may read it any more -- in-app or by email.
+      userRepo.seed({ id: 'revoked-1', email: 'revoked@example.com', firstName: 'Revoked' });
+      userRepo.seed({ id: 'stranger-1', email: 'stranger@example.com', firstName: 'Stranger' });
+      await emitApproval({ userIds: ['user-1', 'revoked-1', 'user-2', 'stranger-1'] });
+
+      expect(notifRepo.rows().map((n) => n.userId)).toEqual(['user-1']);
+      expect(mail.sendTemplate.mock.calls.map((c) => c[0])).toEqual(['one@example.com']);
+    });
+
+    it('drops a team lead who is no longer a member of the organization', async () => {
+      userRepo.seed({ id: 'lead-2', email: 'lead2@example.com', firstName: 'Lead2' });
+      userTeamRepo.seed({ userId: 'lead-2', teamId: 'team-1', role: TeamRole.LEAD, isActive: true });
+      userOrgRepo.seed({ userId: 'lead-2', organizationId: 'org-1', role: OrganizationRole.MEMBER, isActive: false, inviteAccepted: true, inviteToken: null });
+      await emitApproval({ roleTarget: { teamLeadOfTeamId: 'team-1' } });
+
+      expect(notifRepo.rows().map((n) => n.userId)).toEqual(['lead-1']);
+    });
+
+    it('an invite reaches the pending invitee, and only when the emission says it is one', async () => {
+      const invite = { type: 'invite.received' as const, organizationId: 'org-1', userIds: ['user-2'], title: 'Invited', body: 'b' };
+      await service.emit(invite);
+      expect(notifRepo.rows()).toEqual([]);
+      await service.emit({ ...invite, toInvitees: true });
+      expect(notifRepo.rows().map((n) => n.userId)).toEqual(['user-2']);
     });
   });
 

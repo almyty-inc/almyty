@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { getRedisConnectionToken } from '@nestjs-modules/ioredis';
 import { Request, Response } from 'express';
 import { EventEmitter } from 'events';
 
@@ -374,39 +375,86 @@ describe('StreamableHttpTransport', () => {
   describe('with Redis (multi-replica)', () => {
     // A tiny in-process pub/sub + kv that models the slice of ioredis the
     // transport uses. duplicate() returns a subscriber bound to the same bus.
-    function makeRedisBus() {
+    //
+    // `open` is the socket: disconnect() closes it at once, and a closed
+    // subscriber hears nothing. With { down: true } Redis is unreachable, so
+    // quit() -- a command -- waits in ioredis's offline queue for good.
+    function makeRedisBus(opts: { down?: boolean } = {}) {
       const kv = new Map<string, string>();
       const bus = new EventEmitter();
       bus.setMaxListeners(0);
+      const clients: any[] = [];
       function makeClient(isSub = false): any {
         const subs = new Set<string>();
         const client: any = {
           isSub,
+          open: true,
           async set(k: string, v: string) { kv.set(k, v); return 'OK'; },
           async get(k: string) { return kv.get(k) ?? null; },
           async publish(ch: string, msg: string) { bus.emit(ch, msg); return 1; },
           async subscribe(...chs: string[]) { chs.forEach(c => subs.add(c)); return chs.length; },
           on(ev: string, cb: any) {
             if (ev === 'message') {
-              bus.on('__any__', (ch: string, msg: string) => { if (subs.has(ch)) cb(ch, msg); });
+              bus.on('__any__', (ch: string, msg: string) => { if (client.open && subs.has(ch)) cb(ch, msg); });
             }
             return client;
           },
-          async quit() { return 'OK'; },
+          quit() {
+            if (opts.down) return new Promise(() => undefined);
+            client.open = false;
+            return Promise.resolve('OK');
+          },
+          disconnect() { client.open = false; },
           duplicate() { return makeClient(true); },
         };
+        clients.push(client);
         return client;
       }
       // Route every channel emit through a single '__any__' fan so subscribers
       // can filter by their subscribed set.
       const origEmit = bus.emit.bind(bus);
       bus.emit = ((ch: string, msg: string) => origEmit('__any__', ch, msg)) as any;
-      return makeClient(false);
+      const main = makeClient(false);
+      main.subscribers = () => clients.filter((c) => c.isSub);
+      return main;
     }
 
     function makeTransport(redis: any) {
       return new StreamableHttpTransport(mcpService as any, sessionService as any, redis);
     }
+
+    async function nestTransport(redis: any) {
+      const moduleRef = await Test.createTestingModule({
+        providers: [
+          StreamableHttpTransport,
+          { provide: McpService, useValue: mcpService },
+          { provide: McpSessionService, useValue: sessionService },
+          { provide: getRedisConnectionToken(), useValue: redis },
+        ],
+      }).compile();
+      return moduleRef;
+    }
+
+    it('closing the Nest context closes the subscriber it opened (or jest and pods never exit)', async () => {
+      const redis = makeRedisBus();
+      const moduleRef = await nestTransport(redis);
+      const [subscriber] = redis.subscribers();
+      expect(subscriber.open).toBe(true);
+      await moduleRef.close();
+      expect(subscriber.open).toBe(false);
+    });
+
+    it('closing does not wait on a Redis that is gone', async () => {
+      const redis = makeRedisBus({ down: true });
+      const moduleRef = await nestTransport(redis);
+      const [subscriber] = redis.subscribers();
+      const closed = await Promise.race([
+        moduleRef.close().then(() => 'closed'),
+        new Promise((resolve) => setTimeout(() => resolve('still waiting'), 1000)),
+      ]);
+      expect(closed).toBe('closed');
+      expect(subscriber.open).toBe(false);
+    });
 
     it('adopts a session from the registry so a GET on another pod does not 404', async () => {
       const redis = makeRedisBus();

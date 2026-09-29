@@ -67,9 +67,10 @@ describe('the chosen strategy becomes the pipeline', () => {
       { find: jest.fn().mockResolvedValue(['drafter', 'verifier', 'principal'].map((key) => ({ key }))) },
       orchestrator,
     );
-    const compiled = await r.pipelineFor(agent('single'), 'do the thing');
+    const compiled = await r.pipelineFor(agent('single'), 'do the thing', 'user-7');
 
-    expect(orchestrator.choose).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), 'do the thing');
+    // The decision is made as the run's user.
+    expect(orchestrator.choose).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), 'do the thing', 'user-7');
     expect(compiled.strategyKey).toBe('cascade');
     expect(compiled.chosenBy).toBe('orchestrator');
   });

@@ -20,8 +20,9 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AccessPolicyService, normaliseVisibility, type ResourceVisibility } from '../../common/authorization/access-policy.service';
 import { gatewayServableTo } from '../gateways/private-gateway';
-import { providerUsableBy } from '../llm-providers/private-provider';
+import { usableProviders } from '../llm-providers/private-provider';
 import { batchAsync } from '../../common/utils/batch-async';
+import { assertManageable, canRead } from '../../common/authorization/read-rule';
 
 /**
  * Whether `userId` may see this credential at all. A private ("just me")
@@ -110,8 +111,8 @@ export class CredentialsService {
       where: { id, organizationId },
     });
 
-    // Another user's private credential is reported as not found.
-    if (!credential || (caller && !credentialVisibleTo(credential, caller.id))) {
+    // A credential the caller may not read (read-rule.ts) is reported as not found.
+    if (!credential || (caller && !(await canRead(this.accessPolicy, caller, credential)))) {
       throw new NotFoundException('Credential not found');
     }
 
@@ -224,15 +225,10 @@ export class CredentialsService {
       throw new NotFoundException('Credential not found');
     }
 
-    // Authorization: org owner/admin always, team-scoped requires team lead.
-    // userId may be undefined for legacy callers; skip the check in that
-    // case so the migration doesn't break existing internal callers.
-    if (userId) {
-      const decision = await this.accessPolicy.canAccess({ id: userId }, credential, 'manage');
-      if (!decision.allowed) {
-        throw new ForbiddenException(decision.reason);
-      }
-    }
+    // Cannot read it (a team credential outside the caller's teams): 404.
+    // Can read it but not manage it: 403. userId may be undefined for
+    // internal callers; they skip the gate.
+    if (userId) await assertManageable(this.accessPolicy, userId, credential, 'Credential');
     // Re-validate team scoping if it's being changed.
     if (userId && (data.visibility !== undefined || data.teamId !== undefined)) {
       const nextVis = data.visibility ?? credential.visibility;
@@ -292,13 +288,9 @@ export class CredentialsService {
       throw new NotFoundException('Credential not found');
     }
 
-    // Authorization: org owner/admin always, team-scoped requires team lead.
-    if (userId) {
-      const decision = await this.accessPolicy.canAccess({ id: userId }, credential, 'manage');
-      if (!decision.allowed) {
-        throw new ForbiddenException(decision.reason);
-      }
-    }
+    // Cannot read it (a team credential outside the caller's teams): 404.
+    // Can read it but not manage it: 403.
+    if (userId) await assertManageable(this.accessPolicy, userId, credential, 'Credential');
 
     await this.credentialRepository.remove(credential);
     this.logger.log(`Credential deleted: ${id} (${credential.name})`);
@@ -316,18 +308,19 @@ export class CredentialsService {
       where: { id, organizationId },
     });
 
-    if (!credential || (caller && !credentialVisibleTo(credential, caller.id))) {
+    if (!credential || (caller && !(await canRead(this.accessPolicy, caller, credential)))) {
       throw new NotFoundException('Credential not found');
     }
 
     // Find LLM providers using this credential (not another user's
-    // private ones: those are not the caller's to know about).
-    const llmProviders = (await this.llmProviderRepository.find({
+    // private ones, nor a team's the caller is not on: those are not the
+    // caller's to know about).
+    const usingIt = await this.llmProviderRepository.find({
       where: { credentialId: id, organizationId },
-      select: { id: true, name: true, type: true, status: true, visibility: true, ownerUserId: true },
-    }))
-      .filter((p) => !caller || providerUsableBy(p, caller.id))
-      .map(({ visibility: _v, ownerUserId: _o, ...rest }) => rest);
+      select: { id: true, name: true, type: true, status: true, organizationId: true, visibility: true, ownerUserId: true, teamId: true },
+    });
+    const llmProviders = (caller ? await usableProviders(this.accessPolicy, organizationId, caller.id, usingIt) : usingIt)
+      .map(({ visibility: _v, ownerUserId: _o, teamId: _t, organizationId: _org, ...rest }) => rest);
 
     // Find APIs that have credentials with this id
     const apis = await this.apiRepository.find({

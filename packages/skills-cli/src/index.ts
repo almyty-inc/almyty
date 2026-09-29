@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { resolveCredentials } from './auth.js';
-import { AlmytyClient, parseRef } from './client.js';
+import { AlmytyClient, gatewayRefSlug, parseRef } from './client.js';
 import { getAllTargets } from './agents.js';
 import { installSkills, removeSkills, listInstalledSkills } from './installer.js';
 import { loadConfig, resolveTargets } from './config.js';
@@ -124,7 +124,7 @@ async function main(): Promise<void> {
 
       console.log('\nYour gateways:\n');
       for (const gw of gateways) {
-        const slug = gw.name.toLowerCase().replace(/\s+/g, '-');
+        const slug = gatewayRefSlug(gw);
         console.log(`  ${gw.name}`);
         console.log(`    Type: ${gw.type}`);
         console.log(`    Use:  npx @almyty/skills install <org>/${slug}`);

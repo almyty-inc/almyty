@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsEnum, IsIn, IsNumber, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 import { GatewayKind, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
@@ -102,6 +102,18 @@ export class CreateGatewayBodyDto {
   @IsOptional()
   @IsString()
   teamId?: string | null;
+
+  /**
+   * Tools to share on a tool gateway in the same request that creates it,
+   * so "pick tools, get an address" is one step. Each goes through the
+   * same attach rules as POST /gateways/:id/tools/bulk; anything refused
+   * comes back as skipped with its reason.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsUUID('all', { each: true })
+  toolIds?: string[];
 }
 
 export class UpdateGatewayBodyDto {
@@ -119,9 +131,12 @@ export class UpdateGatewayBodyDto {
   @IsString()
   endpoint?: string;
 
+  // A person pauses or resumes a gateway; 'error' is the health check's
+  // verdict and 'maintenance' had no behaviour of its own, so neither is
+  // something to set by hand.
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsIn(['active', 'inactive'])
+  status?: 'active' | 'inactive';
 
   @IsOptional()
   @IsObject()

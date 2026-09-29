@@ -3,8 +3,10 @@ import cors from 'cors';
 import request from 'supertest';
 import { NotFoundException } from '@nestjs/common';
 import { readFileSync } from 'fs';
+import type { Server } from 'http';
 import { join } from 'path';
 
+import { serveOnLoopback } from '../../../../test/http';
 import {
   SurfaceCorsService,
   publicSurfaceFor,
@@ -25,7 +27,11 @@ const WIDGET = '11111111-2222-4333-8444-555555555555';
 const OTHER_WIDGET = '99999999-2222-4333-8444-555555555555';
 const DASHBOARD = 'https://app.almyty.com';
 
-function appWith(lists: Record<string, string[]>, opts: { failLookup?: boolean } = {}) {
+const servers: Server[] = [];
+const closeServers = () =>
+  Promise.all(servers.splice(0).map((s) => new Promise<void>((resolve) => s.close(() => resolve()))));
+
+async function appWith(lists: Record<string, string[]>, opts: { failLookup?: boolean } = {}) {
   const seen: SurfaceRef[] = [];
   const delegate = surfaceCorsDelegate({
     platformOrigins: new Set([DASHBOARD]),
@@ -37,9 +43,11 @@ function appWith(lists: Record<string, string[]>, opts: { failLookup?: boolean }
       return lists[key] ?? [];
     },
   });
-  const app = express();
-  app.use(cors(delegate as any));
-  app.use((_req, res) => res.json({ ok: true }));
+  const handler = express();
+  handler.use(cors(delegate as any));
+  handler.use((_req, res) => res.json({ ok: true }));
+  const app = await serveOnLoopback(handler);
+  servers.push(app);
   return { app, seen };
 }
 
@@ -116,9 +124,9 @@ describe('origin parsing', () => {
 
 describe('surface CORS through the real cors middleware', () => {
   const lists = { [WIDGET]: ['https://shop.example.com'], 'slug:acme': ['https://acme.com'] };
-
+  afterEach(closeServers);
   it('answers a listed origin, without credentials', async () => {
-    const { app } = appWith(lists);
+    const { app } = await appWith(lists);
     const res = await request(app)
       .get(`/gateways/${WIDGET}/widget/messages`)
       .set('Origin', 'https://shop.example.com');
@@ -128,7 +136,7 @@ describe('surface CORS through the real cors middleware', () => {
   });
 
   it('gives an unlisted origin no CORS answer', async () => {
-    const { app } = appWith(lists);
+    const { app } = await appWith(lists);
     const res = await request(app)
       .get(`/gateways/${WIDGET}/widget/messages`)
       .set('Origin', 'https://attacker.example');
@@ -136,7 +144,7 @@ describe('surface CORS through the real cors middleware', () => {
   });
 
   it("does not let one gateway's list open another gateway", async () => {
-    const { app } = appWith(lists);
+    const { app } = await appWith(lists);
     const res = await request(app)
       .post(`/gateways/${OTHER_WIDGET}/widget/messages`)
       .set('Origin', 'https://shop.example.com');
@@ -144,13 +152,13 @@ describe('surface CORS through the real cors middleware', () => {
   });
 
   it('an empty list is same-origin only', async () => {
-    const { app } = appWith({ [WIDGET]: [] });
+    const { app } = await appWith({ [WIDGET]: [] });
     const res = await request(app).get(`/gateways/${WIDGET}/widget-config`).set('Origin', 'https://shop.example.com');
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
   });
 
   it('answers a preflight for a listed origin and refuses it for anyone else', async () => {
-    const { app } = appWith(lists);
+    const { app } = await appWith(lists);
     const ok = await request(app)
       .options(`/gateways/${WIDGET}/widget/messages`)
       .set('Origin', 'https://shop.example.com')
@@ -169,7 +177,7 @@ describe('surface CORS through the real cors middleware', () => {
   });
 
   it('hosted chat routes answer from the surface list, never with credentials', async () => {
-    const { app } = appWith(lists);
+    const { app } = await appWith(lists);
     const ok = await request(app).get('/public/chat/acme/me').set('Origin', 'https://acme.com');
     expect(ok.headers['access-control-allow-origin']).toBe('https://acme.com');
     expect(ok.headers['access-control-allow-credentials']).toBeUndefined();
@@ -179,14 +187,14 @@ describe('surface CORS through the real cors middleware', () => {
   });
 
   it('the dashboard origin is answered on a surface, but without credentials', async () => {
-    const { app } = appWith(lists);
+    const { app } = await appWith(lists);
     const res = await request(app).get(`/gateways/${WIDGET}/widget-config`).set('Origin', DASHBOARD);
     expect(res.headers['access-control-allow-origin']).toBe(DASHBOARD);
     expect(res.headers['access-control-allow-credentials']).toBeUndefined();
   });
 
   it('leaves every other route on the app-wide policy', async () => {
-    const { app, seen } = appWith(lists);
+    const { app, seen } = await appWith(lists);
     const dash = await request(app).get('/auth/profile').set('Origin', DASHBOARD);
     expect(dash.headers['access-control-allow-origin']).toBe(DASHBOARD);
     expect(dash.headers['access-control-allow-credentials']).toBe('true');
@@ -198,7 +206,7 @@ describe('surface CORS through the real cors middleware', () => {
   });
 
   it('fails closed when the list cannot be read', async () => {
-    const { app } = appWith(lists, { failLookup: true });
+    const { app } = await appWith(lists, { failLookup: true });
     const res = await request(app)
       .get(`/gateways/${WIDGET}/widget/messages`)
       .set('Origin', 'https://shop.example.com');

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions name="TemperatureConversions"
+    targetNamespace="http://www.example.com/temperature"
+    xmlns:tns="http://www.example.com/temperature"
+    xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+    xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">
+  <wsdl:documentation>Converts temperatures between Celsius and Fahrenheit.</wsdl:documentation>
+  <wsdl:types>
+    <xsd:schema targetNamespace="http://www.example.com/temperature">
+      <xsd:element name="CelsiusToFahrenheit">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="nCelsius" type="xsd:decimal"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="CelsiusToFahrenheitResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="CelsiusToFahrenheitResult" type="xsd:decimal"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+    </xsd:schema>
+  </wsdl:types>
+  <wsdl:message name="CelsiusToFahrenheitSoapRequest">
+    <wsdl:part name="parameters" element="tns:CelsiusToFahrenheit"/>
+  </wsdl:message>
+  <wsdl:message name="CelsiusToFahrenheitSoapResponse">
+    <wsdl:part name="parameters" element="tns:CelsiusToFahrenheitResponse"/>
+  </wsdl:message>
+  <wsdl:portType name="TemperatureConversionsSoapType">
+    <wsdl:operation name="CelsiusToFahrenheit">
+      <wsdl:documentation>Converts a Celsius temperature to Fahrenheit.</wsdl:documentation>
+      <wsdl:input message="tns:CelsiusToFahrenheitSoapRequest"/>
+      <wsdl:output message="tns:CelsiusToFahrenheitSoapResponse"/>
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="TemperatureConversionsSoapBinding" type="tns:TemperatureConversionsSoapType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="CelsiusToFahrenheit">
+      <soap:operation soapAction="" style="document"/>
+      <wsdl:input><soap:body use="literal"/></wsdl:input>
+      <wsdl:output><soap:body use="literal"/></wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="TemperatureConversions">
+    <wsdl:port name="TemperatureConversionsSoap" binding="tns:TemperatureConversionsSoapBinding">
+      <soap:address location="https://temperature.example.com/TempConvert.asmx"/>
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>

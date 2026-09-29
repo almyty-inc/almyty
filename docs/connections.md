@@ -6,6 +6,38 @@ backends, MCP servers, chat channels, clouds and model registries. You
 connect once; agents, models, deployments and the registry use the
 connection.
 
+## The Connections page
+
+`/connections` in the sidebar lists every connected service: its logo,
+its name, whether it works ("Works", "Needs attention", or "Saved" for a
+key nobody can check), the account on the other side, and who can use
+it. "Connect a service" opens a searchable grid of tiles, one per
+connector; a tile opens a short form with only what that service needs:
+its key (the connector's required and secret fields) or a Connect button
+for a sign-in, and "Who can use it", one line that says "everyone in your
+organization" until someone changes it. Saving checks the key with the
+service; a refusal is said next to the key and the form stays filled.
+The rest (another way to connect, optional fields, pasting a sign-in
+code) is under Advanced. An AI model provider's tile goes to
+`/models/connect`, where connecting it also brings its models.
+
+"Other service" (connector `other`) is for any key the catalog has no
+entry for: a name and one secret box. Nothing can be asked whether such
+a key works, so its check is shape only and the page calls it "Saved".
+
+A connection's own page (`/connections/:id`) has Check again, Replace
+key (a rotate), what uses it, and Disconnect. The admins' Advanced tab
+(`/connections/advanced`) holds the grants of each connection, whether
+members may keep personal keys, custom connectors and the governance
+rules.
+
+Access keys, the keys other programs use to call almyty, are not
+connections: they are made on the gateway or agent they unlock.
+
+The same inline form opens under "Connect an account" or "Save a new
+key" wherever another form needs a key (an API's auth, a tool, a chat
+channel, a memory backend), so a key saved there is a connection too.
+
 ## Connect
 
 Open the catalog (`GET /connectors`) and pick a connector. Each one
@@ -80,7 +112,7 @@ otherwise revoke it in the provider's console as well.
 ## Chat channels
 
 Every chat channel is a connector like any other, so a Slack, Discord or
-Telegram token is connected in the connect sheet instead of pasted into
+Telegram token is connected on the Connections page instead of pasted into
 a gateway form. The connector key is `channel-<gateway type>` with
 underscores dasherized (`channel-whatsapp-cloud`), the same key
 `ChannelCredentialService` tags the row it manages for a gateway, so a
@@ -171,7 +203,7 @@ npx @almyty/connections revoke <id> <grantId>
 ```
 
 `connect` picks the connector's best method unless `--method` names another,
-which is the same "best first" order the connect sheet renders. For a form
+which is the same "best first" order the connect form offers. For a form
 method it prints the connector's own guidance and the page where the key is
 created, then prompts for each field.
 

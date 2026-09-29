@@ -26,6 +26,7 @@ export interface ToolGenerationOptions {
   defaultTimeout?: number; // Default timeout in milliseconds
   defaultRetries?: number; // Default retry attempts
   categoryIds?: string[]; // Categories to assign to generated tools
+  createdBy?: string | null; // The user generating them; null when unknown
 }
 
 export interface ToolGenerationResult {
@@ -200,7 +201,7 @@ export class ToolGeneratorService {
         result.summary.skipped++;
       }
       for (const tool of written.created) {
-        await this.createToolVersion(tool, 'Initial tool generation');
+        await this.createToolVersion(tool, 'Initial tool generation', options.createdBy ?? null);
       }
       result.generatedTools.push(...written.updated, ...written.created);
       result.summary.generated += written.updated.length + written.created.length;
@@ -242,7 +243,7 @@ export class ToolGeneratorService {
       return null;
     }
 
-    await this.createToolVersion(savedTool, 'Initial tool generation');
+    await this.createToolVersion(savedTool, 'Initial tool generation', options.createdBy ?? null);
     this.logger.log(`Generated tool '${savedTool.name}' from operation '${operation.name}'`);
     return savedTool;
   }
@@ -286,6 +287,10 @@ export class ToolGeneratorService {
         // The schema-import path never hit this because it goes through
         // a different helper that does set the field.
         organizationId: api.organizationId,
+        // Who generated it (null when unknown); the flag, not the creator,
+        // is what marks it generated.
+        createdBy: options.createdBy ?? null,
+        generated: true,
         // A private API's tools are private to the API's owner.
         ...(api.visibility === 'private' && api.ownerUserId
           ? { visibility: 'private' as const, teamId: null, createdBy: api.ownerUserId }
@@ -536,7 +541,7 @@ export class ToolGeneratorService {
     return parameters;
   }
 
-  private async createToolVersion(tool: Tool, changelog?: string): Promise<ToolVersion> {
+  private async createToolVersion(tool: Tool, changelog?: string, createdBy: string | null = null): Promise<ToolVersion> {
     const version = this.toolVersionRepository.create({
       toolId: tool.id,
       version: tool.version,
@@ -548,6 +553,7 @@ export class ToolGeneratorService {
         configuration: tool.configuration,
       },
       changelog: changelog || 'Initial version',
+      createdBy,
     });
 
     return this.toolVersionRepository.save(version);

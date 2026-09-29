@@ -14,6 +14,8 @@ import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { SkillGeneratorService } from '../tools/skill-generator.service';
 import { PromotedSkillsService } from '../promoted-skills/promoted-skills.service';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { orgMembersPolicy } from '../../test/execution-access.fixture';
 
 describe('McpService - Tool Execution', () => {
   let service: McpService;
@@ -25,6 +27,7 @@ describe('McpService - Tool Execution', () => {
       providers: [
         McpToolHandler,
         McpContentHandler,
+        { provide: AccessPolicyService, useValue: orgMembersPolicy('org-123') },
         { provide: PromotedSkillsService, useValue: { listForServing: jest.fn().mockResolvedValue([]), get: jest.fn() } },
         McpServerRequestService,
         McpService,

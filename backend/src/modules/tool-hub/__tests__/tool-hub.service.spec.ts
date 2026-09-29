@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 
 import { ToolHubService } from '../tool-hub.service';
+import { orgMembersPolicy } from '../../../test/execution-access.fixture';
 
 /**
  * First tests for the tool hub. The module had none, and the two things
@@ -56,6 +57,7 @@ describe('ToolHubService', () => {
       toolRepository,
       apiRepository,
       auditLogService,
+      orgMembersPolicy('org-1'),
     );
   });
 

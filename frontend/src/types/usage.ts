@@ -1,6 +1,6 @@
 import type { Gateway, Tool, LlmProvider, User, Organization, ApiAuthType } from './index';
-import type { RouteAttribution } from './models';
-import type { CollaborationParticipant } from '@/components/agents/builder/collaboration';
+import type { RouteAttribution, RoutingPolicy } from './models';
+import type { AgentModels } from './agent-models';
 // Usage Metrics Types
 export interface UsageMetric {
   id: string
@@ -226,6 +226,7 @@ export interface Agent {
   modelConfig?: {
     providerId?: string
     model?: string
+    routing?: RoutingPolicy
     temperature?: number
     maxTokens?: number
   }
@@ -252,21 +253,11 @@ export interface Agent {
     }
   }
   isTemporary?: boolean
-  collaboration?: {
-    strategy: 'sequential' | 'parallel' | 'race' | 'debate'
-    /** Other agents and models, in run order for `sequential`. */
-    participants: CollaborationParticipant[]
-    sharedBrief?: string
-    rules?: {
-      maxTotalCost?: number
-      maxChainDepth?: number
-      outputFormat?: 'text' | 'json'
-      escalation?: 'never' | 'on_failure' | 'on_low_confidence'
-      conflictResolution?: 'judge' | 'majority' | 'first_wins' | 'merge'
-    }
-    judge?: CollaborationParticipant
-    maxRounds?: number
-  }
+  /**
+   * Autonomous agents: the roles that work on a request and how they work
+   * together. The main role is mirrored into `modelConfig` by the server.
+   */
+  models?: AgentModels | null
   variables?: Record<string, any>
   settings?: {
     maxExecutionTime?: number

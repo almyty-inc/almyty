@@ -1,3 +1,4 @@
+import { HttpException } from '@nestjs/common';
 /**
  * Vendor "model does not exist" responses, normalised.
  *
@@ -76,6 +77,33 @@ export function findModelNotFound(err: unknown): ModelNotFoundError | undefined 
     cur = cur.cause;
   }
   return undefined;
+}
+
+const KEY_REJECTED_TEXT =
+  /\b40[13]\b|unauthori[sz]ed|forbidden|authentication[_ ]error|invalid[_ ]?(api[_ ]?)?key|incorrect api key|api key not valid|invalid[_ ]authentication|permission[_ ]denied/i;
+
+/**
+ * Whether a failed provider call means the vendor refused the key, as
+ * opposed to an outage or a wrong model. Reads the status wherever the
+ * error chain carries one, then the text, because the listing step wraps
+ * the vendor's answer ("... could not list its models (Request failed
+ * with status code 401)") and the status is only in the words by then.
+ */
+export function isKeyRejection(err: unknown): boolean {
+  // Each link of the chain that is an HttpException was raised by almyty
+  // (a policy, a permission, "no model to choose"): its status is ours,
+  // not the vendor's, so only the links beneath it can say "refused".
+  let cur: any = err;
+  for (let depth = 0; cur && depth < 5; depth++) {
+    if (!(cur instanceof HttpException)) {
+      const status = cur?.response?.status ?? cur?.status;
+      if (status === 401 || status === 403) return true;
+      const text = cur instanceof Error ? cur.message : typeof cur === 'string' ? cur : '';
+      if (KEY_REJECTED_TEXT.test(text)) return true;
+    }
+    cur = cur.cause;
+  }
+  return false;
 }
 function bodyText(body: unknown): string {
   if (body == null) return '';

@@ -90,7 +90,7 @@ describe('a verify checker that names a role reaches the panel as a provider', (
       'user-1',
       options(),
     );
-    expect(providerForModelId).toHaveBeenCalledWith('org-1', 'card-1', { id: 'user-1' });
+    expect(providerForModelId).toHaveBeenCalledWith('org-1', 'card-1', 'user-1');
     expect(checkersSeenByPanel()).toEqual([
       { name: 'verifier', roleKey: 'role-verifier', providerId: 'prov-9', model: 'gpt-x' },
     ]);

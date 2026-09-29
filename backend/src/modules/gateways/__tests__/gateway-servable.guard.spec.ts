@@ -152,3 +152,72 @@ describe('a gateway executes only what it publishes (source guard)', () => {
     });
   });
 });
+
+/**
+ * What a gateway LISTS is held at the source too.
+ *
+ * The generated SDK and CLI bundles read the gateway's attachments with
+ * their own `find` and filtered them by scope alone, so a draft, retired or
+ * disabled tool was written into code handed to clients -- a listing that
+ * had drifted from tools/list. Every read of `gateway_tools` rows is
+ * classified here: a new one fails this spec until someone decides whether
+ * it lists or runs what the gateway serves (then it must go through
+ * gateway-servable) or is a dashboard management read.
+ */
+const GATEWAY_TOOL_READERS: Record<string, string> = {
+  'src/modules/gateways/gateway-servable.ts': 'the servable rule itself',
+  'src/modules/tools/tool-executor.service.ts':
+    'the executor backstop: loads the one row a gateway call names and answers isServableGatewayTool',
+  'src/modules/gateways/gateways.service.ts':
+    'dashboard gateway detail (attachments, all states) and the publish-time scope check of every attachment',
+  'src/modules/gateways/gateway-tool.service.ts': 'dashboard attach / update / detach of one attachment',
+  'src/modules/gateways/gateway-tool-queries.helper.ts': 'dashboard attachment list and the available-tools picker',
+  'src/modules/gateways/gateway-tool-transfer.helper.ts': 'dashboard copy / move of attachments between gateways',
+  'src/modules/gateways/gateway-tool-stats.helper.ts': 'dashboard per-gateway tool stats and usage counters',
+  'src/modules/gateways/gateways-stats.helper.ts':
+    'skill search across gateways: the SQL twin of the servable rule (SERVABLE_TOOL_SCOPE_CLAUSE, tool active)',
+  'src/scripts/lifecycle-staging-verify.ts': 'a staging verification script, not a serving path',
+};
+
+/** A read of gateway_tools rows, in code (comments stripped). */
+const READS_GATEWAY_TOOLS =
+  /\b(gatewayToolRepository|gatewayToolRepo|gatewayTools)\.(find|findOne|findBy|findOneBy|findAndCount|count|createQueryBuilder)\(|getRepository\(GatewayTool\)|\.from\(GatewayTool\b|['"]gateway\.tools['"]|\btools:\s*\{\s*tool:/;
+
+const stripComments = (source: string) =>
+  source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+
+/** Surfaces that hand a client the gateway's tool set: each builds it from gateway-servable. */
+const LISTING_SURFACES = [
+  'src/modules/tools/codegen.service.ts',
+  'src/modules/tools/cli-generator.service.ts',
+  'src/modules/tools/skill-generator.service.ts',
+  'src/modules/mcp/services/mcp-tool.handler.ts',
+  'src/modules/mcp/services/mcp-content.handler.ts',
+  'src/modules/mcp/utcp.service.ts',
+];
+
+describe('a gateway lists only what it serves (source guard)', () => {
+  const readers = [...walk(join(ROOT, 'src')), ...walk(join(ROOT, 'ee'))]
+    .map((f) => relative(ROOT, f))
+    .filter((f) => READS_GATEWAY_TOOLS.test(stripComments(readFileSync(join(ROOT, f), 'utf8'))))
+    .sort();
+
+  it('every read of gateway_tools rows is classified, and none has gone away unnoticed', () => {
+    expect(readers).toEqual(Object.keys(GATEWAY_TOOL_READERS).sort());
+  });
+
+  it.each(LISTING_SURFACES.map((f) => [f]))('%s builds its tool set from gateway-servable', (file) => {
+    const source = read(file);
+    expect(source).toMatch(/from '(\.\/|\.\.\/gateways\/|\.\.\/\.\.\/gateways\/)gateway-servable'/);
+    expect(source).toMatch(/\b(servableToolsOnGateway|servableGatewayTools|findServableGatewayTool)\(/);
+    // A scope-only filter over the gateway's rows is how the bundles drifted.
+    expect(source).not.toMatch(/resourceServableThroughGateway|servableOnGateway/);
+  });
+
+  it('skill search holds each hit to the servable rule in SQL', () => {
+    const source = read('src/modules/gateways/gateways-stats.helper.ts');
+    expect(source).toContain('.andWhere(SERVABLE_TOOL_SCOPE_CLAUSE)');
+    expect(source).toContain("'tool.status = :toolStatus', { toolStatus: ToolStatus.ACTIVE }");
+    expect(source).toContain("'gatewayTool.isActive = true'");
+  });
+});

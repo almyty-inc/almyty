@@ -172,7 +172,7 @@ describe('Decision node config', () => {
   it('writes the prompt into the question the backend reads', () => {
     const { onUpdateNode } = renderPanel({ question })
 
-    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'Is it urgent?' } })
+    fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Is it urgent?' } })
 
     expect(onUpdateNode).toHaveBeenCalledWith(
       'decision_1',
@@ -185,7 +185,8 @@ describe('Decision node config', () => {
   it('writes a per-option threshold, keyed by option id', () => {
     const { onUpdateNode } = renderPanel({ question })
 
-    fireEvent.change(screen.getByLabelText('Option 1 threshold'), { target: { value: '0.75' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+    fireEvent.change(screen.getByLabelText('Answer 1 bar'), { target: { value: '0.75' } })
 
     expect(onUpdateNode).toHaveBeenCalledWith(
       'decision_1',
@@ -196,7 +197,8 @@ describe('Decision node config', () => {
   it('clears a threshold back to unset rather than to zero', () => {
     const { onUpdateNode } = renderPanel({ question, thresholds: { billing: 0.75 } })
 
-    fireEvent.change(screen.getByLabelText('Option 1 threshold'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+    fireEvent.change(screen.getByLabelText('Answer 1 bar'), { target: { value: '' } })
 
     expect(onUpdateNode).toHaveBeenCalledWith(
       'decision_1',
@@ -207,7 +209,7 @@ describe('Decision node config', () => {
   it('moves the abstain mark rather than allowing two', () => {
     const { onUpdateNode } = renderPanel({ question })
 
-    fireEvent.click(screen.getByLabelText('Option 2 is the abstain option'))
+    fireEvent.click(screen.getByLabelText('Answer 2 means cannot tell'))
 
     const written = onUpdateNode.mock.calls.at(-1)![1] as any
     expect(written.question.options.filter((o: any) => o.abstain === true)).toEqual([
@@ -218,32 +220,36 @@ describe('Decision node config', () => {
   it('warns when the question has no abstain option at all', () => {
     renderPanel({ question: { ...question, options: [{ id: 'billing' }] } })
 
-    expect(screen.getByText(/no abstain option/i)).toBeInTheDocument()
+    expect(screen.getByText(/Mark one answer as .cannot tell./i)).toBeInTheDocument()
   })
 
   // The panel only offers what executeDecisionNode actually serves. It
   // throws by name on a boolean question and on any optionsOrderPolicy but
   // `asis`, so offering either as a choice would hand the user a node that
   // is guaranteed to fail its first run with no warning in the builder.
-  it('does not offer a boolean question, which the executor refuses', () => {
-    renderPanel({ question })
+  it('never offers a choice the step refuses: no yes-or-no kind, no reordering', () => {
+    renderPanel({ question: { ...question, type: 'boolean', optionsOrderPolicy: 'permute2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
 
-    const types = screen.getByLabelText('Question type')
-    fireEvent.keyDown(types, { key: 'Enter' })
-
-    expect(screen.queryByText(/boolean - true or false/i)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Kind of question'))
+    const kinds = screen.getAllByRole('option').map((o) => o.textContent)
+    expect(kinds).toEqual(['Pick one answer', 'Pick one level, in order'])
+    expect(document.body.textContent).not.toMatch(/refused by this node/i)
+    expect(screen.queryByLabelText('Option order')).not.toBeInTheDocument()
   })
 
-  it('warns on a node that already carries a boolean question', () => {
+  it('says so on a step that already carries a yes-or-no question', () => {
     renderPanel({ question: { ...question, type: 'boolean' } })
 
-    expect(screen.getByText(/refuses a boolean question at run time/i)).toBeInTheDocument()
+    expect(screen.getByTestId('decision-boolean')).toHaveTextContent('cannot run a yes-or-no question')
   })
 
-  it('warns on an option order policy this node does not serve', () => {
-    renderPanel({ question: { ...question, optionsOrderPolicy: 'permute2' } })
+  it('says so on a step set to reorder its answers, and puts the written order back', () => {
+    const { onUpdateNode } = renderPanel({ question: { ...question, optionsOrderPolicy: 'permute2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
 
-    expect(screen.getByText(/refuses/i)).toBeInTheDocument()
-    expect(screen.getAllByText(/permute2/).length).toBeGreaterThan(0)
+    expect(screen.getByTestId('decision-order-policy')).toHaveTextContent('permute2')
+    fireEvent.click(screen.getByRole('button', { name: 'Use the written order' }))
+    expect(onUpdateNode).toHaveBeenCalledWith('decision_1', expect.objectContaining({ question: expect.objectContaining({ optionsOrderPolicy: 'asis' }) }))
   })
 })

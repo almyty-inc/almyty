@@ -230,7 +230,19 @@ describe('an agent gateway serves only its own agent (A2A, ACP, the unified endp
         ] as any,
       });
       fakeManager([[Agent, agents], [Gateway, gateways]]);
-      const base = { organizationId: ORG, userId: 'user-1', isActive: true, expiresAt: null };
+      // Each key's user is loaded with it: active and still a member of ORG,
+      // so only which agent the key may reach is under test here.
+      const base = {
+        organizationId: ORG,
+        userId: 'user-1',
+        isActive: true,
+        expiresAt: null,
+        user: {
+          id: 'user-1',
+          isActive: true,
+          organizationMemberships: [{ userId: 'user-1', organizationId: ORG, isActive: true, inviteAccepted: true }],
+        },
+      };
       const apiKeys = fakeRepository<any>([
         { id: 'k-platform', keyHash: keyFor('platform'), ...base },
         { id: 'k-a2a', keyHash: keyFor('a2a-gateway'), gatewayId: 'gw-a2a', ...base },

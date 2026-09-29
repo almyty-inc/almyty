@@ -46,17 +46,18 @@ this layer from becoming a second execution model.
 Compiled nodes carry `roleKey`, never a model, so a compiled graph is
 exactly as portable as the strategy that produced it.
 
-### Workflow agents only
+### Workflow agents, and the autonomous counterpart
 
-Strategies, roles and the orchestrator apply to workflow agents. An
-autonomous agent has no graph: it runs the ReAct loop on its own
-`modelConfig`, which never reads `settings.execution` or the agent's
-roles. Wiring a strategy into that loop would be the second execution
-model this layer exists not to be, so instead the Execution tab shows an
-autonomous agent one line saying so, and `PUT /agents/:id/execution`
-refuses a strategy or an enabled orchestrator on one with
-`STRATEGY_WORKFLOW_ONLY` (400). Clearing a leftover choice is still
-accepted.
+This layer's strategies, the roles table and the orchestrator apply to
+workflow agents: a strategy here compiles to a graph. An autonomous agent
+has no graph. Its multi-model shape is its **models** — roles (main,
+drafter, checker, panelists, explorers, a summariser, teammates) and one
+of the same five strategy shapes — stored on the agent and applied by the
+ReAct loop to each of its steps; see `docs/autonomous-models.md`. So
+`PUT /agents/:id/execution` still refuses a strategy or an enabled
+orchestrator on an autonomous agent with `STRATEGY_WORKFLOW_ONLY` (400),
+pointing at the agent's Models section instead. Clearing a leftover
+choice is still accepted.
 
 ### A check is a branch
 

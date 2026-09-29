@@ -1,3 +1,4 @@
+import type { RunStepRole } from './agent-models'
 // ── Agent Runtime (Autonomous Mode) ──
 
 export type AgentRunMode = 'workflow' | 'autonomous'
@@ -13,6 +14,8 @@ export interface AgentRunStep {
   duration?: number
   timestamp: string
   error?: string
+  /** Autonomous runs: which role of the agent's models made this call. Older runs lack it. */
+  role?: RunStepRole
 }
 
 export interface AgentRun {

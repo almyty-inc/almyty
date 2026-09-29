@@ -5,6 +5,8 @@ import { ToolHubService } from '../tool-hub.service';
 import { ToolExecutionMethod, ToolStatus } from '../../../entities/tool.entity';
 import { seedPublicToolTemplates } from '../public-templates.seed';
 import { unlimitedToolQuotaManager } from '../../../test/tool-quota.fake';
+import { orgMembersPolicy } from '../../../test/execution-access.fixture';
+import { OrganizationRole } from '../../../entities/user-organization.entity';
 
 /**
  * Publishing is the tool hub's only authoring path, so these tests carry
@@ -73,11 +75,14 @@ function makeService() {
   (apiRepository as any).manager = unlimitedToolQuotaManager(apiRepository);
   const auditLogService = { logCreate: jest.fn(), logUpdate: jest.fn(), logDelete: jest.fn() };
 
+  // user-a administers org-a, so may publish any org-wide tool of it; who
+  // else may is pinned against Postgres in team-read-boundary.integration.spec.ts.
   const service = new ToolHubService(
     templateRepository as any,
     toolRepository as any,
     apiRepository as any,
     auditLogService as any,
+    orgMembersPolicy('org-a', { 'user-a': OrganizationRole.ADMIN }),
   );
 
   return { service, templateRepository, toolRepository, apiRepository, auditLogService };

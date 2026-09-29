@@ -106,12 +106,12 @@ describe('ApisService inline authentication', () => {
     expect(api.authentication).toEqual({ type: 'api_key', config: { headerName: 'X-Key', location: 'header', credentialId: store.rows[0].id } });
     expect(store.rows[0].keyName).toBe('X-Key');
     expect(store.rows[0].keyLocation).toBe('header');
-    expect((await store.resolver.resolve('org-1', store.rows[0].id)).config.apiKey).toBe('k-1');
+    expect((await store.resolver.resolve('org-1', store.rows[0].id, { principal: null })).config.apiKey).toBe('k-1');
 
     await service.update('api-1', { authentication: { type: 'api_key', config: { headerName: 'X-Key', apiKey: 'k-2', location: 'header', credentialId: store.rows[0].id } } } as any, 'org-1');
 
     expect(store.rows).toHaveLength(1);
-    expect((await store.resolver.resolve('org-1', store.rows[0].id)).config.apiKey).toBe('k-2');
+    expect((await store.resolver.resolve('org-1', store.rows[0].id, { principal: null })).config.apiKey).toBe('k-2');
     expect(JSON.stringify(api.authentication)).not.toContain('k-2');
   });
 

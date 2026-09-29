@@ -33,7 +33,7 @@ import { createRequire, builtinModules, registerHooks } from 'module';
 import { pathToFileURL } from 'url';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { WorkerInput, WorkerOutput } from './types';
+import { WorkerInput, WorkerOutput, WorkerReadyMessage } from './types';
 import {
   installSandboxNetGuard,
   lockSandboxNetGuard,
@@ -343,6 +343,11 @@ async function run() {
       },
     };
   }
+
+  // Bootstrap is done. Tell the host, which starts the tool's own timeout
+  // here: everything above is the platform's start-up, not the tool's.
+  const ready: WorkerReadyMessage = { type: 'ready' };
+  parentPort!.postMessage(ready);
 
   try {
     // Step 5 — create an AsyncFunction from the user code. The

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Check, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import CodeMirror from '@uiw/react-codemirror'
+import CodeMirror, { EditorView } from '@uiw/react-codemirror'
 import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -28,6 +28,12 @@ interface CodeBlockProps {
   copyable?: boolean
   className?: string
   maxHeight?: string
+  /**
+   * Wrap long lines instead of scrolling them off to the right. On by
+   * default: a command whose end is out of sight (a --header with the key)
+   * gets copied by someone who never saw it.
+   */
+  wrap?: boolean
 }
 
 function useIsDark() {
@@ -44,7 +50,7 @@ function useIsDark() {
   return dark
 }
 
-export function CodeBlock({ value, language, copyable = true, className, maxHeight = '400px' }: CodeBlockProps) {
+export function CodeBlock({ value, language, copyable = true, className, maxHeight = '400px', wrap = true }: CodeBlockProps) {
   const [copied, setCopied] = useState(false)
   const isDark = useIsDark()
 
@@ -54,10 +60,10 @@ export function CodeBlock({ value, language, copyable = true, className, maxHeig
     setTimeout(() => setCopied(false), 2000)
   }
   const ext = language ? languageExtensions[language.toLowerCase()] : []
-  const extensions = Array.isArray(ext) ? ext : [ext]
+  const extensions = [...(Array.isArray(ext) ? ext : [ext]), ...(wrap ? [EditorView.lineWrapping] : [])]
 
   return (
-    <div className={cn('relative group rounded-md border overflow-hidden', className)}>
+    <div className={cn('relative group rounded-md border overflow-hidden', className)} data-testid="code-block" data-wrap={wrap ? 'true' : 'false'}>
       {(language || copyable) && (
         <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted">
           {language && (

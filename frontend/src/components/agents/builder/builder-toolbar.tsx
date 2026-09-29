@@ -79,18 +79,21 @@ export function BuilderToolbar({
   const scope = visibility ? VISIBILITY_LABEL[visibility] : null
   return (
     <div className="flex flex-wrap items-center gap-y-2 px-2 sm:px-4 py-2 border-b bg-background shrink-0 sticky top-0 z-30">
-      <div className="flex items-center gap-1 sm:gap-3 min-w-0 mr-auto sm:mr-0">
+      <div className="flex items-center gap-1 sm:gap-2 min-w-0 mr-auto">
         <Button variant="ghost" size="icon" className="shrink-0" aria-label="Back to agents" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <Input
-          className="text-base sm:text-lg font-semibold border-none shadow-none focus-visible:ring-0 w-[140px] sm:w-[260px] px-1"
+          // Sized to the name (within bounds) so the status and visibility
+          // sit next to it instead of after a fixed 260px gap.
+          className="text-base sm:text-lg font-semibold border-none shadow-none focus-visible:ring-0 min-w-[8ch] max-w-[140px] sm:max-w-[320px] px-1"
+          style={{ width: `${Math.max(8, agentName.length + 2)}ch` }}
           value={agentName}
           onChange={(e) => onAgentNameChange(e.target.value)}
           placeholder="Agent name"
         />
         <Badge variant={agentStatus === 'active' ? 'success' : agentStatus === 'error' ? 'destructive' : 'outline'} className="hidden sm:inline-flex">
-          {agentStatus}
+          {agentStatus ? agentStatus.charAt(0).toUpperCase() + agentStatus.slice(1) : agentStatus}
         </Badge>
         {scope && onVisibilityClick && (
           <Button
@@ -118,7 +121,7 @@ export function BuilderToolbar({
         role="group"
         aria-label="Agent mode"
         data-testid="agent-mode-toggle"
-        className="order-last flex min-w-[10rem] flex-1 items-center gap-1 bg-muted rounded-md p-0.5 sm:order-none sm:ml-3 sm:mr-auto sm:min-w-0 sm:flex-none"
+        className="order-last flex min-w-[10rem] flex-1 items-center gap-1 bg-muted rounded-md p-0.5 sm:order-none sm:mr-2 sm:min-w-0 sm:flex-none"
       >
         <button
           type="button"

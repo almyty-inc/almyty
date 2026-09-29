@@ -165,4 +165,46 @@ describe('team and private tools run in the caller scope only (executor)', () =>
     expect(result.success).toBe(false);
     expect(mockedAxios).not.toHaveBeenCalled();
   });
+
+  describe('an org-wide tool over a team API', () => {
+    // Generation makes a team API's tools org-wide (only a private API's
+    // tools follow it), so the tool row alone handed the team's API -- its
+    // base URL and bound credentials -- to the whole org.
+    const TEAM_API = { id: 'api-team', organizationId: CAST.org, visibility: 'team', teamId: CAST.team, ownerUserId: null };
+    const onTeamApi = { ...base, id: 'org-tool-team-api', name: 'org-tool-team-api', visibility: 'org', teamId: null, createdBy: CAST.member, api: TEAM_API };
+
+    function buildWithApiTool() {
+      const built = build();
+      (built.executor as any).toolRepository = fakeRepository<any>([...TOOLS, onTeamApi]);
+      return built;
+    }
+
+    const refusedOnApi: Array<[string, () => ExecutionPrincipal]> = [
+      ['a member outside the API team', () => userPrincipal(CAST.nonMember)],
+      ['a call with no known user', () => userPrincipal(null)],
+      ['an org-wide gateway', () => gatewayPrincipal({ id: 'gw', organizationId: CAST.org, visibility: 'org' })],
+      ['a gateway scoped to another team', () =>
+        gatewayPrincipal({ id: 'gw', organizationId: CAST.org, visibility: 'team', teamId: CAST.otherTeam })],
+    ];
+    it.each(refusedOnApi)('is refused to %s, exactly as a missing tool', async (_label, principal) => {
+      const { executor, recordExecution } = buildWithApiTool();
+      const result = await run(executor, 'org-tool-team-api', principal());
+      expect(result.notFound).toBe(true);
+      expect(result.error).toBe((await run(executor, 'no-such-tool', principal())).error);
+      expect(mockedAxios).not.toHaveBeenCalled();
+      expect(recordExecution).not.toHaveBeenCalled();
+    });
+
+    const allowedOnApi: Array<[string, () => ExecutionPrincipal]> = [
+      ['a member of the API team', () => userPrincipal(CAST.member)],
+      ['an org admin', () => userPrincipal(CAST.admin)],
+      ['a gateway scoped to the API team', () =>
+        gatewayPrincipal({ id: 'gw', organizationId: CAST.org, visibility: 'team', teamId: CAST.team })],
+    ];
+    it.each(allowedOnApi)('is run for %s', async (_label, principal) => {
+      const { executor } = buildWithApiTool();
+      const result = await run(executor, 'org-tool-team-api', principal());
+      expect(result.notFound).toBeFalsy();
+    });
+  });
 });

@@ -9,6 +9,7 @@ import {
 import { Request, Response } from 'express';
 import { QueryFailedError, EntityNotFoundError } from 'typeorm';
 
+import { redactQueryError } from '../errors/redact-query-error';
 import { getRequestContext, getRequestId } from '../request-context';
 
 /**
@@ -89,6 +90,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
 
   catch(exception: unknown, host: ArgumentsHost): void {
+    // A failed query's error carries the row it was writing. Redacted
+    // before any log line or Sentry report here can pass it on.
+    redactQueryError(exception);
+
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();

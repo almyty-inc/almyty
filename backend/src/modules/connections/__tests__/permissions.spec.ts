@@ -72,10 +72,16 @@ describe('connections permissions', () => {
     expect((await h.service.list(owner, ORG)).map((c) => c.id).sort()).toEqual([mine.connection.id, shared.connection.id].sort());
     expect((await h.service.list(other, ORG)).map((c) => c.id)).toEqual([shared.connection.id]);
     expect((await h.service.list(admin, ORG)).length).toBe(2);
-    await expect(h.service.get(other, ORG, mine.connection.id)).rejects.toMatchObject({ response: { code: 'CONNECTION_FORBIDDEN' } });
-    await expect(h.service.validate(other, ORG, mine.connection.id)).rejects.toMatchObject({ response: { code: 'CONNECTION_FORBIDDEN' } });
+    // A connection the caller may not see is the not-found a missing id
+    // gets, on every path that names it: a 403 would confirm it exists.
+    const missing = await h.service.get(other, ORG, '00000000-0000-4000-8000-00000000dead').catch((e) => e.getResponse());
+    expect(missing).toMatchObject({ code: 'CONNECTION_NOT_FOUND' });
+    await expect(h.service.get(other, ORG, mine.connection.id)).rejects.toMatchObject({ response: missing });
+    await expect(h.service.validate(other, ORG, mine.connection.id)).rejects.toMatchObject({ response: missing });
+    await expect(h.service.disconnect(other, ORG, mine.connection.id)).rejects.toMatchObject({ response: missing });
+    await expect(h.service.rotate(other, ORG, mine.connection.id, {})).rejects.toMatchObject({ response: missing });
+    // One they can see but may not manage: 403.
     await expect(h.service.disconnect(other, ORG, shared.connection.id)).rejects.toMatchObject({ response: { code: 'CONNECTIONS_PERMISSION_REQUIRED' } });
-    await expect(h.service.rotate(other, ORG, mine.connection.id, {})).rejects.toMatchObject({ response: { code: 'CONNECTION_FORBIDDEN' } });
     expect((await h.service.validate(owner, ORG, mine.connection.id)).health.status).toBe('valid');
     expect((await h.service.disconnect(admin, ORG, mine.connection.id)).revoked).toBe(false);
     expect(h.credentials.rows).toHaveLength(1);

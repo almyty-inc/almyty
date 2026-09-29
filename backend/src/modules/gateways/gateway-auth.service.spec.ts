@@ -12,6 +12,7 @@ import { User } from '../../entities/user.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 import { realJwtService, signExpiredTestJwt, signTestJwt } from '../../test/jwt';
+import { restoreEnv } from '../../test/env';
 
 describe('GatewayAuthService - Real Business Logic', () => {
   let service: GatewayAuthService;
@@ -322,11 +323,13 @@ describe('GatewayAuthService - Real Business Logic', () => {
       const originalEnv = process.env.JWT_SECRET;
       process.env.JWT_SECRET = 'env-secret';
 
-      expect(() => {
-        service['validateAuthConfiguration'](GatewayAuthType.JWT, {});
-      }).toThrow('JWT auth requires a gateway-specific secret');
-
-      process.env.JWT_SECRET = originalEnv;
+      try {
+        expect(() => {
+          service['validateAuthConfiguration'](GatewayAuthType.JWT, {});
+        }).toThrow('JWT auth requires a gateway-specific secret');
+      } finally {
+        restoreEnv('JWT_SECRET', originalEnv);
+      }
     });
 
     it('should require headerName or queryName for CUSTOM type', () => {
@@ -720,11 +723,13 @@ describe('GatewayAuthService - Real Business Logic', () => {
       const originalEnv = process.env.JWT_SECRET;
       delete process.env.JWT_SECRET;
 
-      await expect(
-        service.updateGatewayAuth('auth-1', { configuration: {} }, 'org-1')
-      ).rejects.toThrow('JWT auth requires a gateway-specific secret');
-
-      process.env.JWT_SECRET = originalEnv;
+      try {
+        await expect(
+          service.updateGatewayAuth('auth-1', { configuration: {} }, 'org-1')
+        ).rejects.toThrow('JWT auth requires a gateway-specific secret');
+      } finally {
+        restoreEnv('JWT_SECRET', originalEnv);
+      }
     });
 
     it('should update and save auth with valid data', async () => {

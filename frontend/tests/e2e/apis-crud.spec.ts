@@ -1,5 +1,5 @@
 import { test, expect } from './setup/test-hooks'
-import { TEST_APIS } from './fixtures/test-data'
+import { MINIMAL_OPENAPI_SCHEMA } from './fixtures/schemas'
 
 test.describe('APIs - CRUD Operations', () => {
   test.beforeEach(async ({ authenticatedPage: page }) => {
@@ -8,7 +8,7 @@ test.describe('APIs - CRUD Operations', () => {
 
   test('should display APIs page', async ({ authenticatedPage: page, assertHelper }) => {
     await assertHelper.assertPageTitle(/APIs/i)
-    await expect(page.getByRole('link', { name: /connect api/i }).first()).toBeVisible()
+    await expect(page.getByRole('link', { name: /connect an api/i }).first()).toBeVisible()
   })
 
   test('should show empty state for new user', async ({ authenticatedPage: page }) => {
@@ -16,139 +16,45 @@ test.describe('APIs - CRUD Operations', () => {
     await expect(page.getByText(/no apis|create your first api|get started/i).first()).toBeVisible()
   })
 
-  test('[CRITICAL BUG TEST] should create OpenAPI successfully', async ({ authenticatedPage: page, assertHelper }) => {
-    // This test targets CLAUDE.md issue: "API creation via UI returns 400 error"
-
-    // Connect API is a page now
-    await page.getByRole('link', { name: /connect api/i }).first().click()
+  test('connects an API from a pasted description in one step', async ({ authenticatedPage: page }) => {
+    await page.getByRole('link', { name: /connect an api/i }).first().click()
     await expect(page).toHaveURL(/\/apis\/new$/)
-    await expect(page.getByRole('heading', { name: /connect api/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Connect an API' })).toBeVisible()
 
-    // Fill form with valid data
-    await page.getByLabel('API Name').fill('Test OpenAPI')
-    await page.getByLabel('Base URL').fill('https://api.example.com')
-    await page.getByLabel('Description').fill('A test OpenAPI for debugging')
+    // One box; everything else is read from the description.
+    await page.getByLabel('Paste a link, drop a file, or paste it here').fill(JSON.stringify(MINIMAL_OPENAPI_SCHEMA))
 
-    // Select API type - OpenAPI (click the combobox, not the label)
-    await page.getByRole('combobox').first().click()
-    await page.getByRole('option', { name: /openapi|swagger|rest/i }).click()
-
-    // Authentication defaults to "No Authentication" - no need to set
-
-    // Set up response listener BEFORE clicking submit (API is now very fast!)
-    const responsePromise = page.waitForResponse(response =>
-      response.url().includes('/apis') && response.request().method() === 'POST'
-    )
-
-    // Submit form
-    await page.getByRole('button', { name: /continue to schema import|connect api/i }).click()
-
-    // Wait for API creation request
-    const createResponse = await responsePromise
-
-    const status = createResponse.status()
-    console.log(`API creation response status: ${status}`)
-
-    if (status === 400) {
-      const body = await createResponse.json()
-      console.error('400 Error Response:', body)
-      throw new Error(`API creation returned 400: ${JSON.stringify(body)}`)
-    }
-
-    // Step 2, the schema import, is the API's own page
-    await expect(page).toHaveURL(/\/apis\/[^/]+\/import\?created=1$/)
-    await expect(page.getByRole('heading', { name: /import schema/i })).toBeVisible()
-    await assertHelper.assertToastMessage(/created|success/i)
-
-    // Skip the import; the API page opens
-    await page.getByRole('button', { name: /skip for now/i }).click()
-    await expect(page.getByRole('heading', { name: 'Test OpenAPI' })).toBeVisible()
-
-    console.log('✅ API creation successful - CLAUDE.md bug report was incorrect!')
-  })
-
-  test('should create GraphQL API successfully', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('link', { name: /connect api/i }).first().click()
-    await expect(page).toHaveURL(/\/apis\/new$/)
-
-    await page.getByLabel('API Name').fill('Test GraphQL')
-    await page.getByLabel('Base URL').fill('https://graphql.example.com/graphql')
-    await page.getByLabel('Description').fill('A test GraphQL API')
-
-    // Select GraphQL type - use combobox role like OpenAPI test
-    await page.getByRole('combobox').first().click()
-    await page.getByRole('option', { name: /graphql/i }).click()
-
-    // Set up response listener BEFORE clicking (API is very fast now!)
-    const responsePromise = page.waitForResponse(r => r.url().includes('/apis') && r.request().method() === 'POST')
-
-    await page.getByRole('button', { name: /continue to schema import|connect api/i }).click()
-
-    // Check response status
+    const responsePromise = page.waitForResponse((r) => r.url().includes('/apis/import') && r.request().method() === 'POST')
+    await page.getByRole('button', { name: 'Import' }).click()
     const response = await responsePromise
     expect(response.status()).toBe(201)
 
-    // Step 2, the schema import, is the API's own page; skip it
-    await expect(page.getByRole('heading', { name: /import schema/i })).toBeVisible()
-    await page.getByRole('button', { name: /skip for now/i }).click()
-
-    await expect(page.getByRole('heading', { name: 'Test GraphQL' })).toBeVisible()
+    // No key in this description: once the import is in, the API opens.
+    await expect(page.getByRole('heading', { name: MINIMAL_OPENAPI_SCHEMA.info.title })).toBeVisible({ timeout: 60000 })
   })
 
-  test('should create SOAP API successfully', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('link', { name: /connect api/i }).first().click()
-    await expect(page).toHaveURL(/\/apis\/new$/)
-
-    await page.getByLabel('API Name').fill('Test SOAP')
-    await page.getByLabel('Base URL').fill('https://soap.example.com/service')
-    await page.getByLabel('Description').fill('A test SOAP API')
-
-    // Select SOAP type - use combobox role
-    await page.getByRole('combobox').first().click()
-    await page.getByRole('option', { name: /soap/i }).click()
-
-    // Set up response listener BEFORE clicking
-    const responsePromise = page.waitForResponse(r => r.url().includes('/apis') && r.request().method() === 'POST')
-
-    await page.getByRole('button', { name: /continue to schema import|connect api/i }).click()
-
-    const response = await responsePromise
-    expect(response.status()).toBe(201)
-
-    // Step 2, the schema import, is the API's own page; skip it
-    await expect(page.getByRole('heading', { name: /import schema/i })).toBeVisible()
-    await page.getByRole('button', { name: /skip for now/i }).click()
-
-    await expect(page.getByRole('heading', { name: 'Test SOAP' })).toBeVisible()
+  test('connects a GraphQL API from pasted SDL', async ({ authenticatedPage: page }) => {
+    await page.goto('/apis/new')
+    await page.getByLabel('Paste a link, drop a file, or paste it here').fill('type Query {\n  hello: String\n}')
+    await page.getByRole('button', { name: 'Advanced' }).click()
+    await page.getByLabel('Name').fill('Test GraphQL')
+    await page.getByLabel('Address').fill('https://graphql.example.com/graphql')
+    await page.getByRole('button', { name: 'Import' }).click()
+    await expect(page.getByRole('heading', { name: 'Test GraphQL' })).toBeVisible({ timeout: 60000 })
   })
 
-  test('should validate required fields', async ({ authenticatedPage: page }) => {
-    await page.getByRole('link', { name: /connect api/i }).first().click()
-    await expect(page).toHaveURL(/\/apis\/new$/)
-
-    // Try to submit without filling fields
-    await page.getByRole('button', { name: /continue to schema import|connect api/i }).click()
-
-    // Should show validation errors (checking for actual Zod error messages)
-    await expect(page.getByText(/at least 2 characters|valid url/i).first()).toBeVisible()
+  test('says what to do when nothing was given', async ({ authenticatedPage: page }) => {
+    await page.goto('/apis/new')
+    await page.getByRole('button', { name: 'Import' }).click()
+    await expect(page.getByText('Paste a link, drop a file, or paste the description first.')).toBeVisible()
   })
 
-  test('should validate base URL format', async ({ authenticatedPage: page }) => {
-    await page.getByRole('link', { name: /connect api/i }).first().click()
-    await expect(page).toHaveURL(/\/apis\/new$/)
-
-    await page.getByLabel('API Name').fill('Invalid URL Test')
-    await page.getByLabel('Base URL').fill('not-a-valid-url')
-    await page.getByLabel('Description').fill('Testing invalid URL')
-
-    // Select API type - use combobox role
-    await page.getByRole('combobox').first().click()
-    await page.getByRole('option', { name: /openapi/i }).click()
-
-    await page.getByRole('button', { name: /continue to schema import|connect api/i }).click()
-
-    // Should show URL validation error
-    await expect(page.getByText(/invalid.*url|valid.*url|url.*format/i)).toBeVisible()
+  test('refuses text that is not an API description, in plain words', async ({ authenticatedPage: page }) => {
+    await page.goto('/apis/new')
+    await page.getByLabel('Paste a link, drop a file, or paste it here').fill('just some notes, no spec here')
+    await page.getByRole('button', { name: 'Import' }).click()
+    await expect(page.getByText("We couldn't read this as OpenAPI, GraphQL, WSDL or proto.")).toBeVisible()
+  })
   })
 
   test('should edit existing API', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
@@ -184,8 +90,8 @@ test.describe('APIs - CRUD Operations', () => {
     await expect(page.getByRole('heading', { name: /edit.*api/i })).toBeVisible()
 
     // Update fields
-    await page.getByLabel('API Name').clear()
-    await page.getByLabel('API Name').fill('Updated Name')
+    await page.getByLabel('Name', { exact: true }).clear()
+    await page.getByLabel('Name', { exact: true }).fill('Updated Name')
     await page.getByLabel('Description').clear()
     await page.getByLabel('Description').fill('Updated description')
 

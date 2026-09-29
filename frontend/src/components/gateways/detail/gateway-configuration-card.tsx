@@ -10,6 +10,7 @@ import { Copy } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { skillsInstallCommand } from '@/lib/gateway-connect'
 
 export interface GatewayConfigurationCardProps {
   gateway: any
@@ -24,10 +25,7 @@ function buildEndpoint(gateway: any, orgSlug: string): string {
   if (gateway.type === 'mcp') return `${backendUrl}/${orgSlug}/${gwSlug}`
   if (gateway.type === 'utcp') return `${backendUrl}/${orgSlug}/${gwSlug}`
   if (gateway.type === 'a2a') return `${backendUrl}/${orgSlug}/${gwSlug}`
-  if (gateway.type === 'skills') {
-    const nameSlug = (gateway.name || '').toLowerCase().replace(/\s+/g, '-')
-    return `npx @almyty/skills install @${orgSlug}/${nameSlug}`
-  }
+  if (gateway.type === 'skills') return skillsInstallCommand(gateway, orgSlug)
   return gateway.endpoint
 }
 
@@ -48,6 +46,9 @@ export function GatewayConfigurationCard({
       onCopyError('Failed to copy', 'Could not copy to clipboard')
     }
   }
+
+  // A shared-tools gateway's address and snippets are its Connect card.
+  if (gateway.type === 'tools') return null
 
   return (
     <Card>

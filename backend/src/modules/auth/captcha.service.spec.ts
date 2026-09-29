@@ -1,8 +1,9 @@
 import { CaptchaService } from './captcha.service';
+import { snapshotEnv } from '../../test/env';
 
 describe('CaptchaService', () => {
   let service: CaptchaService;
-  const originalEnv = { ...process.env };
+  const restore = snapshotEnv('TURNSTILE_SECRET', 'HCAPTCHA_SECRET', 'CAPTCHA_PROVIDER');
 
   beforeEach(() => {
     service = new CaptchaService();
@@ -12,7 +13,7 @@ describe('CaptchaService', () => {
   });
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    restore();
     jest.restoreAllMocks();
   });
 

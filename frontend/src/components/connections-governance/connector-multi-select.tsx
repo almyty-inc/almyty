@@ -8,7 +8,7 @@ import { Search, X } from 'lucide-react'
 
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { CONNECTORS_QUERY_KEY } from '@/components/connections/connect-sheet'
+import { CONNECTORS_QUERY_KEY } from '@/components/connections/connect-flow'
 import { connectorsApi, matchesConnectorSearch } from '@/lib/connections-api'
 import { CONNECTOR_KIND_LABELS, type Connector } from '@/types/connections'
 

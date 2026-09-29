@@ -1,4 +1,5 @@
 import { ApprovalRequest } from '../../../entities/approval-request.entity';
+import { Agent } from '../../../entities/agent.entity';
 import {
   fakeRepository,
   FakeRepository,
@@ -20,6 +21,7 @@ import {
  */
 export type FakeApprovalsRepo = FakeRepository<ApprovalRequest> & {
   createQueryBuilder: jest.Mock;
+  agents: FakeRepository<Agent>;
 };
 
 const UPDATE_CLAUSES: Record<string, (p: any) => Record<string, any>> = {
@@ -31,7 +33,10 @@ const SELECT_CLAUSES: Record<string, (p: any) => Record<string, any>> = {
   'a.status = :status': (p) => ({ status: p.status }),
 };
 
-export function fakeApprovalsRepo(seed: Array<Partial<ApprovalRequest>> = []): FakeApprovalsRepo {
+export function fakeApprovalsRepo(
+  seed: Array<Partial<ApprovalRequest>> = [],
+  agentSeed: Array<Partial<Agent>> = [],
+): FakeApprovalsRepo {
   const repo = fakeRepository<ApprovalRequest>({ seed, idPrefix: 'a' });
   let tick = 0;
 
@@ -90,5 +95,16 @@ export function fakeApprovalsRepo(seed: Array<Partial<ApprovalRequest>> = []): F
     return qb;
   });
 
-  return Object.assign(repo, { createQueryBuilder });
+  // The agents table, read through the repository's manager: the service
+  // takes a request's scope from the agent that asked (a private agent's
+  // request is its owner's). Seeded agents only; an unknown id is absent.
+  const agents = fakeRepository<Agent>({ seed: agentSeed, idPrefix: 'ag' });
+  const manager = {
+    getRepository: (entity: unknown) => {
+      if (entity !== Agent) throw new UnmodelledQueryError('approvals manager repository other than Agent');
+      return agents;
+    },
+  };
+
+  return Object.assign(repo, { createQueryBuilder, manager, agents });
 }
