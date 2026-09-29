@@ -165,6 +165,8 @@ describe('AgentChannelsService', () => {
       });
       expect(JSON.stringify(row)).not.toContain('xoxb-live-1');
       expect(JSON.stringify(view)).not.toContain('xoxb-live-1');
+      // Keys entered on the channel are its own, not a credential picked from Credentials.
+      expect(view.credentialPicked).toBe(false);
       const credential = credentials.row(row.configuration!.credentialId)!;
       expect(credential.metadata.managedBy).toEqual({ kind: 'agent_channel', id: row.id });
       expect(isEncrypted(credential.config.bot_token)).toBe(true);
@@ -183,6 +185,7 @@ describe('AgentChannelsService', () => {
       } as any);
       const view = await build().add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, credentialId: 'cred-shared' });
       expect(view.configuration).toEqual({ credentialId: 'cred-shared', credentialKeys: ['bot_token', 'signing_secret'] });
+      expect(view.credentialPicked).toBe(true);
       expect(credentials.rows()).toHaveLength(1);
     });
 

@@ -4,7 +4,7 @@ import { ShareToolsForm } from '@/components/gateways/share-tools-form'
 
 /**
  * /gateways/new -- share tools. Tools are the only thing made here: an
- * agent is put in front of people from its app (/apps).
+ * agent is put in front of people from its Channels tab.
  */
 export function GatewayNewPage() {
   useEffect(() => {

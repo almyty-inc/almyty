@@ -106,13 +106,13 @@ describe('buildPreviewSrcDoc', () => {
 })
 
 describe('WidgetBuilder', () => {
-  it('shows the embed snippet and a live preview in the app look, asking only where it sits', () => {
+  it('shows the embed snippet and a live preview in the channel look, asking only where it sits', () => {
     const { container } = render(<WidgetBuilder gateway={baseGateway} app={app} />)
 
     // The look is the app's: nothing here edits it.
     expect(screen.queryByLabelText('Title')).toBeNull()
     expect(screen.queryByLabelText('Primary color')).toBeNull()
-    expect(screen.getByText(/come from the app/i)).toBeInTheDocument()
+    expect(screen.getByText(/come from the branding and visitor rules/i)).toBeInTheDocument()
     expect(screen.getByLabelText('Position')).toBeInTheDocument()
     expect(screen.getByLabelText('Launcher icon')).toBeInTheDocument()
 

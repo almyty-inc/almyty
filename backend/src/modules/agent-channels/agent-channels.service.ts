@@ -91,6 +91,8 @@ export interface PublicSettingsInput {
 /** What the channel page shows: the row, where it answers, and what it resolves to. */
 export type ChannelView = AgentChannel & {
   endpoint: string;
+  /** Its keys come from a credential picked on Credentials, not keys entered on the channel. */
+  credentialPicked: boolean;
   effective: {
     branding: ReturnType<typeof effectiveBranding>;
     visitorRules: Omit<ReturnType<typeof effectiveVisitorRules>, 'ownSpend'> & { ownSpend: boolean };
@@ -236,9 +238,19 @@ export class AgentChannelsService {
       ? await this.gatewayRepository.find({ where: { id: In(gatewayIds) }, select: { id: true, endpoint: true } })
       : [];
     const endpoints = new Map(gateways.map((g) => [g.id, g.endpoint]));
+    // Whether a channel's keys come from a credential picked on Credentials
+    // rather than keys entered on the channel (kept in one it manages).
+    const picked = new Set<string>();
+    for (const channel of channels) {
+      const credentialId = channel.configuration?.credentialId;
+      if (typeof credentialId !== 'string' || !credentialId || !this.credentialRefs) continue;
+      const row = await this.credentialRefs.load(channel.organizationId, credentialId).catch(() => null);
+      if (row && !CredentialRefResolver.isManagedBy(row, channelManagedBy(channel.id))) picked.add(channel.id);
+    }
     return channels.map((channel) =>
       Object.assign(channel, {
         endpoint: (channel.gatewayId && endpoints.get(channel.gatewayId)) || endpointFor(channel),
+        credentialPicked: picked.has(channel.id),
         effective: {
           branding: effectiveBranding(agent, channel),
           visitorRules: effectiveVisitorRules(agent, channel),

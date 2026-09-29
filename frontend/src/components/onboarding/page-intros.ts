@@ -24,10 +24,6 @@ export const PAGE_INTROS = {
     page: '/agents',
     text: 'An agent uses models and tools to do a job. Build a workflow when you know the steps, or an autonomous agent when you would rather give it a goal.',
   },
-  apps: {
-    page: '/apps',
-    text: 'An app is how people reach your agents: a hosted web chat, a messaging channel, a terminal command or a desktop app. Create one, then add where it ships.',
-  },
   runners: {
     page: '/runners',
     text: 'A runner connects a machine you control so agents can do work on it. Set one up; it shows here once it checks in.',

@@ -3,7 +3,7 @@ import { screen, fireEvent, waitFor } from '@testing-library/react'
 
 import { render } from '../../../test/setup'
 import { BuildPanel } from '../build-panel'
-import { agentAppsApi, formatBytes, isBuildable, type AgentApp } from '@/lib/agent-apps'
+import { agentChannelsApi as agentAppsApi, formatBytes, isBuildable } from '@/lib/agent-channels'
 import { credentialsApi } from '@/lib/api'
 
 vi.mock('@/lib/api', async () => {
@@ -14,11 +14,11 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-vi.mock('@/lib/agent-apps', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/agent-apps')>('@/lib/agent-apps')
+vi.mock('@/lib/agent-channels', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/agent-channels')>('@/lib/agent-channels')
   return {
     ...actual,
-    agentAppsApi: {
+    agentChannelsApi: {
       platforms: vi.fn(),
       builds: vi.fn(),
       requestBuild: vi.fn(),
@@ -28,7 +28,7 @@ vi.mock('@/lib/agent-apps', async () => {
   }
 })
 
-const app = { slug: 'acme-support' } as AgentApp
+const channel = { id: 'channel-1', type: 'tui' as const }
 
 const macPlatform = {
   id: 'macos-arm64',
@@ -100,7 +100,7 @@ describe('BuildPanel', () => {
         buildReason: 'This deployment cannot build tui because bun is not installed.',
         signing: [],
       })
-      render(<BuildPanel app={app} target="tui" />)
+      render(<BuildPanel agentId="agent-1" channel={channel} />)
 
       expect(await screen.findByText(/bun is not installed/)).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Build/ })).toBeDisabled()
@@ -114,7 +114,7 @@ describe('BuildPanel', () => {
           { kind: 'apple', ready: false, reason: 'rcodesign is not installed on the build host.' },
         ],
       })
-      render(<BuildPanel app={app} target="tui" onSigningCredentialChange={vi.fn()} />)
+      render(<BuildPanel agentId="agent-1" channel={channel} onSigningCredentialChange={vi.fn()} />)
 
       fireEvent.click(await screen.findByLabelText('Build for'))
       fireEvent.click(await screen.findByText('macOS (Apple silicon)'))
@@ -130,7 +130,7 @@ describe('BuildPanel', () => {
         buildReason: null,
         signing: [{ kind: 'apple', ready: false, reason: 'rcodesign is not installed.' }],
       })
-      render(<BuildPanel app={app} target="tui" onSigningCredentialChange={vi.fn()} />)
+      render(<BuildPanel agentId="agent-1" channel={channel} onSigningCredentialChange={vi.fn()} />)
 
       fireEvent.click(await screen.findByLabelText('Build for'))
       fireEvent.click(await screen.findByText('macOS (Apple silicon)'))
@@ -140,7 +140,7 @@ describe('BuildPanel', () => {
     })
 
     it('says nothing when the host can do everything', async () => {
-      render(<BuildPanel app={app} target="tui" />)
+      render(<BuildPanel agentId="agent-1" channel={channel} />)
       await screen.findByRole('button', { name: /Build/ })
 
       expect(screen.queryByText(/not installed/)).toBeNull()
@@ -155,7 +155,7 @@ describe('BuildPanel', () => {
     }
 
     it('offers only code-signing credentials, not every credential', async () => {
-      render(<BuildPanel app={app} target="tui" onSigningCredentialChange={vi.fn()} />)
+      render(<BuildPanel agentId="agent-1" channel={channel} onSigningCredentialChange={vi.fn()} />)
       await selectMac()
 
       fireEvent.click(await screen.findByLabelText('Sign with'))
@@ -166,8 +166,7 @@ describe('BuildPanel', () => {
     it('stops warning about an unsigned build once a certificate is chosen', async () => {
       render(
         <BuildPanel
-          app={app}
-          target="tui"
+          agentId="agent-1" channel={channel}
           signingCredentialId="cred-1"
           onSigningCredentialChange={vi.fn()}
         />,
@@ -179,7 +178,7 @@ describe('BuildPanel', () => {
 
     it('warns again when the certificate is cleared', async () => {
       render(
-        <BuildPanel app={app} target="tui" signingCredentialId="" onSigningCredentialChange={vi.fn()} />,
+        <BuildPanel agentId="agent-1" channel={channel} signingCredentialId="" onSigningCredentialChange={vi.fn()} />,
       )
       await selectMac()
 
@@ -188,7 +187,7 @@ describe('BuildPanel', () => {
 
     it('reports the certificate the operator picked', async () => {
       const onChange = vi.fn()
-      render(<BuildPanel app={app} target="tui" onSigningCredentialChange={onChange} />)
+      render(<BuildPanel agentId="agent-1" channel={channel} onSigningCredentialChange={onChange} />)
       await selectMac()
 
       fireEvent.click(await screen.findByLabelText('Sign with'))
@@ -201,8 +200,7 @@ describe('BuildPanel', () => {
       const onChange = vi.fn()
       render(
         <BuildPanel
-          app={app}
-          target="tui"
+          agentId="agent-1" channel={channel}
           signingCredentialId="cred-1"
           onSigningCredentialChange={onChange}
         />,
@@ -216,7 +214,7 @@ describe('BuildPanel', () => {
     })
 
     it('does not ask about signing for a platform that needs none', async () => {
-      render(<BuildPanel app={app} target="tui" onSigningCredentialChange={vi.fn()} />)
+      render(<BuildPanel agentId="agent-1" channel={channel} onSigningCredentialChange={vi.fn()} />)
       fireEvent.click(await screen.findByLabelText('Build for'))
       fireEvent.click(await screen.findByText('Linux (x64)'))
 
@@ -224,7 +222,7 @@ describe('BuildPanel', () => {
     })
 
     it('does not ask about signing before a platform is chosen', async () => {
-      render(<BuildPanel app={app} target="tui" onSigningCredentialChange={vi.fn()} />)
+      render(<BuildPanel agentId="agent-1" channel={channel} onSigningCredentialChange={vi.fn()} />)
       await screen.findByRole('button', { name: /Build/ })
 
       expect(screen.queryByLabelText('Sign with')).toBeNull()
@@ -232,12 +230,12 @@ describe('BuildPanel', () => {
   })
 
   it('will not start a build until a platform is chosen', async () => {
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
     expect(await screen.findByRole('button', { name: /Build/ })).toBeDisabled()
   })
 
   it('warns what an unsigned artifact does before the build, not after', async () => {
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
     fireEvent.click(await screen.findByLabelText('Build for'))
     fireEvent.click(await screen.findByText('macOS (Apple silicon)'))
 
@@ -247,7 +245,7 @@ describe('BuildPanel', () => {
   })
 
   it('says nothing alarming for a platform that needs no signature', async () => {
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
     fireEvent.click(await screen.findByLabelText('Build for'))
     fireEvent.click(await screen.findByText('Linux (x64)'))
     expect(screen.queryByText(/refuses to open it/)).toBeNull()
@@ -255,15 +253,14 @@ describe('BuildPanel', () => {
 
   it('starts a build for the chosen platform', async () => {
     ;(agentAppsApi.requestBuild as any).mockResolvedValue({ id: 'b-1' })
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
 
     fireEvent.click(await screen.findByLabelText('Build for'))
     fireEvent.click(await screen.findByText('Linux (x64)'))
     fireEvent.click(screen.getByRole('button', { name: /Build/ }))
 
     await waitFor(() =>
-      expect(agentAppsApi.requestBuild).toHaveBeenCalledWith('acme-support', {
-        target: 'tui',
+      expect(agentAppsApi.requestBuild).toHaveBeenCalledWith('agent-1', 'channel-1', {
         platform: 'linux-x64',
       }),
     )
@@ -286,7 +283,7 @@ describe('BuildPanel', () => {
         artifactExpiresAt: null,
       },
     ])
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
     expect(await screen.findByText('Building')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Download/ })).toBeNull()
   })
@@ -312,14 +309,14 @@ describe('BuildPanel', () => {
     const open = vi.fn()
     vi.stubGlobal('open', open)
 
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
 
     // Not requested while merely rendering the list.
     expect(agentAppsApi.downloadUrl).not.toHaveBeenCalled()
 
     fireEvent.click(await screen.findByRole('button', { name: /Download/ }))
     await waitFor(() =>
-      expect(agentAppsApi.downloadUrl).toHaveBeenCalledWith('acme-support', 'b-1'),
+      expect(agentAppsApi.downloadUrl).toHaveBeenCalledWith('agent-1', 'channel-1', 'b-1'),
     )
     await waitFor(() => expect(open).toHaveBeenCalledWith(
       'https://example.test/artifact',
@@ -345,7 +342,7 @@ describe('BuildPanel', () => {
         artifactExpiresAt: null,
       },
     ])
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
     expect(await screen.findByText(/macOS \(Apple silicon\)/)).toBeInTheDocument()
   })
 
@@ -366,7 +363,7 @@ describe('BuildPanel', () => {
         artifactExpiresAt: null,
       },
     ])
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
     expect(await screen.findByText('solaris-sparc')).toBeInTheDocument()
   })
 
@@ -387,7 +384,7 @@ describe('BuildPanel', () => {
         artifactExpiresAt: null,
       },
     ])
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
     expect(await screen.findByText('Unsigned')).toBeInTheDocument()
     expect(screen.getByText('65.1 MB')).toBeInTheDocument()
   })
@@ -417,7 +414,7 @@ describe('BuildPanel', () => {
         artifactExpiresAt: null,
       },
     ])
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
 
     expect(await screen.findByText(/refuses to run this on download/)).toBeInTheDocument()
     expect(screen.getByText('xattr -d com.apple.quarantine ./Acme')).toBeInTheDocument()
@@ -443,7 +440,7 @@ describe('BuildPanel', () => {
         artifactExpiresAt: null,
       },
     ])
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
 
     expect(await screen.findByText('Nothing to do.')).toBeInTheDocument()
     expect(screen.queryByText(/xattr/)).toBeNull()
@@ -469,7 +466,7 @@ describe('BuildPanel', () => {
         artifactExpiresAt: null,
       },
     ])
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
     expect(await screen.findByText(/No signing certificate is selected/)).toBeInTheDocument()
     // Still downloadable: the artifact works, it just warns on open.
     expect(screen.getByRole('button', { name: /Download/ })).toBeInTheDocument()
@@ -493,7 +490,7 @@ describe('BuildPanel', () => {
         artifactExpiresAt: null,
       },
     ])
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
     expect(await screen.findByText(/bun exited/)).toBeInTheDocument()
     expect(screen.queryByText(/No signing certificate/)).toBeNull()
   })
@@ -515,7 +512,7 @@ describe('BuildPanel', () => {
         artifactExpiresAt: null,
       },
     ])
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
     expect(await screen.findByText(/bun is not installed/)).toBeInTheDocument()
   })
 
@@ -536,7 +533,7 @@ describe('BuildPanel', () => {
         artifactExpiresAt: null,
       },
     ])
-    render(<BuildPanel app={app} target="tui" />)
+    render(<BuildPanel agentId="agent-1" channel={channel} />)
     await screen.findByRole('button', { name: /Build/ })
     expect(screen.queryByRole('button', { name: /Download/ })).toBeNull()
   })

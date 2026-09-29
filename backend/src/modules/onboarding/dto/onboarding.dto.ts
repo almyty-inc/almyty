@@ -56,7 +56,6 @@ export const PAGE_INTRO_TOPICS = [
   'tools',
   'gateways',
   'agents',
-  'apps',
   'runners',
   'credentials',
   'models',

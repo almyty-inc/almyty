@@ -30,7 +30,7 @@ import {
   ChannelConfigForm,
   isChannelType,
 } from '@/components/gateways/detail/channel-config-form'
-import { ManagedByAppBanner, useManagedByApp } from '@/components/gateways/managed-by-app-banner'
+import { ManagedByChannelBanner, useManagedByChannel } from '@/components/gateways/managed-by-channel-banner'
 import { CustomDomainCard } from '@/components/gateways/custom-domain-card'
 import { VisitorOAuthCard } from '@/components/gateways/visitor-oauth-card'
 import { AllowedOriginsCard } from '@/components/gateways/allowed-origins-card'
@@ -79,8 +79,8 @@ export function GatewayDetailPage() {
     enabled: !!id,
   })
 
-  // The app this gateway was published from, if any: its settings live there.
-  const managedBy = useManagedByApp(id)
+  // The agent channel this gateway answers for, if any: its settings live there.
+  const managedBy = useManagedByChannel(id)
 
   useEffect(() => {
     const name = (gatewayData as any)?.name
@@ -478,8 +478,8 @@ export function GatewayDetailPage() {
         </div>
       )}
 
-      {/* An app's place: configured on the app, linked from here. */}
-      {managedBy && <ManagedByAppBanner managedBy={managedBy} />}
+      {/* An agent's channel: configured on the agent, linked from here. */}
+      {managedBy && <ManagedByChannelBanner managedBy={managedBy} />}
 
       {/* Gateway Configuration — type-specific */}
       <GatewayConfigurationCard
@@ -509,9 +509,9 @@ export function GatewayDetailPage() {
         />
       )}
 
-      {/* A hosted chat or a website widget is an app's place: its look, who
-          can use it, its domain, sign-in, embed snippet and allowed sites
-          are all on the app's page for that place. Only a surface no app
+      {/* A hosted chat or a website widget is an agent's channel: its look,
+          who can use it, its domain, sign-in, embed snippet and allowed
+          sites are all on that channel's page. Only a surface no channel
           owns keeps these cards here. */}
       {gateway.type === 'hosted_chat' && !managedBy && <CustomDomainCard gatewayId={gateway.id} />}
       {gateway.type === 'hosted_chat' && !managedBy && (

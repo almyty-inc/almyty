@@ -9,7 +9,8 @@ import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { credentialsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { DISTRIBUTION_LABELS, agentAppsApi, type DistributionTarget } from '@/lib/agent-apps'
+import { CHANNEL_LABELS, agentChannelsApi, type ChannelType } from '@/lib/agent-channels'
+import { channelKeys } from './channel-page-loader'
 
 export type SigningKind = 'apple' | 'authenticode'
 
@@ -32,26 +33,27 @@ const readAsBase64 = (file: File) =>
 type Errors = Partial<Record<'name' | 'file' | 'password' | 'keyId' | 'issuer' | 'key', string>>
 
 export interface SigningCredentialFormProps {
-  slug: string
-  appName: string
-  target: DistributionTarget
+  agentId: string
+  agentName: string
+  channelId: string
+  type: ChannelType
   /** 'apple' asks for notarisation keys as well; 'authenticode' does not. */
   kind: SigningKind
 }
 
 /**
- * Adding the certificate an app's builds are signed with, then signing
- * this distribution with it.
+ * Adding the certificate a desktop or terminal app is signed with, then
+ * signing this channel's builds with it.
  *
  * The private key goes straight into the credential vault and is never
  * read back: the fields are write-only from here on, the same as every
  * other secret in the product.
  */
-export function SigningCredentialForm({ slug, appName, target, kind }: SigningCredentialFormProps) {
+export function SigningCredentialForm({ agentId, agentName, channelId, type, kind }: SigningCredentialFormProps) {
   const { success, error: errorNotif } = useNotifications()
   const queryClient = useQueryClient()
   const apple = kind === 'apple'
-  const back = `/apps/${slug}/distributions/${target}`
+  const back = `/agents/${agentId}/channels/${channelId}`
 
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
@@ -78,18 +80,18 @@ export function SigningCredentialForm({ slug, appName, target, kind }: SigningCr
         },
       })
       const credential = (response as any)?.data ?? response
-      // Sign this distribution with it straight away: that is why the
+      // Sign this channel's builds with it straight away: that is why the
       // certificate was added from here.
-      await agentAppsApi.addDistribution(slug, target, { signingCredentialId: credential.id })
+      await agentChannelsApi.update(agentId, channelId, { configuration: { signingCredentialId: credential.id } })
       return credential
     },
     onSuccess: () => {
-      success('Certificate stored', `${DISTRIBUTION_LABELS[target]} builds are signed with it.`)
+      success('Certificate stored', `${CHANNEL_LABELS[type]} builds are signed with it.`)
       // Into the cache before the picker reads it again: without a row
       // for this id the Select fell back to "Nothing, ship it unsigned"
       // for a build that would in fact be signed.
       queryClient.invalidateQueries({ queryKey: ['signing-credentials'] })
-      queryClient.invalidateQueries({ queryKey: ['agent-app', slug] })
+      queryClient.invalidateQueries({ queryKey: channelKeys.one(agentId, channelId) })
       guard.leave(back)
     },
     onError: (err: unknown) =>
@@ -118,7 +120,7 @@ export function SigningCredentialForm({ slug, appName, target, kind }: SigningCr
           ? 'Your Developer ID certificate and an App Store Connect key. Apps built here are signed and notarised as you.'
           : 'Your code-signing certificate. Apps built here are signed as you.'
       }
-      back={{ to: back, label: `${appName} · ${DISTRIBUTION_LABELS[target]}` }}
+      back={{ to: back, label: `${agentName} · ${CHANNEL_LABELS[type]}` }}
       guard={guard}
       width="narrow"
       submitLabel="Store certificate"

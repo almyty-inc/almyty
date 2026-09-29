@@ -301,7 +301,7 @@ describe('ChannelWidgetController', () => {
       );
     });
 
-    it('takes the look from the app that owns the widget, and only placement from the widget', async () => {
+    it('takes the look from the agent that owns the widget channel, and only placement from the widget', async () => {
       channelGatewayService.findWidgetGateway.mockResolvedValueOnce({
         id: GATEWAY_UUID,
         organizationId: 'org-1',
@@ -311,10 +311,12 @@ describe('ChannelWidgetController', () => {
         },
       });
       const appLink = {
-        distributionFor: jest.fn(async () => ({
-          app: {
+        channelFor: jest.fn(async () => ({
+          branding: { greeting: 'Ask away' },
+          visitorRules: null,
+          agent: {
             name: 'Acme',
-            branding: { appName: 'Acme Help', primaryColor: '#0F766E', greeting: 'Ask away', theme: 'light', whiteLabel: true, aiDisclosure: 'You are talking to a bot.' },
+            branding: { appName: 'Acme Help', primaryColor: '#0F766E', greeting: 'Hello', theme: 'light', whiteLabel: true, aiDisclosure: 'You are talking to a bot.' },
           },
         })),
       };
@@ -322,7 +324,7 @@ describe('ChannelWidgetController', () => {
 
       const out = await owned.widgetConfig(GATEWAY_UUID, res as any);
 
-      expect(appLink.distributionFor).toHaveBeenCalledWith('org-1', GATEWAY_UUID);
+      expect(appLink.channelFor).toHaveBeenCalledWith('org-1', GATEWAY_UUID);
       expect(out.data).toEqual({
         primaryColor: '#0f766e',
         title: 'Acme Help',
@@ -337,9 +339,9 @@ describe('ChannelWidgetController', () => {
       });
     });
 
-    it('always shows an AI disclosure line on an app-owned widget', async () => {
+    it('always shows an AI disclosure line on a channel widget', async () => {
       channelGatewayService.findWidgetGateway.mockResolvedValueOnce({ id: GATEWAY_UUID, organizationId: 'org-1', type: 'chat_widget', configuration: {} });
-      const appLink = { distributionFor: jest.fn(async () => ({ app: { name: 'Acme', branding: {} } })) };
+      const appLink = { channelFor: jest.fn(async () => ({ branding: null, visitorRules: null, agent: { name: 'Acme', branding: {} } })) };
       const owned = new ChannelWidgetController(channelGatewayService as any, gatewayRateLimit as any, appLink as any);
 
       const out = await owned.widgetConfig(GATEWAY_UUID, res as any);
@@ -347,10 +349,14 @@ describe('ChannelWidgetController', () => {
       expect(out.data).toMatchObject({ title: 'Acme', aiDisclosure: WIDGET_DEFAULT_AI_DISCLOSURE, poweredBy: true });
     });
 
-    it('says which visitor rights the app grants, off when the app turned them off', async () => {
+    it('says which visitor rights the agent grants, off when it turned them off', async () => {
       channelGatewayService.findWidgetGateway.mockResolvedValueOnce({ id: GATEWAY_UUID, organizationId: 'org-1', type: 'chat_widget', configuration: {} });
       const appLink = {
-        distributionFor: jest.fn(async () => ({ app: { name: 'Acme', branding: {}, privacy: { visitorCanDelete: false, visitorCanExport: true } } })),
+        channelFor: jest.fn(async () => ({
+          branding: null,
+          visitorRules: null,
+          agent: { name: 'Acme', branding: {}, visitorRules: { privacy: { visitorCanDelete: false, visitorCanExport: true } } },
+        })),
       };
       const owned = new ChannelWidgetController(channelGatewayService as any, gatewayRateLimit as any, appLink as any);
 

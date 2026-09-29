@@ -1,0 +1,195 @@
+/**
+ * Channels tab for the agent detail page: where people, or other agents,
+ * reach this agent, and the only place channels are added and edited.
+ *
+ * A table of the agent's channels (row click opens the channel's page),
+ * "Add channel" to add another, and the branding and visitor rules every
+ * channel uses unless it sets its own. Gateways that serve the agent
+ * without being a channel (ACP, an OpenAI-compatible endpoint) are listed
+ * after it, linking to their own pages.
+ */
+import { Link, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import type { ColumnDef } from '@tanstack/react-table'
+import { ChevronRight, MessagesSquare, Plus, Router } from 'lucide-react'
+
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { DataTable } from '@/components/ui/data-table'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
+import { QueryError } from '@/components/ui/query-error'
+import { gatewaysApi } from '@/lib/api'
+import {
+  AUTH_MODE_SUMMARY,
+  CHANNEL_LABELS,
+  agentChannelsApi,
+  isBuildable,
+  webChatUrl,
+  type AgentChannel,
+} from '@/lib/agent-channels'
+import type { Gateway } from '@/types'
+import { ChannelIcon, CHANNEL_STATUS } from './channel-meta'
+import { channelKeys } from './channel-page-loader'
+
+interface ChannelsTabProps {
+  agentId: string
+  agentName?: string
+}
+
+/** A gateway a channel stood up names its channel; those are listed as channels. */
+const isChannelGateway = (gateway: Gateway) => !!(gateway as any)?.configuration?.channelId
+
+/** Where a channel is, in one short line. */
+function whereLine(channel: AgentChannel): string {
+  if (channel.type === 'web' && channel.slug) return webChatUrl(channel.slug).replace(/^https:\/\//, '')
+  if (isBuildable(channel.type)) return channel.lastBuild?.version ? `Last build ${channel.lastBuild.version}` : 'Not built yet'
+  return channel.status === 'live' ? 'Answering' : 'Not answering yet'
+}
+
+const hasOwnSettings = (channel: AgentChannel) => !!channel.branding || !!channel.visitorRules
+
+export function ChannelsTab({ agentId, agentName }: ChannelsTabProps) {
+  const navigate = useNavigate()
+  const name = agentName || 'this agent'
+
+  const channelsQuery = useQuery({
+    queryKey: channelKeys.list(agentId),
+    queryFn: () => agentChannelsApi.list(agentId),
+    enabled: !!agentId,
+  })
+  const settingsQuery = useQuery({
+    queryKey: channelKeys.publicSettings(agentId),
+    queryFn: () => agentChannelsApi.publicSettings(agentId),
+    enabled: !!agentId,
+  })
+  const gatewaysQuery = useQuery({
+    queryKey: ['agent-gateways', agentId],
+    queryFn: () => gatewaysApi.getAll({ kind: 'agent', agentId }),
+    enabled: !!agentId,
+  })
+
+  const channels = channelsQuery.data ?? []
+  const gateways: Gateway[] = (() => {
+    const data: any = gatewaysQuery.data
+    const raw = data?.gateways || (Array.isArray(data) ? data : [])
+    return Array.isArray(raw) ? raw.filter((g: Gateway) => !isChannelGateway(g)) : []
+  })()
+
+  const addPath = `/agents/${agentId}/channels/new`
+  const channelPath = (channel: AgentChannel) => `/agents/${agentId}/channels/${channel.id}`
+
+  const columns: ColumnDef<AgentChannel, any>[] = [
+    {
+      id: 'channel',
+      header: 'Channel',
+      cell: ({ row }) => (
+        <span className="flex items-center gap-2 font-medium">
+          <ChannelIcon type={row.original.type} />
+          {CHANNEL_LABELS[row.original.type] ?? row.original.type}
+        </span>
+      ),
+    },
+    {
+      id: 'where',
+      header: 'Where',
+      cell: ({ row }) => <span className="text-sm text-muted-foreground">{whereLine(row.original)}</span>,
+    },
+    {
+      id: 'settings',
+      header: 'Branding and visitor rules',
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">{hasOwnSettings(row.original) ? 'Its own' : `Same as ${name}`}</span>
+      ),
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      cell: ({ row }) => {
+        const status = CHANNEL_STATUS[row.original.status] ?? CHANNEL_STATUS.draft
+        return <Badge variant={status.variant}>{status.label}</Badge>
+      },
+    },
+  ]
+
+  const settings = settingsQuery.data?.effective
+
+  return (
+    <div className="space-y-6" data-testid="channels-tab">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold">Channels</h2>
+          <p className="text-sm text-muted-foreground">Where people, or other agents, reach {name}.</p>
+        </div>
+        <Button asChild className="gap-2">
+          <Link to={addPath}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add channel
+          </Link>
+        </Button>
+      </div>
+
+      {settings && (
+        <Card className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 text-sm" data-testid="public-settings-summary">
+          <span className="text-muted-foreground">Name people see:</span>
+          <span className="font-medium">{settings.branding.appName}</span>
+          <span className="text-muted-foreground">·</span>
+          <span className="text-muted-foreground">Who can use it:</span>
+          <span>{AUTH_MODE_SUMMARY[settings.visitorRules.authMode]}</span>
+          <Link
+            to={`/agents/${agentId}/channels/settings`}
+            className="ml-auto inline-flex items-center gap-1 text-primary hover:underline"
+          >
+            Branding and visitor rules
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        </Card>
+      )}
+
+      {channelsQuery.isError ? (
+        <QueryError error={channelsQuery.error} onRetry={() => channelsQuery.refetch()} title="Couldn't load the channels" />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={channels}
+          loading={channelsQuery.isLoading}
+          onRowClick={(channel) => navigate(channelPath(channel))}
+          hideSelectionCount
+          hideColumnsButton
+          hidePaginationWhenSinglePage
+          emptyState={
+            <EmptyState
+              icon={MessagesSquare}
+              title="No channels yet"
+              description={`Add a web chat link, a website widget, Slack, WhatsApp or another channel to put ${name} in front of people.`}
+              action={
+                <Button asChild>
+                  <Link to={addPath}>Add channel</Link>
+                </Button>
+              }
+            />
+          }
+        />
+      )}
+
+      {gateways.length > 0 && (
+        <section className="space-y-2" aria-labelledby="gateways-heading">
+          <h3 id="gateways-heading" className="text-sm font-medium text-muted-foreground">
+            Also served by gateways
+          </h3>
+          <Card className="divide-y">
+            {gateways.map((gateway) => (
+              <Link key={gateway.id} to={`/gateways/${gateway.id}`} className="flex items-center gap-2 px-4 py-3 text-sm hover:bg-muted/50">
+                <Router className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                <span className="font-medium">{gateway.name}</span>
+                {gateway.type && <ProtocolBadge protocol={gateway.type} />}
+                <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              </Link>
+            ))}
+          </Card>
+        </section>
+      )}
+    </div>
+  )
+}

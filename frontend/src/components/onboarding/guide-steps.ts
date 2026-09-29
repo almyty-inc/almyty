@@ -171,27 +171,19 @@ export const JOURNEYS: Journey[] = [
     id: 'ship',
     title: 'Put it where people are',
     summary:
-      'Package an agent as an app and ship it: a hosted web chat, a messaging channel, a terminal command or a desktop app.',
+      'Add a channel to an agent: a web chat link, a website widget, Slack, WhatsApp and other messaging apps, or a desktop or terminal app.',
     icon: Package,
     steps: [
       {
-        key: 'app',
-        title: 'Create an app',
-        description: () =>
-          'An app puts one or more agents under your name and sets who may use it.',
-        cta: 'Create an app',
-        target: () => ({ to: '/apps/new', place: 'Apps › Create app' }),
-      },
-      {
-        key: 'distribution',
-        title: 'Ship it somewhere',
+        key: 'channel',
+        title: 'Add a channel',
         description: (s) =>
-          `Add a distribution${s.links.app ? ` to ${s.links.app.name}` : ''}: a web chat on its own address, Slack, WhatsApp, Teams and other channels, a terminal command or a desktop app. Done when one is live or built.`,
-        cta: 'Add a distribution',
+          `Add a channel to ${s.links.agent ? s.links.agent.name : 'an agent'}: a web chat link, a website widget, Slack, WhatsApp, Teams and other messaging apps, a terminal app or a desktop app. Done when one is live or built.`,
+        cta: 'Add channel',
         target: (s) =>
-          s.links.app
-            ? { to: `/apps/${s.links.app.slug}/distributions/new`, place: `Apps › ${s.links.app.name} › Add a distribution` }
-            : { to: '/apps', place: 'Apps' },
+          s.links.agent
+            ? { to: `/agents/${s.links.agent.id}/channels/new`, place: `Agents › ${s.links.agent.name} › Channels › Add channel` }
+            : { to: '/agents', place: 'Agents' },
       },
     ],
   },

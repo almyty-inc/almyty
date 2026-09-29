@@ -6,11 +6,11 @@ import { createMemoryRouter, RouterProvider, useLocation } from 'react-router-do
 
 import { GatewayDetailPage } from '../gateway-detail'
 import { gatewaysApi, toolsApi } from '@/lib/api'
-import { appPlacesApi } from '@/lib/agent-apps'
+import { channelLinkApi } from '@/lib/agent-channels'
 
 /**
- * A gateway an app stood up says "Managed in <app>" and links to the
- * place on the app, instead of carrying a second copy of its settings.
+ * A gateway an agent channel stood up says so and links to the channel
+ * on the agent, instead of carrying a second copy of its settings.
  */
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 
@@ -34,9 +34,9 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-vi.mock('@/lib/agent-apps', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/agent-apps')>('@/lib/agent-apps')
-  return { ...actual, appPlacesApi: { usedBy: vi.fn(), appForGateway: vi.fn() } }
+vi.mock('@/lib/agent-channels', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/agent-channels')>('@/lib/agent-channels')
+  return { ...actual, channelLinkApi: { channelForGateway: vi.fn() } }
 })
 
 vi.mock('@/store/organization', () => {
@@ -57,7 +57,7 @@ function renderAt(path: string) {
   const router = createMemoryRouter(
     [
       { path: '/gateways/:id', element: <><GatewayDetailPage /><Where /></> },
-      { path: '/apps/:slug/distributions/:target', element: <Where /> },
+      { path: '/agents/:id/channels/:channelId', element: <Where /> },
     ],
     { initialEntries: [path] },
   )
@@ -75,7 +75,7 @@ const hostedChat = {
   type: 'hosted_chat',
   status: 'active',
   endpoint: '/apps/acme-support/web',
-  configuration: { hostedChat: { slug: 'acme-support', authMode: 'oauth' }, appId: 'app-1' },
+  configuration: { hostedChat: { slug: 'acme-support', authMode: 'oauth' }, channelId: 'channel-1' },
 }
 
 beforeEach(() => {
@@ -89,59 +89,56 @@ beforeEach(() => {
   vi.mocked(toolsApi.getAll).mockResolvedValue({ tools: [] } as any)
 })
 
-describe('a gateway an app manages', () => {
-  it('says which app, links to the place, and drops the settings the app owns', async () => {
+describe('a gateway an agent channel manages', () => {
+  it('says which agent, links to the channel, and drops the settings the channel owns', async () => {
     vi.mocked(gatewaysApi.getById).mockResolvedValue(hostedChat as any)
-    vi.mocked(appPlacesApi.appForGateway).mockResolvedValue({
-      app: { id: 'app-1', slug: 'acme-support', name: 'Acme support' },
-      target: 'web',
+    vi.mocked(channelLinkApi.channelForGateway).mockResolvedValue({
+      agent: { id: 'agent-1', name: 'Support agent' },
+      channel: { id: 'channel-1', type: 'web' },
     })
     renderAt('/gateways/gw-web')
 
-    const banner = await screen.findByTestId('managed-by-app')
-    expect(banner).toHaveTextContent('Managed in Acme support')
-    const link = screen.getByRole('link', { name: /Open Web app in Acme support/ })
-    expect(link).toHaveAttribute('href', '/apps/acme-support/distributions/web')
-    expect(appPlacesApi.appForGateway).toHaveBeenCalledWith('gw-web')
+    const banner = await screen.findByTestId('managed-by-channel')
+    expect(banner).toHaveTextContent('Web chat channel of Support agent')
+    const link = screen.getByRole('link', { name: /Open the channel/ })
+    expect(link).toHaveAttribute('href', '/agents/agent-1/channels/channel-1')
+    expect(channelLinkApi.channelForGateway).toHaveBeenCalledWith('gw-web')
 
     expect(screen.queryByText('Custom domain')).toBeNull()
     expect(screen.queryByText('Allowed sites')).toBeNull()
     expect(screen.queryByText('Visitor sign-in provider')).toBeNull()
 
     await userEvent.click(link)
-    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/apps/acme-support/distributions/web'))
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/agents/agent-1/channels/channel-1'))
   })
 
-  it('hides the channel credential form of a channel an app manages', async () => {
+  it('hides the credential form of a messaging channel', async () => {
     vi.mocked(gatewaysApi.getById).mockResolvedValue({
       ...hostedChat,
       id: 'gw-slack',
       type: 'slack',
-      configuration: { appId: 'app-1', credentialKeys: ['bot_token'] },
+      configuration: { channelId: 'channel-2', credentialKeys: ['bot_token'] },
     } as any)
-    vi.mocked(appPlacesApi.appForGateway).mockResolvedValue({
-      app: { id: 'app-1', slug: 'acme-support', name: 'Acme support' },
-      target: 'slack',
+    vi.mocked(channelLinkApi.channelForGateway).mockResolvedValue({
+      agent: { id: 'agent-1', name: 'Support agent' },
+      channel: { id: 'channel-2', type: 'slack' },
     })
     renderAt('/gateways/gw-slack')
-    expect(await screen.findByRole('link', { name: /Open Slack in Acme support/ })).toHaveAttribute(
-      'href',
-      '/apps/acme-support/distributions/slack',
-    )
+    expect(await screen.findByRole('link', { name: /Open the channel/ })).toHaveAttribute('href', '/agents/agent-1/channels/channel-2')
     expect(screen.queryByLabelText(/Bot token/i)).toBeNull()
   })
 
-  it('shows no banner, and keeps the widget cards, for a gateway no app owns', async () => {
+  it('shows no banner, and keeps the widget cards, for a gateway no channel owns', async () => {
     vi.mocked(gatewaysApi.getById).mockResolvedValue({
       ...hostedChat,
       id: 'gw-widget',
       type: 'chat_widget',
       configuration: {},
     } as any)
-    vi.mocked(appPlacesApi.appForGateway).mockResolvedValue(null)
+    vi.mocked(channelLinkApi.channelForGateway).mockResolvedValue(null)
     renderAt('/gateways/gw-widget')
     expect(await screen.findByText('Allowed sites')).toBeInTheDocument()
-    await waitFor(() => expect(appPlacesApi.appForGateway).toHaveBeenCalledWith('gw-widget'))
-    expect(screen.queryByTestId('managed-by-app')).toBeNull()
+    await waitFor(() => expect(channelLinkApi.channelForGateway).toHaveBeenCalledWith('gw-widget'))
+    expect(screen.queryByTestId('managed-by-channel')).toBeNull()
   })
 })

@@ -15,18 +15,12 @@ import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useCopy } from '@/lib/clipboard'
 import { credentialsApi } from '@/lib/api'
-import {
-  agentAppsApi,
-  formatBytes,
-  type AgentApp,
-  type AppBuild,
-  type DistributionTarget,
-} from '@/lib/agent-apps'
+import { agentChannelsApi, formatBytes, type AgentChannel, type AppBuild } from '@/lib/agent-channels'
 
 export interface BuildPanelProps {
-  app: AgentApp
-  target: DistributionTarget
-  /** The certificate this distribution signs with, if it names one. */
+  agentId: string
+  channel: Pick<AgentChannel, 'id' | 'type'>
+  /** The certificate this channel signs with, if it names one. */
   signingCredentialId?: string | null
   onSigningCredentialChange?: (credentialId: string) => void
   /** Opens the page that adds a certificate of this kind. */
@@ -48,7 +42,7 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 /**
- * Building an artifact and getting a link to it.
+ * Building a download and getting a link to it.
  *
  * The build runs on our machines, so this is a button rather than a
  * command to paste into a terminal. What it cannot hide is what an
@@ -56,8 +50,8 @@ const STATUS_LABEL: Record<string, string> = {
  * the build rather than discovered afterwards.
  */
 export function BuildPanel({
-  app,
-  target,
+  agentId,
+  channel,
   signingCredentialId,
   onSigningCredentialChange,
   onAddCertificate,
@@ -68,21 +62,21 @@ export function BuildPanel({
   const [platform, setPlatform] = useState<string>('')
 
   const { data: platforms } = useQuery({
-    queryKey: ['app-build-platforms', app.slug, target],
-    queryFn: () => agentAppsApi.platforms(app.slug, target),
+    queryKey: ['channel-build-platforms', agentId, channel.id],
+    queryFn: () => agentChannelsApi.platforms(agentId, channel.id),
   })
 
   const { data: builds } = useQuery({
-    queryKey: ['app-builds', app.slug],
-    queryFn: () => agentAppsApi.builds(app.slug),
+    queryKey: ['channel-builds', agentId, channel.id],
+    queryFn: () => agentChannelsApi.builds(agentId, channel.id),
     // A build takes tens of seconds, so poll while one is running and
     // stop as soon as none is rather than polling forever.
     refetchInterval: (query) => (inFlight(query.state.data as AppBuild[]) ? 4000 : false),
   })
 
   const { data: capabilities } = useQuery({
-    queryKey: ['app-build-capabilities', app.slug, target],
-    queryFn: () => agentAppsApi.capabilities(app.slug, target),
+    queryKey: ['channel-build-capabilities', agentId, channel.id],
+    queryFn: () => agentChannelsApi.capabilities(agentId, channel.id),
   })
 
   const { data: certificates } = useQuery({
@@ -94,7 +88,7 @@ export function BuildPanel({
     },
   })
 
-  const forTarget = (builds ?? []).filter((b) => b.target === target)
+  const forTarget = builds ?? []
   const chosen = (platforms ?? []).find((p) => p.id === platform)
   const willSign = Boolean(signingCredentialId)
 
@@ -105,17 +99,17 @@ export function BuildPanel({
     (platforms ?? []).find((p) => p.id === id)?.label ?? id ?? 'unknown platform'
 
   const start = useMutation({
-    mutationFn: () => agentAppsApi.requestBuild(app.slug, { target, platform }),
+    mutationFn: () => agentChannelsApi.requestBuild(agentId, channel.id, { platform }),
     onSuccess: () => {
       success('Build started', 'It will appear below when it finishes.')
-      queryClient.invalidateQueries({ queryKey: ['app-builds', app.slug] })
+      queryClient.invalidateQueries({ queryKey: ['channel-builds', agentId, channel.id] })
     },
     onError: (err: any) =>
       errorNotif('Could not start the build', getApiErrorMessage(err, 'Please try again.')),
   })
 
   const download = useMutation({
-    mutationFn: (buildId: string) => agentAppsApi.downloadUrl(app.slug, buildId),
+    mutationFn: (buildId: string) => agentChannelsApi.downloadUrl(agentId, channel.id, buildId),
     onSuccess: (url) => {
       // The URL is short lived, so it is fetched at click time and used
       // immediately rather than rendered into the page.

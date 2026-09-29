@@ -36,7 +36,7 @@ describeOrSkip('channels on the agent migration (real Postgres)', () => {
       database: process.env.DATABASE_NAME || 'almyty_test',
     });
     await db.connect();
-    await db.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
+    await db.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public');
     await db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await db.query(`CREATE SCHEMA ${schema}`);
     await db.query(`SET search_path TO ${schema}, public`);

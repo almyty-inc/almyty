@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { type Node, type Edge } from '@xyflow/react'
 import { ArrowLeft } from 'lucide-react'
@@ -39,7 +39,7 @@ import { OverviewTab } from '@/components/agents/detail/overview-tab'
 import { RunsTab } from '@/components/agents/detail/runs-tab'
 import { MemoryTab } from '@/components/agents/detail/memory-tab'
 import { FilesTab } from '@/components/agents/detail/files-tab'
-import { InterfacesTab } from '@/components/agents/detail/interfaces-tab'
+import { ChannelsTab } from '@/components/channels/channels-tab'
 import { AgentAccessKeysSection } from '@/components/access-keys/access-keys-section'
 import { PromotedSkillsTab } from '@/components/agents/detail/promoted-skills-tab'
 import { ConstraintsTab } from '@/components/agents/detail/constraints-tab'
@@ -59,7 +59,9 @@ export function AgentDetailPage() {
   const orgId = useOrganizationStore((s) => s.currentOrganization?.id)
 
   const [runPanelOpen, setRunPanelOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState('overview')
+  // `?tab=channels` opens a tab directly: the channel pages link back to it.
+  const [searchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview')
 
   // Webhook state (lifted so overview tab can use it, synced from agent data)
   const [webhookUrl, setWebhookUrl] = useState('')
@@ -389,7 +391,7 @@ export function AgentDetailPage() {
           <TabsTrigger value="execution">Execution</TabsTrigger>
           <TabsTrigger value="memory">Memory</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
-          <TabsTrigger value="interfaces">Interfaces</TabsTrigger>
+          <TabsTrigger value="channels">Channels</TabsTrigger>
           <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="constraints">Constraints</TabsTrigger>
         </TabsList>
@@ -437,8 +439,8 @@ export function AgentDetailPage() {
           <FilesTab agentId={id!} files={files} error={filesError} onRetry={() => refetchFiles()} />
         </TabsContent>
 
-        <TabsContent value="interfaces" className="space-y-4">
-          <InterfacesTab agentId={id!} agentName={agent?.name} />
+        <TabsContent value="channels" className="space-y-4">
+          <ChannelsTab agentId={id!} agentName={agent?.name} />
           <AgentAccessKeysSection agentId={id!} agentName={agent?.name} />
         </TabsContent>
 
