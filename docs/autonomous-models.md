@@ -97,8 +97,8 @@ judge, or the main role when there is none, then writes the answer they
 agree on (the workflow consensus prompt): the step records `agreement`
 and `consensusReached` (threshold 0.5) and which model judged. A judge
 that fails leaves the main role's answer. The judge is a model, never
-another agent; the page adds it with the same role picker as any other
-role, labelled Judge.
+another agent; the page shows it as an optional Judge slot under Panel,
+added with **Add a judge**.
 
 ### Explore, extract, patch — needs `explorer`s, `summariser`, `main`, `checker`
 
