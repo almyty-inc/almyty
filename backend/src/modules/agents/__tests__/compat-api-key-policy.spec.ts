@@ -4,6 +4,7 @@ import { QueryFailedError } from 'typeorm';
 
 import { AgentOpenAICompatController } from '../agent-openai-compat.controller';
 import { AgentAnthropicCompatController } from '../agent-anthropic-compat.controller';
+import { CompatAgentInvoker } from '../compat-agent-invoker.service';
 import { ApiKey } from '../../../entities/api-key.entity';
 import { fakeRepository } from '../../../test/fake-repository';
 import { membershipFixture } from '../../../test/execution-access.fixture';
@@ -131,7 +132,7 @@ function anthropic() {
   };
   const controller = new AgentAnthropicCompatController(
     agentsService as any,
-    engine as any,
+    new CompatAgentInvoker(engine as any),
     fakeRepository<ApiKey>({ seed: KEYS, make: () => new ApiKey() }) as any,
     undefined, // redis
     membershipFixture().executionAccess, // the real execution gate

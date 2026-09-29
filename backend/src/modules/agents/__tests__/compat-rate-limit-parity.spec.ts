@@ -11,6 +11,7 @@ import * as crypto from 'crypto';
 import { ApiKey } from '../../../entities/api-key.entity';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
+import { CompatAgentInvoker } from '../compat-agent-invoker.service';
 import { AgentAnthropicCompatController } from '../agent-anthropic-compat.controller';
 import { AgentOpenAICompatController } from '../agent-openai-compat.controller';
 import { AgentOpenAIStreamHelper } from '../agent-openai-stream.helper';
@@ -39,6 +40,7 @@ describe('compat-route rate limit parity', () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [AgentAnthropicCompatController, AgentOpenAICompatController],
       providers: [
+        CompatAgentInvoker,
         { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         {
           provide: AgentsService,

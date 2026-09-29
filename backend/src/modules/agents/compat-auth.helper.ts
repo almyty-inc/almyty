@@ -136,3 +136,26 @@ export function compatPrincipal(apiKey: ApiKey): ExecutionPrincipal {
 export function agentsForKey<T extends { id: string }>(agents: T[], apiKey: ApiKey): T[] {
   return apiKey.agentId ? agents.filter((agent) => agent.id === apiKey.agentId) : agents;
 }
+
+/**
+ * Throttle window for `lastUsedAt` writes. Without it every compat request
+ * issued one UPDATE, which is wasteful and races with any concurrent change
+ * to the key row (revocation, scope change).
+ */
+const LAST_USED_THROTTLE_MS = 60_000;
+
+/**
+ * Touch the key's `lastUsedAt`, at most once a minute, as a partial UPDATE
+ * rather than `save(entity)`: saving the in-memory copy would write stale
+ * fields back over a concurrent revocation. Both compat routes call this, so
+ * a key used only through /v1/messages no longer looks unused.
+ */
+export async function touchCompatKeyLastUsed(apiKeys: Pick<Repository<ApiKey>, 'update'>, apiKey: ApiKey): Promise<void> {
+  const now = Date.now();
+  const last = apiKey.lastUsedAt ? new Date(apiKey.lastUsedAt).getTime() : 0;
+  if (now - last < LAST_USED_THROTTLE_MS) return;
+
+  const nowDate = new Date(now);
+  await apiKeys.update({ id: apiKey.id }, { lastUsedAt: nowDate });
+  apiKey.lastUsedAt = nowDate;
+}
