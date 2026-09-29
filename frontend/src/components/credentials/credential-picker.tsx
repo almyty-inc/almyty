@@ -16,6 +16,9 @@
  *   - the hint line, then the error line, as on any other field;
  *   - creating opens a bordered, muted panel under the field with its own
  *     Save and Cancel; saving selects the new one and folds the panel.
+ *
+ * A caller whose credential is made another way (an OAuth 2.0 sign-in that
+ * leaves for the provider) passes `createPanel`, shown in the same panel.
  */
 import { useId, useMemo, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -28,6 +31,7 @@ import { ConnectFlow } from '@/components/connections/connect-flow'
 import { useConnectionOptions } from '@/components/connections/connection-select'
 import { connectionCheck } from '@/components/connections/connection-status'
 import { CONNECTIONS_QUERY_KEY, CREDENTIALS_QUERY_KEY, credentialPath } from '@/components/credentials/paths'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { cn } from '@/lib/utils'
 import type { Connection, ConnectorKind } from '@/types/connections'
 
@@ -54,6 +58,8 @@ export interface CredentialPickerProps {
   allowNone?: boolean
   /** Skip the fetch and list these instead (tests, callers that already hold the list). */
   connections?: Connection[]
+  /** Replaces the add flow in the "Create one here" panel; `close` folds it. */
+  createPanel?: (close: () => void) => ReactNode
   className?: string
 }
 
@@ -86,12 +92,16 @@ export function CredentialPicker({
   placeholder = 'Pick a credential',
   allowNone = false,
   connections,
+  createPanel,
   className,
 }: CredentialPickerProps) {
   const queryClient = useQueryClient()
   const [creating, setCreating] = useState(false)
   // A credential made here, until the list is refetched with it in.
   const [created, setCreated] = useState<Connection | null>(null)
+  // A key half typed in the panel asks before a navigation throws it away.
+  const [panelDirty, setPanelDirty] = useState(false)
+  const guard = useLeaveGuard(creating && panelDirty)
   const options = useConnectionOptions({ kind, connections })
   const list = useMemo(() => sortCredentialOptions(created && !options.connections.some((c) => c.id === created.id) ? [created, ...options.connections] : options.connections, connectorKey), [created, options.connections, connectorKey])
   const selected = list.find((c) => c.id === value) ?? null
@@ -177,13 +187,21 @@ export function CredentialPicker({
           {error}
         </p>
       )}
-      {creating && (
+      {creating && createPanel && (
+        <div id={panelId} className="pt-1">
+          <div className="space-y-4 rounded-lg border bg-muted/30 p-4" data-testid="credential-picker-panel">
+            {createPanel(() => setCreating(false))}
+          </div>
+        </div>
+      )}
+      {creating && !createPanel && (
         <div id={panelId} className="pt-1">
           <ConnectFlow
             embedded
             kind={kind}
             connectorKey={connectorKey}
             defaultName={defaultName}
+            onDirtyChange={setPanelDirty}
             onCancel={() => setCreating(false)}
             onConnected={(credential) => {
               setCreating(false)
@@ -195,6 +213,7 @@ export function CredentialPicker({
           />
         </div>
       )}
+      {guard.element}
     </div>
   )
 }

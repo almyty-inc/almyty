@@ -154,6 +154,8 @@ export interface ConnectFlowProps {
   onPick?: (connector: Connector) => void
   /** "Other service": the name the new credential starts with, e.g. "Acme API key". */
   defaultName?: string
+  /** Told whether a value has been typed and not saved yet, so the host can ask before leaving. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 type SignIn =
@@ -228,7 +230,7 @@ function readFailure(error: unknown, connector: Connector): Failure {
   return { message: errorMessage(error, `${connector.displayName} was not saved.`) }
 }
 
-export function ConnectFlow({ kind, connectorKey, onConnected, onCancel, rotateConnection, pollIntervalMs = 2000, embedded = false, onPick, defaultName }: ConnectFlowProps) {
+export function ConnectFlow({ kind, connectorKey, onConnected, onCancel, rotateConnection, pollIntervalMs = 2000, embedded = false, onPick, defaultName, onDirtyChange }: ConnectFlowProps) {
   const targetKey = rotateConnection?.connectorKey ?? connectorKey
   const [search, setSearch] = useState('')
   const [pickedKey, setPickedKey] = useState<string | null>(targetKey ?? null)
@@ -298,6 +300,7 @@ export function ConnectFlow({ kind, connectorKey, onConnected, onCancel, rotateC
           onCancel={embedded ? onCancel : undefined}
           onChooseAnother={embedded && !targetKey ? () => setPickedKey(null) : undefined}
           defaultName={defaultName}
+          onDirtyChange={onDirtyChange}
         />
       )}
 
@@ -330,6 +333,8 @@ export interface ConnectServiceFormProps {
   onChooseAnother?: () => void
   /** "Other service": the name the new credential starts with. */
   defaultName?: string
+  /** Told whether a value has been typed and not saved yet. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 /**
@@ -337,7 +342,7 @@ export interface ConnectServiceFormProps {
  * Save. Saving checks it with the service; a refusal is said in plain
  * words next to the key and the form stays filled.
  */
-export function ConnectServiceForm({ connector, onConnected, embedded = false, rotateConnection, pollIntervalMs = 2000, onCancel, onChooseAnother, defaultName }: ConnectServiceFormProps) {
+export function ConnectServiceForm({ connector, onConnected, embedded = false, rotateConnection, pollIntervalMs = 2000, onCancel, onChooseAnother, defaultName, onDirtyChange }: ConnectServiceFormProps) {
   const owners = useConnectOwners()
   const [methodType, setMethodType] = useState<ConnectMethod['type'] | null>(rotateConnection?.method ?? null)
   const [who, setWho] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
@@ -365,6 +370,14 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
     setFieldErrors({})
     setFailure(null)
   }, [method?.type])
+
+  // Something typed that is not a default yet: a half-entered key.
+  const defaults = useMemo(() => schemaDefaults(method?.schema), [method?.schema])
+  const dirty = Object.entries(values).some(([k, v]) => v !== undefined && v !== '' && v !== defaults[k])
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty])
+  useEffect(() => () => onDirtyChange?.(false), [])
 
   const stopPolling = () => {
     pollAbort.current?.abort()

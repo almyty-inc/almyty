@@ -43,6 +43,7 @@ vi.mock('@/lib/connections-api', async () => {
     connectionsApi: {
       list: vi.fn().mockResolvedValue([
         { id: 'cred-1', name: 'Acme key', connectorKey: 'other', connectorDisplayName: 'Other service', kind: 'tool_source', owner: 'org', health: { status: 'valid' }, createdAt: '2026-09-01T00:00:00.000Z' },
+        { id: 'cred-2', name: 'Acme sign-in', connectorKey: 'basic-auth', connectorDisplayName: 'Username and password', accountLabel: 'ops', kind: 'tool_source', owner: 'org', health: { status: 'valid' }, createdAt: '2026-09-01T00:00:00.000Z' },
       ]),
     },
   }
@@ -118,6 +119,23 @@ describe('the create-tool page', () => {
 
     await waitFor(() => expect(toolsApi.create).toHaveBeenCalled())
     expect(vi.mocked(toolsApi.create).mock.calls[0][0].authConfig).toEqual({ type: 'apiKey', config: { credentialId: 'cred-1', headerName: 'X-API-Key' } })
+  })
+
+  it('sends a username and password as the credential the tool points at, never typed in', async () => {
+    vi.mocked(toolsApi.create).mockResolvedValue({ id: 'tool-4' } as any)
+    const user = userEvent.setup()
+    renderWithProviders(<ToolNewPage />)
+
+    await fillBasics(user)
+    await user.click(screen.getByRole('combobox', { name: 'Authentication' }))
+    await user.click(await screen.findByRole('option', { name: 'Basic auth' }))
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('combobox', { name: 'Username and password' }))
+    await user.click(await screen.findByRole('option', { name: /Acme sign-in/ }))
+    await user.click(screen.getByRole('button', { name: 'Create tool' }))
+
+    await waitFor(() => expect(toolsApi.create).toHaveBeenCalled())
+    expect(vi.mocked(toolsApi.create).mock.calls[0][0].authConfig).toEqual({ type: 'basic', config: { credentialId: 'cred-2' } })
   })
 
   it('Cancel goes back to the list without creating anything', async () => {

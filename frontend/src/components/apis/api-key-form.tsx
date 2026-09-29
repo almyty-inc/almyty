@@ -3,8 +3,9 @@
  * one created right here with the shared pick-or-create control, so the
  * key lands on the Credentials page like every other. How it is sent (the
  * header, bearer, basic, OAuth 2.0) comes from the API's description and
- * is a one-line "Change" away. A username and password (basic auth) are
- * typed here, and an OAuth 2.0 sign-in happens here.
+ * is a one-line "Change" away. A username and password (basic auth) and an
+ * OAuth 2.0 sign-in are credentials too: picked, or made in the same
+ * control. No secret is typed into this form itself.
  *
  * Used on "Finish connecting" (/apis/:id/setup) and by the API page's
  * Key card.
@@ -24,6 +25,10 @@ import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { apisApi, credentialsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import type { ApiKeyType, ApiKeyView } from '@/types/api-connect'
+
+/** The services a credential of each kind is made for (connector-catalog.ts). */
+export const BASIC_AUTH_SERVICE = 'basic-auth'
+export const OAUTH2_SIGN_IN_SERVICE = 'oauth2'
 
 /** How a key is sent, in words. */
 export function keySentAs(view: Pick<ApiKeyView, 'type' | 'headerName' | 'location'>): string {
@@ -57,13 +62,10 @@ interface ApiKeyFormProps {
   onCancel?: () => void
   /** Where an OAuth 2.0 sign-in comes back to. */
   returnTo: string
-  submitLabel?: string
 }
 
-export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo, submitLabel = 'Save key' }: ApiKeyFormProps) {
+export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo }: ApiKeyFormProps) {
   const [type, setType] = useState<ApiKeyType>(view.type === 'none' ? 'api_key' : view.type)
-  const [key, setKey] = useState('')
-  const [username, setUsername] = useState('')
   const [headerName, setHeaderName] = useState(view.headerName ?? 'X-API-Key')
   const [location, setLocation] = useState<'header' | 'query'>(view.location ?? 'header')
   const [changing, setChanging] = useState(view.type === 'none')
@@ -72,12 +74,13 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo, 
   const [clientSecret, setClientSecret] = useState('')
   const [error, setError] = useState<string | null>(null)
 
+  // The spec says how to sign in: making the credential is a sign-in there.
   const oauth = type === 'oauth2' && view.oauth2?.tokenUrl && !pasteToken ? view.oauth2 : null
   // Set when an OAuth sign-in sends the browser to the provider.
   const [redirectTo, setRedirectTo] = useState<string | null>(null)
-  // A half-typed key asks before a navigation throws it away (not the
-  // sign-in's own redirect, which is the point).
-  const guard = useLeaveGuard(!redirectTo && !!(key || username || clientId || clientSecret))
+  // A half-typed client secret asks before a navigation throws it away (not
+  // the sign-in's own redirect, which is the point).
+  const guard = useLeaveGuard(!redirectTo && !!(clientId || clientSecret))
   useEffect(() => {
     if (redirectTo) window.location.assign(redirectTo)
   }, [redirectTo])
@@ -85,7 +88,6 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo, 
   const save = useMutation({
     mutationFn: (body: Parameters<typeof apisApi.setKey>[1]) => apisApi.setKey(apiId, body),
     onSuccess: (next) => {
-      setKey('')
       setError(null)
       onSaved(next)
     },
@@ -107,6 +109,8 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo, 
         setRedirectTo(redirect)
         return
       }
+      setClientId('')
+      setClientSecret('')
       onSaved(await apisApi.getKey(apiId))
     },
     onError: (err) => setError(getApiErrorMessage(err, 'Signing in did not work.')),
@@ -114,31 +118,24 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo, 
 
   const busy = save.isPending || signIn.isPending
 
+  const startSignIn = () => {
+    setError(null)
+    if (!clientId.trim() || !clientSecret.trim()) {
+      setError('Enter the client ID and secret from your app at the provider.')
+      return
+    }
+    signIn.mutate()
+  }
+
+  // Nothing is submitted by the form itself: picking a credential saves it.
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    setError(null)
-    if (oauth) {
-      if (!clientId.trim() || !clientSecret.trim()) {
-        setError('Enter the client ID and secret from your app at the provider.')
-        return
-      }
-      signIn.mutate()
-      return
-    }
-    if (type !== 'basic') {
-      setError('Pick a key, or create one here.')
-      return
-    }
-    if (!key.trim()) {
-      setError('Enter the password.')
-      return
-    }
-    if (type === 'basic' && !username.trim()) {
-      setError('Enter the username.')
-      return
-    }
-    save.mutate({ type, key: key.trim(), username: username.trim() })
+    if (oauth && (clientId || clientSecret)) startSignIn()
   }
+
+  const service = type === 'basic' ? BASIC_AUTH_SERVICE : type === 'oauth2' ? OAUTH2_SIGN_IN_SERVICE : OTHER_SERVICE_KEY
+  const pickerLabel = type === 'basic' ? 'Username and password' : type === 'oauth2' ? 'Sign-in' : 'Credential'
+  const defaultName = type === 'basic' || type === 'oauth2' ? `${apiName} sign-in` : `${apiName} key`
 
   return (
     <form onSubmit={submit} className="space-y-4" noValidate aria-label={`Key for ${apiName}`}>
@@ -194,52 +191,54 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo, 
         </p>
       )}
 
-      {oauth ? (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Sign in at {new URL(oauth.authorizationUrl || oauth.tokenUrl!).hostname} with the client ID and secret of your app there.
-          </p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="api-oauth-client-id">Client ID</Label>
-              <Input id="api-oauth-client-id" className="mt-1" value={clientId} onChange={(e) => setClientId(e.target.value)} disabled={busy} />
-            </div>
-            <div>
-              <Label htmlFor="api-oauth-client-secret">Client secret</Label>
-              <SecretInput id="api-oauth-client-secret" className="mt-1" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} disabled={busy} />
-            </div>
-          </div>
-          <button type="button" className="text-xs text-primary hover:underline" onClick={() => setPasteToken(true)} disabled={busy}>
-            Paste an access token instead
-          </button>
-        </div>
-      ) : type === 'basic' ? (
-        <div className="space-y-3">
-          <div>
-            <Label htmlFor="api-key-username">Username</Label>
-            <Input id="api-key-username" className="mt-1" value={username} onChange={(e) => setUsername(e.target.value)} disabled={busy} autoComplete="off" />
-          </div>
-          <div>
-            <Label htmlFor="api-key-value">Password</Label>
-            <SecretInput id="api-key-value" className="mt-1" value={key} onChange={(e) => setKey(e.target.value)} disabled={busy} />
-          </div>
-        </div>
-      ) : (
-        <CredentialPicker
-          id="api-key-credential"
-          label={type === 'oauth2' ? 'Access token' : 'Credential'}
-          value={view.connection?.id ?? ''}
-          connectorKey={OTHER_SERVICE_KEY}
-          defaultName={`${apiName} key`}
-          disabled={busy}
-          hint="Saved in Credentials, so other APIs and tools can use it too."
-          onChange={(credential) => {
-            if (!credential) return
-            setError(null)
-            save.mutate({ type, connectionId: credential.id, ...(type === 'api_key' ? { headerName: headerName.trim() || 'X-API-Key', location } : {}) })
-          }}
-        />
-      )}
+      <CredentialPicker
+        key={service}
+        id="api-key-credential"
+        label={pickerLabel}
+        value={view.connection?.id ?? (type === 'oauth2' ? view.credential?.id ?? '' : '')}
+        connectorKey={service}
+        defaultName={defaultName}
+        disabled={busy}
+        hint="Saved in Credentials, so other APIs and tools can use it too."
+        onChange={(credential) => {
+          if (!credential) return
+          setError(null)
+          save.mutate({ type, connectionId: credential.id, ...(type === 'api_key' ? { headerName: headerName.trim() || 'X-API-Key', location } : {}) })
+        }}
+        createPanel={
+          oauth
+            ? (close) => (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Sign in at {new URL(oauth.authorizationUrl || oauth.tokenUrl!).hostname} with the client ID and secret of your app there.
+                  </p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label htmlFor="api-oauth-client-id">Client ID</Label>
+                      <Input id="api-oauth-client-id" className="mt-1" value={clientId} onChange={(e) => setClientId(e.target.value)} disabled={busy} />
+                    </div>
+                    <div>
+                      <Label htmlFor="api-oauth-client-secret">Client secret</Label>
+                      <SecretInput id="api-oauth-client-secret" className="mt-1" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} disabled={busy} />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="button" onClick={startSignIn} disabled={busy}>
+                      {signIn.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
+                      {oauth.flow === 'client_credentials' || !oauth.authorizationUrl ? 'Save' : 'Sign in'}
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={close} disabled={busy}>
+                      Cancel
+                    </Button>
+                    <button type="button" className="text-xs text-primary hover:underline" onClick={() => setPasteToken(true)} disabled={busy}>
+                      Paste an access token instead
+                    </button>
+                  </div>
+                </>
+              )
+            : undefined
+        }
+      />
 
       {error && (
         <p role="alert" className="text-sm text-destructive" data-testid="api-key-error">
@@ -247,19 +246,11 @@ export function ApiKeyForm({ apiId, apiName, view, onSaved, onCancel, returnTo, 
         </p>
       )}
 
-      {(oauth || type === 'basic' || onCancel) && (
+      {onCancel && (
         <div className="flex flex-wrap items-center gap-2">
-          {(oauth || type === 'basic') && (
-            <Button type="submit" disabled={busy}>
-              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
-              {oauth ? (oauth.flow === 'client_credentials' || !oauth.authorizationUrl ? 'Save' : 'Sign in') : submitLabel}
-            </Button>
-          )}
-          {onCancel && (
-            <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>
-              Cancel
-            </Button>
-          )}
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
         </div>
       )}
       {guard.element}
