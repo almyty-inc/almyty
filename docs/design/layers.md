@@ -48,6 +48,20 @@ are the blunt instrument and not the mechanism: switching one on to let
 one team reach one internal endpoint opens every private range to every
 organization on the install.
 
+Every request to a URL a user, tenant or visitor can influence goes
+through one guarded client in `common/security`: `safeFetch` for `fetch`
+call sites and `egressAxiosConfig` for axios ones. Each applies the same
+five parts: the string gate, the DNS pin at connect, redirects refused or
+re-gated hop by hop, a response-size cap on the decompressed body, and a
+total deadline (an idle timer lets a server that drips a byte at a time
+hold a worker forever). Failures reach the caller as
+`outboundFailureDetail`, never an errno or an upstream status.
+`outbound-transport-inventory.guard.spec.ts` lists every module that
+dials out and why its URL is safe; a new one fails until it is routed
+through the guard or justified there. A self-hosted OIDC IdP on a private
+network needs `SSO_ALLOW_PRIVATE_URLS=true`, which exempts the configured
+issuer host and nothing else.
+
 ## L2 — Vendors as data
 
 A vendor is a base URL, an auth header, a path, a listing shape and a
