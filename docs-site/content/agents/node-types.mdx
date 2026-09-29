@@ -302,6 +302,11 @@ An expression that is a single `{{...}}` reference keeps its type, so an array
 stays an array. Anything else is rendered to a string, and any non-array value
 is wrapped in a one-element array.
 
+An iterable that resolves to nothing — a typo, a field the input did not carry,
+a step that failed — fails the node with `the iterable '...' resolved to
+nothing`, rather than being treated as a one-item list. An empty array is an
+empty list, and the run carries on.
+
 ## Parallel
 
 Marks a fan-out point. The engine executes a pipeline in topological layers, so
@@ -389,6 +394,12 @@ strategy calls a judge; the single answer is returned as-is.
 
 The merged result is available as `{{nodes.merge_1.output}}`.
 
+A branch that failed, or was skipped by a Condition, contributes nothing. The
+merge reads the branches that produced output, in edge order — so
+`concatenate` lists only those, and the positions of the others close up — and
+the merge itself fails only when no branch produced anything, naming each
+upstream and whether it failed or was skipped.
+
 ## Sub-Agent
 
 Invokes another agent as a step within this pipeline, enabling composable and
@@ -425,6 +436,13 @@ The sub-agent's output is available as `{{nodes.sub_1.output}}`.
 `inputMapping` also accepts an object — `{ "query": "{{nodes.llm_1.output}}" }` —
 and both shapes resolve the same way. With no mapping at all, the whole
 invocation input is passed through to the sub-agent unchanged.
+
+A child run that does not complete fails this node: a child that failed, timed
+out or was cancelled is reported on the node as `Sub-agent execution <status>:
+<the child's error>`, and the steps after it are skipped. Nesting is bounded by
+the run's recursion depth (see [Run limits](/run-limits)), so an agent that
+reaches itself through a chain of sub-agents stops with `Max nesting depth (N)
+exceeded` rather than recursing.
 
 ## Verify
 

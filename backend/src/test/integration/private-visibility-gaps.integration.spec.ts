@@ -328,7 +328,7 @@ describeIfDb('private visibility gaps (real Postgres)', () => {
       const pipeline = {
         nodes: [
           { id: 'in', type: 'input', position: { x: 0, y: 0 }, data: {} },
-          { id: 'llm', type: 'llm_call', position: { x: 0, y: 0 }, data: { providerId: privateProvider.id, model: 'gpt-x', prompt: 'hi' } },
+          { id: 'llm', type: 'llm_call', position: { x: 0, y: 0 }, data: { providerId: privateProvider.id, model: 'gpt-x', userPromptTemplate: 'hi' } },
           { id: 'out', type: 'output', position: { x: 0, y: 0 }, data: {} },
         ],
         edges: [

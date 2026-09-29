@@ -67,6 +67,20 @@ export {
   SOAPRequest,
 };
 
+/** Back off for `ms`, or less if `signal` aborts first. */
+function sleepUnlessAborted(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) return sleep(ms);
+  if (signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      signal.removeEventListener('abort', done);
+      resolve();
+    };
+    signal.addEventListener('abort', done, { once: true });
+    sleep(ms).then(done, done);
+  });
+}
+
 @Injectable()
 export class ToolExecutorService {
   private readonly logger = new Logger(ToolExecutorService.name);
@@ -485,12 +499,20 @@ export class ToolExecutorService {
           lastError = error;
           retryCount++;
 
+          // A cancelled or timed-out caller is not retried. The abort
+          // surfaces here as a failed attempt, and the loop used to back off
+          // and try again -- 2s, 4s, 8s with the default three retries --
+          // against a signal that was already aborted, holding the cancelled
+          // run's layer open for up to fourteen seconds.
+          if (options.signal?.aborted) break;
+
           if (retryCount <= maxRetries) {
             const delay = Math.pow(2, retryCount) * 1000;
-            await sleep(delay);
             this.logger.warn(
               `Tool execution failed, retrying in ${delay}ms (attempt ${retryCount}/${maxRetries}): ${error.message}`,
             );
+            await sleepUnlessAborted(delay, options.signal);
+            if (options.signal?.aborted) break;
           }
         }
       }

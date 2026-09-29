@@ -473,13 +473,20 @@ export class AgentNodeExecutor {
       ? this.templateResolver.resolve(config.systemPrompt, context)
       : undefined;
 
-    const userPrompt = config.userPromptTemplate
-      ? this.templateResolver.resolve(config.userPromptTemplate, context)
-      : config.userPrompt
-        ? this.templateResolver.resolve(config.userPrompt, context)
-        : undefined;
+    const promptTemplate = config.userPromptTemplate || config.userPrompt;
+    const userPrompt = promptTemplate ? this.templateResolver.resolve(promptTemplate, context) : undefined;
 
     if (!userPrompt) {
+      if (promptTemplate) {
+        // The prompt is set; what it points at is not there. Saying "missing
+        // user prompt" here sent people to a config field that was filled in.
+        const unresolved = context.unresolvedReferences?.length
+          ? ` Unresolved: ${context.unresolvedReferences.join(', ')}.`
+          : '';
+        throw new Error(
+          `LLM call node '${node.id}': its prompt '${promptTemplate}' resolved to an empty prompt.${unresolved}`,
+        );
+      }
       throw new Error(`LLM call node '${node.id}' is missing user prompt (userPromptTemplate or userPrompt)`);
     }
 
@@ -704,6 +711,13 @@ export class AgentNodeExecutor {
       // client or parent-cancelled run.
       signal: options.signal,
       runnerLabels: options.runnerLabels,
+      // The run's tool-error retry budget. A tool's own configured retry
+      // count still wins inside the executor; this replaces only the
+      // executor's default, which is what applied to every workflow tool
+      // call whatever the agent's Run limits said.
+      ...(typeof context.runLimits?.toolErrorRetries === 'number'
+        ? { retries: context.runLimits.toolErrorRetries }
+        : {}),
     });
 
     const executionTime = Date.now() - startTime;
@@ -883,6 +897,18 @@ export class AgentNodeExecutor {
     const resolved = singleRef
       ? this.templateResolver.resolveValue(singleRef, context)
       : this.templateResolver.resolve(expression, context);
+    // Nothing to iterate is not a one-item list. A reference that resolves
+    // to nothing -- a typo, a field the input did not carry, a step that
+    // failed -- was wrapped like any other non-array value, so the loop
+    // handed `[undefined]` downstream as if it had found one item, and the
+    // single-reference path never even recorded the reference as
+    // unresolved. An empty array is still an empty list.
+    if (resolved === undefined || resolved === null || (typeof resolved === 'string' && resolved.trim() === '')) {
+      throw new Error(
+        `Loop node '${node.id}': the iterable '${expression}' resolved to nothing. ` +
+          'Point it at an array the input or an earlier step provides.',
+      );
+    }
     const items = Array.isArray(resolved) ? resolved : [resolved];
 
     return {

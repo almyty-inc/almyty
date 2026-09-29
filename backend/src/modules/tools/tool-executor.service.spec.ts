@@ -899,6 +899,42 @@ describe('ToolExecutorService', () => {
       expect(result.error).toContain('Execution failed after');
       expect(result.error).toContain('Persistent failure');
     });
+
+    it('does not retry a call whose caller has already given up', async () => {
+      const mockTool = {
+        id: 'tool-1',
+        status: ToolStatus.ACTIVE,
+        operation: {
+          api: { type: 'openapi', baseUrl: 'https://api.example.com', authentication: { type: 'none' } },
+        },
+        configuration: { retries: 3 },
+      } as any;
+
+      toolRepository.findOne.mockResolvedValue(mockTool);
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', hasPermissionInOrganization: jest.fn().mockReturnValue(true) });
+      toolExecutionRepository.create.mockReturnValue({});
+      toolExecutionRepository.save.mockResolvedValue({});
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+      jest.spyOn(service['cacheRateLimit'] as any, 'checkRateLimit').mockResolvedValue({ limited: false });
+
+      // The run was cancelled while the call was in flight: the call rejects
+      // because its signal aborted, which is what axios does.
+      const cancel = new AbortController();
+      const executeOpSpy = jest.spyOn(service as any, 'executeOperation').mockImplementation(async () => {
+        cancel.abort();
+        throw new Error('canceled');
+      });
+
+      const result = await service.executeTool('tool-1', {}, {
+        userId: 'user-1',
+        organizationId: 'org-1',
+        signal: cancel.signal,
+      });
+
+      expect(result.success).toBe(false);
+      expect(executeOpSpy).toHaveBeenCalledTimes(1);
+      expect(sleepUtil).not.toHaveBeenCalled();
+    });
   });
 
   describe('generateCacheKey', () => {

@@ -46,7 +46,10 @@ The message names the node id, so:
 
 | Node Type | Requirement |
 |-----------|-------------|
-| **Condition** | Exactly 2 outgoing edges, and their `sourceHandle` (or `label`) must be `true`/`false` or `yes`/`no` |
+| **LLM Call** | A `data.userPromptTemplate` (or `userPrompt`): the prompt it sends |
+| **Condition** | Exactly 2 outgoing edges, and their `sourceHandle` (or `label`) must be `true`/`false` or `yes`/`no`; and a `data.expression` to branch on |
+| **Transform** | A `data.expression` |
+| **Loop** | A `data.iterableExpression` |
 | **Merge** | At least 2 incoming edges |
 | **Parallel** | At least 2 outgoing edges |
 | **Tool Call** | `data.toolId` must be set |
@@ -54,10 +57,9 @@ The message names the node id, so:
 | **Verify** | A non-empty `checkers` array, each entry with a `providerId` or a `roleKey`; `policy`, if set, must be `all_pass`, `majority` or `any_fail_blocks` |
 
 Nothing else is checked. In particular, a save succeeds when an LLM Call node
-has no provider, an Output node has no mapping, a Transform node has no
-expression, a Loop node has no iterable, a `toolId` names a tool that no longer
-exists, or a template expression points at a node id that is not in the graph.
-Those surface at run time instead, on the node that hit them.
+has no provider, an Output node has no mapping, a `toolId` names a tool that no
+longer exists, or a template expression points at a node id that is not in the
+graph. Those surface at run time instead, on the node that hit them.
 
 ## What a Refusal Looks Like
 

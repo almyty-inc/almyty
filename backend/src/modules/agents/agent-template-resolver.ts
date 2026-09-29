@@ -22,7 +22,7 @@ export interface ExecutionContext {
    * loop node asking for 100 iterations inside a run capped at 25 steps
    * would otherwise outlive the budget that governs everything else.
    */
-  runLimits?: { maxSteps?: number; maxToolCalls?: number };
+  runLimits?: { maxSteps?: number; maxToolCalls?: number; toolErrorRetries?: number };
   /**
    * The run's tool-call ledger, counted against `runLimits.maxToolCalls`.
    * A single mutable object shared by every node of the run (the executor

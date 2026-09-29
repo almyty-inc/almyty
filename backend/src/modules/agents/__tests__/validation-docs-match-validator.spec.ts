@@ -32,7 +32,7 @@ const edge = (source: string, target: string, sourceHandle?: string) =>
   ({ id: `${source}-${target}-${sourceHandle ?? ''}`, source, target, sourceHandle }) as any;
 
 const straightLine = () => ({
-  nodes: [node('input_1', 'input'), node('llm_1', 'llm_call'), node('output_1', 'output')],
+  nodes: [node('input_1', 'input'), node('llm_1', 'llm_call', { userPromptTemplate: '{{input.message}}' }), node('output_1', 'output')],
   edges: [edge('input_1', 'llm_1'), edge('llm_1', 'output_1')],
 });
 
@@ -114,7 +114,7 @@ describe('what the validator does not check', () => {
 
   it('still requires an Output reachable from the Input', () => {
     const pipeline = {
-      nodes: [node('input_1', 'input'), node('llm_1', 'llm_call'), node('output_1', 'output')],
+      nodes: [node('input_1', 'input'), node('llm_1', 'llm_call', { userPromptTemplate: '{{input.message}}' }), node('output_1', 'output')],
       edges: [edge('input_1', 'llm_1')],
     };
 
@@ -126,14 +126,25 @@ describe('what the validator does not check', () => {
     );
   });
 
-  it('accepts a Transform node with no expression and a Loop node with no iterable', () => {
-    const pipeline = straightLine();
-    pipeline.nodes.push(node('transform_1', 'transform'), node('loop_1', 'loop'));
-    pipeline.edges.push(edge('llm_1', 'transform_1'), edge('transform_1', 'loop_1'));
+  it('refuses a Transform node with no expression and a Loop node with no iterable, and the page says so', () => {
+    const withTransform = straightLine();
+    withTransform.nodes.push(node('transform_1', 'transform'));
+    withTransform.edges.push(edge('llm_1', 'transform_1'));
+    expect(() => validator.validatePipeline(withTransform as any)).toThrow(
+      "Transform node 'transform_1' must have an 'expression' in config",
+    );
 
-    // Both throw at run time, on the node, with nothing said at save time.
-    expect(() => validator.validatePipeline(pipeline as any)).not.toThrow();
-    expect(FLAT).toContain('a Transform node has no expression, a Loop node has no iterable');
+    const withLoop = straightLine();
+    withLoop.nodes.push(node('loop_1', 'loop'));
+    withLoop.edges.push(edge('llm_1', 'loop_1'));
+    expect(() => validator.validatePipeline(withLoop as any)).toThrow(
+      "Loop node 'loop_1' must have an 'iterableExpression' in config",
+    );
+
+    // Both used to save and then fail on their first run.
+    expect(FLAT).not.toContain('a Transform node has no expression, a Loop node has no iterable');
+    expect(FLAT).toContain('| **Transform** | A `data.expression` |');
+    expect(FLAT).toContain('| **Loop** | A `data.iterableExpression` |');
   });
 });
 
