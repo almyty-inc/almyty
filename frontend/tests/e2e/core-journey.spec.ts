@@ -7,8 +7,8 @@ import { startFakeUpstreams, type FakeUpstreams, FINAL_ANSWER, FORECAST, MODEL_I
 /**
  * The core journey, through the UI, the way a new user takes it: sign up,
  * connect a model, import an API, share its tools over MCP/UTCP/Skills,
- * build an autonomous agent on that model and tool and run it, put it in
- * an app on the web and chat with it as a visitor, then look at
+ * build an autonomous agent on that model and tool and run it, add a web
+ * chat channel to it and chat with it as a visitor, then look at
  * Connections. Unit suites cannot see the seams between these (a client
  * calling a route the server shadows, a proxy rule missing, a response
  * shape the page does not wait for); this walks across all of them.
@@ -106,12 +106,13 @@ function watch(page: Page, who: string, trouble: Trouble) {
   })
 }
 
-test('core journey: sign up, model, API, shared tools, agent, app, connections', async ({ browser, page, request }) => {
+test('core journey: sign up, model, API, shared tools, agent, channel, connections', async ({ browser, page, request }) => {
   test.setTimeout(120_000)
   const fake: FakeUpstreams = await startFakeUpstreams()
   const trouble: Trouble = { consoleErrors: [], failedRequests: [] }
   watch(page, 'user', trouble)
   const user = AuthHelper.generateTestUser('journey')
+  let agentPath = ''
 
   try {
     await test.step('register, verify, sign in', async () => {
@@ -225,20 +226,16 @@ test('core journey: sign up, model, API, shared tools, agent, app, connections',
       await page.getByPlaceholder('Type a message to test this agent...').fill('What is the weather in Lisbon?')
       await page.getByRole('button', { name: 'Run test' }).click()
       await expect(page.getByRole('status').filter({ hasText: FINAL_ANSWER })).toContainText(FORECAST, { timeout: 30_000 })
+      agentPath = `/agents/${agentId}`
     })
 
-    await test.step('Apps: an app on the web, published, answering a visitor', async () => {
-      await page.goto('/apps/new')
-      await page.getByRole('combobox', { name: 'Agent' }).click()
-      await page.getByRole('option', { name: /Forecaster/ }).click()
-      // Web addresses are one namespace across organizations: a fresh one per run.
-      const appName = `Forecast desk ${Date.now().toString(36)}`
-      await page.getByRole('textbox', { name: 'Name' }).fill(appName)
-      await page.getByRole('button', { name: 'Create app' }).click()
-      await expect(page.getByRole('heading', { name: appName, level: 1 })).toBeVisible()
-      await page.getByRole('link', { name: 'Add a place' }).first().click()
-      await page.getByRole('button', { name: /^Web app/ }).click()
-      await expect(page.getByRole('heading', { name: 'Web app', level: 1 })).toBeVisible()
+    await test.step('Channels: a web chat on the agent, published, answering a visitor', async () => {
+      await page.goto(`${agentPath}?tab=channels`)
+      await expect(page.getByRole('heading', { name: 'Channels', level: 2 })).toBeVisible()
+      await page.getByRole('link', { name: 'Add channel' }).first().click()
+      await expect(page.getByRole('heading', { name: 'Add channel', level: 1 })).toBeVisible()
+      await page.getByRole('button', { name: /^Web chat/ }).click()
+      await expect(page.getByRole('heading', { name: 'Web chat', level: 1 })).toBeVisible()
       await page.getByRole('button', { name: 'Publish', exact: true }).click()
       await expect(page.getByRole('heading', { name: 'Live', level: 2 })).toBeVisible()
       const link = await page.getByRole('link', { name: 'Open it' }).getAttribute('href')
