@@ -155,10 +155,6 @@ export const TARGET_PLATFORMS: Partial<Record<DistributionTarget, string[]>> = {
   [DistributionTarget.DESKTOP]: ['linux-x64', 'windows-x64', 'macos-arm64', 'macos-x64'],
 };
 
-export function isBuildable(target: DistributionTarget | string): boolean {
-  return Array.isArray(TARGET_PLATFORMS[target as DistributionTarget]);
-}
-
 export function platformsFor(target: DistributionTarget | string): BuildPlatform[] {
   return (TARGET_PLATFORMS[target as DistributionTarget] ?? []).map((id) => BUILD_PLATFORMS[id]);
 }
@@ -278,16 +274,4 @@ export function artifactExtension(
   // Terminal apps and standalone binaries are one executable file.
   // Unix has no extension for that; Windows needs .exe to run it.
   return isWindows ? 'exe' : null;
-}
-
-/** Filename for an artifact, given the app's name. */
-export function artifactFilename(
-  slug: string,
-  target: DistributionTarget | string,
-  platformId: string,
-  macPackaging: MacPackaging = 'zip',
-): string {
-  const extension = artifactExtension(target, platformId, macPackaging);
-  const base = `${slug}-${platformId}`;
-  return extension ? `${base}.${extension}` : base;
 }
