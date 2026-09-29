@@ -410,6 +410,131 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+  # ─── End to end: the core journey on a real stack ────────────
+  # frontend/tests/e2e/core-journey.spec.ts walks sign-up, Models, APIs,
+  # shared tools over MCP/UTCP/Skills, an autonomous agent, a published
+  # web app answering a visitor, and Connections, through the UI, against
+  # the backend and the vite dev server. The seams it covers (a route the
+  # server shadows, a proxy rule missing, a response the page does not
+  # wait for) are the ones unit suites cannot see. Everything outside is
+  # one local fake started by the spec: no internet, no real keys.
+  e2e-journey:
+    name: E2E core journey (Playwright)
+    needs: changes
+    if: ${{ needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: almyty_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      E2E_BASE_URL: http://localhost:3002
+      E2E_API_URL: http://localhost:4000
+      E2E_PSQL: psql postgresql://postgres:postgres@127.0.0.1:5432/almyty_e2e
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node 26
+        uses: actions/setup-node@v6
+        with:
+          node-version: '26'
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          (cd backend && npm ci --ignore-scripts)
+          (cd frontend && npm ci --ignore-scripts)
+
+      - name: Build the API
+        working-directory: backend
+        run: npm run build:ee
+
+      # Migrations run on boot. LLM_ALLOW_PRIVATE_URLS lets the connected
+      # model be the spec's fake on localhost.
+      - name: Start the API
+        working-directory: backend
+        env:
+          PORT: '4000'
+          NODE_ENV: development
+          DATABASE_HOST: 127.0.0.1
+          DATABASE_PORT: '5432'
+          DATABASE_USERNAME: postgres
+          DATABASE_PASSWORD: postgres
+          DATABASE_NAME: almyty_e2e
+          DB_SSL: 'false'
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: '6379'
+          JWT_SECRET: e2e-jwt-secret-0123456789abcdef0123456789
+          JWT_REFRESH_SECRET: e2e-refresh-secret-0123456789abcdef
+          ENCRYPTION_KEY: e2e-encryption-key-32-bytes-minimum!!
+          FRONTEND_URL: http://localhost:3002
+          CORS_ORIGIN: http://localhost:3002
+          BASE_URL: http://localhost:4000
+          API_BASE_URL: http://localhost:4000
+          LLM_ALLOW_PRIVATE_URLS: 'true'
+          MODEL_PRICE_FEED_DISABLED: 'true'
+        run: |
+          nohup node dist-ee/src/main > "$RUNNER_TEMP/api.log" 2>&1 &
+          for _ in $(seq 1 90); do
+            curl -sf http://localhost:4000/health > /dev/null && exit 0
+            sleep 2
+          done
+          tail -n 100 "$RUNNER_TEMP/api.log"
+          exit 1
+
+      - name: Start the web app
+        working-directory: frontend
+        env:
+          PORT: '3002'
+          ALMYTY_API_TARGET: http://localhost:4000
+        run: |
+          nohup npm run dev > "$RUNNER_TEMP/web.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -sf http://localhost:3002/ > /dev/null && exit 0
+            sleep 2
+          done
+          tail -n 50 "$RUNNER_TEMP/web.log"
+          exit 1
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the journey
+        working-directory: frontend
+        run: npm run test:e2e:journey
+
+      - name: API log on failure
+        if: failure()
+        run: tail -n 200 "$RUNNER_TEMP/api.log" | grep -v 'query:' || true
+
   # ─── Dependency vulnerability scan (npm audit) ───────────────
   # Fails the PR if npm audit finds a high- or critical-severity
   # advisory in backend/ or frontend/ dependencies. `--audit-level=high`
