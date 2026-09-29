@@ -239,11 +239,19 @@ export class AuthController {
     };
   }
 
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Logout and clear auth cookie' })
+  @ApiOperation({ summary: 'Logout: end the session and clear the auth cookie' })
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
-  async logout(@Res({ passthrough: true }) res: Response) {
+  async logout(@Req() req: ExpressRequest, @Res({ passthrough: true }) res: Response) {
+    // End the server-side session first, so the token stops working
+    // everywhere, not just in this browser. The cookie is the web client's
+    // token; a programmatic client sends the same token as a bearer.
+    const bearer = req.headers.authorization?.startsWith('Bearer ')
+      ? req.headers.authorization.slice('Bearer '.length)
+      : undefined;
+    await this.authService.logout(req.cookies?.access_token ?? bearer);
     res.clearCookie('access_token', { path: '/' });
 
     return {

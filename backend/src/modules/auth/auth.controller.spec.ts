@@ -25,6 +25,7 @@ describe('AuthController', () => {
       // undone on every single sign-in.
       completeLogin: jest.fn(),
       refreshToken: jest.fn(),
+      logout: jest.fn(),
       createApiKey: jest.fn(),
       getUserApiKeys: jest.fn(),
       revokeApiKey: jest.fn(),
@@ -267,15 +268,21 @@ describe('AuthController', () => {
   });
 
   describe('logout', () => {
-    it('should clear access_token cookie and return success', async () => {
-      const result = await controller.logout(mockResponse);
+    it('ends the session the cookie belongs to, clears the cookie and returns success', async () => {
+      const result = await controller.logout({ cookies: { access_token: 'tok' }, headers: {} } as any, mockResponse);
 
       expect(result).toEqual({
         success: true,
         data: null,
         message: 'Logged out successfully',
       });
+      expect(authService.logout).toHaveBeenCalledWith('tok');
       expect(mockResponse.clearCookie).toHaveBeenCalledWith('access_token', { path: '/' });
+    });
+
+    it('ends the session of a bearer token when there is no cookie', async () => {
+      await controller.logout({ cookies: {}, headers: { authorization: 'Bearer abc' } } as any, mockResponse);
+      expect(authService.logout).toHaveBeenCalledWith('abc');
     });
   });
 

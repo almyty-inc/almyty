@@ -54,6 +54,7 @@ async function harness() {
     { log: jest.fn(async () => undefined) } as any,
     mail,
     {} as any,
+    { start: jest.fn(async (userId: string) => ({ id: 'sess-' + userId, refreshJti: 'j', ssoOrganizationId: null })) } as any,
   );
   const usersService = new UsersService(users as any, fakeRepository() as any, fakeRepository() as any);
   const controller = new UsersController(usersService, auth);

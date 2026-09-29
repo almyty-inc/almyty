@@ -12,7 +12,10 @@ import {
   hasEffectiveMembership,
   membershipOrgId,
 } from '../../../common/authorization/membership';
-import { DEV_ONLY_JWT_SECRET } from '../dev-jwt-secret';
+import { jwtSecretOrDevFallback } from '../dev-jwt-secret';
+import { AuthSession } from '../../../entities/auth-session.entity';
+import { isSessionLive } from '../auth-session.service';
+import { ACCESS_TOKEN_AUDIENCE, JWT_ALGORITHM, JWT_ISSUER, isAccessTokenPayload } from '../token-kinds';
 
 /**
  * Extract JWT from httpOnly cookie first, then fall back to Authorization header.
@@ -35,26 +38,33 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private configService: ConfigService,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(AuthSession)
+    private sessionRepository: Repository<AuthSession>,
   ) {
     super({
       jwtFromRequest: extractJwtFromCookieOrHeader,
       ignoreExpiration: false,
-      secretOrKey:
-        configService.get<string>('JWT_SECRET') ||
-        DEV_ONLY_JWT_SECRET,
+      secretOrKey: jwtSecretOrDevFallback(configService.get<string>('JWT_SECRET'), 'JwtStrategy'),
+      // HS256 only, the one algorithm tokens are signed with.
+      algorithms: [JWT_ALGORITHM],
       // Enforce the iss + aud claims set by JwtModule.signOptions
       // (see auth.module.ts). passport-jwt configures these as
       // strings, not verifyOptions — if they're missing or wrong,
       // verification fails with "jwt issuer invalid" / "jwt
-      // audience invalid" and the request is 401'd. Prevents
-      // cross-service token replay if JWT_SECRET is ever shared.
-      issuer: 'almyty',
-      audience: 'almyty-api',
+      // audience invalid" and the request is 401'd. The audience is
+      // also what keeps refresh and email-verification tokens, signed
+      // with the same secret, from verifying here (see token-kinds.ts).
+      issuer: JWT_ISSUER,
+      audience: ACCESS_TOKEN_AUDIENCE,
       passReqToCallback: true,
     });
   }
 
   async validate(req: Request, payload: JwtPayload): Promise<User> {
+    if (!isAccessTokenPayload(payload)) {
+      throw new UnauthorizedException('Not an access token');
+    }
+
     // Only load organizationMemberships, skip apiKeys for performance
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
@@ -73,6 +83,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // until the user's first bump.
     if (((payload as any).tv ?? 0) !== (user.tokenVersion ?? 0)) {
       throw new UnauthorizedException('Token has been revoked');
+    }
+
+    // The session the token belongs to must still be live: logout and a
+    // replayed refresh token revoke it (see AuthSession). Every token
+    // AuthService signs names one; a token without `sid` could only have
+    // been signed outside it (spec fixtures), and is held to `tv` alone.
+    if (payload.sid !== undefined) {
+      if (!(await isSessionLive(this.sessionRepository, payload.sid, user.id))) {
+        throw new UnauthorizedException('Session has ended');
+      }
+      (user as any).sessionId = payload.sid;
     }
 
     // An SSO session reaches the organization whose IdP asserted it and

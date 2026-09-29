@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
 import { User } from '../../../entities/user.entity';
+import { AuthSession } from '../../../entities/auth-session.entity';
 import { OrganizationRole } from '../../../entities/user-organization.entity';
 import { AuthController } from '../auth.controller';
 import { AuthService } from '../auth.service';
@@ -109,6 +110,7 @@ describe('the profile org list is exactly what JwtStrategy accepts', () => {
           provide: getRepositoryToken(User),
           useValue: { findOne: jest.fn().mockResolvedValue(user) },
         },
+        { provide: getRepositoryToken(AuthSession), useValue: { count: jest.fn().mockResolvedValue(1) } },
       ],
     })
       .overrideGuard(LocalAuthGuard)

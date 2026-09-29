@@ -22,11 +22,14 @@ import { UserOrganization } from '../../entities/user-organization.entity';
 import { ReferralsModule } from '../referrals/referrals.module';
 import { BullModule } from '@nestjs/bull';
 import { LIFECYCLE_EMAIL_QUEUE } from '../lifecycle/lifecycle-email.processor';
-import { DEV_ONLY_JWT_SECRET } from './dev-jwt-secret';
+import { jwtSecretOrDevFallback } from './dev-jwt-secret';
+import { AuthSession } from '../../entities/auth-session.entity';
+import { AuthSessionService } from './auth-session.service';
+import { JWT_ALGORITHM } from './token-kinds';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, ApiKey, Organization, UserOrganization]),
+    TypeOrmModule.forFeature([User, ApiKey, Organization, UserOrganization, AuthSession]),
     // Lifecycle activation-email queue so AuthService can enqueue a
     // welcome job on email verification (@InjectQueue).
     BullModule.registerQueue({ name: LIFECYCLE_EMAIL_QUEUE }),
@@ -42,15 +45,10 @@ import { DEV_ONLY_JWT_SECRET } from './dev-jwt-secret';
         // diagnose. Worse, if any path somehow treated undefined as "no
         // signing" it would be a catastrophic auth bypass. Fail early,
         // fail loud.
-        if (!secret) {
-          if (process.env.NODE_ENV === 'production') {
-            throw new Error(
-              'JWT_SECRET environment variable is required in production. ' +
-                'Refusing to start with an undefined signing key.',
-            );
-          }
-          // Dev/test: warn and use a fixed placeholder so the server
-          // can still boot for local development.
+        // Production refuses to start without a secret of its own (see
+        // jwtSecretOrDevFallback); dev and test warn and use the fixed
+        // placeholder so the server can still boot locally.
+        if (!secret && process.env.NODE_ENV !== 'production') {
           // eslint-disable-next-line no-console
           console.warn(
             '[SECURITY WARNING] JWT_SECRET not set. Using dev fallback. Set JWT_SECRET in production!',
@@ -66,8 +64,9 @@ import { DEV_ONLY_JWT_SECRET } from './dev-jwt-secret';
         // type declaration.
         const expiresIn = configService.get<string>('JWT_EXPIRES_IN', '24h') as any;
         return {
-          secret: secret || DEV_ONLY_JWT_SECRET,
+          secret: jwtSecretOrDevFallback(secret, 'AuthModule'),
           signOptions: {
+            algorithm: JWT_ALGORITHM,
             expiresIn,
             // issuer + audience bind every signed token to THIS
             // service. If an attacker ever gets hold of a JWT_SECRET
@@ -92,6 +91,7 @@ import { DEV_ONLY_JWT_SECRET } from './dev-jwt-secret';
             issuer: 'almyty',
             audience: 'almyty-api',
             ignoreExpiration: false,
+            algorithms: [JWT_ALGORITHM],
           },
         };
       },
@@ -99,6 +99,7 @@ import { DEV_ONLY_JWT_SECRET } from './dev-jwt-secret';
   ],
   providers: [
     AuthService,
+    AuthSessionService,
     CaptchaService,
     JwtStrategy,
     LocalStrategy,
@@ -109,6 +110,6 @@ import { DEV_ONLY_JWT_SECRET } from './dev-jwt-secret';
     RolesGuard,
   ],
   controllers: [AuthController],
-  exports: [AuthService, JwtAuthGuard, ApiKeyAuthGuard, RolesGuard],
+  exports: [AuthService, AuthSessionService, JwtAuthGuard, ApiKeyAuthGuard, RolesGuard],
 })
 export class AuthModule {}
