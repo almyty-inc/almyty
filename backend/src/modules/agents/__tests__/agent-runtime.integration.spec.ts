@@ -384,6 +384,22 @@ describe('AgentRuntimeService (integration)', () => {
 
       expect(run.parentRunId).toBe('parent-run-99');
     });
+
+    it('stamps a run from an app place with its app, and files the new conversation under the gateway', async () => {
+      // What the app spend cap sums (run.appId), and what per-app retention
+      // and widget erasure find a conversation by (conversation.gatewayId).
+      const run = await service.startRun('agent-1', 'org-1', 'user-1', 'hi', { appId: 'app-1', gatewayId: 'gw-1' });
+
+      expect(run.appId).toBe('app-1');
+      const saved = mockConversationRepo.save.mock.calls[0][0];
+      expect(saved.gatewayId).toBe('gw-1');
+    });
+
+    it('leaves a run no app place started unstamped', async () => {
+      const run = await service.startRun('agent-1', 'org-1', 'user-1', 'hi');
+      expect(run.appId).toBeNull();
+      expect(mockConversationRepo.save.mock.calls[0][0].gatewayId).toBeUndefined();
+    });
   });
 
   describe('processStep', () => {

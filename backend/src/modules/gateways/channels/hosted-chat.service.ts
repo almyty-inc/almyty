@@ -395,12 +395,12 @@ export class HostedChatService {
     });
 
     for (const m of rows) {
-      if (!this.isPublicTurn(m)) continue;
+      if (!HostedChatService.isPublicTurn(m)) continue;
       const bucket = grouped.get(m.conversationId);
       if (bucket) {
-        if (bucket.length < MESSAGE_PAGE_LIMIT) bucket.push(this.toTranscript(m));
+        if (bucket.length < MESSAGE_PAGE_LIMIT) bucket.push(HostedChatService.toTranscript(m));
       } else {
-        grouped.set(m.conversationId, [this.toTranscript(m)]);
+        grouped.set(m.conversationId, [HostedChatService.toTranscript(m)]);
       }
     }
     return grouped;
@@ -412,7 +412,7 @@ export class HostedChatService {
    * agent narrating its working (what it is about to look up, what the
    * last tool said), saved alongside the call, not an answer.
    */
-  private isPublicTurn(m: Message): boolean {
+  static isPublicTurn(m: Message): boolean {
     return (
       (m.role === MessageRole.USER || m.role === MessageRole.ASSISTANT) &&
       m.type !== MessageType.TOOL_CALL &&
@@ -422,7 +422,7 @@ export class HostedChatService {
   }
 
   /** The shape a transcript turn is exposed as. */
-  private toTranscript(m: Message): { id: string; role: string; content: string; createdAt: Date } {
+  static toTranscript(m: Message): { id: string; role: string; content: string; createdAt: Date } {
     return {
       id: m.id,
       role: m.role,
@@ -500,7 +500,7 @@ export class HostedChatService {
       take: MESSAGE_PAGE_LIMIT,
     });
 
-    return messages.filter((m) => this.isPublicTurn(m)).map((m) => this.toTranscript(m));
+    return messages.filter((m) => HostedChatService.isPublicTurn(m)).map((m) => HostedChatService.toTranscript(m));
   }
 
   /**

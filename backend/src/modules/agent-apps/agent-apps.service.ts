@@ -58,6 +58,7 @@ import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { channelConnectorKey } from '../gateways/channels/channel-credential.service';
 import { channelSecretKeysIn } from '../gateways/channels/channel-config.helper';
 import { distributionManagedBy, splitDistributionSecrets } from './distribution-secrets';
+import { AppPlacePolicyService, type AppSpendStatus } from '../gateways/app-place-policy.service';
 import { CreateAppDto, newAppFields } from './new-app';
 
 export type { CreateAppDto } from './new-app';
@@ -70,6 +71,38 @@ export type UpdateAppDto = Partial<CreateAppDto> & { isActive?: boolean };
  * all of them in heap at once.
  */
 export const MAX_APPS_PER_PAGE = 200;
+
+/** The limit fields an app stores; anything else sent in `limits` is dropped. */
+const LIMIT_FIELDS = [
+  'costCapCents',
+  'perUserRateLimit',
+  'perIpRateLimit',
+  'dailySpendCapCents',
+  'monthlySpendCapCents',
+] as const;
+
+/**
+ * The limits as stored: known fields only, each a whole number of zero or
+ * more, or null. A field left out stays out, which for the spend caps
+ * means "the default" (appSpendCapsFrom); null means "none".
+ */
+export function normalizeLimits(limits: Record<string, any> | null | undefined): AgentApp['limits'] {
+  if (limits == null) return null;
+  const out: Record<string, number | null> = {};
+  for (const field of LIMIT_FIELDS) {
+    if (!(field in limits)) continue;
+    const value = limits[field];
+    if (value === null) {
+      out[field] = null;
+      continue;
+    }
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+      throw new BadRequestException('Limits must be whole numbers of zero or more, or empty.');
+    }
+    out[field] = Math.floor(value);
+  }
+  return out as AgentApp['limits'];
+}
 
 /**
  * The factory floor: creating, configuring and shipping agent products.
@@ -100,6 +133,9 @@ export class AgentAppsService {
     // Nest must inject it; typed optional only for positional unit specs,
     // and without it a secret is refused rather than written to the row.
     private readonly credentialRefs?: CredentialRefResolver,
+    // The spend caps and what the app has spent against them. Not
+    // @Optional(): Nest must inject it; typed optional for positional specs.
+    private readonly places?: AppPlacePolicyService,
   ) {}
 
   async list(organizationId: string): Promise<Array<AgentApp & { health: AppHealth }>> {
@@ -362,7 +398,7 @@ export class AgentAppsService {
     if (dto.branding !== undefined) app.branding = dto.branding;
     if (dto.authMode !== undefined) app.authMode = dto.authMode;
     if (dto.capabilities !== undefined) app.capabilities = dto.capabilities;
-    if (dto.limits !== undefined) app.limits = dto.limits;
+    if (dto.limits !== undefined) app.limits = normalizeLimits(dto.limits);
     if (dto.privacy !== undefined) app.privacy = dto.privacy;
 
     if (dto.isActive !== undefined) app.isActive = dto.isActive;
@@ -373,6 +409,17 @@ export class AgentAppsService {
   async remove(organizationId: string, slug: string): Promise<void> {
     const app = await this.findOne(organizationId, slug);
     await this.appRepository.remove(app);
+  }
+
+  /**
+   * What the app has spent today and this month against its spend caps,
+   * and whether it is refusing visitors because of them. The app page
+   * shows this so the owner sees the cap before a visitor reports it.
+   */
+  async spend(organizationId: string, slug: string): Promise<AppSpendStatus> {
+    const app = await this.findOne(organizationId, slug);
+    if (!this.places) throw new BadRequestException('Spend tracking is not available.');
+    return this.places.spendStatus(app);
   }
 
   /**

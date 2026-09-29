@@ -387,7 +387,7 @@ describe('RetentionSweepService', () => {
 
       const out = await withApps.sweepApps('org-1', 30);
 
-      expect(out).toEqual({ conversations: 2, messages: 8, runs: 3 });
+      expect(out).toEqual({ conversations: 2, messages: 8, runs: 3, channelEvents: 0 });
       const where = conversationRepo.find.mock.calls[0][0].where;
       expect(where.organizationId).toBe('org-1');
       expect(where.gatewayId).toEqual(In(['gw-1']));
@@ -430,12 +430,33 @@ describe('RetentionSweepService', () => {
 
       const out = await withApps.sweepApps('org-1', 30);
 
-      expect(out).toEqual({ conversations: 0, messages: 0, runs: 0 });
+      expect(out).toEqual({ conversations: 0, messages: 0, runs: 0, channelEvents: 0 });
       expect(conversationRepo.find).not.toHaveBeenCalled();
     });
 
     it('is a no-op on the service built without the app repositories', async () => {
-      await expect(service.sweepApps('org-1', 30)).resolves.toEqual({ conversations: 0, messages: 0, runs: 0 });
+      await expect(service.sweepApps('org-1', 30)).resolves.toEqual({ conversations: 0, messages: 0, runs: 0, channelEvents: 0 });
+    });
+
+    it('sweeps the stored widget replies and channel deliveries of the app places at the same cutoff', async () => {
+      const eventRepo = mockRepo();
+      eventRepo.delete.mockResolvedValue({ affected: 4 });
+      const withEvents = new RetentionSweepService(
+        policyRepo, runRepo, conversationRepo, messageRepo, requestLogRepo, usageMetricRepo, auditLogRepo,
+        toolExecutionRepo, notificationRepo, auditLogService, undefined, appRepo, distributionRepo, eventRepo as any,
+      );
+      appRepo.find.mockResolvedValue([{ id: 'app-1', privacy: { retentionDays: 7 } }]);
+      distributionRepo.find.mockResolvedValue([{ gatewayId: 'gw-widget' }]);
+      conversationRepo.find.mockResolvedValueOnce([]);
+
+      const out = await withEvents.sweepApps('org-1', null);
+
+      expect(out.channelEvents).toBe(4);
+      const where = eventRepo.delete.mock.calls[0][0];
+      expect(where.organizationId).toBe('org-1');
+      expect(where.gatewayId).toEqual(In(['gw-widget']));
+      const sevenDays = Date.now() - 7 * 24 * 3600 * 1000;
+      expect(Math.abs(where.createdAt.value.getTime() - sevenDays)).toBeLessThan(5000);
     });
   });
 

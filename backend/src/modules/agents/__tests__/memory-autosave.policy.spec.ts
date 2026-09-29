@@ -1,4 +1,4 @@
-import { shouldAutoSaveMemory } from '../memory-autosave.policy';
+import { runMayWriteSharedMemory, shouldAutoSaveMemory } from '../memory-autosave.policy';
 
 describe('shouldAutoSaveMemory', () => {
   it('is off unless the agent opted in', () => {
@@ -21,5 +21,19 @@ describe('shouldAutoSaveMemory', () => {
     expect(shouldAutoSaveMemory(agent, { endUserId: 'eu-1', metadata: { visitorMemory: true } } as any)).toBe(true);
     expect(shouldAutoSaveMemory(agent, { endUserId: 'eu-1', metadata: { visitorMemory: false } } as any)).toBe(false);
     expect(shouldAutoSaveMemory(agent, { endUserId: 'eu-1', metadata: {} } as any)).toBe(false);
+  });
+});
+
+describe('runMayWriteSharedMemory on an app place with no end-user row', () => {
+  it('keeps a widget, channel or A2A visitor out of shared memory unless the app opted them in', () => {
+    // These runs have no endUserId; before the appVisitor mark they read as
+    // an operator's own run and wrote shared memory regardless of the app.
+    expect(runMayWriteSharedMemory({ endUserId: null, metadata: { appVisitor: true, visitorMemory: false } } as any)).toBe(false);
+    expect(runMayWriteSharedMemory({ endUserId: null, metadata: { appVisitor: true } } as any)).toBe(false);
+    expect(runMayWriteSharedMemory({ endUserId: null, metadata: { appVisitor: true, visitorMemory: true } } as any)).toBe(true);
+  });
+
+  it('still lets an operator run write it', () => {
+    expect(runMayWriteSharedMemory({ endUserId: null, metadata: { channelUserId: 'U1' } } as any)).toBe(true);
   });
 });
