@@ -14,6 +14,7 @@ import { renderWithProviders } from '@/test/setup'
 import { ModelPicker, keyRejected, type ModelSelection } from '../model-picker'
 import { llmProvidersApi } from '@/lib/api'
 import { modelsApi } from '@/lib/models-api'
+import { SEARCH_CASES, SEARCH_CATALOG, SEARCH_PROVIDER_ANTHROPIC, SEARCH_PROVIDER_OPENAI } from '@/lib/__tests__/model-search.cases'
 
 vi.mock('@/lib/api', () => ({
   llmProvidersApi: { getAll: vi.fn() },
@@ -258,6 +259,53 @@ describe('ModelPicker', () => {
     vi.mocked(modelsApi.list).mockReturnValue(new Promise(() => {}))
     renderPicker({})
     expect(await screen.findByTestId('t-model-loading')).toHaveTextContent('Loading models')
+  })
+})
+
+describe('ModelPicker search relevance', () => {
+  const PROVIDERS = [
+    { id: 'prov-openai', ...SEARCH_PROVIDER_OPENAI, status: 'active' },
+    { id: 'prov-anthropic', ...SEARCH_PROVIDER_ANTHROPIC, status: 'active' },
+  ]
+  const providerId = (name?: string | null) => PROVIDERS.find((p) => p.name === name)!.id
+  const SEARCH_CARDS = SEARCH_CATALOG.map((m) => card(providerId(m.providerName), m.id, m.name ? { name: m.name } : {}))
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(llmProvidersApi.getAll).mockResolvedValue(PROVIDERS as any)
+    vi.mocked(modelsApi.list).mockResolvedValue(SEARCH_CARDS)
+  })
+
+  const listedIds = (list: HTMLElement) =>
+    within(list)
+      .queryAllByRole('option')
+      .map((o) => o.getAttribute('data-model'))
+      .filter((id): id is string => !!id)
+
+  it.each(SEARCH_CASES)('"$query" lists $expected ($why)', async ({ query, expected }) => {
+    renderPicker({})
+    const list = await open()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: query } })
+    // The picker sorts each provider's models by label before ranking, so compare the set here.
+    expect(listedIds(list).sort()).toEqual([...expected].sort())
+  })
+
+  it('lists only the gpt-4o models for "gpt-4o", exact id first, under a provider named after it', async () => {
+    renderPicker({})
+    const list = await open()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'gpt-4o' } })
+    expect(listedIds(list)).toEqual(['gpt-4o', 'gpt-4o-2024-08-06', 'gpt-4o-mini', 'chatgpt-4o-latest'])
+    expect(within(list).queryByRole('option', { name: /gpt-3\.5-turbo|dall-e-3/ })).not.toBeInTheDocument()
+  })
+
+  it('offers "Provider default" for a provider only when its name is what matched', async () => {
+    renderPicker({}, { modelOptional: true })
+    const list = await open()
+    const search = screen.getByRole('searchbox', { name: 'Search models' })
+    fireEvent.change(search, { target: { value: 'gpt-4o' } })
+    expect(within(list).queryByRole('option', { name: /Provider default/ })).not.toBeInTheDocument()
+    fireEvent.change(search, { target: { value: 'openai' } })
+    expect(within(list).getAllByRole('option', { name: /Provider default/ })).toHaveLength(1)
   })
 })
 
