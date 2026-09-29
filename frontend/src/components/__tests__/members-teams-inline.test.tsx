@@ -45,7 +45,8 @@ beforeEach(() => {
   vi.mocked(organizationsApi.getPendingInvites).mockResolvedValue([] as any)
 })
 
-async function openTeams(user: ReturnType<typeof userEvent.setup>) {
+/** Teams sit under members on the same page; wait for the team list. */
+async function openTeams() {
   render(<MembersAndTeamsTab organizationId="org1" />)
   await screen.findByText('Platform')
 }
@@ -72,7 +73,7 @@ describe('MembersAndTeamsTab inline forms', () => {
   it('adds a member to a team inline, on that team', async () => {
     vi.mocked(organizationsApi.addTeamMember).mockResolvedValue({} as any)
     const user = userEvent.setup()
-    await openTeams(user)
+    await openTeams()
 
     await user.click(screen.getByRole('button', { name: 'Add a member to Platform' }))
     const form = within(screen.getByRole('form', { name: 'Add member to Platform' }))
@@ -87,7 +88,7 @@ describe('MembersAndTeamsTab inline forms', () => {
   it('edits a team inline, seeded from the team', async () => {
     vi.mocked(organizationsApi.updateTeam).mockResolvedValue({} as any)
     const user = userEvent.setup()
-    await openTeams(user)
+    await openTeams()
 
     await user.click(screen.getByRole('button', { name: 'Edit team Platform' }))
     const form = within(screen.getByRole('form', { name: 'Edit team Platform' }))
@@ -102,7 +103,7 @@ describe('MembersAndTeamsTab inline forms', () => {
 
   it('cancelling an inline team form closes it without saving', async () => {
     const user = userEvent.setup()
-    await openTeams(user)
+    await openTeams()
     await user.click(screen.getByRole('button', { name: 'Edit team Platform' }))
     await user.click(within(screen.getByRole('form', { name: 'Edit team Platform' })).getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('form', { name: 'Edit team Platform' })).not.toBeInTheDocument()
