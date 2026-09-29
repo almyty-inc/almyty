@@ -36,7 +36,7 @@ describe('ConnectProviderPage', () => {
     await screen.findByTestId('provider-tile-openai')
     const missing = Object.values(LlmProviderType).filter((t) => !screen.queryByTestId(`provider-tile-${t}`))
     expect(missing).toEqual([])
-    expect(screen.getByTestId('provider-tile-custom')).toHaveTextContent('Your own server (OpenAI-compatible)')
+    expect(screen.getByTestId('provider-tile-custom')).toHaveTextContent(/Your own serverOpenAI-compatible$/)
   })
 
   it('searches the tiles', async () => {

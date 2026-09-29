@@ -5,7 +5,7 @@ import { ArrowLeft, CheckCircle2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/layout/page-header'
-import { PickedService, ServiceTileGrid, type ServiceTileGroup } from '@/components/connect/service-tiles'
+import { PickedService, ServiceTileGrid, splitTileName, type ServiceTileGroup } from '@/components/connect/service-tiles'
 import { ConnectProviderForm, type ConnectResult } from '@/components/llm-providers/connect-provider-form'
 import { PROVIDER_TILE_GROUPS, isProviderType, providerTileLabel } from '@/components/llm-providers/provider-catalog'
 import { providerLogos } from '@/components/llm-providers/provider-type-config'
@@ -54,7 +54,7 @@ export function ConnectProviderPage() {
       title: g.title,
       tiles: g.types
         .filter((t) => !q || providerTileLabel(t).toLowerCase().includes(q) || t.includes(q))
-        .map((t) => ({ key: t, label: providerTileLabel(t), icon: providerLogos[t] || '⚙️' })),
+        .map((t) => ({ key: t, ...splitTileName(providerTileLabel(t)), icon: providerLogos[t] || '⚙️' })),
     })).filter((g) => g.tiles.length > 0)
   }, [search])
 

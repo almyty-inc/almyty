@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bot, Code2, Globe, Loader2, MessageSquare, Monitor, Terminal } from 'lucide-react'
 
 import { FormPage } from '@/components/layout/form-page'
-import { ChoiceTile, ChoiceTiles } from '@/components/connect/service-tiles'
+import { ChoiceTile, ChoiceTiles, splitTileName } from '@/components/connect/service-tiles'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
 import {
@@ -68,6 +68,18 @@ export const DISTRIBUTION_GROUPS: Array<{
   },
 ]
 
+/** What a tile says in the picker, where a label has room for about fifteen characters. */
+const TILE_HINTS: Partial<Record<DistributionTarget, string>> = {
+  whatsapp: 'Via Twilio',
+  whatsapp_cloud: 'Via Meta',
+}
+
+export function placeTile(target: DistributionTarget): { label: string; hint?: string } {
+  // "WhatsApp (Meta)" -> "WhatsApp" over "Via Meta"; "Other agents (A2A)" -> over "A2A".
+  const { label, hint } = splitTileName(DISTRIBUTION_LABELS[target])
+  return { label, hint: TILE_HINTS[target] ?? hint ?? (isChannelTarget(target) ? undefined : DISTRIBUTION_BLURBS[target]) }
+}
+
 function iconFor(target: DistributionTarget) {
   const cls = 'h-4 w-4 text-primary'
   if (target === 'web') return <Globe className={cls} />
@@ -130,14 +142,15 @@ export function AddDistributionPicker({ app }: { app: AgentApp }) {
           <ChoiceTiles label={group.title}>
             {group.targets.map((target) => {
               const already = taken.has(target)
+              const tile = placeTile(target)
               return (
                 <ChoiceTile
                   key={target}
                   testId={`place-${target}`}
                   icon={pending === target ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : iconFor(target)}
-                  label={DISTRIBUTION_LABELS[target]}
+                  label={tile.label}
                   // A platform's name says what it is; the other places get one line.
-                  hint={already ? 'Already added' : isChannelTarget(target) ? undefined : DISTRIBUTION_BLURBS[target]}
+                  hint={already ? (tile.hint ? `${tile.hint}, added` : 'Already added') : tile.hint}
                   disabled={add.isPending}
                   onClick={() => {
                     if (already) {

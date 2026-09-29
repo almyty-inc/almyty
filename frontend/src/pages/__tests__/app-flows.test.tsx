@@ -264,7 +264,8 @@ describe('/apps/:slug/distributions/new', () => {
   it('opens a place the app already has instead of adding it again', async () => {
     renderAt('/apps/support/distributions/new')
     const existing = await screen.findByTestId('place-whatsapp_cloud')
-    expect(existing).toHaveTextContent('Already added')
+    expect(existing).toHaveTextContent('WhatsApp')
+    expect(existing).toHaveTextContent('Via Meta, added')
     fireEvent.click(existing)
     await waitFor(() => expect(where()).toBe('/apps/support/distributions/whatsapp_cloud'))
     expect(api.addDistribution).not.toHaveBeenCalled()
@@ -276,7 +277,7 @@ describe('/apps/:slug/distributions/new', () => {
     expect(within(web).getByTestId('place-web')).toHaveTextContent('Web app')
     expect(within(web).getByTestId('place-widget')).toHaveTextContent('On your website')
     const agents = screen.getByRole('region', { name: 'Other agents' })
-    expect(within(agents).getByTestId('place-a2a')).toHaveTextContent('Other agents (A2A)')
+    expect(within(agents).getByTestId('place-a2a')).toHaveTextContent(/^Other agentsA2A$/)
 
     fireEvent.click(screen.getByTestId('place-widget'))
     await waitFor(() => expect(api.addDistribution).toHaveBeenCalledWith('support', 'widget'))

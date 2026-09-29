@@ -26,6 +26,17 @@ export interface ServiceTileGroup {
   tiles: ServiceTile[]
 }
 
+/**
+ * A tile has room for about fifteen characters of label, so a name that
+ * carries a qualifier in parentheses ("WhatsApp (Meta)", "Your own server
+ * (OpenAI-compatible)") shows the name as the label and the qualifier as
+ * the line under it, instead of losing the qualifier to an ellipsis.
+ */
+export function splitTileName(name: string): { label: string; hint?: string } {
+  const m = /^(.+?)\s*\(([^()]+)\)$/.exec(name.trim())
+  return m ? { label: m[1], hint: m[2] } : { label: name }
+}
+
 /** The square a logo sits in, on tiles, cards and page headers. */
 export function ServiceIcon({ children, size = 'sm' }: { children: ReactNode; size?: 'sm' | 'md' | 'lg' }) {
   return (
