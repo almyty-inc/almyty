@@ -155,6 +155,7 @@
     "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-regexp": "^3.3.1",
     "jest": "^30.5.2",
     "oauth2-mock-server": "^7.2.1",
     "prettier": "^3.9.8",
