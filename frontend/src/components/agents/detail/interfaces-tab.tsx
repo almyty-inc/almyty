@@ -2,12 +2,12 @@
  * Interfaces tab for the agent detail page: where this agent is in
  * front of people, read-only.
  *
- * An app is the one place an agent is put on the web, in Slack or in
- * any other chat app, so this tab only says where that happened and
- * links there: "Used in: Acme support > Slack". Nothing is created or
- * edited here. Gateways that serve the agent without an app (A2A, an
- * OpenAI-compatible endpoint) are listed after it, linking to their own
- * pages.
+ * An app is the one place an agent is put on the web, on a website, in
+ * Slack or any other chat app, or in front of other agents over A2A, so
+ * this tab only says where that happened and links there: "Used in: Acme
+ * support > Slack". Nothing is created or edited here. Gateways that serve
+ * the agent without an app (ACP, an OpenAI-compatible endpoint) are listed
+ * after it, linking to their own pages.
  */
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'

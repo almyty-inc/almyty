@@ -43,6 +43,7 @@ import {
 import { BuildPanel } from './build-panel'
 import { SlackInstall } from './slack-install'
 import { WebAddress, WebPlaceSettings } from './web-place'
+import { A2aPlaceSettings, WidgetPlaceSettings } from './other-places'
 
 /** Stands in for "the product's default", because a Select cannot take ''. */
 const DEFAULT_AGENT = 'default'
@@ -54,12 +55,11 @@ const BUNDLE_ID_PATTERN = /^[a-z0-9]+(\.[a-z0-9-]+)+$/
 const NEEDS_BUNDLE_ID = ['desktop', 'binary']
 
 /**
- * The two refusals that belong to a place. Everything else the check
- * returns is about the app as a whole (no agents, no cost cap, an
- * entitlement), and is shown once, on the app's page, not repeated
- * inside every place.
+ * The refusals that belong to a place. Everything else the check returns
+ * is about the app as a whole (no agents, no cost cap, an entitlement),
+ * and is shown once, on the app's page, not repeated inside every place.
  */
-const DISTRIBUTION_REFUSALS = new Set(['MISSING_CREDENTIALS', 'BUNDLE_ID_INVALID'])
+const DISTRIBUTION_REFUSALS = new Set(['MISSING_CREDENTIALS', 'BUNDLE_ID_INVALID', 'WIDGET_HAS_NO_SIGN_IN'])
 
 const STATUS: Record<DistributionStatus, { label: string; variant: 'success' | 'secondary' | 'warning' | 'outline' | 'destructive' }> = {
   live: { label: 'Live', variant: 'success' },
@@ -103,6 +103,9 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
   const channel = isChannelTarget(target)
   const served = servesOverGateway(target)
   const web = target === 'web'
+  // Places we host whose settings save themselves (no Save button): the
+  // web app, the website widget and the A2A endpoint.
+  const hosted = web || target === 'widget' || target === 'a2a'
   const fields = channel ? CHANNEL_CREDENTIAL_FIELDS[target] ?? [] : []
 
   // What is stored, updated locally on a successful save so the form is
@@ -130,19 +133,21 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
   )
   const dirty =
     (packaged && bundleId !== storedBundleId) ||
-    (!web && agentId !== storedAgent) ||
+    (!hosted && agentId !== storedAgent) ||
     changedFields.length > 0
   const guard = useLeaveGuard(dirty)
 
   const appAgents = app.agentIds.map((id) => agents.find((a) => a.id === id) ?? { id, name: id })
   const choosesAgent = served && appAgents.length > 1
-  const hasForm = packaged || fields.length > 0 || (choosesAgent && !web)
+  const hasForm = packaged || fields.length > 0 || (choosesAgent && !hosted)
 
   const { data: check } = useQuery({
     queryKey: ['agent-app-distribution-check', app.slug, target],
     queryFn: () => agentAppsApi.checkDistribution(app.slug, target),
   })
   const appNotReady = (check?.refusals ?? []).some((r) => !DISTRIBUTION_REFUSALS.has(r.code))
+  // Reasons of this place's own that no field on the page shows.
+  const placeRefusals = (check?.refusals ?? []).filter((r) => r.code === 'WIDGET_HAS_NO_SIGN_IN')
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['agent-app-distribution-check', app.slug, target] })
@@ -241,7 +246,7 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
     setBundleError(undefined)
     const patch: Record<string, unknown> = {}
     if (packaged && trimmed !== storedBundleId) patch.bundleId = trimmed
-    if (!web && agentId !== storedAgent) patch.agentId = agentId
+    if (!hosted && agentId !== storedAgent) patch.agentId = agentId
     for (const f of changedFields) patch[f.key] = values[f.key].trim()
     if (Object.keys(patch).length === 0) return
     save.mutate(patch)
@@ -352,8 +357,9 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
         </div>
       }
     >
-      {/* The web app: publish, and the link is there. */}
-      {web && (
+      {/* A place we host: publish, and the link, the snippet or the
+          address is there. */}
+      {hosted && (
         <FormSection
           title={live ? 'Live' : 'Publish'}
           description={
@@ -362,7 +368,13 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
               : undefined
           }
         >
-          <WebAddress app={app} live={live} />
+          {web && <WebAddress app={app} live={live} />}
+          {placeRefusals.map((r) => (
+            <p key={r.code} className="flex gap-2 text-sm text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{r.message}</span>
+            </p>
+          ))}
           {notReady}
           {publishButton}
         </FormSection>
@@ -435,8 +447,8 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
               onValueChange={(value) => {
                 const next = value === DEFAULT_AGENT ? '' : value
                 setAgentId(next)
-                // No Save on the web page: the choice applies when picked.
-                if (web && next !== storedAgent) save.mutate({ agentId: next })
+                // No Save on a hosted place's page: the choice applies when picked.
+                if (hosted && next !== storedAgent) save.mutate({ agentId: next })
               }}
             >
               <SelectTrigger id="dist-agent">
@@ -456,10 +468,12 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
       )}
 
       {web && <WebPlaceSettings app={app} distribution={distribution} />}
+      {target === 'widget' && <WidgetPlaceSettings app={app} distribution={distribution} />}
+      {target === 'a2a' && <A2aPlaceSettings app={app} distribution={distribution} orgSlug={orgSlug} />}
 
       {/* Adding a place records where a product will ship. Publishing
           is the separate decision to let people reach it. */}
-      {served && !web && (
+      {served && !hosted && (
         <FormSection
           title={live ? 'Live' : 'Publish'}
           description={

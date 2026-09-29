@@ -5,11 +5,11 @@ import { render } from '../../../test/setup'
 
 import {
   WidgetBuilder,
-  widgetConfigSchema,
-  widgetConfigFromGateway,
-  aiDisclosureText,
+  widgetPlacementSchema,
+  widgetPlacementFrom,
+  widgetLookFromApp,
   buildPreviewSrcDoc,
-  WIDGET_CONFIG_FORM_DEFAULTS,
+  WIDGET_PLACEMENT_DEFAULTS,
 } from '../widget-builder'
 
 vi.mock('@/lib/api', () => ({
@@ -25,100 +25,63 @@ const baseGateway = {
   id: '3e7f8f3a-4a5b-4c6d-8e9f-0a1b2c3d4e5f',
   name: 'Support widget',
   type: 'chat_widget',
-  configuration: { aiDisclosure: true, some_channel_key: 'keep-me' },
+  configuration: { appId: 'app-1', some_channel_key: 'keep-me', widget: { position: 'bottom-left', launcherIcon: 'help', title: 'Old' } },
+}
+
+const app = {
+  name: 'Northwind',
+  branding: { appName: 'Northwind Support', primaryColor: '#22d3ee', greeting: 'Hi there', theme: 'dark' as const },
 }
 
 beforeEach(() => {
   vi.mocked(gatewaysApi.update).mockClear()
+  if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false)
+  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = vi.fn()
 })
 
-describe('widgetConfigSchema', () => {
+describe('widgetPlacementSchema', () => {
   it('accepts the defaults', () => {
-    expect(widgetConfigSchema.safeParse(WIDGET_CONFIG_FORM_DEFAULTS).success).toBe(true)
-  })
-
-  it('rejects bad hex colors', () => {
-    for (const bad of ['red', '#12345g', '8b5cf6', '#1234', 'javascript:alert(1)']) {
-      const out = widgetConfigSchema.safeParse({
-        ...WIDGET_CONFIG_FORM_DEFAULTS,
-        primaryColor: bad,
-      })
-      expect(out.success).toBe(false)
-    }
-  })
-
-  it('accepts 3- and 6-digit hex colors', () => {
-    for (const good of ['#abc', '#8b5cf6', '#22D3EE']) {
-      expect(
-        widgetConfigSchema.safeParse({ ...WIDGET_CONFIG_FORM_DEFAULTS, primaryColor: good })
-          .success,
-      ).toBe(true)
-    }
-  })
-
-  it('length-caps title and greeting', () => {
-    expect(
-      widgetConfigSchema.safeParse({ ...WIDGET_CONFIG_FORM_DEFAULTS, title: 't'.repeat(61) })
-        .success,
-    ).toBe(false)
-    expect(
-      widgetConfigSchema.safeParse({
-        ...WIDGET_CONFIG_FORM_DEFAULTS,
-        greeting: 'g'.repeat(301),
-      }).success,
-    ).toBe(false)
+    expect(widgetPlacementSchema.safeParse(WIDGET_PLACEMENT_DEFAULTS).success).toBe(true)
   })
 
   it('rejects unknown enum values', () => {
-    expect(
-      widgetConfigSchema.safeParse({ ...WIDGET_CONFIG_FORM_DEFAULTS, position: 'top-left' })
-        .success,
-    ).toBe(false)
-    expect(
-      widgetConfigSchema.safeParse({ ...WIDGET_CONFIG_FORM_DEFAULTS, theme: 'sepia' }).success,
-    ).toBe(false)
+    expect(widgetPlacementSchema.safeParse({ position: 'top', launcherIcon: 'spark' }).success).toBe(false)
+    expect(widgetPlacementSchema.safeParse({ position: 'bottom-right', launcherIcon: 'rocket' }).success).toBe(false)
   })
 })
 
-describe('widgetConfigFromGateway', () => {
-  it('returns defaults when nothing is saved', () => {
-    expect(widgetConfigFromGateway(null)).toEqual(WIDGET_CONFIG_FORM_DEFAULTS)
-    expect(widgetConfigFromGateway({})).toEqual(WIDGET_CONFIG_FORM_DEFAULTS)
+describe('widgetPlacementFrom', () => {
+  it('reads where the widget sits and falls back to the defaults', () => {
+    expect(widgetPlacementFrom(baseGateway.configuration)).toEqual({ position: 'bottom-left', launcherIcon: 'help' })
+    expect(widgetPlacementFrom(null)).toEqual(WIDGET_PLACEMENT_DEFAULTS)
+    expect(widgetPlacementFrom({ widget: { position: 'nowhere' } })).toEqual(WIDGET_PLACEMENT_DEFAULTS)
   })
+})
 
-  it('merges saved widget values over the defaults', () => {
-    const out = widgetConfigFromGateway({
-      widget: { title: 'Northwind', primaryColor: '#123456' },
+describe('widgetLookFromApp', () => {
+  it('takes the look from the app, as the widget-config endpoint does', () => {
+    expect(widgetLookFromApp(app)).toEqual({
+      primaryColor: '#22d3ee',
+      title: 'Northwind Support',
+      greeting: 'Hi there',
+      theme: 'dark',
+      poweredBy: true,
+      aiDisclosure: 'You are chatting with an AI assistant.',
     })
-    expect(out.title).toBe('Northwind')
-    expect(out.primaryColor).toBe('#123456')
-    expect(out.position).toBe('bottom-right')
   })
 
-  it('falls back to defaults when the saved config is invalid', () => {
-    expect(widgetConfigFromGateway({ widget: { primaryColor: 'nope' } })).toEqual(
-      WIDGET_CONFIG_FORM_DEFAULTS,
-    )
-    expect(widgetConfigFromGateway({ widget: 'not-an-object' })).toEqual(
-      WIDGET_CONFIG_FORM_DEFAULTS,
-    )
-  })
-})
-
-describe('aiDisclosureText', () => {
-  it('passes the channel-level setting through', () => {
-    expect(aiDisclosureText(undefined)).toBeNull()
-    expect(aiDisclosureText({})).toBeNull()
-    expect(aiDisclosureText({ aiDisclosure: false })).toBeNull()
-    expect(aiDisclosureText({ aiDisclosure: true })).toBe(
-      'You are chatting with an AI assistant.',
-    )
-    expect(aiDisclosureText({ aiDisclosure: '  Custom note  ' })).toBe('Custom note')
+  it('falls back to the app name, the default colour, and hides the mark for a white-label app', () => {
+    expect(widgetLookFromApp({ name: 'Acme', branding: { whiteLabel: true, aiDisclosure: 'A bot answers.' } })).toMatchObject({
+      title: 'Acme',
+      primaryColor: '#8b5cf6',
+      poweredBy: false,
+      aiDisclosure: 'A bot answers.',
+    })
   })
 })
 
 describe('buildPreviewSrcDoc', () => {
-  const cfg = { ...WIDGET_CONFIG_FORM_DEFAULTS, aiDisclosure: null }
+  const cfg = { ...WIDGET_PLACEMENT_DEFAULTS, ...widgetLookFromApp({ name: 'Acme', branding: null }) }
 
   it('loads the real widget.js and ships the config as inert escaped JSON', () => {
     const doc = buildPreviewSrcDoc('https://api.test/gateways/gw-1/widget.js', cfg)
@@ -143,74 +106,44 @@ describe('buildPreviewSrcDoc', () => {
 })
 
 describe('WidgetBuilder', () => {
-  it('renders the form from saved configuration plus embed snippet and live preview', () => {
-    const { container } = render(
-      <WidgetBuilder
-        gateway={{
-          ...baseGateway,
-          configuration: {
-            ...baseGateway.configuration,
-            widget: { title: 'Northwind Support', primaryColor: '#22d3ee' },
-          },
-        }}
-      />,
-    )
+  it('shows the embed snippet and a live preview in the app look, asking only where it sits', () => {
+    const { container } = render(<WidgetBuilder gateway={baseGateway} app={app} />)
 
-    expect(screen.getByLabelText('Title')).toHaveValue('Northwind Support')
-    expect(screen.getByLabelText('Primary color')).toHaveValue('#22d3ee')
+    // The look is the app's: nothing here edits it.
+    expect(screen.queryByLabelText('Title')).toBeNull()
+    expect(screen.queryByLabelText('Primary color')).toBeNull()
+    expect(screen.getByText(/come from the app/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Position')).toBeInTheDocument()
+    expect(screen.getByLabelText('Launcher icon')).toBeInTheDocument()
 
     // Embed snippet is the exact one-liner customers paste.
-    expect(
-      screen.getByText(
-        `<script src="https://api.test/gateways/${baseGateway.id}/widget.js" async></script>`,
-      ),
-    ).toBeInTheDocument()
+    expect(screen.getByText(`<script src="https://api.test/gateways/${baseGateway.id}/widget.js" async></script>`)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy embed snippet' })).toBeInTheDocument()
 
-    // Live preview iframe loads the real widget.js for this gateway.
     const iframe = container.querySelector('iframe[title="Chat widget live preview"]')
-    expect(iframe).not.toBeNull()
     const srcdoc = iframe!.getAttribute('srcdoc') || ''
     expect(srcdoc).toContain(`https://api.test/gateways/${baseGateway.id}/widget.js`)
     expect(srcdoc).toContain('"title":"Northwind Support"')
-
-    // Channel aiDisclosure is surfaced (passthrough, edited elsewhere).
+    expect(srcdoc).toContain('"position":"bottom-left"')
     expect(srcdoc).toContain('You are chatting with an AI assistant.')
   })
 
-  it('saves by MERGING the widget key into the existing configuration', async () => {
+  it('saves where it sits by merging into the stored widget block', async () => {
     const user = userEvent.setup()
-    render(<WidgetBuilder gateway={baseGateway} />)
+    render(<WidgetBuilder gateway={{ ...baseGateway, configuration: { ...baseGateway.configuration, widget: { position: 'bottom-right', launcherIcon: 'help', title: 'Old' } } }} app={app} />)
 
-    const title = screen.getByLabelText('Title')
-    await user.clear(title)
-    await user.type(title, 'Talk to sales')
-    await user.click(screen.getByRole('button', { name: 'Save widget' }))
+    // Radix Select: open it and pick.
+    await user.click(screen.getByLabelText('Position'))
+    await user.click(await screen.findByRole('option', { name: 'Bottom left' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(gatewaysApi.update).toHaveBeenCalledTimes(1))
     expect(gatewaysApi.update).toHaveBeenCalledWith(baseGateway.id, {
       configuration: {
-        // pre-existing channel config survives the save
-        aiDisclosure: true,
+        appId: 'app-1',
         some_channel_key: 'keep-me',
-        widget: {
-          ...WIDGET_CONFIG_FORM_DEFAULTS,
-          title: 'Talk to sales',
-        },
+        widget: { title: 'Old', position: 'bottom-left', launcherIcon: 'help' },
       },
     })
-  })
-
-  it('rejects a bad hex color client-side and does not call the API', async () => {
-    const user = userEvent.setup()
-    render(<WidgetBuilder gateway={baseGateway} />)
-
-    const color = screen.getByLabelText('Primary color')
-    await user.clear(color)
-    await user.type(color, 'magenta')
-    await user.click(screen.getByRole('button', { name: 'Save widget' }))
-
-    expect(await screen.findByText('Must be a hex color like #8b5cf6')).toBeInTheDocument()
-    expect(gatewaysApi.update).not.toHaveBeenCalled()
   })
 })

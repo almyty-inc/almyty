@@ -30,7 +30,6 @@ import {
   ChannelConfigForm,
   isChannelType,
 } from '@/components/gateways/detail/channel-config-form'
-import { WidgetBuilder } from '@/components/gateways/widget-builder'
 import { ManagedByAppBanner, useManagedByApp } from '@/components/gateways/managed-by-app-banner'
 import { CustomDomainCard } from '@/components/gateways/custom-domain-card'
 import { VisitorOAuthCard } from '@/components/gateways/visitor-oauth-card'
@@ -509,12 +508,10 @@ export function GatewayDetailPage() {
         />
       )}
 
-      {/* Chat widget builder — customize + live-preview the embeddable widget */}
-      {gateway.type === 'chat_widget' && <WidgetBuilder gateway={gateway} />}
-
-      {/* A hosted chat is an app's web app: its look, who can use it, its
-          domain, sign-in and allowed sites are all on the app's web page.
-          Only a surface no app owns keeps these cards here. */}
+      {/* A hosted chat or a website widget is an app's place: its look, who
+          can use it, its domain, sign-in, embed snippet and allowed sites
+          are all on the app's page for that place. Only a surface no app
+          owns keeps these cards here. */}
       {gateway.type === 'hosted_chat' && !managedBy && <CustomDomainCard gatewayId={gateway.id} />}
       {gateway.type === 'hosted_chat' && !managedBy && (
         <VisitorOAuthCard gatewayId={gateway.id} authMode={gateway.configuration?.hostedChat?.authMode} />
@@ -522,7 +519,7 @@ export function GatewayDetailPage() {
       {/* Which third-party sites may call this public surface from the
           browser. Keyed on the gateway so the card resets when the saved
           list changes underneath it. */}
-      {(gateway.type === 'chat_widget' || (gateway.type === 'hosted_chat' && !managedBy)) && (
+      {(gateway.type === 'chat_widget' || gateway.type === 'hosted_chat') && !managedBy && (
         <AllowedOriginsCard
           key={`${gateway.id}:${JSON.stringify(gateway.configuration?.allowedOrigins ?? [])}`}
           gateway={{ id: gateway.id, type: gateway.type, configuration: gateway.configuration }}

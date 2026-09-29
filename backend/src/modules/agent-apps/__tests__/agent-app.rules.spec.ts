@@ -187,6 +187,15 @@ describe('checkDistribution', () => {
     expect(codes(result)).toContain('NO_AGENTS');
   });
 
+  it('says up front that the website widget only goes on an app anyone can use', () => {
+    const gated = checkDistribution(DistributionTarget.WIDGET, app({ authMode: AppAuthMode.EMAIL_OTP }), null, SAFE_OPEN);
+    expect(codes(gated)).toContain('WIDGET_HAS_NO_SIGN_IN');
+    const open = checkDistribution(DistributionTarget.WIDGET, app({ authMode: AppAuthMode.PUBLIC_LINK }), null, SAFE_OPEN);
+    expect(codes(open)).not.toContain('WIDGET_HAS_NO_SIGN_IN');
+    const web = checkDistribution(DistributionTarget.WEB, app({ authMode: AppAuthMode.EMAIL_OTP }), null, SAFE_OPEN);
+    expect(codes(web)).not.toContain('WIDGET_HAS_NO_SIGN_IN');
+  });
+
   it('needs a bundle id for anything someone installs', () => {
     for (const target of [DistributionTarget.DESKTOP, DistributionTarget.BINARY]) {
       const result = checkDistribution(target, app(), { bundleId: 'nope' }, SAFE_OPEN);
