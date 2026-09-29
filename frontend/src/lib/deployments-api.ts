@@ -1,4 +1,4 @@
-import { apiDel, apiGet, apiPost } from '@/lib/api'
+import { apiGet, apiPost } from '@/lib/api'
 import type {
   AdapterRefusal,
   ArtifactScheme,
@@ -18,11 +18,9 @@ export const modelAdaptersApi = {
 
 export const modelDeploymentsApi = {
   list: () => apiGet<ModelDeployment[]>('/model-deployments'),
-  get: (id: string) => apiGet<ModelDeployment>(`/model-deployments/${id}`),
   create: (body: CreateModelDeploymentBody) => apiPost<ModelDeployment>('/model-deployments', body),
   scale: (id: string, replicas: number) => apiPost<ModelDeployment>(`/model-deployments/${id}/scale`, { replicas }),
   teardown: (id: string) => apiPost<ModelDeployment>(`/model-deployments/${id}/teardown`, {}),
-  delete: (id: string) => apiDel<ModelDeployment>(`/model-deployments/${id}`),
 }
 
 // Pinned weight records. The UI only reads them, for the lineage facts
@@ -30,7 +28,6 @@ export const modelDeploymentsApi = {
 // API and CLI concern (almyty models register-version).
 export const modelVersionsApi = {
   list: () => apiGet<ModelVersion[]>('/model-versions'),
-  get: (id: string) => apiGet<ModelVersion>(`/model-versions/${id}`),
 }
 
 /** How often the deployments list refetches while a row is still moving. */
