@@ -41,11 +41,14 @@ Per-org, unauthenticated by design:
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /sso/:orgId/saml/login` | redirect to the IdP |
+| `GET /sso/:orgId/saml/login` | redirect to the IdP (sets a relay-state cookie, 10 min) |
 | `POST /sso/:orgId/saml/callback` | SAML ACS (assertion consumer) |
+| `GET /sso/:orgId/saml/complete` | finishes the sign-in in the browser that started it |
 | `GET /sso/:orgId/saml/metadata` | SP metadata XML for IdP setup |
 | `GET /sso/:orgId/oidc/login` | start the OIDC flow (state cookie, 10 min) |
 | `GET /sso/:orgId/oidc/callback` | code exchange, then cookie + redirect |
+
+SAML sign-in is SP-initiated only: start it from the login URL, not from a tile in the IdP's portal. The ACS accepts a response only if it answers the request that login URL sent (`InResponseTo`, single use, 10 minutes) and is addressed to this ACS (`Recipient` and `Destination`); an IdP-initiated (unsolicited) response is refused. The session is issued on the `complete` step, and only in the browser holding the relay-state cookie from the login, so a response posted into someone else's browser signs nobody in.
 
 On a verified assertion the user is resolved by email:
 
