@@ -8,7 +8,7 @@ import { connectionPoliciesApi, connectionsExpiryApi, connectionsReviewApi, conn
 const entitlementState = { granted: false, loading: false }
 vi.mock('../../../hooks/use-entitlement', async () => {
   const actual = await vi.importActual<any>('../../../hooks/use-entitlement')
-  const list = () => (entitlementState.granted ? ['connections_governance'] : [])
+  const list = () => (entitlementState.granted ? ['credentials_governance'] : [])
   return {
     ...actual,
     useEntitlement: (feature?: string) => {

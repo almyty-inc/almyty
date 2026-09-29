@@ -8,7 +8,7 @@ import {
 } from 'typeorm';
 
 /**
- * Connections governance (EE, entitlement `connections_governance`).
+ * Credentials governance (EE, entitlement `credentials_governance`).
  * Org-wide rules over the Connections layer. The row is core data so the
  * schema, migration and repository live with the other entities; every
  * read, write and evaluation happens in

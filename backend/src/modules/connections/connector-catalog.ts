@@ -360,6 +360,61 @@ export const OTHER_SERVICE_CONNECTOR: ConnectorDefinition = {
   docsUrl: null,
 };
 
+/**
+ * A username and password, for any service that signs in with basic
+ * auth. Stored under a name the person gives it, like "Other service";
+ * the username is the account shown next to it, the password is secret.
+ */
+export const BASIC_AUTH_CONNECTOR: ConnectorDefinition = {
+  key: 'basic-auth',
+  kind: 'tool_source',
+  displayName: 'Username and password',
+  description: 'A username and password for any service that signs in with basic auth.',
+  connect: [{
+    type: 'api_key',
+    label: 'Username and password',
+    schema: {
+      type: 'object',
+      properties: {
+        username: { type: 'string', title: 'Username' },
+        password: { type: 'string', title: 'Password', 'x-secret': true },
+      },
+      required: ['username', 'password'],
+    },
+    credentialType: CredentialType.BASIC_AUTH,
+  }],
+  validation: { kind: 'format', accountLabelFrom: 'username' },
+  keyPageUrl: null,
+  docsUrl: null,
+};
+
+/**
+ * An OAuth 2.0 sign-in at a service that is not in the catalog: what an
+ * API's own OAuth 2.0 sign-in makes (with the refresh token and client, so
+ * it renews itself), or an access token pasted here.
+ */
+export const OAUTH2_SIGN_IN_CONNECTOR: ConnectorDefinition = {
+  key: 'oauth2',
+  kind: 'tool_source',
+  displayName: 'OAuth 2.0 sign-in',
+  description: 'A sign-in at a service over OAuth 2.0: made by signing in on an API, or an access token pasted here.',
+  connect: [{
+    type: 'api_key',
+    label: 'Access token',
+    schema: {
+      type: 'object',
+      properties: {
+        accessToken: { type: 'string', title: 'Access token', 'x-secret': true },
+      },
+      required: ['accessToken'],
+    },
+    credentialType: CredentialType.OAUTH2,
+  }],
+  validation: { kind: 'format' },
+  keyPageUrl: null,
+  docsUrl: null,
+};
+
 const OTHER_CONNECTORS: ConnectorDefinition[] = [
   REGISTRY_S3_CONNECTOR,
   {
@@ -443,6 +498,8 @@ const OTHER_CONNECTORS: ConnectorDefinition[] = [
     docsUrl: null,
   },
   OTHER_SERVICE_CONNECTOR,
+  BASIC_AUTH_CONNECTOR,
+  OAUTH2_SIGN_IN_CONNECTOR,
 ];
 
 // ---------------------------------------------------------------------------

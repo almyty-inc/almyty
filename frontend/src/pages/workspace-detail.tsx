@@ -192,26 +192,6 @@ function BackHeader({ runnerId }: { runnerId: string }) {
   )
 }
 
-/**
- * /workspaces/:id, from before workspaces lived on their runner's page:
- * on to the workspace under its runner, or to Runners when it is gone.
- */
-export function WorkspaceAddressRedirect() {
-  const { id = '' } = useParams<{ id: string }>()
-  const wsQuery = useQuery<Workspace>({
-    queryKey: ['workspace', id],
-    queryFn: () => workspacesApi.getById(id),
-    enabled: !!id,
-    retry: false,
-  })
-  if (wsQuery.isLoading) {
-    return (
-      <div className="py-12 flex justify-center"><LoadingSpinner size="lg" /></div>
-    )
-  }
-  return <Navigate to={wsQuery.data?.runnerId ? workspacePath(wsQuery.data) : '/runners'} replace />
-}
-
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-4">

@@ -12,9 +12,10 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { SecretInput } from '@/components/ui/secret-input'
 import { Textarea } from '@/components/ui/textarea'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
+import { OTHER_SERVICE_KEY } from '@/components/connections/connect-flow'
+import { CredentialPicker } from '@/components/credentials/credential-picker'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 import { apisApi } from '@/lib/api'
@@ -36,7 +37,8 @@ export function SdkApiForm() {
   const [newPkgVersion, setNewPkgVersion] = React.useState('*')
   const [usePrivateRegistry, setUsePrivateRegistry] = React.useState(false)
   const [registryUrl, setRegistryUrl] = React.useState('')
-  const [registryToken, setRegistryToken] = React.useState('')
+  // The registry's token is a credential the API points at, never kept on the API.
+  const [registryCredentialId, setRegistryCredentialId] = React.useState('')
   const [registryScope, setRegistryScope] = React.useState('')
   const [visibility, setVisibility] = React.useState<VisibilityValue>({ visibility: 'org', teamId: null })
 
@@ -82,7 +84,7 @@ export function SdkApiForm() {
       visibility: visibility.visibility,
       teamId: visibility.teamId,
       ...(usePrivateRegistry
-        ? { npmRegistry: { url: registryUrl || undefined, token: registryToken || undefined, scope: registryScope || undefined } }
+        ? { npmRegistry: { url: registryUrl || undefined, credentialId: registryCredentialId || undefined, scope: registryScope || undefined } }
         : {}),
     })
   }
@@ -175,9 +177,17 @@ export function SdkApiForm() {
             <Field id="registry-url" label="Registry URL" className="sm:col-span-2">
               <Input placeholder="https://registry.example.com" value={registryUrl} onChange={(e) => setRegistryUrl(e.target.value)} />
             </Field>
-            <Field id="registry-token" label="Auth token" hint="An npm token with read access to the registry.">
-              <SecretInput placeholder="npm auth token" value={registryToken} onChange={(e) => setRegistryToken(e.target.value)} />
-            </Field>
+            <CredentialPicker
+              id="registry-token"
+              className="sm:col-span-2"
+              label="Auth token"
+              value={registryCredentialId}
+              onChange={(credential) => setRegistryCredentialId(credential?.id ?? '')}
+              connectorKey={OTHER_SERVICE_KEY}
+              defaultName={name.trim() ? `${name.trim()} npm token` : 'npm token'}
+              allowNone
+              hint="An npm token with read access to the registry, kept in Credentials."
+            />
             <Field id="registry-scope" label="Scope (optional)">
               <Input placeholder="@myorg" value={registryScope} onChange={(e) => setRegistryScope(e.target.value)} />
             </Field>

@@ -13,12 +13,32 @@ import {
   ParseUUIDPipe,
   HttpException,
   HttpStatus,
+  Query,
+  ForbiddenException,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CredentialsService } from './credentials.service';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { findEffectiveMembership } from '../../common/authorization/membership';
+import { ConnectionsService } from '../connections/connections.service';
+import { ConnectorCatalogService } from '../connections/connector-catalog.service';
+import { CONNECTIONS_MANAGE, CONNECTIONS_READ } from '../connections/connections.permissions';
+import { CompleteConnectDto, ConnectBodyDto, CreateConnectorDto, ListConnectorsQueryDto, RotateBodyDto } from '../connections/dto/connections.dto';
+import { ConnectorDefinition } from '../connections/connector.types';
+
+const connectionValidation = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+
+/** The origin a sign-in comes back to, from the request. */
+function requestBase(req: any): string | undefined {
+  const host = req?.headers?.host;
+  if (!host) return undefined;
+  const proto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0] || req.protocol || 'https';
+  return `${proto}://${host}`;
+}
 import {
   CreateCredentialDto,
   UpdateCredentialDto,
@@ -30,7 +50,10 @@ import {
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class CredentialsController {
-  constructor(private readonly credentialsService: CredentialsService) {}
+  constructor(
+    private readonly credentialsService: CredentialsService,
+    private readonly moduleRef: ModuleRef,
+  ) {}
 
   // Extract the caller's current org and reject multi-org users who
   // didn't send an X-Organization-Id header. Previously this controller
@@ -55,16 +78,81 @@ export class CredentialsController {
   }
 
   // ──────────────────────────────────────────────
-  // Outbound credentials (secrets vault)
+  // Credentials: every key, token and account the org keeps.
+  //
+  // A credential made through a service (a "connection" in the code) is
+  // added, checked, replaced and deleted here; its grants are on
+  // GrantsController and the sign-in callback on CredentialSignInController.
+  // The fixed paths come before `:id` (route-shadowing.guard.spec.ts).
   // ──────────────────────────────────────────────
 
-  @Get('credentials')
+  private connectionsService(): ConnectionsService {
+    return this.moduleRef.get(ConnectionsService, { strict: false });
+  }
+
+  @Get('credentials/services')
+  @Roles('viewer', 'member', 'admin', 'owner')
+  @RequirePermissions(CONNECTIONS_READ)
+  @ApiOperation({ summary: 'The services a credential can be added for: built-in, provider-derived and this organization\'s own' })
+  @UsePipes(connectionValidation)
+  async listServices(@Request() req: any, @Query() query: ListConnectorsQueryDto) {
+    const organizationId = this.requireOrg(req);
+    const data = await this.connectionsService().describeConnectors(organizationId, query.kind);
+    return { success: true, data, message: 'Services retrieved successfully' };
+  }
+
+  @Post('credentials/services')
+  @Roles('admin', 'owner')
+  @RequirePermissions(CONNECTIONS_MANAGE)
+  @ApiOperation({ summary: 'Define a custom service (any OpenAI-compatible endpoint, MCP server, bucket)' })
+  @UsePipes(connectionValidation)
+  async createService(@Request() req: any, @Body() body: CreateConnectorDto) {
+    const organizationId = this.requireOrg(req);
+    const catalog = this.moduleRef.get(ConnectorCatalogService, { strict: false });
+    const data = await catalog.createCustom(organizationId, req.user.id, body as unknown as ConnectorDefinition);
+    return { success: true, data, message: 'Service created successfully' };
+  }
+
+  @Post('credentials/connect/:connectorKey')
   @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'List all credentials for the organization' })
+  @RequirePermissions(CONNECTIONS_READ)
+  @ApiOperation({ summary: 'Add a credential for a service: checks a key live, or returns an authorize URL for a sign-in' })
+  @UsePipes(connectionValidation)
+  async connect(@Request() req: any, @Param('connectorKey') connectorKey: string, @Body() body: ConnectBodyDto) {
+    const organizationId = this.requireOrg(req);
+    const data = await this.connectionsService().connect(req.user, organizationId, connectorKey, body, requestBase(req));
+    return { success: true, data, message: data.pending ? 'Sign-in pending' : 'Credential added' };
+  }
+
+  @Post('credentials/connect/:connectorKey/complete')
+  @Roles('member', 'admin', 'owner')
+  @RequirePermissions(CONNECTIONS_READ)
+  @ApiOperation({ summary: 'Finish a sign-in with the code the service showed' })
+  @UsePipes(connectionValidation)
+  async completeConnect(@Request() req: any, @Param('connectorKey') _connectorKey: string, @Body() body: CompleteConnectDto) {
+    this.requireOrg(req);
+    const data = await this.connectionsService().complete(body.state, body.code);
+    return { success: true, data, message: 'Credential added' };
+  }
+
+  /**
+   * Every credential: the ones added for a service carry what the service
+   * says (its name, the account, whether it works, who owns it), the keys a
+   * single API, MCP server, channel or app keeps are listed as they are.
+   * Secret values never appear.
+   */
+  @Get('credentials')
+  @Roles('viewer', 'member', 'admin', 'owner')
+  @ApiOperation({ summary: 'List every credential of the organization (masked)' })
   @ApiResponse({ status: 200, description: 'Credentials retrieved successfully' })
   async findAll(@Request() req: any) {
     const organizationId = this.requireOrg(req);
-    const data = await this.credentialsService.findAll({ id: req.user.id }, organizationId);
+    const [rows, views] = await Promise.all([
+      this.credentialsService.findAll({ id: req.user.id }, organizationId),
+      this.connectionsService().list(req.user, organizationId).catch(() => []),
+    ]);
+    const byId = new Map<string, any>(views.map((v: any) => [v.id, v] as [string, any]));
+    const data = rows.map((row: any) => (row.connectorKey && byId.has(row.id) ? { ...row, ...byId.get(row.id) } : row));
     return { success: true, data, message: 'Credentials retrieved successfully' };
   }
 
@@ -80,12 +168,13 @@ export class CredentialsController {
   }
 
   @Get('credentials/:id')
-  @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Get a credential by ID' })
+  @Roles('viewer', 'member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Get a credential by ID (masked)' })
   @ApiResponse({ status: 200, description: 'Credential retrieved successfully' })
   async findById(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     const organizationId = this.requireOrg(req);
-    const data = await this.credentialsService.findById(id, organizationId, { id: req.user.id });
+    const row: any = await this.credentialsService.findById(id, organizationId, { id: req.user.id });
+    const data = row.connectorKey ? { ...row, ...(await this.connectionsService().get(req.user, organizationId, id)) } : row;
     return { success: true, data, message: 'Credential retrieved successfully' };
   }
 
@@ -104,17 +193,51 @@ export class CredentialsController {
     return { success: true, data, message: 'Credential updated successfully' };
   }
 
+  /**
+   * Delete a credential. One added for a service is disconnected (revoked
+   * at the service first when it can be) by whoever may manage it; a key
+   * an API, server, channel or app keeps is deleted by an admin.
+   */
   @Delete('credentials/:id')
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Delete a credential' })
   @ApiResponse({ status: 200, description: 'Credential deleted successfully' })
   async delete(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     const organizationId = this.requireOrg(req);
+    const row: any = await this.credentialsService.findById(id, organizationId, { id: req.user.id });
+    if (row.connectorKey) {
+      const data = await this.connectionsService().disconnect(req.user, organizationId, id);
+      return { success: true, data, message: 'Credential deleted successfully' };
+    }
+    const role = findEffectiveMembership<any>(req.user?.organizationMemberships, organizationId)?.role;
+    if (role !== 'admin' && role !== 'owner') throw new ForbiddenException('Insufficient role privileges');
     await this.credentialsService.delete(id, organizationId, req.user.id);
     return { success: true, data: null, message: 'Credential deleted successfully' };
   }
 
+  @Post('credentials/:id/validate')
+  @Roles('member', 'admin', 'owner')
+  @RequirePermissions(CONNECTIONS_READ)
+  @ApiOperation({ summary: 'Check a credential with its service again; refreshes whether it works and the account' })
+  async validate(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
+    const organizationId = this.requireOrg(req);
+    const data = await this.connectionsService().validate(req.user, organizationId, id);
+    return { success: true, data, message: data.health.status === 'valid' ? 'Credential works' : `Credential ${data.health.status}` };
+  }
+
+  @Post('credentials/:id/rotate')
+  @Roles('member', 'admin', 'owner')
+  @RequirePermissions(CONNECTIONS_READ)
+  @ApiOperation({ summary: 'Replace the key in place: returns the form (or a new authorize URL), then takes the new values' })
+  @UsePipes(connectionValidation)
+  async rotate(@Request() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() body: RotateBodyDto) {
+    const organizationId = this.requireOrg(req);
+    const data = await this.connectionsService().rotate(req.user, organizationId, id, body, requestBase(req));
+    return { success: true, data, message: data.pending ? 'Replace pending' : 'Key replaced' };
+  }
+
   @Post('credentials/:id/test')
+
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Test a credential connection' })
   @ApiResponse({ status: 200, description: 'Credential test completed' })

@@ -20,7 +20,7 @@ describe('ConnectionsGovernanceHookImpl', () => {
     await hook.beforeConnect('org-1', 'openai', 'user');
     await hook.beforeUse('org-1', connection, { userId: 'u1' }, {}, { via: 'grant', grant: { budgetId: 'b1' } });
     expect((await hook.evaluateUse('org-1', connection, { userId: 'u1' })).allowed).toBe(true);
-    expect(licenses.hasForOrg).toHaveBeenCalledWith('org-1', 'connections_governance');
+    expect(licenses.hasForOrg).toHaveBeenCalledWith('org-1', 'credentials_governance');
     expect(governance.decideConnect).not.toHaveBeenCalled();
     expect(governance.decideUse).not.toHaveBeenCalled();
     expect(governance.assertBudget).not.toHaveBeenCalled();

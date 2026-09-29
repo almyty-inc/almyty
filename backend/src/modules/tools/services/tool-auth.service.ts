@@ -15,8 +15,7 @@
  *      (legacy inline config on the Api entity).
  *
  * For an inline (no api) tool, applyToolAuth() sends the credential the
- * tool points at (`tool.authConfig.config.credentialId`), or an older
- * inline `tool.authConfig` directly.
+ * tool points at (`tool.authConfig.config.credentialId`).
  *
  * Applying a credential also refreshes expired OAuth2 tokens
  * transparently via the credential service.
@@ -70,6 +69,8 @@ export class ToolAuthService {
         principal,
         context: { purpose: 'api_call', resourceType: 'api', resourceId: api.id },
       });
+      // An OAuth 2.0 sign-in renews its own token and sends it.
+      if (await this.applySignIn(config, resolved.credential)) return;
       this.applyInlineApiAuth(config, inlineApiAuthView(api.authentication as any, connectionAuthConfig(resolved.config)) as Api['authentication']);
       return;
     }
@@ -158,27 +159,37 @@ export class ToolAuthService {
    * credential keeps no secret of its own: the key is read from Credentials
    * at call time, as the call's principal, and sent the way the tool says.
    * A credential that cannot be used fails the call rather than sending it
-   * unsigned. An older tool with its key inline sends that.
+   * unsigned. A tool keeps no key of its own (tool-auth-config.ts), so one
+   * without a credential is sent without a key.
    */
   async applyToolAuth(config: AxiosRequestConfig, tool: { id: string; authConfig?: any }, options: ToolExecutionOptions): Promise<void> {
     const authConfig = tool.authConfig;
-    if (!authConfig) return;
-    const credentialId = authConfig.config?.credentialId as string | undefined;
-    if (credentialId && this.credentialRefs) {
-      const resolved = await this.credentialRefs.resolve(options.organizationId, credentialId, {
-        principal: options.principal ?? userPrincipal(options.userId),
-        context: { purpose: 'tool_call', resourceType: 'tool', resourceId: tool.id },
-      });
-      const secret = connectionAuthConfig(resolved.config);
-      const filled =
-        authConfig.type === 'bearer' ? { token: secret.token }
-        : authConfig.type === 'apiKey' ? { key: secret.apiKey, headerName: authConfig.config?.headerName }
-        : authConfig.type === 'basic' ? { username: secret.username, password: secret.password }
-        : {};
-      this.applyInlineToolAuth(config, { type: authConfig.type, config: filled });
-      return;
-    }
-    this.applyInlineToolAuth(config, authConfig);
+    const credentialId = authConfig?.config?.credentialId as string | undefined;
+    if (!credentialId || !this.credentialRefs) return;
+    const resolved = await this.credentialRefs.resolve(options.organizationId, credentialId, {
+      principal: options.principal ?? userPrincipal(options.userId),
+      context: { purpose: 'tool_call', resourceType: 'tool', resourceId: tool.id },
+    });
+    if (await this.applySignIn(config, resolved.credential)) return;
+    const secret = connectionAuthConfig(resolved.config);
+    const filled =
+      authConfig.type === 'bearer' ? { token: secret.token }
+      : authConfig.type === 'apiKey' ? { key: secret.apiKey, headerName: authConfig.config?.headerName }
+      : authConfig.type === 'basic' ? { username: secret.username, password: secret.password }
+      : {};
+    this.applyInlineToolAuth(config, { type: authConfig.type, config: filled });
+  }
+
+  /**
+   * An OAuth 2.0 sign-in picked as a key: refresh it when expired and send
+   * its token, as a bound credential is. False for every other credential.
+   */
+  private async applySignIn(config: AxiosRequestConfig, credential: Pick<Credential, 'id' | 'type'> | undefined | null): Promise<boolean> {
+    if (!credential || credential.type !== CredentialType.OAUTH2 || !this.credentialRepository) return false;
+    const row = await this.credentialRepository.findOne({ where: { id: credential.id } });
+    if (!row) return false;
+    await this.applyCredential(config, row);
+    return true;
   }
 
   /** Put an inline tool `{ type, config }` (secret filled in) onto the request. */
@@ -191,9 +202,6 @@ export class ToolAuthService {
     } else if (authConfig.type === 'apiKey' && authConfig.config?.key) {
       headers[authConfig.config.headerName || 'X-API-Key'] = authConfig.config.key;
     } else if (authConfig.type === 'basic' && authConfig.config?.username) {
-      // The create-tool dialog offers Basic alongside the other two and
-      // this did not implement it, so a tool configured that way sent no
-      // credentials at all and got a 401 it could not explain.
       const pair = `${authConfig.config.username}:${authConfig.config.password ?? ''}`;
       headers.Authorization = `Basic ${Buffer.from(pair).toString('base64')}`;
     }

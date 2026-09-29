@@ -8,7 +8,7 @@ export default {
   'agents-api': 'Agents API',
   'llm-providers-api': 'Providers API',
   'models-api': 'Models API',
-  'connections-api': 'Credentials API',
+  'credentials-api': 'Credentials API',
   'openai-compatible': 'OpenAI-Compatible API',
   'rate-limits': 'Rate Limits',
   'error-codes': 'Error Codes',

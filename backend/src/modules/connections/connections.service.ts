@@ -636,7 +636,7 @@ export class ConnectionsService {
       requestBase ||
       'http://localhost:3000'
     ).replace(/\/$/, '');
-    return `${base}/connections/oauth/callback`;
+    return `${base}/credentials/oauth/callback`;
   }
 
   private platformClient(connectorKey: string): { clientId: string; clientSecret: string } {

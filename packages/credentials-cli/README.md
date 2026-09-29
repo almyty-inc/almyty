@@ -1,21 +1,21 @@
-# @almyty/connections
+# @almyty/credentials
 
-Connect a third-party account to almyty once, from your terminal; agents,
-models, deployments, memory backends, MCP servers, channels and registries
-then use the connection. Inference vendors, deployment clouds, buckets, chat
-platforms — all of them are connectors in the same catalog.
+Add a key, a token or a sign-in to almyty once, from your terminal; agents,
+APIs, tools, models, deployments, memory backends, MCP servers, channels and
+registries then use the credential. Model providers, deployment clouds,
+buckets, chat platforms: all of them are services in the same catalog.
 
 ```sh
 npx @almyty/auth login
-npx @almyty/connections connectors --kind inference
-npx @almyty/connections connect openrouter --open
-npx @almyty/connections list
+npx @almyty/credentials services --kind inference
+npx @almyty/credentials add openrouter --open
+npx @almyty/credentials list
 ```
 
-## What a connection is
+## What a credential is
 
-A connection is a credential row with a connector key, an account label and a
-health status. The secret is stored encrypted in almyty's credential store and
+A credential is a row with its service, an account label and a health
+status. The secret is stored encrypted in almyty's credential store and
 is **never returned**, not even masked. Every module that needs it holds a
 reference, resolved on each use, so a rotation is live on the next call and
 every resolve is audited.
@@ -34,38 +34,38 @@ Every read command takes `--json` and writes undecorated JSON to stdout.
 
 | Command | What it does |
 |---|---|
-| `connectors [--kind k]` | The catalog: what can be connected, and how. `--kind` is one of `inference`, `deployment`, `memory`, `mcp`, `tool_source`, `channel`, `cloud`, `registry` |
-| `list` | Connected accounts with health |
-| `get <id>` | One connection: connector, account label, health and when it was checked, scopes, owner — and what to do when the health is not `valid` |
-| `grants <id>` | Who may use this connection |
+| `services [--kind k]` | The catalog: what a credential can be added for, and how. `--kind` is one of `inference`, `deployment`, `memory`, `mcp`, `tool_source`, `channel`, `cloud`, `registry` |
+| `list` | Every credential, with its health |
+| `get <id>` | One credential: service, account label, health and when it was checked, scopes, owner — and what to do when the health is not `valid` |
+| `grants <id>` | Who may use this credential |
 
-### Connect
+### Add
 
 | Command | What it does |
 |---|---|
-| `connect <key> [--method m] [--owner org\|user\|private] [--name n] [--headless] [--open]` | Start a connection |
+| `add <service> [--method m] [--owner org\|user\|private] [--name n] [--headless] [--open]` | Add a credential |
 | `complete <key> --state s --code c` | Finish a headless sign-in by pasting the code |
 | `validate <id>` | Re-check against the provider; refreshes health and the account label |
-| `rotate <id> [--headless] [--open]` | Replace the secret in place, so everything pointing at the connection keeps working |
-| `disconnect <id>` | Revoke at the provider where the connector declares a revoke endpoint, then delete |
+| `rotate <id> [--headless] [--open]` | Replace the secret in place, so everything using the credential keeps working |
+| `delete <id>` | Revoke at the provider where the service declares a revoke endpoint, then delete |
 
-Each connector offers one or more methods, best first, and `connect` picks the
-best unless `--method` names another. `connectors` lists them.
+Each service offers one or more methods, best first, and `add` picks the best
+unless `--method` names another. `services` lists them.
 
 **Sign-in** (OpenRouter and Slack today) is the best path: nothing to paste.
 
 ```sh
-npx @almyty/connections connect openrouter --open
+npx @almyty/credentials add openrouter --open
 ```
 
 On a machine with no browser, ask for the headless flow and the provider shows
 a code:
 
 ```sh
-npx @almyty/connections connect openrouter --headless
+npx @almyty/credentials add openrouter --headless
 # -> Open this URL to continue: https://…
 #    The provider will show you a code. Paste it with:
-#      almyty connections complete openrouter --state st-… --code <code>
+#      almyty credentials complete openrouter --state st-… --code <code>
 ```
 
 The instructions you get are the ones that will work: a browser flow finishes
@@ -76,39 +76,39 @@ whose state the redirect has already consumed.
 the page where the key is created:
 
 ```sh
-npx @almyty/connections connect huggingface --owner user
+npx @almyty/credentials add huggingface --owner user
 # Get a key at: https://huggingface.co/settings/tokens
 # Access token: ······
 ```
 
 The key is checked against the provider before it is saved. If the provider
-says no, the connection is kept with a `failed` health and the provider's
+says no, the credential is kept with a `failed` health and the provider's
 answer, so you fix the key at the provider and `validate` or `rotate` rather
 than starting over.
 
-**Rotate** replaces the secret without touching anything that points at the
-connection. For a pasted key it prompts for the new value; for a sign-in
-connector it returns a fresh authorize URL and completing it swaps the key on
-the same connection.
+**Rotate** replaces the secret without touching anything that uses the
+credential. For a pasted key it prompts for the new value; for a sign-in
+service it returns a fresh authorize URL and completing it swaps the key on
+the same credential.
 
 ### Share
 
-An organization connection is usable by the organization; a grant widens or
+An organization credential is usable by the organization; a grant widens or
 narrows that to a principal.
 
 | Command | What it does |
 |---|---|
-| `grant <id> --principal user\|team\|role\|agent\|workspace --to <principalId> [--permission use\|manage] [--expires <iso8601>]` | Let a principal use (or manage) a connection |
+| `grant <id> --principal user\|team\|role\|agent\|workspace --to <principalId> [--permission use\|manage] [--expires <iso8601>]` | Let a principal use (or manage) a credential |
 | `revoke <id> <grantId>` | Withdraw one grant |
 
 ## Org or personal
 
-`--owner org` (the default) makes the connection the organization's: this is
+`--owner org` (the default) makes the credential the organization's: this is
 what agents and deployments use, and it needs `connections:manage` (admin or
 owner). `--owner user` makes it yours, and you can grant it to others.
 `--owner private` makes it yours alone: nobody else sees or uses it, org admins
 included, and it cannot be granted. Free and personal organizations allow
-personal and private connections by default; paid organizations start with them off until
+personal and private credentials by default; paid organizations start with them off until
 an admin turns them on.
 
 ## Secrets never travel on argv
@@ -119,24 +119,24 @@ a secret as a flag value.
 
 In order of preference:
 
-1. **A sign-in flow** where the connector has one. Nothing is typed at all.
+1. **A sign-in flow** where the service has one. Nothing is typed at all.
 2. **The prompt**, which is the default: secret fields are read without echo.
 3. **`--input-file <path>`** — the form fields as a JSON object in a file.
 4. **`--input-stdin`** — the same object on stdin.
 
 ```sh
-npx @almyty/connections connect telegram --input-file bot.json
+npx @almyty/credentials add channel-telegram --input-file bot.json
 pass show telegram/bot | jq -Rn '{bot_token: input}' \
-  | npx @almyty/connections connect telegram --input-stdin
+  | npx @almyty/credentials add channel-telegram --input-stdin
 ```
 
-`--input '<json>'` still works for the fields a connector does **not** mark
+`--input '<json>'` still works for the fields a service does **not** mark
 secret (a region, a bucket, a phone number) and is refused the moment it
 carries one that is, naming the field and the safe alternatives. The refusal
 never repeats the value.
 
 Unattended runs are handled rather than hung: without a terminal to prompt on,
-`connect` and `rotate` say so and name `--input-file` and `--input-stdin`
+`add` and `rotate` say so and name `--input-file` and `--input-stdin`
 instead of reading end-of-file and submitting an empty form. `--input-stdin`
 with a terminal on stdin is refused for the same reason.
 
@@ -157,19 +157,19 @@ it:
 
 ## Chat channels
 
-Every chat channel is a connector like any other, so a Slack, Discord or
-Telegram token is connected here instead of pasted into a gateway form:
+Every chat channel is a service like any other, so a Slack, Discord or
+Telegram token is added here instead of pasted into a gateway form:
 
 ```sh
-npx @almyty/connections connectors --kind channel
-npx @almyty/connections connect channel-slack --open
-npx @almyty/connections connect channel-telegram
+npx @almyty/credentials services --kind channel
+npx @almyty/credentials add channel-slack --open
+npx @almyty/credentials add channel-telegram
 ```
 
-The connector key is `channel-<gateway type>` with underscores dasherized
+The service key is `channel-<gateway type>` with underscores dasherized
 (`channel-whatsapp-cloud`), and the form fields are spelled the way the
-channel adapter reads them, so a gateway can adopt a connection you already
-made. `docs/connections.md` has the table of what each channel needs, where
+channel adapter reads them, so a channel can use a credential you already
+added. `docs/connections.md` has the table of what each channel needs, where
 to get it, and how it is validated.
 
 ## Environment
@@ -202,6 +202,6 @@ turned into tools, served over MCP, A2A, UTCP and Agent Skills.
 - Design notes: `docs/connections.md` in the almyty repository
 - Source: https://github.com/almyty-inc/almyty
 
-Run `npx @almyty/connections --help` for the full surface.
+Run `npx @almyty/credentials --help` for the full surface.
 
 Apache-2.0 © Almyty Inc.

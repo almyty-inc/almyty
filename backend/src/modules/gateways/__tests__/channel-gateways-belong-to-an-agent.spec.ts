@@ -37,7 +37,7 @@ describe('every channel gateway belongs to an agent channel', () => {
         GatewayType.IRC,
       ].sort(),
     );
-    for (const type of [GatewayType.TOOLS, GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS, GatewayType.ACP, GatewayType.OPENAI_CHAT]) {
+    for (const type of [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS, GatewayType.ACP, GatewayType.OPENAI_CHAT]) {
       expect(isChannelGatewayType(type)).toBe(false);
     }
   });
@@ -101,9 +101,9 @@ describe('every channel gateway belongs to an agent channel', () => {
       expect(gatewayRepository.save).toHaveBeenCalledTimes(1);
     });
 
-    it('still makes a shared-tools gateway, which no channel owns', async () => {
+    it('still makes a tool gateway, which no channel owns', async () => {
       const gateway = await service().createGateway(
-        { name: 'Shared', type: GatewayType.TOOLS, endpoint: '/shared', configuration: {} } as any,
+        { name: 'Shared', type: GatewayType.MCP, endpoint: '/shared', configuration: { transport: 'http' } } as any,
         'org-1',
         'user-1',
       );

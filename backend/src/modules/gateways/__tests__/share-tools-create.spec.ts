@@ -12,9 +12,9 @@ import { fakeRepository } from '../../../test/fake-repository';
 import { CAST, castFixture } from '../../../test/execution-access.fixture';
 
 /**
- * Share tools is one step: POST /gateways with the picked tools creates the
- * shared-tools gateway, attaches the tools and mints its access key, and the
- * answer carries the key and what was (and was not) attached.
+ * Sharing tools is one step: POST /gateways with a protocol and the picked
+ * tools creates the gateway, attaches the tools and mints its access key,
+ * and the answer carries the key and what was (and was not) attached.
  *
  * The attach half is the real GatewayToolService over truthful tables, so a
  * picked tool that may not be served (a draft, a team tool on an org-wide
@@ -103,14 +103,14 @@ describe('POST /gateways with toolIds: share tools in one step', () => {
 
   const share = (toolIds: string[] | undefined, extra: Record<string, any> = {}) =>
     controller.createGateway(
-      { name: 'Weather', type: GatewayType.TOOLS, endpoint: '/weather', configuration: {}, toolIds, ...extra } as any,
+      { name: 'Weather', type: GatewayType.MCP, endpoint: '/weather', configuration: { transport: 'http' }, toolIds, ...extra } as any,
       { user: { id: CAST.member, sub: CAST.member, currentOrganizationId: CAST.org } },
     );
 
   it('creates the gateway, attaches the picked tools and returns a working key at once', async () => {
     const out = await share([TOOLS.ready.id, TOOLS.alsoReady.id]);
 
-    expect(out.data.type).toBe(GatewayType.TOOLS);
+    expect(out.data.type).toBe(GatewayType.MCP);
     expect(out.data.kind).toBe(GatewayKind.TOOL);
     expect(out.data.sharedTools).toEqual({ associated: 2, skipped: [] });
     const rows = await gatewayTools.find({ where: { gatewayId: out.data.id } });

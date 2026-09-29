@@ -134,7 +134,7 @@ a secret as a flag value.
 provider account once and name the connection.
 
 ```sh
-npx @almyty/connections connect huggingface
+npx @almyty/credentials add huggingface
 npx @almyty/models host hf://Qwen/Qwen3-0.6B@main \
   --adapter huggingface-endpoints --credential <connectionId>
 ```

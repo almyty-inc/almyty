@@ -12,7 +12,6 @@ import {
 
 /** One line under "Connect a client", by protocol. */
 const DESCRIPTIONS: Record<string, string> = {
-  tools: 'One address works in every client: MCP, UTCP and Skills.',
   mcp: 'Paste one of these into your MCP client.',
   utcp: 'Read the manual, then run a tool with a POST to /execute.',
   skills: 'Install the skills into your coding agent.',
@@ -43,7 +42,7 @@ export function ConnectSnippets({
     <Card data-testid="connect-snippets">
       <CardHeader>
         <CardTitle>Connect a client</CardTitle>
-        <CardDescription>{DESCRIPTIONS[(gateway.type || 'tools').toLowerCase()] ?? DESCRIPTIONS.tools}</CardDescription>
+        <CardDescription>{DESCRIPTIONS[(gateway.type || 'mcp').toLowerCase()] ?? DESCRIPTIONS.mcp}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <CopyField value={address} label="Address" />

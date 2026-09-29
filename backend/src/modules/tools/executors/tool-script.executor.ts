@@ -7,7 +7,7 @@
  * same pattern: gather inputs, resolve credentials, hand off to
  * a sandbox or LLM provider, record the result.
  */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -21,6 +21,10 @@ import { getByDotPath } from '../tool-execution-utils';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { ToolInvocationBudget } from './tool-invocation-budget';
 import { sandboxHostPolicy } from '../../../common/security/gateway-tool-policy';
+import { userPrincipal } from '../../../common/authorization/execution-access.service';
+import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
+import { connectionSecretOf } from '../../credentials/inline-api-auth.helper';
+import type { NpmRegistryConfig } from '../node-sandbox/types';
 
 /**
  * `text.match(/\{[\s\S]*\}|\[[\s\S]*\]/)?.[0] ?? null`: from the first
@@ -52,7 +56,32 @@ export class ToolScriptExecutor {
     private readonly sdkCodeAssembler: SdkCodeAssemblerService,
     private readonly moduleRef: ModuleRef,
     private readonly envelopeCrypto: EnvelopeCryptoService,
+    @Optional()
+    private readonly credentialRefs?: CredentialRefResolver,
   ) {}
+
+  /**
+   * The private registry an SDK or JavaScript tool installs from. Its token
+   * is a credential the registry names (`credentialId`), read at run time as
+   * the caller; nothing secret is kept on the tool or the API, and a token
+   * written beside the registry is never sent.
+   */
+  async registryFor(
+    registry: Record<string, any> | null | undefined,
+    tool: Pick<Tool, 'id'>,
+    options: ToolExecutionOptions,
+  ): Promise<NpmRegistryConfig | undefined> {
+    if (!registry?.url) return undefined;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { credentialId, token: _token, authToken: _authToken, ...rest } = registry;
+    if (!credentialId || !this.credentialRefs) return rest as NpmRegistryConfig;
+    const resolved = await this.credentialRefs.resolve(options.organizationId, credentialId, {
+      principal: options.principal ?? userPrincipal(options.userId),
+      context: { purpose: 'npm_registry', resourceType: 'tool', resourceId: tool.id },
+    });
+    const secret = connectionSecretOf(resolved.config);
+    return { ...(rest as NpmRegistryConfig), ...(secret ? { authToken: secret } : {}) };
+  }
 
   // ─── LLM tool ──────────────────────────────────────────────────
 
@@ -164,7 +193,7 @@ export class ToolScriptExecutor {
       if (sdkConfig.packageName && !dependencies[sdkConfig.packageName]) {
         dependencies[sdkConfig.packageName] = '*';
       }
-      const npmRegistry = tool.npmRegistry ?? api?.npmRegistry ?? undefined;
+      const npmRegistry = await this.registryFor(tool.npmRegistry ?? api?.npmRegistry, tool, options);
       const credentials = await this.resolveToolCredentials(tool, api);
       const code = this.sdkCodeAssembler.assemble(sdkConfig);
 
@@ -219,7 +248,7 @@ export class ToolScriptExecutor {
     try {
       const api = tool.api ?? tool.operation?.api ?? null;
       const dependencies = tool.dependencies ?? api?.dependencies ?? undefined;
-      const npmRegistry = tool.npmRegistry ?? api?.npmRegistry ?? undefined;
+      const npmRegistry = await this.registryFor(tool.npmRegistry ?? api?.npmRegistry, tool, options);
       const credentials = await this.resolveToolCredentials(tool, api);
 
       const sandboxResult = await this.nodeSandbox.execute({

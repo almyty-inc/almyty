@@ -38,7 +38,6 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { orgSlugOf } from '@/lib/gateway-connect'
 import { ConnectSnippets } from '@/components/gateways/connect-snippets'
 import { GatewayStatusSwitch } from '@/components/gateways/detail/gateway-status-switch'
-import { Disclosure } from '@/components/ui/disclosure'
 import { pluralized } from '@/lib/utils'
 
 /** The tabs `?tab=` may open. */
@@ -297,10 +296,9 @@ export function GatewayDetailPage() {
     )
   }
 
-  const isSharedTools = gateway.type === 'tools'
-  // A gateway made on Create gateway serves tools over one protocol (or,
-  // made earlier, over all three): its setup per client shows up top.
-  const isToolGateway = !gateway.isSystem && ['tools', 'mcp', 'utcp', 'skills'].includes(gateway.type)
+  // A tool gateway serves its tools over one protocol: its setup per client
+  // shows up top.
+  const isToolGateway = !gateway.isSystem && ['mcp', 'utcp', 'skills'].includes(gateway.type)
   const orgSlug = orgSlugOf(currentOrganization)
   // What the create page could not attach, handed over with the key.
   const skippedTools: Array<{ toolId: string; reason: string }> =
@@ -328,7 +326,6 @@ export function GatewayDetailPage() {
       onAssign={(toolId) => assignToolMutation.mutate({ toolId })}
       onRemove={(toolId) => removeToolMutation.mutate({ toolId })}
       securitySaving={updateToolConfigMutation.isPending}
-      hidePresets={isSharedTools}
       onSaveSecurity={(target) =>
         updateToolConfigMutation.mutateAsync({
           gatewayToolId: target.gatewayToolId,
@@ -394,7 +391,7 @@ export function GatewayDetailPage() {
             </div>
             <div>
               <h1 className={DETAIL_TITLE_CLASSES}>{gateway.name}</h1>
-              <p className="text-muted-foreground">{gateway.description || (isSharedTools ? 'One address for MCP, UTCP and Skills' : 'API Gateway')}</p>
+              <p className="text-muted-foreground">{gateway.description || 'API Gateway'}</p>
             </div>
           </div>
         </div>
@@ -530,26 +527,6 @@ export function GatewayDetailPage() {
         />
       )}
 
-      {isSharedTools ? (
-        <>
-          {/* A gateway of every protocol: its tools, then everything else
-              folded away. Keys, extra sign-in methods, usage and events
-              are there for whoever needs them; the address and snippets
-              above are all a first visit needs. */}
-          <section aria-labelledby="shared-tools-heading" className="space-y-3">
-            <h2 id="shared-tools-heading" className="text-lg font-semibold">
-              Tools <span className="text-sm font-normal text-muted-foreground">({gatewayTools.length})</span>
-            </h2>
-            {toolsTab}
-          </section>
-          <Disclosure title="Advanced" summary="Access keys, sign-in methods, usage and events">
-            <GatewayAuthSection gatewayId={gateway.id} gatewayName={gateway.name} />
-            {metricsCard}
-            <GatewayEventsTab gatewayId={id!} />
-          </Disclosure>
-        </>
-      ) : (
-        <>
       {/* Authentication */}
       {gateway.type !== 'skills' && (
         <GatewayAuthSection gatewayId={gateway.id} gatewayName={gateway.name} />
@@ -585,8 +562,6 @@ export function GatewayDetailPage() {
           <GatewayEventsTab gatewayId={id!} />
         </TabsContent>
       </Tabs>
-        </>
-      )}
 
       {confirmDialog}
 

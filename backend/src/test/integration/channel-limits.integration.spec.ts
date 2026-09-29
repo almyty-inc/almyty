@@ -333,7 +333,6 @@ run('channel limits and visitor rights (real Postgres)', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       places,
     );
   });

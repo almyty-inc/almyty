@@ -216,29 +216,17 @@ jobs:
           - auth-cli
           - chat-cli
           - client
-          - connections-cli
+          - credentials-cli
           - mcp-mux
           - mcp-server
           - models-cli
           - runner
           - skills-cli
-        # almyty-cli is deliberately absent, and its lockfile is the one
-        # rotted lock that cannot be regenerated. It depends on
-        # @almyty/models and @almyty/connections at ^1.2.0 and neither name
-        # exists on the registry (both answer 404), so `npm install` in that
-        # package fails outright -- there is nothing for npm to resolve.
-        #
-        # What a user gets today is worse than a failed install, not better:
-        # the PUBLISHED @almyty/cli@1.2.0 manifest predates those two
-        # dependencies, so `npm i -g @almyty/cli` succeeds and installs a
-        # binary that reports v0.1.0 and has no `models`, `connections` or
-        # `acp` command at all. The next publish from this tree would flip
-        # that to an uninstallable package, because npm publish does not
-        # check that a dependency resolves.
-        #
-        # Both halves close the same way: publish @almyty/models and
-        # @almyty/connections, then regenerate
-        # packages/almyty-cli/package-lock.json and add the leg back.
+        # almyty-cli is deliberately absent: it depends on
+        # @almyty/credentials, which is not on the registry until its first
+        # publish, so `npm ci` there has nothing to resolve. Publish
+        # @almyty/credentials, regenerate packages/almyty-cli/package-lock.json
+        # (scripts/check-package-locks.js names this too) and add the leg.
 
     steps:
       - name: Checkout

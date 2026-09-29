@@ -87,18 +87,25 @@ export function getInitials(name: string): string {
     .slice(0, 2)
 }
 
+/**
+ * "3h ago", or "in 3h" for a time still to come (an expiry, a next run).
+ * A time a few seconds either side of now is "just now", so a clock a
+ * little ahead of the server's does not read as the future.
+ */
 export function formatRelativeTime(date: Date | string): string {
   const d = new Date(date)
   const now = new Date()
   const diffMs = now.getTime() - d.getTime()
-  const diffSec = Math.floor(diffMs / 1000)
+  const future = diffMs < 0
+  const diffSec = Math.floor(Math.abs(diffMs) / 1000)
   const diffMin = Math.floor(diffSec / 60)
   const diffHr = Math.floor(diffMin / 60)
   const diffDay = Math.floor(diffHr / 24)
+  const say = (amount: string) => (future ? `in ${amount}` : `${amount} ago`)
 
   if (diffSec < 60) return 'just now'
-  if (diffMin < 60) return `${diffMin}m ago`
-  if (diffHr < 24) return `${diffHr}h ago`
-  if (diffDay < 30) return `${diffDay}d ago`
+  if (diffMin < 60) return say(`${diffMin}m`)
+  if (diffHr < 24) return say(`${diffHr}h`)
+  if (diffDay < 30) return say(`${diffDay}d`)
   return formatDate(date)
 }

@@ -49,6 +49,7 @@ const ApiImportPage = lazy(() => import('@/pages/api-import').then(m => ({ defau
 const ApiSetupPage = lazy(() => import('@/pages/api-setup').then(m => ({ default: m.ApiSetupPage })))
 const ApiNewSdkPage = lazy(() => import('@/pages/api-new-sdk').then(m => ({ default: m.ApiNewSdkPage })))
 const ApiNewHttpPage = lazy(() => import('@/pages/api-new-http').then(m => ({ default: m.ApiNewHttpPage })))
+const ApiNewProviderPage = lazy(() => import('@/pages/api-new-provider').then(m => ({ default: m.ApiNewProviderPage })))
 const ApiNewDescriptionPage = lazy(() => import('@/pages/api-new-description').then(m => ({ default: m.ApiNewDescriptionPage })))
 const ToolsPage = lazy(() => import('@/pages/tools').then(m => ({ default: m.ToolsPage })))
 const ToolDetailPage = lazy(() => import('@/pages/tool-detail').then(m => ({ default: m.ToolDetailPage })))
@@ -69,8 +70,6 @@ const ApprovalPolicyPage = lazy(() => import('@/pages/approval-policy').then(m =
 const CredentialDetailRoutePage = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.CredentialDetailRoutePage })))
 const CustomServiceNewPage = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.CustomServiceNewPage })))
 const CredentialPolicyPage = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.CredentialPolicyPage })))
-const OldCredentialsAddressRedirect = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.OldCredentialsAddressRedirect })))
-const AccessKeysRedirect = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.AccessKeysRedirect })))
 const OrganizationNewPage = lazy(() => import('@/pages/organization-pages').then(m => ({ default: m.OrganizationNewPage })))
 const OrganizationDetailPage = lazy(() => import('@/pages/organization-pages').then(m => ({ default: m.OrganizationDetailPage })))
 const SettingsPage = lazy(() => import('@/pages/settings').then(m => ({ default: m.SettingsPage })))
@@ -85,7 +84,6 @@ const ApprovalsPage = lazy(() => import('@/pages/approvals').then(m => ({ defaul
 const RunnerDetailPage = lazy(() => import('@/pages/runner-detail').then(m => ({ default: m.RunnerDetailPage })))
 const RunnerNewPage = lazy(() => import('@/pages/runner-new').then(m => ({ default: m.RunnerNewPage })))
 const WorkspaceDetailPage = lazy(() => import('@/pages/workspace-detail').then(m => ({ default: m.WorkspaceDetailPage })))
-const WorkspaceAddressRedirect = lazy(() => import('@/pages/workspace-detail').then(m => ({ default: m.WorkspaceAddressRedirect })))
 const MemoriesPage = lazy(() => import('@/pages/memories').then(m => ({ default: m.MemoriesPage })))
 const DocsPage = lazy(() => import('@/pages/docs').then(m => ({ default: m.DocsPage })))
 const AcceptInvitePage = lazy(() => import('@/pages/accept-invite').then(m => ({ default: m.AcceptInvitePage })))
@@ -179,6 +177,7 @@ export function createAppRoutes() {
           <Route path="/apis/new" element={<ApiNewPage />} />
           <Route path="/apis/new/sdk" element={<ApiNewSdkPage />} />
           <Route path="/apis/new/http" element={<ApiNewHttpPage />} />
+          <Route path="/apis/new/provider/:key" element={<ApiNewProviderPage />} />
           <Route path="/apis/new/:type" element={<ApiNewDescriptionPage />} />
           <Route path="/apis/:id" element={<ApiDetailPage />} />
           <Route path="/apis/:id/edit" element={<ApiEditPage />} />
@@ -205,9 +204,6 @@ export function createAppRoutes() {
           <Route path="/runners/:id" element={<RunnerDetailPage />} />
           <Route path="/runners/:runnerId/workspaces/:id" element={<WorkspaceDetailPage />} />
           <Route path="/approvals" element={<ApprovalsPage />} />
-          {/* Workspaces live on their runner's page now. */}
-          <Route path="/workspaces" element={<Navigate to="/runners" replace />} />
-          <Route path="/workspaces/:id" element={<WorkspaceAddressRedirect />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/models" element={<ModelsPage />} />
           <Route path="/models/connect" element={<ConnectProviderPage />} />
@@ -228,7 +224,6 @@ export function createAppRoutes() {
           <Route path="/memories/transfer" element={<MemoryTransferPage />} />
           <Route path="/settings/approvals/policies/new" element={<ApprovalPolicyPage />} />
           <Route path="/settings/approvals/policies/:policyId" element={<ApprovalPolicyPage />} />
-          <Route path="/settings/connections/*" element={<OldCredentialsAddressRedirect />} />
           <Route path="/settings/*" element={<SettingsPage />} />
           {/* /credentials?connection=<id> is where a sign-in at a service comes back. */}
           <Route path="/credentials" element={<CredentialsPage />} />
@@ -237,11 +232,7 @@ export function createAppRoutes() {
           <Route path="/credentials/custom/new" element={<CustomServiceNewPage />} />
           <Route path="/credentials/policies/new" element={<CredentialPolicyPage />} />
           <Route path="/credentials/policies/:policyId" element={<CredentialPolicyPage />} />
-          {/* Access keys live on the gateway or agent they unlock. */}
-          <Route path="/credentials/access-keys/*" element={<AccessKeysRedirect />} />
           <Route path="/credentials/:id" element={<CredentialDetailRoutePage />} />
-          {/* Credentials were called Connections for a while; those addresses keep working. */}
-          <Route path="/connections/*" element={<OldCredentialsAddressRedirect />} />
           <Route path="/organizations" element={<OrganizationsPage />} />
           <Route path="/organizations/new" element={<OrganizationNewPage />} />
           <Route path="/organizations/:id" element={<OrganizationDetailPage />} />

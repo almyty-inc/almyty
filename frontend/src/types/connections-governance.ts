@@ -1,5 +1,5 @@
 /**
- * Connections governance (EE, entitlement `connections_governance`):
+ * Credentials governance (EE, entitlement `credentials_governance`):
  * org-wide policies over the Connections layer, the review of user-scoped
  * connections granted to agents and workspaces, expiry and rotation runs,
  * and the audit export.
@@ -180,7 +180,7 @@ export interface ExpiryAction {
   policyId: string | null
 }
 
-/** GET /ee/connections/expiring: what the sweep would act on, without acting. */
+/** GET /ee/credentials/expiring: what the sweep would act on, without acting. */
 export interface ExpiryActions {
   warn: ExpiryAction[]
   expire: ExpiryAction[]
@@ -205,7 +205,7 @@ export interface RotationCandidate {
   policyId: string | null
 }
 
-/** GET /ee/connections/rotate-due. */
+/** GET /ee/credentials/rotate-due. */
 export interface RotationDue {
   /** Rotated through the provider API by the sweep. */
   due: RotationCandidate[]

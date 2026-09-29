@@ -154,7 +154,7 @@ export const LABEL_PROPER_NOUNS = new Set([
 
 /** Multi-word names that keep their capitals: named surfaces and specs. */
 export const LABEL_PROPER_PHRASES = [
-  'Tool Hub', 'Agent Skills', 'Hugging Face', 'Google Chat', 'Microsoft Teams', 'Claude Code', 'Claude Desktop',
+  'Tool Hub', 'Agent Skills', 'Hugging Face Hub', 'Hugging Face', 'Google Chat', 'Microsoft Teams', 'Claude Code', 'Claude Desktop',
   'Amazon Bedrock', 'Cloud Storage', 'Universal Tool Call Protocol', 'Google Cloud Storage', 'VS Code', 'OpenID Connect',
   'EU AI Act', 'App Store Connect', 'Twilio Account SID', 'Terms of Service', 'Privacy Policy',
   'Server-Sent Events', 'Google Cloud', 'Microsoft App ID', 'Azure AI Foundry', 'Ctrl+Z', 'Ctrl+Shift+Z', 'Ctrl+K',

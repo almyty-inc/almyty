@@ -130,7 +130,7 @@ const SHARED = {
   id: 'gw-9',
   name: 'Petstore',
   description: '',
-  type: 'tools',
+  type: 'mcp',
   status: 'active',
   endpoint: '/petstore',
   configuration: {},
@@ -331,27 +331,22 @@ describe('/gateways/new: create gateway', () => {
   })
 })
 
-describe('a gateway of every protocol, made before the protocol pick', () => {
+describe('a tool gateway, one protocol', () => {
   beforeEach(() => {
     vi.mocked(gatewaysApi.getById).mockResolvedValue(SHARED as any)
   })
 
-  it('leads with the address and snippets; keys, usage and events wait under Advanced', async () => {
-    const user = userEvent.setup()
+  it('leads with the address and the setups of its one protocol', async () => {
     renderAt('/gateways/gw-9')
-    expect(await screen.findByTestId('connect-snippets')).toBeInTheDocument()
+    const setups = await screen.findByTestId('connect-snippets')
     // No key in hand any more: a placeholder, and where a new one comes from.
     expect(screen.getByTestId('snippet-claude-code')).toHaveTextContent('<your-access-key>')
     expect(screen.getByTestId('key-placeholder-note')).toBeInTheDocument()
-    expect(screen.queryByText('Authentication')).toBeNull()
-    expect(screen.queryByRole('tab', { name: 'Integrations' })).toBeNull()
-    // Just the list of what it serves: no scoping presets to learn.
-    expect(screen.getByRole('heading', { name: /^Tools/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Read only' })).toBeNull()
-
-    await user.click(screen.getByRole('button', { name: /^Advanced/ }))
-    expect(await screen.findByText('Authentication')).toBeInTheDocument()
-    expect(screen.getByText('Performance metrics')).toBeInTheDocument()
+    expect(within(setups).queryByRole('tab', { name: 'UTCP' })).toBeNull()
+    expect(within(setups).queryByRole('tab', { name: 'Skills' })).toBeNull()
+    // Keys, scoping, usage and events are on the page, as on every gateway.
+    expect(await screen.findByRole('tab', { name: 'Integrations' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^Tool scoping/ })).toBeInTheDocument()
   })
 
   it('pauses and resumes with one switch', async () => {

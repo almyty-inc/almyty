@@ -115,27 +115,24 @@ describe('one Credentials page', () => {
     expect(existsSync(join(SRC, rel))).toBe(false)
   })
 
-  it('nothing links to the old addresses, which only redirect', () => {
-    const OLD = /['"`]\/(connections|settings\/connections)(\/|['"`?])/
+  it('nothing calls or links to a /connections address, on the page or the server', () => {
+    const CONNECTIONS = /['"`]\/(connections|connectors|settings\/connections|ee\/connections)(\/|['"`?])/
     const hits = sourceFiles(SRC)
-      // Server paths, not page addresses: the /connections endpoints the
-      // credential flows call.
-      .filter((f) => !f.endsWith('App.tsx') && !f.endsWith(join('pages', 'credential-pages.tsx')) && !f.endsWith(join('lib', 'api.ts')) && !f.endsWith(join('lib', 'connections-api.ts')))
-      .filter((f) => OLD.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')))
+      .filter((f) => CONNECTIONS.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')))
       .map((f) => relative(SRC, f))
     expect(hits).toEqual([])
   })
 
-  it('keeps the old addresses working', () => {
+  it('has no route for /connections, /settings/connections or /workspaces', () => {
     const app = read('App.tsx')
-    expect(app).toMatch(/<Route path="\/connections\/\*" element=\{<OldCredentialsAddressRedirect \/>\} \/>/)
-    expect(app).toMatch(/<Route path="\/settings\/connections\/\*" element=\{<OldCredentialsAddressRedirect \/>\} \/>/)
+    expect(app).not.toMatch(/path="\/(connections|settings\/connections|workspaces)[/"]/)
+    expect(app + read('pages/credential-pages.tsx') + read('pages/workspace-detail.tsx')).not.toMatch(/AddressRedirect|AccessKeysRedirect/)
   })
 })
 
 describe('one pick-or-create control', () => {
-  it('is what the API key, tool auth, MCP server token and memory accounts use', () => {
-    for (const rel of ['components/apis/api-key-form.tsx', 'components/tools/tool-form.tsx', 'components/tools/mcp-server-form.tsx', 'pages/memories.tsx']) {
+  it('is what the API key, tool auth, MCP server token, npm registry token and memory accounts use', () => {
+    for (const rel of ['components/apis/api-key-form.tsx', 'components/tools/tool-form.tsx', 'components/tools/mcp-server-form.tsx', 'components/apis/sdk-api-form.tsx', 'pages/memories.tsx']) {
       const source = read(rel)
       expect(importsFrom(source, '@/components/credentials/credential-picker'), rel).toContain('CredentialPicker')
       expect(importsFrom(source, '@/components/connections/connect-flow'), rel).not.toContain('ConnectAccountButton')
@@ -157,6 +154,23 @@ describe('one pick-or-create control', () => {
       'components/llm-providers/credential-slot.tsx',
       'pages/provider.tsx',
     ])
+  })
+
+  it('leaves no secret to be typed into an API, tool or package form itself', () => {
+    // Basic auth, an OAuth sign-in and a registry token are credentials too.
+    // The only secret fields left are an OAuth app's client secret (the
+    // sign-in that makes the credential) and a tool's custom header values.
+    const apiKey = read('components/apis/api-key-form.tsx')
+    expect(apiKey).not.toMatch(/id="api-key-value"|id="api-key-username"/)
+    expect(apiKey).toMatch(/BASIC_AUTH_SERVICE = 'basic-auth'/)
+    expect(apiKey).toMatch(/OAUTH2_SIGN_IN_SERVICE = 'oauth2'/)
+    expect(apiKey).toMatch(/createPanel=/)
+    const toolForm = read('components/tools/tool-form.tsx')
+    expect(toolForm).not.toMatch(/auth-password|auth-username|authConfig\.password/)
+    expect(toolForm).toMatch(/'basic-auth'/)
+    const sdkForm = read('components/apis/sdk-api-form.tsx')
+    expect(importsFrom(sdkForm, '@/components/ui/secret-input')).toEqual([])
+    expect(sdkForm).toMatch(/credentialId: registryCredentialId/)
   })
 
   it('creates inline with the same add flow as the Credentials page, and links to what was picked', () => {
