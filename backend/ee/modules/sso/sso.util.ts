@@ -32,6 +32,8 @@ export const SSO_ACCESS_TOKEN_COOKIE_OPTIONS = {
 
 /** Short-lived cookie carrying the OIDC `state` between login and callback. */
 export const SSO_STATE_COOKIE = 'sso_oidc_state';
+/** Short-lived cookie carrying a dashboard SAML sign-in's relay state (SamlSignInStore). */
+export const SSO_SAML_STATE_COOKIE = 'sso_saml_state';
 export const SSO_STATE_COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',

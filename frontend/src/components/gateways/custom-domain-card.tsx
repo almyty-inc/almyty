@@ -1,15 +1,15 @@
 import React, { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy } from 'lucide-react'
+import { Check } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { DnsRecords } from '@/components/ui/dns-records'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { gatewaysApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { useCopy } from '@/lib/clipboard'
 
 /**
  * A hosted chat app on a domain the tenant owns. Set the hostname, publish
@@ -39,7 +39,6 @@ const STATUS_LABEL: Record<CustomDomainView['status'], string> = {
 
 export function CustomDomainCard({ gatewayId }: { gatewayId: string }) {
   const queryClient = useQueryClient()
-  const copy = useCopy()
   const key = ['gateway-custom-domain', gatewayId]
   const { data: domain, isLoading } = useQuery<CustomDomainView | null>({
     queryKey: key,
@@ -109,25 +108,7 @@ export function CustomDomainCard({ gatewayId }: { gatewayId: string }) {
                     Add these records at your DNS provider, then check. DNS changes can take a few minutes to appear.
                   </p>
                 )}
-                <div className="space-y-2" aria-label="DNS records">
-                  {[domain.records.txt, domain.records.cname].map((record) => (
-                    <div key={record.type} className="rounded-md border p-3 text-sm">
-                      <div className="mb-1 text-xs font-medium text-muted-foreground">{record.type}</div>
-                      <div className="grid gap-1 sm:grid-cols-[4rem_minmax(0,1fr)_auto] sm:items-center">
-                        <span className="text-muted-foreground">Name</span>
-                        <code className="break-all font-mono">{record.name}</code>
-                        <Button type="button" variant="ghost" size="sm" aria-label={`Copy ${record.type} name`} onClick={() => copy(record.name, `${record.type} name`)}>
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                        <span className="text-muted-foreground">Value</span>
-                        <code className="break-all font-mono">{record.value}</code>
-                        <Button type="button" variant="ghost" size="sm" aria-label={`Copy ${record.type} value`} onClick={() => copy(record.value, `${record.type} value`)}>
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <DnsRecords records={[domain.records.txt, domain.records.cname]} />
                 {domain.lastError && domain.status !== 'active' && (
                   <p role="status" className="text-sm text-amber-600 dark:text-amber-400">
                     {domain.lastError}

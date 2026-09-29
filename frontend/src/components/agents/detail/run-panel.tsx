@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label'
 import { CodeEditor } from '@/components/ui/code-editor'
 import { CodeBlock } from '@/components/ui/code-block'
 
-import { agentsApi } from '@/lib/api'
+import { invokeAndSettle } from '@/lib/agent-run'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import type { Agent } from '@/types'
@@ -57,7 +57,8 @@ export function RunPanel({ agent, onClose }: RunPanelProps) {
       } catch {
         throw new Error('Invalid JSON input')
       }
-      return agentsApi.invoke(agent.id, input)
+      // An autonomous run is answered while it is still going; wait for it.
+      return invokeAndSettle(agent.id, input)
     },
     // A run that finishes is not a run that worked. The endpoint answers
     // 200 with `status: 'failed'` and an `error` string in the body, and

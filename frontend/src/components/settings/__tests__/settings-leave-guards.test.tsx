@@ -20,7 +20,7 @@ vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 vi.mock('@/lib/api', () => ({
   apiGet: vi.fn(),
   api: { get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() },
-  ssoApi: { getConfig: vi.fn(), saveConfig: vi.fn(), rotateScimToken: vi.fn(), revealScimToken: vi.fn() },
+  ssoApi: { getConfig: vi.fn(), saveConfig: vi.fn(), rotateScimToken: vi.fn(), revealScimToken: vi.fn(), listDomains: vi.fn(async () => []) },
   complianceApi: { getPolicy: vi.fn(), updatePolicy: vi.fn(), getReport: vi.fn() },
   organizationsApi: { getRetention: vi.fn(), updateRetention: vi.fn() },
 }))

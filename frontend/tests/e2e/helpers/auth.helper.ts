@@ -38,22 +38,22 @@ export class AuthHelper {
   }
 
   /**
-   * Register a new user via API (faster)
+   * Register a new user via API (faster). Registration answers with a
+   * cookie and no token, so the helper signs in through the non-browser
+   * login (/auth/token) to learn the user's id and organization.
    */
   async registerViaAPI(user: Omit<TestUser, 'token' | 'id' | 'organizationId'>): Promise<TestUser> {
-    const response = await this.apiHelper.register(user)
-
-    // Check if response contains accessToken
-    if (!response || !response.accessToken) {
-      throw new Error(`Registration failed: ${JSON.stringify(response)}`)
+    await this.apiHelper.register(user)
+    const tokens = await this.apiHelper.login(user.email, user.password)
+    if (!tokens?.accessToken) {
+      throw new Error(`Registration failed: ${JSON.stringify(tokens)}`)
     }
 
-    // Decode JWT to get user info (backend doesn't return user object directly)
-    const tokenPayload = JSON.parse(Buffer.from(response.accessToken.split('.')[1], 'base64').toString())
+    const tokenPayload = JSON.parse(Buffer.from(tokens.accessToken.split('.')[1], 'base64').toString())
 
     return {
       ...user,
-      token: response.accessToken,
+      token: tokens.accessToken,
       id: tokenPayload.sub,
       organizationId: tokenPayload.organizations[0]?.id,
     }
@@ -70,53 +70,42 @@ export class AuthHelper {
   }
 
   /**
-   * Login via API and set token in localStorage (faster)
+   * Login via API (faster). The browser's session is the httpOnly cookie
+   * from /auth/login, set on this page's context; the API helper holds a
+   * separate bearer token from /auth/token for its own calls.
    */
   async loginViaAPI(email: string, password: string): Promise<string> {
-    const response = await this.apiHelper.login(email, password)
+    const apiUrl = process.env.E2E_API_URL || 'http://localhost:4000'
+    await this.page.request.post(`${apiUrl}/auth/login`, { data: { email, password } })
+    const tokens = await this.apiHelper.login(email, password)
 
     // Fetch full user profile to match real auth flow
     // This gets complete organization data, not just JWT payload
-    const profileResponse = await this.apiHelper.getProfile()
-    const user = profileResponse
+    const user = await this.apiHelper.getProfile()
 
-    await this.setAuthState(response.accessToken, user)
-    return response.accessToken
+    await this.setAuthState(user)
+    return tokens.accessToken
   }
 
   /**
-   * Set authentication state in localStorage
+   * Seed the display state the app persists (never a token: the session
+   * is the httpOnly cookie).
    */
-  async setAuthState(token: string, user: any) {
-    // Set via addInitScript for new page navigations
-    await this.page.addInitScript(({ token, user }) => {
-      localStorage.setItem('token', token)
-      localStorage.setItem('user', JSON.stringify(user))
+  async setAuthState(user: any) {
+    const seed = (u: any) => {
+      localStorage.setItem('user', JSON.stringify(u))
       localStorage.setItem('auth-storage', JSON.stringify({
-        state: {
-          user,
-          token,
-          isAuthenticated: true,
-        },
+        state: { user: u, isAuthenticated: true },
         version: 0,
       }))
-    }, { token, user })
+    }
+    // Set via addInitScript for new page navigations
+    await this.page.addInitScript(seed, user)
 
     // ALSO set directly if page is already navigated (persists through reloads!)
     const url = this.page.url()
     if (url && url !== 'about:blank' && !url.startsWith('data:')) {
-      await this.page.evaluate(({ token, user }) => {
-        localStorage.setItem('token', token)
-        localStorage.setItem('user', JSON.stringify(user))
-        localStorage.setItem('auth-storage', JSON.stringify({
-          state: {
-            user,
-            token,
-            isAuthenticated: true,
-          },
-          version: 0,
-        }))
-      }, { token, user })
+      await this.page.evaluate(seed, user)
     }
   }
 

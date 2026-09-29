@@ -101,7 +101,7 @@ describe('auth store logout', () => {
 
     const state = useAuthStore.getState()
     expect(state.user).toBeNull()
-    expect(state.token).toBeNull()
+    expect(state).not.toHaveProperty('token')
     expect(state.isAuthenticated).toBe(false)
   })
 
