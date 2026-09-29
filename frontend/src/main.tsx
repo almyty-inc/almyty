@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 
@@ -9,6 +9,7 @@ import { AppErrorFallback } from '@/components/layout/route-error'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { initAnalytics } from '@/lib/analytics'
 import { initSentry } from '@/lib/sentry'
+import { createQueryClient } from '@/lib/query-client'
 import { telemetryAllowedOn } from '@/lib/tenant-host'
 
 import './index.css'
@@ -27,20 +28,7 @@ if (telemetryAllowedOn()) {
 }
 
 
-// Create a client
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30000, // 30 seconds before refetch
-      gcTime: 5 * 60 * 1000, // keep unused data 5 minutes
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-    mutations: {
-      retry: 1,
-    },
-  },
-})
+const queryClient = createQueryClient()
 
 // A data router, not <BrowserRouter>: create and configure flows are pages,
 // and a page with unsaved changes asks before it is left (useLeaveGuard).
