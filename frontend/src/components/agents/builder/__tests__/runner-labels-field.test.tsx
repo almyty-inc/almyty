@@ -40,9 +40,11 @@ describe('machine labels on an agent', () => {
     expect(screen.queryByText(/Write each label as key=value/)).not.toBeInTheDocument()
   })
 
-  it('is on the autonomous agent form, reading and writing agentConfig.runnerLabels', () => {
-    const source = readFileSync(join(__dirname, '..', 'autonomous-config.tsx'), 'utf8')
-    expect(source).toMatch(/<RunnerLabelsField[\s\S]*value=\{agentConfig\.runnerLabels\}/)
-    expect(source).toContain('onAgentConfigChange({ ...agentConfig, runnerLabels })')
+  it('is on the autonomous agent form, under Capabilities, reading and writing agentConfig.runnerLabels', () => {
+    const form = readFileSync(join(__dirname, '..', 'autonomous-config.tsx'), 'utf8')
+    expect(form).toMatch(/<CapabilitiesSection[\s\S]*agentConfig=\{agentConfig\}/)
+    const source = readFileSync(join(__dirname, '..', 'capabilities-section.tsx'), 'utf8')
+    expect(source).toMatch(/<Machine value=\{agentConfig\.runnerLabels\} onChange=\{\(runnerLabels\) => set\(\{ runnerLabels \}\)\}/)
+    expect(source).toMatch(/<RunnerLabelsField[\s\S]*value=\{value\}[\s\S]*onChange=\{onChange\}/)
   })
 })

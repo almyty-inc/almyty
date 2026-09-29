@@ -16,6 +16,7 @@ import { PURPOSE_LABELS, STRATEGY_LABELS, modelsFromAgent } from '@/components/a
 import type { Agent } from '@/types'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
 import { pluralized } from '@/lib/utils'
+import { SAVE_LABELS, saveOf } from '@/components/agents/builder/memory-section'
 
 export function AgentConfigPanel({ agent }: { agent: Agent }) {
   const [editingVerify, setEditingVerify] = useState(false)
@@ -123,7 +124,7 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
             {memory?.enabled && (
               <Badge variant="outline" className="text-[10px] gap-1">
                 <Brain className="h-3 w-3" />
-                Memory{memory.autoSave ? ' · auto-save' : ''}
+                Memory · {SAVE_LABELS[saveOf(memory)].toLowerCase()}
               </Badge>
             )}
           </div>

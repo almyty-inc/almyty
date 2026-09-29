@@ -38,6 +38,7 @@ import { PipelineCanvas } from '@/components/agents/detail/pipeline-canvas'
 import { OverviewTab } from '@/components/agents/detail/overview-tab'
 import { RunsTab } from '@/components/agents/detail/runs-tab'
 import { MemoryTab } from '@/components/agents/detail/memory-tab'
+import { agentMemoryScope } from '@/components/agents/agent-memory-scope'
 import { FilesTab } from '@/components/agents/detail/files-tab'
 import { InterfacesTab } from '@/components/agents/detail/interfaces-tab'
 import { AgentAccessKeysSection } from '@/components/access-keys/access-keys-section'
@@ -155,16 +156,15 @@ export function AgentDetailPage() {
 
   const runs: AgentRun[] = Array.isArray(runsData) ? runsData : []
 
-  // Fetch memories — agent-scoped reads route through the canonical
-  // store via the workspace scope. We don't filter by agent_id here
-  // because canonical scoping is per-workspace; the memory tab can
-  // narrow client-side via tags or use search if needed.
+  // Fetch memories: the memory this agent's runs read and write, per its
+  // Memory section (whose memory: its own, each person's, or shared).
+  const memoryScope = orgId && id ? agentMemoryScope(agent?.memoryConfig, orgId, id) : null
   const { data: memoriesData, error: memoriesError, refetch: refetchMemories } = useQuery({
-    queryKey: ['agent-memories', id, orgId],
+    queryKey: ['agent-memories', id, orgId, memoryScope?.scope_type],
     queryFn: async () => {
-      if (!orgId) return []
+      if (!memoryScope) return []
       const d: any = await memoriesApi.list({
-        scope: { scope_type: 'workspace', scope_id: orgId },
+        scope: memoryScope,
         mode: 'memory',
         limit: 100,
       })
@@ -430,7 +430,7 @@ export function AgentDetailPage() {
         <TabsContent value="memory" className="space-y-4">
           {/* The tabs render QueryError when handed a failure; without
               these props those branches were unreachable. */}
-          <MemoryTab agentId={id!} memories={memories} error={memoriesError} onRetry={() => refetchMemories()} />
+          <MemoryTab agentId={id!} scope={memoryScope ?? undefined} memories={memories} error={memoriesError} onRetry={() => refetchMemories()} />
         </TabsContent>
 
         <TabsContent value="files" className="space-y-4">

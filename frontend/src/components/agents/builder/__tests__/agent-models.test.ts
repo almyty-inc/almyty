@@ -7,7 +7,6 @@ import { describe, it, expect } from 'vitest'
 
 import type { AgentModelRole, AgentModels } from '@/types/agent-models'
 import {
-  missingSlotsAction,
   missingSlotsSentence,
   modelsFromAgent,
   modelsPayload,
@@ -16,8 +15,14 @@ import {
   newRole,
   nextRoleKey,
   roleIsUsed,
+  rolesInUse,
+  splitAgentTeammates,
+  withWorkMode,
   PURPOSE_LABELS,
   ROLE_PURPOSES,
+  STRATEGY_OPTIONAL,
+  STRATEGY_SLOTS,
+  WORK_MODE_SLOTS,
 } from '../agent-models'
 
 const main: AgentModelRole = { key: 'main', name: 'Main', purpose: 'main', kind: 'model', providerId: 'p1', model: 'big' }
@@ -42,11 +47,48 @@ describe('missing slots', () => {
     expect(missingSlotsSentence({ strategy: 'single', roles: [main] })).toBeNull()
   })
 
-  it('says only what is missing, as what to add', () => {
-    expect(missingSlotsAction({ strategy: 'cascade', roles: [main] })).toBe('Add a drafter and a checker')
-    expect(missingSlotsAction({ strategy: 'cascade', roles: [main, routed('drafter', 'drafter')] })).toBe('Add a checker')
-    expect(missingSlotsAction({ strategy: 'panel', roles: [main, routed('panelist_1', 'panelist')] })).toBe('Add 1 more panelist')
-    expect(missingSlotsAction({ strategy: 'single', roles: [main] })).toBeNull()
+  it('switching the work mode fills each slot it needs, keeps what is there, and asks N for Best of N', () => {
+    const cascade = withWorkMode({ strategy: 'single', roles: [main] }, 'cascade')
+    expect(cascade.strategy).toBe('cascade')
+    expect(cascade.roles.map((r) => [r.key, r.purpose, r.providerId ?? null])).toEqual([
+      ['main', 'main', 'p1'],
+      ['drafter', 'drafter', null],
+      ['checker', 'checker', null],
+    ])
+    const panel = withWorkMode(cascade, 'panel')
+    expect(panel.roles.filter((r) => r.purpose === 'panelist').map((r) => r.key)).toEqual(['panelist_1', 'panelist_2'])
+    // The judge is optional: not added.
+    expect(panel.roles.some((r) => r.purpose === 'judge')).toBe(false)
+    expect(withWorkMode(panel, 'best_of_n').candidates).toBe(3)
+    // Back to Cascade: its drafter and checker are still there, nothing doubled.
+    expect(withWorkMode(panel, 'cascade').roles.filter((r) => r.purpose === 'drafter')).toHaveLength(1)
+  })
+
+  it('saves only the roles the work mode uses; agent teammates go to the agents it may call', () => {
+    const draft: AgentModels = {
+      strategy: 'single',
+      roles: [
+        main,
+        routed('drafter', 'drafter'),
+        routed('lookup', 'teammate'),
+        { key: 'critic', name: 'Critic', purpose: 'teammate', kind: 'agent', agentId: 'agent-critic' },
+      ],
+    }
+    expect(rolesInUse(draft).map((r) => r.key)).toEqual(['main', 'lookup'])
+    expect(modelsPayload(draft).roles.map((r) => r.key)).toEqual(['main', 'lookup'])
+    // A role of another mode's slot does not block the save either.
+    expect(modelsProblems({ ...draft, roles: [...draft.roles, { key: 'checker', name: 'Checker', purpose: 'checker', kind: 'model' }] })).toEqual([])
+    const split = splitAgentTeammates(draft)
+    expect(split.agentIds).toEqual(['agent-critic'])
+    expect(split.models.roles.map((r) => r.key)).toEqual(['main', 'drafter', 'lookup'])
+  })
+
+  it('has a slot list per work mode that is exactly what the engine needs and reads', () => {
+    for (const [strategy, slots] of Object.entries(WORK_MODE_SLOTS)) {
+      const required = Object.fromEntries(slots.filter((s) => !s.optional).map((s) => [s.purpose, s.min]))
+      expect(required).toEqual(STRATEGY_SLOTS[strategy as keyof typeof STRATEGY_SLOTS])
+      expect(slots.filter((s) => s.optional).map((s) => s.purpose)).toEqual(STRATEGY_OPTIONAL[strategy as keyof typeof STRATEGY_OPTIONAL])
+    }
   })
 
   it('brings collaboration participants and the judge along as teammates, on either kind of agent, dropping none', () => {
@@ -86,13 +128,13 @@ describe('the rules the backend enforces', () => {
     expect(modelsProblems(newAgentModels())).toEqual(['Main: pick a model, or route it by policy'])
   })
 
-  it('lets only panelists and teammates be another agent', () => {
+  it('lets only panelists be another agent', () => {
     const models: AgentModels = {
-      strategy: 'single',
+      strategy: 'cascade',
       roles: [
         main,
+        routed('drafter', 'drafter'),
         { key: 'checker', name: 'Checker', purpose: 'checker', kind: 'agent', agentId: 'a2' },
-        { key: 'teammate_1', name: 'Helper', purpose: 'teammate', kind: 'agent', agentId: 'a2' },
       ],
     }
     expect(modelsProblems(models)).toEqual([
@@ -102,16 +144,16 @@ describe('the rules the backend enforces', () => {
 
   it('asks which agent an agent role is', () => {
     const models: AgentModels = {
-      strategy: 'single',
-      roles: [main, { key: 'teammate_1', name: 'Helper', purpose: 'teammate', kind: 'agent', agentId: '' }],
+      strategy: 'panel',
+      roles: [main, routed('panelist_1', 'panelist'), { key: 'panelist_2', name: 'Critic', purpose: 'panelist', kind: 'agent', agentId: '' }],
     }
-    expect(modelsProblems(models)).toEqual(['Helper: choose the agent'])
+    expect(modelsProblems(models)).toEqual(['Critic: choose the agent'])
   })
 
   it('allows one of each one-of purpose and needs a main', () => {
-    expect(modelsProblems({ strategy: 'single', roles: [main, routed('checker', 'checker'), routed('checker_2', 'checker')] })).toContain(
-      'There are 2 checker roles; there can be one',
-    )
+    expect(
+      modelsProblems({ strategy: 'cascade', roles: [main, routed('drafter', 'drafter'), routed('checker', 'checker'), routed('checker_2', 'checker')] }),
+    ).toContain('There are 2 checker roles; there can be one')
     expect(modelsProblems({ strategy: 'single', roles: [routed('checker', 'checker')] })).toEqual([
       'Choose a main role: it runs the loop',
     ])
@@ -178,20 +220,20 @@ describe('loading and saving', () => {
 
   it('sends only the fields that apply to each role, and N only for Best of N', () => {
     const payload = modelsPayload({
-      strategy: 'cascade',
+      strategy: 'panel',
       candidates: 4,
       roles: [
         { ...main, agentId: 'stale', instructions: '  ' },
-        { key: 'drafter', name: ' Drafter ', purpose: 'drafter', kind: 'model', providerId: 'p1', routing: { objective: 'cheapest' } },
-        { key: 'teammate_1', name: 'Helper', purpose: 'teammate', kind: 'agent', agentId: 'a2', providerId: 'p1', temperature: 1 },
+        { key: 'panelist_1', name: ' Skeptic ', purpose: 'panelist', kind: 'model', providerId: 'p1', routing: { objective: 'cheapest' } },
+        { key: 'panelist_2', name: 'Critic', purpose: 'panelist', kind: 'agent', agentId: 'a2', providerId: 'p1', temperature: 1 },
       ],
     })
     expect(payload).toEqual({
-      strategy: 'cascade',
+      strategy: 'panel',
       roles: [
         { key: 'main', name: 'Main', purpose: 'main', kind: 'model', providerId: 'p1', model: 'big' },
-        { key: 'drafter', name: 'Drafter', purpose: 'drafter', kind: 'model', routing: { objective: 'cheapest' } },
-        { key: 'teammate_1', name: 'Helper', purpose: 'teammate', kind: 'agent', agentId: 'a2' },
+        { key: 'panelist_1', name: 'Skeptic', purpose: 'panelist', kind: 'model', routing: { objective: 'cheapest' } },
+        { key: 'panelist_2', name: 'Critic', purpose: 'panelist', kind: 'agent', agentId: 'a2' },
       ],
     })
     expect(modelsPayload({ strategy: 'best_of_n', roles: [main] }).candidates).toBe(3)
