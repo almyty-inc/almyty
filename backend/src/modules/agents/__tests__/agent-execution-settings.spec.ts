@@ -7,6 +7,7 @@ import request from 'supertest';
 import { Agent } from '../../../entities/agent.entity';
 import { Strategy } from '../../../entities/strategy.entity';
 import { AgentRole } from '../../../entities/agent-role.entity';
+import { Organization } from '../../../entities/organization.entity';
 import { AgentExecutionSettingsController } from '../agent-execution-settings.controller';
 import { StrategyPipelineResolver } from '../strategies/strategy-pipeline.resolver';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -48,6 +49,7 @@ describe('agent execution settings', () => {
   const agents: FakeRepository<Agent> = fakeRepository<Agent>({ make: () => new Agent() });
   const strategies: FakeRepository<Strategy> = fakeRepository<Strategy>({ idPrefix: 'strategy' });
   const roles: FakeRepository<AgentRole> = fakeRepository<AgentRole>({ idPrefix: 'role' });
+  const organizations: FakeRepository<Organization> = fakeRepository<Organization>({ idPrefix: 'org' });
 
   // The caller's organization, per test (see above).
   let orgId: string;
@@ -60,6 +62,7 @@ describe('agent execution settings', () => {
         { provide: getRepositoryToken(Agent), useValue: agents },
         { provide: getRepositoryToken(Strategy), useValue: strategies },
         { provide: getRepositoryToken(AgentRole), useValue: roles },
+        { provide: getRepositoryToken(Organization), useValue: organizations },
         // The real resolver, so ejecting exercises the actual compiler
         // rather than a stub that always returns a graph.
         StrategyPipelineResolver,
@@ -130,10 +133,10 @@ describe('agent execution settings', () => {
   });
 
   it('changes one without clearing the other', async () => {
-    await put({ strategyKey: 'panel' }).expect(200);
+    await put({ strategyKey: 'cascade' }).expect(200);
     await put({ orchestrator: { enabled: true, roleKey: 'orchestrator', timeoutMs: 2000, fallbackStrategyKey: 'single' } }).expect(200);
     const { body } = await get().expect(200);
-    expect(body.data.strategyKey).toBe('panel');
+    expect(body.data.strategyKey).toBe('cascade');
     expect(body.data.orchestrator.enabled).toBe(true);
   });
 
@@ -168,6 +171,46 @@ describe('agent execution settings', () => {
     seedAgent({ settings: { somethingElse: 'kept' } as any });
     await put({ strategyKey: 'single' }).expect(200);
     expect((stored().settings as any).somethingElse).toBe('kept');
+  });
+
+  /**
+   * The panel's judge is an optional role: a judge role, else a principal
+   * role, else the organization's default routing. With none of them the
+   * run paid for every panelist and failed at the judge, so choosing
+   * Panel is refused, saying what to add.
+   */
+  describe('a panel needs someone to judge it', () => {
+    const addRole = (key: string) => roles.seed({ key, organizationId: orgId, agentId: id } as Partial<AgentRole>);
+
+    it('refuses Panel when nothing can judge, and saves nothing', async () => {
+      const { body } = await put({ strategyKey: 'panel' }).expect(400);
+      expect(body.code).toBe('STRATEGY_ROLE_MISSING');
+      expect(body.message).toBe(
+        'Panel needs a judge to write one answer from what the panelists said. ' +
+          'Add a judge role (a principal role also works), or set a default routing policy for your organization.',
+      );
+      expect(stored().settings).toBeUndefined();
+    });
+
+    it('accepts Panel with a judge role', async () => {
+      addRole('judge');
+      await put({ strategyKey: 'panel' }).expect(200);
+      expect((stored().settings as any).execution.strategyKey).toBe('panel');
+    });
+
+    it('accepts Panel with a principal role standing in for the judge', async () => {
+      addRole('principal');
+      await put({ strategyKey: 'panel' }).expect(200);
+    });
+
+    it("accepts Panel when the organization's default routing will judge", async () => {
+      organizations.seed({ id: orgId, settings: { defaultRouting: { objective: 'cheapest' } } } as any);
+      await put({ strategyKey: 'panel' }).expect(200);
+    });
+
+    it('does not ask the other shapes for a judge', async () => {
+      await put({ strategyKey: 'best_of_n' }).expect(200);
+    });
   });
 
   it('does not serve another organization an agent', async () => {

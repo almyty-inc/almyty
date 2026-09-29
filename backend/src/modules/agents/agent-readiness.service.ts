@@ -62,6 +62,16 @@ export class AgentReadinessService {
       const config = node.data || node.config || {};
       if (node.type === 'llm_call' || node.type === 'extract_context') {
         configs.push({ config, label: `Model node "${node.id}"` });
+      } else if (node.type === 'merge' && (config.strategy === 'best_of_n' || config.strategy === 'consensus')) {
+        // A judged merge calls a model the same way an llm_call does: its
+        // role, a pinned judge provider, its routing, or the organization
+        // default. The panel's judge is optional, so a panel with no judge
+        // role and no default reaches here with nothing to call.
+        const judge = config.judgeConfig ?? {};
+        configs.push({
+          config: { roleKey: config.roleKey, providerId: judge.providerId, routing: judge.routing ?? config.routing },
+          label: `Judge on "${node.id}"`,
+        });
       } else if (node.type === 'verify') {
         for (const checker of config.checkers || []) configs.push({ config: checker, label: `Checker on "${node.id}"` });
       }

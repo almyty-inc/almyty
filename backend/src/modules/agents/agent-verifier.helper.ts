@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { LlmProvidersService } from '../llm-providers/llm-providers.service';
+import type { ChatResponse } from '../llm-providers/llm-providers.service';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 
@@ -35,6 +36,10 @@ export interface CheckerResult {
   error?: string;
   cost?: number;
   tokens?: number;
+  /** The model that gave the verdict, and the router's attribution when it was routed. */
+  model?: string;
+  providerId?: string;
+  routing?: ChatResponse['routing'];
 }
 
 export interface VerifyPanelResult {
@@ -43,7 +48,14 @@ export interface VerifyPanelResult {
   policy: VerifyPolicy;
   failures: VerifyFailure[];
   passedRules: string[];
-  checkers: Array<{ checker: string; verdict: 'pass' | 'fail' | 'error'; error?: string }>;
+  checkers: Array<{
+    checker: string;
+    verdict: 'pass' | 'fail' | 'error';
+    error?: string;
+    model?: string;
+    providerId?: string;
+    routing?: ChatResponse['routing'];
+  }>;
   cost: number;
   tokens: number;
 }
@@ -106,6 +118,9 @@ export class AgentVerifierHelper {
         checker: r.checker,
         verdict: r.verdict,
         ...(r.error ? { error: r.error } : {}),
+        ...(r.model ? { model: r.model } : {}),
+        ...(r.providerId ? { providerId: r.providerId } : {}),
+        ...(r.routing ? { routing: r.routing } : {}),
       })),
       cost: checkerResults.reduce((s, r) => s + (r.cost || 0), 0),
       tokens: checkerResults.reduce((s, r) => s + (r.tokens || 0), 0),
@@ -199,6 +214,16 @@ export class AgentVerifierHelper {
       const parsed = this.parseCheckerJson(raw);
       const cost = response?.cost || 0;
       const tokens = response?.usage?.totalTokens || 0;
+      // Which model gave this verdict: what the provider said it ran, the
+      // router's pick for a routed checker, else the checker's own model.
+      // A check is a step like any other, and says who answered it.
+      const answeredModel = response?.model || response?.routing?.vendorModelId || checker.model;
+      const answeredProvider = response?.routing?.providerId ?? checker.providerId;
+      const answered = {
+        ...(answeredModel ? { model: answeredModel } : {}),
+        ...(answeredProvider ? { providerId: answeredProvider } : {}),
+        ...(response?.routing ? { routing: response.routing } : {}),
+      };
 
       if (!parsed) {
         return {
@@ -209,6 +234,7 @@ export class AgentVerifierHelper {
           error: 'unparseable checker response',
           cost,
           tokens,
+          ...answered,
         };
       }
 
@@ -233,7 +259,7 @@ export class AgentVerifierHelper {
         ? parsed.passed_rules.map((r: any) => String(r))
         : [];
 
-      return { checker: name, verdict, failures, passedRules, cost, tokens };
+      return { checker: name, verdict, failures, passedRules, cost, tokens, ...answered };
     } catch (err: any) {
       const detail =
         err?.response?.data?.error?.message || err?.message || 'checker call failed';

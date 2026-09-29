@@ -18,7 +18,7 @@ import { shouldAutoSaveMemory } from './memory-autosave.policy';
 import { emitStreamChunk } from './llm-stream-events';
 import { answerCallMessages, composesFinalAnswer } from './final-answer';
 import { AgentRoleCall, ModelRoleCall, Team, TeamRole, stampOf, teamOf, teammateToolName } from './autonomous-team';
-import { AutonomousStrategyRunner, answeredBy, chargeRole } from './autonomous-strategy.runner';
+import { AutonomousStrategyRunner, answeredBy, chargeRole, checkedBy } from './autonomous-strategy.runner';
 import type { ResolvedRunLimits } from './run-limits';
 
 
@@ -919,7 +919,7 @@ export class AgentStepProcessor {
               type: 'verify',
               role: stampOf(team.checker!),
               input: { mode: 'cascade', policy: check.policy, checkers: check.checkers.length },
-              output: { verdict: 'fail', escalateTo: team.main.key, failures: check.failures },
+              output: { verdict: 'fail', escalateTo: team.main.key, failures: check.failures, ...checkedBy(check) },
               cost: check.cost,
               duration: checkDuration,
               timestamp: new Date().toISOString(),
@@ -941,7 +941,7 @@ export class AgentStepProcessor {
             type: 'verify',
             role: stampOf(team.checker!),
             input: { mode: 'cascade', policy: check.policy, checkers: check.checkers.length },
-            output: { verdict: 'pass', failures: [] },
+            output: { verdict: 'pass', failures: [], ...checkedBy(check) },
             cost: check.cost,
             duration: checkDuration,
             timestamp: new Date().toISOString(),
@@ -963,7 +963,8 @@ export class AgentStepProcessor {
             run,
             main: team.main,
             panelists: team.panelists,
-            judge: team.checker ?? team.main,
+            // The judge role writes the agreed answer; without one, the main role does.
+            judge: team.judge ?? team.main,
             loopRequest: chatRequest,
             first: finalContent,
             limits: resolvedLimits,
@@ -1008,7 +1009,7 @@ export class AgentStepProcessor {
               type: 'verify',
               role: stampOf(team.checker!),
               input: { mode: 'patch', policy: check.policy, checkers: check.checkers.length },
-              output: { verdict: 'fail', revision: revisions + 1, failures: check.failures },
+              output: { verdict: 'fail', revision: revisions + 1, failures: check.failures, ...checkedBy(check) },
               cost: check.cost,
               duration: checkDuration,
               timestamp: new Date().toISOString(),
@@ -1024,7 +1025,7 @@ export class AgentStepProcessor {
             type: 'verify',
             role: stampOf(team.checker!),
             input: { mode: 'patch', policy: check.policy, checkers: check.checkers.length },
-            output: { verdict: check.verdict, exhausted: !check.passed, failures: check.failures },
+            output: { verdict: check.verdict, exhausted: !check.passed, failures: check.failures, ...checkedBy(check) },
             cost: check.cost,
             duration: checkDuration,
             timestamp: new Date().toISOString(),

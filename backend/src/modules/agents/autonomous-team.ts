@@ -51,6 +51,8 @@ export interface Team {
   main: ModelRoleCall;
   drafter?: ModelRoleCall;
   checker?: ModelRoleCall;
+  /** Panel: writes the agreed answer. Absent, the main role judges. */
+  judge?: ModelRoleCall;
   summariser?: ModelRoleCall;
   panelists: TeamRole[];
   explorers: ModelRoleCall[];
@@ -159,6 +161,7 @@ export function teamOf(
     main,
     drafter: modelOnly(one('drafter'), 'drafter'),
     checker: modelOnly(one('checker'), 'checker'),
+    judge: modelOnly(one('judge'), 'judge'),
     summariser: modelOnly(one('summariser'), 'summariser'),
     panelists: many('panelist'),
     explorers: many('explorer').map((r) => modelOnly(r, 'explorer')!),
