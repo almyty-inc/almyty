@@ -56,6 +56,9 @@ describe('ModelRouterService', () => {
     update,
   });
   const providersRepo = () => ({
+    find: jest.fn(async (o: any) =>
+      fakeRepository<LlmProvider>({ seed: Object.values(providers), make: () => new LlmProvider() }).find(o),
+    ),
     findOne: jest.fn(async (o: any) =>
       fakeRepository<LlmProvider>({ seed: Object.values(providers), make: () => new LlmProvider() }).findOne(o),
     ),

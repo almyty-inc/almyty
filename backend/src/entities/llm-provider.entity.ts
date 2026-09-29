@@ -190,6 +190,16 @@ export function keyCheckPassed(provider: Pick<LlmProvider, 'status' | 'isHealthy
 /** Ollama's own hosted service; any other Ollama host is a server someone runs. */
 const OLLAMA_CLOUD_HOST = /(^|\.)ollama\.com$/i;
 
+/** Whether `url` is Ollama Cloud (ollama.com), Ollama's own hosted API. */
+export function isOllamaCloudUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  try {
+    return OLLAMA_CLOUD_HOST.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * An Ollama provider pointed at a server someone runs (their machine,
  * their cluster), as opposed to Ollama Cloud (ollama.com). Only the
@@ -330,6 +340,26 @@ export class LlmProvider {
   @Column({ type: 'timestamp with time zone', nullable: true })
   modelsSyncedAt: Date | null;
 
+  /**
+   * Which models this connection may be used for. Read through
+   * llm-providers/allowed-models.ts, never directly.
+   *
+   * On (the default): every model the key reaches is allowed, including
+   * ones the vendor lists later, except those in `hiddenModels`.
+   * Off: only the models in `allowedModels`; a model the vendor adds later
+   * stays off until it is ticked, so a key can be pinned to one model.
+   * Both lists are kept, so switching back and forth loses nothing.
+   */
+  @Column({ type: 'boolean', default: true })
+  allowNewModels: boolean;
+
+  /** Vendor model ids unticked while `allowNewModels` is on. */
+  @Column({ type: 'jsonb', nullable: true })
+  hiddenModels: string[] | null;
+
+  /** Vendor model ids ticked while `allowNewModels` is off. */
+  @Column({ type: 'jsonb', nullable: true })
+  allowedModels: string[] | null;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -20,6 +20,7 @@ import { providerUsableByUser, usableProviders } from '../llm-providers/private-
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { providerChecked } from './readiness';
 import { isKeyRejection } from '../llm-providers/model-errors';
+import { providerAllowsModel } from '../llm-providers/allowed-models';
 
 /** Override as the API accepts it; currency defaults to USD when omitted. */
 export type ModelPricingInput = Omit<ModelPricing, 'currency'> & { currency?: string };
@@ -130,9 +131,9 @@ export class ModelCatalogService {
     if (filter.providerId) where.providerId = filter.providerId;
     const rows = await this.models.find({ where, order: { createdAt: 'ASC' } });
     const hidden = viewerId === undefined ? new Set<string>() : await this.hiddenProviderIds(organizationId, viewerId);
-    return rows
-      .filter((r) => !r.providerId || !hidden.has(r.providerId))
-      .filter((r) => (filter.selectable ? r.isSelectable() : true));
+    const visible = rows.filter((r) => !r.providerId || !hidden.has(r.providerId));
+    await this.markAllowed(organizationId, visible);
+    return visible.filter((r) => (filter.selectable ? r.isSelectable() : true));
   }
 
   async get(organizationId: string, id: string, viewerId?: string | null): Promise<Model> {
@@ -141,7 +142,23 @@ export class ModelCatalogService {
     if (viewerId !== undefined && card.providerId && (await this.hiddenProviderIds(organizationId, viewerId)).has(card.providerId)) {
       throw new NotFoundException('Model not found');
     }
+    await this.markAllowed(organizationId, [card]);
     return card;
+  }
+
+  /**
+   * Stamp `allowed` on each card from its connection's allowed models, so
+   * `isSelectable()` (and every list, chooser and MCP tool that reads it)
+   * leaves out what a connection hides. One query for the lot.
+   */
+  async markAllowed(organizationId: string, cards: Model[]): Promise<void> {
+    const ids = [...new Set(cards.map((c) => c.providerId).filter((id): id is string => !!id))];
+    if (ids.length === 0) return;
+    const rows = await this.providers.find({ where: { organizationId, id: In(ids) }, select: { id: true, allowNewModels: true, hiddenModels: true, allowedModels: true } });
+    const byId = new Map(rows.map((p) => [p.id, p]));
+    for (const card of cards) {
+      card.allowed = card.providerId ? providerAllowsModel(byId.get(card.providerId), card.vendorModelId) : true;
+    }
   }
 
   /**

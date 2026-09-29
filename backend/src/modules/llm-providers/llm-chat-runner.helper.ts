@@ -11,7 +11,7 @@ import {
   callVertex,
   callCustomProvider,
 } from './providers';
-import { LlmProvider, LlmProviderType, LlmProviderConfig } from '../../entities/llm-provider.entity';
+import { LlmProvider, LlmProviderType, LlmProviderConfig, isOllamaCloudUrl } from '../../entities/llm-provider.entity';
 import { Conversation } from '../../entities/conversation.entity';
 import { Tool } from '../../entities/tool.entity';
 import { ToolCall } from '../../entities/message.entity';
@@ -38,6 +38,7 @@ import {
 } from '../../common/security/url-validator';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
+import { assertModelAllowed } from './allowed-models';
 import { preferredBinding, providerProfile } from './provider-profile';
 import { type ActingAs, type ExecutionPrincipal, asPrincipal, userPrincipal } from '../../common/authorization/execution-access.service';
 
@@ -208,6 +209,8 @@ export class LlmChatRunnerHelper {
     if (!request.model) {
       request = { ...request, model: await this.defaultModels.resolve(provider) };
     }
+    // A model the connection's owner unticked is never sent through it.
+    assertModelAllowed(provider, request.model);
     const maxRetries = 2;
     const backoffDelays = [1000, 3000]; // 1s, 3s exponential backoff
     let lastError: any;
@@ -566,6 +569,11 @@ export class LlmChatRunnerHelper {
         // first chat call. callLlmProviderHttp re-runs the same gate on
         // every outbound request (defense in depth).
         const effectiveUrl = config.apiUrl || 'http://localhost:11434';
+        // Ollama Cloud is Ollama's own hosted API: it answers only with a
+        // key, so a missing one is said here rather than as a 401 later.
+        if (isOllamaCloudUrl(effectiveUrl) && !config.apiKey) {
+          throw new BadRequestException('Ollama Cloud needs an API key. Create one at https://ollama.com/settings/keys');
+        }
         const validation = ollamaPrivateUrlsAllowed()
           ? validateUrlAllowingPrivate(effectiveUrl)
           : validateUrl(effectiveUrl);

@@ -179,6 +179,12 @@ describe('ollama SSRF gate', () => {
       ).not.toThrow();
     });
 
+    it('asks for a key when the URL is Ollama Cloud, and takes one', () => {
+      delete process.env[ENV_KEY];
+      expect(() => runner.validateProviderConfiguration(LlmProviderType.OLLAMA, { apiUrl: 'https://ollama.com' } as any)).toThrow(/Ollama Cloud needs an API key/);
+      expect(() => runner.validateProviderConfiguration(LlmProviderType.OLLAMA, { apiUrl: 'https://ollama.com', apiKey: 'k' } as any)).not.toThrow();
+    });
+
     it('rejects the default localhost URL when the escape hatch is off', () => {
       delete process.env[ENV_KEY];
       expect(() =>

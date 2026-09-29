@@ -515,6 +515,70 @@ describe('LlmProvidersService', () => {
       configuration: { temperature: 0.8 },
     };
 
+    const connection = (): any => {
+      const row: any = {
+        id: 'provider-1', name: 'OpenAI', type: LlmProviderType.OPENAI, organizationId: 'org-1',
+        configuration: { apiKey: 'own-key' }, capabilities: {},
+      };
+      Object.setPrototypeOf(row, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(row);
+      llmProviderRepository.save.mockImplementation(async (p: any) => p);
+      return row;
+    };
+
+    it('renames the key a connection made for itself, and a rename spends no key check', async () => {
+      jest.useFakeTimers();
+      try {
+        const row = connection();
+        const check = jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+        // The first write moves the inline key into a row the connection manages.
+        await service.updateProvider('provider-1', { configuration: { temperature: 0.1 } }, 'org-1', 'user-1');
+        jest.advanceTimersByTime(2000);
+        expect(check).toHaveBeenCalledTimes(1);
+        expect(store.rows.map((r) => r.name)).toEqual(['OpenAI']);
+
+        check.mockClear();
+        await service.updateProvider('provider-1', { name: '  OpenAI - research  ' }, 'org-1', 'user-1');
+        jest.advanceTimersByTime(2000);
+        expect(row.name).toBe('OpenAI - research');
+        expect(store.rows.map((r) => r.name)).toEqual(['OpenAI - research']);
+        expect(check).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('a shared credential keeps its own name when the connection using it is renamed', async () => {
+      const shared = store.seed({ organizationId: 'org-1', name: 'Team OpenAI', config: { apiKey: 'shared-key' }, connectorKey: 'openai' });
+      const row = connection();
+      row.credentialId = shared.id;
+      row.credential = shared;
+      row.configuration = {};
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+      await service.updateProvider('provider-1', { name: 'OpenAI - shared' }, 'org-1', 'user-1');
+      expect(shared.name).toBe('Team OpenAI');
+    });
+
+    it('stores which models the connection allows, keeping both lists across the switch', async () => {
+      const row = connection();
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+
+      await service.updateProvider('provider-1', { allowNewModels: true, hiddenModels: [' gpt-4o ', 'gpt-4o'] }, 'org-1', 'user-1');
+      expect(row).toMatchObject({ allowNewModels: true, hiddenModels: ['gpt-4o'] });
+
+      await service.updateProvider('provider-1', { allowNewModels: false, allowedModels: ['gpt-5'] }, 'org-1', 'user-1');
+      expect(row).toMatchObject({ allowNewModels: false, allowedModels: ['gpt-5'], hiddenModels: ['gpt-4o'] });
+    });
+
+    it('refuses a connection that would allow no model at all', async () => {
+      const row = connection();
+      await expect(service.updateProvider('provider-1', { allowNewModels: false, allowedModels: [] }, 'org-1', 'user-1')).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'NO_MODELS_ALLOWED' }),
+      });
+      expect(row.allowNewModels).toBeUndefined();
+      expect(llmProviderRepository.save).not.toHaveBeenCalled();
+    });
+
     it('should update provider successfully', async () => {
       const mockProvider = {
         isHealthy: true,

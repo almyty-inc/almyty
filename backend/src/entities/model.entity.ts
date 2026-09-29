@@ -184,7 +184,16 @@ export class Model {
   updatedAt: Date;
 
   /**
-   * Usable: active, callable, and checked. A provider's models are checked
+   * Not a column. Whether the connection serving this card allows it
+   * (llm-providers/allowed-models.ts): false when the connection's owner
+   * unticked it. The catalog and the router set it from the provider row
+   * when they read cards; unset means nobody has said otherwise.
+   */
+  allowed?: boolean;
+
+  /**
+   * Usable: active, callable, checked, and not hidden by its connection.
+   * A provider's models are checked
    * together when the provider's key check passes (the catalog writes
    * `validationStatus: passed` with `metadata.checkedBy: provider_check`),
    * and go back to waiting when the vendor later rejects the key. A model
@@ -195,7 +204,8 @@ export class Model {
     return (
       this.status === 'active' &&
       !!(this.providerId || this.endpointRef) &&
-      this.validationStatus === 'passed'
+      this.validationStatus === 'passed' &&
+      this.allowed !== false
     );
   }
 
