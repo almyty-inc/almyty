@@ -70,6 +70,8 @@ export class ToolAuthService {
         principal,
         context: { purpose: 'api_call', resourceType: 'api', resourceId: api.id },
       });
+      // An OAuth 2.0 sign-in renews its own token and sends it.
+      if (await this.applySignIn(config, resolved.credential)) return;
       this.applyInlineApiAuth(config, inlineApiAuthView(api.authentication as any, connectionAuthConfig(resolved.config)) as Api['authentication']);
       return;
     }
@@ -169,6 +171,7 @@ export class ToolAuthService {
         principal: options.principal ?? userPrincipal(options.userId),
         context: { purpose: 'tool_call', resourceType: 'tool', resourceId: tool.id },
       });
+      if (await this.applySignIn(config, resolved.credential)) return;
       const secret = connectionAuthConfig(resolved.config);
       const filled =
         authConfig.type === 'bearer' ? { token: secret.token }
@@ -179,6 +182,18 @@ export class ToolAuthService {
       return;
     }
     this.applyInlineToolAuth(config, authConfig);
+  }
+
+  /**
+   * An OAuth 2.0 sign-in picked as a key: refresh it when expired and send
+   * its token, as a bound credential is. False for every other credential.
+   */
+  private async applySignIn(config: AxiosRequestConfig, credential: Pick<Credential, 'id' | 'type'> | undefined | null): Promise<boolean> {
+    if (!credential || credential.type !== CredentialType.OAUTH2 || !this.credentialRepository) return false;
+    const row = await this.credentialRepository.findOne({ where: { id: credential.id } });
+    if (!row) return false;
+    await this.applyCredential(config, row);
+    return true;
   }
 
   /** Put an inline tool `{ type, config }` (secret filled in) onto the request. */

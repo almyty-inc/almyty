@@ -66,6 +66,19 @@ describe('OAuth2 sign-in returns to where it started', () => {
     expect(row).toMatchObject({ apiId: 'pets', organizationId: 'org-a', type: CredentialType.OAUTH2 });
   });
 
+  it('makes a credential like any other: the "OAuth 2.0 sign-in" service, the token host as the account, working', async () => {
+    const { state } = await start('/apis/pets');
+    await callback(state);
+    const [row] = credentials.rows();
+    expect(row).toMatchObject({ connectorKey: 'oauth2', accountLabel: 'auth.example.com', healthStatus: 'valid' });
+  });
+
+  it('does the same for a client-credentials sign-in', async () => {
+    await service.clientCredentialsGrant({ organizationId: 'org-a', userId: 'user-a', apiId: 'pets', clientId: 'client', clientSecret: 'secret', tokenUrl: 'https://auth.example.com/token' } as any);
+    const [row] = credentials.rows();
+    expect(row).toMatchObject({ connectorKey: 'oauth2', accountLabel: 'auth.example.com', type: CredentialType.OAUTH2 });
+  });
+
   it('keeps an existing query string', async () => {
     const { state } = await start('/apis/pets/setup?job=7');
     expect(await callback(state)).toMatch(/^https:\/\/app\.example\.com\/apis\/pets\/setup\?job=7&oauth=success&credentialId=/);

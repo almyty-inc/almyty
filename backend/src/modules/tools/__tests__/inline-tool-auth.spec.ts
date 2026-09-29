@@ -104,6 +104,18 @@ describe('applyToolAuth with a credential', () => {
     await expect(headersFor(service, { type: 'bearer', config: { credentialId: 'cred-1' } })).rejects.toThrow('credential not found');
   });
 
+  it('renews and sends an OAuth 2.0 sign-in the way a bound credential is sent', async () => {
+    const row = { id: 'cred-1', type: 'oauth2' };
+    const resolve = jest.fn().mockResolvedValue({ credential: row, config: { accessToken: 'stale' } });
+    const repository = { findOne: jest.fn().mockResolvedValue(row) };
+    const service = new ToolAuthService(repository as any, null as any, null as any, { resolve } as any);
+    const applied = jest.spyOn(service as any, 'applyCredential').mockImplementation(async (config: any) => {
+      config.headers = { Authorization: 'Bearer renewed' };
+    });
+    expect(await headersFor(service, { type: 'bearer', config: { credentialId: 'cred-1' } })).toEqual({ Authorization: 'Bearer renewed' });
+    expect(applied).toHaveBeenCalledWith(expect.anything(), row);
+  });
+
   it('still sends an older inline key', async () => {
     const { service, resolve } = serviceWith({});
     expect(await headersFor(service, { type: 'bearer', config: { token: 't0ken' } })).toEqual({ Authorization: 'Bearer t0ken' });
