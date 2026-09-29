@@ -22,8 +22,9 @@ a job:
 |---|---|---|
 | `main` | Runs the loop. Exactly one. | no |
 | `drafter` | Cascade: takes each step first. | no |
-| `checker` | Refute-only review (cascade, explore-extract-patch); picks the best answer (best of N); judges the panel when present. | no |
+| `checker` | Refute-only review (cascade, explore-extract-patch); picks the best answer (best of N). | no |
 | `panelist` | Panel: answers the same question. | yes |
+| `judge` | Panel: writes the answer the panelists agree on. Optional; the main role judges without one. | no |
 | `explorer` | Explore-extract-patch: gathers with the tools. | no |
 | `summariser` | Explore-extract-patch: compresses what the explorers found. | no |
 | `teammate` | Offered to the loop's model as a tool, `ask_<key>`, in every strategy. | yes |
@@ -83,15 +84,17 @@ ceiling (`checkRunLimits`), a failed or empty one is dropped, and with one
 candidate left no judge is paid for. An unreadable pick keeps candidate 1
 and says so on the step.
 
-### Panel — needs `main` and at least two `panelist`s; optional `checker`
+### Panel — needs `main` and at least two `panelist`s; optional `judge`
 
 The main role runs the loop. When it answers, each panelist answers too:
 a model panelist over the same conversation with no tools, an agent
 panelist as its own run of that agent on the user's latest message. The
-checker, or the main role when there is none, then writes the answer
-they agree on (the workflow consensus prompt): the step records
-`agreement` and `consensusReached` (threshold 0.5). A judge that fails
-leaves the main role's answer.
+judge, or the main role when there is none, then writes the answer they
+agree on (the workflow consensus prompt): the step records `agreement`
+and `consensusReached` (threshold 0.5) and which model judged. A judge
+that fails leaves the main role's answer. The judge is a model, never
+another agent; the page adds it with the same role picker as any other
+role, labelled Judge.
 
 ### Explore, extract, patch — needs `explorer`s, `summariser`, `main`, `checker`
 
@@ -142,7 +145,12 @@ purpose, kind }`, its `cost`, `tokens`, and `output.model`,
 `output.providerId` and, for a routed call, `output.routing`. Step types:
 `llm_call` (`status`: `completed`, `drafted`, `revising`, `escalated`,
 `candidate`, `panel_answer`, `sleeping`, `waiting_input`), `verify`,
-`judge`, `explore`, `extract_context`, `teammate_call`.
+`judge`, `explore`, `extract_context`, `teammate_call`. A `verify` step is
+stamped the same way: the checker's verdict says which model gave it (and
+the verifier panel's `checkers` carry it per checker).
+`src/modules/agents/__tests__/autonomous-strategies-end-to-end.spec.ts`
+runs every strategy through the hosted chat with a different model per
+role and checks each step's model and the visitor's answer.
 `run.metadata.roleCosts` totals each role (`cost`, `tokens`, `calls`) and
 `run.metadata.strategy` names the strategy. The run detail shows both.
 

@@ -30,7 +30,7 @@ That is enforced three times over, because the failure is silent:
 | `single` | One call | `principal` |
 | `cascade` | Cheap drafts, verifier checks, only a failure escalates | `drafter`, `verifier`, `principal` |
 | `best_of_n` | N attempts, a judge picks | `principal`, `verifier` |
-| `panel` | Three roles answer, consensus over the disagreement | three panelists |
+| `panel` | Three roles answer, a judge writes the answer they agree on | three panelists; `judge` optional (else `principal`, else the organization's default routing) |
 | `explore_extract_patch` (experimental) | Explore in parallel, compress to a brief, act on the brief | `explorer`, `summariser`, `principal`, `verifier` |
 
 ## Compiling
@@ -51,8 +51,8 @@ exactly as portable as the strategy that produced it.
 This layer's strategies, the roles table and the orchestrator apply to
 workflow agents: a strategy here compiles to a graph. An autonomous agent
 has no graph. Its multi-model shape is its **models** — roles (main,
-drafter, checker, panelists, explorers, a summariser, teammates) and one
-of the same five strategy shapes — stored on the agent and applied by the
+drafter, checker, panelists, a judge, explorers, a summariser, teammates)
+and one of the same five strategy shapes — stored on the agent and applied by the
 ReAct loop to each of its steps; see `docs/autonomous-models.md`. So
 `PUT /agents/:id/execution` still refuses a strategy or an enabled
 orchestrator on an autonomous agent with `STRATEGY_WORKFLOW_ONLY` (400),
@@ -100,8 +100,57 @@ check failed. A `parallel` feeder adds nothing; a replicated feeder
 (`rollout#2`) is not a template path and is left out. A shape can write
 its own `userPromptTemplate` into the step's params, which wins.
 
-A judged `merge` with no slot of its own — the panel's `consensus` — takes
-the organization's default routing policy, and fails by name without one.
+### Optional slots: the panel's judge
+
+A step may name its slot as optional by listing `fallbackSlots`: when the
+agent has no role for the slot, the first fallback it does have a role for
+stands in, and with none the compiled node names no role and takes the
+organization's default routing policy, like any model node that names
+neither a role nor a provider. `describe()` lists these as
+`optionalRoleSlots`, and the picker shows them as "judge (optional)".
+
+The panel's `consensus` merge is the one built-in case: slot `judge`,
+falling back to `principal`. A panel with none of the three -- no judge
+role, no principal role, no default routing -- would pay for every
+panelist and then fail at the judge, so `PUT /agents/:id/execution`
+refuses to choose it (`STRATEGY_ROLE_MISSING`, 400) with the message
+"Panel needs a judge to write one answer from what the panelists said. Add
+a judge role (a principal role also works), or set a default routing
+policy for your organization." The readiness check reads a judged merge's
+model the way it reads an `llm_call`'s, so a judge role removed later
+shows up there as `Judge on "consensus" needs a provider or routing
+policy`.
+
+### What a compiled strategy answers with
+
+An output node with no mapping answers with every node's output keyed by
+node id: the draft, the verdict, each candidate and the judge's pick as
+one JSON object. Nobody asking a strategy a question wants that, so the
+compiler gives the output node a `source`:
+
+| Strategy | `source` | The answer |
+|---|---|---|
+| `single` | `nodes.answer.output` | the principal's reply |
+| `cascade` | `[nodes.escalate.output, nodes.draft.output]` | the escalation when the check failed, else the draft it passed |
+| `best_of_n` | `nodes.judge.output` | the candidate the judge picked |
+| `panel` | `nodes.consensus.output.answer` | the answer the judge wrote |
+| `explore_extract_patch` | `nodes.patch.output` | the patched reply, not the verdict |
+
+The rule, for any shape: the answer is what the last step that writes one
+produced -- a call's text, a best-of-n pick, a consensus answer. A check
+writes none, so a check that ends a shape answers with what it checked. A
+check with a failure path answers two ways, listed escalation first; the
+output node takes the first path a step that ran produced (a skipped step
+has no output). A shape that ends on more than one step, or on a
+replicated one, has no single answer and keeps the map.
+
+The list form of `source` is an output-node feature, not a strategy one:
+a hand-drawn graph with a branch can name its answer the same way. The
+answer is the same on every surface that runs a workflow agent: the run
+record, Try it, the OpenAI-compatible API and a gateway's invoke.
+`src/modules/agents/__tests__/strategy-final-answer.spec.ts` runs each
+strategy through the real engine and reads the answer back from each.
+
 ### Fan-out happens at compile time
 
 A `parallel` step with `n` means "run what comes next n times over", and
