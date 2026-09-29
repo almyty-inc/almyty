@@ -12,6 +12,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *    through the service's API once `expires_at` has passed. almyty's own
  *    store expires memories through `ttl_seconds` instead and has no rows
  *    here.
+ * 3. `tools.apiId` filled in from the tool's operation, for tools
+ *    generated from an API before generation set it.
  */
 export class AgentMemorySettings1750813700000 implements MigrationInterface {
   name = 'AgentMemorySettings1750813700000';
@@ -39,6 +41,12 @@ export class AgentMemorySettings1750813700000 implements MigrationInterface {
       `CREATE INDEX IF NOT EXISTS memory_expiries_due ON memory_expiries (expires_at) WHERE expires_at IS NOT NULL`,
     );
     await queryRunner.query(`CREATE INDEX IF NOT EXISTS memory_expiries_agent ON memory_expiries (organization_id, agent_id)`);
+    // 3. A tool generated from an API names that API, so an agent given the
+    //    whole API (agentConfig.apiIds) gets every tool of it. Generation
+    //    set only the operation until now.
+    await queryRunner.query(
+      `UPDATE tools SET "apiId" = o."apiId" FROM operations o WHERE tools."operationId" = o.id AND tools."apiId" IS NULL`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
