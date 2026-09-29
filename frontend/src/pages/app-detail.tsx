@@ -22,6 +22,7 @@ import {
 } from '@/lib/agent-apps'
 import { AppAgentsPanel } from '@/components/agent-apps/app-agents-panel'
 import { AppSettingsPanel } from '@/components/agent-apps/app-settings-panel'
+import { AppSpendNotice } from '@/components/agent-apps/app-spend-notice'
 
 /** How each distribution status reads and colours in a badge. */
 const STATUS: Record<DistributionStatus, { label: string; variant: 'success' | 'secondary' | 'warning' | 'outline' | 'destructive' }> = {
@@ -80,6 +81,7 @@ export function AppDetailPage() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['agent-app', slug] })
     queryClient.invalidateQueries({ queryKey: ['agent-app-check', slug] })
+    queryClient.invalidateQueries({ queryKey: ['agent-app-spend', slug] })
   }
 
   if (isLoading) {
@@ -165,6 +167,8 @@ export function AppDetailPage() {
           Ready to publish
         </p>
       )}
+
+      <AppSpendNotice slug={app.slug} onChangeLimit={() => setTab('settings')} />
 
       <Tabs value={activeTab} onValueChange={setTab} className="space-y-4">
         <TabsList>
