@@ -52,6 +52,62 @@ export function collectAgentReferences(agent: {
   }
   return { toolIds, agentIds };
 }
+/** One model an agent names by connection and model id, and where. */
+export interface AgentModelReference {
+  providerId: string;
+  model: string;
+  /** Where in the agent: "model", "step <label>", "role <name>", "checker", ... */
+  where: string;
+}
+
+/**
+ * Every (connection, model) pair an agent definition names: the same
+ * places collectProviderReferences reads, keeping only those that name a
+ * model. A reference with a connection and no model uses whatever the
+ * connection defaults to, and a routed one names no model at all, so
+ * neither is "using" a particular model. Roles bound in the agent_roles
+ * table name a model card instead and are read by whoever needs them.
+ */
+export function collectModelReferences(agent: {
+  modelConfig?: Agent['modelConfig'] | null;
+  pipeline?: AgentPipeline | null;
+  agentConfig?: Agent['agentConfig'] | null;
+  collaboration?: Agent['collaboration'] | LegacyCollaboration | null;
+  models?: Pick<AgentModels, 'roles'> | null;
+}): AgentModelReference[] {
+  const out: AgentModelReference[] = [];
+  const add = (ref: { providerId?: unknown; model?: unknown } | null | undefined, where: string) => {
+    const providerId = typeof ref?.providerId === 'string' ? ref.providerId.trim() : '';
+    const model = typeof ref?.model === 'string' ? ref.model.trim() : '';
+    if (providerId && model) out.push({ providerId, model, where });
+  };
+  const modelConfig = agent.modelConfig as { providerId?: string; model?: string; compaction?: { providerId?: string; model?: string } } | null | undefined;
+  add(modelConfig, 'model');
+  add(modelConfig?.compaction, 'context compaction');
+  for (const node of agent.pipeline?.nodes ?? []) {
+    const data: Record<string, any> = (node as any).data || (node as any).config || {};
+    const label = typeof data.label === 'string' && data.label.trim() ? data.label.trim() : node.id;
+    if (node.type === 'llm_call' || node.type === 'extract_context') add(data, `step ${label}`);
+    if (node.type === 'verify' && Array.isArray(data.checkers)) {
+      for (const checker of data.checkers) add(checker, `step ${label}`);
+    }
+  }
+  const agentConfig = agent.agentConfig as { verify?: { checkers?: Array<{ providerId?: string; model?: string }> }; constraints?: { distill?: { providerId?: string; model?: string } } } | null | undefined;
+  for (const checker of agentConfig?.verify?.checkers ?? []) add(checker, 'checker');
+  add(agentConfig?.constraints?.distill, 'constraints');
+  const collab = agent.collaboration as
+    | { participants?: Array<{ kind?: string; providerId?: string; model?: string } | null>; judge?: { kind?: string; providerId?: string; model?: string } | null }
+    | null
+    | undefined;
+  for (const p of [...(collab?.participants ?? []), collab?.judge]) {
+    if (p && p.kind === 'model') add(p, 'team');
+  }
+  for (const role of agent.models?.roles ?? []) {
+    if (role && role.kind === 'model') add(role, `role ${role.name || role.key}`);
+  }
+  return out;
+}
+
 /**
  * Every LLM provider an agent definition names directly: its own model
  * config and compaction model, the model nodes of its pipeline (`llm_call`,

@@ -1,13 +1,15 @@
 import { InjectQueue, OnQueueFailed, Process, Processor } from '@nestjs/bull';
-import { Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Logger, OnApplicationBootstrap, Optional } from '@nestjs/common';
 import { Job, Queue } from 'bull';
 
 import { ModelCatalogService } from './model-catalog.service';
 import { BootSyncResult, CatalogWarmupService } from './catalog-warmup.service';
+import { ModelChangeNoticesService } from './notices/model-change-notices.service';
 
 export const MODEL_CATALOG_SYNC_QUEUE = 'model-catalog-sync';
 export const MODEL_CATALOG_BACKFILL_JOB = 'backfill';
 export const MODEL_CATALOG_SWEEP_JOB = 'sweep';
+export const MODEL_CHANGE_DIGEST_JOB = 'model-change-digest';
 
 /** Stable id so replicas booting together queue the backfill once. */
 const BACKFILL_JOB_ID = 'model-catalog-backfill';
@@ -15,6 +17,10 @@ const BACKFILL_JOB_ID = 'model-catalog-backfill';
 const SWEEP_JOB_ID = 'model-catalog-sweep';
 /** Every six hours, off the hour. */
 const DEFAULT_SWEEP_CRON = '17 */6 * * *';
+/** Stable id for the daily email of model changes. */
+const DIGEST_JOB_ID = 'model-change-digest';
+/** Once a day, 08:00 UTC. */
+const DEFAULT_DIGEST_CRON = '0 8 * * *';
 
 /**
  * Keeps every organization's model list in step with what its providers
@@ -38,6 +44,7 @@ export class CatalogSyncProcessor implements OnApplicationBootstrap {
     @InjectQueue(MODEL_CATALOG_SYNC_QUEUE) private readonly queue: Queue,
     private readonly catalog: ModelCatalogService,
     private readonly warmup: CatalogWarmupService,
+    @Optional() private readonly notices?: ModelChangeNoticesService,
   ) {}
 
   isEnabled(): boolean {
@@ -51,7 +58,19 @@ export class CatalogSyncProcessor implements OnApplicationBootstrap {
     return raw && raw.length > 0 ? raw : DEFAULT_SWEEP_CRON;
   }
 
+  /** The daily model-change email's schedule (MODEL_CHANGE_DIGEST_CRON), or undefined when it is off. */
+  digestCron(): string | undefined {
+    const raw = process.env.MODEL_CHANGE_DIGEST_CRON?.trim();
+    if (raw && raw.toLowerCase() === 'off') return undefined;
+    return raw && raw.length > 0 ? raw : DEFAULT_DIGEST_CRON;
+  }
+
   async onApplicationBootstrap(): Promise<void> {
+    // The digest mails what syncs recorded, whoever ran them, so it does
+    // not follow MODEL_CATALOG_BACKFILL.
+    if (process.env.NODE_ENV !== 'test') {
+      await this.scheduleRepeatable(DIGEST_JOB_ID, MODEL_CHANGE_DIGEST_JOB, this.digestCron(), 'Model change digest');
+    }
     if (!this.isEnabled()) {
       this.logger.log('Model catalog backfill disabled (NODE_ENV=test or MODEL_CATALOG_BACKFILL=off)');
       return;
@@ -93,6 +112,31 @@ export class CatalogSyncProcessor implements OnApplicationBootstrap {
     } catch (error: any) {
       this.logger.error(`Failed to schedule the model catalog sweep: ${error.message}`);
     }
+  }
+
+  /** Schedule (or unschedule) a repeatable job by its stable id. Never throws. */
+  private async scheduleRepeatable(jobId: string, name: string, cron: string | undefined, label: string): Promise<void> {
+    try {
+      for (const repeatable of await this.queue.getRepeatableJobs()) {
+        if (repeatable.id === jobId && repeatable.cron !== cron) await this.queue.removeRepeatableByKey(repeatable.key);
+      }
+      if (!cron) {
+        this.logger.log(`${label} disabled`);
+        return;
+      }
+      await this.queue.add(name, {}, { jobId, repeat: { cron }, removeOnComplete: true, removeOnFail: true });
+      this.logger.log(`${label} scheduled: "${cron}"`);
+    } catch (error: any) {
+      this.logger.error(`Failed to schedule ${label.toLowerCase()}: ${error.message}`);
+    }
+  }
+
+  @Process(MODEL_CHANGE_DIGEST_JOB)
+  async handleDigest(_job?: Job): Promise<{ rows: number; emails: number }> {
+    if (!this.notices) return { rows: 0, emails: 0 };
+    const result = await this.notices.sendDigest();
+    if (result.rows > 0) this.logger.log(`Model change digest: ${result.rows} change(s), ${result.emails} email(s)`);
+    return result;
   }
 
   @Process(MODEL_CATALOG_BACKFILL_JOB)

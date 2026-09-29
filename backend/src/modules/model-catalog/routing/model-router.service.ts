@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
@@ -14,6 +14,7 @@ import { providerUsableByUser } from '../../llm-providers/private-provider';
 import { type ActingAs, asPrincipal } from '../../../common/authorization/execution-access.service';
 import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
 import { assertModelAllowed, providerAllowsModel } from '../../llm-providers/allowed-models';
+import { GONE_REASONS, MODEL_CHANGE_LISTENER, type ModelChangeListener } from '../notices/model-change';
 
 /** Why a plan leaves out a model: its connection's owner unticked it. */
 function notAllowedReason(connectionName: string): string {
@@ -100,6 +101,8 @@ export class ModelRouterService {
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly credentialRefs?: CredentialRefResolver,
     @Optional() private readonly accessPolicy?: AccessPolicyService,
+    // Who hears when a model goes away (notices/).
+    @Optional() @Inject(MODEL_CHANGE_LISTENER) private readonly changes?: ModelChangeListener,
   ) {}
 
   async plan(organizationId: string, policy: RoutingPolicy = {}, principal?: ActingAs): Promise<RoutePlan> {
@@ -348,9 +351,16 @@ export class ModelRouterService {
     try {
       const card = await this.models.findOne({ where: { organizationId, providerId, vendorModelId } });
       if (!card || card.validationStatus === 'failed') return;
+      const wasUsable = card.status === 'active' && card.validationStatus === 'passed';
       const lastValidationError = error.slice(0, 1000);
       const status = card.status === 'active' ? 'error' : card.status;
       await this.models.update({ id: card.id }, { validationStatus: 'failed', lastValidatedAt: new Date(), lastValidationError, status });
+      if (wasUsable && this.changes) {
+        const provider = await this.providers.findOne({ where: { id: providerId, organizationId } });
+        if (provider && providerAllowsModel(provider, vendorModelId)) {
+          await this.changes.modelsChanged({ organizationId, providerId, appeared: [], gone: [{ card, reason: GONE_REASONS.modelNotFound }] });
+        }
+      }
       if (this.auditLog) {
         void this.auditLog
           .log({

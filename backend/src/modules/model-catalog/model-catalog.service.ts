@@ -21,6 +21,7 @@ import { AccessPolicyService } from '../../common/authorization/access-policy.se
 import { providerChecked } from './readiness';
 import { isKeyRejection } from '../llm-providers/model-errors';
 import { providerAllowsModel } from '../llm-providers/allowed-models';
+import { GONE_REASONS, MODEL_CHANGE_LISTENER, type ModelChangeListener } from './notices/model-change';
 
 /** Override as the API accepts it; currency defaults to USD when omitted. */
 export type ModelPricingInput = Omit<ModelPricing, 'currency'> & { currency?: string };
@@ -112,6 +113,8 @@ export class ModelCatalogService {
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly accessPolicy?: AccessPolicyService,
+    // Who hears when a connection's models appear or go away (notices/).
+    @Optional() @Inject(MODEL_CHANGE_LISTENER) private readonly changes?: ModelChangeListener,
   ) {}
 
   /**
@@ -267,6 +270,9 @@ export class ModelCatalogService {
     // provider, or a team provider outside their teams, does not exist;
     // lifecycle syncs run with no user.
     if (!provider || (userId && !(await providerUsableByUser(this.accessPolicy, provider, userId)))) throw new NotFoundException('Provider not found');
+    // The first import of a connection's list is not "new models": the
+    // person who just connected it is looking at them.
+    const firstImport = !provider.modelsSyncedAt;
     const listed = await this.modelsHelper.fetchModelsFromProvider(provider);
     const existing = await this.models.find({ where: { organizationId, providerId } });
     const byVendorId = new Map(existing.map((m) => [m.vendorModelId, m]));
@@ -301,10 +307,13 @@ export class ModelCatalogService {
       }
     }
     const retired: Model[] = [];
+    // Retired cards someone could use until now: those are the ones to tell people about.
+    const wentAway: Model[] = [];
     if (listed.length > 0) {
       const listedIds = new Set(listed.map((m) => m.id));
       for (const card of existing) {
         if (card.status === 'inactive' || listedIds.has(card.vendorModelId)) continue;
+        if (card.validationStatus === 'passed' && providerAllowsModel(provider, card.vendorModelId)) wentAway.push(card);
         card.status = 'inactive';
         card.metadata = { ...(card.metadata ?? {}), retiredAt: now, retiredReason: 'not listed by provider' };
         retired.push(await this.models.save(card));
@@ -324,6 +333,14 @@ export class ModelCatalogService {
     if (created.some((c) => c.validationStatus === 'never')) {
       const now = await this.providers.findOne({ where: { id: providerId, organizationId } });
       if (now && providerChecked(now)) await this.applyProviderCheck(organizationId, providerId, { passed: true });
+    }
+    if (this.changes && ((created.length > 0 && !firstImport) || wentAway.length > 0)) {
+      await this.changes.modelsChanged({
+        organizationId,
+        providerId,
+        appeared: firstImport ? [] : created,
+        gone: wentAway.map((card) => ({ card, reason: GONE_REASONS.notListed })),
+      });
     }
     return { created, skipped, retired, reinstated };
   }
@@ -566,6 +583,14 @@ export class ModelCatalogService {
         continue;
       }
       changed.push(await this.models.save(card));
+    }
+    // A refused key takes every model of the connection away at once.
+    if (!outcome.passed && this.changes && changed.length > 0) {
+      const provider = await this.providers.findOne({ where: { id: providerId, organizationId } });
+      const gone = changed.filter((card) => card.status === 'active' && providerAllowsModel(provider, card.vendorModelId));
+      if (gone.length > 0) {
+        await this.changes.modelsChanged({ organizationId, providerId, appeared: [], gone: gone.map((card) => ({ card, reason: GONE_REASONS.keyRejected })) });
+      }
     }
     if (changed.length) {
       this.audit(changed[0], AuditAction.MODEL_VALIDATED, undefined, {
