@@ -28,11 +28,17 @@ export function shouldAutoSaveMemory(
  * default stays out. The tool used to skip this, so a visitor could ask
  * the agent to remember something and plant it in every later run's
  * recall.
+ *
+ * A visitor is either an end user with a row of their own (the hosted
+ * chat) or anyone on one of an app's other places -- a widget thread, a
+ * messaging-channel sender, an A2A caller -- which have no end-user row
+ * and are marked `appVisitor` on the run instead. Before that mark, a
+ * widget or Slack run had no endUserId, read as an operator's own run,
+ * and fed shared memory whatever the app's privacy setting said.
  */
 export function runMayWriteSharedMemory(
   run: Pick<AgentRun, 'endUserId'> & { metadata?: Record<string, any> | null },
 ): boolean {
-  if (run.endUserId) return run.metadata?.visitorMemory === true;
+  if (run.endUserId || run.metadata?.appVisitor === true) return run.metadata?.visitorMemory === true;
   return true;
 }
-

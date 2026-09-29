@@ -163,6 +163,14 @@ export class AgentApp {
     perUserRateLimit?: number | null;
     /** Requests per hour per IP, for surfaces with no account. */
     perIpRateLimit?: number | null;
+    /**
+     * Ceiling on what the whole app may spend in one UTC day, in cents,
+     * across every place and every visitor. Missing means the default for
+     * the auth mode (see appSpendCapsFrom); null or 0 means no daily cap.
+     */
+    dailySpendCapCents?: number | null;
+    /** The same ceiling per UTC calendar month, in cents. */
+    monthlySpendCapCents?: number | null;
   } | null;
 
   /**

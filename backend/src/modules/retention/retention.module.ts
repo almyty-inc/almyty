@@ -12,6 +12,7 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { Notification } from '../../entities/notification.entity';
 import { AgentApp } from '../../entities/agent-app.entity';
 import { AppDistribution } from '../../entities/agent-app-distribution.entity';
+import { ChannelEvent } from '../../entities/channel-event.entity';
 
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { RetentionService } from './retention.service';
@@ -37,6 +38,9 @@ import { RetentionController } from './retention.controller';
       Notification,
       AgentApp,
       AppDistribution,
+      // Stored widget replies and channel deliveries: visitor words that
+      // an app's retention period must reach as well as its conversations.
+      ChannelEvent,
     ]),
     AuditLogModule,
   ],
