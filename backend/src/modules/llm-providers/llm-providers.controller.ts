@@ -194,6 +194,31 @@ export class LlmProvidersController {
     }
   }
 
+  // Above ':providerId', which would otherwise take this path as an id.
+  @Get('provider-types')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Get available provider types' })
+  @ApiResponse({ status: 200, description: 'Provider types retrieved successfully' })
+  async getProviderTypes() {
+    const providerTypes = Object.values(LlmProviderType).map(type => ({
+      type,
+      name: getProviderDisplayName(type),
+      description: getProviderDescription(type),
+      features: getProviderFeatures(type),
+      keyUrl: getProviderKeyUrl(type),
+      docsUrl: getProviderDocsUrl(type),
+      // False when the vendor serves no model list: connecting it then
+      // needs the model to use (connect answers MODEL_REQUIRED otherwise).
+      listsModels: providerListsModels(type),
+    }));
+
+    return {
+      success: true,
+      data: providerTypes,
+      message: 'Provider types retrieved successfully',
+    };
+  }
+
   @Get(':providerId')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get provider by ID' })
@@ -450,32 +475,6 @@ export class LlmProvidersController {
         failureStatus(error, HttpStatus.BAD_GATEWAY),
       );
     }
-  }
-
-
-  // Utility endpoints
-  @Get('provider-types')
-  @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Get available provider types' })
-  @ApiResponse({ status: 200, description: 'Provider types retrieved successfully' })
-  async getProviderTypes() {
-    const providerTypes = Object.values(LlmProviderType).map(type => ({
-      type,
-      name: getProviderDisplayName(type),
-      description: getProviderDescription(type),
-      features: getProviderFeatures(type),
-      keyUrl: getProviderKeyUrl(type),
-      docsUrl: getProviderDocsUrl(type),
-      // False when the vendor serves no model list: connecting it then
-      // needs the model to use (connect answers MODEL_REQUIRED otherwise).
-      listsModels: providerListsModels(type),
-    }));
-
-    return {
-      success: true,
-      data: providerTypes,
-      message: 'Provider types retrieved successfully',
-    };
   }
 
   @Post('models/by-type')
