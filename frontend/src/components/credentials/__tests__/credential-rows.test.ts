@@ -43,7 +43,7 @@ describe('credentialRows', () => {
 
   it('puts a model provider\'s own key with the model providers, opening the provider', () => {
     const row = storedRow({ id: 'llm-p1', name: 'OpenAI API Key', type: 'api_key', _source: 'llm_provider', _sourceId: 'p1', usedBy: [{ type: 'llm_provider', id: 'p1', name: 'OpenAI' }] })
-    expect(row).toMatchObject({ group: 'models', href: '/models/providers/p1', uses: [{ label: 'OpenAI', href: '/models/providers/p1' }] })
+    expect(row).toMatchObject({ group: 'models', href: '/credentials/providers/p1', uses: [{ label: 'OpenAI', href: '/credentials/providers/p1' }] })
   })
 })
 

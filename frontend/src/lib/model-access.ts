@@ -17,7 +17,7 @@ export interface ModelAccess {
   allowedModels: string[]
 }
 
-/** What the API sends on a provider; older rows lack the fields and behave as "all, new ones too". */
+/** What the API sends on a provider; a missing field reads as "all, new ones too". */
 export interface ModelAccessFields {
   allowNewModels?: boolean | null
   hiddenModels?: string[] | null
@@ -81,6 +81,7 @@ export function accessSummary(access: ModelAccess, all: string[], nameOf: (id: s
   const ticked = tickedModels(access, all)
   if (all.length === 0) return access.allowNewModels ? 'Every model it lists' : 'Only the models you tick'
   if (ticked.length === all.length) return access.allowNewModels ? `All ${pluralized(all.length, 'model')}, and new ones` : `All ${pluralized(all.length, 'model')}, not new ones`
+  if (ticked.length === 0) return access.allowNewModels ? 'No models now, new ones when they appear' : 'No models: paused'
   if (ticked.length === 1) return `Only ${nameOf(ticked[0])}`
   return `${ticked.length} of ${pluralized(all.length, 'model')}`
 }

@@ -38,7 +38,9 @@ export function providerCheckFailed(provider?: ProviderHealth | null): boolean {
  * model itself did not answer.
  */
 export function availability(card: Pick<ModelCard, 'selectable' | 'status' | 'validationStatus' | 'lastValidationError' | 'metadata'> & { allowed?: boolean }, provider?: ProviderHealth | null): Availability {
-  if (card.allowed === false) return { usable: false, label: 'Turned off', detail: 'Unticked on its connection, so nothing uses it.' }
+  if (card.allowed === false) {
+    return { usable: false, label: provider?.name ? `Not allowed on ${provider.name}` : 'Not allowed', detail: 'Unticked on its connection, so nothing uses it. Tick it there to use it.' }
+  }
   if (card.selectable) return { usable: true, label: 'Available' }
   if (card.status === 'inactive' || card.metadata?.retiredReason) {
     const reason = typeof card.metadata?.retiredReason === 'string' ? card.metadata.retiredReason : undefined

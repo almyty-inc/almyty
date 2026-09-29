@@ -100,7 +100,7 @@ function connection(overrides: Partial<Connection> = {}): Connection {
 /** A key one API keeps for itself: in GET /credentials, not in GET /connections. */
 const apiKey = { id: 'cred-api', name: 'Petstore key', type: 'api_key', connectorKey: null, visibility: 'org', createdAt: '2026-08-01T00:00:00.000Z', metadata: { managedBy: { kind: 'api', id: 'api-1' } } }
 
-const PATHS = ['/credentials', '/credentials/advanced', '/credentials/new', '/credentials/:id', '/models/connect', '/guide', '/gateways', '/apis/:id', '/models']
+const PATHS = ['/credentials', '/credentials/advanced', '/credentials/new', '/credentials/:id', '/credentials/providers/new', '/guide', '/gateways', '/apis/:id', '/models']
 
 let openSpy: ReturnType<typeof vi.spyOn>
 
@@ -145,11 +145,12 @@ describe('/credentials', () => {
     expect(within(table).getAllByText('GitHub', { selector: 'span.truncate' })).toHaveLength(1)
   })
 
-  it('shows model provider keys as their own group, pointing at Models', async () => {
+  it('shows model provider connections as their own group, connected from here, with the catalog one link away', async () => {
     at()
     const group = await screen.findByTestId('model-provider-credentials')
     expect(await within(group).findByText('OpenAI', { selector: 'span.truncate' })).toBeInTheDocument()
-    expect(within(group).getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/models')
+    expect(within(group).getByRole('link', { name: /Connect a provider/ })).toHaveAttribute('href', '/credentials/providers/new')
+    expect(within(group).getByRole('link', { name: 'Models catalog' })).toHaveAttribute('href', '/models')
     expect(within(screen.getByTestId('credentials-table')).queryByText('OpenAI', { selector: 'span.truncate' })).not.toBeInTheDocument()
   })
 
@@ -299,7 +300,7 @@ describe('/credentials/new', () => {
     expect(router.state.location.search).toBe('?service=other')
   })
 
-  it('shows model providers as one tile that leads to Models, with no AI or GPU hosting groups of its own', async () => {
+  it('shows model providers as one tile that leads to connecting one, with no AI or GPU hosting groups of its own', async () => {
     const modal: Connector = { key: 'modal', kind: 'deployment', adapterKey: 'modal', displayName: 'Modal', connect: [{ type: 'api_key' }] }
     vi.mocked(connectorsApi.list).mockResolvedValue([github, slack, openai, modal, other])
     const { router } = at()
@@ -309,12 +310,12 @@ describe('/credentials/new', () => {
     expect(screen.queryByTestId('service-tile-modal')).not.toBeInTheDocument()
     expect(screen.queryByText('GPU hosting')).not.toBeInTheDocument()
     fireEvent.click(tile)
-    await waitFor(() => expect(router.state.location.pathname).toBe('/models/connect'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/credentials/providers/new'))
   })
 
-  it('sends a link to a model provider on to Models, where its models come with it', async () => {
+  it('sends a link to a model provider on to connecting one, where its models come with it', async () => {
     const { router } = at('/credentials/new?service=openai')
-    await waitFor(() => expect(router.state.location.pathname).toBe('/models/connect'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/credentials/providers/new'))
     expect(router.state.location.search).toBe('?type=openai')
   })
 })

@@ -244,7 +244,7 @@ almyty's SSRF protection refuses private and loopback URLs on outbound LLM calls
 OLLAMA_ALLOW_PRIVATE_URLS=true
 ```
 
-Set it on the backend API process, then connect Ollama (Models → Connect a provider → Ollama → **Your own server**) and give its URL, for example `http://localhost:11434`. The Ollama tile picks Ollama Cloud first, which needs an API key and none of this. Chat and tool calling use Ollama's OpenAI-compatible `/v1` endpoint, the model list comes from `/api/tags`, and memory embeddings use `/api/embed`. No API key is needed for your own server.
+Set it on the backend API process, then connect Ollama (Credentials → Connect a provider → Ollama → **Your own server**) and give its URL, for example `http://localhost:11434`. The Ollama tile picks Ollama Cloud first, which needs an API key and none of this. Chat and tool calling use Ollama's OpenAI-compatible `/v1` endpoint, the model list comes from `/api/tags`, and memory embeddings use `/api/embed`. No API key is needed for your own server.
 
 Networking note for Docker Compose: inside the backend container, `localhost` is the container itself, not your machine. Point the provider at the host instead, `http://host.docker.internal:11434` (on Linux, add `extra_hosts: ["host.docker.internal:host-gateway"]` to the backend service).
 

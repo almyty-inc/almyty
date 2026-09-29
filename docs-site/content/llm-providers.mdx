@@ -1,33 +1,31 @@
 # Connect a provider
 
-Bring your own model keys and every agent, workflow step and Model Prompt tool can use them. A provider connection is a named key almyty calls models with (or the address of an OpenAI-compatible server you run, Ollama, or a cloud account). Connect one and its models appear in [Models](/models) by themselves; there is nothing to add per model. Connect the same provider as often as you like, each connection with its own name, key and models.
+Bring your own model keys and every agent, workflow step and Model Prompt tool can use them. A provider connection is a named key almyty calls models with (or the address of an OpenAI-compatible server you run, Ollama, or a cloud account). Connections live in [Credentials](/credentials), in the **Model providers** group, with every other key. Connect one and its models appear in the [Models](/models) catalog by themselves; there is nothing to add per model. Connect the same provider as often as you like, each connection with its own name, key and models.
 
 ![Models page](/screenshots/models.png)
 
 ## In the dashboard
 
-1. Open **Models** in the sidebar and click **Connect a provider** (`/models/connect`), or click **Add a connection** at the bottom of any model chooser to do the same without leaving the page.
+1. Open **Credentials** in the sidebar and click **Connect a provider** in the **Model providers** group (`/credentials/providers/new`; the Models page has the same button), or click **Add a connection** at the bottom of any model chooser to do the same without leaving the page.
 2. Search or scroll the tiles and click your provider. Your own OpenAI-compatible server and Ollama have their own tiles.
 3. **Name** the connection. It starts as the provider's name; give it one that says what it is for, such as "HF - Llama 70B only".
-4. Paste the API key, or click **Connect an account** to use a saved connection or a sign-in flow instead. Your own server asks for its URL and an optional key; Ollama asks for an Ollama Cloud key, or the URL of an Ollama you run (see [Ollama](#ollama)). A provider that needs something more asks only for that: AWS Bedrock the region, Azure the resource and the model name in Azure, Vertex AI the project and the model, RunPod the endpoint. A provider that serves no model list (Qwen, Z.ai, Fireworks, SambaNova, Doubao Ark, Spark, Vertex AI) asks for the model to use.
+4. Paste the API key, or click **Use a saved key instead** and pick a key already in Credentials (or add one there without leaving the page). Your own server asks for its URL and an optional key; Ollama asks for an Ollama Cloud key, or the URL of an Ollama you run (see [Ollama](#ollama)). A provider that needs something more asks only for that: AWS Bedrock the region, Azure the resource and the model name in Azure, Vertex AI the project and the model, RunPod the endpoint. A provider that serves no model list (Qwen, Z.ai, Fireworks, SambaNova, Doubao Ark, Spark, Vertex AI) asks for the model to use.
 5. **Who can use it** reads "everyone in your organization". Click **Change** to make it yours alone or a team's.
 6. Click **Connect**.
 
 almyty checks the key with one real call. If the check fails you see one plain line, such as "OpenAI rejected this key.", next to the key field, with the vendor's own words under **Details** and a link to get a key. Nothing is saved until the key works.
 
-When it works, every model the key reaches is listed, all ticked. Untick any this connection should not be used for, then click **Done**: it opens the new connection's page (or goes back to the page that sent you). Other setup pages can link to `/models/connect?type=openai` (open with that tile chosen) and `?returnTo=` to come back when done.
+When it works, every model the key reaches is listed, all ticked. Untick any this connection should not be used for, then click **Done**: it opens the new connection's page (or goes back to the page that sent you). Other setup pages can link to `/credentials/providers/new?type=openai` (open with that tile chosen) and `?returnTo=` to come back when done.
 
 ## A connection's page
 
-Click a connection on the Models page (`/models/providers/:id`). The header shows its name (the pencil renames it), whether its key works and which models it offers, with **Check again** (a new key check, then a fresh read of its model list).
+Click a connection in the **Model providers** group on Credentials, or from a row on the Models page (`/credentials/providers/:id`). The header shows its name (the pencil renames it), whether its key works and which models it offers, with **Check again** (a new key check, then a fresh read of its model list).
 
-- **Models**: every model its key reaches with price, context length and status. Tick the ones it offers; **Allow new models automatically** says whether a model the provider adds later is offered too. With the switch off and one model ticked, the key serves that model and nothing else. See [Which models a connection offers](/models#which-models-a-connection-offers).
-- **Settings**: **Replace key**, **who can use it**, the **default model** it answers with when a step names none, and **Advanced**: per-model overrides (price, context length, privacy tier, region, capabilities), an admin key for usage reconciliation (OpenAI, Anthropic), and default generation parameters. **Remove connection** asks once; its models stay in past runs.
+- **Models**: every model its key reaches with price, context length and status. Tick the ones it offers; **Allow new models automatically** says whether a model the provider adds later is offered too. With the switch off and one model ticked, the key serves that model and nothing else. With none ticked the connection is paused. A model an agent uses cannot be unticked until those agents use another one; saving names them. See [Which models a connection offers](/models#which-models-a-connection-offers).
+- **Settings**: **Replace key**, **who can use it**, the **default model** it answers with when a step names none, and **Advanced**: per-model overrides (price, context length, privacy tier, region, capabilities), an admin key for usage reconciliation (OpenAI, Anthropic), and default generation parameters. **Remove connection** asks once, naming the agents that use its models; their owners are told afterwards that the model is no longer available. Its models stay in past runs.
 - **Open models on this account**, on a cloud account connection: see [Your cloud account](/models/your-cloud).
 
-The connection's key is kept with your other keys under the connection's name; renaming one renames the other.
-
-Old addresses still work: `/llm-providers` opens Models, `/llm-providers/new` and `/models/new` open the connect page, and `/llm-providers/:id` opens the connection's page.
+The connection's key is listed on Credentials under the connection's name; renaming one renames the other. Every key picker offers it too, since the same key serves the provider's other APIs.
 
 ## From your AI assistant
 
@@ -96,7 +94,7 @@ The Ollama tile offers two places Ollama runs, and **Ollama Cloud** is picked fi
 
 **Ollama Cloud** is Ollama's hosted service at `https://ollama.com`. Paste an API key from [ollama.com/settings/keys](https://ollama.com/settings/keys); nothing else is asked. You get the hosted model catalog (large open models like `gpt-oss:120b` or `qwen3.5:397b` without hardware of your own), listed from `GET /api/tags` and called through the OpenAI-compatible `/v1` surface with the key as a Bearer token. It is a public endpoint like any other provider, so no private-address setting is involved. Ollama bills hosted models by plan, so their price reads "Price unknown" rather than zero; track that spend in your Ollama account. Over the API, `configuration.apiUrl` is `https://ollama.com`, and a key is required with it.
 
-**Your own server** is an Ollama you run. Give its URL (for example `http://build-box:11434`) and, only if it sits behind an authenticating proxy, a key, sent as a Bearer token. Chat, streaming and tool calling ride its OpenAI-compatible `/v1` endpoint; its models are read from the native `GET /api/tags` (the models you pulled); memory embeddings use the native `POST /api/embed`. Its models are free and `local`. Because such a server usually listens on localhost or a private network, almyty refuses those addresses unless the install opts in with `OLLAMA_ALLOW_PRIVATE_URLS=true` on the backend (see [Self-hosting](/self-hosting#local-models-with-ollama)); on hosted almyty the server must be reachable at a public URL. An `ollama` connection made over the API with no `apiUrl` still means `http://localhost:11434`.
+**Your own server** is an Ollama you run. Give its URL (for example `http://build-box:11434`) and, only if it sits behind an authenticating proxy, a key, sent as a Bearer token. Chat, streaming and tool calling ride its OpenAI-compatible `/v1` endpoint; its models are read from the native `GET /api/tags` (the models you pulled); memory embeddings use the native `POST /api/embed`. Its models are free and `local`. Because such a server usually listens on localhost or a private network, almyty refuses those addresses unless the install opts in with `OLLAMA_ALLOW_PRIVATE_URLS=true` on the backend (see [Self-hosting](/self-hosting#local-models-with-ollama)); on hosted almyty the server must be reachable at a public URL. An `ollama` connection made over the API with no `apiUrl` is Ollama Cloud (`https://ollama.com`), and needs a key.
 
 ## Configuration reference
 

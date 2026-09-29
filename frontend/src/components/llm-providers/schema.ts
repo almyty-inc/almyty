@@ -83,10 +83,8 @@ export const createProviderSchema = z.object({
   // Optional admin-scoped key for the provider's usage/cost API (issue
   // #241) — only rendered for types in providerUsageApiSupport.
   usageApiKey: z.string().optional(),
-  // Set when the user connected an account through the connect sheet
-  // instead of pasting a key; the backend resolves the secret from it.
-  connectionId: z.string().optional(),
-  // Set when the user picked an existing vault credential / connection.
+  // Set when the user picked a saved key in Credentials instead of pasting
+  // one; the backend resolves the secret from it.
   credentialId: z.string().optional(),
   // Structural configuration (see STRUCTURAL_FIELDS). Flat on the form,
   // nested into configuration.{bedrock,azure,vertex,runpod} on submit.
@@ -126,8 +124,8 @@ export const createProviderSchema = z.object({
     }
     return
   }
-  // A connected account or an existing connection stands in for the key.
-  if (data.connectionId || data.credentialId) return
+  // A saved key stands in for a pasted one.
+  if (data.credentialId) return
   if (!data.apiKey) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Paste your API key', path: ['apiKey'] })
   } else if (data.apiKey.length < 8) {
@@ -171,7 +169,7 @@ type ProviderCreateInput = CreateProviderFormData & {
 }
 
 export function buildProviderCreateBody(data: ProviderCreateInput): Record<string, any> {
-  const credentialId = data.connectionId || data.credentialId || undefined
+  const credentialId = data.credentialId || undefined
   const apiKey = credentialId ? undefined : pastedKey(data.apiKey)
   const usageApiKey = pastedKey(data.usageApiKey)
   const trimmed = (value?: string) => (value?.trim() ? value.trim() : undefined)

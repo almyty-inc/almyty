@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
 /**
- * The connect pages' building blocks, shared by Models (/models/connect)
+ * The connect pages' building blocks, shared by provider connections (/credentials/providers/new)
  * and Credentials (/credentials/new): a searchable grid of tiles, the
  * card a picked tile opens into, and the list of what is connected.
  */

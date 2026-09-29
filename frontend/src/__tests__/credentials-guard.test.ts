@@ -148,8 +148,8 @@ describe('one pick-or-create control', () => {
   })
 
   it('has no new look-alikes: the older add button and select are used only where they were', () => {
-    // The model provider forms and the channel form move to CredentialPicker
-    // with their own reworks; nothing new may join them.
+    // The channel form moves to CredentialPicker with its own rework;
+    // nothing new may join it. The model provider forms already have.
     const users = sourceFiles(SRC)
       .filter((f) => /\b(ConnectAccountButton|ConnectionSelect)\b/.test(readFileSync(f, 'utf8')))
       .map((f) => relative(SRC, f))
@@ -157,9 +157,6 @@ describe('one pick-or-create control', () => {
       .sort()
     expect(users).toEqual([
       'components/gateways/detail/channel-config-form.tsx',
-      'components/llm-providers/connect-provider-form.tsx',
-      'components/llm-providers/credential-slot.tsx',
-      'pages/provider.tsx',
     ])
   })
 
@@ -205,7 +202,6 @@ describe('adding a credential speaks plainly', () => {
     'components/credentials/credential-rows.ts',
     'components/connections/connection-status.ts',
     'components/connect/service-tiles.tsx',
-    'components/connect/connected-card.tsx',
     'components/connect/who-can-use.tsx',
     'components/connect/status-label.tsx',
     'components/access-keys/access-keys-section.tsx',

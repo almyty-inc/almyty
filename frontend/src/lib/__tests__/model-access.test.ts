@@ -28,6 +28,16 @@ describe('a connection\'s models', () => {
     expect(tickedModels(withSwitch(off, ALL, true), ALL)).toEqual(['llama'])
   })
 
+  it('lets a connection offer no model at all: paused, said plainly', () => {
+    const none = withTicked(modelAccessOf({}), ALL, [])
+    expect(tickedModels(none, ALL)).toEqual([])
+    expect(accessSummary(none, ALL)).toBe('No models now, new ones when they appear')
+    const paused = withSwitch(none, ALL, false)
+    expect(modelAccessBody(paused)).toEqual({ allowNewModels: false, hiddenModels: ['llama', 'qwen', 'deepseek'], allowedModels: null })
+    expect(allowsModel(paused, 'llama')).toBe(false)
+    expect(accessSummary(paused, ALL)).toBe('No models: paused')
+  })
+
   it('keeps a hidden id the vendor stopped listing, in case it comes back', () => {
     const access = withTicked(modelAccessOf({ hiddenModels: ['retired'] }), ALL, ALL)
     expect(access.hiddenModels).toEqual(['retired'])

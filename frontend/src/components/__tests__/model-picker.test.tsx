@@ -167,7 +167,7 @@ describe('ModelPicker', () => {
   it('adds a connection right here, under the field, and lists its models when done', async () => {
     renderPicker({})
     await open()
-    expect(screen.getByRole('link', { name: 'Manage connections' })).toHaveAttribute('href', '/models')
+    expect(screen.getByRole('link', { name: 'Manage provider keys' })).toHaveAttribute('href', '/credentials')
     fireEvent.click(screen.getByRole('button', { name: /Add a connection/ }))
     // No dialog and no new tab: the flow is part of the page.
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()

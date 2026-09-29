@@ -9,8 +9,7 @@ import { SecretInput } from '@/components/ui/secret-input'
 import type { VisibilityValue } from '@/components/ui/visibility-field'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
 import { ChoiceTile, ChoiceTiles } from '@/components/connect/service-tiles'
-import { ConnectAccountButton } from '@/components/connections/connect-flow'
-import { ConnectedChip } from '@/components/connections/connected-chip'
+import { CredentialPicker } from '@/components/credentials/credential-picker'
 import { llmProvidersApi } from '@/lib/api'
 import type { Connection } from '@/types/connections'
 import type { ModelCard } from '@/types/models'
@@ -74,6 +73,8 @@ export function ConnectProviderForm({ type, onConnected, onCancel, idPrefix = 'c
   const [model, setModel] = useState('')
   const [structural, setStructural] = useState<Structural>({})
   const [account, setAccount] = useState<Connection | null>(null)
+  // Paste a key (the default), or pick one already in Credentials.
+  const [useSaved, setUseSaved] = useState(false)
   const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [failure, setFailure] = useState<ConnectFailure | null>(null)
@@ -129,7 +130,7 @@ export function ConnectProviderForm({ type, onConnected, onCancel, idPrefix = 'c
       type,
       apiKey: account ? undefined : apiKey.trim() || undefined,
       apiUrl: url,
-      connectionId: account?.id,
+      credentialId: account?.id,
       model: needsModel ? model : undefined,
       ...structural,
     })
@@ -140,7 +141,8 @@ export function ConnectProviderForm({ type, onConnected, onCancel, idPrefix = 'c
       }
     }
     if (!name.trim()) next.name = 'Give the connection a name'
-    if (ollamaCloud && !account && !apiKey.trim() && !next.apiKey) next.apiKey = 'Paste your Ollama Cloud API key'
+    if (ollamaCloud && !account && !apiKey.trim() && !next.apiKey) next.apiKey = useSaved ? 'Pick a saved key' : 'Paste your Ollama Cloud API key'
+    if (useSaved && !account) next.apiKey = 'Pick a saved key, or paste one instead'
     if (ollama && !ollamaCloud && !isHttpUrl(apiUrl)) next.apiUrl = 'Enter the server URL, starting with http:// or https://'
     if (needsModel && !model.trim() && !next.model) next.model = 'Enter the model you want to use'
     setErrors(next)
@@ -151,7 +153,7 @@ export function ConnectProviderForm({ type, onConnected, onCancel, idPrefix = 'c
       type,
       apiKey: account ? '' : apiKey.trim(),
       apiUrl: url,
-      connectionId: account?.id,
+      credentialId: account?.id,
       model: needsModel ? model : undefined,
       ...structural,
       visibility: visibility.visibility,
@@ -253,11 +255,34 @@ export function ConnectProviderForm({ type, onConnected, onCancel, idPrefix = 'c
         </Field>
       )}
 
-      {account ? (
+      {useSaved ? (
         <div className="space-y-1.5">
-          <Label>Account</Label>
-          <ConnectedChip connection={account} onClear={() => setAccount(null)} />
+          <CredentialPicker
+            id={id('saved-key')}
+            label="Saved key"
+            value={account?.id ?? ''}
+            onChange={(credential) => {
+              setAccount(credential)
+              setFailure(null)
+              setErrors((prev) => ({ ...prev, apiKey: '' }))
+            }}
+            kind="inference"
+            connectorKey={type}
+            placeholder="Pick a saved key"
+            error={errors.apiKey}
+            hint="A key already in Credentials, or one you add here. It stays in Credentials under its own name."
+          />
           {failureBox(false)}
+          <button
+            type="button"
+            className="text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              setUseSaved(false)
+              setAccount(null)
+            }}
+          >
+            Paste a key instead
+          </button>
         </div>
       ) : (
         <div className="space-y-2">
@@ -283,19 +308,18 @@ export function ConnectProviderForm({ type, onConnected, onCancel, idPrefix = 'c
               <ExternalLink className="h-3 w-3" aria-hidden />
             </a>
           )}
-          {!ollama && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted-foreground">or</span>
-              <ConnectAccountButton
-                kind="inference"
-                connectorKey={type}
-                onConnected={(connection) => {
-                  setAccount(connection)
-                  setApiKey('')
-                  setFailure(null)
-                }}
-              />
-            </div>
+          {!ownServer && (
+            <button
+              type="button"
+              className="block text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                setUseSaved(true)
+                setApiKey('')
+                setFailure(null)
+              }}
+            >
+              Use a saved key instead
+            </button>
           )}
         </div>
       )}

@@ -1,8 +1,7 @@
 /**
  * Where provider connections live: under Credentials, next to every other
  * key. The Models page is the catalog of what they reach and links here.
- * One place, so a move is one edit; the old /models/providers/* and
- * /models/connect addresses redirect (pages/models-redirects.tsx).
+ * One place, so every link to them is built the same way.
  */
 export const PROVIDER_CONNECTIONS_PATH = '/credentials/providers'
 

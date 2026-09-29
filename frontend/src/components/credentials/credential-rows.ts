@@ -11,6 +11,7 @@ import type { Connection, Connector, ConnectorKind } from '@/types/connections'
 
 import { connectionCheck, connectionWhoShort } from '@/components/connections/connection-status'
 import { credentialPath } from './paths'
+import { connectProviderPath, providerPath } from '@/components/llm-providers/paths'
 
 /** A row of GET /credentials. Secrets arrive masked, and are never read here. */
 export interface StoredCredential {
@@ -81,7 +82,7 @@ export function managedUse(managedBy: { kind: string; id?: string } | null | und
       return { label: 'An MCP server', href: '/tools' }
     case 'llm_provider':
     case 'llm_provider_usage':
-      return { label: 'A model provider', href: id ? `/models/providers/${id}` : '/models' }
+      return { label: 'A model provider', href: id ? providerPath(id) : connectProviderPath() }
     case 'gateway_channel':
       return { label: 'A channel', href: id ? `/gateways/${id}` : undefined }
     case 'channel_installation':
@@ -107,8 +108,9 @@ export function connectionRow(connection: Connection, connector?: Pick<Connector
     who: connectionWhoShort(connection),
     uses: (connection.usedBy ?? []).map((u) => ({ label: u.name })),
     createdAt: connection.createdAt ?? null,
-    href: credentialPath(connection.id),
-    group: connection.kind && MODEL_KINDS.includes(connection.kind) ? 'models' : 'other',
+    // A provider connection's key is changed on that connection's page, with its models.
+    href: connection.providerId ? providerPath(connection.providerId) : credentialPath(connection.id),
+    group: connection.providerId || (connection.kind && MODEL_KINDS.includes(connection.kind)) ? 'models' : 'other',
   }
 }
 
@@ -117,13 +119,13 @@ export function storedRow(credential: StoredCredential): CredentialRow {
   const fromProvider = credential._source === 'llm_provider'
   const managed = managedUse(credential.metadata?.managedBy)
   const uses: CredentialUse[] = fromProvider
-    ? (credential.usedBy ?? []).map((u) => ({ label: u.name, href: `/models/providers/${u.id}` }))
+    ? (credential.usedBy ?? []).map((u) => ({ label: u.name, href: providerPath(u.id) }))
     : managed
       ? [managed]
       : credential.apiId
         ? [{ label: 'An API', href: `/apis/${credential.apiId}` }]
         : []
-  const providerKind = managed?.href?.startsWith('/models')
+  const providerKind = credential.metadata?.managedBy?.kind === 'llm_provider' || credential.metadata?.managedBy?.kind === 'llm_provider_usage'
   return {
     id: credential.id,
     name: credential.name,
@@ -134,8 +136,8 @@ export function storedRow(credential: StoredCredential): CredentialRow {
     who: credential.visibility === 'private' ? 'Only you' : credential.visibility === 'team' ? 'One team' : 'Everyone',
     uses,
     createdAt: credential.createdAt ?? null,
-    // A provider's own key has no page of its own here: it is changed on the provider.
-    href: fromProvider ? uses[0]?.href ?? '/models' : credentialPath(credential.id),
+    // A provider's own key has no page of its own here: it is changed on the provider connection.
+    href: fromProvider ? uses[0]?.href ?? connectProviderPath() : providerKind && managed?.href ? managed.href : credentialPath(credential.id),
     group: fromProvider || providerKind ? 'models' : 'other',
   }
 }

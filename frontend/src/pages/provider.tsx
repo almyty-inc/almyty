@@ -22,7 +22,7 @@ import { FormSection } from '@/components/layout/form-page'
 import { ServiceIcon } from '@/components/connect/service-tiles'
 import { AllowedModelsEditor } from '@/components/llm-providers/allowed-models-editor'
 import { accessSummary, modelAccessOf } from '@/lib/model-access'
-import { ConnectAccountButton } from '@/components/connections/connect-flow'
+import { CredentialPicker } from '@/components/credentials/credential-picker'
 import { ModelPicker } from '@/components/model-picker'
 import { EditModelForm } from '@/components/models/edit-model-form'
 import { HostingPanel } from '@/components/models/hosting/hosting-panel'
@@ -91,7 +91,7 @@ export function ProviderPage() {
   }
 
   useEffect(() => {
-    document.title = provider?.name ? `${provider.name} | Models | almyty` : 'Connection | almyty'
+    document.title = provider?.name ? `${provider.name} | Credentials | almyty` : 'Connection | almyty'
     return () => {
       document.title = 'almyty'
     }
@@ -143,15 +143,15 @@ export function ProviderPage() {
       queryClient.invalidateQueries({ queryKey: ['models'] })
       queryClient.invalidateQueries({ queryKey: ['credentials'] })
       notifications.success('Connection removed', `${provider?.name ?? 'The connection'} and its models are gone.`)
-      navigate('/models')
+      navigate('/credentials')
     },
     onError: (error) => notifications.error('Could not remove the connection', getApiErrorMessage(error, 'It was not removed.')),
   })
 
   const back = (
-    <Link to="/models" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+    <Link to="/credentials" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
       <ArrowLeft className="h-4 w-4" aria-hidden />
-      Models
+      Credentials
     </Link>
   )
 
@@ -185,9 +185,16 @@ export function ProviderPage() {
   const summary = accessSummary(modelAccessOf(provider), listedIds, (vid) => models.find((m) => m.vendorModelId === vid)?.name ?? vid)
 
   const askRemove = async () => {
+    // Name the agents that lose their model before asking, so nobody removes one blind.
+    let using: { agents: Array<{ id: string; name: string }>; others: number } = { agents: [], others: 0 }
+    try {
+      using = await llmProvidersApi.agents(id)
+    } catch {
+      // The question still stands without the list; the notices name them afterwards.
+    }
     const ok = await confirm({
       title: `Remove ${provider.name}?`,
-      description: 'Its key and its models go with it. Agents that use them stop working until you pick another model.',
+      description: removeDescription(using.agents.map((a) => a.name), using.others),
       confirmLabel: 'Remove connection',
       destructive: true,
     })
@@ -410,8 +417,19 @@ function ReplaceKey({ provider, onSaved }: { provider: any; onSaved: () => void 
                 <ExternalLink className="h-3 w-3" aria-hidden />
               </a>
             )}
-            <ConnectAccountButton kind="inference" connectorKey={provider.type} label="Use a connected account instead" onConnected={(connection) => save.mutate({ credentialId: connection.id })} />
           </div>
+          <CredentialPicker
+            id="replace-key-saved"
+            label="Or use a saved key"
+            value={provider.credentialRef?.id ?? ''}
+            onChange={(credential) => {
+              if (credential && credential.id !== provider.credentialRef?.id) save.mutate({ credentialId: credential.id })
+            }}
+            kind="inference"
+            connectorKey={provider.type}
+            placeholder="Pick a saved key"
+            hint="Saving it checks the key again."
+          />
         </div>
       )}
     </div>
@@ -515,6 +533,21 @@ function Hosting({ provider, orgId }: { provider: any; orgId: string }) {
       )}
     </section>
   )
+}
+
+/**
+ * The line under "Remove X?": which agents lose their model. Names the ones
+ * the viewer can see, counts the rest.
+ */
+export function removeDescription(names: string[], others: number): string {
+  const base = 'Its key and its models go with it.'
+  const total = names.length + others
+  if (total === 0) return `${base} No agent uses its models.`
+  const shown = names.map((n) => `"${n}"`).join(', ')
+  const rest = others > 0 ? pluralized(others, 'other agent') : ''
+  const who = shown && rest ? `${shown} and ${rest}` : shown || rest
+  const one = total === 1
+  return `${base} ${who} ${one ? 'uses' : 'use'} its models and ${one ? 'stops' : 'stop'} working until given another model; their owners are told.`
 }
 
 /** Everything a first connection does not need: call settings, the usage key, and per-model settings. */

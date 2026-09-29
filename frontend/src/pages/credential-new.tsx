@@ -16,15 +16,14 @@ import { safeReturnTo } from '@/lib/return-to'
 import type { Connection, Connector, ConnectorKind } from '@/types/connections'
 import { connectProviderPath } from '@/components/llm-providers/paths'
 
-/** AI providers and model hosting have one home: Models. */
+/** AI providers and model hosting have their own connect flow, where their models come with them. */
 const MODELS_KINDS: ConnectorKind[] = ['inference', 'deployment']
-const MODELS_CONNECT_PATH = connectProviderPath()
 /** The one tile that stands in for every AI provider. */
 const AI_MODELS_TILE = 'ai-models'
 
 /**
- * Every service but AI models, which are connected on Models where their
- * models come with them: here they are one tile that leads there. It stays
+ * Every service but AI models, which have their own connect flow (models
+ * come with them): here they are one tile that leads there. It stays
  * visible while a search matches an AI provider, so "openai" still finds it.
  */
 function serviceTileGroups(connectors: Connector[], search: string): ServiceTileGroup[] {
@@ -35,7 +34,7 @@ function serviceTileGroups(connectors: Connector[], search: string): ServiceTile
   const models: ServiceTileGroup = {
     id: AI_MODELS_TILE,
     title: 'AI models',
-    tiles: [{ key: AI_MODELS_TILE, label: 'Model providers', hint: 'Added on Models', icon: <Brain className="h-4 w-4 text-primary" /> }],
+    tiles: [{ key: AI_MODELS_TILE, label: 'Model providers', hint: 'OpenAI, Anthropic, Ollama and more', icon: <Brain className="h-4 w-4 text-primary" /> }],
   }
   return [models, ...services]
 }
@@ -43,8 +42,8 @@ function serviceTileGroups(connectors: Connector[], search: string): ServiceTile
 /**
  * Add credential: pick the service's tile, give it its key or sign in,
  * done. The picked tile lives in the URL (?service=github) so a link can
- * open straight onto it. A model provider key is added on Models, where
- * its models come with it.
+ * open straight onto it. A model provider key has its own connect flow
+ * (/credentials/providers/new), where its models come with it.
  */
 export function AddCredentialPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -68,7 +67,7 @@ export function AddCredentialPage() {
 
   const pick = (next: string | null) => {
     if (next === AI_MODELS_TILE) {
-      navigate(MODELS_CONNECT_PATH)
+      navigate(connectProviderPath())
       return
     }
     setConnected(null)
@@ -144,12 +143,12 @@ export function AddCredentialPage() {
   )
 }
 
-/** AI providers and model hosting are connected on Models, where their models come with them. */
+/** AI providers and model hosting have their own connect flow, where their models come with them. */
 function providerRoute(connector: Connector): string | null {
   if (connector.kind === 'deployment') return '/models'
   if (connector.kind !== 'inference') return null
   const type = connector.providerType ?? connector.key
-  return isProviderType(type) ? `${MODELS_CONNECT_PATH}?type=${encodeURIComponent(type)}` : MODELS_CONNECT_PATH
+  return connectProviderPath(isProviderType(type) ? type : null)
 }
 
 function Connected({ connection, connector, onDone, onOpen }: { connection: Connection; connector: Connector; onDone: () => void; onOpen: () => void }) {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Plug, Search } from 'lucide-react'
@@ -39,7 +39,7 @@ const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
   { value: 'all', label: 'Any status' },
   { value: 'available', label: 'Available' },
   { value: 'unavailable', label: 'Not available' },
-  { value: 'off', label: 'Turned off' },
+  { value: 'off', label: 'Not allowed' },
   { value: 'new', label: 'New this week' },
 ]
 
@@ -190,9 +190,6 @@ export function ModelsPage() {
   )
 
   // Links from before this page was redesigned.
-  const legacyTab = searchParams.get('tab')
-  if (legacyTab === 'providers' || searchParams.get('new') === '1') return <Navigate to={connectProviderPath()} replace />
-  if (legacyTab) return <Navigate to="/models" replace />
 
   const loading = providersQuery.isLoading || cardsQuery.isLoading
   const noConnections = !providersQuery.isLoading && !providersQuery.isError && connections.length === 0 && rows.length === 0

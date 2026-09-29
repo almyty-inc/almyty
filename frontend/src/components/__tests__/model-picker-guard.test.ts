@@ -107,7 +107,7 @@ describe('model selection goes through ModelPicker', () => {
       'components/agents/detail/verify-config-editor.tsx',
       'components/tools/tool-form.tsx',
       'pages/chat.tsx',
-      // A provider's default model, on /models/providers/:id.
+      // A provider's default model, on /credentials/providers/:id.
       'pages/provider.tsx',
     ]
     for (const rel of sites) {

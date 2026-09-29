@@ -166,6 +166,8 @@ export interface Connection {
   createdAt: string
   updatedAt?: string
   expiresAt?: string | null
+  /** The model provider connection this is the key of, when it is one; changed on that connection's page. */
+  providerId?: string | null
 }
 
 export interface ConnectBody {

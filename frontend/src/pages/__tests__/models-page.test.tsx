@@ -75,7 +75,7 @@ const CARDS = [
   card(GROQ.id, 'llama-4', { selectable: false }),
 ]
 
-const at = (url = '/models') => renderAtRoute(<ModelsPage />, { path: '/models', url, paths: ['/models/connect', '/models/providers/:id'] })
+const at = (url = '/models') => renderAtRoute(<ModelsPage />, { path: '/models', url, paths: ['/credentials/providers/new', '/credentials/providers/:id'] })
 const rowOf = async (id: string) => (await screen.findByTestId(`catalog-row-${id}`)).closest('tr') as HTMLElement
 const listedIds = () => screen.queryAllByTestId(/^catalog-row-/).map((el) => el.getAttribute('data-testid')!.replace('catalog-row-', ''))
 
@@ -90,7 +90,7 @@ describe('ModelsPage', () => {
     at()
     const gpt4o = await rowOf('card-prov-openai-gpt-4o')
     expect(within(gpt4o).getByTestId('catalog-connection')).toHaveTextContent('OpenAI')
-    expect(within(gpt4o).getByTestId('catalog-connection')).toHaveAttribute('href', '/models/providers/prov-openai')
+    expect(within(gpt4o).getByTestId('catalog-connection')).toHaveAttribute('href', '/credentials/providers/prov-openai')
     expect(within(gpt4o).getByTestId('model-price')).toHaveTextContent('$2.50 in / $10.00 out')
     expect(within(gpt4o).getByTestId('model-context')).toHaveTextContent('128k')
     expect(within(gpt4o).getByTestId('model-availability')).toHaveTextContent('Available')
@@ -109,7 +109,7 @@ describe('ModelsPage', () => {
   it('manages no connections itself: the one action is connecting a provider', async () => {
     at()
     await rowOf('card-prov-openai-gpt-4o')
-    expect(screen.getByRole('link', { name: /Connect a provider/ })).toHaveAttribute('href', '/models/connect')
+    expect(screen.getByRole('link', { name: /Connect a provider/ })).toHaveAttribute('href', '/credentials/providers/new')
     expect(screen.queryByTestId(/^provider-card-/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Remove|Rename|Replace key/ })).not.toBeInTheDocument()
   })
@@ -119,7 +119,7 @@ describe('ModelsPage', () => {
     expect(within(await rowOf('card-prov-openai-o3')).getByTestId('model-new')).toHaveTextContent('New')
     expect(within(await rowOf('card-prov-openai-gpt-4o')).queryByTestId('model-new')).not.toBeInTheDocument()
     expect(within(await rowOf('card-prov-openai-gpt-3.5-turbo')).getByTestId('model-availability')).toHaveTextContent('No longer offered')
-    expect(within(await rowOf(`card-prov-hf-1-${QWEN}`)).getByTestId('model-availability')).toHaveTextContent('Turned off')
+    expect(within(await rowOf(`card-prov-hf-1-${QWEN}`)).getByTestId('model-availability')).toHaveTextContent(/^Not allowed on /)
     expect(within(await rowOf('card-prov-groq-llama-4')).getByTestId('model-availability')).toHaveTextContent('Provider check failed')
   })
 
@@ -149,7 +149,7 @@ describe('ModelsPage', () => {
   it('opens a model on its connection\'s page', async () => {
     const { router } = at()
     fireEvent.click(within(await rowOf('card-prov-openai-o3')).getByText('o3'))
-    expect(await screen.findByText('at /models/providers/prov-openai')).toBeInTheDocument()
+    expect(await screen.findByText('at /credentials/providers/prov-openai')).toBeInTheDocument()
     expect(router.state.location.hash).toBe('#model-card-prov-openai-o3')
   })
 
@@ -167,7 +167,7 @@ describe('ModelsPage', () => {
     vi.mocked(modelsApi.list).mockResolvedValue([])
     at()
     expect(await screen.findByText('No models yet')).toBeInTheDocument()
-    expect(screen.getAllByRole('link', { name: /Connect a provider/ }).every((l) => l.getAttribute('href') === '/models/connect')).toBe(true)
+    expect(screen.getAllByRole('link', { name: /Connect a provider/ }).every((l) => l.getAttribute('href') === '/credentials/providers/new')).toBe(true)
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
@@ -178,11 +178,6 @@ describe('ModelsPage', () => {
     at()
     expect((await rowOf('card-prov-qwen-qwen3-0.6b')).textContent).toContain('Your cloud')
     expect(screen.queryByRole('option', { name: 'Qwen on Modal' })).not.toBeInTheDocument()
-  })
-
-  it('sends old ?tab=providers and ?new=1 links to connecting a provider', async () => {
-    renderAtRoute(<ModelsPage />, { path: '/models', url: '/models?tab=providers', paths: ['/models/connect'] })
-    expect(await screen.findByText('at /models/connect')).toBeInTheDocument()
   })
 
   describe('search relevance (the shared model search cases)', () => {

@@ -24,6 +24,7 @@ import { useOrganizationRole } from '@/hooks/use-organization-role'
 import { credentialsApi } from '@/lib/api'
 import { formatRelativeTime, pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
+import { connectProviderPath } from '@/components/llm-providers/paths'
 
 /**
  * Credentials: every key, token and signed-in account almyty keeps for you,
@@ -153,23 +154,37 @@ function CredentialLists({ rows }: { rows: ReturnType<typeof useCredentialRows> 
           />
         </CardContent>
       </Card>
-      {(models.length > 0 || rows.isLoading) && (
-        <Card data-testid="model-provider-credentials">
-          <CardHeader>
+      <Card data-testid="model-provider-credentials">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+          <div className="space-y-1.5">
             <CardTitle className="text-base">Model providers</CardTitle>
             <CardDescription>
-              The keys your model providers use. They are added and changed on{' '}
+              One connection per key, as many per provider as you like, each with the models it offers. Every model they reach is in the{' '}
               <Link to="/models" className="text-primary hover:underline">
-                Models
+                Models catalog
               </Link>
               .
             </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DataTable columns={columns} data={models} loading={rows.isLoading} onRowClick={open} hideSelectionCount hideColumnsButton />
-          </CardContent>
-        </Card>
-      )}
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link to={connectProviderPath()}>
+              <Plus className="mr-2 h-4 w-4" aria-hidden />
+              Connect a provider
+            </Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            columns={columns}
+            data={models}
+            loading={rows.isLoading}
+            onRowClick={open}
+            hideSelectionCount
+            hideColumnsButton
+            emptyState={<EmptyState variant="inline" title="No model providers yet" description="Connect OpenAI, Anthropic, Ollama Cloud or any other provider with its key." />}
+          />
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -26,7 +26,7 @@ describe('ModelAvailabilityBanner', () => {
     const banner = await screen.findByTestId('model-availability-banner')
     expect(banner).toHaveTextContent('Qwen/Qwen3-32B is no longer available from HF - everything.')
     expect(banner).toHaveTextContent('The provider no longer lists it. Used in: model, role Checker.')
-    expect(within(banner).getByRole('link', { name: 'HF - everything' })).toHaveAttribute('href', '/models/providers/p1')
+    expect(within(banner).getByRole('link', { name: 'HF - everything' })).toHaveAttribute('href', '/credentials/providers/p1')
     // A connection the viewer may not see is not named.
     expect(banner).toHaveTextContent('gpt-4o is no longer available from its connection.')
     expect(within(banner).getByRole('link', { name: 'Pick another model' })).toHaveAttribute('href', '/agents/a1/edit')

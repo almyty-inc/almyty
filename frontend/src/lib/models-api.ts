@@ -14,8 +14,6 @@ export const modelsApi = {
   list: (query?: ListModelsQuery) =>
     apiGet<ModelCard[]>('/models', query && Object.keys(query).length ? { params: query } : undefined),
 
-  get: (id: string) => apiGet<ModelCard>(`/models/${id}`),
-
   /** One provider when given; every configured provider when omitted. */
   sync: (providerId?: string) =>
     providerId

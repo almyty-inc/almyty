@@ -7,7 +7,7 @@ import { LlmProviderType } from '@/types'
 /**
  * Every provider type, with the name a person reads. One list, because
  * hand-maintained ones drift. `provider-types.test.ts` fails if an enum
- * value has no entry here or no tile on /models/connect.
+ * value has no entry here or no tile on /credentials/providers/new.
  */
 export const providerTypeLabels: Record<LlmProviderType, string> = {
   [LlmProviderType.OPENAI]: 'OpenAI',

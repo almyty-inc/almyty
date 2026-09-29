@@ -12,10 +12,10 @@ Connect a provider  -->  key checked  -->  its models appear  -->  pick one, or 
 
 ## Connect a provider
 
-1. Open **Models** in the sidebar and click **Connect a provider**. Every model chooser also has **Add a connection**, which opens the same steps right under the field.
+1. Open **Credentials** in the sidebar and click **Connect a provider** in the **Model providers** group (`/credentials/providers/new`; the **Models** page has the same button). Every model chooser also has **Add a connection**, which opens the same steps right under the field.
 2. Pick your provider from the tiles: first-party vendors (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Cohere and more), hosted inference (Groq, Together, OpenRouter, Fireworks, Cerebras and more), clouds (Azure, AWS Bedrock, Vertex AI, Hugging Face, Modal and more), **Your own server** for anything OpenAI-compatible, and **Ollama**.
 3. **Name** the connection. It starts as the provider's name; call it what it is for ("HF - Llama 70B only", "OpenAI - research team"). The name is what every model chooser shows, and you can rename it later.
-4. Paste the API key, or connect an account instead. A few providers ask for the one or two things they cannot work without: the region for AWS Bedrock, the resource and deployment for Azure, the project for Vertex AI. Your own server asks for its URL and an optional key. Ollama asks for an **Ollama Cloud** key by default, or the URL of an Ollama you run (see [Ollama](/llm-providers#ollama)).
+4. Paste the API key, or click **Use a saved key instead** and pick one already in Credentials. A few providers ask for the one or two things they cannot work without: the region for AWS Bedrock, the resource and deployment for Azure, the project for Vertex AI. Your own server asks for its URL and an optional key. Ollama asks for an **Ollama Cloud** key by default, or the URL of an Ollama you run (see [Ollama](/llm-providers#ollama)).
 5. **Who can use it** is everyone in your organization unless you change it to just you or a team.
 6. Click **Connect**.
 
@@ -30,33 +30,35 @@ Every model the key reaches is offered by default. Untick a model on the connect
 **Allow new models automatically** decides what a model the provider adds later does:
 
 - **On** (the default): it is ticked and offered right away. Only the models you unticked stay hidden.
-- **Off**: only the models you ticked are offered. A new model shows up unticked until you tick it.
+- **Off**: only the models you ticked are offered. A new model shows up unticked, marked **Not allowed on** the connection, and is still announced (see below) so you can tick it.
 
-Turn it off and untick all but one model to pin a key to that model: a Hugging Face key that serves Llama 3.3 70B and nothing else. When a step names the connection without a model, it uses the connection's default model if that is ticked, else the best ticked one. A connection keeps at least one model ticked; to stop using it, remove it.
+Turn it off and untick all but one model to pin a key to that model: a Hugging Face key that serves Llama 3.3 70B and nothing else. When a step names the connection without a model, it uses the connection's default model if that is ticked, else the best ticked one. A connection may have no model ticked at all: it is paused, and offers nothing until you tick one.
+
+A model an agent uses cannot be unticked. Saving says which agents use it ("\"gpt-4o\" is used by Support triage. Pick another model for those agents first, then turn it off.", code `MODEL_IN_USE`); give those agents another model, then untick it.
 
 ## The Models page
 
-The Models page is the catalog: one table of every model every connection reaches, with its connection, its price per million tokens in and out, its context length and its status. Filter by connection or status (**Available**, **Not available**, **Turned off**, **New this week**) and search by name or id. Each row links to its connection; setting connections up happens on their own pages, not here.
+The Models page is the catalog: one table of every model every connection reaches, with its connection, its price per million tokens in and out, its context length and its status. Filter by connection or status (**Available**, **Not available**, **Not allowed**, **New this week**) and search by name or id. Each row links to its connection; setting connections up happens on their own pages, not here.
 
-A model's status says whether it can be used now and, when not, why in two words: **No longer offered** (the provider stopped listing it), **Provider check failed** (the connection's key did not pass its last check), **Not available** (the provider said the model is gone) or **Turned off** (unticked on its connection). A model its connection started listing within the last week is marked **New**.
+A model's status says whether it can be used now and, when not, why in two words: **No longer offered** (the provider stopped listing it), **Provider check failed** (the connection's key did not pass its last check), **Not available** (the provider said the model is gone) or **Not allowed on** the connection (unticked there). A model its connection started listing within the last week is marked **New**, ticked or not.
 
 With no connection yet, the page offers to connect a provider.
 
 ## A connection's page
 
-Click a connection (from a row on the Models page, or `/models/providers/:id`). The header shows its name (click the pencil to rename it), the provider, whether its key works and which of its models it offers, with **Check again** for a new key check and a fresh read of its model list.
+Click a connection (in the **Model providers** group on Credentials, from a row on the Models page, or `/credentials/providers/:id`). The header shows its name (click the pencil to rename it), the provider, whether its key works and which of its models it offers, with **Check again** for a new key check and a fresh read of its model list.
 
 - **Models**: every model the key reaches, with price, context and status, a checkbox each and the **Allow new models automatically** switch. Save to apply.
-- **Settings**: its key (**Replace key**), who can use it, its default model, and **Advanced**: per-model overrides of price, context length, privacy tier, region and capabilities, an admin key for usage reconciliation, and default generation parameters. **Remove connection** asks once; its models stay in past runs.
+- **Settings**: its key (**Replace key**), who can use it, its default model, and **Advanced**: per-model overrides of price, context length, privacy tier, region and capabilities, an admin key for usage reconciliation, and default generation parameters. **Remove connection** asks once, and the question names the agents that use its models (the ones you can see by name, the rest as a count). After removal their owners get the usual "no longer available" notices; its models stay in past runs.
 - **Open models on this account**, on a cloud account connection (Hugging Face, Modal, AWS, Vertex AI, Azure and the like): see [Your cloud account](/models/your-cloud).
 
-The connection's key is listed with your other keys under the connection's name, and renaming either renames both.
+The connection's key is listed on Credentials under the connection's name, and renaming either renames both. It is also offered in every key picker, since the same key serves a provider's other APIs (images, speech, embeddings).
 
 ## Choosing a model
 
 Everywhere a model is chosen (an agent's roles, a workflow step, a provider's default) there is one search box listing every model your connections offer, grouped by connection, each with its price per million tokens in and out. A model that cannot be used says why. Type part of a name to narrow it. **Automatic** at the top lets almyty pick per call: the cheapest model that fits the step, or the fastest, within the limits you set (see [Routing](/models/routing)).
 
-At the bottom, **Add a connection** opens the connect steps right under the field, without leaving the page or losing what you typed; its models are in the list when you are done. **Manage connections** goes to the Models page.
+At the bottom, **Add a connection** opens the connect steps right under the field, without leaving the page or losing what you typed; its models are in the list when you are done. **Manage provider keys** goes to Credentials.
 
 ## When a model is usable
 
@@ -85,8 +87,9 @@ almyty tells people when a connection gains models or loses usable ones:
 
 - **Who**: the connection's owner and the organization's owners and admins (only the owner, for a connection private to them), plus the owner of every agent that uses a model that went away. Each person gets one message per change, and an agent is named only to its owner.
 - **In the app**, always: a notification under the bell, and a banner on each affected agent ("gpt-4o is no longer available from OpenAI", with **Pick another model**). The banner goes away by itself once the model is back or the agent uses another one.
-- **By email**: at once for a model an agent uses that went away; everything else (new models, and models no agent uses that went away) in one email a day. Each person turns either email off under **Settings → Your account → Notifications** ("New models", "Model no longer available").
-- **Not twice in a day**: a model that goes away is announced at most once a day per connection, so a provider that drops a model and lists it again does not flood anyone. A new model is announced once per connection, and the first import of a new connection is not news. With **Allow new models automatically** off, a model the provider adds is not announced, since the connection does not offer it.
+- **By email**: at once for a model an agent uses that went away; everything else (new models, and models no agent uses that went away) in one email a day, at 08:00 in each person's time zone (set under **Settings → Your account → Profile**; UTC until set). Each person turns either email off under **Settings → Your account → Notifications** ("New models", "Model no longer available").
+- **Not twice in a day**: a model that goes away is announced at most once a day per connection, so a provider that drops a model and lists it again does not flood anyone. A new model is announced once per connection, and the first import of a new connection is not news. With **Allow new models automatically** off, a model the provider adds is still announced, marked "not allowed on" the connection, with a link to tick it there.
+- **A removed connection**: removing a connection announces each of its models an agent used as no longer available, the same way.
 
 ## What a model records
 
@@ -154,7 +157,7 @@ Connecting a provider over the API is one call, `POST /llm-providers/connect`; w
 |---|---|---|
 | `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time sync of connections that have never been synced, and the periodic sweep |
 | `MODEL_CATALOG_SYNC_CRON` | `17 */6 * * *` | How often every connection's list is read again; `off` disables |
-| `MODEL_CHANGE_DIGEST_CRON` | `0 8 * * *` | When the daily email of new and gone models goes out (UTC); `off` disables it (in-app notices and the immediate email stay) |
+| `MODEL_CHANGE_DIGEST_CRON` | `0 * * * *` | How often the daily email of new and gone models is considered; each person gets it once a day at 08:00 in their own time zone. `off` disables it (in-app notices and the immediate email stay) |
 | `MODEL_PRICE_FEED_CRON` | `0 4 * * *` | Price feed refresh; `off` disables |
 | `MODEL_RECONCILE_CRON` | `*/2 * * * *` | How often models on your cloud accounts are checked and brought to the state you asked for; `off` disables |
 | `MODEL_ROUTER_VERIFY_ESCALATION` | unset | `true` lets a verifier rejection advance the route plan; see [Routing](/models/routing#verify-escalation) |

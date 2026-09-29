@@ -89,10 +89,6 @@ export function AllowedModelsEditor({ provider, cards, onSaved, onCancel, submit
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    if (all.length > 0 && ticked.size === 0) {
-      setError(access.allowNewModels ? 'Tick at least one model. To stop using this connection, remove it.' : 'Tick at least one model, or allow new models automatically.')
-      return
-    }
     // Nothing changed: nothing to send.
     if (!dirty) {
       onSaved?.(provider)
@@ -161,7 +157,7 @@ export function AllowedModelsEditor({ provider, cards, onSaved, onCancel, submit
               {shown.map((card) => {
                 const on = ticked.has(card.vendorModelId)
                 const price = effectivePrice(card)
-                const state = availability({ ...card, allowed: on, selectable: on && card.validationStatus === 'passed' && card.status === 'active' })
+                const state = availability({ ...card, allowed: on, selectable: on && card.validationStatus === 'passed' && card.status === 'active' }, { id: provider.id, name: provider.name })
                 return (
                   <TableRow key={card.id} data-testid={`allowed-model-${card.vendorModelId}`} data-state={on ? 'checked' : 'unchecked'}>
                     <TableCell>

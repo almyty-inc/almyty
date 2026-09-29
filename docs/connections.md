@@ -26,7 +26,7 @@ organization" until someone changes it. Saving checks the key with the
 service; a refusal is said next to the key and the form stays filled.
 The rest (another way to sign in, optional fields, pasting a sign-in
 code) is under Advanced. A model provider's tile goes to
-`/models/connect`, where adding it also brings its models.
+`/credentials/providers/new`, where adding it also brings its models.
 
 "Other service" (connector `other`) is for any key the catalog has no
 entry for: a name and one secret box. Nothing can be asked whether such

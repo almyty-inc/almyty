@@ -1,5 +1,5 @@
 /**
- * /models/providers/:id: one provider connection. Its name, whether its key
+ * /credentials/providers/:id: one provider connection. Its name, whether its key
  * works and which of its models it offers up top; the models tab ticks and
  * unticks them; settings holds the key, who can use it and Advanced.
  */
@@ -16,7 +16,7 @@ import { hfAdapter, makeDeployment } from '@/components/models/hosting/__tests__
 
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 vi.mock('@/lib/api', () => ({
-  llmProvidersApi: { getById: vi.fn(), getAll: vi.fn(), update: vi.fn(), test: vi.fn(), delete: vi.fn() },
+  llmProvidersApi: { getById: vi.fn(), getAll: vi.fn(), update: vi.fn(), test: vi.fn(), delete: vi.fn(), agents: vi.fn() },
   organizationsApi: { getTeams: vi.fn() },
   budgetsApi: { list: vi.fn().mockResolvedValue([]) },
 }))
@@ -65,7 +65,7 @@ const card = (vendorModelId: string, over: Record<string, any> = {}) =>
     ...over,
   }) as any
 
-const at = (tab?: string) => renderAtRoute(<ProviderPage />, { path: '/models/providers/:id', url: `/models/providers/p1${tab ? `?tab=${tab}` : ''}`, paths: ['/models'] })
+const at = (tab?: string) => renderAtRoute(<ProviderPage />, { path: '/credentials/providers/:id', url: `/credentials/providers/p1${tab ? `?tab=${tab}` : ''}`, paths: ['/models', '/credentials'] })
 
 describe('ProviderPage', () => {
   beforeEach(() => {
@@ -107,12 +107,23 @@ describe('ProviderPage', () => {
     await waitFor(() => expect(llmProvidersApi.update).toHaveBeenCalledWith('p1', { allowNewModels: false, hiddenModels: ['o3'], allowedModels: ['gpt-4o'] }))
   })
 
-  it('will not leave a connection with no model ticked', async () => {
+  it('saves a connection with no model ticked: it is paused, not refused', async () => {
+    vi.mocked(llmProvidersApi.update).mockResolvedValue({} as any)
     at()
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Untick every model shown' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(await screen.findByTestId('allowed-models-error')).toHaveTextContent('Tick at least one model')
-    expect(llmProvidersApi.update).not.toHaveBeenCalled()
+    await waitFor(() => expect(llmProvidersApi.update).toHaveBeenCalledWith('p1', expect.objectContaining({ allowNewModels: true, hiddenModels: expect.arrayContaining(['gpt-4o', 'o3']) })))
+    expect(screen.queryByTestId('allowed-models-error')).not.toBeInTheDocument()
+  })
+
+  it('says which agents use a model when unticking it is refused, and keeps it ticked', async () => {
+    vi.mocked(llmProvidersApi.update).mockRejectedValue({
+      response: { status: 409, data: { code: 'MODEL_IN_USE', message: '"o3" is used by Support triage. Pick another model for those agents first, then turn it off.', agents: [{ id: 'a1', name: 'Support triage' }], otherAgents: 0 } },
+    })
+    at()
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Allow o3' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByTestId('allowed-models-error')).toHaveTextContent('"o3" is used by Support triage. Pick another model for those agents first, then turn it off.')
   })
 
   it('reads a pinned connection back as pinned', async () => {
@@ -213,12 +224,27 @@ describe('ProviderPage', () => {
       expect(screen.queryByRole('button', { name: /Validate/ })).not.toBeInTheDocument()
       expect(screen.queryByText(/Validated|Not validated/)).not.toBeInTheDocument()
 
+      vi.mocked(llmProvidersApi.agents).mockResolvedValue({ agents: [], others: 0 })
       fireEvent.click(screen.getByRole('button', { name: 'Remove connection' }))
       const confirm = await screen.findByRole('alertdialog')
       expect(within(confirm).getByText('Remove OpenAI?')).toBeInTheDocument()
+      expect(confirm).toHaveTextContent('No agent uses its models.')
       fireEvent.click(within(confirm).getByRole('button', { name: 'Remove connection' }))
       await waitFor(() => expect(llmProvidersApi.delete).toHaveBeenCalledWith('p1'))
-      expect(await screen.findByText('at /models')).toBeInTheDocument()
+      // Back to Credentials, where connections live.
+      expect(await screen.findByText('at /credentials')).toBeInTheDocument()
+    })
+
+    it('names the agents that lose their model before removing, counting the ones the viewer cannot see', async () => {
+      vi.mocked(llmProvidersApi.agents).mockResolvedValue({ agents: [{ id: 'a1', name: 'Support triage' }, { id: 'a2', name: 'Nightly digest' }], others: 1 })
+      at('settings')
+      await screen.findByTestId('who-can-use')
+      fireEvent.click(screen.getByRole('button', { name: 'Remove connection' }))
+      const confirm = await screen.findByRole('alertdialog')
+      expect(llmProvidersApi.agents).toHaveBeenCalledWith('p1')
+      expect(confirm).toHaveTextContent('"Support triage", "Nightly digest" and 1 other agent use its models and stop working until given another model; their owners are told.')
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }))
+      expect(llmProvidersApi.delete).not.toHaveBeenCalled()
     })
   })
 
