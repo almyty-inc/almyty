@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, MoreThan, Repository } from 'typeorm';
+import { DataSource, In, IsNull, MoreThan, Repository } from 'typeorm';
 
 import { ModelChangeEvent } from '../../../entities/model-change-event.entity';
 import { LlmProvider } from '../../../entities/llm-provider.entity';
@@ -19,6 +19,7 @@ import { agentOwnerUserId } from '../../agents/agent-owner';
 import { providerAllowsModel } from '../../llm-providers/allowed-models';
 import { providerUsableByUser } from '../../llm-providers/private-provider';
 import { GONE_REASONS, ModelChange, ModelChangeListener } from './model-change';
+import { ModelUsageService } from './model-usage.service';
 
 /**
  * A model that stops being usable is announced at most once a day per
@@ -31,8 +32,26 @@ export const UNAVAILABLE_NOTICE_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** How long the catalog marks a model "New". */
 export const NEW_MODEL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Change rows kept this long after their email went out. */
+/** Change rows kept this long. */
 export const MODEL_CHANGE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+
+/** The digest goes out at this hour in each recipient's own time zone. */
+export const DIGEST_LOCAL_HOUR = 8;
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** A digest never covers more than this, however long since the last one. */
+const DIGEST_LOOKBACK_MS = 2 * DAY_MS;
+/** Two digests are at least this far apart (a daylight-saving shift moves 08:00 by an hour). */
+const DIGEST_MIN_GAP_MS = 20 * 60 * 60 * 1000;
+
+/** The hour of the day at `now` in `timeZone` (an IANA name); UTC when unset or not a real zone. */
+export function localHour(now: Date, timeZone: string | null | undefined): number {
+  const format = (zone: string) => Number(new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', hourCycle: 'h23' }).format(now));
+  try {
+    return format(timeZone || 'UTC');
+  } catch {
+    return format('UTC');
+  }
+}
 
 /** How many model names a notice lists before "and N more". */
 const LISTED = 8;
@@ -62,6 +81,11 @@ function frontendUrl(path: string): string {
   return `${base}${path}`;
 }
 
+/** Where a provider connection's page is. */
+export function providerPagePath(providerId: string): string {
+  return `/credentials/providers/${providerId}`;
+}
+
 function listNames(names: string[]): string {
   const shown = names.slice(0, LISTED);
   const more = names.length - shown.length;
@@ -79,8 +103,13 @@ function listNames(names: string[]): string {
  *
  * When: in the app at once, always. By email at once for a model an agent
  * uses that stopped being usable; everything else (new models, and models
- * no agent uses) goes into one email a day (sendDigest). Each person turns
- * either email off in their own notification settings.
+ * no agent uses) goes into one email a day at 08:00 the recipient's time
+ * (sendDigest). Each person turns either email off in their own
+ * notification settings.
+ *
+ * A new model is announced whether or not the connection offers it: one it
+ * does not (new models not allowed automatically) is marked so, and the
+ * owner can tick it.
  */
 @Injectable()
 export class ModelChangeNoticesService implements ModelChangeListener {
@@ -95,6 +124,7 @@ export class ModelChangeNoticesService implements ModelChangeListener {
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(UserOrganization) private readonly memberships: Repository<UserOrganization>,
     private readonly dataSource: DataSource,
+    private readonly usage: ModelUsageService,
     @Optional() private readonly notifications?: NotificationsService,
     @Optional() private readonly mail?: MailService,
     @Optional() private readonly accessPolicy?: AccessPolicyService,
@@ -105,11 +135,9 @@ export class ModelChangeNoticesService implements ModelChangeListener {
   async modelsChanged(change: ModelChange): Promise<void> {
     try {
       if (change.appeared.length === 0 && change.gone.length === 0) return;
-      const provider = await this.providers.findOne({ where: { id: change.providerId, organizationId: change.organizationId } });
+      const provider = change.provider ?? (await this.providers.findOne({ where: { id: change.providerId, organizationId: change.organizationId } }));
       if (!provider) return;
-      // A model the connection does not allow is not new to anyone using it.
-      const appeared = change.appeared.filter((card) => providerAllowsModel(provider, card.vendorModelId));
-      const { added, gone } = await this.recordRows(provider, appeared, change.gone);
+      const { added, gone } = await this.recordRows(provider, change.appeared, change.gone);
       if (added.length > 0) await this.announceNew(provider, added);
       if (gone.length > 0) await this.announceGone(provider, gone);
     } catch (err: any) {
@@ -138,7 +166,7 @@ export class ModelChangeNoticesService implements ModelChangeListener {
         for (const card of appeared) {
           if (said.has(card.vendorModelId)) continue;
           said.add(card.vendorModelId);
-          added.push(await repo.save(repo.create({ ...base, providerName: provider.name, modelId: card.id, vendorModelId: card.vendorModelId, modelName: card.name || card.vendorModelId, kind: 'new', reason: null, agentIds: [] })));
+          added.push(await repo.save(repo.create({ ...base, providerName: provider.name, modelId: card.id, vendorModelId: card.vendorModelId, modelName: card.name || card.vendorModelId, kind: 'new', offered: providerAllowsModel(provider, card.vendorModelId), reason: null, agentIds: [] })));
         }
       }
       const goneRows: ModelChangeEvent[] = [];
@@ -146,7 +174,7 @@ export class ModelChangeNoticesService implements ModelChangeListener {
         const since = new Date(Date.now() - UNAVAILABLE_NOTICE_WINDOW_MS);
         const recent = await repo.find({ where: { ...base, kind: 'unavailable', vendorModelId: In(gone.map((g) => g.card.vendorModelId)), createdAt: MoreThan(since) }, select: { vendorModelId: true } });
         const said = new Set(recent.map((e) => e.vendorModelId));
-        const using = await this.agentsUsing(provider.organizationId, provider.id, gone.map((g) => g.card));
+        const using = await this.usage.modelsInUse(provider.organizationId, provider.id);
         for (const { card, reason } of gone) {
           if (said.has(card.vendorModelId)) continue;
           said.add(card.vendorModelId);
@@ -157,49 +185,27 @@ export class ModelChangeNoticesService implements ModelChangeListener {
     });
   }
 
-  /** For each vendor model id, the agents of the org that name it on this connection. */
-  private async agentsUsing(organizationId: string, providerId: string, cards: Model[]): Promise<Map<string, string[]>> {
-    const out = new Map<string, string[]>();
-    if (cards.length === 0) return out;
-    const wanted = new Set(cards.map((c) => c.vendorModelId));
-    const add = (vendorModelId: string, agentId: string) => {
-      const list = out.get(vendorModelId) ?? [];
-      if (!list.includes(agentId)) list.push(agentId);
-      out.set(vendorModelId, list);
-    };
-    const agents = await this.agents.find({
-      where: { organizationId, isTemporary: false },
-      select: { id: true, modelConfig: true, pipeline: true, agentConfig: true, collaboration: true, models: true },
-    });
-    for (const agent of agents) {
-      for (const ref of collectModelReferences(agent)) {
-        if (ref.providerId === providerId && wanted.has(ref.model)) add(ref.model, agent.id);
-      }
-    }
-    // Roles bound to a model card (agent_roles).
-    const cardIds = new Map(cards.map((c) => [c.id, c.vendorModelId]));
-    const roles = await this.agentRoles.find({ where: { organizationId } });
-    for (const role of roles) {
-      const binding = role.binding as { mode?: string; modelId?: string } | null | undefined;
-      const vendorModelId = binding?.mode === 'pinned' && binding.modelId ? cardIds.get(binding.modelId) : undefined;
-      if (vendorModelId) add(vendorModelId, role.agentId);
-    }
-    return out;
-  }
-
   // ── In the app, and the immediate email ─────────────────────────
 
   private async announceNew(provider: LlmProvider, rows: ModelChangeEvent[]): Promise<void> {
     const audience = await this.connectionAudience(provider);
     if (audience.length === 0 || !this.notifications) return;
-    const names = rows.map((r) => r.modelName);
+    const offered = rows.filter((r) => r.offered !== false).map((r) => r.modelName);
+    const notOffered = rows.filter((r) => r.offered === false).map((r) => r.modelName);
+    const title = rows.length === 1 ? `New model on ${provider.name}: ${rows[0].modelName}` : `${rows.length} new models on ${provider.name}`;
+    const body = [
+      offered.length ? `${listNames(offered)}. ${offered.length === 1 ? 'It shows' : 'They show'} up in every model chooser.` : '',
+      notOffered.length
+        ? `${listNames(notOffered)}: not allowed on ${provider.name}, which offers new models only once they are ticked. Tick ${notOffered.length === 1 ? 'it' : 'them'} on the connection to use ${notOffered.length === 1 ? 'it' : 'them'}.`
+        : '',
+    ].filter(Boolean).join(' ');
     await this.notifications.emit({
       type: 'models.new',
       organizationId: provider.organizationId,
       userIds: audience,
-      title: rows.length === 1 ? `New model on ${provider.name}: ${names[0]}` : `${rows.length} new models on ${provider.name}`,
-      body: `${listNames(names)}. ${rows.length === 1 ? 'It shows' : 'They show'} up in every model chooser.`,
-      link: `/models?connection=${provider.id}&show=new`,
+      title,
+      body,
+      link: notOffered.length ? providerPagePath(provider.id) : `/models?connection=${provider.id}&show=new`,
     });
   }
 
@@ -231,7 +237,8 @@ export class ModelChangeNoticesService implements ModelChangeListener {
       ].filter(Boolean).join(' ');
       const reasons = [...new Set(rows.map((r) => r.reason).filter(Boolean))].join(' ');
       const body = [rows.length > 1 ? `${listNames(rows.map((r) => r.modelName))}.` : '', reasons, agentLine].filter(Boolean).join(' ');
-      const link = mine.length === 1 ? `/agents/${mine[0].id}` : `/models?connection=${provider.id}&status=unavailable`;
+      const removed = rows.every((r) => r.reason === GONE_REASONS.connectionRemoved);
+      const link = mine.length === 1 ? `/agents/${mine[0].id}` : removed ? '/models?status=unavailable' : `/models?connection=${provider.id}&status=unavailable`;
       await this.notifications?.emit({ type: 'models.unavailable', organizationId: provider.organizationId, userIds: [userId], title, body, link });
 
       const person = people.get(userId);
@@ -251,84 +258,123 @@ export class ModelChangeNoticesService implements ModelChangeListener {
     // The used ones are mailed now; the rest wait for the digest.
     if (used.length > 0) {
       const now = new Date();
-      await this.events.update({ id: In(used.map((r) => r.id)) }, { notifiedAt: now, digestedAt: now });
+      await this.events.update({ id: In(used.map((r) => r.id)) }, { notifiedAt: now });
     }
   }
 
   // ── The daily digest ─────────────────────────────────────────────
 
   /**
-   * One email per person with what changed since the last digest: the new
-   * models, and the models no agent used that stopped being usable. Rows
-   * are claimed with a skip-locked update, so two instances running it at
-   * once never mail the same row twice. Old rows are pruned here too.
+   * The daily email, at 08:00 in each recipient's own time zone
+   * (users.timezone, UTC when unset). Run every hour: a person whose local
+   * hour is 8 and who has not had a digest in the last 20 hours gets one
+   * email with what changed since their last one (at most the last 48
+   * hours): new models, and models that went away with no agent using them.
+   * A model an agent used was mailed at once and is not repeated here.
+   *
+   * Each person is claimed with one conditional update of their
+   * `modelDigestSentAt`, so two instances running this at once never mail
+   * the same person twice. Old change rows are pruned here too.
    */
   async sendDigest(now = new Date()): Promise<{ rows: number; emails: number }> {
-    const claimed: ModelChangeEvent[] = await this.dataSource.query(
-      `UPDATE "model_change_events" SET "digestedAt" = $1
-        WHERE "id" IN (
-          SELECT "id" FROM "model_change_events"
-           WHERE "digestedAt" IS NULL AND "createdAt" <= $1
-           FOR UPDATE SKIP LOCKED
-        )
-        RETURNING *`,
-      [now],
-    ).then((result: any) => (Array.isArray(result?.[0]) ? result[0] : result) as ModelChangeEvent[]);
+    const since = new Date(now.getTime() - DIGEST_LOOKBACK_MS);
+    const rows = await this.events.find({ where: { createdAt: MoreThan(since), notifiedAt: IsNull() }, order: { createdAt: 'ASC' } });
     let emails = 0;
-    const byOrg = new Map<string, ModelChangeEvent[]>();
-    for (const row of claimed) byOrg.set(row.organizationId, [...(byOrg.get(row.organizationId) ?? []), row]);
-    for (const [organizationId, rows] of byOrg) {
-      try {
-        emails += await this.digestForOrg(organizationId, rows);
-      } catch (err: any) {
-        this.logger.warn(`model digest for org ${organizationId} failed: ${err?.message ?? err}`);
+    if (rows.length > 0 && this.mail) {
+      const byOrg = new Map<string, ModelChangeEvent[]>();
+      for (const row of rows) byOrg.set(row.organizationId, [...(byOrg.get(row.organizationId) ?? []), row]);
+      for (const [organizationId, orgRows] of byOrg) {
+        try {
+          emails += await this.digestForOrg(organizationId, orgRows, now);
+        } catch (err: any) {
+          this.logger.warn(`model digest for org ${organizationId} failed: ${err?.message ?? err}`);
+        }
       }
     }
     await this.events
       .createQueryBuilder()
       .delete()
-      .where('"digestedAt" IS NOT NULL AND "createdAt" < :cutoff', { cutoff: new Date(now.getTime() - MODEL_CHANGE_RETENTION_MS) })
+      .where('"createdAt" < :cutoff', { cutoff: new Date(now.getTime() - MODEL_CHANGE_RETENTION_MS) })
       .execute()
       .catch((err) => this.logger.warn(`model change prune failed: ${err?.message ?? err}`));
-    return { rows: claimed.length, emails };
+    return { rows: rows.length, emails };
   }
 
-  private async digestForOrg(organizationId: string, rows: ModelChangeEvent[]): Promise<number> {
-    if (!this.mail) return 0;
+  private async digestForOrg(organizationId: string, rows: ModelChangeEvent[], now: Date): Promise<number> {
+    // Who hears about each connection's rows, per kind, by email.
     const providerIds = [...new Set(rows.map((r) => r.providerId))];
-    const providers = await this.providers.find({ where: { organizationId, id: In(providerIds) } });
-    const perUser = new Map<string, { fresh: Array<{ connection: string; names: string[] }>; gone: Array<{ connection: string; names: string[]; reasons: string[] }> }>();
-    for (const provider of providers) {
-      const mine = rows.filter((r) => r.providerId === provider.id);
-      // A new model the connection hides by now is not news any more.
-      const fresh = mine.filter((r) => r.kind === 'new' && providerAllowsModel(provider, r.vendorModelId)).map((r) => r.modelName);
-      const gone = mine.filter((r) => r.kind === 'unavailable');
-      const audience = await this.connectionAudience(provider);
-      const freshTo = fresh.length ? await this.withEmailOn('models.new', audience) : [];
-      const goneTo = gone.length ? await this.withEmailOn('models.unavailable', audience) : [];
-      for (const userId of new Set([...freshTo, ...goneTo])) {
-        const entry = perUser.get(userId) ?? { fresh: [], gone: [] };
-        if (freshTo.includes(userId)) entry.fresh.push({ connection: provider.name, names: fresh });
-        if (goneTo.includes(userId)) entry.gone.push({ connection: provider.name, names: gone.map((r) => r.modelName), reasons: [...new Set(gone.map((r) => r.reason ?? '').filter(Boolean))] });
-        perUser.set(userId, entry);
+    const providers = new Map((await this.providers.find({ where: { organizationId, id: In(providerIds) } })).map((p) => [p.id, p]));
+    const wants = new Map<string, Set<string>>(); // `${providerId}:${kind}` -> userIds
+    const candidates = new Set<string>();
+    for (const providerId of providerIds) {
+      const audience = await this.audienceFor(organizationId, providers.get(providerId));
+      for (const kind of ['new', 'unavailable'] as const) {
+        if (!rows.some((r) => r.providerId === providerId && r.kind === kind)) continue;
+        const to = await this.withEmailOn(kind === 'new' ? 'models.new' : 'models.unavailable', audience);
+        wants.set(`${providerId}:${kind}`, new Set(to));
+        for (const id of to) candidates.add(id);
       }
     }
-    const people = await this.people([...perUser.keys()]);
+    if (candidates.size === 0) return 0;
+
+    const people = await this.users.find({ where: { id: In([...candidates]) }, select: { id: true, email: true, firstName: true, timezone: true } });
     let sent = 0;
-    for (const [userId, entry] of perUser) {
-      const person = people.get(userId);
-      if (!person?.email) continue;
+    for (const person of people) {
+      if (!person.email || localHour(now, person.timezone) !== DIGEST_LOCAL_HOUR) continue;
+      const previous = await this.claimDigest(person.id, now);
+      if (previous === undefined) continue; // had one today, or another instance took it
+      const from = previous && previous > new Date(now.getTime() - DIGEST_LOOKBACK_MS) ? previous : new Date(now.getTime() - DAY_MS);
+      const mine = rows.filter((r) => r.createdAt > from && wants.get(`${r.providerId}:${r.kind}`)?.has(person.id));
+      if (mine.length === 0) continue;
+      const group = (kind: 'new' | 'unavailable') => {
+        const out = new Map<string, ModelChangeEvent[]>();
+        for (const r of mine.filter((m) => m.kind === kind)) out.set(r.providerId, [...(out.get(r.providerId) ?? []), r]);
+        return [...out.values()];
+      };
       sent++;
-      void this.mail
+      void this.mail!
         .sendTemplate(person.email, 'models.digest', {
           firstName: person.firstName,
-          fresh: entry.fresh.map((e) => ({ connection: e.connection, models: listNames(e.names), count: e.names.length })),
-          gone: entry.gone.map((e) => ({ connection: e.connection, models: listNames(e.names), count: e.names.length, reason: e.reasons.join(' ') })),
+          fresh: group('new').map((list) => {
+            const offered = list.filter((r) => r.offered !== false).map((r) => r.modelName);
+            const notOffered = list.filter((r) => r.offered === false).map((r) => r.modelName);
+            return { connection: list[0].providerName, models: listNames(offered), count: offered.length, notOffered: listNames(notOffered), notOfferedCount: notOffered.length };
+          }),
+          gone: group('unavailable').map((list) => ({
+            connection: list[0].providerName,
+            models: listNames(list.map((r) => r.modelName)),
+            count: list.length,
+            reason: [...new Set(list.map((r) => r.reason ?? '').filter(Boolean))].join(' '),
+          })),
           url: frontendUrl('/models'),
         })
         .catch((err) => this.logger.warn(`model digest email failed: ${err?.message ?? err}`));
     }
     return sent;
+  }
+
+  /**
+   * Take the day's digest for a person: set `modelDigestSentAt` to now
+   * unless one went out in the last 20 hours. Answers the previous value
+   * (null for never), or undefined when nothing was claimed.
+   */
+  private async claimDigest(userId: string, now: Date): Promise<Date | null | undefined> {
+    const result = await this.dataSource.query(
+      `UPDATE "users" AS u SET "modelDigestSentAt" = $2
+         FROM (SELECT "id", "modelDigestSentAt" AS prev FROM "users" WHERE "id" = $1 FOR UPDATE) AS old
+        WHERE u."id" = old."id" AND (old.prev IS NULL OR old.prev < $3)
+        RETURNING old.prev AS prev`,
+      [userId, now, new Date(now.getTime() - DIGEST_MIN_GAP_MS)],
+    );
+    const list = Array.isArray(result?.[0]) ? result[0] : result;
+    if (!Array.isArray(list) || list.length === 0) return undefined;
+    return list[0].prev ? new Date(list[0].prev) : null;
+  }
+
+  /** Who hears about a connection: its audience, or the org's owners and admins once it is gone. */
+  private async audienceFor(organizationId: string, provider: LlmProvider | undefined): Promise<string[]> {
+    if (provider) return this.connectionAudience(provider);
+    return this.orgAdmins(organizationId);
   }
 
   // ── What the pages read ──────────────────────────────────────────
@@ -416,13 +462,18 @@ export class ModelChangeNoticesService implements ModelChangeListener {
    */
   private async connectionAudience(provider: LlmProvider): Promise<string[]> {
     if (provider.visibility === 'private') return provider.ownerUserId ? await this.currentMembers(provider.organizationId, [provider.ownerUserId]) : [];
-    const admins = await this.memberships.find({
-      where: { organizationId: provider.organizationId, role: In([OrganizationRole.OWNER, OrganizationRole.ADMIN]), isActive: true },
-      select: { userId: true, isActive: true, inviteAccepted: true, inviteToken: true },
-    });
-    const ids = new Set(admins.filter((m) => isEffectiveMembership(m)).map((m) => m.userId));
+    const ids = new Set(await this.orgAdmins(provider.organizationId));
     if (provider.ownerUserId) ids.add(provider.ownerUserId);
     return this.currentMembers(provider.organizationId, [...ids]);
+  }
+
+  /** The organization's owners and admins who are members now. */
+  private async orgAdmins(organizationId: string): Promise<string[]> {
+    const admins = await this.memberships.find({
+      where: { organizationId, role: In([OrganizationRole.OWNER, OrganizationRole.ADMIN]), isActive: true },
+      select: { userId: true, isActive: true, inviteAccepted: true, inviteToken: true },
+    });
+    return admins.filter((m) => isEffectiveMembership(m)).map((m) => m.userId);
   }
 
   /** The ones of `userIds` who are members of the organization now. */

@@ -84,7 +84,7 @@ describe('ollama SSRF gate', () => {
   describe('per-call gate (callLlmProviderHttp)', () => {
     it('rejects a private/loopback URL by default without any network call', async () => {
       delete process.env[ENV_KEY];
-      const provider = ollamaProvider(); // defaults to http://localhost:11434
+      const provider = ollamaProvider('http://localhost:11434');
       await expect(
         callLlmProviderHttp(
           { method: 'POST', url: `${provider.getApiUrl()}/chat/completions` },
@@ -96,7 +96,7 @@ describe('ollama SSRF gate', () => {
 
     it('allows a private URL when OLLAMA_ALLOW_PRIVATE_URLS=true', async () => {
       process.env[ENV_KEY] = 'true';
-      const provider = ollamaProvider();
+      const provider = ollamaProvider('http://localhost:11434');
       await callLlmProviderHttp(
         { method: 'POST', url: `${provider.getApiUrl()}/chat/completions` },
         llmCallOptionsFor(provider),
@@ -185,10 +185,16 @@ describe('ollama SSRF gate', () => {
       expect(() => runner.validateProviderConfiguration(LlmProviderType.OLLAMA, { apiUrl: 'https://ollama.com', apiKey: 'k' } as any)).not.toThrow();
     });
 
-    it('rejects the default localhost URL when the escape hatch is off', () => {
+    it('with no URL means Ollama Cloud, which needs a key', () => {
+      delete process.env[ENV_KEY];
+      expect(() => runner.validateProviderConfiguration(LlmProviderType.OLLAMA, {} as any)).toThrow(/Ollama Cloud needs an API key/);
+      expect(() => runner.validateProviderConfiguration(LlmProviderType.OLLAMA, { apiKey: 'k' } as any)).not.toThrow();
+    });
+
+    it('rejects a localhost URL when the escape hatch is off', () => {
       delete process.env[ENV_KEY];
       expect(() =>
-        runner.validateProviderConfiguration(LlmProviderType.OLLAMA, {} as any),
+        runner.validateProviderConfiguration(LlmProviderType.OLLAMA, { apiUrl: 'http://localhost:11434' } as any),
       ).toThrow(/OLLAMA_ALLOW_PRIVATE_URLS/);
     });
 
@@ -204,7 +210,7 @@ describe('ollama SSRF gate', () => {
     it('allows private URLs when OLLAMA_ALLOW_PRIVATE_URLS=true', () => {
       process.env[ENV_KEY] = 'true';
       expect(() =>
-        runner.validateProviderConfiguration(LlmProviderType.OLLAMA, {} as any),
+        runner.validateProviderConfiguration(LlmProviderType.OLLAMA, { apiUrl: 'http://localhost:11434' } as any),
       ).not.toThrow();
       expect(() =>
         runner.validateProviderConfiguration(LlmProviderType.OLLAMA, {

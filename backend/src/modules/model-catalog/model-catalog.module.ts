@@ -25,6 +25,7 @@ import { AgentRole } from '../../entities/agent-role.entity';
 import { User } from '../../entities/user.entity';
 import { UserOrganization } from '../../entities/user-organization.entity';
 import { ModelChangeNoticesService } from './notices/model-change-notices.service';
+import { ModelUsageService } from './notices/model-usage.service';
 import { MODEL_CHANGE_LISTENER } from './notices/model-change';
 
 /**
@@ -52,9 +53,10 @@ import { MODEL_CHANGE_LISTENER } from './notices/model-change';
     ModelCatalogService,
     // New and gone models, told to the people they concern (notices/).
     ModelChangeNoticesService,
+    ModelUsageService,
     { provide: MODEL_CHANGE_LISTENER, useExisting: ModelChangeNoticesService },
   ],
   controllers: [ModelCatalogController, RoutingAnalyticsController],
-  exports: [PriceFeedService, ModelRouterService, ModelCatalogService, ModelChangeNoticesService],
+  exports: [PriceFeedService, ModelRouterService, ModelCatalogService, ModelChangeNoticesService, ModelUsageService],
 })
 export class ModelCatalogModule {}

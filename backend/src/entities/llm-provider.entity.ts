@@ -190,6 +190,14 @@ export function keyCheckPassed(provider: Pick<LlmProvider, 'status' | 'isHealthy
 /** Ollama's own hosted service; any other Ollama host is a server someone runs. */
 const OLLAMA_CLOUD_HOST = /(^|\.)ollama\.com$/i;
 
+/**
+ * Where an Ollama connection with no URL points: Ollama Cloud, which is
+ * what the Ollama tile offers first. A server you run is always given by
+ * its URL. Rows saved when the default was a local install were given that
+ * URL by the migration that changed the default.
+ */
+export const OLLAMA_DEFAULT_URL = 'https://ollama.com';
+
 /** Whether `url` is Ollama Cloud (ollama.com), Ollama's own hosted API. */
 export function isOllamaCloudUrl(url: string | null | undefined): boolean {
   if (!url) return false;
@@ -210,7 +218,7 @@ export function isOllamaCloudUrl(url: string | null | undefined): boolean {
  */
 export function isSelfHostedOllama(provider: Pick<LlmProvider, 'type' | 'configuration'>): boolean {
   if (provider.type !== LlmProviderType.OLLAMA) return false;
-  const url = provider.configuration?.apiUrl || 'http://localhost:11434';
+  const url = provider.configuration?.apiUrl || OLLAMA_DEFAULT_URL;
   try {
     return !OLLAMA_CLOUD_HOST.test(new URL(url).hostname);
   } catch {
@@ -665,11 +673,11 @@ export class LlmProvider {
           || 'https://router.huggingface.co/v1';
       case LlmProviderType.OLLAMA: {
         // OpenAI-compatible surface lives under /v1 on the Ollama server
-        // root; `apiUrl` is the root (default: a local install). On
-        // hosted almyty the URL must be publicly reachable — private and
-        // loopback ranges are refused by the SSRF gate unless the
-        // self-hosting escape hatch OLLAMA_ALLOW_PRIVATE_URLS=true is set.
-        const ollamaBase = (this.configuration.apiUrl || 'http://localhost:11434').replace(/(?<!\/)\/+$/, '');
+        // root; `apiUrl` is the root (default: Ollama Cloud). A server you
+        // run on a private or loopback address is refused by the SSRF
+        // gate unless the self-hosting escape hatch
+        // OLLAMA_ALLOW_PRIVATE_URLS=true is set.
+        const ollamaBase = (this.configuration.apiUrl || OLLAMA_DEFAULT_URL).replace(/(?<!\/)\/+$/, '');
         return ollamaBase.toLowerCase().endsWith('/v1') ? ollamaBase : `${ollamaBase}/v1`;
       }
       case LlmProviderType.CUSTOM:
@@ -711,7 +719,7 @@ export class LlmProvider {
    * GET /api/tags (models) and POST /api/embed (embeddings).
    */
   getOllamaBaseUrl(): string {
-    const base = (this.configuration?.apiUrl || 'http://localhost:11434').replace(/(?<!\/)\/+$/, '');
+    const base = (this.configuration?.apiUrl || OLLAMA_DEFAULT_URL).replace(/(?<!\/)\/+$/, '');
     return base.toLowerCase().endsWith('/v1')
       ? base.slice(0, -3).replace(/(?<!\/)\/+$/, '')
       : base;
@@ -880,10 +888,9 @@ export class LlmProvider {
         break;
 
       case LlmProviderType.OLLAMA:
-        // Ollama itself is unauthenticated — no API key is required.
-        // A key is optional and only sent (as a Bearer token) when
-        // configured, for deployments that front Ollama with an
-        // authenticating reverse proxy.
+        // Ollama Cloud takes its key as a Bearer token. A server you run
+        // is unauthenticated unless it sits behind an authenticating
+        // proxy, and then the key goes the same way.
         if (apiKey) {
           headers['Authorization'] = `Bearer ${apiKey}`;
         }

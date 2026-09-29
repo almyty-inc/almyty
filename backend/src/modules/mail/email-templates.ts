@@ -696,10 +696,15 @@ Object.assign(TEMPLATES, {
 
   // Once a day: new models, and models no agent used that went away.
   'models.digest': (p: Record<string, any>): RenderedEmail => {
-    const fresh: Array<{ connection: string; models: string; count: number }> = Array.isArray(p.fresh) ? p.fresh : [];
+    const fresh: Array<{ connection: string; models: string; count: number; notOffered?: string; notOfferedCount?: number }> = Array.isArray(p.fresh) ? p.fresh : [];
     const gone: Array<{ connection: string; models: string; count: number; reason?: string }> = Array.isArray(p.gone) ? p.gone : [];
+    const freshLine = (f: (typeof fresh)[number]) =>
+      [
+        f.count ? esc(f.models) : '',
+        f.notOfferedCount ? `not allowed on ${esc(f.connection)} until you tick ${f.notOfferedCount === 1 ? 'it' : 'them'}: ${esc(f.notOffered ?? '')}` : '',
+      ].filter(Boolean).join('; ');
     const freshHtml = fresh.length
-      ? para('<strong>New models</strong>') + `<ul style="margin: 0 0 12px; padding-left: 20px;">${fresh.map((f) => `<li>${esc(f.connection)}: ${esc(f.models)}</li>`).join('')}</ul>`
+      ? para('<strong>New models</strong>') + `<ul style="margin: 0 0 12px; padding-left: 20px;">${fresh.map((f) => `<li>${esc(f.connection)}: ${freshLine(f)}</li>`).join('')}</ul>`
       : '';
     const goneHtml = gone.length
       ? para('<strong>No longer available</strong>') + `<ul style="margin: 0 0 12px; padding-left: 20px;">${gone.map((g) => `<li>${esc(g.connection)}: ${esc(g.models)}${g.reason ? ` - ${esc(g.reason)}` : ''}</li>`).join('')}</ul>`
@@ -710,10 +715,10 @@ Object.assign(TEMPLATES, {
         heading: 'Changes to your models',
         bodyHtml: freshHtml + goneHtml + (gone.length ? para('No agent was using the models that went away.') : ''),
         button: p.url ? { label: 'Open Models', url: p.url } : undefined,
-        footerNote: 'One email a day at most. Turn it off under Settings, Your account, Notifications.',
+        footerNote: 'One email a day at most, at 08:00 your time (set your time zone under Settings, Your account, Profile). Turn it off under Settings, Your account, Notifications.',
       }),
       text: flattenText(
-        `Changes to your models. ${fresh.map((f) => `New on ${f.connection}: ${f.models}.`).join(' ')} ${gone.map((g) => `No longer available on ${g.connection}: ${g.models}.`).join(' ')} ${p.url ?? ''}`,
+        `Changes to your models. ${fresh.map((f) => `New on ${f.connection}: ${[f.count ? f.models : '', f.notOfferedCount ? `not allowed until ticked: ${f.notOffered}` : ''].filter(Boolean).join('; ')}.`).join(' ')} ${gone.map((g) => `No longer available on ${g.connection}: ${g.models}.`).join(' ')} ${p.url ?? ''}`,
       ),
     };
   },

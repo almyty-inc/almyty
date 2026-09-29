@@ -14,7 +14,11 @@
  *    setting;
  *  - a provider that drops a model and lists it again does not mail anyone
  *    twice in a day;
- *  - the digest sends one email per person, once;
+ *  - the digest sends one email per person, once, at 08:00 in that
+ *    person's own time zone;
+ *  - a new model a connection does not offer (new models not allowed
+ *    automatically) is still announced, marked as not allowed there;
+ *  - removing a connection agents use tells them like any lost model;
  *  - a private connection's changes reach its owner and nobody else;
  *  - the agent's banner names the model, the connection and why, and
  *    clears once the model is back.
@@ -39,6 +43,7 @@ import { NotificationPreference } from '../../entities/notification-preference.e
 import { ModelCatalogService } from '../../modules/model-catalog/model-catalog.service';
 import { ModelRouterService } from '../../modules/model-catalog/routing/model-router.service';
 import { ModelChangeNoticesService, UNAVAILABLE_NOTICE_WINDOW_MS } from '../../modules/model-catalog/notices/model-change-notices.service';
+import { ModelUsageService } from '../../modules/model-catalog/notices/model-usage.service';
 import { NotificationsService } from '../../modules/notifications/notifications.service';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { ensureSchema } from './isolated-schema.helper';
@@ -64,6 +69,7 @@ describeIfDb('model change notices (real Postgres)', () => {
   let catalog: ModelCatalogService;
   let notices: ModelChangeNoticesService;
   let notifications: NotificationsService;
+  let usage: ModelUsageService;
   const mail = { sendTemplate: jest.fn(async (..._args: any[]) => true) };
   const users: Record<'owner' | 'admin' | 'connOwner' | 'agentOwner' | 'bystander', string> = {} as any;
   let listed: string[] = [];
@@ -130,9 +136,10 @@ describeIfDb('model change notices (real Postgres)', () => {
 
     const policy = new AccessPolicyService(repo(UserOrganization), repo(UserTeam));
     notifications = new NotificationsService(repo(Notification), repo(NotificationPreference), repo(User), repo(UserOrganization), repo(UserTeam), mail as any);
+    usage = new ModelUsageService(repo(Agent), repo(AgentRole), repo(Model), policy);
     notices = new ModelChangeNoticesService(
       repo(ModelChangeEvent), repo(LlmProvider), repo(Model), repo(Agent), repo(AgentRole), repo(User), repo(UserOrganization),
-      ds, notifications, mail as any, policy,
+      ds, usage, notifications, mail as any, policy,
     );
     const listing = { fetchModelsFromProvider: async () => listed.map((id) => ({ id, name: id })) };
     const router = new ModelRouterService(repo(Model), repo(LlmProvider), repo(ModelDeployment), undefined, undefined, policy, notices);
@@ -144,7 +151,20 @@ describeIfDb('model change notices (real Postgres)', () => {
     users.connOwner = await person(OrganizationRole.MEMBER);
     users.agentOwner = await person(OrganizationRole.MEMBER);
     users.bystander = await person(OrganizationRole.MEMBER);
+    // 08:00 falls at 06:00 UTC for the owner, 08:00 UTC for the connection's
+    // owner (no time zone set: UTC) and 12:00 UTC for the admin. Fixed
+    // offsets, so the test does not move with daylight saving.
+    await repo(User).update({ id: users.owner }, { timezone: 'Etc/GMT-2' });
+    await repo(User).update({ id: users.admin }, { timezone: 'Etc/GMT+4' });
   });
+
+  /** The next time it is `hour`:00 UTC, within a day of now. */
+  const nextUtc = (hour: number, minute = 0) => {
+    const at = new Date();
+    at.setUTCHours(hour, minute, 0, 0);
+    if (at.getTime() <= Date.now()) at.setUTCDate(at.getUTCDate() + 1);
+    return at;
+  };
 
   afterAll(async () => {
     if (ds?.isInitialized) await ds.destroy();
@@ -197,8 +217,8 @@ describeIfDb('model change notices (real Postgres)', () => {
     expect(mail.sendTemplate.mock.calls.find((c) => c[0] === agentOwnerEmail)![2].yourAgents).toEqual([{ name: 'Support bot', url: expect.stringContaining(`/agents/${agent.id}`) }]);
     expect(mail.sendTemplate.mock.calls.find((c) => c[0] === ownerEmail)![2]).toMatchObject({ yourAgents: [], otherAgents: 1 });
     const rows = await repo(ModelChangeEvent).find({ where: { kind: 'unavailable' } });
-    expect(rows.find((r) => r.vendorModelId === 'm-used')).toMatchObject({ agentIds: [agent.id], notifiedAt: expect.any(Date), digestedAt: expect.any(Date) });
-    expect(rows.find((r) => r.vendorModelId === 'm-unused')).toMatchObject({ agentIds: [], notifiedAt: null, digestedAt: null });
+    expect(rows.find((r) => r.vendorModelId === 'm-used')).toMatchObject({ agentIds: [agent.id], notifiedAt: expect.any(Date) });
+    expect(rows.find((r) => r.vendorModelId === 'm-unused')).toMatchObject({ agentIds: [], notifiedAt: null });
   });
 
   it('the agent\'s banner says which model, from which connection, and why; it clears when the model is back', async () => {
@@ -221,7 +241,7 @@ describeIfDb('model change notices (real Postgres)', () => {
     expect(await repo(ModelChangeEvent).count({ where: { kind: 'unavailable' } })).toBe(2);
 
     // A day later the same drop is news again.
-    await ds.query(`UPDATE "model_change_events" SET "createdAt" = "createdAt" - make_interval(secs => $1)`, [UNAVAILABLE_NOTICE_WINDOW_MS / 1000 + 60]);
+    await ds.query(`UPDATE "model_change_events" SET "createdAt" = "createdAt" - make_interval(secs => $1) WHERE "vendorModelId" = 'm-used'`, [UNAVAILABLE_NOTICE_WINDOW_MS / 1000 + 60]);
     listed = ['m-new', 'm-used'];
     await catalog.syncFromProvider(orgId, conn.id);
     listed = ['m-new'];
@@ -230,22 +250,86 @@ describeIfDb('model change notices (real Postgres)', () => {
     expect(await sentTo('models.unavailable')).toEqual({ owner: 1, connOwner: 1, agentOwner: 1 });
   });
 
-  it('the digest sends each person one email with the rest, following their settings, and only once', async () => {
-    mail.sendTemplate.mockClear();
-    const result = await notices.sendDigest(new Date(Date.now() + 1000));
-    await settle();
-    expect(await sentTo('models.digest')).toEqual({ owner: 1, admin: 1, connOwner: 1 });
+  it('the digest reaches each person at 08:00 their own time, once, with the rest, following their settings', async () => {
     const adminEmail = await emailOf(users.admin);
     const ownerEmail = await emailOf(users.owner);
     const byEmail = (email: string) => mail.sendTemplate.mock.calls.find((c) => c[1] === 'models.digest' && c[0] === email)![2];
-    // The admin turned unavailable-model emails off: new models only.
+
+    // 06:00 UTC is 08:00 for the owner only.
+    mail.sendTemplate.mockClear();
+    const sixUtc = nextUtc(6);
+    expect((await notices.sendDigest(sixUtc)).emails).toBe(1);
+    await settle();
+    expect(await sentTo('models.digest')).toEqual({ owner: 1 });
+    expect(byEmail(ownerEmail)).toMatchObject({ fresh: [expect.objectContaining({ models: 'm-new', count: 1, notOfferedCount: 0 })], gone: [expect.objectContaining({ models: 'm-unused' })] });
+
+    // Later that hour, or on another instance: not twice.
+    mail.sendTemplate.mockClear();
+    expect((await notices.sendDigest(new Date(sixUtc.getTime() + 30 * 60 * 1000))).emails).toBe(0);
+    expect(mail.sendTemplate).not.toHaveBeenCalled();
+
+    // 08:00 UTC: the connection's owner, who set no time zone.
+    mail.sendTemplate.mockClear();
+    await notices.sendDigest(new Date(sixUtc.getTime() + 2 * 60 * 60 * 1000));
+    await settle();
+    expect(await sentTo('models.digest')).toEqual({ connOwner: 1 });
+
+    // 12:00 UTC: the admin, who turned unavailable-model emails off: new models only.
+    mail.sendTemplate.mockClear();
+    await notices.sendDigest(new Date(sixUtc.getTime() + 6 * 60 * 60 * 1000));
+    await settle();
+    expect(await sentTo('models.digest')).toEqual({ admin: 1 });
     expect(byEmail(adminEmail)).toMatchObject({ fresh: [expect.objectContaining({ connection: 'OpenAI - main', models: 'm-new' })], gone: [] });
-    expect(byEmail(ownerEmail)).toMatchObject({ fresh: [expect.objectContaining({ models: 'm-new' })], gone: [expect.objectContaining({ models: 'm-unused' })] });
-    expect(result.emails).toBe(3);
+  });
+
+  it('a new model a connection does not offer is still announced, as not allowed there, so it can be ticked', async () => {
+    const pinned = await connect('OpenAI - gpt-4o only', { allowNewModels: false, allowedModels: ['gpt-4o'] } as any);
+    listed = ['gpt-4o'];
+    await catalog.syncFromProvider(orgId, pinned.id);
+    listed = ['gpt-4o', 'gpt-5'];
+    await catalog.syncFromProvider(orgId, pinned.id);
+    await settle();
+    const row = await repo(ModelChangeEvent).findOneByOrFail({ providerId: pinned.id, vendorModelId: 'gpt-5' });
+    expect(row).toMatchObject({ kind: 'new', offered: false });
+    const bell = await repo(Notification).findOneByOrFail({ userId: users.connOwner, type: 'models.new', title: 'New model on OpenAI - gpt-4o only: gpt-5' });
+    expect(bell.body).toContain('not allowed on OpenAI - gpt-4o only');
+    expect(bell.link).toBe(`/credentials/providers/${pinned.id}`);
+    // The catalog marks it new.
+    expect((await notices.recentlyNew(orgId)).has(row.modelId!)).toBe(true);
+
+    // In the owner's next digest, as not allowed there. (The digest above
+    // ran at a time still ahead of now; start the owner's clock over.)
+    await repo(User).update({ id: users.owner }, { modelDigestSentAt: null });
+    mail.sendTemplate.mockClear();
+    await notices.sendDigest(nextUtc(6));
+    await settle();
+    const digest = mail.sendTemplate.mock.calls.find((c) => c[1] === 'models.digest' && c[0] === 'p1@notices.test')?.[2];
+    expect(digest?.fresh).toEqual(expect.arrayContaining([expect.objectContaining({ connection: 'OpenAI - gpt-4o only', count: 0, notOffered: 'gpt-5', notOfferedCount: 1 })]));
+  });
+
+  it('removing a connection an agent uses names the agent first, then tells everyone the models are gone', async () => {
+    const doomed = await connect('Mistral - old');
+    listed = ['mistral-large'];
+    await catalog.syncFromProvider(orgId, doomed.id);
+    const user = (await save(Agent, {
+      name: 'Report writer',
+      organizationId: orgId,
+      pipeline: { nodes: [{ id: 'n1', type: 'llm_call', data: { label: 'Draft', providerId: doomed.id, model: 'mistral-large' } }], edges: [] },
+      createdBy: users.agentOwner,
+    })) as Agent;
+    expect(await usage.agentsUsingConnection(orgId, doomed.id)).toEqual([user.id]);
+    expect(await usage.forViewer(orgId, [user.id], users.agentOwner)).toEqual({ agents: [{ id: user.id, name: 'Report writer' }], others: 0 });
 
     mail.sendTemplate.mockClear();
-    expect(await notices.sendDigest(new Date(Date.now() + 2000))).toEqual({ rows: 0, emails: 0 });
-    expect(mail.sendTemplate).not.toHaveBeenCalled();
+    await catalog.retireProviderCards(orgId, doomed.id);
+    await repo(LlmProvider).delete({ id: doomed.id });
+    await settle();
+    const row = await repo(ModelChangeEvent).findOneByOrFail({ providerId: doomed.id, vendorModelId: 'mistral-large' });
+    expect(row).toMatchObject({ kind: 'unavailable', reason: 'Its connection was removed.', agentIds: [user.id] });
+    const agentOwnerEmail = await emailOf(users.agentOwner);
+    expect(mail.sendTemplate.mock.calls.find((c) => c[1] === 'models.unavailable' && c[0] === agentOwnerEmail)?.[2]).toMatchObject({ connectionName: 'Mistral - old' });
+    const banner = await notices.agentModelIssues(orgId, user.id, users.agentOwner);
+    expect(banner).toEqual([expect.objectContaining({ model: 'mistral-large', reason: 'Its connection was removed.', where: ['step Draft'] })]);
   });
 
   it('a refused key takes every model away, and a private connection tells its owner and nobody else', async () => {

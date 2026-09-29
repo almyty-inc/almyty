@@ -14,6 +14,10 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * key are one thing to a person now, listed under Credentials by the
  * connection's name, so the key takes the provider's name. A shared
  * credential a provider points at keeps its own name.
+ *
+ * An Ollama connection with no URL now means Ollama Cloud. One saved
+ * before meant a local install, so it is given that URL and keeps
+ * reaching the same server.
  */
 export class ProviderConnectionAllowedModels1750813733170 implements MigrationInterface {
   name = 'ProviderConnectionAllowedModels1750813733170';
@@ -30,6 +34,12 @@ export class ProviderConnectionAllowedModels1750813733170 implements MigrationIn
          AND (c."metadata"::jsonb -> 'managedBy' ->> 'kind') = 'llm_provider'
          AND (c."metadata"::jsonb -> 'managedBy' ->> 'id') = p."id"::text
          AND c."name" IS DISTINCT FROM p."name"
+    `);
+    await queryRunner.query(`
+      UPDATE "llm_providers"
+         SET "configuration" = ("configuration"::jsonb || '{"apiUrl": "http://localhost:11434"}'::jsonb)::json
+       WHERE "type" = 'ollama'
+         AND COALESCE("configuration"::jsonb ->> 'apiUrl', '') = ''
     `);
   }
 

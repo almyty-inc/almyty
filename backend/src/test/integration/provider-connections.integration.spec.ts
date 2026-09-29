@@ -28,7 +28,7 @@
  *
  * Gated behind RUN_DB_INTEGRATION=1 with the standard DATABASE_* env vars.
  */
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 
 import { Organization } from '../../entities/organization.entity';
 import { LlmProvider, LlmProviderStatus, LlmProviderType } from '../../entities/llm-provider.entity';
@@ -47,6 +47,11 @@ import { LlmProviderSecretsHelper } from '../../modules/llm-providers/llm-provid
 import { LlmChatRunnerHelper } from '../../modules/llm-providers/llm-chat-runner.helper';
 import { DefaultModelResolver } from '../../modules/llm-providers/default-model.resolver';
 import { ProviderConnectionAllowedModels1750813733170 } from '../../migrations/1750813733170-ProviderConnectionAllowedModels';
+import { Agent } from '../../entities/agent.entity';
+import { AgentRole } from '../../entities/agent-role.entity';
+import { ModelUsageService } from '../../modules/model-catalog/notices/model-usage.service';
+import { LlmProvidersService } from '../../modules/llm-providers/llm-providers.service';
+import { providerAllowsModel } from '../../modules/llm-providers/allowed-models';
 import { makeEnvelopeCryptoMock } from '../envelope-crypto.mock';
 import { ensureSchema } from './isolated-schema.helper';
 
@@ -170,12 +175,58 @@ describeIfDb('provider connections: several per provider, hidden models (real Po
     const other = await ds.getRepository(LlmProvider).save(
       ds.getRepository(LlmProvider).create({ name: 'HF via shared token', type: LlmProviderType.HUGGINGFACE, organizationId: orgId, configuration: {}, credentialId: (shared as any).id } as Partial<LlmProvider>),
     );
+    // An Ollama saved when no URL meant a local install.
+    const localOllama = await ds.getRepository(LlmProvider).save(
+      ds.getRepository(LlmProvider).create({ name: 'Ollama', type: LlmProviderType.OLLAMA, organizationId: orgId, configuration: { model: 'llama3.3' } } as Partial<LlmProvider>),
+    );
     const runnerQ = ds.createQueryRunner();
     await new ProviderConnectionAllowedModels1750813733170().up(runnerQ);
     await runnerQ.release();
     expect((await ds.getRepository(Credential).findOneOrFail({ where: { id: managed.id } })).name).toBe('HF - Llama 70B only');
     expect((await ds.getRepository(Credential).findOneOrFail({ where: { id: (shared as any).id } })).name).toBe('Shared HF token');
-    await ds.getRepository(LlmProvider).delete({ id: other.id });
+    // It keeps reaching that server, now that no URL means Ollama Cloud.
+    const migrated = await ds.getRepository(LlmProvider).findOneOrFail({ where: { id: localOllama.id } });
+    expect(migrated.configuration).toEqual({ model: 'llama3.3', apiUrl: 'http://localhost:11434' });
+    expect(migrated.getApiUrl()).toBe('http://localhost:11434/v1');
+    expect(Object.assign(new LlmProvider(), { type: LlmProviderType.OLLAMA, configuration: {} }).getApiUrl()).toBe('https://ollama.com/v1');
+    await ds.getRepository(LlmProvider).delete({ id: In([other.id, localOllama.id]) });
+  });
+
+  it('turning off a model an agent uses is refused, naming the agent, until the agent is changed', async () => {
+    const usage = new ModelUsageService(ds.getRepository(Agent), ds.getRepository(AgentRole), ds.getRepository(Model));
+    const agent = await ds.getRepository(Agent).save(
+      ds.getRepository(Agent).create({
+        name: 'Ticket triage',
+        organizationId: orgId,
+        pipeline: { nodes: [], edges: [] },
+        modelConfig: { providerId: open.id, model: QWEN },
+      } as Partial<Agent>),
+    );
+    const assertNoAgentLosesModel = (LlmProvidersService.prototype as any).assertNoAgentLosesModel as (p: LlmProvider, before: any, userId: string) => Promise<void>;
+    const svc = { usage };
+    const row = await ds.getRepository(LlmProvider).findOneOrFail({ where: { id: open.id } });
+    const before = { allowNewModels: row.allowNewModels, hiddenModels: row.hiddenModels, allowedModels: row.allowedModels };
+
+    // Unticking Qwen, or turning off new models with only Llama ticked.
+    for (const next of [{ hiddenModels: [QWEN] }, { allowNewModels: false, allowedModels: [LLAMA] }]) {
+      const attempt = Object.assign(new LlmProvider(), row, next);
+      await expect(assertNoAgentLosesModel.call(svc, attempt, before, 'b6d1a2c0-0000-4000-8000-000000000001')).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'MODEL_IN_USE', models: [QWEN], agents: [{ id: agent.id, name: 'Ticket triage' }] }),
+      });
+    }
+    // Another model the agent does not use can go.
+    await expect(assertNoAgentLosesModel.call(svc, Object.assign(new LlmProvider(), row, { hiddenModels: [LLAMA] }), before, 'x')).resolves.toBeUndefined();
+
+    // Once the agent uses another model, Qwen can be turned off.
+    await ds.getRepository(Agent).update({ id: agent.id }, { modelConfig: { providerId: open.id, model: LLAMA } });
+    await expect(assertNoAgentLosesModel.call(svc, Object.assign(new LlmProvider(), row, { hiddenModels: [QWEN] }), before, 'x')).resolves.toBeUndefined();
+    await ds.getRepository(Agent).delete({ id: agent.id });
+  });
+
+  it('a connection may offer no model at all: it is paused', async () => {
+    const paused = Object.assign(new LlmProvider(), { id: 'p', name: 'Paused', type: LlmProviderType.HUGGINGFACE, configuration: {}, allowNewModels: false, allowedModels: null });
+    expect(providerAllowsModel(paused, LLAMA)).toBe(false);
+    await expect(new DefaultModelResolver(listing as any).resolve(paused)).rejects.toThrow(/allows no models/);
   });
 
   it('the model list every chooser reads hides what the connection hides, and only there', async () => {

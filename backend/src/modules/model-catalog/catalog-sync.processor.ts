@@ -20,7 +20,11 @@ const DEFAULT_SWEEP_CRON = '17 */6 * * *';
 /** Stable id for the daily email of model changes. */
 const DIGEST_JOB_ID = 'model-change-digest';
 /** Once a day, 08:00 UTC. */
-const DEFAULT_DIGEST_CRON = '0 8 * * *';
+/**
+ * Every hour: each person gets theirs when it is 08:00 where they are
+ * (ModelChangeNoticesService.sendDigest reads their time zone).
+ */
+const DEFAULT_DIGEST_CRON = '0 * * * *';
 
 /**
  * Keeps every organization's model list in step with what its providers
@@ -58,7 +62,7 @@ export class CatalogSyncProcessor implements OnApplicationBootstrap {
     return raw && raw.length > 0 ? raw : DEFAULT_SWEEP_CRON;
   }
 
-  /** The daily model-change email's schedule (MODEL_CHANGE_DIGEST_CRON), or undefined when it is off. */
+  /** How often the daily model-change email looks for people whose 08:00 it is (MODEL_CHANGE_DIGEST_CRON), or undefined when it is off. */
   digestCron(): string | undefined {
     const raw = process.env.MODEL_CHANGE_DIGEST_CRON?.trim();
     if (raw && raw.toLowerCase() === 'off') return undefined;

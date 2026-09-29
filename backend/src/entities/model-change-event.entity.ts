@@ -9,12 +9,13 @@ export type ModelChangeKind = 'new' | 'unavailable';
  * which agents used it, and whether its email went out yet.
  *
  * Kept, not a queue: the catalog reads recent 'new' rows to mark models
- * "New", and the unavailable rows of the last day are the flap guard, so
- * a provider that drops a model and lists it again does not mail anyone
- * twice in a day.
+ * "New", the unavailable rows of the last day are the flap guard (a
+ * provider that drops a model and lists it again does not mail anyone
+ * twice in a day), and each person's daily digest reads the rows since
+ * their last one.
  */
 @Entity('model_change_events')
-@Index(['organizationId', 'digestedAt'])
+@Index(['createdAt'])
 @Index(['organizationId', 'providerId', 'vendorModelId', 'kind', 'createdAt'])
 export class ModelChangeEvent {
   @PrimaryGeneratedColumn('uuid')
@@ -44,6 +45,14 @@ export class ModelChangeEvent {
   @Column({ type: 'varchar', length: 16 })
   kind: ModelChangeKind;
 
+  /**
+   * For a new model: whether its connection offers it. One whose
+   * connection takes new models only once they are ticked is announced as
+   * not allowed there, so the owner can tick it.
+   */
+  @Column({ type: 'boolean', default: true })
+  offered: boolean;
+
   /** Why a model became unavailable, in plain words. */
   @Column({ type: 'text', nullable: true })
   reason: string | null;
@@ -52,13 +61,13 @@ export class ModelChangeEvent {
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   agentIds: string[];
 
-  /** When the immediate email went out (an unavailable model an agent uses). */
+  /**
+   * When the immediate email went out (an unavailable model an agent uses).
+   * Every other row goes into each recipient's daily digest; who has had
+   * theirs is users.modelDigestSentAt.
+   */
   @Column({ type: 'timestamptz', nullable: true })
   notifiedAt: Date | null;
-
-  /** When the daily digest took it, or when it was settled without one. */
-  @Column({ type: 'timestamptz', nullable: true })
-  digestedAt: Date | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

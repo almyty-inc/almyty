@@ -78,9 +78,10 @@ function normaliseList(input: unknown, field: string): string[] | null | undefin
 }
 
 /**
- * Apply a request's model access fields to a row (or a new one) and check
- * the result: with the switch off, at least one model must stay ticked,
- * since a connection that allows nothing is removed, not emptied.
+ * Apply a request's model access fields to a row (or a new one). A
+ * connection may offer no model at all (switch off, nothing ticked): it is
+ * paused, and nothing is offered or called through it until a model is
+ * ticked again.
  */
 export function applyModelAccess(target: Partial<ModelAccessFields>, input: ModelAccessInput): void {
   // Worked out on a copy: a refused change leaves the row as it was.
@@ -95,14 +96,6 @@ export function applyModelAccess(target: Partial<ModelAccessFields>, input: Mode
   if (hidden !== undefined) next.hiddenModels = hidden && hidden.length > 0 ? hidden : null;
   const allowed = normaliseList(input.allowedModels, 'allowedModels');
   if (allowed !== undefined) next.allowedModels = allowed && allowed.length > 0 ? allowed : null;
-  const switchOn = 'allowNewModels' in next ? next.allowNewModels : target.allowNewModels;
-  const allowList = 'allowedModels' in next ? next.allowedModels : target.allowedModels;
-  if (switchOn === false && !(allowList && allowList.length > 0)) {
-    throw new BadRequestException({
-      code: 'NO_MODELS_ALLOWED',
-      message: 'Tick at least one model, or allow new models automatically. To stop using this connection, remove it.',
-    });
-  }
   Object.assign(target, next);
 }
 

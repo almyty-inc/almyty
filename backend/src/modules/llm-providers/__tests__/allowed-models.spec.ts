@@ -34,14 +34,15 @@ describe('allowed models on a connection', () => {
     expect(() => assertModelAllowed(p, 'llama')).not.toThrow();
   });
 
-  it('an update keeps the list it does not touch, trims and de-duplicates, and refuses to allow nothing', () => {
+  it('an update keeps the list it does not touch, trims and de-duplicates, and may pause a connection with no model', () => {
     const target: Partial<LlmProvider> = { allowNewModels: true, hiddenModels: ['a'], allowedModels: null };
     applyModelAccess(target, { allowNewModels: false, allowedModels: [' b ', 'b', ''] });
     expect(target).toEqual({ allowNewModels: false, hiddenModels: ['a'], allowedModels: ['b'] });
-    expect(() => applyModelAccess(target, { allowedModels: [] })).toThrow(/Tick at least one model/);
-    expect(target.allowedModels).toEqual(['b']);
+    applyModelAccess(target, { allowedModels: [] });
+    expect(target.allowedModels).toBeNull();
+    expect(providerAllowsModel(target, 'b')).toBe(false);
     applyModelAccess(target, { allowNewModels: true, hiddenModels: null });
-    expect(target).toEqual({ allowNewModels: true, hiddenModels: null, allowedModels: ['b'] });
+    expect(target).toEqual({ allowNewModels: true, hiddenModels: null, allowedModels: null });
   });
 
   it('the API accepts the three fields and nothing that is not a list of ids', async () => {

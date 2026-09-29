@@ -11,7 +11,7 @@ import {
   callVertex,
   callCustomProvider,
 } from './providers';
-import { LlmProvider, LlmProviderType, LlmProviderConfig, isOllamaCloudUrl } from '../../entities/llm-provider.entity';
+import { LlmProvider, LlmProviderType, LlmProviderConfig, OLLAMA_DEFAULT_URL, isOllamaCloudUrl } from '../../entities/llm-provider.entity';
 import { Conversation } from '../../entities/conversation.entity';
 import { Tool } from '../../entities/tool.entity';
 import { ToolCall } from '../../entities/message.entity';
@@ -568,7 +568,7 @@ export class LlmChatRunnerHelper {
         // time, so a blocked URL fails fast here rather than on the
         // first chat call. callLlmProviderHttp re-runs the same gate on
         // every outbound request (defense in depth).
-        const effectiveUrl = config.apiUrl || 'http://localhost:11434';
+        const effectiveUrl = config.apiUrl || OLLAMA_DEFAULT_URL;
         // Ollama Cloud is Ollama's own hosted API: it answers only with a
         // key, so a missing one is said here rather than as a 401 later.
         if (isOllamaCloudUrl(effectiveUrl) && !config.apiKey) {

@@ -480,15 +480,23 @@ export class ModelCatalogService {
    */
   async retireProviderCards(organizationId: string, providerId: string, reason = 'provider deleted'): Promise<number> {
     const cards = await this.models.find({ where: { organizationId, providerId } });
+    // Read while the connection still exists: who hears, and what it offered.
+    const provider = this.changes ? await this.providers.findOne({ where: { id: providerId, organizationId } }) : null;
+    const wentAway: Model[] = [];
     let retired = 0;
     for (const card of cards) {
       if (card.status === 'inactive') continue;
+      if (card.validationStatus === 'passed' && providerAllowsModel(provider, card.vendorModelId)) wentAway.push(card);
       card.status = 'inactive';
       card.metadata = { ...(card.metadata ?? {}), retiredAt: new Date().toISOString(), retiredReason: reason };
       await this.models.save(card);
       retired++;
     }
     if (retired) this.audit(cards[0], AuditAction.UPDATE, undefined, { providerId, retired, reason });
+    // Removing a connection takes its models away like any other loss.
+    if (this.changes && provider && wentAway.length > 0) {
+      await this.changes.modelsChanged({ organizationId, providerId, provider, appeared: [], gone: wentAway.map((card) => ({ card, reason: GONE_REASONS.connectionRemoved })) });
+    }
     return retired;
   }
 

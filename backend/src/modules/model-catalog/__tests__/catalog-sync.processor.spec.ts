@@ -113,14 +113,14 @@ describe('CatalogSyncProcessor', () => {
     expect(queue.add.mock.calls.map((c) => c[0])).toEqual([MODEL_CHANGE_DIGEST_JOB]);
   });
 
-  it('schedules the daily model change email at 08:00 UTC unless MODEL_CHANGE_DIGEST_CRON says otherwise, and runs it', async () => {
+  it('looks for people whose 08:00 it is every hour unless MODEL_CHANGE_DIGEST_CRON says otherwise, and runs it', async () => {
     process.env.NODE_ENV = 'production';
     await processor.onApplicationBootstrap();
-    expect(queue.add).toHaveBeenCalledWith(MODEL_CHANGE_DIGEST_JOB, {}, expect.objectContaining({ jobId: 'model-change-digest', repeat: { cron: '0 8 * * *' } }));
+    expect(queue.add).toHaveBeenCalledWith(MODEL_CHANGE_DIGEST_JOB, {}, expect.objectContaining({ jobId: 'model-change-digest', repeat: { cron: '0 * * * *' } }));
 
     queue.add.mockClear();
     process.env.MODEL_CHANGE_DIGEST_CRON = 'off';
-    queue.getRepeatableJobs.mockResolvedValue([{ id: 'model-change-digest', cron: '0 8 * * *', key: 'digest' }]);
+    queue.getRepeatableJobs.mockResolvedValue([{ id: 'model-change-digest', cron: '0 * * * *', key: 'digest' }]);
     await processor.onApplicationBootstrap();
     expect(queue.removeRepeatableByKey).toHaveBeenCalledWith('digest');
     expect(queue.add).not.toHaveBeenCalledWith(MODEL_CHANGE_DIGEST_JOB, expect.anything(), expect.anything());

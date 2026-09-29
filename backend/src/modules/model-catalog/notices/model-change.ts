@@ -1,4 +1,5 @@
 import type { Model } from '../../../entities/model.entity';
+import type { LlmProvider } from '../../../entities/llm-provider.entity';
 
 /**
  * What the catalog tells the notices about a connection's models: the ones
@@ -11,6 +12,8 @@ export interface ModelChange {
   providerId: string;
   appeared: Model[];
   gone: Array<{ card: Model; reason: string }>;
+  /** The connection as it is now, when the caller has it (a connection being removed). */
+  provider?: LlmProvider;
 }
 
 export interface ModelChangeListener {
@@ -26,4 +29,5 @@ export const GONE_REASONS = {
   notListed: 'The provider no longer lists it.',
   keyRejected: "The provider refused the connection's key.",
   modelNotFound: 'The provider says the model is gone.',
+  connectionRemoved: 'Its connection was removed.',
 } as const;
