@@ -7,6 +7,7 @@ import {
   resolveVisibilityWrite,
   withoutOthersPrivate,
 } from '../private-visibility';
+import { narrowsScope } from '../private-dependents';
 import { PrivateAgentGuard } from '../private-resource.guard';
 import { collectAgentReferences } from '../../../modules/agents/agent-references';
 import { Agent } from '../../../entities/agent.entity';
@@ -124,6 +125,33 @@ describe('private visibility helpers', () => {
       });
       expect([...refs.toolIds].sort()).toEqual(['a', 'b', 'c']);
       expect([...refs.agentIds].sort()).toEqual(['x', 'y', 'z']);
+    });
+    it('finds the tool list of an llm_call step', () => {
+      const refs = collectAgentReferences({
+        pipeline: {
+          nodes: [{ id: 'n1', type: 'llm_call', data: { prompt: 'x', toolIds: ['d', 'e', 7] } }],
+          edges: [],
+        } as any,
+      });
+      expect([...refs.toolIds].sort()).toEqual(['d', 'e']);
+    });
+  });
+
+  describe('narrowsScope', () => {
+    it('is true for org or team to private, org to a team, and one team to another', () => {
+      expect(narrowsScope({ visibility: 'org' }, { visibility: 'private' })).toBe(true);
+      expect(narrowsScope({ visibility: 'team', teamId: 'a' }, { visibility: 'private' })).toBe(true);
+      expect(narrowsScope({ visibility: 'org' }, { visibility: 'team', teamId: 'a' })).toBe(true);
+      expect(narrowsScope({ visibility: null }, { visibility: 'team', teamId: 'a' })).toBe(true);
+      expect(narrowsScope({ visibility: 'team', teamId: 'a' }, { visibility: 'team', teamId: 'b' })).toBe(true);
+    });
+
+    it('is false for widening and for the scope a row already has', () => {
+      expect(narrowsScope({ visibility: 'private' }, { visibility: 'team', teamId: 'a' })).toBe(false);
+      expect(narrowsScope({ visibility: 'private' }, { visibility: 'private' })).toBe(false);
+      expect(narrowsScope({ visibility: 'team', teamId: 'a' }, { visibility: 'org' })).toBe(false);
+      expect(narrowsScope({ visibility: 'team', teamId: 'a' }, { visibility: 'team', teamId: 'a' })).toBe(false);
+      expect(narrowsScope({ visibility: 'org' }, { visibility: 'org', teamId: 'stray' })).toBe(false);
     });
   });
 

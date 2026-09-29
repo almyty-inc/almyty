@@ -83,8 +83,11 @@ describe('ApisService.update team-scoping sanitize', () => {
 
     expect(existing.visibility).toBe('team')
     expect(existing.teamId).toBe('team-uuid')
-    // Its generated tools follow it into the team.
-    const [sql, params] = dataSource.query.mock.calls[0]
+    // It first looks up the generated tools that move with it (none here,
+    // so nobody can lose them), then they follow it into the team.
+    const [lookup] = dataSource.query.mock.calls[0]
+    expect(lookup).toContain('SELECT id FROM tools')
+    const [sql, params] = dataSource.query.mock.calls[1]
     expect(sql).toContain('UPDATE tools SET visibility')
     expect(params.slice(0, 4)).toEqual(['org-1', 'api-1', 'team', 'team-uuid'])
   })
