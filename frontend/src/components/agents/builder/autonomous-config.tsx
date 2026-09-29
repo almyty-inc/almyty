@@ -294,7 +294,7 @@ export function ToolGroupList({ tools, toolSearch, selectedIds, onSelectedIdsCha
                 <span className="text-xs text-muted-foreground">{pluralized(groupTools.length, 'tool')}{selectedInGroup > 0 ? `, ${selectedInGroup} selected` : ''}</span>
               </button>
               <Button type="button" variant="ghost" size="sm" className="h-6 text-xs px-2"
-                aria-label={`${allSelectedInGroup ? 'Deselect' : 'Select'} all ${groupName} tools`}
+                aria-label={`${allSelectedInGroup ? 'Deselect' : 'Select'} all in ${groupName}`}
                 onClick={() => (allSelectedInGroup ? deselectAll() : selectAll())}>
                 {allSelectedInGroup ? 'Deselect all' : 'Select all'}
               </Button>

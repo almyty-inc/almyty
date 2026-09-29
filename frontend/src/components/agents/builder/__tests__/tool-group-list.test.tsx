@@ -38,7 +38,7 @@ describe('ToolGroupList (an autonomous agent picking its tools)', () => {
     const header = screen.getByRole('button', { name: /^Other/ })
     expect(header).toHaveAttribute('aria-expanded', 'false')
 
-    await user.click(screen.getByRole('button', { name: 'Select all Other tools' }))
+    await user.click(screen.getByRole('button', { name: 'Select all in Other' }))
     expect(picked).toEqual(['t1'])
     expect(header).toHaveAttribute('aria-expanded', 'false')
 

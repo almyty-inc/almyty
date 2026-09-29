@@ -212,7 +212,7 @@ test('core journey: sign up, model, API, shared tools, agent, app, connections',
       await page.getByRole('searchbox', { name: 'Search models' }).fill(MODEL_ID)
       await page.getByRole('option', { name: new RegExp(MODEL_ID) }).click()
       await expect(model).toContainText(MODEL_ID)
-      await page.getByRole('button', { name: 'Select all Other tools' }).click()
+      await page.getByRole('button', { name: 'Select all in Other' }).click()
       await expect(page.getByText('1 tool selected')).toBeVisible()
       await page.getByRole('button', { name: 'Save' }).click()
       await expect(page.getByText('Agent "Forecaster" saved successfully.', { exact: true })).toBeVisible()
