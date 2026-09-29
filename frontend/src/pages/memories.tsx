@@ -21,8 +21,7 @@ import { formatDateTime, pluralized } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { TeamFilter, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
-import { ConnectAccountButton } from '@/components/connections/connect-flow'
-import type { Connection } from '@/types/connections'
+import { CredentialPicker } from '@/components/credentials/credential-picker'
 import { MEMORY_TIER_LABELS, memoryBackendName } from '@/components/memory/memory-words'
 
 /**
@@ -158,17 +157,6 @@ export function MemoriesPage() {
       notify.success('Saved')
     },
     onError: (err: any) => notify.error('Save failed', err.message ?? String(err)),
-  })
-
-  // Credentials list — for the "wire credential to backend" picker.
-  const credsQ = useQuery({
-    queryKey: ['credentials', 'memory-backend'],
-    queryFn: async () => {
-      const res: any = await import('@/lib/api').then((m) => m.credentialsApi.getAll())
-      const list = (res?.data ?? res ?? []) as any[]
-      return list.filter((c) => c?.type === 'memory_backend')
-    },
-    enabled: tab === 'storage',
   })
 
   // ── render ──────────────────────────────────────────────────────────
@@ -348,7 +336,6 @@ export function MemoriesPage() {
           <ConfigCard
             config={configQ.data}
             backends={backends}
-            credentials={credsQ.data ?? []}
             saving={updateConfigMut.isPending}
             onSave={(patch) => updateConfigMut.mutate(patch)}
             orgId={orgId}
@@ -425,8 +412,8 @@ export function MemoriesPage() {
 // Where this workspace keeps its memories, and the rest of the routing
 // under Advanced. Reads the server-side workspace_config row and writes
 // patches via /memory/canonical/config. Each external service that needs
-// credentials gets a picker tied to the org's memory_backend credential
-// rows.
+// an account gets the shared pick-or-create credential control, listing the
+// org's memory credentials.
 
 interface ConfigCardProps {
   config?: {
@@ -445,7 +432,6 @@ interface ConfigCardProps {
     } & Record<string, unknown>
   } | null
   backends: Backend[]
-  credentials: Array<{ id: string; name: string; type: string }>
   saving: boolean
   orgId: string
   onSave: (patch: {
@@ -458,7 +444,7 @@ interface ConfigCardProps {
   children?: React.ReactNode
 }
 
-function ConfigCard({ config, backends, credentials, saving, orgId, onSave, children }: ConfigCardProps) {
+function ConfigCard({ config, backends, saving, orgId, onSave, children }: ConfigCardProps) {
   const routing = config?.overrides?.routing ?? {}
   const memBackend = routing.memory_backend ?? 'almyty-native'
   const docBackend = routing.document_backend ?? 'almyty-native'
@@ -467,9 +453,6 @@ function ConfigCard({ config, backends, credentials, saving, orgId, onSave, chil
   const softcap = config?.softcapBehavior ?? 'warn_log'
 
   const externalBackends = backends.filter((b) => b.id !== 'almyty-native')
-  // Accounts connected through the connect sheet during this visit, so the
-  // picker can name them before the credentials list catches up.
-  const [connected, setConnected] = useState<Record<string, Connection>>({})
 
   function patch(next: Partial<typeof routing> | { softcap_behavior?: typeof softcap }) {
     const isSoftcap = 'softcap_behavior' in next
@@ -520,14 +503,8 @@ function ConfigCard({ config, backends, credentials, saving, orgId, onSave, chil
             <AccountPicker
               backendId={memBackend}
               value={creds[memBackend]}
-              credentials={credentials}
-              connected={connected[memBackend]}
               saving={saving}
               onPick={(id) => patch({ credentials: { ...creds, [memBackend]: id } })}
-              onConnected={(connection) => {
-                setConnected((prev) => ({ ...prev, [memBackend]: connection }))
-                patch({ credentials: { ...creds, [memBackend]: connection.id } })
-              }}
             />
           )}
         </CardContent>
@@ -584,14 +561,8 @@ function ConfigCard({ config, backends, credentials, saving, orgId, onSave, chil
                   key={b.id}
                   backendId={b.id}
                   value={creds[b.id]}
-                  credentials={credentials}
-                  connected={connected[b.id]}
                   saving={saving}
                   onPick={(id) => patch({ credentials: { ...creds, [b.id]: id } })}
-                  onConnected={(connection) => {
-                    setConnected((prev) => ({ ...prev, [b.id]: connection }))
-                    patch({ credentials: { ...creds, [b.id]: connection.id } })
-                  }}
                 />
               ))}
             </div>
@@ -604,36 +575,20 @@ function ConfigCard({ config, backends, credentials, saving, orgId, onSave, chil
   )
 }
 
-function AccountPicker({
-  backendId, value, credentials, connected, saving, onPick, onConnected,
-}: {
-  backendId: string
-  value?: string
-  credentials: Array<{ id: string; name: string }>
-  connected?: Connection
-  saving: boolean
-  onPick: (id: string) => void
-  onConnected: (connection: Connection) => void
-}) {
+/** The account an outside memory service signs in with: a credential, picked or created here. */
+function AccountPicker({ backendId, value, saving, onPick }: { backendId: string; value?: string; saving: boolean; onPick: (id: string) => void }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="w-44 shrink-0 text-sm">{memoryBackendName(backendId)} account</span>
-      <Select value={value || '__none__'} onValueChange={(v) => onPick(v === '__none__' ? '' : v)} disabled={saving}>
-        <SelectTrigger className="min-w-[12rem] flex-1" aria-label={`${memoryBackendName(backendId)} account`}>
-          <SelectValue placeholder="Not connected" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__none__">Not connected</SelectItem>
-          {credentials.map((c) => (
-            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-          ))}
-          {connected && !credentials.some((c) => c.id === connected.id) && (
-            <SelectItem value={connected.id}>{connected.name} (just connected)</SelectItem>
-          )}
-        </SelectContent>
-      </Select>
-      <ConnectAccountButton kind="memory" label="Connect" onConnected={onConnected} />
-    </div>
+    <CredentialPicker
+      id={`memory-account-${backendId}`}
+      label={`${memoryBackendName(backendId)} account`}
+      value={value ?? ''}
+      kind="memory"
+      allowNone
+      placeholder="None"
+      disabled={saving}
+      onChange={(credential) => onPick(credential?.id ?? '')}
+      className="max-w-md"
+    />
   )
 }
 

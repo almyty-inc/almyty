@@ -586,6 +586,15 @@ export const apisApi = {
     apiGet(`/apis/${id}/schemas/${schemaId}/parsed`),
 
   createSdkApi: (data: any) => apiPost('/apis/sdk', data),
+  /** An API without a description: a base URL, with tools added by hand. */
+  createHttpApi: (data: {
+    name: string
+    baseUrl: string
+    description?: string
+    authentication?: { type: string; config?: Record<string, unknown> }
+    visibility?: 'org' | 'team' | 'private'
+    teamId?: string | null
+  }) => apiPost('/apis/http', data),
   getSdkMaps: (apiId: string) => apiGet(`/apis/${apiId}/sdk-maps`),
 
   // Connect an API from its description in one call: a link, a file or
@@ -1140,6 +1149,10 @@ export const auditExportApi = {
 // Credentials Vault API
 export const credentialsApi = {
   getAll: () => apiGet('/credentials'),
+  /** One credential, secrets masked. */
+  getById: (id: string) => apiGet(`/credentials/${encodeURIComponent(id)}`),
+  /** Delete a key a single API, MCP server, channel or app keeps (a shared one goes through the connections endpoint). */
+  remove: (id: string) => apiDel(`/credentials/${encodeURIComponent(id)}`),
   create: (data: any) => apiPost('/credentials', data),
   /** Start an OAuth 2.0 sign-in; the browser goes to authorizationUrl and comes back to returnTo. */
   oauth2Authorize: (data: {

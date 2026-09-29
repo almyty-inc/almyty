@@ -264,7 +264,7 @@
       "path": "screenshots/apis-list.png",
       "capturedAt": "2026-09-22T15:12:24.622Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "Connect an API picks the kind first. Recapture /apis on staging.",
       "sha256": "90353bd3bc69fc6356e168ebc2365f25761db69c10e335f868657ddbeb187bcc",
       "source": {
         "kind": "browser",
@@ -536,11 +536,11 @@
     },
     {
       "id": "connections",
-      "title": "Connections catalog with all Settings sections visible",
+      "title": "Credentials page (the Connections page it replaced no longer exists)",
       "path": "screenshots/connections.png",
       "capturedAt": "2026-09-23T05:53:42.281Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "The Connections page became Credentials: a table of every credential, model provider keys as their own group, Add credential and the Advanced tab. Recapture /credentials and /credentials/advanced on staging.",
       "sha256": "d91157a54e07217ba91b2f90efe289387fd80c0477f697747a1ac992471f5afd",
       "source": {
         "kind": "browser",
@@ -563,7 +563,7 @@
       "path": "screenshots/credentials-vault.png",
       "capturedAt": "2026-09-23T10:44:29.981Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "Credentials is a sidebar page again: one table of every key, token and account, with Model providers as their own group. Recapture /credentials on staging.",
       "sha256": "cf1d4b266fe8a01145e730c45415a1923364769634bb231fe551f705e6faa174",
       "source": {
         "kind": "browser",
@@ -582,11 +582,11 @@
     },
     {
       "id": "gateway-detail-tools",
-      "title": "Gateway detail \u2014 Tools tab with scoping",
+      "title": "Gateway detail — Tools tab with scoping",
       "path": "screenshots/gateway-detail-tools.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Share tools became Create gateway with a protocol pick. Recapture a new MCP gateway on staging.",
       "sha256": "c638eca3e8262999cb2a9015d486ec11e84b8f0337b06fc7c820478d997828c4"
     },
     {
@@ -595,7 +595,7 @@
       "path": "screenshots/gateway-detail.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Gateways are created with an explicit protocol pick; the detail page shows the setup for that protocol only. Recapture a new MCP gateway on staging.",
       "sha256": "341c3513b9c2d32056a1f2a8bd0e7c5494e946eb61f975d1ea5e5754bf6ae76a"
     },
     {
@@ -604,7 +604,7 @@
       "path": "screenshots/gateway-petstore-config.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Share tools became Create gateway with a protocol pick. Recapture on staging.",
       "sha256": "a18d4dc7315900a7268221676d2ef15c793f39fc5bd33c1b945d971f3fade1b2"
     },
     {
@@ -613,7 +613,7 @@
       "path": "screenshots/gateway-petstore-integration.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Share tools became Create gateway with a protocol pick. Recapture the Integrations tab of an MCP gateway on staging.",
       "sha256": "8ce35bad186b518728f4f61f25a05718db98a9edb94154da5333ea9f26878420"
     },
     {
@@ -718,7 +718,7 @@
       "path": "screenshots/quickstart-api-imported.png",
       "capturedAt": "2026-09-23T09:18:25.838Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "Connect an API picks the kind first, then its own form; the key is picked or created with the credential control. Recapture on staging.",
       "sha256": "cfc481629a98c618201e51c93cadbb3d23ce69f7c1a8a684d0025ff2854d887e",
       "source": {
         "kind": "browser",
@@ -750,7 +750,7 @@
       "path": "screenshots/quickstart-gateway-mcp.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The quickstart now creates an MCP gateway with Create gateway. Recapture on staging.",
       "sha256": "a99843fba87607e705e1d7dc8414225592b1e8fc14fbabf77637ad5885d4ce10"
     },
     {
@@ -768,7 +768,7 @@
       "path": "screenshots/runner-detail.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh, and the Labels card now says labels send work to a matching machine (label routing). Recapture on staging.",
+      "reason": "Runner pages have Overview and Workspaces tabs; the Workspaces sidebar item is gone. Recapture /runners/:id and its Workspaces tab on staging.",
       "sha256": "1b1cd0d9afbed153cd9e0a2018e6b8cdb044b93920be5080745dc94b411db426"
     },
     {
@@ -777,7 +777,7 @@
       "path": "screenshots/runners-list.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The Workspaces sidebar item moved onto each runner page. Recapture /runners on staging.",
       "sha256": "3beefba3a06dfb389778a1034ac8a99329a34bd1dd2e90c7a6245ab5f596a632"
     },
     {

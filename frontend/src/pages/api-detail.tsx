@@ -166,7 +166,7 @@ export function ApiDetailPage() {
           <Button variant="outline" size="sm" asChild>
             <Link to={`/gateways/new?api=${api.id}`}>
               <Share2 className="mr-2 h-4 w-4" />
-              Share tools
+              Create gateway
             </Link>
           </Button>
         </div>

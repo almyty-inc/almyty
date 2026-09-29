@@ -137,7 +137,7 @@ describe('ConnectFlow', () => {
     expect(screen.queryByTestId('service-tile-channel-slack')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('service-tile-openai'))
-    expect(await screen.findByText('Connect OpenAI')).toBeInTheDocument()
+    expect(await screen.findByText('Add OpenAI')).toBeInTheDocument()
     // One field, a link to where the key is made, and who can use it.
     expect(screen.getByLabelText('API key')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Get a key/ })).toHaveAttribute('href', 'https://platform.openai.com/api-keys')
@@ -156,7 +156,7 @@ describe('ConnectFlow', () => {
     render(<ConnectFlow embedded onCancel={onCancel} connectorKey="openai" onConnected={onConnected} />)
 
     fireEvent.change(await screen.findByLabelText('API key'), { target: { value: 'sk-test-123' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('openai', { method: 'api_key', owner: 'org', input: { apiKey: 'sk-test-123' } }))
     await waitFor(() => expect(onConnected).toHaveBeenCalledWith(created))
@@ -166,7 +166,7 @@ describe('ConnectFlow', () => {
   it('refuses to post until the key is filled', async () => {
     render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
     await screen.findByLabelText('API key')
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('API key is required')).toBeInTheDocument()
     expect(connectionsApi.connect).not.toHaveBeenCalled()
   })
@@ -181,7 +181,7 @@ describe('ConnectFlow', () => {
     render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={onConnected} />)
 
     fireEvent.change(await screen.findByLabelText('API key'), { target: { value: 'sk-bad' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     const failure = await screen.findByTestId('connect-failure')
     expect(failure).toHaveTextContent('OpenAI did not accept this.')
@@ -190,7 +190,7 @@ describe('ConnectFlow', () => {
     expect(onConnected).not.toHaveBeenCalled()
 
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-good' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(onConnected).toHaveBeenCalledTimes(1))
     expect(connectionsApi.rotate).toHaveBeenCalledWith('conn-kept', { input: { apiKey: 'sk-good' } })
     expect(connectionsApi.connect).toHaveBeenCalledTimes(1)
@@ -202,7 +202,7 @@ describe('ConnectFlow', () => {
     })
     render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
     fireEvent.change(await screen.findByLabelText('API key'), { target: { value: 'sk-broke' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByTestId('connect-failure')).toHaveTextContent('OpenAI accepted the key, but the account is out of credit or over its limit.')
   })
 
@@ -216,13 +216,13 @@ describe('ConnectFlow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
     fireEvent.change(screen.getByLabelText('Health path'), { target: { value: '/health' } })
     fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'https://llm.example.com/v1' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() =>
       expect(connectionsApi.connect).toHaveBeenCalledWith('openai-compatible', expect.objectContaining({ input: { baseUrl: 'https://llm.example.com/v1', healthPath: '/health' } })),
     )
   })
 
-  it('connects a sign-in service with one Connect button, waits, and hands back what the callback made', async () => {
+  it('connects a sign-in service with one Sign in button, waits, and hands back what the callback made', async () => {
     vi.mocked(connectionsApi.connect).mockResolvedValue(redirect('st-1'))
     const landed = connection({ id: 'conn-slack', name: 'Slack', connectorKey: 'channel-slack', kind: 'channel' })
     vi.mocked(connectionsApi.list).mockResolvedValueOnce([]).mockResolvedValueOnce([landed])
@@ -232,7 +232,7 @@ describe('ConnectFlow', () => {
     // Nothing to paste; the bot-token way waits under Advanced.
     expect(await screen.findByText(/You sign in at Slack and come back here/)).toBeInTheDocument()
     expect(screen.queryByLabelText('Bot token')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('channel-slack', { method: 'oauth2_code', owner: 'org' }))
     await waitFor(() => expect(openSpy).toHaveBeenCalledWith('https://slack.com/oauth/authorize?state=st-1', '_blank', 'noopener'))
@@ -240,14 +240,14 @@ describe('ConnectFlow', () => {
     await waitFor(() => expect(onConnected).toHaveBeenCalledWith(landed))
   })
 
-  it('offers the other way to connect under Advanced', async () => {
+  it('offers the other way to sign in under Advanced', async () => {
     vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connection({ connectorKey: 'channel-slack' }) })
     render(<ConnectFlow embedded onCancel={() => {}} connectorKey="channel-slack" onConnected={() => {}} />)
     await screen.findByText(/You sign in at Slack/)
     fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
     fireEvent.click(screen.getByRole('radio', { name: 'Bot token' }))
     fireEvent.change(await screen.findByLabelText('Bot token'), { target: { value: 'xoxb-123' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('channel-slack', { method: 'api_key', owner: 'org', input: { bot_token: 'xoxb-123' } }))
   })
 
@@ -259,7 +259,7 @@ describe('ConnectFlow', () => {
     const onConnected = vi.fn()
     render(<ConnectFlow embedded onCancel={() => {}} connectorKey="channel-slack" onConnected={onConnected} pollIntervalMs={50} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }))
     await screen.findByTestId('oauth-waiting')
     expect(screen.queryByLabelText('Code from the service')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
@@ -299,7 +299,7 @@ describe('who can use it', () => {
     fireEvent.click(screen.getByRole('radio', { name: /Private/ }))
 
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-test-123' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('openai', expect.objectContaining({ owner: 'private' })))
   })
 
@@ -317,7 +317,7 @@ describe('who can use it', () => {
     render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
     await waitFor(() => expect(screen.getByTestId('who-can-use')).toHaveTextContent('only you'))
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-test-123' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('openai', expect.objectContaining({ owner: 'private' })))
   })
 
@@ -325,7 +325,7 @@ describe('who can use it', () => {
     Object.assign(role, { role: 'member', canManage: false })
     vi.mocked(organizationsApi.getById).mockResolvedValue({ id: 'test-org-id', plan: 'pro', settings: { allowUserScopedConnections: false } })
     render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
-    expect(await screen.findByTestId('connect-admins-only')).toHaveTextContent('Only admins can connect services')
+    expect(await screen.findByTestId('connect-admins-only')).toHaveTextContent('Only admins can add credentials')
     expect(screen.queryByLabelText('API key')).not.toBeInTheDocument()
   })
 })
@@ -343,7 +343,7 @@ describe('ConnectAccountButton', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Connect an account' }))
-    expect(await screen.findByText('Connect OpenAI')).toBeInTheDocument()
+    expect(await screen.findByText('Add OpenAI')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     // A <form> inside the other <form> would submit it.
     expect(screen.getByTestId('consumer-form').querySelectorAll('form')).toHaveLength(0)

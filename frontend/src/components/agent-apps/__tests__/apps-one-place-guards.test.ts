@@ -128,8 +128,8 @@ describe('apps are the one place, in the shared look', () => {
 
   // A web chat or a messaging channel is a place on an app; the server
   // refuses one made any other way. The one screen that makes a gateway is
-  // Share tools, and what it makes is a shared-tools gateway.
-  it('makes no gateway outside an app except the shared-tools one', () => {
+  // Create gateway, and what it makes serves tools over MCP, UTCP or Skills.
+  it('makes no gateway outside an app except a tools gateway', () => {
     const creators: string[] = []
     const walk = (dir: string) => {
       for (const name of readdirSync(dir)) {
@@ -145,7 +145,8 @@ describe('apps are the one place, in the shared look', () => {
       }
     }
     walk(SRC)
-    expect(creators.sort()).toEqual(['components/gateways/share-tools-form.tsx', 'lib/api.ts'])
-    expect(read('components/gateways/share-tools-form.tsx')).toMatch(/type: 'tools',/)
+    expect(creators.sort()).toEqual(['components/gateways/create-gateway-form.tsx', 'lib/api.ts'])
+    expect(read('components/gateways/create-gateway-form.tsx')).toMatch(/type: protocol,/)
+    expect(read('lib/gateway-connect.ts')).toMatch(/GATEWAY_PROTOCOLS = \['mcp', 'utcp', 'skills'\] as const/)
   })
 })

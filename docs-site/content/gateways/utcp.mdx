@@ -4,12 +4,13 @@ Call your tools over a plain REST API. A UTCP (Universal Tool Call Protocol) gat
 
 ![Gateway detail page](/screenshots/gateway-detail.png)
 
-## Share the tools
+## Create the gateway
 
-1. Open **Gateways → Share tools** (`/gateways/new`)
-2. Under **What to share**, pick a whole API or single tools
-3. Name it; the address follows from the name (**Advanced** changes the path and who can use it)
-4. Click **Share** and copy the access key
+1. Open **Gateways** and click **Create gateway** (`/gateways/new`)
+2. Under **Protocol**, pick **UTCP**
+3. Under **Tools**, pick a whole API or single tools (a draft can't be served until it is active)
+4. Name it; the address follows from the name (**Advanced** changes the path and who can use it)
+5. Click **Create gateway** and copy the access key: it is shown once, in the ready-made `curl` for the manual
 
 Change which tools it serves from **Tool scoping** on the gateway detail page, and its auth from the **Authentication** section.
 
@@ -22,9 +23,9 @@ https://api.almyty.com/{org}/{gateway-slug}
 ```
 
 There is no `/utcp` path segment. Every gateway is served from the same
-`{org}/{gateway-slug}` URL. A shared-tools gateway answers MCP, UTCP and Agent Skills
-there at once, and which one a request speaks follows from its path: `/manual`,
-`/execute` and `/.well-known/utcp` are UTCP.
+`{org}/{gateway-slug}` URL, and `/manual`, `/execute` and `/.well-known/utcp` are the
+UTCP paths under it. A gateway made before the protocol pick answers MCP and Agent Skills
+there too.
 
 ## Endpoints
 

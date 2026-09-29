@@ -35,6 +35,19 @@ vi.mock('@/store/organization', () => {
 
 vi.mock('@/store/app', () => ({ useNotifications: () => ({ success: vi.fn(), error: vi.fn() }) }))
 
+vi.mock('@/lib/connections-api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/connections-api')>('@/lib/connections-api')
+  return {
+    ...actual,
+    connectorsApi: { list: vi.fn().mockResolvedValue([]) },
+    connectionsApi: {
+      list: vi.fn().mockResolvedValue([
+        { id: 'cred-1', name: 'Acme key', connectorKey: 'other', connectorDisplayName: 'Other service', kind: 'tool_source', owner: 'org', health: { status: 'valid' }, createdAt: '2026-09-01T00:00:00.000Z' },
+      ]),
+    },
+  }
+})
+
 beforeEach(() => {
   vi.clearAllMocks()
   if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false) as any
@@ -87,6 +100,24 @@ describe('the create-tool page', () => {
 
     await waitFor(() => expect(toolsApi.create).toHaveBeenCalled())
     expect(vi.mocked(toolsApi.create).mock.calls[0][0]).toMatchObject({ visibility: 'org', teamId: null })
+  })
+
+  it('sends an API key as the credential the tool points at, never a pasted secret', async () => {
+    vi.mocked(toolsApi.create).mockResolvedValue({ id: 'tool-3' } as any)
+    const user = userEvent.setup()
+    renderWithProviders(<ToolNewPage />)
+
+    await fillBasics(user)
+    await user.click(screen.getByRole('combobox', { name: 'Authentication' }))
+    await user.click(await screen.findByRole('option', { name: 'API key' }))
+    // The one pick-or-create control: pick from Credentials, or create one here.
+    expect(screen.getByRole('button', { name: 'Create one here' })).toBeInTheDocument()
+    await user.click(screen.getByRole('combobox', { name: 'API key' }))
+    await user.click(await screen.findByRole('option', { name: /Acme key/ }))
+    await user.click(screen.getByRole('button', { name: 'Create tool' }))
+
+    await waitFor(() => expect(toolsApi.create).toHaveBeenCalled())
+    expect(vi.mocked(toolsApi.create).mock.calls[0][0].authConfig).toEqual({ type: 'apiKey', config: { credentialId: 'cred-1', headerName: 'X-API-Key' } })
   })
 
   it('Cancel goes back to the list without creating anything', async () => {

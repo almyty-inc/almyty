@@ -10,14 +10,17 @@ vi.mock('../../../lib/api', () => ({
   },
 }))
 
-vi.mock('../../../lib/connections-api', () => ({
-  connectionsApi: {
-    list: vi.fn().mockResolvedValue([
-      { id: 'conn-mcp-1', name: 'Team MCP', connectorKey: 'mcp-custom', kind: 'mcp', owner: 'org', health: { status: 'valid' }, createdAt: '2026-01-01T00:00:00.000Z' },
-      { id: 'conn-openai', name: 'OpenAI', connectorKey: 'openai', kind: 'inference', owner: 'org', health: { status: 'valid' }, createdAt: '2026-01-01T00:00:00.000Z' },
-    ]),
-  },
-}))
+vi.mock('../../../lib/connections-api', async () => {
+  const actual = await vi.importActual<typeof import('../../../lib/connections-api')>('../../../lib/connections-api')
+  return {
+    ...actual,
+    connectionsApi: {
+      list: vi.fn().mockResolvedValue([
+        { id: 'conn-mcp-1', name: 'Team MCP', connectorKey: 'mcp-custom', connectorDisplayName: 'MCP server', kind: 'mcp', owner: 'org', health: { status: 'valid' }, createdAt: '2026-01-01T00:00:00.000Z' },
+      ]),
+    },
+  }
+})
 
 const navigateMock = vi.fn()
 vi.mock('react-router-dom', async () => ({
@@ -43,15 +46,15 @@ describe('McpServerForm (/tools/mcp-servers/new)', () => {
     navigateMock.mockReset()
   })
 
-  it('renders name, url, and optional auth token fields as a page', () => {
+  it('renders name, url, and an optional token picked from Credentials, as a page', () => {
     render(<McpServerForm organizationId="org-1" />)
 
     expect(screen.getByRole('heading', { name: 'Add MCP server' })).toBeInTheDocument()
     expect(screen.getByLabelText(/^name/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/server url/i)).toBeInTheDocument()
-    const token = screen.getByLabelText(/auth token/i)
-    expect(token).toHaveAttribute('type', 'password')
-    expect(token).toHaveAttribute('data-1p-ignore', 'true')
+    // The token is a credential: picked, or created with "Create one here". Never pasted onto the server row.
+    expect(screen.getByRole('combobox', { name: /token/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create one here' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -79,14 +82,12 @@ describe('McpServerForm (/tools/mcp-servers/new)', () => {
     fireEvent.change(screen.getByLabelText(/server url/i), {
       target: { value: 'https://mcp.example.com/mcp' },
     })
-    fireEvent.change(screen.getByLabelText(/auth token/i), { target: { value: 'tok-123' } })
     fireEvent.click(screen.getByRole('button', { name: /add server/i }))
 
     await waitFor(() => {
       expect(mockedCreate).toHaveBeenCalledWith('org-1', {
         name: 'weather',
         url: 'https://mcp.example.com/mcp',
-        bearerToken: 'tok-123',
       })
     })
     await waitFor(() => {
@@ -96,7 +97,7 @@ describe('McpServerForm (/tools/mcp-servers/new)', () => {
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/tools', undefined))
   })
 
-  it('omits bearerToken from the payload when left empty', async () => {
+  it('sends no token when none is picked', async () => {
     mockedCreate.mockResolvedValue({
       source: { id: 'src-1' },
       sync: { added: 0, updated: 0, removed: 0, total: 0 },
@@ -160,24 +161,17 @@ describe('McpServerForm (/tools/mcp-servers/new)', () => {
     })
   })
 
-  it('lists existing MCP connections and sends credentialId instead of a token when one is picked', async () => {
+  it('sends the credential picked for the token as credentialId, never a token', async () => {
     mockedCreate.mockResolvedValue({ source: { id: 'src-1' }, sync: { total: 1 }, syncError: null })
+    if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false)
+    if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = vi.fn()
     render(<McpServerForm organizationId="org-1" />)
-
-    const select = (await screen.findByLabelText(/use an existing connection/i)) as HTMLSelectElement
-    await waitFor(() => expect(Array.from(select.options).map((o) => o.value)).toEqual(['', 'conn-mcp-1']))
-    // Inference connections are not offered for an MCP server.
-    expect(screen.queryByRole('option', { name: /OpenAI/ })).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'weather' } })
     fireEvent.change(screen.getByLabelText(/server url/i), { target: { value: 'https://mcp.example.com/mcp' } })
-    fireEvent.change(screen.getByLabelText(/auth token/i), { target: { value: 'typed-token' } })
-    fireEvent.change(select, { target: { value: 'conn-mcp-1' } })
-
-    // The chip replaces the select and the typed token is dropped and locked.
-    expect(await screen.findByTestId('connected-chip')).toHaveTextContent('Team MCP')
-    expect(screen.getByLabelText(/auth token/i)).toHaveValue('')
-    expect(screen.getByLabelText(/auth token/i)).toBeDisabled()
+    fireEvent.click(screen.getByRole('combobox', { name: /token/i }))
+    fireEvent.click(await screen.findByRole('option', { name: /Team MCP/ }))
+    expect(await screen.findByTestId('credential-picker-open')).toHaveTextContent('Open Team MCP')
 
     fireEvent.click(screen.getByRole('button', { name: /add server/i }))
     await waitFor(() => {

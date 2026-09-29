@@ -38,6 +38,8 @@ describe('every dashboard route has a way in', () => {
     '/verify-email', '/accept-invite', '/oauth/callback',
     // Redirects, not destinations.
     '/llm-providers', '/llm-providers/new', '/models/new', '/connections',
+    // Workspaces are a tab on each runner's page; the old list address redirects.
+    '/workspaces',
     // Entered by following a link or a CLI prompt from outside the app.
     '/invite/accept', '/cli-login', '/oauth/consent',
   ])

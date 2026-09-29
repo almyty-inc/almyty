@@ -190,11 +190,11 @@ describe('describePolicyRule', () => {
   const names = { openai: 'OpenAI', anthropic: 'Anthropic' }
 
   it('says what each kind does in words', () => {
-    expect(describePolicyRule({ kind: 'connector_allowlist', rule: { connectorKeys: ['openai', 'anthropic'], owners: ['org'] } }, names)).toBe('Organization connections may only use OpenAI, Anthropic')
-    expect(describePolicyRule({ kind: 'connector_denylist', rule: { connectorKeys: ['openrouter'], owners: ['user'] } }, names)).toBe('Personal connections may never use openrouter')
-    expect(describePolicyRule({ kind: 'connector_denylist', rule: { connectorKeys: ['openrouter'] } })).toBe('All connections may never use openrouter')
-    expect(describePolicyRule({ kind: 'scope_rule', rule: { principalKinds: ['agent', 'workspace'], environments: ['production'], requireOwner: 'org', approvedConnectorsOnly: true } })).toBe('Agents, Workspaces in production may only use organization connections from approved connectors')
-    expect(describePolicyRule({ kind: 'scope_rule', rule: { principalKinds: ['agent'], requireOwner: 'org' } })).toBe('Agents may only use organization connections')
+    expect(describePolicyRule({ kind: 'connector_allowlist', rule: { connectorKeys: ['openai', 'anthropic'], owners: ['org'] } }, names)).toBe('Organization credentials may only use OpenAI, Anthropic')
+    expect(describePolicyRule({ kind: 'connector_denylist', rule: { connectorKeys: ['openrouter'], owners: ['user'] } }, names)).toBe('Personal credentials may never use openrouter')
+    expect(describePolicyRule({ kind: 'connector_denylist', rule: { connectorKeys: ['openrouter'] } })).toBe('All credentials may never use openrouter')
+    expect(describePolicyRule({ kind: 'scope_rule', rule: { principalKinds: ['agent', 'workspace'], environments: ['production'], requireOwner: 'org', approvedConnectorsOnly: true } })).toBe('Agents, Workspaces in production may only use organization credentials from approved connectors')
+    expect(describePolicyRule({ kind: 'scope_rule', rule: { principalKinds: ['agent'], requireOwner: 'org' } })).toBe('Agents may only use organization credentials')
     expect(describePolicyRule({ kind: 'expiry_rule', rule: { maxAgeDays: 90, warnDays: 7, enforce: true } })).toBe('Secrets expire after 90 days, warning 7 days ahead, grants are revoked on expiry')
     expect(describePolicyRule({ kind: 'expiry_rule', rule: { maxAgeDays: 30, warnDays: 1, enforce: false } })).toBe('Secrets expire after 30 days, warning 1 day ahead, owners are notified only')
     expect(describePolicyRule({ kind: 'rotation_rule', rule: { everyDays: 30, requireProviderApi: true, connectorKeys: ['openai'] } }, names)).toBe('Rotate OpenAI every 30 days through the provider API')
@@ -202,7 +202,7 @@ describe('describePolicyRule', () => {
   })
 
   it('truncates long connector lists', () => {
-    expect(describePolicyRule({ kind: 'connector_allowlist', rule: { connectorKeys: ['a', 'b', 'c', 'd', 'e', 'f'] } })).toBe('All connections may only use a, b, c, d and 2 more')
+    expect(describePolicyRule({ kind: 'connector_allowlist', rule: { connectorKeys: ['a', 'b', 'c', 'd', 'e', 'f'] } })).toBe('All credentials may only use a, b, c, d and 2 more')
   })
 })
 

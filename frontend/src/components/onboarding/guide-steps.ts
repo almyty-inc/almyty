@@ -88,11 +88,11 @@ export const JOURNEYS: Journey[] = [
       },
       {
         key: 'gateway',
-        title: 'Share your tools',
+        title: 'Create a gateway',
         description: () =>
-          'Pick tools and get one address that works in any MCP, UTCP or Skills client. Done once it shares at least one tool.',
-        cta: 'Share tools',
-        target: () => ({ to: '/gateways/new', place: 'Gateways › Share tools' }),
+          'Pick a protocol (MCP, UTCP or Skills) and the tools it serves, and get an address your AI client can use. Done once it serves at least one tool.',
+        cta: 'Create gateway',
+        target: () => ({ to: '/gateways/new', place: 'Gateways › Create gateway' }),
       },
       {
         key: 'external_client',
@@ -218,10 +218,10 @@ export const JOURNEYS: Journey[] = [
 /** The rest of the platform, for when you need it. Links, not steps. */
 export const SUPPORTING: GuideLink[] = [
   {
-    title: 'Connections',
-    description: 'The keys and accounts almyty uses for you, stored encrypted.',
-    to: '/connections',
-    place: 'Connections',
+    title: 'Credentials',
+    description: 'The keys, tokens and accounts almyty uses for you, stored encrypted.',
+    to: '/credentials',
+    place: 'Credentials',
   },
   {
     title: 'Models',

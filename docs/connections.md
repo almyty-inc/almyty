@@ -1,42 +1,62 @@
-# Connections
+# Connections (the Credentials page)
 
-Connections is where almyty keeps every key, token and account it uses
-on your behalf: inference vendors, deployment providers, memory
-backends, MCP servers, chat channels, clouds and model registries. You
-connect once; agents, models, deployments and the registry use the
-connection.
+A connection is a credential with a connector: every key, token and
+account almyty uses on your behalf (inference vendors, deployment
+providers, memory backends, MCP servers, chat channels, clouds, model
+registries, and any other key). In the product they are called
+**Credentials**; the code, the REST routes (`/connections`,
+`/connectors`) and the CLI keep the name connection. Add one once;
+agents, models, deployments and the registry use it.
 
-## The Connections page
+## The Credentials page
 
-`/connections` in the sidebar lists every connected service: its logo,
-its name, whether it works ("Works", "Needs attention", or "Saved" for a
-key nobody can check), the account on the other side, and who can use
-it. "Connect a service" opens a searchable grid of tiles, one per
-connector; a tile opens a short form with only what that service needs:
-its key (the connector's required and secret fields) or a Connect button
-for a sign-in, and "Who can use it", one line that says "everyone in your
+`/credentials` in the sidebar is a table of every credential: name and
+logo, service, whether it works ("Works", "Needs attention", or "Saved"
+for a key nobody can check), who can use it, what uses it, and when it
+was added. Keys a model provider uses are their own group, "Model
+providers", added and changed on Models. The table also lists the keys a
+single API, MCP server, channel or app keeps for itself (credential rows
+without a connector, from `GET /credentials`), each saying what keeps it.
+
+"Add credential" (`/credentials/new`) opens a searchable grid of tiles,
+one per connector; a tile opens a short form with only what that service
+needs: its key (the connector's required and secret fields) or a Sign in
+button, and "Who can use it", one line that says "everyone in your
 organization" until someone changes it. Saving checks the key with the
 service; a refusal is said next to the key and the form stays filled.
-The rest (another way to connect, optional fields, pasting a sign-in
-code) is under Advanced. An AI model provider's tile goes to
-`/models/connect`, where connecting it also brings its models.
+The rest (another way to sign in, optional fields, pasting a sign-in
+code) is under Advanced. A model provider's tile goes to
+`/models/connect`, where adding it also brings its models.
 
 "Other service" (connector `other`) is for any key the catalog has no
 entry for: a name and one secret box. Nothing can be asked whether such
 a key works, so its check is shape only and the page calls it "Saved".
 
-A connection's own page (`/connections/:id`) has Check again, Replace
-key (a rotate), what uses it, and Disconnect. The admins' Advanced tab
-(`/connections/advanced`) holds the grants of each connection, whether
+A credential's own page (`/credentials/:id`) has the detail header with
+Check again, then Overview (the account, Replace key (a rotate), who can
+use it, Delete credential) and Used by. The admins' Advanced tab
+(`/credentials/advanced`) holds the grants of each credential, whether
 members may keep personal keys, custom connectors and the governance
-rules.
+rules. `/connections/*` and `/settings/connections/*` redirect to the
+same place under `/credentials`, and a sign-in comes back to
+`/credentials?connection=<id>`, which opens what it made.
 
 Access keys, the keys other programs use to call almyty, are not
-connections: they are made on the gateway or agent they unlock.
+credentials: they are made on the gateway or agent they unlock.
 
-The same inline form opens under "Connect an account" or "Save a new
-key" wherever another form needs a key (an API's auth, a tool, a chat
-channel, a memory backend), so a key saved there is a connection too.
+## Pick one or create one where it is used
+
+Wherever a form needs a key, it uses one control,
+`components/credentials/credential-picker.tsx` (`CredentialPicker`): a
+select of the org's credentials (of one kind, when the form says so, the
+service's own first), "Create one here", which opens the same add form
+inline without a nested form or a dialog, and "Open <name>" to the
+picked credential's page. A credential made there is a connection like
+any other and comes back picked. An API's key (Finish connecting and its
+Key card), an HTTP tool's key (`tool.authConfig.config.credentialId`,
+resolved at call time as the caller by `ToolAuthService.applyToolAuth`),
+an MCP server's token and a memory account use it; chat channels and
+model providers move to it with their own forms.
 
 ## Connect
 
@@ -112,7 +132,7 @@ otherwise revoke it in the provider's console as well.
 ## Chat channels
 
 Every chat channel is a connector like any other, so a Slack, Discord or
-Telegram token is connected on the Connections page instead of pasted into
+Telegram token is added on the Credentials page instead of pasted into
 a gateway form. The connector key is `channel-<gateway type>` with
 underscores dasherized (`channel-whatsapp-cloud`), the same key
 `ChannelCredentialService` tags the row it manages for a gateway, so a

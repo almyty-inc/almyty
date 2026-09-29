@@ -88,6 +88,41 @@ export function gatewaySlugOf(gateway: ConnectableGateway): string {
   return gateway.endpoint?.replace(/^\/+/, '') || gatewayClientName(gateway)
 }
 
+/** The protocols a tools gateway can be created for, in the order the create page offers them. */
+export const GATEWAY_PROTOCOLS = ['mcp', 'utcp', 'skills'] as const
+export type GatewayProtocol = (typeof GATEWAY_PROTOCOLS)[number]
+
+/** Which client snippets each protocol serves; a gateway of every protocol ('tools') serves them all. */
+const SNIPPETS_BY_PROTOCOL: Record<GatewayProtocol, ClientSnippet['id'][]> = {
+  mcp: ['claude-code', 'cursor', 'claude-desktop', 'mcp'],
+  utcp: ['utcp'],
+  skills: ['skills'],
+}
+
+/** A Skills gateway is read by the almyty CLI, signed in as you: it has no access key. */
+export function gatewayUsesAccessKey(type: string | null | undefined): boolean {
+  return (type || '').toLowerCase() !== 'skills'
+}
+
+/**
+ * The client snippets for one gateway: the ones its protocol serves. With
+ * no key in hand (it is shown once, at creation) they carry a placeholder.
+ */
+export function gatewaySnippets(
+  gateway: ConnectableGateway,
+  orgSlug: string,
+  key?: string | null,
+  backendUrl = gatewayBackendUrl(),
+): ClientSnippet[] {
+  const all = sharedToolsSnippets(gateway, orgSlug, key, backendUrl)
+  const type = (gateway.type || '').toLowerCase() as GatewayProtocol
+  const ids = SNIPPETS_BY_PROTOCOL[type]
+  if (!ids) return all
+  return all
+    .filter((s) => ids.includes(s.id))
+    .map((s) => (s.id === 'skills' && type === 'skills' ? { ...s, hint: 'Installs one SKILL.md per tool into your coding agent. Sign in first with npx @almyty/auth login.' } : s))
+}
+
 /**
  * Everything a person pastes to use a shared-tools gateway, one entry per
  * client. One address serves every entry: MCP clients POST to it, UTCP
