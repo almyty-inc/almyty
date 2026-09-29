@@ -8,6 +8,7 @@ import { renderAtRoute } from '@/test/render-at-route'
 import { ModelsPage } from '../models'
 import { llmProvidersApi } from '@/lib/api'
 import { modelsApi } from '@/lib/models-api'
+import { SEARCH_CASES, SEARCH_CATALOG, SEARCH_PROVIDER_ANTHROPIC, SEARCH_PROVIDER_OPENAI } from '@/lib/__tests__/model-search.cases'
 
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 vi.mock('@/lib/api', () => ({ llmProvidersApi: { getAll: vi.fn() } }))
@@ -128,6 +129,35 @@ describe('ModelsPage', () => {
     expect(screen.getByTestId('model-row-card-claude-sonnet-5')).toBeInTheDocument()
     expect(screen.queryByTestId('model-row-card-gpt-4o')).not.toBeInTheDocument()
     expect(screen.queryByTestId('model-group-prov-openai')).not.toBeInTheDocument()
+  })
+
+  describe('search relevance (the shared model search cases)', () => {
+    const PROVIDERS = [
+      { ...OPENAI, ...SEARCH_PROVIDER_OPENAI },
+      { ...ANTHROPIC, ...SEARCH_PROVIDER_ANTHROPIC },
+    ]
+    const providerId = (name?: string | null) => PROVIDERS.find((p) => p.name === name)!.id
+    const listedIds = () => screen.queryAllByTestId(/^model-row-card-/).map((row) => row.getAttribute('data-testid')!.replace('model-row-card-', ''))
+
+    beforeEach(() => {
+      vi.mocked(llmProvidersApi.getAll).mockResolvedValue(PROVIDERS as any)
+      vi.mocked(modelsApi.list).mockResolvedValue(SEARCH_CATALOG.map((m) => card(providerId(m.providerName), m.id, m.name ? { name: m.name } : {})))
+    })
+
+    it.each(SEARCH_CASES)('"$query" lists $expected ($why)', async ({ query, expected }) => {
+      at()
+      await screen.findByTestId('model-row-card-gpt-4o')
+      fireEvent.change(screen.getByRole('textbox', { name: 'Search models' }), { target: { value: query } })
+      // The page sorts each provider's models by name before ranking, so compare the set here.
+      expect(listedIds().sort()).toEqual([...expected].sort())
+    })
+
+    it('lists only the gpt-4o models for "gpt-4o", exact id first', async () => {
+      at()
+      await screen.findByTestId('model-row-card-gpt-4o')
+      fireEvent.change(screen.getByRole('textbox', { name: 'Search models' }), { target: { value: 'gpt-4o' } })
+      expect(listedIds()).toEqual(['gpt-4o', 'gpt-4o-2024-08-06', 'gpt-4o-mini', 'chatgpt-4o-latest'])
+    })
   })
 
   it('says "Key works" only by the rule that makes the models usable, never over a failed check', async () => {

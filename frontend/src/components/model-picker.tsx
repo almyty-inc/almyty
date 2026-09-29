@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label'
 import { RoutingPolicyField } from '@/components/models/routing-policy-editor'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
 import { modelsApi } from '@/lib/models-api'
+import { MODEL_RANK, modelSearchScorer, rankBy, textMatchesSearch } from '@/lib/model-search'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { cn } from '@/lib/utils'
 import type { ModelCard, RoutingPolicy } from '@/types/models'
@@ -187,8 +188,8 @@ export function ModelPicker({
   const savedCard = savedModel ? cards.find((c) => c.providerId === value.providerId && c.vendorModelId === savedModel) : undefined
 
   const groups: Group[] = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    const matches = (...texts: Array<string | null | undefined>) => !q || texts.some((t) => (t || '').toLowerCase().includes(q))
+    const q = search.trim()
+    const matches = (...texts: Array<string | null | undefined>) => !q || textMatchesSearch(q, ...texts)
     const out: Group[] = []
 
     const top: Item[] = []
@@ -196,29 +197,44 @@ export function ModelPicker({
     if (providerOptionalLabel && matches(providerOptionalLabel)) top.push({ key: 'clear', kind: 'clear', label: providerOptionalLabel })
     if (top.length > 0) out.push({ key: 'top', items: top })
 
-    let modelHits = 0
+    // Every model the list could show, so whether a provider name counts
+    // (only when no model id or name matches) is decided once, for all.
+    const own = new Map<string, ModelCard[]>()
+    const candidates: Array<{ provider: ProviderOption; item: Extract<Item, { kind: 'model' }> }> = []
     for (const p of providers) {
-      const items: Item[] = []
-      if (modelOptional && matches('Provider default', p.name)) items.push({ key: `${p.id}::default`, kind: 'default', label: 'Provider default', provider: p })
-      const own = cards
+      const mine = cards
         .filter((c) => c.providerId === p.id)
         .filter((c) => (c.selectable && c.status !== 'inactive') || (c.providerId === value.providerId && c.vendorModelId === savedModel))
         .sort((a, b) => cardLabel(a).localeCompare(cardLabel(b)))
-      for (const c of own) {
-        if (!matches(c.name, c.vendorModelId, p.name)) continue
+      own.set(p.id, mine)
+      for (const c of mine) {
         const unavailable = !c.selectable || c.status === 'inactive'
-        items.push({ key: `${p.id}::${c.vendorModelId}`, kind: 'model', label: cardLabel(c), sub: c.vendorModelId, provider: p, model: c.vendorModelId, unavailable })
-        modelHits += 1
+        candidates.push({ provider: p, item: { key: `${p.id}::${c.vendorModelId}`, kind: 'model', label: cardLabel(c), sub: c.vendorModelId, provider: p, model: c.vendorModelId, unavailable } })
       }
       // A saved id this provider no longer lists still reads as chosen.
-      if (p.id === value.providerId && savedModel && !savedCard && matches(savedModel, p.name)) {
-        items.push({ key: `${p.id}::${savedModel}`, kind: 'model', label: savedModel, sub: 'Saved, not in the list', provider: p, model: savedModel, saved: true, unavailable: true })
-        modelHits += 1
+      if (p.id === value.providerId && savedModel && !savedCard) {
+        candidates.push({ provider: p, item: { key: `${p.id}::${savedModel}`, kind: 'model', label: savedModel, sub: 'Saved, not in the list', provider: p, model: savedModel, saved: true, unavailable: true } })
       }
+    }
+    const score = modelSearchScorer(candidates, q, ({ provider, item }) => ({ id: item.model, name: item.label, providerName: provider.name, providerType: provider.type }))
+    const byProviderName = !!q && candidates.every((c) => (score(c) ?? MODEL_RANK.provider) === MODEL_RANK.provider)
+
+    let modelHits = 0
+    for (const p of providers) {
+      const items: Item[] = []
+      if (modelOptional && (matches('Provider default') || (byProviderName && matches(p.name, p.type)))) {
+        items.push({ key: `${p.id}::default`, kind: 'default', label: 'Provider default', provider: p })
+      }
+      const hits = rankBy(
+        candidates.filter((c) => c.provider.id === p.id),
+        score,
+      ).map((c) => c.item)
+      items.push(...hits)
+      modelHits += hits.length
       // Listed but none usable is not the same as nothing listed: say which.
       const listed = cards.filter((c) => c.providerId === p.id && c.status !== 'inactive').length
       const note =
-        own.length === 0 && !q
+        (own.get(p.id) ?? []).length === 0 && !q
           ? listed > 0
             ? `${listed} model${listed === 1 ? '' : 's'} listed, none usable yet. Check the provider again on its page.`
             : FREE_TEXT_PROVIDER_TYPES.has(p.type)
@@ -424,6 +440,7 @@ export function ModelPicker({
                           role="option"
                           aria-selected={selected}
                           data-active={idx === active || undefined}
+                          data-model={item.kind === 'model' ? item.model : undefined}
                           onMouseEnter={() => setActive(idx)}
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => choose(item)}
