@@ -264,10 +264,10 @@ export function ModelPicker({
       const note =
         (own.get(p.id) ?? []).length === 0 && !q
           ? listed > 0
-            ? `${pluralized(listed, 'model')} listed, none usable yet. Check the provider again on its page.`
+            ? `${pluralized(listed, 'model')} listed, none usable yet. Check the connection again on its page.`
             : FREE_TEXT_PROVIDER_TYPES.has(p.type)
               ? 'Type the model id your server runs.'
-              : 'No models yet. Check the provider again on its page.'
+              : 'No models yet. Check the connection again on its page.'
           : undefined
       if (items.length > 0 || note) out.push({ key: p.id, heading: p.name, items, note })
     }
@@ -531,7 +531,7 @@ export function ModelPicker({
 
       {savedUnavailable && (
         <p className={cn('text-amber-700 dark:text-amber-400', hint)} data-testid={`${idPrefix}-model-unavailable`}>
-          This model is not available right now. Pick another, or check its provider again.
+          This model is not available right now. Pick another, or check its connection again.
         </p>
       )}
 

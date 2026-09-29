@@ -50,7 +50,7 @@ export function availability(card: Pick<ModelCard, 'selectable' | 'status' | 'va
   if (card.validationStatus === 'failed' || card.status === 'error') {
     return { usable: false, label: 'Not available', detail: card.lastValidationError || 'The provider did not answer for this model.' }
   }
-  return { usable: false, label: 'Not available', detail: 'Check the provider again to make it available.' }
+  return { usable: false, label: 'Not available', detail: 'Check its connection again to make it available.' }
 }
 
 function trimPrice(n: number): string {

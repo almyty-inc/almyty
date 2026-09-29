@@ -664,7 +664,7 @@ Object.assign(TEMPLATES, {
         heading: subject,
         bodyHtml: `<ul style="margin: 0 0 12px; padding-left: 20px;">${modelLines(models)}</ul>` + para('They show up in every model chooser.'),
         button: p.url ? { label: 'See the models', url: p.url } : undefined,
-        footerNote: 'Turn these emails off under Settings, Notifications.',
+        footerNote: 'Turn these emails off under Settings, Your account, Notifications.',
       }),
       text: flattenText(`${subject}: ${models.map((m) => m.name).join(', ')}. ${p.url ?? ''}`),
     };
@@ -686,7 +686,7 @@ Object.assign(TEMPLATES, {
         heading: subject,
         bodyHtml: `<ul style="margin: 0 0 12px; padding-left: 20px;">${modelLines(models)}</ul>${agentsHtml}`,
         button: p.url ? { label: yours.length === 1 ? 'Pick another model' : 'See the models', url: p.url } : undefined,
-        footerNote: 'You get this because you own the connection or an agent that uses the model, or you run the organization. Turn these emails off under Settings, Notifications.',
+        footerNote: 'You get this because you own the connection or an agent that uses the model, or you run the organization. Turn these emails off under Settings, Your account, Notifications.',
       }),
       text: flattenText(
         `${subject}. ${models.map((m) => `${m.name}${m.reason ? `: ${m.reason}` : ''}`).join('; ')}. ${yours.length ? `Your agents that use it: ${yours.map((a) => a.name).join(', ')}.` : ''} ${p.url ?? ''}`,
@@ -710,7 +710,7 @@ Object.assign(TEMPLATES, {
         heading: 'Changes to your models',
         bodyHtml: freshHtml + goneHtml + (gone.length ? para('No agent was using the models that went away.') : ''),
         button: p.url ? { label: 'Open Models', url: p.url } : undefined,
-        footerNote: 'One email a day at most. Turn it off under Settings, Notifications.',
+        footerNote: 'One email a day at most. Turn it off under Settings, Your account, Notifications.',
       }),
       text: flattenText(
         `Changes to your models. ${fresh.map((f) => `New on ${f.connection}: ${f.models}.`).join(' ')} ${gone.map((g) => `No longer available on ${g.connection}: ${g.models}.`).join(' ')} ${p.url ?? ''}`,

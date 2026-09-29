@@ -198,7 +198,7 @@ export class ModelChangeNoticesService implements ModelChangeListener {
       organizationId: provider.organizationId,
       userIds: audience,
       title: rows.length === 1 ? `New model on ${provider.name}: ${names[0]}` : `${rows.length} new models on ${provider.name}`,
-      body: `${listNames(names)}. They show up in every model chooser.`,
+      body: `${listNames(names)}. ${rows.length === 1 ? 'It shows' : 'They show'} up in every model chooser.`,
       link: `/models?connection=${provider.id}&show=new`,
     });
   }
@@ -223,9 +223,11 @@ export class ModelChangeNoticesService implements ModelChangeListener {
       const mine = agents.filter((a) => ownerOf.get(a.id) === userId);
       const others = agents.filter((a) => ownerOf.get(a.id) !== userId && a.visibility !== 'private').length;
       const title = rows.length === 1 ? `${rows[0].modelName} is no longer available from ${provider.name}` : `${rows.length} models are no longer available from ${provider.name}`;
+      const it = rows.length === 1 ? 'it' : 'them';
       const agentLine = [
-        mine.length ? `Your agents that use it: ${mine.map((a) => a.name).join(', ')}. Pick another model for them.` : '',
-        others ? `${others === 1 ? '1 other agent uses' : `${others} other agents use`} it.` : '',
+        mine.length === 1 ? `Your agent ${mine[0].name} uses ${it}. Pick another model for it.` : '',
+        mine.length > 1 ? `Your agents that use ${it}: ${mine.map((a) => a.name).join(', ')}. Pick another model for each.` : '',
+        others ? `${others === 1 ? '1 other agent uses' : `${others} other agents use`} ${it}.` : '',
       ].filter(Boolean).join(' ');
       const reasons = [...new Set(rows.map((r) => r.reason).filter(Boolean))].join(' ');
       const body = [rows.length > 1 ? `${listNames(rows.map((r) => r.modelName))}.` : '', reasons, agentLine].filter(Boolean).join(' ');

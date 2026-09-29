@@ -41,7 +41,7 @@ export const PAGE_INTROS = {
   models: {
     page: '/models',
     // Adds to the subtitle rather than repeating it: prices, and when a model can be picked.
-    text: 'Prices fill in by themselves and stay current. A new model can be picked once a first test call to it has worked.',
+    text: 'Every model your provider connections reach, with prices that fill in by themselves. A model can be picked once its connection\'s key works and the connection offers it.',
   },
   memories: {
     page: '/memories',

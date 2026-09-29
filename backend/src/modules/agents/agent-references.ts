@@ -82,7 +82,10 @@ export function collectModelReferences(agent: {
     if (providerId && model) out.push({ providerId, model, where });
   };
   const modelConfig = agent.modelConfig as { providerId?: string; model?: string; compaction?: { providerId?: string; model?: string } } | null | undefined;
-  add(modelConfig, 'model');
+  // An autonomous agent's main role is mirrored into modelConfig; it is one
+  // place to a person, named by the role below.
+  const mainRoleMirrored = (agent.models?.roles ?? []).some((role) => role?.purpose === 'main' && role.kind === 'model');
+  if (!mainRoleMirrored) add(modelConfig, 'model');
   add(modelConfig?.compaction, 'context compaction');
   for (const node of agent.pipeline?.nodes ?? []) {
     const data: Record<string, any> = (node as any).data || (node as any).config || {};

@@ -242,7 +242,7 @@ describe('ModelPicker', () => {
     renderPicker({})
     const list = await open()
     const group = within(list).getByRole('group', { name: 'Mistral' })
-    expect(within(group).getByText('2 models listed, none usable yet. Check the provider again on its page.')).toBeInTheDocument()
+    expect(within(group).getByText('2 models listed, none usable yet. Check the connection again on its page.')).toBeInTheDocument()
     expect(within(group).queryByText(/No models yet/)).not.toBeInTheDocument()
   })
 
