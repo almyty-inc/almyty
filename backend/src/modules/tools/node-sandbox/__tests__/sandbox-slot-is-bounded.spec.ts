@@ -62,6 +62,12 @@ describe('a sandbox execution holds its pool slot for a bounded time', () => {
     const stuck = service.execute({ code: 'return 1', parameters: {}, dependencies: { 'left-pad': '1.3.0' }, organizationId: 'org-a' });
     // Queued behind it: the pool has one slot.
     const next = service.execute({ code: 'return parameters.x + 1', parameters: { x: 41 }, organizationId: 'org-b' });
+    // The stuck one read its 1500ms slot when it took the pool; the one
+    // waiting reads the limit when it gets the slot. Give that one room, so
+    // a slow worker boot on a busy CI runner can't fail what this proves:
+    // the slot is freed and the next execution runs.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    process.env.SANDBOX_MAX_SLOT_MS = '30000';
 
     const started = Date.now();
     await expect(stuck).resolves.toMatchObject({ success: false, error: 'Sandbox execution exceeded its 1500ms slot' });
