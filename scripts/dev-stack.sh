@@ -10,7 +10,8 @@
 # The API is started with OLLAMA_ALLOW_PRIVATE_URLS=true so an Ollama-typed
 # provider may point at a localhost fake server (the models E2E specs start
 # one), MODEL_RECONCILE_CRON at every minute so deployments settle quickly,
-# and the price feed off. Logs land in $LOG_DIR (default: /tmp/almyty-qa).
+# and the price feed off unless MODEL_PRICE_FEED_DISABLED=false. Logs land
+# in $LOG_DIR (default: /tmp/almyty-qa).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -35,7 +36,7 @@ api_env() {
     ENCRYPTION_KEY="${ENCRYPTION_KEY:-qa-encryption-key-32-bytes-minimum!!}" \
     FRONTEND_URL="http://localhost:$WEB_PORT" CORS_ORIGIN="http://localhost:$WEB_PORT" \
     BASE_URL="http://localhost:$API_PORT" API_BASE_URL="http://localhost:$API_PORT" \
-    OLLAMA_ALLOW_PRIVATE_URLS=true MODEL_RECONCILE_CRON='*/1 * * * *' MODEL_PRICE_FEED_DISABLED=true \
+    OLLAMA_ALLOW_PRIVATE_URLS=true MODEL_RECONCILE_CRON='*/1 * * * *' MODEL_PRICE_FEED_DISABLED="${MODEL_PRICE_FEED_DISABLED:-true}" \
     "$@"
 }
 
