@@ -21,6 +21,7 @@ import { fakeRepository } from '../../../test/fake-repository';
 import { LlmProviderSecretsHelper } from '../llm-provider-secrets.helper';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
 import { AuditLogService } from '../../audit-log/audit-log.service';
+import { AuditResource } from '../../../entities/audit-log.entity';
 import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
 import { LlmChatHelper } from '../llm-chat.helper';
 import { LlmStatsHelper } from '../llm-stats.helper';
@@ -173,6 +174,8 @@ describe('connect a provider', () => {
     expect(await catalog.list('org-1', { selectable: true })).toEqual([]);
     expect(store.rows).toHaveLength(0);
     expect(audit.logDelete).toHaveBeenCalledTimes(1);
+    // TypeORM clears the id on a removed entity, so it is read before the remove.
+    expect(audit.logDelete).toHaveBeenCalledWith('org-1', 'user-a', AuditResource.LLM_PROVIDER, expect.stringMatching(/^provider/), 'OpenAI');
   });
 
   it('a vendor with no model list asks for the model before anything is saved or called', async () => {
