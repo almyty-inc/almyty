@@ -1,13 +1,12 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, Loader2 } from 'lucide-react'
+import { Bot, Code2, Globe, Loader2, MessageSquare, Monitor, Terminal } from 'lucide-react'
 
-import { FormPage, FormSection } from '@/components/layout/form-page'
-import { ProtocolBadge } from '@/components/ui/protocol-badge'
+import { FormPage } from '@/components/layout/form-page'
+import { ChoiceTile, ChoiceTiles, splitTileName } from '@/components/connect/service-tiles'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { cn } from '@/lib/utils'
 import {
   DISTRIBUTION_BLURBS,
   DISTRIBUTION_LABELS,
@@ -19,16 +18,19 @@ import {
 
 /** Grouped so the choice reads as a decision about reach, not a list. */
 export const DISTRIBUTION_GROUPS: Array<{
+  id: string
   title: string
   blurb: string
   targets: DistributionTarget[]
 }> = [
   {
-    title: 'Hosted',
+    id: 'web',
+    title: 'On the web',
     blurb: 'Served by almyty, live as soon as you publish.',
-    targets: ['web'],
+    targets: ['web', 'widget'],
   },
   {
+    id: 'installable',
     title: 'Installable',
     blurb: 'Built here, signed with your certificate.',
     // 'binary' is deliberately absent. It compiles to byte-identical
@@ -39,6 +41,7 @@ export const DISTRIBUTION_GROUPS: Array<{
     targets: ['tui', 'desktop'],
   },
   {
+    id: 'messaging',
     title: 'Messaging',
     blurb: 'Each one needs the settings from your own account on that platform.',
     targets: [
@@ -57,14 +60,43 @@ export const DISTRIBUTION_GROUPS: Array<{
       'webhook',
     ],
   },
+  {
+    id: 'agents',
+    title: 'Other agents',
+    blurb: 'Agents elsewhere find yours by its agent card and call it. Each caller signs in with a key.',
+    targets: ['a2a'],
+  },
 ]
 
+/** What a tile says in the picker, where a label has room for about fifteen characters. */
+const TILE_HINTS: Partial<Record<DistributionTarget, string>> = {
+  whatsapp: 'Via Twilio',
+  whatsapp_cloud: 'Via Meta',
+}
+
+export function placeTile(target: DistributionTarget): { label: string; hint?: string } {
+  // "WhatsApp (Meta)" -> "WhatsApp" over "Via Meta"; "Other agents (A2A)" -> over "A2A".
+  const { label, hint } = splitTileName(DISTRIBUTION_LABELS[target])
+  return { label, hint: TILE_HINTS[target] ?? hint ?? (isChannelTarget(target) ? undefined : DISTRIBUTION_BLURBS[target]) }
+}
+
+function iconFor(target: DistributionTarget) {
+  const cls = 'h-4 w-4 text-primary'
+  if (target === 'web') return <Globe className={cls} />
+  if (target === 'widget') return <Code2 className={cls} />
+  if (target === 'tui' || target === 'binary') return <Terminal className={cls} />
+  if (target === 'desktop') return <Monitor className={cls} />
+  if (target === 'a2a') return <Bot className={cls} />
+  if (isChannelTarget(target)) return <MessageSquare className={cls} />
+  return <Globe className={cls} />
+}
+
 /**
- * Where an app can ship, one card per place.
+ * Where an app can ship, one tile per place.
  *
  * Picking one records it on the app and goes straight to its own page,
- * where its settings and its callback URL live. A place the app already
- * ships to links to that page instead of being offered twice.
+ * where its settings and its address live. A place the app already has
+ * opens that page instead of being added twice.
  */
 export function AddDistributionPicker({ app }: { app: AgentApp }) {
   const navigate = useNavigate()
@@ -96,58 +128,43 @@ export function AddDistributionPicker({ app }: { app: AgentApp }) {
       back={{ to: `/apps/${app.slug}`, label: app.branding?.appName || app.name }}
     >
       {DISTRIBUTION_GROUPS.map((group) => (
-        <FormSection key={group.title} title={group.title} description={group.blurb}>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <section
+          key={group.id}
+          aria-labelledby={`places-${group.id}`}
+          className="space-y-3 rounded-xl border bg-card p-4 text-card-foreground sm:p-6"
+        >
+          <div className="space-y-1">
+            <h2 id={`places-${group.id}`} className="text-base font-semibold">
+              {group.title}
+            </h2>
+            <p className="text-sm text-muted-foreground">{group.blurb}</p>
+          </div>
+          <ChoiceTiles label={group.title}>
             {group.targets.map((target) => {
               const already = taken.has(target)
-              const body = (
-                <>
-                  <span className="min-w-0 flex-1">
-                    <span className="mb-1 flex flex-wrap items-center gap-2">
-                      <span className="truncate text-sm font-medium">
-                        {DISTRIBUTION_LABELS[target]}
-                      </span>
-                      <ProtocolBadge protocol={target} />
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {already ? 'Already added. Open its settings.' : DISTRIBUTION_BLURBS[target]}
-                    </span>
-                    {!already && isChannelTarget(target) && (
-                      <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                        You will need its settings from that platform
-                      </span>
-                    )}
-                  </span>
-                  {pending === target ? (
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  )}
-                </>
-              )
-              const classes =
-                'flex items-center gap-2 rounded-lg border p-3 text-left transition-colors hover:border-primary hover:bg-muted/50'
-              return already ? (
-                <Link key={target} to={pageFor(target)} className={cn(classes, 'bg-muted/30')}>
-                  {body}
-                </Link>
-              ) : (
-                <button
+              const tile = placeTile(target)
+              return (
+                <ChoiceTile
                   key={target}
-                  type="button"
+                  testId={`place-${target}`}
+                  icon={pending === target ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : iconFor(target)}
+                  label={tile.label}
+                  // A platform's name says what it is; the other places get one line.
+                  hint={already ? (tile.hint ? `${tile.hint}, added` : 'Already added') : tile.hint}
                   disabled={add.isPending}
                   onClick={() => {
+                    if (already) {
+                      navigate(pageFor(target))
+                      return
+                    }
                     setPending(target)
                     add.mutate(target)
                   }}
-                  className={cn(classes, 'disabled:cursor-wait disabled:opacity-60')}
-                >
-                  {body}
-                </button>
+                />
               )
             })}
-          </div>
-        </FormSection>
+          </ChoiceTiles>
+        </section>
       ))}
     </FormPage>
   )

@@ -19,6 +19,7 @@ import {
   type ExecutionPrincipal,
   isExecutionPrincipal,
 } from '../../common/authorization/execution-access.service';
+import { type LabelRequirements, labelsMatch, noMatchingRunnerMessage } from './runner-labels';
 
 /**
  * Runner ids are uuids. Checked before an id that arrived over the wire
@@ -496,6 +497,45 @@ export class RunnerService {
       throw new BadRequestException(`runner ${runner.name} is ${runner.state}; cannot accept dispatch`);
     }
     return runner;
+  }
+
+  /**
+   * The runner a dispatch with label requirements goes to: an online one
+   * (ONLINE or BUSY, with a live session) in the organization whose
+   * labels include every requirement and which the caller may use.
+   *
+   * "May use" is resolveForDispatch, asked of each candidate, so label
+   * routing adds no rule of its own: a private runner is its owner's, a
+   * team runner its team's, a runner of a deactivated member nobody's,
+   * and a dispatch with no known caller reaches org-wide runners only.
+   *
+   * Order: `preferRunnerId` first when it qualifies (work stays where it
+   * was headed), then idle before busy, then the most recent heartbeat.
+   * When nothing qualifies the answer is one plain sentence -- "No
+   * machine with gpu=yes is online" -- the same whether no runner carries
+   * the labels or the ones that do are someone else's, so it does not
+   * say which machines exist.
+   */
+  async resolveByLabels(
+    required: LabelRequirements,
+    caller: string | ExecutionPrincipal | null | undefined,
+    organizationId: string,
+    options: { preferRunnerId?: string } = {},
+  ): Promise<Runner> {
+    const candidates = (await this.runners.find({ where: { organizationId } }))
+      .filter((r) => canAcceptWork(r.state) && labelsMatch(r.labels, required))
+      .sort((a, b) => {
+        const preferred = Number(b.id === options.preferRunnerId) - Number(a.id === options.preferRunnerId);
+        if (preferred !== 0) return preferred;
+        const idle = Number(b.state === RunnerState.ONLINE) - Number(a.state === RunnerState.ONLINE);
+        if (idle !== 0) return idle;
+        return (b.lastHeartbeatAt?.getTime() ?? 0) - (a.lastHeartbeatAt?.getTime() ?? 0);
+      });
+    for (const candidate of candidates) {
+      const runner = await this.resolveForDispatch(candidate.id, caller).catch(() => null);
+      if (runner && (await this.getActiveSession(runner.id))) return runner;
+    }
+    throw new NotFoundException(noMatchingRunnerMessage(required));
   }
 
   /**

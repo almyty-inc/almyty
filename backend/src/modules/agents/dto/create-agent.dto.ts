@@ -5,8 +5,7 @@ import { AgentStatus } from '../../../entities/agent.entity';
 import type { AgentCollaboration } from '../collaboration-participants';
 import type { AgentModels } from '../autonomous-models';
 
-const stripHtml = ({ value }: { value: unknown }) =>
-  typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
+import { stripHtmlTransform as stripHtml } from '../../../common/security/strip-tags';
 
 export class CreateAgentDto {
   @Transform(stripHtml)
@@ -93,6 +92,8 @@ export class CreateAgentDto {
   agentConfig?: {
     canCallAgents?: boolean;
     canCreateAgents?: boolean;
+    /** Machine label requirements, as `gpu=yes, os=mac` or an object; see Agent.agentConfig. */
+    runnerLabels?: Record<string, string> | string;
   };
 
   // Shape checked in AgentsService (collaborationProblems) so a bad

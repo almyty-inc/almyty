@@ -38,4 +38,12 @@ export class CreateWorkspaceDto {
   @IsOptional()
   @IsUUID()
   runnerId?: string;
+
+  /**
+   * Label requirements for the machine: "gpu=yes, os=mac" or an object.
+   * Shape checked in WorkspaceService (parseLabelRequirements), which says
+   * which pair is wrong.
+   */
+  @IsOptional()
+  labels?: Record<string, string> | string;
 }

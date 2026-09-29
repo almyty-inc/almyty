@@ -17,7 +17,7 @@ vi.mock('@/components/command-palette', () => ({ CommandPalette: () => null }))
 vi.mock('@/components/keyboard-shortcuts', () => ({ KeyboardShortcutsListener: () => null }))
 vi.mock('@/components/notifications/notification-bell', () => ({ NotificationBell: () => null }))
 vi.mock('@/components/layout/email-verification-banner', () => ({ EmailVerificationBanner: () => null }))
-vi.mock('@/components/plan-indicator', () => ({ PlanBadge: () => null }))
+vi.mock('@/components/plan-indicator', () => ({ PlanBadge: () => null, PlanLine: () => null }))
 
 const oldOrg = { id: 'old-org', name: 'Existing organization' } as Organization
 const newOrg = { id: 'new-org', name: 'Newly created organization' } as Organization

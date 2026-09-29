@@ -25,7 +25,6 @@ import { ReferralsTab } from '@/components/settings/referrals-tab'
 import { DataRetentionCard } from '@/components/settings/data-retention-card'
 import { NotificationPreferences } from '@/components/settings/notification-preferences'
 import { BillingTab } from '@/components/BillingTab'
-import { PlanBadge } from '@/components/plan-indicator'
 import { PageHeader } from '@/components/layout/page-header'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { authApi, organizationsApi } from '@/lib/api'
@@ -145,12 +144,6 @@ export function SettingsPage() {
       <PageHeader
         title="Settings"
         description="Your organization, your account and who can do what"
-        actions={
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Plan</span>
-            <PlanBadge />
-          </div>
-        }
       />
 
       {/* The shared pill tabs, as on Analytics, Tools and Memory: one per

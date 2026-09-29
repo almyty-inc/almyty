@@ -34,6 +34,7 @@ const protocolStyles: Record<string, string> = {
   tui: 'bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/30',
   desktop: 'bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/30',
   binary: 'bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-500/20 dark:text-cyan-300 dark:border-cyan-500/30',
+  widget: 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-500/20 dark:text-violet-300 dark:border-violet-500/30',
 }
 
 const protocolLabels: Record<string, string> = {
@@ -45,6 +46,7 @@ const protocolLabels: Record<string, string> = {
   whatsapp_cloud: 'WhatsApp Cloud',
   tui: 'Terminal',
   web: 'Web',
+  widget: 'Widget',
 }
 
 interface ProtocolBadgeProps {

@@ -31,6 +31,7 @@ import {
   type ScopeRule,
   type UpdatePolicyBody,
 } from '@/types/connections-governance'
+import { pluralized } from './utils'
 
 export const CONNECTIONS_GOVERNANCE_ENTITLEMENT = 'connections_governance'
 
@@ -270,7 +271,7 @@ function listWords(items: string[], max = 4): string {
 }
 
 function days(n: number): string {
-  return `${n} day${n === 1 ? '' : 's'}`
+  return pluralized(n, 'day')
 }
 
 /**

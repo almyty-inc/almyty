@@ -238,6 +238,8 @@ export interface Agent {
   agentConfig?: {
     canCallAgents?: boolean
     canCreateAgents?: boolean
+    /** Machine label requirements for runner-backed tools; the server stores an object, a save may send text. */
+    runnerLabels?: Record<string, string> | string
     verify?: {
       enabled?: boolean
       checkers?: Array<{ name?: string; providerId?: string; model?: string; instructions?: string }>

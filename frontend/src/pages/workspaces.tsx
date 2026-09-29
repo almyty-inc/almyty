@@ -14,7 +14,7 @@ import { QueryError } from '@/components/ui/query-error'
 import { runnersApi, workspacesApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { workspaceStatusVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, formatDateTime } from '@/lib/utils'
 
 interface Workspace {
   id: string
@@ -193,7 +193,7 @@ export function WorkspacesPage() {
                           ? (w.ttlAt ? `expires ${formatRelativeTime(w.ttlAt)}` : 'no TTL')
                           : (w.closeReason?.kind ?? '—')}
                       </td>
-                      <td className="py-2 text-muted-foreground" title={w.createdAt}>
+                      <td className="py-2 text-muted-foreground" title={formatDateTime(w.createdAt)}>
                         {formatRelativeTime(w.createdAt)}
                       </td>
                     </tr>

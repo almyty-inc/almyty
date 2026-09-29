@@ -48,11 +48,12 @@ export const HOSTED_CHAT_SLUG_INDEX = 'UQ_gateways_hosted_chat_slug';
 /**
  * Configuration set on a published surface itself rather than on the
  * distribution it came from, so republishing must carry it over: the
- * sites allowed to embed a web app are set on the app's web page against
- * this gateway (allowed-origins-card), and the distribution never holds
- * them.
+ * sites allowed to embed a web app or a widget are set on the place's page
+ * against this gateway (allowed-origins-card), and so is where the widget
+ * sits on the page (`widget`, widget-builder). The distribution holds
+ * neither.
  */
-export const KEPT_ON_REPUBLISH: readonly string[] = Object.freeze(['allowedOrigins']);
+export const KEPT_ON_REPUBLISH: readonly string[] = Object.freeze(['allowedOrigins', 'widget']);
 
 export function keptOnRepublish(configuration: Record<string, any> | null | undefined): Record<string, any> {
   const kept: Record<string, any> = {};

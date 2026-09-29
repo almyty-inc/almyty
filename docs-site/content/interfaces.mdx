@@ -35,7 +35,7 @@ A channel is therefore not usable until its verification secret is set, and its 
 
 Twilio signs the exact URL it called, so `webhook_url` has to match what is configured in the Twilio console. Automatic registration fills it in; if you registered the webhook by hand, enter it by hand too.
 
-![The Channel Setup panel: your exact webhook URL or embed snippet, the platform-side checklist, and a live connection test](/screenshots/interfaces-channel-setup.png)
+![A channel's place on its app: the callback URL to paste into the platform, next to the settings it needs](/screenshots/interfaces-channel-setup.png)
 
 ## Supported channels
 
@@ -54,13 +54,13 @@ Twilio signs the exact URL it called, so `webhook_url` has to match what is conf
 | **IRC** | IRC-to-HTTP bridge webhook | Bridge send | Bridge webhook URL |
 | **Email** | Inbound MIME parsing | Resend API | Resend API key |
 | **Webhook** | Any HTTP POST, optional HMAC verification | POST to your callback URL | Callback URL, optional shared secret |
-| **Chat Widget** | Widget POST | SSE / polling delivery | Nothing, just embed the snippet |
+| **Chat Widget** | Widget POST | SSE / polling delivery | Nothing, add the **On your website** place and paste its line |
 
 Every inbound request is authenticated against the platform's mechanism before it reaches an agent: Slack and Webhook use HMAC signatures, WhatsApp validates the Twilio signature, Teams verifies the Bot Framework JWT, Google Chat checks its verification token. Requests that fail verification are rejected, never queued.
 
 ## Per-platform quick guides
 
-The setup panel in the app shows the same checklist for the channel you deployed; this section is the reference copy.
+Each place's page on the app shows what that platform needs and where to paste almyty's URL; this section is the reference copy.
 
 ### Slack
 
@@ -132,13 +132,13 @@ The setup panel in the app shows the same checklist for the channel you deployed
 
 ### Chat Widget
 
-Copy the embed snippet from the setup panel into your site's HTML, just before the closing `body` tag:
+The widget is the **On your website** place on an app. Publish it, then copy the line its page shows into your site's HTML, just before the closing `body` tag:
 
 ```html
 <script src="https://<api-host>/gateways/<gateway-id>/widget.js" async></script>
 ```
 
-No webhook needed. The widget talks to almyty directly.
+No webhook needed. The widget talks to almyty directly, from the sites you list under **Allowed sites** on the same page.
 
 ## Beyond a widget
 
@@ -146,9 +146,9 @@ The chat widget puts an agent in the corner of a page you already have. If you w
 
 ## Customizing the chat widget
 
-Chat-widget gateways get a **widget builder** on their gateway page: title, color, position, launcher icon, theme, and greeting, with a live preview that runs the exact `widget.js` the gateway serves, and the one-line embed snippet.
+The widget's look is the app's: its colour, name, greeting, theme and AI disclosure come from the app's settings, so it matches the web app. On the widget's page you choose where it sits and its launcher icon, with a live preview that runs the exact `widget.js` your site loads.
 
-![The widget builder: customize and preview the embeddable widget, then copy the snippet](/screenshots/widget-builder.png)
+![The widget's page on its app: the embed line, placement with a live preview, and allowed sites](/screenshots/widget-builder.png)
 
 ## AI disclosure (EU AI Act Art. 50)
 

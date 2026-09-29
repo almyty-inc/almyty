@@ -183,8 +183,8 @@ export function AppDetailPage() {
               title="Not in front of anyone yet"
               description={
                 needsAgent
-                  ? 'Add the agent people will talk to first. Then put it on the web, in Slack or another chat app, or ship it as a terminal or desktop app.'
-                  : 'Put it on the web, in Slack or another chat app, or ship it as a terminal or desktop app.'
+                  ? 'Add the agent people will talk to first. Then put it on the web or your own website, in Slack or another chat app, in front of other agents, or ship it as a terminal or desktop app.'
+                  : 'Put it on the web or your own website, in Slack or another chat app, in front of other agents, or ship it as a terminal or desktop app.'
               }
               action={
                 needsAgent ? (

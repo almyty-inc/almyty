@@ -13,7 +13,7 @@ export function ReadinessBanner({ result, pending, failed, onRetry, onConfigure 
       <p className="font-medium">{failed ? 'Could not check model setup' : 'Not ready to activate'}</p>
       <p className="text-sm">{failed ? 'The readiness check failed. Retry before activating this agent.' : result?.message}</p>
       <div className="flex flex-wrap items-center gap-3">
-        {!failed && <><Link className="text-sm underline" to="/models">Open Models</Link><Button size="sm" variant="outline" onClick={onConfigure}>Configure execution</Button></>}
+        {!failed && <><Link className="text-sm underline" to="/models">Open models</Link><Button size="sm" variant="outline" onClick={onConfigure}>Configure execution</Button></>}
         <Button size="sm" variant="outline" onClick={onRetry}>Recheck setup</Button>
       </div>
     </div>

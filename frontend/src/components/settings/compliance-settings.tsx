@@ -63,6 +63,7 @@ import {
 } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
+import { formatDate } from '@/lib/utils'
 
 /** PII categories the built-in pii-filter can mask (from the OSS plugin). */
 const PII_CATEGORIES: Array<{ value: string; label: string }> = [
@@ -465,8 +466,8 @@ function ComplianceReportCard() {
 
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                Window: {new Date(data.window.from).toLocaleDateString()} –{' '}
-                {new Date(data.window.to).toLocaleDateString()}
+                Window: {formatDate(data.window.from)} –{' '}
+                {formatDate(data.window.to)}
               </p>
               <div className="flex items-center gap-2">
                 <Button variant="ghost" onClick={() => refetch()} disabled={isFetching}>

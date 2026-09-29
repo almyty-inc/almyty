@@ -17,6 +17,7 @@ import { buildClientSchema, parse as parseGraphQL, printSchema, Kind } from 'gra
 import * as protobuf from 'protobufjs';
 
 import { ApiType } from '../../entities/api.entity';
+import { stripTags } from '../../common/security/strip-tags';
 
 export type DetectedFormat = 'openapi3' | 'swagger2' | 'graphql-sdl' | 'graphql-introspection' | 'wsdl' | 'proto';
 
@@ -99,7 +100,10 @@ export function detectApiSchema(raw: string, opts: DetectOptions = {}): Detected
   const json = tryJson(trimmed);
   if (json !== undefined) return detectJson(json, text, opts);
 
-  if (/^\s*(openapi|swagger)\s*:/m.test(text)) {
+  // Horizontal whitespace only. `^\s*` with /m matches across newlines, so
+  // every line start rescanned every blank line after it: a pasted run of
+  // 80 KB of newlines took six seconds, a 10 MB upload hours.
+  if (/^[ \t]*(openapi|swagger)[ \t]*:/m.test(text)) {
     const doc = tryYaml(text);
     if (doc && typeof doc === 'object') return detectJson(doc, text, opts);
   }
@@ -372,18 +376,22 @@ function detectXml(text: string, opts: DetectOptions): DetectedApi {
   const head = text.slice(0, 64 * 1024);
   const isWsdl = /<(?:[\w-]+:)?(definitions|description)\b/.test(head) && WSDL_NAMESPACES.some((ns) => head.includes(ns));
   if (!isWsdl) throw new SchemaNotRecognizedError();
-  const defName = /<(?:[\w-]+:)?definitions\b[^>]*\bname\s*=\s*"([^"]+)"/.exec(head)?.[1];
-  const serviceName = /<(?:[\w-]+:)?service\b[^>]*\bname\s*=\s*"([^"]+)"/.exec(text)?.[1];
-  const doc = /<(?:[\w-]+:)?documentation\b[^>]*>([\s\S]*?)<\/(?:[\w-]+:)?documentation>/.exec(head)?.[1];
+  // `[^<>]*` rather than `[^>]*`: a tag's attributes end at the next tag.
+  // With `[^>]*`, every `<address ` in a run with no `>` scanned to the end
+  // of the document before failing, so 144 KB of them took 1.5 seconds and
+  // the 10 MB an upload may carry, hours, all on the event loop.
+  const defName = /<(?:[\w-]+:)?definitions\b[^<>]*\bname\s*=\s*"([^"]+)"/.exec(head)?.[1];
+  const serviceName = /<(?:[\w-]+:)?service\b[^<>]*\bname\s*=\s*"([^"]+)"/.exec(text)?.[1];
+  const doc = /<(?:[\w-]+:)?documentation\b[^<>]*>([\s\S]*?)<\/(?:[\w-]+:)?documentation>/.exec(head)?.[1];
   // SOAP 1.1 or 1.2 address, in the service's port.
-  const address = /<(?:[\w-]+:)?address\b[^>]*\blocation\s*=\s*"([^"]+)"/.exec(text)?.[1];
+  const address = /<(?:[\w-]+:)?address\b[^<>]*\blocation\s*=\s*"([^"]+)"/.exec(text)?.[1];
   return {
     type: ApiType.SOAP,
     format: 'wsdl',
     content: text,
     name: str(defName) ?? str(serviceName) ?? fallbackName(opts),
     version: null,
-    description: doc ? str(doc.replace(/<[^>]*>/g, '')) : null,
+    description: doc ? str(stripTags(doc)) : null,
     baseUrl: address ? absolute(address, opts.sourceUrl) : null,
     auth: { type: 'none' },
   };
@@ -394,7 +402,9 @@ function detectXml(text: string, opts: DetectOptions): DetectedApi {
 // ---------------------------------------------------------------------------
 
 function looksLikeProto(text: string): boolean {
-  return /^\s*syntax\s*=\s*["']proto[23]["']/m.test(text) || (/^\s*service\s+\w+\s*\{/m.test(text) && /\brpc\s+\w+\s*\(/.test(text)) || (/^\s*message\s+\w+\s*\{/m.test(text) && /=\s*\d+\s*;/.test(text));
+  // Line-anchored patterns take horizontal whitespace only; see the openapi
+  // sniff in detectApiSchema for what `^\s*` under /m costs.
+  return /^[ \t]*syntax\s*=\s*["']proto[23]["']/m.test(text) || (/^[ \t]*service\s+\w+\s*\{/m.test(text) && /\brpc\s+\w+\s*\(/.test(text)) || (/^[ \t]*message\s+\w+\s*\{/m.test(text) && /=\s*\d+\s*;/.test(text));
 }
 
 function tryProto(text: string, opts: DetectOptions): DetectedApi | null {
@@ -414,7 +424,7 @@ function tryProto(text: string, opts: DetectOptions): DetectedApi | null {
   walk(parsed.root);
   const pkg = parsed.package ?? null;
   const version = pkg ? /(?:^|\.)(v\d+(?:(?:alpha|beta)\d*)?)$/.exec(pkg)?.[1] ?? null : null;
-  const leading = /^\s*\/\/\s*(.+)$/m.exec(text.split(/^\s*syntax\b/m)[0] ?? '');
+  const leading = /^[ \t]*\/\/[ \t]*(.+)$/m.exec(text.split(/^[ \t]*syntax\b/m)[0] ?? '');
   return {
     type: ApiType.GRPC,
     format: 'proto',

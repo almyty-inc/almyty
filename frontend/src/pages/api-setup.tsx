@@ -15,6 +15,7 @@ import { apiKeyQueryKey } from '@/components/apis/detail/key-card'
 import { apisApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import type { Api } from '@/types'
+import { pluralized } from '@/lib/utils'
 
 type ImportState = { status: 'running' } | { status: 'done'; operations: number; tools: number } | { status: 'failed'; error: string }
 
@@ -134,8 +135,8 @@ export function ApiSetupPage() {
             {importState.status === 'done' && job && (
               <p className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-400">
                 <CheckCircle2 className="h-4 w-4" aria-hidden />
-                Found {importState.operations} operation{importState.operations === 1 ? '' : 's'}
-                {importState.tools > 0 ? ` and made ${importState.tools} tool${importState.tools === 1 ? '' : 's'}.` : '.'}
+                Found {pluralized(importState.operations, 'operation')}
+                {importState.tools > 0 ? ` and made ${pluralized(importState.tools, 'tool')}.` : '.'}
               </p>
             )}
             {importState.status === 'failed' && (

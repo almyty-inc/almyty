@@ -20,7 +20,7 @@ import { StatusLabel } from '@/components/connect/status-label'
 import { WhoCanUse } from '@/components/connect/who-can-use'
 import { useOrganizationRole } from '@/hooks/use-organization-role'
 import { connectionsApi, errorMessage } from '@/lib/connections-api'
-import { cn } from '@/lib/utils'
+import { cn, pluralized } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import type { Connection, Connector } from '@/types/connections'
 import { ConnectServiceForm, connectorIcon, useConnectors } from './connect-flow'
@@ -187,7 +187,7 @@ export function ConnectionDetail({ connection, connector, onDisconnected }: Conn
               title: `Disconnect ${connection.name}?`,
               description:
                 usedBy.length > 0
-                  ? `${usedBy.length} thing${usedBy.length === 1 ? '' : 's'} still use${usedBy.length === 1 ? 's' : ''} it and will stop working. The key is deleted.`
+                  ? `${pluralized(usedBy.length, 'thing')} still use${usedBy.length === 1 ? 's' : ''} it and will stop working. The key is deleted.`
                   : 'The key is deleted.',
               confirmLabel: 'Disconnect',
               destructive: true,

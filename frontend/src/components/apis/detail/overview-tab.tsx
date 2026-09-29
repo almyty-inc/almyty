@@ -20,6 +20,7 @@ import { apisApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { Api, ApiOperation, Tool } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { pluralized } from '@/lib/utils'
 
 /** How the API's key is sent, as the overview's Key row says it. */
 const AUTH_WORDS: Record<string, string> = {
@@ -66,7 +67,7 @@ export function OverviewTab({
               <span className="font-bold">{operations.length}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Tools Generated</span>
+              <span className="text-muted-foreground">Tools generated</span>
               <button
                 onClick={() => navigate('/tools')}
                 className="font-bold text-blue-600 hover:underline"
@@ -166,10 +167,10 @@ export function OverviewTab({
                 if (failed > 0) {
                   warning(
                     'Some tools could not be generated',
-                    `${generated} created, ${failed} failed out of ${result?.total ?? generated + failed} operations.`,
+                    `${generated} created, ${failed} failed out of ${pluralized(result?.total ?? generated + failed, 'operation')}.`,
                   )
                 } else {
-                  success('Tools generated', `${generated} tools created successfully`)
+                  success('Tools generated', `${pluralized(generated, 'tool')} created`)
                 }
               } catch (err: any) {
                 error('Failed to generate tools', getApiErrorMessage(err, 'Please try again.'))

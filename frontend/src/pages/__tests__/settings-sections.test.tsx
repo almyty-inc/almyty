@@ -38,7 +38,7 @@ vi.mock('@/components/settings/kms-settings', () => ({ KmsSettings: stub('encryp
 vi.mock('@/components/settings/referrals-tab', () => ({ ReferralsTab: stub('referrals') }))
 vi.mock('@/components/settings/notification-preferences', () => ({ NotificationPreferences: stub('notifications') }))
 vi.mock('@/components/BillingTab', () => ({ BillingTab: stub('billing') }))
-vi.mock('@/components/plan-indicator', () => ({ PlanBadge: () => null }))
+vi.mock('@/components/plan-indicator', () => ({ PlanBadge: () => null, PlanLine: () => null }))
 vi.mock('@/lib/api', () => ({
   authApi: { getProfile: vi.fn().mockResolvedValue({}) },
   organizationsApi: { getById: vi.fn().mockResolvedValue({}) },
@@ -112,5 +112,13 @@ describe('settings sections', () => {
     for (const file of ['sso-settings.tsx', 'rbac-settings.tsx', 'approval-policies-settings.tsx', 'compliance-settings.tsx', 'audit-streams-settings.tsx', 'kms-settings.tsx']) {
       expect(readFileSync(join(dir, file), 'utf8'), file).toMatch(/<EntitlementGate\b/)
     }
+  })
+
+  it('leave the plan to the sidebar, so it shows once, not twice', () => {
+    const shell = readFileSync(join(__dirname, '..', 'settings.tsx'), 'utf8')
+    expect(shell).not.toMatch(/<Plan(Badge|Line)\b/)
+    const sidebar = readFileSync(join(__dirname, '..', '..', 'components', 'layout', 'dashboard-layout.tsx'), 'utf8')
+    expect(sidebar.match(/<PlanLine\b/g) ?? []).toHaveLength(1)
+    expect(sidebar).not.toMatch(/>Plan</)
   })
 })

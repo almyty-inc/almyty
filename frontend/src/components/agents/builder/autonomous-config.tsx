@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { VerifierPanelList } from '@/components/agents/verifier-panel'
 import { RunLimitsSection, type RunLimitsConfig } from '@/components/agents/builder/run-limits-section'
 import { ModelsSection } from '@/components/agents/builder/models-section'
+import { RunnerLabelsField } from '@/components/agents/builder/runner-labels-field'
 import { StrategyChoice } from '@/components/agents/builder/strategy-choice'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -24,6 +25,7 @@ import { Textarea } from '@/components/ui/textarea'
 import type { AgentModels } from '@/types/agent-models'
 import type { Agent } from '@/types'
 import { useOrganizationStore } from '@/store/organization'
+import { pluralized } from '@/lib/utils'
 
 export interface AutonomousConfigProps {
   agentId?: string
@@ -41,6 +43,8 @@ export interface AutonomousConfigProps {
   agentConfig: {
     canCallAgents?: boolean
     canCreateAgents?: boolean
+    /** Machine label requirements: typed as `gpu=yes, os=mac`, stored by the server as an object. */
+    runnerLabels?: Record<string, string> | string
     runLimits?: RunLimitsConfig
     /** Shown read-only here and saved back as it is; edited on the overview. */
     verify?: NonNullable<Agent['agentConfig']>['verify']
@@ -127,7 +131,7 @@ export function AutonomousConfig({
           <p className="text-xs text-muted-foreground mb-3">Select which tools this agent can use during execution.</p>
           {toolIds.length > 0 && (
             <div className="mb-3">
-              <p className="text-xs font-medium text-muted-foreground mb-1.5">{toolIds.length} tool{toolIds.length !== 1 ? 's' : ''} selected</p>
+              <p className="text-xs font-medium text-muted-foreground mb-1.5">{pluralized(toolIds.length, 'tool')} selected</p>
               <div className="flex flex-wrap gap-1.5">
                 {toolIds.map((tid) => {
                   const tool = tools.find((t: any) => t.id === tid)
@@ -184,6 +188,13 @@ export function AutonomousConfig({
               onChange={(e) => onAgentConfigChange({ ...agentConfig, canCreateAgents: e.target.checked })} className="rounded" />
             <div><p className="text-sm font-medium">Can create agents</p><p className="text-xs text-muted-foreground">Spawn temporary specialist agents during runs</p></div>
           </label>
+          {/* Where its runner tools run: an online machine with these labels. */}
+          <RunnerLabelsField
+            id="agent-runner-labels"
+            value={agentConfig.runnerLabels}
+            onChange={(runnerLabels) => onAgentConfigChange({ ...agentConfig, runnerLabels })}
+            hint="Tools that run on your machines go to an online runner with all of these labels. Leave empty to use each tool's own machine."
+          />
         </CardContent>
       </Card>
 
@@ -286,7 +297,7 @@ function ToolGroupList({ tools, toolSearch, selectedIds, onSelectedIdsChange, ex
             >
               {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
               <span className="text-sm font-medium flex-1">{groupName}</span>
-              <span className="text-xs text-muted-foreground">{groupTools.length} tool{groupTools.length !== 1 ? 's' : ''}{selectedInGroup > 0 ? `, ${selectedInGroup} selected` : ''}</span>
+              <span className="text-xs text-muted-foreground">{pluralized(groupTools.length, 'tool')}{selectedInGroup > 0 ? `, ${selectedInGroup} selected` : ''}</span>
               <Button type="button" variant="ghost" size="sm" className="h-6 text-xs px-2"
                 onClick={(e) => { e.stopPropagation(); allSelectedInGroup ? deselectAll() : selectAll() }}>
                 {allSelectedInGroup ? 'Deselect all' : 'Select all'}

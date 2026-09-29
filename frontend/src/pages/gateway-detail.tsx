@@ -30,7 +30,6 @@ import {
   ChannelConfigForm,
   isChannelType,
 } from '@/components/gateways/detail/channel-config-form'
-import { WidgetBuilder } from '@/components/gateways/widget-builder'
 import { ManagedByAppBanner, useManagedByApp } from '@/components/gateways/managed-by-app-banner'
 import { CustomDomainCard } from '@/components/gateways/custom-domain-card'
 import { VisitorOAuthCard } from '@/components/gateways/visitor-oauth-card'
@@ -40,6 +39,7 @@ import { orgSlugOf } from '@/lib/gateway-connect'
 import { ConnectSnippets } from '@/components/gateways/connect-snippets'
 import { GatewayStatusSwitch } from '@/components/gateways/detail/gateway-status-switch'
 import { Disclosure } from '@/components/ui/disclosure'
+import { pluralized } from '@/lib/utils'
 
 /** The tabs `?tab=` may open. */
 export const GATEWAY_TABS = ['tools', 'metrics', 'integrations', 'events'] as const
@@ -152,7 +152,7 @@ export function GatewayDetailPage() {
       if (skipped.length === 0) {
         success(
           'Tools assigned',
-          `${assigned.length} tool${assigned.length === 1 ? '' : 's'} assigned to the gateway.`,
+          `${pluralized(assigned.length, 'tool')} assigned to the gateway.`,
         )
         return
       }
@@ -168,7 +168,7 @@ export function GatewayDetailPage() {
       if (assigned.length === 0) {
         errorNotif('No tools were assigned', detail)
       } else {
-        warning(`${assigned.length} of ${assigned.length + skipped.length} tools assigned`, detail)
+        warning(`${assigned.length} of ${pluralized(assigned.length + skipped.length, 'tool')} assigned`, detail)
       }
     },
     onError: (err: any) => {
@@ -345,7 +345,7 @@ export function GatewayDetailPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="text-2xl font-bold">{gateway.totalRequests || 0}</div>
-              <div className="text-sm text-muted-foreground">Total Requests</div>
+              <div className="text-sm text-muted-foreground">Total requests</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-green-600">
@@ -361,7 +361,7 @@ export function GatewayDetailPage() {
             </div>
             <div>
               <div className="text-2xl font-bold">{gatewayTools.length}</div>
-              <div className="text-sm text-muted-foreground">Assigned Tools</div>
+              <div className="text-sm text-muted-foreground">Assigned tools</div>
             </div>
           </div>
         </div>
@@ -509,12 +509,10 @@ export function GatewayDetailPage() {
         />
       )}
 
-      {/* Chat widget builder — customize + live-preview the embeddable widget */}
-      {gateway.type === 'chat_widget' && <WidgetBuilder gateway={gateway} />}
-
-      {/* A hosted chat is an app's web app: its look, who can use it, its
-          domain, sign-in and allowed sites are all on the app's web page.
-          Only a surface no app owns keeps these cards here. */}
+      {/* A hosted chat or a website widget is an app's place: its look, who
+          can use it, its domain, sign-in, embed snippet and allowed sites
+          are all on the app's page for that place. Only a surface no app
+          owns keeps these cards here. */}
       {gateway.type === 'hosted_chat' && !managedBy && <CustomDomainCard gatewayId={gateway.id} />}
       {gateway.type === 'hosted_chat' && !managedBy && (
         <VisitorOAuthCard gatewayId={gateway.id} authMode={gateway.configuration?.hostedChat?.authMode} />
@@ -522,7 +520,7 @@ export function GatewayDetailPage() {
       {/* Which third-party sites may call this public surface from the
           browser. Keyed on the gateway so the card resets when the saved
           list changes underneath it. */}
-      {(gateway.type === 'chat_widget' || (gateway.type === 'hosted_chat' && !managedBy)) && (
+      {(gateway.type === 'chat_widget' || gateway.type === 'hosted_chat') && !managedBy && (
         <AllowedOriginsCard
           key={`${gateway.id}:${JSON.stringify(gateway.configuration?.allowedOrigins ?? [])}`}
           gateway={{ id: gateway.id, type: gateway.type, configuration: gateway.configuration }}

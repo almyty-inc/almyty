@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { mkdtempSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -8,6 +8,7 @@ import { InvalidManifestError, manifestSha, validateManifest } from '../manifest
 import { MANIFEST_FILE, ModelRegistryService, RegistryObjectStore, RegistryPinMismatchError } from '../model-registry.service';
 import { Credential } from '../../../entities/credential.entity';
 import { snapshotEnv } from '../../../test/env';
+import { MAX_REGISTRY_FILE_BYTES, REGISTRY_FILE_ROOT_ENV } from '../registry-file';
 
 const manifest = () => ({
   schemaVersion: 1 as const,
@@ -127,12 +128,81 @@ describe('ModelRegistryService', () => {
     expect(described.parsed.scheme).toBe('s3');
   });
 
-  it('reads a runner-local manifest through file://', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'almyty-registry-'));
-    writeFileSync(join(dir, MANIFEST_FILE), JSON.stringify(manifest()));
-    const service = new ModelRegistryService(undefined, store);
-    const m = await service.readManifest(`file://${dir}@local`, 'org-1');
-    expect(m.license).toBe('Apache-2.0');
+  describe('file://', () => {
+    let restore: () => void;
+    let root: string;
+    let outside: string;
+    beforeEach(() => {
+      restore = snapshotEnv(REGISTRY_FILE_ROOT_ENV);
+      root = mkdtempSync(join(tmpdir(), 'almyty-registry-root-'));
+      outside = mkdtempSync(join(tmpdir(), 'almyty-registry-outside-'));
+      writeFileSync(join(outside, MANIFEST_FILE), JSON.stringify(manifest()));
+    });
+    afterEach(() => {
+      restore();
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    });
+
+    it('reads a manifest under the operator-configured root', async () => {
+      mkdirSync(join(root, 'qwen3'));
+      writeFileSync(join(root, 'qwen3', MANIFEST_FILE), JSON.stringify(manifest()));
+      process.env[REGISTRY_FILE_ROOT_ENV] = root;
+      const service = new ModelRegistryService(undefined, store);
+      const m = await service.readManifest(`file://${join(root, 'qwen3')}@local`, 'org-1');
+      expect(m.license).toBe('Apache-2.0');
+    });
+
+    // An org admin types the path. Without a root the API process used to
+    // open whatever they named, on its own filesystem.
+    it('opens nothing on this server when no root is configured', async () => {
+      delete process.env[REGISTRY_FILE_ROOT_ENV];
+      const service = new ModelRegistryService(undefined, store);
+      await expect(service.readManifest(`file://${outside}@local`, 'org-1')).rejects.toMatchObject({
+        code: 'REGISTRY_FILE_REFUSED',
+      });
+    });
+
+    it('refuses a path outside the root', async () => {
+      process.env[REGISTRY_FILE_ROOT_ENV] = root;
+      const service = new ModelRegistryService(undefined, store);
+      await expect(service.readManifest(`file://${outside}@local`, 'org-1')).rejects.toMatchObject({
+        code: 'REGISTRY_FILE_REFUSED',
+      });
+    });
+
+    it('refuses a symlink under the root that points out of it', async () => {
+      symlinkSync(outside, join(root, 'escape'));
+      process.env[REGISTRY_FILE_ROOT_ENV] = root;
+      const service = new ModelRegistryService(undefined, store);
+      await expect(service.readManifest(`file://${join(root, 'escape')}@local`, 'org-1')).rejects.toMatchObject({
+        code: 'REGISTRY_FILE_REFUSED',
+      });
+    });
+
+    it('refuses a sibling directory that only shares the root as a prefix', async () => {
+      const sibling = `${root}-sibling`;
+      mkdirSync(sibling);
+      writeFileSync(join(sibling, MANIFEST_FILE), JSON.stringify(manifest()));
+      process.env[REGISTRY_FILE_ROOT_ENV] = root;
+      const service = new ModelRegistryService(undefined, store);
+      try {
+        await expect(service.readManifest(`file://${sibling}@local`, 'org-1')).rejects.toMatchObject({
+          code: 'REGISTRY_FILE_REFUSED',
+        });
+      } finally {
+        rmSync(sibling, { recursive: true, force: true });
+      }
+    });
+
+    it('refuses something too large to be a manifest', async () => {
+      writeFileSync(join(root, MANIFEST_FILE), Buffer.alloc(MAX_REGISTRY_FILE_BYTES + 1, 0x20));
+      process.env[REGISTRY_FILE_ROOT_ENV] = root;
+      const service = new ModelRegistryService(undefined, store);
+      await expect(service.readManifest(`file://${root}@local`, 'org-1')).rejects.toMatchObject({
+        code: 'REGISTRY_FILE_REFUSED',
+      });
+    });
   });
 
   it('refuses a manifest that is not valid JSON or not a manifest', async () => {
@@ -252,5 +322,18 @@ describe('ModelRegistryService connections', () => {
       expect(await service.seedSingleTenantFromEnv()).toBeNull();
       expect(credentials.save).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('model registry filesystem access', () => {
+  // A registry URI is typed by an organization admin. The one place that
+  // may turn it into a filesystem read is registry-file.ts, which confines
+  // it to the operator's root.
+  it('reads the filesystem only through registry-file.ts', () => {
+    const dir = join(__dirname, '..');
+    const offenders = readdirSync(dir)
+      .filter((name) => name.endsWith('.ts') && !name.endsWith('.spec.ts') && name !== 'registry-file.ts')
+      .filter((name) => /from ['"](?:node:)?fs(?:\/promises)?['"]|require\(['"](?:node:)?fs/.test(readFileSync(join(dir, name), 'utf8')));
+    expect(offenders).toEqual([]);
   });
 });

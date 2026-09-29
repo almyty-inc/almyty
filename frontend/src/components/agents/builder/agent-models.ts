@@ -14,6 +14,7 @@ import type {
   AutonomousStrategyKey,
   RolePurpose,
 } from '@/types/agent-models'
+import { pluralize, pluralized } from '@/lib/utils'
 
 export const AUTONOMOUS_STRATEGY_KEYS: readonly AutonomousStrategyKey[] = [
   'single',
@@ -129,7 +130,7 @@ function missingSlotsWords(models: Pick<AgentModels, 'strategy' | 'roles'>): str
     const min = STRATEGY_SLOTS[models.strategy][purpose] ?? 1
     if (min === 1) return withArticle(purpose)
     const have = min - n
-    return have === 0 ? `${min} ${purpose}s` : `${n} more ${purpose}${n === 1 ? '' : 's'}`
+    return have === 0 ? pluralized(min, purpose) : `${n} more ${pluralize(n, purpose)}`
   })
   return joinAnd(parts)
 }
@@ -346,7 +347,7 @@ export function modelsProblems(models: AgentModels): string[] {
   for (const purpose of ROLE_PURPOSES) {
     if (MULTIPLE.has(purpose)) continue
     const n = models.roles.filter((r) => r.purpose === purpose).length
-    if (n > 1) problems.push(`There are ${n} ${purpose} roles; there can be one`)
+    if (n > 1) problems.push(`There are ${pluralized(n, `${purpose} role`)}; there can be one`)
   }
 
   const keys = new Set<string>()
@@ -358,7 +359,7 @@ export function modelsProblems(models: AgentModels): string[] {
   if (models.strategy === 'best_of_n' && models.candidates !== undefined) {
     const n = models.candidates
     if (!Number.isInteger(n) || n < BEST_OF_N_MIN || n > BEST_OF_N_MAX) {
-      problems.push(`Best of N takes ${BEST_OF_N_MIN} to ${BEST_OF_N_MAX} candidates`)
+      problems.push(`Best of N takes ${BEST_OF_N_MIN} to ${pluralized(BEST_OF_N_MAX, 'candidate')}`)
     }
   }
 

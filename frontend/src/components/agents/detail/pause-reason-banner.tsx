@@ -5,6 +5,7 @@ import { agentsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import type { Agent, AgentPauseReason } from '@/types'
+import { formatDateTime } from '@/lib/utils'
 
 type Kind = 'schedule' | 'heartbeat'
 
@@ -71,7 +72,7 @@ function PausedNotice({ agent, kind, reason }: { agent: Agent; kind: Kind; reaso
   const { success, error: errorNotif } = useNotifications()
   const copy = COPY[reason.code]
   const when = new Date(reason.detectedAt)
-  const whenLabel = Number.isNaN(when.getTime()) ? '' : when.toLocaleString()
+  const whenLabel = Number.isNaN(when.getTime()) ? '' : formatDateTime(when)
 
   const resume = useMutation({
     mutationFn: () => {

@@ -8,7 +8,7 @@
       "path": "screenshots/agent-builder-autonomous.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Legacy image predates the UI refresh, and Agent capabilities now has a Machine labels field (label routing). Recapture on staging.",
       "sha256": "c94b58f0f0c815fbb223492905bb6a79c98972f42157f255c2a44cf5cd844466"
     },
     {
@@ -498,7 +498,8 @@
       "title": "MCP server CLI 1.5.0 help",
       "path": "screenshots/cli/mcp-server-help.png",
       "capturedAt": "2026-09-22T13:42:14.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "Captured from published 1.5.0. The source has since changed: almyty_create_gateway shares tools only (A2A is now a place on an app), though the help text itself is the same. Recapture after the next publish of @almyty/mcp-server.",
       "sha256": "ca20cb3aa051362aa5c2bdfc09da337171142ca458566e69d736430b6db59b3f",
       "source": {
         "kind": "published-cli",
@@ -625,11 +626,11 @@
     },
     {
       "id": "interfaces-channel-setup",
-      "title": "interfaces channel setup",
+      "title": "A channel's place on its app, with the callback URL next to the settings it needs",
       "path": "screenshots/interfaces-channel-setup.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Shows the Channel Setup panel, which is gone: a channel is now set up as a place on an app (Apps > Where people use it). Recapture from an app's channel place.",
+      "reason": "Shows the Channel Setup panel, which is gone: a channel is now set up as a place on an app (Apps > Where people use it > Add a place). Recapture from an app's channel place, e.g. /apps/<app>/distributions/whatsapp_cloud, showing its settings and callback URL.",
       "sha256": "981ad7f99f7e76e0d34d788f046417d0caba96e2fc133b53c60b40a11ee657ab"
     },
     {
@@ -766,7 +767,7 @@
       "path": "screenshots/runner-detail.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Legacy image predates the UI refresh, and the Labels card now says labels send work to a matching machine (label routing). Recapture on staging.",
       "sha256": "1b1cd0d9afbed153cd9e0a2018e6b8cdb044b93920be5080745dc94b411db426"
     },
     {
@@ -1049,7 +1050,7 @@
       "path": "screenshots/settings-teams.png",
       "capturedAt": "2026-09-23T06:10:33.702Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "Members and teams are one page now (members first, teams below, no inner tabs), and the Settings header no longer shows the plan. Recapture on staging.",
       "sha256": "bbdd844b8f42e116b403a9b0b4d2ef147ec950dd89b320de263823fa9958cb1a",
       "source": {
         "kind": "browser",
@@ -1214,11 +1215,11 @@
     },
     {
       "id": "widget-builder",
-      "title": "widget builder",
+      "title": "The website widget's place on its app: embed line, placement with live preview, allowed sites",
       "path": "screenshots/widget-builder.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Shows the old widget builder on the gateway page. The widget is now the On your website place on an app: the embed line, position and launcher icon with a live preview (its look comes from the app), and allowed sites. Recapture from /apps/<app>/distributions/widget once published.",
       "sha256": "3e007ef828b2789531a98aa22d9ba9f573f0fbc419ec4fea57d99accf938a991"
     }
   ]

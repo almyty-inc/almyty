@@ -282,8 +282,8 @@ export function RunnerDetailPage() {
               <p className="text-sm text-muted-foreground">
                 No labels. Labels are short tags that say what this machine has, such as{' '}
                 <code>os=mac</code> or <code>gpu=yes</code>, set when the runner starts with{' '}
-                <code>--label os=mac</code>. They are meant for sending work to a matching machine;
-                for now they only help you tell runners apart.
+                <code>--label os=mac</code>. An agent or workspace that asks for <code>gpu=yes</code> runs
+                only on an online machine with that label.
               </p>
             ) : (
               <div className="flex flex-wrap gap-1">

@@ -85,7 +85,7 @@ export function AcceptInvitePage() {
         {details && details.isExpired && (
           <div className="text-center space-y-4">
             <XCircle className="h-12 w-12 text-destructive mx-auto" />
-            <p className="text-lg font-medium">Invitation Expired</p>
+            <p className="text-lg font-medium">Invitation expired</p>
             <p className="text-sm text-muted-foreground">
               This invitation to {details.organizationName} has expired. Ask the admin to send a new one.
             </p>

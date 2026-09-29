@@ -1,6 +1,6 @@
 import { AgentApp, AppAuthMode } from '../../entities/agent-app.entity';
 import { DistributionTarget } from '../../entities/agent-app-distribution.entity';
-import { missingCredentials, servesOverGateway } from './distribution-publish';
+import { PUBLISH_REFUSALS, missingCredentials, servesOverGateway } from './distribution-publish';
 
 /**
  * The rules that decide whether a app may ship.
@@ -53,6 +53,7 @@ export const APP_REFUSALS = Object.freeze({
   LOCAL_ACCESS_ON_PUBLIC:
     'An app anyone can download must not have local filesystem or shell access. Restrict who can use it, or remove the access.',
   MISSING_CREDENTIALS: 'This platform still needs its credentials before it can go live: ',
+  WIDGET_HAS_NO_SIGN_IN: PUBLISH_REFUSALS.WIDGET_HAS_NO_SIGN_IN,
   BUNDLE_ID_INVALID:
     'Desktop and binary builds need a reverse-domain identifier such as com.acme.assistant.',
 });
@@ -266,6 +267,11 @@ export function checkDistribution(
         message: `${APP_REFUSALS.MISSING_CREDENTIALS}${missing.join(', ')}`,
       });
     }
+  }
+
+  // Said here too, so the widget's page shows it before anyone presses Publish.
+  if (target === DistributionTarget.WIDGET && (app.authMode ?? AppAuthMode.PUBLIC_LINK) !== AppAuthMode.PUBLIC_LINK) {
+    refusals.push({ code: 'WIDGET_HAS_NO_SIGN_IN', message: APP_REFUSALS.WIDGET_HAS_NO_SIGN_IN });
   }
 
   return { ok: refusals.length === 0, refusals };

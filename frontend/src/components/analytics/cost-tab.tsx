@@ -11,6 +11,7 @@ import { useOrganizationStore } from '@/store/organization'
 import { getApiErrorMessage } from '@/lib/api-error'
 
 import { TABLE_HEAD_CLASS as TH } from './constants'
+import { formatDate } from '@/lib/utils'
 
 interface SpendBucket {
   periodStart: string
@@ -139,7 +140,7 @@ export function CostTab() {
                 {summary!.timeseries.map((b) => (
                   <div key={b.periodStart} className="flex items-center gap-3 text-xs">
                     <span className="w-24 shrink-0 text-muted-foreground">
-                      {new Date(b.periodStart).toLocaleDateString()}
+                      {formatDate(b.periodStart)}
                     </span>
                     <div className="flex-1 h-4 rounded bg-muted overflow-hidden">
                       <div

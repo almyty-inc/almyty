@@ -36,7 +36,7 @@ describe('ConnectProviderPage', () => {
     await screen.findByTestId('provider-tile-openai')
     const missing = Object.values(LlmProviderType).filter((t) => !screen.queryByTestId(`provider-tile-${t}`))
     expect(missing).toEqual([])
-    expect(screen.getByTestId('provider-tile-custom')).toHaveTextContent('Your own server (OpenAI-compatible)')
+    expect(screen.getByTestId('provider-tile-custom')).toHaveTextContent(/Your own serverOpenAI-compatible$/)
   })
 
   it('searches the tiles', async () => {
@@ -152,7 +152,7 @@ describe('ConnectProviderPage', () => {
     ['aws_bedrock', ['AWS region']],
     ['azure_openai', ['Resource name', 'Model name in Azure']],
     ['azure_ai_foundry', ['Resource name', 'Model name in Azure']],
-    ['vertex_ai', ['Google Cloud project id', 'Location (optional)', 'Model']],
+    ['vertex_ai', ['Google Cloud project ID', 'Location (optional)', 'Model']],
     ['runpod', ['Endpoint']],
   ])('asks %s for exactly what it cannot work without', async (type, labels) => {
     at(`/models/connect?type=${type}`)
@@ -163,7 +163,7 @@ describe('ConnectProviderPage', () => {
   it('asks nothing extra of a provider that needs only a key', async () => {
     at('/models/connect?type=anthropic')
     const form = await screen.findByRole('form', { name: /^Connect / })
-    for (const label of ['AWS region', 'Resource name', 'Model name in Azure', 'Google Cloud project id', 'Endpoint', 'Model', 'Server URL']) {
+    for (const label of ['AWS region', 'Resource name', 'Model name in Azure', 'Google Cloud project ID', 'Endpoint', 'Model', 'Server URL']) {
       expect(within(form).queryByLabelText(label)).not.toBeInTheDocument()
     }
   })

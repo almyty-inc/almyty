@@ -161,15 +161,18 @@ async function main() {
     },
     {
       name: 'almyty_create_gateway',
-      description: 'Create a gateway that exposes tools OR an agent over a protocol (MCP, A2A, UTCP, Skills). Use kind="tool" for a tool gateway or kind="agent" for an agent gateway.',
+      description: 'Share tools at one address. Type "tools" serves MCP, UTCP and Skills together. An agent is put in front of people or other agents (web, chat apps, A2A) through an app, not here.',
       shape: {
         name: z.string().describe('Gateway name'),
-        type: z.enum(['mcp', 'a2a', 'utcp', 'skills']).describe('Protocol type'),
+        type: z.enum(['tools', 'mcp', 'utcp', 'skills']).default('tools').describe('Protocol type; "tools" serves all three'),
         endpoint: z.string().describe('URL slug for the gateway endpoint'),
-        kind: z.enum(['tool', 'agent']).default('tool').describe('What the gateway exposes: tools or a single agent'),
-        agentId: z.string().optional().describe('Agent ID (required when kind is "agent")'),
       },
-      run: (args) => proxy.createGateway({ ...args, configuration: {} }),
+      run: (args) =>
+        proxy.createGateway({
+          ...args,
+          kind: 'tool',
+          configuration: args.type === 'mcp' ? { transport: 'http' } : args.type === 'utcp' ? { protocol: 'http' } : {},
+        }),
     },
     {
       name: 'almyty_assign_tool',

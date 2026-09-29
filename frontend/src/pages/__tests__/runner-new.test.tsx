@@ -95,7 +95,9 @@ describe('RunnerNewPage', () => {
   it('creates the runner record with name, labels and visibility, and shows one install path', async () => {
     const user = userEvent.setup()
     render(<RunnerNewPage />)
-    expect(screen.getByTestId('runner-labels-hint')).toHaveTextContent(/sending work to a machine that matches/)
+    // Labels route work now; the hint says what they do, not what they will do.
+    expect(screen.getByTestId('runner-labels-hint')).toHaveTextContent(/asks for gpu=yes runs only on an online machine with that label/)
+    expect(screen.getByTestId('runner-labels-hint')).not.toHaveTextContent(/not routed|for now/)
     expect(screen.getByTestId('runner-labels-hint')).toHaveTextContent(/os=mac/)
     await typeName(user, 'my-laptop')
     await user.click(screen.getByRole('button', { name: /add label/i }))

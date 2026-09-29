@@ -88,7 +88,6 @@ describe('team mutations reach every team consumer', () => {
     // All three consumers share one fetch because they share one key.
     expect(organizationsApi.getTeams).toHaveBeenCalledTimes(1)
 
-    await user.click(screen.getByRole('tab', { name: 'Teams' }))
     await user.click(screen.getByRole('button', { name: /Create team/i }))
     // Inline in the Teams card now, not a dialog.
     const form = within(await screen.findByRole('form', { name: 'Create team' }))
@@ -120,7 +119,6 @@ describe('team mutations reach every team consumer', () => {
       expect(screen.getByTestId('lookup')).toHaveTextContent('Existing,Doomed'),
     )
 
-    await user.click(screen.getByRole('tab', { name: 'Teams' }))
     await user.click(screen.getByRole('button', { name: 'Delete team Doomed' }))
     await user.click(
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete team' }),

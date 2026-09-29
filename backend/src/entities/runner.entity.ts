@@ -170,13 +170,11 @@ export class Runner {
    * so a user can set `env: production` without colliding with anything
    * the runner detects automatically.
    *
-   * NOT USED FOR ROUTING TODAY, though this said "labels for routing" in
-   * the present tense and the runner detail page told users the same.
-   * WorkspaceService.pickRunner takes an explicit runnerId or the
-   * account's single runner, and throws when there are several; it never
-   * reads this column. Label-based selection is the v1.x scheduler (see
-   * docs/runner.md). Until it ships these are descriptive only, so
-   * setting one changes nothing about where work lands.
+   * Used for routing: work that names label requirements (an agent's
+   * agentConfig.runnerLabels, a workspace created with `labels`) goes to
+   * an online runner whose labels include every one, among the runners
+   * its caller may use (RunnerService.resolveByLabels). Keys and values
+   * compare case-insensitively. Work that names none goes where it did.
    */
   @Column({ type: 'json', default: () => `'{}'::json` })
   labels: Record<string, string>;
