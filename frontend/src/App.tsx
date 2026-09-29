@@ -49,6 +49,7 @@ const ApiImportPage = lazy(() => import('@/pages/api-import').then(m => ({ defau
 const ApiSetupPage = lazy(() => import('@/pages/api-setup').then(m => ({ default: m.ApiSetupPage })))
 const ApiNewSdkPage = lazy(() => import('@/pages/api-new-sdk').then(m => ({ default: m.ApiNewSdkPage })))
 const ApiNewHttpPage = lazy(() => import('@/pages/api-new-http').then(m => ({ default: m.ApiNewHttpPage })))
+const ApiNewProviderPage = lazy(() => import('@/pages/api-new-provider').then(m => ({ default: m.ApiNewProviderPage })))
 const ApiNewDescriptionPage = lazy(() => import('@/pages/api-new-description').then(m => ({ default: m.ApiNewDescriptionPage })))
 const ToolsPage = lazy(() => import('@/pages/tools').then(m => ({ default: m.ToolsPage })))
 const ToolDetailPage = lazy(() => import('@/pages/tool-detail').then(m => ({ default: m.ToolDetailPage })))
@@ -178,6 +179,7 @@ export function createAppRoutes() {
           <Route path="/apis/new" element={<ApiNewPage />} />
           <Route path="/apis/new/sdk" element={<ApiNewSdkPage />} />
           <Route path="/apis/new/http" element={<ApiNewHttpPage />} />
+          <Route path="/apis/new/provider/:key" element={<ApiNewProviderPage />} />
           <Route path="/apis/new/:type" element={<ApiNewDescriptionPage />} />
           <Route path="/apis/:id" element={<ApiDetailPage />} />
           <Route path="/apis/:id/edit" element={<ApiEditPage />} />

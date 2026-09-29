@@ -7,6 +7,7 @@ import { createMemoryRouter, RouterProvider, useLocation } from 'react-router-do
 import { ApiNewPage } from '@/pages/api-new'
 import { ApiNewDescriptionPage } from '@/pages/api-new-description'
 import { ApiNewHttpPage } from '@/pages/api-new-http'
+import { ApiNewProviderPage } from '@/pages/api-new-provider'
 import { ApiNewSdkPage } from '@/pages/api-new-sdk'
 import { ApiSetupPage } from '@/pages/api-setup'
 import { ApiEditPage } from '@/pages/api-edit'
@@ -77,6 +78,7 @@ function renderAt(url: string, queryClient = new QueryClient({ defaultOptions: {
       { path: '/apis/new', element: <ApiNewPage /> },
       { path: '/apis/new/sdk', element: <ApiNewSdkPage /> },
       { path: '/apis/new/http', element: <ApiNewHttpPage /> },
+      { path: '/apis/new/provider/:key', element: <ApiNewProviderPage /> },
       { path: '/apis/new/:type', element: <ApiNewDescriptionPage /> },
       { path: '/tools/new', element: <Where /> },
       { path: '/apis/:id', element: <Where /> },
@@ -137,6 +139,51 @@ describe('/apis/new: pick the kind first', () => {
     const { router } = renderAt('/apis/new')
     fireEvent.click(await screen.findByTestId(tile))
     await waitFor(() => expect(router.state.location.pathname).toBe(path))
+  })
+})
+
+describe('/apis/new: ready-made provider APIs', () => {
+  const OPENAI_SPEC = 'https://raw.githubusercontent.com/openai/openai-openapi/a1514fbafe294e45d9200b32f1df7511f95492f7/openapi.yaml'
+  const openaiKey = { id: 'cred-openai', name: 'OpenAI', connectorKey: 'openai', connectorDisplayName: 'OpenAI', kind: 'inference', owner: 'org', health: { status: 'valid' }, createdAt: '2026-09-01T00:00:00.000Z' }
+
+  it('offers the providers that publish an API description, as their own group of tiles', async () => {
+    const { router } = renderAt('/apis/new')
+    expect(await screen.findByRole('heading', { name: 'Ready-made provider APIs' })).toBeInTheDocument()
+    const tiles = screen.getAllByTestId(/^provider-api-/).map((t) => t.getAttribute('data-testid'))
+    expect(tiles).toEqual(['provider-api-openai', 'provider-api-mistral', 'provider-api-huggingface'])
+    fireEvent.click(screen.getByTestId('provider-api-openai'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/apis/new/provider/openai'))
+  })
+
+  it('picks the provider key the organization already keeps, imports the pinned description and calls it with that key', async () => {
+    vi.mocked(connectionsApi.list).mockResolvedValue([openaiKey] as any)
+    vi.mocked(apisApi.connect).mockResolvedValue({ ...RESULT, needs: { key: true, address: false } } as any)
+    vi.mocked(apisApi.setKey).mockResolvedValue({} as any)
+    const { router } = renderAt('/apis/new/provider/openai')
+    expect(await screen.findByRole('heading', { name: 'Connect OpenAI' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('combobox', { name: /OpenAI key/ })).toHaveTextContent('OpenAI'))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect API' }))
+
+    await waitFor(() => expect(apisApi.connect).toHaveBeenCalledWith({ type: 'openapi', url: OPENAI_SPEC, name: 'OpenAI API' }))
+    await waitFor(() => expect(apisApi.setKey).toHaveBeenCalledWith('api-9', { type: 'bearer', connectionId: 'cred-openai' }))
+    // The key is in, so "Finish connecting" does not ask for it.
+    await waitFor(() => expect(router.state.location.pathname).toBe('/apis/api-9/setup'))
+    expect(router.state.location.search).not.toContain('key=1')
+  })
+
+  it('asks for a key when the organization keeps none, and imports nothing', async () => {
+    vi.mocked(connectionsApi.list).mockResolvedValue([] as any)
+    renderAt('/apis/new/provider/mistral')
+    expect(await screen.findByRole('heading', { name: 'Connect Mistral' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create one here' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect API' }))
+    expect(await screen.findByText('Pick your Mistral key, or create one here.')).toBeInTheDocument()
+    expect(apisApi.connect).not.toHaveBeenCalled()
+  })
+
+  it('sends an unknown provider back to the tiles', async () => {
+    const { router } = renderAt('/apis/new/provider/anthropic')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/apis/new'))
   })
 })
 
