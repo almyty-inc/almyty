@@ -4,6 +4,7 @@ import { LlmProviderType } from '../../../entities/llm-provider.entity';
 import { callLlmProviderHttp } from '../providers/safe-request';
 
 jest.mock('../providers/safe-request', () => ({
+  ...jest.requireActual('../providers/safe-request'),
   callLlmProviderHttp: jest.fn(),
 }));
 
@@ -39,6 +40,7 @@ describe('LlmModelsHelper.fetchModelsByType', () => {
     // apiUrl must probe Mistral, not OpenAI.
     expect(mockedCall).toHaveBeenCalledWith(
       expect.objectContaining({ url: 'https://api.mistral.ai/v1/models' }),
+      expect.anything(),
     );
 
     expect(ids).toContain('codestral-latest');

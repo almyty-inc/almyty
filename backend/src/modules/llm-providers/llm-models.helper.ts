@@ -90,7 +90,10 @@ export class LlmModelsHelper {
         // to NO_MODEL_CONFIGURED rather than a guessed id.
         case LlmProviderType.QIANFAN:
         case LlmProviderType.HUNYUAN:
-          return this.fetchOpenAIModels(provider);
+        // Your own OpenAI-compatible server (vLLM, LM Studio, a proxy):
+        // <apiUrl>/models is part of the surface it serves, and connecting
+        // one without naming a model probes the first model it lists.
+        case LlmProviderType.CUSTOM:
           return this.fetchOpenAIModels(provider);
         case LlmProviderType.OLLAMA:
           // Native /api/tags — lists locally pulled models. Works
@@ -155,13 +158,15 @@ export class LlmModelsHelper {
     // encodes that per type, so reuse it instead of hardcoding Bearer.
     const { 'Content-Type': _ct, ...authHeaders } = provider.getAuthHeaders();
     // callLlmProviderHttp runs the SSRF gate and applies the shared
-    // content / redirect hygiene defaults before delegating to axios.
+    // content / redirect hygiene defaults before delegating to axios. The
+    // provider's own posture (an allowlisted host, the self-hosting flag)
+    // goes with it, so the list is read from wherever chat is allowed to go.
     const response = await callLlmProviderHttp({
       method: 'GET',
       url,
       headers: authHeaders,
       timeout: 10000,
-    });
+    }, llmCallOptionsFor(provider));
 
     // Response shapes in the wild: OpenAI's `{data:[...]}` (most vendors),
     // a bare array (Together's /v1/models), and `{models:[...]}` for Cohere,
@@ -231,7 +236,7 @@ export class LlmModelsHelper {
         'anthropic-version': provider.configuration.apiVersion || '2023-06-01',
       },
       timeout: 10000,
-    });
+    }, llmCallOptionsFor(provider));
 
     const models = response.data?.data || [];
 
@@ -266,7 +271,7 @@ export class LlmModelsHelper {
       url: `${base}/models?pageSize=1000`,
       headers: apiKey ? { 'x-goog-api-key': apiKey } : {},
       timeout: 10000,
-    });
+    }, llmCallOptionsFor(provider));
     const models = response.data?.models || [];
 
     return models

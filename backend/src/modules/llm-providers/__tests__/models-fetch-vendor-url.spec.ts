@@ -3,6 +3,7 @@ import { LlmModelsHelper } from '../llm-models.helper';
 import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 
 jest.mock('../providers/safe-request', () => ({
+  ...jest.requireActual('../providers/safe-request'),
   callLlmProviderHttp: jest.fn(),
   callLlmProviderHttpStream: jest.fn(),
 }));
@@ -155,6 +156,41 @@ describe('fetchOpenAIModels vendor URL resolution', () => {
       (callLlmProviderHttp as jest.Mock).mockResolvedValue({ data: { data: [{ id: 'x' }] } });
       await helper.fetchModelsFromProvider(makeProvider(type));
       expect((callLlmProviderHttp as jest.Mock).mock.calls[0][0].url).toBe(url);
+    }
+  });
+
+  it('lists your own server (custom) from its own /models, so connecting it needs no model named', async () => {
+    (callLlmProviderHttp as jest.Mock).mockResolvedValue({ data: { object: 'list', data: [{ id: 'my-local-model' }] } });
+    const provider = makeProvider(LlmProviderType.CUSTOM);
+    (provider.configuration as any).apiUrl = 'http://gpu-box.example:8000/v1';
+    const models = await helper.fetchModelsFromProvider(provider);
+    expect((callLlmProviderHttp as jest.Mock).mock.calls[0][0].url).toBe('http://gpu-box.example:8000/v1/models');
+    expect(models.map((m) => m.id)).toEqual(['my-local-model']);
+  });
+
+  it.each([LlmProviderType.OPENAI, LlmProviderType.ANTHROPIC, LlmProviderType.GOOGLE, LlmProviderType.CUSTOM])(
+    '%s lists models with the private host its organization allowlisted, like chat does',
+    async (type) => {
+      (callLlmProviderHttp as jest.Mock).mockResolvedValue({ data: { data: [{ id: 'm' }], models: [{ name: 'm' }] } });
+      const provider = makeProvider(type);
+      Object.assign(provider.configuration as any, { apiUrl: 'http://models.internal.example/v1', egressApprovedHost: 'models.internal.example' });
+      await helper.fetchModelsFromProvider(provider);
+      expect((callLlmProviderHttp as jest.Mock).mock.calls[0][1]).toMatchObject({ egressApprovedHost: 'models.internal.example' });
+    },
+  );
+
+  it('lists a custom server on a private address when the install allows it (LLM_ALLOW_PRIVATE_URLS)', async () => {
+    const before = process.env.LLM_ALLOW_PRIVATE_URLS;
+    process.env.LLM_ALLOW_PRIVATE_URLS = 'true';
+    try {
+      (callLlmProviderHttp as jest.Mock).mockResolvedValue({ data: { data: [{ id: 'm' }] } });
+      const provider = makeProvider(LlmProviderType.CUSTOM);
+      (provider.configuration as any).apiUrl = 'http://localhost:8000/v1';
+      await helper.fetchModelsFromProvider(provider);
+      expect((callLlmProviderHttp as jest.Mock).mock.calls[0][1]).toMatchObject({ allowPrivateUrls: true });
+    } finally {
+      if (before === undefined) delete process.env.LLM_ALLOW_PRIVATE_URLS;
+      else process.env.LLM_ALLOW_PRIVATE_URLS = before;
     }
   });
 });
