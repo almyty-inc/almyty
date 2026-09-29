@@ -3,8 +3,7 @@ import { DataSource } from 'typeorm';
 import { versionsConfig } from 'typeorm-versions';
 
 import { Agent } from '../../entities/agent.entity';
-import { AgentApp } from '../../entities/agent-app.entity';
-import { AppDistribution } from '../../entities/agent-app-distribution.entity';
+import { AgentChannel } from '../../entities/agent-channel.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
 import { Api, ApiType } from '../../entities/api.entity';
@@ -149,7 +148,7 @@ describeIfDb('private visibility gaps (real Postgres)', () => {
     );
     onboarding = new OnboardingService(
       repo(LlmProvider), repo(Api), repo(Gateway), repo(Agent), repo(RequestLog), repo(User), repo(Tool),
-      repo(AgentApp), repo(AppDistribution), repo(Runner), policy,
+      repo(AgentChannel), repo(Runner), policy,
     );
     analytics = new AnalyticsService(
       repo(RequestLog), repo(UsageMetric), repo(ToolExecution), repo(Conversation), repo(Message), repo(AuditLog),

@@ -227,11 +227,11 @@ export class AgentRuntimeService implements OnModuleInit {
       conversationId?: string;
       endUserId?: string | null;
       /**
-       * The app place this run answers on: the app whose spend cap it counts
-       * against (run.appId), and the gateway a new conversation is filed
-       * under, which is what per-app retention and visitor erasure find it by.
+       * The agent channel this run answers on: whose spend cap it counts
+       * against (run.channelId), and the gateway a new conversation is filed
+       * under, which is what channel retention and visitor erasure find it by.
        */
-      appId?: string | null;
+      channelId?: string | null;
       gatewayId?: string | null;
       /** Extra run metadata the surface wants the runtime to see (e.g. visitorMemory). */
       metadata?: Record<string, any>;
@@ -388,7 +388,7 @@ export class AgentRuntimeService implements OnModuleInit {
       organizationId,
       userId: userId ?? null,
       endUserId: options?.endUserId ?? null,
-      appId: options?.appId ?? null,
+      channelId: options?.channelId ?? null,
       conversationId: savedConversation.id,
       mode: AgentMode.AUTONOMOUS,
       status: AgentRunStatus.RUNNING,

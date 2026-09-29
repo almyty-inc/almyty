@@ -91,7 +91,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { VersionsModule } from './modules/versions/versions.module';
 import { RunnerModule } from './modules/runner/runner.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
-import { AgentAppsModule } from './modules/agent-apps/agent-apps.module';
+import { AgentChannelsModule } from './modules/agent-channels/agent-channels.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { LicensingModule } from './modules/licensing/licensing.module';
 import { KmsModule } from './modules/kms/kms.module';
@@ -269,7 +269,7 @@ import { appDataSourceFactory } from './common/errors/redact-query-error';
     AuditLogModule,
     RunnerModule,
     ApprovalsModule,
-    AgentAppsModule,
+    AgentChannelsModule,
     WorkspaceModule,
     LicensingModule,
     BudgetsModule,

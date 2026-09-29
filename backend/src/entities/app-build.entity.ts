@@ -8,12 +8,12 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
-import { AgentApp } from './agent-app.entity';
+import { AgentChannel } from './agent-channel.entity';
 
 /**
  * One attempt at producing a downloadable artifact.
  *
- * Kept as its own row rather than a field on the distribution because
+ * Kept as its own row rather than a field on the channel because
  * builds accumulate: a customer ships v1.2 for three platforms, finds
  * the Windows one unsigned, and rebuilds. Answering "which binary is
  * this person running" later needs the history, not just the latest.
@@ -40,7 +40,7 @@ export enum BuildStatus {
 }
 
 @Entity('app_builds')
-@Index(['appId', 'createdAt'])
+@Index('IDX_app_builds_channelId_createdAt', ['channelId', 'createdAt'])
 @Index(['organizationId', 'createdAt'])
 @Index(['status'])
 export class AppBuild {
@@ -50,10 +50,22 @@ export class AppBuild {
   @Column()
   organizationId: string;
 
-  @Column({ type: 'uuid' })
-  appId: string;
+  /** The desktop or terminal channel this artifact was built for. Null only on a build from an app whose place had no agent to move to. */
+  @Column({ type: 'uuid', nullable: true })
+  channelId: string | null;
 
-  /** Which distribution this artifact is for: tui, desktop, binary. */
+  /** The agent the channel belongs to, for listing an agent's builds. */
+  @Column({ type: 'uuid', nullable: true })
+  agentId: string | null;
+
+  /**
+   * Legacy: the app a build was made for, before apps became channels on
+   * the agent. Kept for the history rows; nothing writes it any more.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  appId: string | null;
+
+  /** Which kind of channel this artifact is for: tui, desktop, binary. */
   @Column({ type: 'varchar' })
   target: string;
 
@@ -137,9 +149,9 @@ export class AppBuild {
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
-  @ManyToOne(() => AgentApp, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'appId' })
-  app: AgentApp;
+  @ManyToOne(() => AgentChannel, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'channelId' })
+  channel: AgentChannel;
 
   isDownloadable(now: Date = new Date()): boolean {
     if (this.status !== BuildStatus.SUCCEEDED || !this.artifactKey) return false;

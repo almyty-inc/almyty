@@ -44,9 +44,9 @@ export interface WidgetPublicConfig {
   theme: WidgetTheme;
   aiDisclosure: string | null;
   poweredBy: boolean;
-  /** The app lets visitors delete their conversation (its privacy setting). */
+  /** The agent lets visitors delete their conversation (its privacy setting). */
   visitorCanDelete: boolean;
-  /** The app lets visitors download their conversation. */
+  /** The agent lets visitors download their conversation. */
   visitorCanExport: boolean;
 }
 
@@ -70,8 +70,8 @@ export const WIDGET_CONFIG_DEFAULTS: WidgetPublicConfig = Object.freeze({
   theme: 'auto' as WidgetTheme,
   aiDisclosure: null,
   poweredBy: true,
-  // The app privacy defaults (APP_PRIVACY_DEFAULTS): visitors may delete
-  // and download their own conversation unless the app turns that off.
+  // The visitor privacy defaults (VISITOR_PRIVACY_DEFAULTS): visitors may
+  // delete and download their own conversation unless the agent turns that off.
   visitorCanDelete: true,
   visitorCanExport: true,
 });
@@ -130,7 +130,7 @@ export function sanitizeWidgetConfig(
   return out;
 }
 
-/** The app a widget is a place of, as far as its look and visitor rights go. */
+/** The channel a widget is, as far as its look and visitor rights go (resolved from its agent). */
 export interface WidgetOwner {
   name: string;
   branding?: {
@@ -141,21 +141,21 @@ export interface WidgetOwner {
     aiDisclosure?: string | null;
     whiteLabel?: boolean;
   } | null;
-  /** The app privacy settings; a missing flag is the default (allowed). */
+  /** The visitor privacy settings; a missing flag is the default (allowed). */
   privacy?: { visitorCanDelete?: boolean; visitorCanExport?: boolean } | null;
 }
 
 /**
  * What the public widget-config endpoint answers for a widget.
  *
- * Branding has one home, the app: a widget an app owns takes its colour,
- * name, greeting, theme, AI disclosure line and almyty mark from the app,
- * read on every request, and keeps only where it sits on the page and
- * which launcher icon it shows. The disclosure line is always shown on an
- * app's widget (the app's own wording, or the default). A widget no app
- * owns keeps its own block, sanitized the same way.
+ * Branding has one home, the agent (overridden per channel): a widget
+ * channel takes its colour, name, greeting, theme, AI disclosure line and
+ * almyty mark from there, read on every request, and keeps only where it
+ * sits on the page and which launcher icon it shows. The disclosure line is
+ * always shown on a channel's widget (its own wording, or the default). A
+ * widget no channel owns keeps its own block, sanitized the same way.
  *
- * What visitors may do with their conversation is the app's privacy
+ * What visitors may do with their conversation is the agent's privacy
  * setting too, so the widget offers "Download" and "Delete" exactly when
  * the endpoints behind them would allow it.
  */

@@ -1,6 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-import { widgetBranding, wrapUnownedPlaces } from '../modules/agent-apps/wrap-unowned-places';
+import { widgetBranding, wrapUnownedPlaces } from './legacy/wrap-unowned-places';
 
 /** The gateway types this migration wraps, frozen as they were when it was written. */
 const WIDGET_AND_A2A_TYPES: readonly string[] = Object.freeze(['chat_widget', 'a2a']);
