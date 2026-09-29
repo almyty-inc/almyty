@@ -224,7 +224,7 @@ export function OverviewTab({
           <CardContent className="pt-6">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <h3 className="font-medium">Test Results</h3>
+                <h3 className="font-medium">Test results</h3>
                 <Badge variant={testResults.success ? 'default' : 'destructive'}>
                   {testResults.success ? 'Success' : 'Failed'}
                 </Badge>

@@ -31,16 +31,16 @@ describe('/memories/new', () => {
     const { queryClient } = renderAtRoute(<MemoryNewPage />, { path: '/memories/new', paths: ['/memories'] })
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
 
-    fireEvent.change(screen.getByLabelText(/^Content/), { target: { value: 'Prefers metric units' } })
+    fireEvent.change(screen.getByLabelText(/^What should your agents remember/), { target: { value: 'Prefers metric units' } })
     fireEvent.change(screen.getByLabelText(/^Tags/), { target: { value: 'user-pref, units ' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Store' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save memory' }))
 
     await waitFor(() => expect(memoriesApi.put).toHaveBeenCalledTimes(1))
     expect(vi.mocked(memoriesApi.put).mock.calls[0][0]).toMatchObject({
       mode: 'memory',
       scope: { scope_type: 'workspace', scope_id: 'org-1' },
       content: 'Prefers metric units',
-      tier: 'short',
+      tier: 'long',
       tags: ['user-pref', 'units'],
       source_uri: undefined,
     })
@@ -51,9 +51,9 @@ describe('/memories/new', () => {
 
   it('refuses an empty memory and focuses the content field', async () => {
     renderAtRoute(<MemoryNewPage />, { path: '/memories/new' })
-    fireEvent.click(screen.getByRole('button', { name: 'Store' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save memory' }))
     expect(await screen.findByText('Write what the memory should hold.')).toBeInTheDocument()
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^Content/)))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^What should your agents remember/)))
     expect(memoriesApi.put).not.toHaveBeenCalled()
   })
 })

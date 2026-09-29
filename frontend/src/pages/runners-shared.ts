@@ -77,3 +77,37 @@ export function runnerStartCommand(name: string, organizationId?: string | null)
   if (organizationId) parts.push('--org', shellQuote(organizationId))
   return parts.join(' ')
 }
+
+/** The kind of computer the browser runs on, as a word for a name. */
+export function browserMachineWord(platform: string = typeof navigator !== 'undefined' ? navigator.platform ?? '' : ''): string {
+  const p = platform.toLowerCase()
+  if (p.includes('mac')) return 'mac'
+  if (p.includes('win')) return 'windows'
+  if (p.includes('linux')) return 'linux'
+  return 'machine'
+}
+
+/**
+ * A name to start the setup form with, so nobody has to invent one.
+ *
+ * A browser cannot read the machine's hostname, and the runner usually
+ * goes on the computer the person is sitting at, so the guess is their
+ * first name and the kind of computer: "frane-mac". A name already taken
+ * in the organization gets a number. The daemon itself falls back to the
+ * real hostname when it is started without --name.
+ */
+export function suggestRunnerName(
+  user: { firstName?: string | null; email?: string | null } | null | undefined,
+  taken: Set<string>,
+  platform?: string,
+): string {
+  const who = (user?.firstName || user?.email?.split('@')[0] || 'my')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'my'
+  const base = `${who}-${browserMachineWord(platform)}`
+  if (!taken.has(base)) return base
+  for (let n = 2; n < 100; n++) if (!taken.has(`${base}-${n}`)) return `${base}-${n}`
+  return base
+}

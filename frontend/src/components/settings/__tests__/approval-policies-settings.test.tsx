@@ -87,7 +87,7 @@ describe('ApprovalPoliciesSettings', () => {
       expect(screen.getByRole('link', { name: /Upgrade to Business/i })).toBeInTheDocument()
     })
     // The lock title is shown; the manager UI is not.
-    expect(screen.getAllByText('Approval Policies').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Approval policies').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByRole('button', { name: /New Policy/i })).not.toBeInTheDocument()
     expect(mockedList).not.toHaveBeenCalled()
   })

@@ -30,6 +30,7 @@ import {
   DISTRIBUTION_LABELS,
   PACKAGED_TARGETS,
   agentAppsApi,
+  defaultBundleId,
   distributionCallbackUrl,
   isBuildable,
   isChannelTarget,
@@ -110,7 +111,10 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
   const [stored, setStored] = useState<Record<string, any>>(() => ({
     ...(distribution.configuration ?? {}),
   }))
-  const storedBundleId = (stored.bundleId as string | undefined) ?? `com.example.${app.slug}`
+  // A new desktop or binary place is stored with this default already
+  // (the server makes it from the app's address); the fallback covers a
+  // place stored without one, and is what the build would use anyway.
+  const storedBundleId = (stored.bundleId as string | undefined) ?? defaultBundleId(app.slug)
   const storedAgent = (stored.agentId as string | undefined) ?? ''
 
   const [bundleId, setBundleId] = useState(storedBundleId)
@@ -369,21 +373,34 @@ export function DistributionSettings({ app, distribution, agents = [] }: Distrib
       )}
 
       {packaged && (
-        <FormSection title="Identity">
-          <Field
-            id="dist-bundle-id"
-            label="Bundle identifier"
-            required={NEEDS_BUNDLE_ID.includes(target)}
-            hint="A reverse-domain name you own, such as com.acme.assistant. Signing toolchains identify the app by it."
-            error={bundleError}
+        <FormSection>
+          {/*
+            The bundle id is made from the app's address when the place is
+            added, so a first build needs nothing typed. It stays reachable
+            for whoever signs with their own developer account, and starts
+            open when the stored one would be refused.
+          */}
+          <Disclosure
+            title="Advanced"
+            summary={`App ID: ${bundleId || defaultBundleId(app.slug)}`}
+            defaultOpen={!BUNDLE_ID_PATTERN.test(storedBundleId)}
+            testId="dist-bundle-advanced"
           >
-            <Input
-              value={bundleId}
-              onChange={(e) => setBundleId(e.target.value)}
-              placeholder="com.acme.assistant"
-              autoComplete="off"
-            />
-          </Field>
+            <Field
+              id="dist-bundle-id"
+              label="App ID"
+              required={NEEDS_BUNDLE_ID.includes(target)}
+              hint="The name computers use to tell your app apart from others. The one filled in works; change it only to match your own developer account, such as com.acme.assistant."
+              error={bundleError}
+            >
+              <Input
+                value={bundleId}
+                onChange={(e) => setBundleId(e.target.value)}
+                placeholder={defaultBundleId(app.slug)}
+                autoComplete="off"
+              />
+            </Field>
+          </Disclosure>
         </FormSection>
       )}
 

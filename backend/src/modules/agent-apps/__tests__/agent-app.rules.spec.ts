@@ -3,6 +3,7 @@ import { DistributionTarget } from '../../../entities/agent-app-distribution.ent
 import {
   APP_REFUSALS,
   RESERVED_APP_SLUGS,
+  defaultBundleId,
   checkDistribution,
   checkApp,
   grantsLocalAccess,
@@ -254,5 +255,14 @@ describe('isOpenToAnyone', () => {
     expect(isOpenToAnyone(undefined)).toBe(true);
     expect(isOpenToAnyone(AppAuthMode.PUBLIC_LINK)).toBe(true);
     expect(isOpenToAnyone(AppAuthMode.SSO)).toBe(false);
+  });
+});
+
+describe('defaultBundleId', () => {
+  it('makes an id every packager and the check accept from any slug', () => {
+    expect(defaultBundleId('support-bot', 'app.almyty')).toBe('app.almyty.supportbot');
+    const id = defaultBundleId('acme-support');
+    const refusals = checkDistribution(DistributionTarget.DESKTOP, app(), { bundleId: id }).refusals;
+    expect(refusals.map((r) => r.code)).not.toContain('BUNDLE_ID_INVALID');
   });
 });
