@@ -1,45 +1,76 @@
-# Cost Governance
+# Cost governance
 
-Put a hard ceiling on LLM spend before a bill surprises you. Spend fails in two ways: a single run loops and burns money fast, or a fleet of well-behaved agents quietly accumulates a large bill. almyty covers both with two separate mechanisms, plus a way to check its own math against your provider's invoice.
+Set limits on what your assistants may spend on AI models, so a bill never surprises you. You can stop a single conversation from costing more than a dollar, cap an experimental agent at $5 a day, keep the whole organization under $500 a month, and check almyty's own cost figures against your model vendor's invoice.
 
-| Mechanism | Scope | When checked | On breach |
+Spend goes wrong in two ways: one run gets stuck in a loop and burns money fast, or many well-behaved runs quietly add up. almyty has a separate limit for each.
+
+| Limit | Covers | Checked | When it is reached |
 |---|---|---|---|
-| **Per-run limits** (`maxCostCents`) | one run | during the run, per step | run fails with error `BUDGET_EXCEEDED` |
-| **Spend budgets** | org or agent, per day/month | before a run starts | alert, or the run is rejected with HTTP 403 |
-| **Provider usage reconciliation** | per provider | on demand | shows the delta between almyty's estimate and provider actuals |
+| **Per-run limit** | one run (one job an agent does) | during the run, after every step | the run stops |
+| **Spend budget** | the organization or one agent, per day or month | before a run starts | you are warned, or new runs are refused |
+| **Provider comparison** | one model vendor | when you ask | shows the difference between almyty's estimate and the vendor's own figures |
 
-## Per-run limits
+## Limit a single run
 
-Every agent run carries a `limits` set. You can pass them when starting a run (fields: `maxCostCents`, `maxSteps`, `maxTokens`, `maxDurationMs`, `maxToolCalls`, `maxRecursionDepth`).
+Every run has a cost cap. If you set nothing, a run may spend up to $1 before it is stopped. Change it per agent under **Run limits** on the agent's edit page; see [Run limits](/run-limits) for every limit and how they combine.
 
-Defaults if you pass nothing: `maxSteps: 50`, `maxDurationMs: 900000` (15 minutes), `maxCostCents: 100` ($1), `maxToolCalls: 100`, `maxTokens: 500000`. Sub-agent runs spawned by an agent get tighter defaults (`maxSteps: 20`, `maxCostCents: 50`).
-
-Those are defaults, not the ceiling. The operator's environment sets a hard ceiling that nothing inside the product may exceed, separately from the default: `RUN_LIMIT_MAX_DURATION_MS` is 3600000 (1 hour) out of the box, so raising `maxDurationMs` on a run raises it towards that ceiling and no further. See [Run limits](/run-limits) for the full table and how the four scopes resolve.
-
-Limits are checked after every step. When accumulated run cost crosses `maxCostCents`, the run stops with status `failed` and error `BUDGET_EXCEEDED`. This is a kill switch for a single runaway run; it knows nothing about what other runs spent.
+The cap only knows about its own run. To limit what many runs spend together, use a spend budget.
 
 ## Spend budgets
 
-A spend budget is a period ceiling that applies **across runs**: "this org spends at most $500/month", "this experimental agent spends at most $5/day".
+A spend budget is a ceiling across runs for a day or a month: "the organization spends at most $500 a month", "this experimental agent spends at most $5 a day".
+
+**Add one**
+
+1. Open **Analytics → Budgets** and click **New budget**.
+2. Under **Applies to**, choose **The whole organization** or **A single agent** (then pick the agent).
+3. Enter the **Limit (USD)** and pick the **Period**: **Per day** or **Per month**. Days and months follow UTC.
+4. Under **When the limit is reached**, choose:
+   - **Warn only**: runs carry on; almyty records an alert and emails the organization's owners and admins, once per period.
+   - **Block new runs**: once the limit is reached, new runs are refused (scheduled agents, chat replies and API calls all stop) until the period rolls over.
+5. **Warn at (% of limit)** sends an early alert, 80% unless you change it. Runs are never blocked at that point.
+6. Click **Create budget**.
+
+Turn off **Enforce this budget** to keep a budget on record without it affecting any run. Only admins and owners can add or change budgets.
+
+The **Budgets** tab shows how much of each budget has been spent this period, and **Recent budget alerts** lists each warning. A budget sends at most one early alert and one limit alert per period, however many runs cross it.
+
+**What counts.** Budgets add up what agent runs cost, including runs that failed or were cancelled, because the money was still spent. Chatting with an agent outside a run is not counted.
+
+## The Cost tab
+
+**Analytics → Cost** shows total spend for today or this month, spend per day and the agents that spent most. Below that is the provider comparison.
+
+## Compare with your model vendor's figures
+
+almyty's costs are estimates, worked out from how much text was sent and received and the vendor's price list. Your vendor's own usage report is the real record. The comparison reads that report and shows the difference, so you notice when prices changed, when someone else is using the same key, or when an estimate is off.
+
+It works for **OpenAI** and **Anthropic**. Other vendors are listed as not supported.
+
+Both vendors only share usage figures with an **admin key**, which is a different key from the one used to run models. To add it, open the vendor's connection on **Credentials**, go to its **Settings** tab, open **Advanced** and fill **Usage key**: pick an admin key you keep on Credentials or paste one. Then click **Sync now** on the Cost tab. Without a usage key, almyty tries the normal key, which the vendor usually refuses; the refusal shows in the result.
+
+## For developers
+
+**Per-run limits** are the `limits` set on a run: `maxCostCents`, `maxSteps`, `maxTokens`, `maxDurationMs`, `maxToolCalls`, `maxRecursionDepth`. Defaults when nothing is passed: `maxSteps: 50`, `maxDurationMs: 900000` (15 minutes), `maxCostCents: 100` ($1), `maxToolCalls: 100`, `maxTokens: 500000`. Sub-agent runs get tighter defaults (`maxSteps: 20`, `maxCostCents: 50`). These are defaults, not the ceiling: the operator's environment sets a ceiling nothing inside the product can exceed (`RUN_LIMIT_MAX_DURATION_MS` is 3600000, one hour, out of the box). A run whose accumulated cost crosses `maxCostCents` ends with status `failed` and error `BUDGET_EXCEEDED`. See [Run limits](/run-limits).
+
+**Spend budget fields:**
 
 | Field | Values | Meaning |
 |---|---|---|
-| `periodType` | `day` or `month` (default `month`) | budget window; periods roll over at UTC midnight / first of the month UTC |
+| `periodType` | `day` or `month` (default `month`) | budget window; periods roll over at UTC midnight / the first of the month UTC |
 | `limitCents` | positive integer | the ceiling for the period, in cents |
-| `behavior` | `warn_log` or `reject` (default `warn_log`) | what happens when the limit is reached |
-| `softThresholdPct` | 1 to 100 (default `80`) | percentage at which a soft alert fires |
+| `behavior` | `warn_log` or `reject` (default `warn_log`) | **Warn only** or **Block new runs** |
+| `softThresholdPct` | 1 to 100 (default `80`) | percentage at which the early alert fires |
 | `agentId` | optional | scope the budget to one agent; omit for org-wide |
 | `active` | boolean (default `true`) | inactive budgets are kept for history but never enforced |
 
-Budgets are listed, added and changed under **Analytics → Budgets** (a new one at `/analytics/budgets/new`), with each budget's period-to-date spend and the recent alerts.
+The budget form lives at `/analytics/budgets/new`.
 
-### Enforcement
+**Enforcement.** Budgets are checked when a run starts, before anything is created, so a refused run leaves no run row behind. For each active budget matching the organization (and the agent, if scoped), almyty sums period-to-date agent-run spend:
 
-Budgets are checked when a run starts, before anything is created, so a rejected run leaves no run row behind. For each active budget matching the org (and agent, if scoped), almyty sums the period-to-date spend of agent runs:
-
-- **Soft threshold crossed**: a `soft` alert is recorded and org owners/admins are emailed. The run proceeds.
-- **Limit reached** with `behavior: warn_log`: a `hard` alert is recorded and emailed. The run still proceeds.
-- **Limit reached** with `behavior: reject`: the run is rejected with **HTTP 403**:
+- Soft threshold crossed: a `soft` alert is recorded and owners and admins are emailed. The run proceeds.
+- Limit reached with `behavior: warn_log`: a `hard` alert is recorded and emailed. The run proceeds.
+- Limit reached with `behavior: reject`: the run is refused with **HTTP 403**:
 
 ```json
 {
@@ -55,37 +86,14 @@ Budgets are checked when a run starts, before anything is created, so a rejected
 }
 ```
 
-Alerts are deduplicated: at most one alert per budget, per period, per level (`soft`/`hard`), so a hot budget sends two emails per period, not two per run. Alert and email failures never block the run path.
+Alerts are deduplicated per budget, per period, per level (`soft`/`hard`). Alert and email failures never block a run.
 
-Two things worth knowing about what counts: budget enforcement sums **agent-run** spend (failed and cancelled runs included, since the money was spent), and only agent runs. Direct conversations with an agent outside a run are not counted against budgets.
+**Reconciliation.** One row per provider: `estimateCents`, `estimateTokens`, `actualCents`, `actualTokens`, `deltaCents` (actual minus estimate) and `deltaPct`. The `actual*` fields are `null` until a sync has run. A sync upserts one snapshot per provider per day, so re-syncing a window is safe. Unsupported provider types are reported by the capabilities endpoint with `supported: false` and a note; no network call is made for them. Admin keys: OpenAI needs an Admin key (`sk-admin-...`) with the `api.usage.read` scope (a normal `sk-...` key gets a 401); Anthropic needs an Admin API key (`sk-ant-admin...`). Over the API the key is `usageApiKey` in the provider's configuration; it is stored as a credential and masked in responses.
 
-## The Cost tab
-
-**Analytics, Cost** shows the same data in the UI: total spend for the selected period (day/month toggle), a per-day spend chart, the top agents by spend, and the provider reconciliation table below. Admins get a sync button to pull fresh provider actuals.
-
-## Provider usage reconciliation
-
-almyty's cost numbers are estimates computed from token counts and price tables. Your provider's usage API is the authoritative record. Reconciliation pulls the provider's own daily usage and cost ("actuals"), stores them as snapshots, and shows the delta against almyty's estimate, so you notice drift from price changes, untracked usage on a shared key, or a miscalibrated price table.
-
-**Supported providers**: OpenAI and Anthropic. Other provider types are listed by the capabilities endpoint with `supported: false` and an explanatory note; no network call is made for them.
-
-Reconciliation returns one row per provider: `estimateCents`, `estimateTokens`, `actualCents`, `actualTokens`, `deltaCents` (actual minus estimate), and `deltaPct`. The `actual*` fields are `null` until a sync has run. Sync is on demand; re-syncing a window overwrites the existing snapshots (upsert per provider per day), so it is safe to run repeatedly.
-
-### The admin-key caveat
-
-Both providers gate their usage APIs behind **admin-scoped keys**, separate from inference keys:
-
-- **OpenAI**: an Admin key (`sk-admin-...`) with the `api.usage.read` scope. A normal `sk-...` key gets a 401.
-- **Anthropic**: an Admin API key (`sk-ant-admin...`) for the organization usage/cost report endpoints.
-
-Set it on the connection's page under **Settings → Advanced → Usage key** (pick an admin key from Credentials or paste one), or as `usageApiKey` in the provider's configuration over the API. It is stored as a credential like the inference key and masked in API responses. If no usage key is set, almyty falls back to the inference key, which will typically 401 on the usage endpoints; the error shows up in the sync result.
-
-## API
-
-Budgets, spend rollups, alerts, and reconciliation live under `/budgets` and `/provider-usage`. Reads need `member` or above; mutations need `admin` or `owner`; multi-org users must send `X-Organization-Id`. See the [API reference](/api-reference).
+**API.** Budgets, spend rollups, alerts and reconciliation live under `/budgets` and `/provider-usage`. Reads need `member` or above; changes need `admin` or `owner`; users in several organizations must send `X-Organization-Id`. See the [API reference](/api-reference).
 
 ## Related
 
-- [Analytics](/analytics): where the Cost tab lives
-- [Connect a provider](/llm-providers): provider configuration, including `usageApiKey`
-- Enterprise [chargeback reports](/enterprise): per-team attribution and forecasting on top of the same spend data
+- [Analytics](/analytics): where the Cost and Budgets tabs live
+- [Connect a provider](/llm-providers): connecting a model vendor
+- [Enterprise](/enterprise#chargeback): chargeback, spend per team with a forecast

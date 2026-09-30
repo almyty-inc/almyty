@@ -1,18 +1,60 @@
 # Advanced RBAC
 
-Requires the `advanced_rbac` entitlement (Business or Enterprise on the hosted platform). Grant exactly the access each person needs, down to a single action or a single request. The core role model (org `owner`/`admin`/`member` plus team leads) is free and covers most teams. Advanced RBAC adds two layers on top when fixed roles stop being enough: **custom roles** with wildcard permissions, and **ABAC policies** for attribute-based rules.
+Give each person exactly the access they need. For example, an "agent operator" role that can run and inspect agents but only look at everything else, or a rule that nobody may run an agent on an amount over $10,000 unless they are in finance.
 
-With the entitlement enabled, **Settings → People and access → Roles** provides custom roles, effective-permission lookup and access policies. Without it, these controls are locked; core member and team controls remain available separately.
+RBAC (role-based access control) means deciding what people can do by the role they hold. Every organization already has the basic roles (owner, admin, member, and team leads), which are free and enough for most teams. Advanced RBAC adds two things on top:
 
-![Business organization with custom role controls enabled](/screenshots/settings-rbac-enabled.png)
+- **Custom roles**: your own named roles with exactly the permissions you choose.
+- **Access policies**: rules that look at the details of a request, such as an amount, to allow or refuse it.
 
-## Custom roles
+This needs the **Business** or **Enterprise** plan. Owners and admins manage it under **Settings → People and access → Roles**. Without the plan these controls are locked; members and teams stay available as usual.
 
-A custom role is a named, org-scoped set of permission strings, assigned per-user in addition to their core role. Under **Settings → People and access → Roles**, click **New role** to open the inline form. Enter a name, an optional description and permissions (one per line), then click **Create role**. You can also use the API.
+![Custom role controls on a Business organization](/screenshots/settings-rbac-enabled.png)
 
-![New custom role form with name, description and permissions fields](/screenshots/settings-rbac-new-role.png)
+## Create a custom role
 
-A role is just a name, a description, and a permission list:
+1. Open **Settings → People and access → Roles**.
+2. Under **Custom roles**, click **New role**.
+3. Enter a **Name**, an optional **Description**, and the **Permissions**, one per line (see [how permissions are written](#how-permissions-are-written)).
+4. Click **Create role**.
+5. To give the role to people, use the assign action on the role's row, pick the members and click **Assign**.
+
+![New custom role form with name, description and permissions](/screenshots/settings-rbac-new-role.png)
+
+A custom role only ever adds to what someone's basic role already allows; it never takes anything away. **Effective permissions** on the same page shows what a person can do with all their roles together.
+
+### How permissions are written
+
+A permission is a thing and an action, such as `agents:execute` (run agents). A `*` stands for "any":
+
+| Permission | Means |
+|---|---|
+| `*` | everything |
+| `agents:*` | anything on agents |
+| `*:read` | look at anything |
+| `agents:execute` | run agents, and nothing more |
+
+## Add an access policy
+
+Use an access policy when the answer depends on the details of a request rather than on who is asking.
+
+1. Under **Access policies (ABAC)**, click **New policy**.
+2. Enter a **Name**, choose the **Effect** (allow or deny), the **Action** it covers (such as `agents:execute`), a **Priority** and a **Description**.
+3. Click **Create policy**.
+
+![New access policy form with effect, priority and action](/screenshots/settings-rbac-new-policy.png)
+
+The form does not set conditions (such as "amount over 10,000"); those are added through the API (see [For developers](#for-developers)). A policy without conditions applies to every request for its action, so check the effect and action before you create one. Policies cannot be edited: delete one and create it again to change it.
+
+**How policies decide.** If any matching policy says **deny**, the request is refused, whatever else allows it. Otherwise the matching **allow** with the highest priority wins.
+
+## How it all fits together
+
+Basic roles answer "is this person an admin?". Custom roles answer "may this person run agents?". Access policies answer "is *this particular request* allowed?". A matching deny policy beats everything.
+
+## For developers
+
+A custom role:
 
 ```json
 {
@@ -22,28 +64,9 @@ A role is just a name, a description, and a permission list:
 }
 ```
 
-Assign or unassign a role per user, disable a role without unassigning it (`active: false`), and read a user's effective permissions (the union across their active custom roles). All RBAC management requires org admin/owner. The full endpoint list is in the [API reference](/api-reference).
+Roles are assigned per user in addition to the core role. A role can be disabled without unassigning it (`active: false`). A user's effective permissions are the union across their active custom roles. Role names are unique per organization; permission lists are trimmed and deduplicated on save. All RBAC management requires organization admin or owner.
 
-### Permission format
-
-Permissions are `resource:action` pairs with wildcards on either side:
-
-| Grant | Means |
-|---|---|
-| `*` | everything |
-| `agents:*` | any action on agents |
-| `*:read` | read on any resource |
-| `agents:execute` | exactly that |
-
-Role names are unique per org; permission lists are normalized (trimmed, deduplicated) on save.
-
-## ABAC policies
-
-Under **Settings → People and access → Roles → New policy**, the inline form accepts a name, effect, action, priority and description. It does not expose condition editing; use the API for attribute conditions such as the example below. A policy without conditions matches every request covered by its action, so review the effect and action before creating one.
-
-![New access policy form with effect, priority and action fields](/screenshots/settings-rbac-new-policy.png)
-
-When a rule depends on *values* rather than resource types ("deny agent execution when `amount > 10000` unless the caller has the finance role"), use an ABAC policy:
+An access (ABAC, attribute-based access control) policy with a condition:
 
 ```json
 {
@@ -57,10 +80,8 @@ When a rule depends on *values* rather than resource types ("deny agent executio
 }
 ```
 
-- **Conditions** are `{attr, op, value}` triples, ANDed together. `attr` is a dot-path into the evaluation context (`subject.*`, `resource.*`, `context.*`). Operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `nin`, `contains` (e.g. `subject.roles contains "finance"`).
-- **Evaluation is deny-overrides**: if any applicable `deny` policy matches, access is denied regardless of allows. Otherwise the highest-`priority` matching `allow` wins.
-- Policies are immutable: delete and recreate to change one.
+- **Conditions** are `{attr, op, value}` triples, ANDed together. `attr` is a dot-path into the evaluation context (`subject.*`, `resource.*`, `context.*`). Operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `nin`, `contains` (for example `subject.roles contains "finance"`).
+- Evaluation is deny-overrides: any applicable `deny` wins; otherwise the highest-`priority` matching `allow`.
+- Policies are immutable.
 
-## How the layers combine
-
-Core roles answer "is this person an admin?"; custom roles answer "does this person hold `agents:execute`?"; ABAC answers "is *this particular request* allowed?". Custom roles are purely additive (they never reduce what a core role grants), while a matching ABAC `deny` beats everything.
+The full endpoint list is in the [API reference](/api-reference).
