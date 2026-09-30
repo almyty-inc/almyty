@@ -35,7 +35,7 @@ import {
   unsupportedOpenAIField,
   withSamplingOverrides,
 } from './compat-conversation.helper';
-import { agentsForKey, authenticateCompatKey, resolveCompatAgent } from './compat-auth.helper';
+import { agentsForKey, authenticateCompatKey, resolveCompatAgent, touchCompatKeyLastUsed } from './compat-auth.helper';
 import { ExecutionAccessService } from '../../common/authorization/execution-access.service';
 import { BudgetExceededException } from '../budgets/budget-exceeded.exception';
 
@@ -47,13 +47,6 @@ const MAX_MESSAGES = 100;
 
 /** Maximum content length per message (100 KB). */
 const MAX_MESSAGE_CONTENT_LENGTH = 100 * 1024;
-
-/**
- * Throttle window for `lastUsedAt` writes, in milliseconds. Without this we issue
- * one UPDATE per chat-completion request, which is wasteful and races with any
- * concurrent mutation of the api-key row (revocation, scope change).
- */
-const LAST_USED_THROTTLE_MS = 60_000;
 
 @Controller('v1')
 @ApiTags('OpenAI Compatible')
@@ -160,8 +153,7 @@ export class AgentOpenAICompatController {
         maxTokens: requestedMaxTokens(body),
       });
 
-      // 5. Touch lastUsedAt (throttled, partial UPDATE — see notes on
-      //    LAST_USED_THROTTLE_MS for the race we're avoiding)
+      // 5. Touch lastUsedAt (throttled, partial UPDATE; see touchCompatKeyLastUsed)
       await this.touchApiKeyLastUsed(apiKey);
 
       // 6. Execute (streaming or sync)
@@ -369,20 +361,9 @@ export class AgentOpenAICompatController {
 
   // ─── API key bookkeeping ─────────────────────────────────────────────
 
-  /**
-   * Touch the api-key's `lastUsedAt`. Throttled to avoid one UPDATE per
-   * request, and uses a partial UPDATE rather than `save(entity)` so we
-   * don't race with concurrent writes (revocation, scope change, etc.) by
-   * round-tripping the whole entity through a stale in-memory copy.
-   */
-  private async touchApiKeyLastUsed(apiKey: ApiKey): Promise<void> {
-    const now = Date.now();
-    const last = apiKey.lastUsedAt ? apiKey.lastUsedAt.getTime() : 0;
-    if (now - last < LAST_USED_THROTTLE_MS) return;
-
-    const nowDate = new Date(now);
-    await this.apiKeyRepository.update({ id: apiKey.id }, { lastUsedAt: nowDate });
-    apiKey.lastUsedAt = nowDate;
+  /** Throttled, partial UPDATE; shared with /v1/messages (compat-auth.helper). */
+  private touchApiKeyLastUsed(apiKey: ApiKey): Promise<void> {
+    return touchCompatKeyLastUsed(this.apiKeyRepository, apiKey);
   }
 
   // ─── Authentication ──────────────────────────────────────────────────

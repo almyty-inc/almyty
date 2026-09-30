@@ -440,8 +440,8 @@ and both shapes resolve the same way. With no mapping at all, the whole
 invocation input is passed through to the sub-agent unchanged.
 
 A child run that does not complete fails this node: a child that failed, timed
-out or was cancelled is reported on the node as `Sub-agent execution <status>:
-<the child's error>`, and the steps after it are skipped. Nesting is bounded by
+out or was cancelled is reported on the node as `Sub-agent execution <status>: <the child's error>`,
+and the steps after it are skipped. Nesting is bounded by
 the run's recursion depth (see [Run limits](/run-limits)), so an agent that
 reaches itself through a chain of sub-agents stops with `Max nesting depth (N)
 exceeded` rather than recursing.

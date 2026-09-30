@@ -145,7 +145,7 @@ the same transcript, ahead of the turns. `temperature` and `max_tokens` are
 applied to the run's `llm_call` nodes and to `modelConfig` for the length of
 the request; nothing is written back to the stored agent.
 
-Three limits, stated because finding them at run time is worse.
+Three things worth knowing before a client finds them at run time.
 
 **Client-declared tools are refused.** An almyty agent runs its own
 tools: a `tool_call` node executes inside the run and the answer comes
@@ -157,16 +157,20 @@ Claude Code, which always sends tools, does not work against this
 endpoint yet — the loop would have to run on our side and be reported
 back, which is not built.
 
-**Streaming is not implemented here.** `"stream": true` is refused
-saying so, rather than answered with one JSON object where the client is
-waiting for SSE.
+**Streaming follows the agent's shape.** `"stream": true` answers with
+Anthropic's event stream. The answer streams token by token when it is one
+model call's text (a workflow `llm_call` feeding the output node unchanged, or
+an autonomous agent's answer step) and arrives in one piece at the end
+otherwise. `/v1/messages` and `/v1/chat/completions` run agents through the
+same invocation path (`CompatAgentInvoker`), so this, autonomous agents, key
+scoping and budgets behave identically on both; see the Anthropic- and
+OpenAI-compatible API reference pages.
 
-**Usage is not split.** A run records one token total and nothing keeps the
-input and output halves apart, so `usage.input_tokens` reports 0 and
-`output_tokens` carries the whole run rather than the completion alone. Every
-response on both compat routes carries `x-almyty-usage-split: unavailable` so
-a caller can tell the split apart from a measurement. Do not attribute cost
-from it.
+**Usage is split only where it was measured.** A workflow run records the
+input/output split each provider reported, and `usage` carries it. An
+autonomous run records one total, so `input_tokens` and `output_tokens` are 0
+there. The `x-almyty-usage-split` header (`measured`, `unavailable`,
+`in-stream`) says which case a response is.
 
 Compatibility shims are a fallback, not the default: Anthropic's
 OpenAI-compatible endpoint drops thinking blocks, Gemini's shim loses

@@ -175,7 +175,8 @@ describe('every execution path goes through the shared scope check', () => {
       const byEntry = (n: string) => calls.filter(([, name]) => name === n).length;
       expect(byEntry('ToolExecutorService.executeTool')).toBeGreaterThanOrEqual(9);
       expect(byEntry('AgentRuntimeService.startRun')).toBeGreaterThanOrEqual(20);
-      expect(byEntry('AgentExecutionEngine.execute')).toBeGreaterThanOrEqual(9);
+      // The OpenAI and Anthropic compat routes share one call in CompatAgentInvoker.
+      expect(byEntry('AgentExecutionEngine.execute')).toBeGreaterThanOrEqual(8);
     });
 
     it('none of them leaves the principal to be re-derived', () => {
