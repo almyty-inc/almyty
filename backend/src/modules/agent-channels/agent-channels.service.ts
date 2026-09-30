@@ -198,6 +198,7 @@ export class AgentChannelsService {
    */
   async updatePublicSettings(organizationId: string, agentId: string, caller: Caller, input: PublicSettingsInput) {
     const agent = await this.manageableAgent(organizationId, agentId, caller);
+    const previousIcon = agent.branding?.iconFileId;
     try {
       if (input.branding !== undefined) agent.branding = normalizeBranding(input.branding);
       if (input.visitorRules !== undefined) agent.visitorRules = normalizeVisitorRules(input.visitorRules);
@@ -211,6 +212,7 @@ export class AgentChannelsService {
       { id: agent.id, organizationId },
       { branding: agent.branding as any, visitorRules: agent.visitorRules as any },
     );
+    await this.releaseIconFiles(organizationId, [previousIcon]);
     await this.resyncLiveChannels(organizationId, agent, caller);
     return this.publicSettingsOf(agent);
   }
@@ -374,6 +376,7 @@ export class AgentChannelsService {
       if (channel.type !== ChannelType.WEB) throw new BadRequestException('Only a web chat has an address to change.');
       channel.slug = await this.freeSlug(agent, channel.type, input.slug, channel);
     }
+    const previousIcon = channel.branding?.iconFileId;
     if ('branding' in overrides) channel.branding = overrides.branding ?? null;
     if ('visitorRules' in overrides) channel.visitorRules = overrides.visitorRules ?? null;
 
@@ -396,6 +399,7 @@ export class AgentChannelsService {
     }
 
     const saved = await this.channelRepository.save(channel);
+    await this.releaseIconFiles(organizationId, [previousIcon]);
     if (saved.status === ChannelStatus.LIVE) await this.resync(organizationId, agent, saved, caller);
     return (await this.views(agent, [saved]))[0];
   }
@@ -411,6 +415,7 @@ export class AgentChannelsService {
     }
     // The credential it used stays on Credentials: it is the org's, not the channel's.
     await this.channelRepository.remove(channel);
+    await this.releaseIconFiles(organizationId, [channel.branding?.iconFileId]);
   }
 
   /** Whether the channel may go live or be built, and if not, why. */
@@ -559,6 +564,34 @@ export class AgentChannelsService {
     }
     await this.assertIconFile(organizationId, out.branding);
     return out;
+  }
+
+  /**
+   * Delete app icons nothing uses any more: the ones a save replaced or
+   * removed, or a removed channel had. An icon still named by the agent's
+   * branding or any channel's (a channel copying the agent's, say) stays.
+   * Never fails the save that let go of it.
+   */
+  private async releaseIconFiles(organizationId: string, previous: Array<string | null | undefined>): Promise<void> {
+    const candidates = [...new Set(previous.filter((id): id is string => !!id))];
+    if (!candidates.length || !this.files) return;
+    const [agents, channels] = await Promise.all([
+      this.agentRepository.find({ where: { organizationId }, select: { id: true, branding: true } }),
+      this.channelRepository.find({ where: { organizationId }, select: { id: true, branding: true } }),
+    ]);
+    const inUse = new Set<string>();
+    for (const row of [...agents, ...channels]) {
+      const id = (row.branding as ChannelBranding | null | undefined)?.iconFileId;
+      if (id) inUse.add(id);
+    }
+    for (const id of candidates) {
+      if (inUse.has(id)) continue;
+      try {
+        await this.files.remove(id, organizationId);
+      } catch (err: any) {
+        this.logger.warn(`Could not delete the app icon file ${id}: ${err?.message ?? err}`);
+      }
+    }
   }
 
   /**

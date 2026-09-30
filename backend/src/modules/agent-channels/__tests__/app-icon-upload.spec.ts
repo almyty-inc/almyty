@@ -31,6 +31,7 @@ describe('the uploaded app icon', () => {
 
   const files = {
     // Organization-scoped, like FilesService.findById.
+    remove: jest.fn(async () => undefined),
     findById: jest.fn(async (id: string, organizationId: string) => {
       const row = fileRows.find((f) => f.id === id && f.organizationId === organizationId);
       if (!row) throw new NotFoundException('File not found');
@@ -105,6 +106,48 @@ describe('the uploaded app icon', () => {
     expect(cleared.effective.branding.iconFileId).toBeNull();
     // Without an override the channel wears the agent's.
     expect(effectiveBranding({ name: 'Support agent', branding: { iconFileId: ICON } }, { branding: null }).iconFileId).toBe(ICON);
+  });
+
+  describe('the icon it replaces or removes', () => {
+    const ICON2 = '66666666-6666-4666-8666-666666666666';
+    beforeEach(() => {
+      fileRows.push({ id: ICON2, organizationId: ORG, mimeType: 'image/png', size: 40_000 });
+      files.remove.mockClear();
+    });
+
+    it('is deleted when a new icon replaces it, or it is removed', async () => {
+      const service = build();
+      await service.updatePublicSettings(ORG, 'agent-1', ME, { branding: { iconFileId: ICON } });
+      await service.updatePublicSettings(ORG, 'agent-1', ME, { branding: { iconFileId: ICON2 } });
+      expect(files.remove).toHaveBeenCalledWith(ICON, ORG);
+      await service.updatePublicSettings(ORG, 'agent-1', ME, { branding: { iconFileId: null } });
+      expect(files.remove).toHaveBeenCalledWith(ICON2, ORG);
+    });
+
+    it('stays while a channel still uses it', async () => {
+      const service = build();
+      await service.updatePublicSettings(ORG, 'agent-1', ME, { branding: { iconFileId: ICON } });
+      const channel = await service.add(ORG, 'agent-1', ME, { type: ChannelType.DESKTOP });
+      await service.update(ORG, 'agent-1', channel.id, ME, { branding: { iconFileId: ICON } });
+      await service.updatePublicSettings(ORG, 'agent-1', ME, { branding: { iconFileId: null } });
+      expect(files.remove).not.toHaveBeenCalledWith(ICON, ORG);
+    });
+
+    it('is deleted with the channel that had it, when nothing else uses it', async () => {
+      const service = build();
+      const channel = await service.add(ORG, 'agent-1', ME, { type: ChannelType.DESKTOP });
+      await service.update(ORG, 'agent-1', channel.id, ME, { branding: { iconFileId: ICON2 } });
+      expect(files.remove).not.toHaveBeenCalled();
+      await service.remove(ORG, 'agent-1', channel.id, ME);
+      expect(files.remove).toHaveBeenCalledWith(ICON2, ORG);
+    });
+
+    it('is left alone when the save keeps it', async () => {
+      const service = build();
+      await service.updatePublicSettings(ORG, 'agent-1', ME, { branding: { iconFileId: ICON } });
+      await service.updatePublicSettings(ORG, 'agent-1', ME, { branding: { iconFileId: ICON, greeting: 'Hi' } });
+      expect(files.remove).not.toHaveBeenCalled();
+    });
   });
 });
 
