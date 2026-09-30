@@ -6,6 +6,8 @@ import { RunnerSession } from '../../entities/runner-session.entity';
 import { Workspace } from '../../entities/workspace.entity';
 import { Tool } from '../../entities/tool.entity';
 import { Agent } from '../../entities/agent.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
+import { AgentExecution } from '../../entities/agent-execution.entity';
 
 import { RunnerService } from './runner.service';
 import { RunnerController } from './runner.controller';
@@ -43,7 +45,7 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Runner, RunnerSession, Workspace, Tool, Agent]),
+    TypeOrmModule.forFeature([Runner, RunnerSession, Workspace, Tool, Agent, AgentRun, AgentExecution]),
     forwardRef(() => McpModule),
     forwardRef(() => WorkspaceModule),
     AuthorizationModule,

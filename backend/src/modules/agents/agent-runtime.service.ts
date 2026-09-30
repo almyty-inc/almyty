@@ -1,6 +1,8 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, Inject, Optional, forwardRef, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Workspace } from '../../entities/workspace.entity';
+import { releaseRunWorkspaces } from '../workspace/run-end-release';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -206,6 +208,11 @@ export class AgentRuntimeService implements OnModuleInit {
     // its retention, and the organization's accounts (AgentMemoryKeeper).
     @Optional()
     readonly memoryAccounts?: MemoryAccountsService,
+    // A cancelled run's runner workspaces are released at once
+    // (releaseRunWorkspaces); without it the workspace tick does it.
+    @Optional()
+    @InjectRepository(Workspace)
+    readonly workspaceRepository?: Repository<Workspace>,
   ) {}
 
   /**
@@ -540,6 +547,7 @@ export class AgentRuntimeService implements OnModuleInit {
     }
     run.status = AgentRunStatus.CANCELLED;
     await this.runRepository.save(run);
+    await releaseRunWorkspaces(this.workspaceRepository, run.id, this.runRepository);
     this.emitEvent(runId, 'run.cancelled', {});
 
     // RUN_CANCEL was declared on AuditAction and emitted by nothing.
@@ -707,6 +715,7 @@ export class AgentRuntimeService implements OnModuleInit {
         ? 'approval expired'
         : `approval rejected${approval.decisionReason ? `: ${approval.decisionReason}` : ''}`;
       await this.runRepository.save(run);
+      await releaseRunWorkspaces(this.workspaceRepository, run.id, this.runRepository);
       this.logger.log(`run ${run.id} cancelled after approval ${approval.status}`);
     }
   }

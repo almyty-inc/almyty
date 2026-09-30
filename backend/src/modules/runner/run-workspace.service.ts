@@ -1,6 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+
+import { AgentRun } from '../../entities/agent-run.entity';
+import { AgentExecution } from '../../entities/agent-execution.entity';
 
 import { Agent } from '../../entities/agent.entity';
 import { Runner, RunnerIsolationTier } from '../../entities/runner.entity';
@@ -31,6 +34,9 @@ const PREPARE_TIMEOUT_MS = 15_000;
 
 const UNIQUE_VIOLATION = '23505';
 
+/** How far up a run's parent chain jobOf looks. */
+const MAX_JOB_DEPTH = 32;
+
 /** A POSIX or Windows absolute path, as the runner answers from realpath. */
 const ABSOLUTE_PATH = /^(\/|[A-Za-z]:[\\/]|\\\\)/;
 
@@ -42,10 +48,13 @@ const ABSOLUTE_PATH = /^(\/|[A-Za-z]:[\\/]|\\\\)/;
  * call is going to: the runner makes a folder (`workspace.prepare`, named
  * `<agent>-<run>`), the workspace is recorded for the run's user and
  * attributed to the agent and run, and every later call of the same run on
- * that runner reuses it. It is an ordinary workspace from then on: the
- * default time limit, released from the runner's Workspaces tab, expired by
- * the TTL sweep, stranded when the runner goes offline. A run whose
- * workspace ended gets a new one in the same folder on its next call.
+ * that runner reuses it. Helper and sub-agent runs of a run are the same
+ * job: they work in the top-level run's workspace on that runner, or get
+ * the job's own on another runner. It is an ordinary workspace from then
+ * on: released when the job's top-level run ends (releaseRunWorkspaces),
+ * or from the runner's Workspaces tab, expired by the TTL sweep, stranded
+ * when the runner goes offline. A run whose workspace ended gets a new one
+ * in the same folder on its next call.
  *
  * Capacity: a runner holds at most `config.maxConcurrent` active
  * workspaces through this path; past that the call fails and says so.
@@ -61,10 +70,52 @@ export class RunWorkspaceService {
     @InjectRepository(Agent) private readonly agents: Repository<Agent>,
     private readonly runners: RunnerService,
     private readonly calls: RunnerCallService,
+    // The parent chain of an autonomous run, and a workflow execution's
+    // agent (jobOf). @Optional() for the positional spec harnesses; without
+    // them every run is its own job.
+    @Optional() @InjectRepository(AgentRun) private readonly agentRuns?: Repository<AgentRun>,
+    @Optional() @InjectRepository(AgentExecution) private readonly executions?: Repository<AgentExecution>,
   ) {}
 
-  async acquire(input: AcquireRunWorkspaceInput): Promise<Workspace> {
-    const owner = ownerOf(input);
+  /**
+   * The job a run belongs to: the top of its parentRunId chain (an
+   * autonomous run's helpers, collaboration members and spawned agents all
+   * point at the run that started them), and that run's agent. A workflow
+   * sub-agent arrives here with its top-level run's id already
+   * (workspaceRunId in the request context). Bounded and cycle-safe; a
+   * parent in another organization is not followed.
+   */
+  private async jobOf(runId: string, organizationId: string): Promise<{ runId: string; agentId: string | null }> {
+    let job = runId;
+    let agentId: string | null = null;
+    if (this.agentRuns) {
+      const seen = new Set<string>();
+      let run = await this.findRun(runId, organizationId);
+      while (run) {
+        job = run.id;
+        agentId = run.agentId ?? null;
+        seen.add(run.id);
+        if (!run.parentRunId || seen.has(run.parentRunId) || seen.size >= MAX_JOB_DEPTH) break;
+        run = await this.findRun(run.parentRunId, organizationId);
+      }
+    }
+    if (!agentId && this.executions) {
+      const execution = await this.executions.findOne({ where: { id: job, organizationId }, select: { id: true, agentId: true } });
+      agentId = execution?.agentId ?? null;
+    }
+    return { runId: job, agentId };
+  }
+
+  private findRun(id: string, organizationId: string): Promise<Pick<AgentRun, 'id' | 'parentRunId' | 'agentId'> | null> {
+    return this.agentRuns!.findOne({ where: { id, organizationId }, select: { id: true, parentRunId: true, agentId: true } });
+  }
+
+  async acquire(requested: AcquireRunWorkspaceInput): Promise<Workspace> {
+    const owner = ownerOf(requested);
+    // A helper or sub-agent run works in the job's workspace: the one the
+    // top-level run has (or gets) on this runner, attributed to its agent.
+    const job = await this.jobOf(requested.runId, requested.organizationId);
+    const input = { ...requested, runId: job.runId, agentId: job.agentId ?? requested.agentId ?? null };
     const runner = await this.resolveRunner(input);
     const key = `${input.runId}:${runner.id}`;
     const pending = this.inFlight.get(key);

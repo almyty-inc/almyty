@@ -1,6 +1,8 @@
 import { NotFoundException } from '@nestjs/common';
 
 import { Agent } from '../../entities/agent.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
+import { AgentExecution } from '../../entities/agent-execution.entity';
 import { RunnerIsolationTier, RunnerState } from '../../entities/runner.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { fakeManager, fakeRepository } from '../../test/fake-repository';
@@ -34,20 +36,22 @@ function runner(overrides: Record<string, any> = {}) {
   };
 }
 
-function build(opts: { runner?: any; prepare?: jest.Mock; seed?: any[] } = {}) {
+function build(opts: { runner?: any; prepare?: jest.Mock; seed?: any[]; runs?: any[]; executions?: any[] } = {}) {
   const workspaces = fakeRepository<Workspace>({ seed: opts.seed ?? [], idPrefix: 'ws' });
   const agents = fakeRepository<Agent>([{ id: AGENT, name: 'Support Bot', organizationId: ORG } as any]);
-  fakeManager([[Workspace, workspaces], [Agent, agents]]);
+  const agentRuns = fakeRepository<AgentRun>(opts.runs ?? []);
+  const executions = fakeRepository<AgentExecution>(opts.executions ?? []);
+  fakeManager([[Workspace, workspaces], [Agent, agents], [AgentRun, agentRuns], [AgentExecution, executions]]);
   const theRunner = opts.runner ?? runner();
   const runners = {
-    resolveForDispatch: jest.fn(async () => theRunner),
+    resolveForDispatch: jest.fn(async (_id?: string, _caller?: unknown): Promise<any> => theRunner),
     resolveByLabels: jest.fn(async () => theRunner),
   };
   const prepare =
     opts.prepare ??
     jest.fn(async (_runnerId: string, _method: string, params: any) => ({ ok: true, result: { cwd: `/home/me/.almyty/workspaces/${params.name}` } }));
   const calls = { dispatch: prepare };
-  const svc = new RunWorkspaceService(workspaces as any, agents as any, runners as any, calls as any);
+  const svc = new RunWorkspaceService(workspaces as any, agents as any, runners as any, calls as any, agentRuns as any, executions as any);
   const acquire = (overrides: Record<string, any> = {}) =>
     svc.acquire({
       runnerId: 'runner-1',
@@ -233,6 +237,77 @@ describe('RunWorkspaceService.acquire', () => {
     const ws = await acquire();
     expect(ws.id).toBe('ws-other-pod');
     expect(workspaces.rows()).toHaveLength(1);
+  });
+});
+
+/**
+ * One job, one folder. A helper, collaboration member or spawned agent is a
+ * child run (parentRunId); it works in the top-level run's workspace on the
+ * same runner, and on a different runner gets the job's own there.
+ */
+describe('sub-agent runs share the job\'s workspace', () => {
+  const PARENT = RUN;
+  const CHILD = '99990000-5555-4555-8555-555555555555';
+  const GRANDCHILD = '88880000-6666-4666-8666-666666666666';
+  const runs = [
+    { id: PARENT, organizationId: ORG, agentId: AGENT, parentRunId: null },
+    { id: CHILD, organizationId: ORG, agentId: 'agent-helper', parentRunId: PARENT },
+    { id: GRANDCHILD, organizationId: ORG, agentId: 'agent-helper', parentRunId: CHILD },
+  ];
+
+  it('a child run on the same runner uses the parent run\'s workspace', async () => {
+    const { acquire, prepare, workspaces } = build({ runs });
+    const parents = await acquire({ runId: PARENT });
+    const childs = await acquire({ runId: CHILD, agentId: 'agent-helper' });
+    const grandchilds = await acquire({ runId: GRANDCHILD, agentId: 'agent-helper' });
+    expect(childs.id).toBe(parents.id);
+    expect(grandchilds.id).toBe(parents.id);
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(workspaces.rows()).toHaveLength(1);
+  });
+
+  it('a child that calls first makes the job\'s workspace, named and attributed to the top-level run', async () => {
+    const { acquire, workspaces } = build({ runs });
+    const ws = await acquire({ runId: CHILD, agentId: 'agent-helper' });
+    expect(workspaces.row(ws.id)).toMatchObject({ runId: PARENT, agentId: AGENT, name: 'support-bot-aaaabbbb' });
+    expect((await acquire({ runId: PARENT })).id).toBe(ws.id);
+  });
+
+  it('a child sent to another runner gets its own workspace there', async () => {
+    const other = runner({ id: 'runner-2', name: 'gpu-box' });
+    const { acquire, runners, workspaces } = build({ runs });
+    runners.resolveForDispatch.mockImplementation(async (id: string) => (id === 'runner-2' ? other : runner()));
+    const here = await acquire({ runId: PARENT });
+    const there = await acquire({ runId: CHILD, runnerId: 'runner-2' });
+    expect(there.id).not.toBe(here.id);
+    expect(workspaces.row(there.id)).toMatchObject({ runnerId: 'runner-2', runId: PARENT });
+  });
+
+  it('does not follow a parent in another organization', async () => {
+    const { acquire, workspaces } = build({
+      runs: [
+        { id: CHILD, organizationId: ORG, agentId: 'agent-helper', parentRunId: 'foreign-run' },
+        { id: 'foreign-run', organizationId: 'org-2', agentId: 'x', parentRunId: null },
+      ],
+    });
+    const ws = await acquire({ runId: CHILD, agentId: 'agent-helper' });
+    expect(workspaces.row(ws.id)!.runId).toBe(CHILD);
+  });
+
+  it('stops on a parent chain that loops', async () => {
+    const { acquire } = build({
+      runs: [
+        { id: 'a', organizationId: ORG, agentId: AGENT, parentRunId: 'b' },
+        { id: 'b', organizationId: ORG, agentId: AGENT, parentRunId: 'a' },
+      ],
+    });
+    await expect(acquire({ runId: 'a' })).resolves.toBeDefined();
+  });
+
+  it('attributes a workflow run\'s workspace to the execution\'s agent', async () => {
+    const { acquire, workspaces } = build({ executions: [{ id: RUN, organizationId: ORG, agentId: AGENT }] });
+    const ws = await acquire({ agentId: 'agent-sub' });
+    expect(workspaces.row(ws.id)!.agentId).toBe(AGENT);
   });
 });
 

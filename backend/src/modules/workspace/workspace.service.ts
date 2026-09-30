@@ -14,6 +14,10 @@ import { Repository, LessThanOrEqual, EntityManager, In } from 'typeorm';
 import { Runner, RunnerIsolationTier } from '../../entities/runner.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { Agent } from '../../entities/agent.entity';
+import { OrganizationRole } from '../../entities/user-organization.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
+import { AgentExecution } from '../../entities/agent-execution.entity';
+import { ENDED_RUN_STATUSES, releaseRunWorkspaces } from './run-end-release';
 import { canAcceptWork } from '../runner/runner-state';
 import { RunnerService } from '../runner/runner.service';
 import {
@@ -112,19 +116,22 @@ export class WorkspaceService {
   }
 
   /**
-   * Look up a workspace, verifying it belongs to the caller's
-   * (user, org). The workspace routes' lookup; dispatch asks
-   * findForDispatch, which also requires it to be live on that runner.
+   * Look up a workspace the caller may see: their own, or one on a runner
+   * they oversee (listForOwner). The workspace routes' lookup, for reading
+   * and for release; anything else is "not found", so the answer does not
+   * say whose workspaces exist. Dispatch asks findForDispatch, which only
+   * ever covers the caller's own.
    */
   async getOne(
     id: string,
-    ownerUserId: string,
+    userId: string,
     organizationId: string,
   ): Promise<Workspace> {
-    const ws = await this.workspaces.findOne({
-      where: { id, ownerUserId, organizationId },
-    });
+    const ws = await this.workspaces.findOne({ where: { id, organizationId } });
     if (!ws) throw new NotFoundException('workspace not found');
+    if (ws.ownerUserId === userId) return ws;
+    const overseen = await this.overseenRunnerIds(userId, organizationId);
+    if (!overseen.includes(ws.runnerId)) throw new NotFoundException('workspace not found');
     return ws;
   }
 
@@ -238,16 +245,46 @@ export class WorkspaceService {
   }
 
   /**
-   * The caller's workspaces, newest first. One an agent run was given
-   * carries `agent: { id, name }` (name only, never the agent's config) so
-   * the runner's Workspaces tab can say which agent and run it is for.
+   * The workspaces the caller may see, newest first: their own, every one
+   * on a runner they own (another member's agent run working on their
+   * machine), and -- for an org owner or admin -- every one on the
+   * organization's team and org-wide runners. A private runner's
+   * workspaces stay its owner's, as the runner itself does. One an agent
+   * run was given carries `agent: { id, name }` (name only, never the
+   * agent's config) so the Workspaces tab can say which agent and run it
+   * is for.
    */
-  async listForOwner(ownerUserId: string, organizationId: string): Promise<Workspace[]> {
-    const rows = await this.workspaces.find({
-      where: { ownerUserId, organizationId },
-      order: { createdAt: 'DESC' },
-    });
+  async listForOwner(userId: string, organizationId: string): Promise<Workspace[]> {
+    const overseen = await this.overseenRunnerIds(userId, organizationId);
+    const own = await this.workspaces.find({ where: { ownerUserId: userId, organizationId }, order: { createdAt: 'DESC' } });
+    const onOverseen = overseen.length > 0
+      ? await this.workspaces.find({ where: { organizationId, runnerId: In(overseen) }, order: { createdAt: 'DESC' } })
+      : [];
+    const byId = new Map<string, Workspace>();
+    for (const w of [...own, ...onOverseen]) byId.set(w.id, w);
+    const rows = [...byId.values()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return this.attachAgentNames(rows, organizationId);
+  }
+
+  /**
+   * Runners whose every workspace this user may see and release: the ones
+   * they own, and for an org owner or admin the organization's team and
+   * org-wide runners (a private runner is its owner's alone, admins
+   * included, as everywhere else).
+   */
+  private async overseenRunnerIds(userId: string, organizationId: string): Promise<string[]> {
+    if (!userId) return [];
+    const owned = await this.runners.find({ where: { ownerUserId: userId, organizationId }, select: { id: true } });
+    const ids = new Set(owned.map((r) => r.id));
+    const role = this.accessPolicy ? await this.accessPolicy.getOrgRole(userId, organizationId) : null;
+    if (role === OrganizationRole.OWNER || role === OrganizationRole.ADMIN) {
+      const shared = await this.runners.find({
+        where: { organizationId, visibility: In(['team', 'org']) },
+        select: { id: true },
+      });
+      for (const r of shared) ids.add(r.id);
+    }
+    return [...ids];
   }
 
   async attachAgentNames(rows: Workspace[], organizationId: string): Promise<Workspace[]> {
@@ -300,6 +337,40 @@ export class WorkspaceService {
       this.logger.log(`expired ${expired.length} workspace(s)`);
     }
     return expired;
+  }
+
+  /**
+   * The safety net for releasing a finished job's workspaces. A run's end
+   * releases them directly (releaseRunWorkspaces), but a run can also end
+   * where nothing calls that: the run reaper, a collaboration step, a
+   * queue failure written by another path. The workspace tick asks this
+   * every beat, with the same rule: a workspace is released once the run
+   * it was given to has ended and -- for an autonomous run -- no run of its
+   * job (any descendant down the parentRunId chain) is still going.
+   */
+  async releaseForEndedRuns(now = new Date()): Promise<number> {
+    const active = (await this.workspaces.find({ where: { status: WorkspaceStatus.ACTIVE } })).filter((w) => !!w.runId);
+    if (active.length === 0) return 0;
+    const runIds = [...new Set(active.map((w) => w.runId as string))];
+    const manager = this.workspaces.manager;
+    const runs = manager.getRepository(AgentRun);
+    let released = 0;
+
+    const endedRuns = await runs.find({
+      where: { id: In(runIds), status: In([...ENDED_RUN_STATUSES]) } as any,
+      select: { id: true } as any,
+    });
+    // releaseRunWorkspaces checks the rest of the job before releasing.
+    for (const r of endedRuns) released += await releaseRunWorkspaces(this.workspaces, r.id, runs, now);
+
+    const endedExecutions = await manager.getRepository(AgentExecution).find({
+      where: { id: In(runIds), status: In([...ENDED_RUN_STATUSES]) } as any,
+      select: { id: true } as any,
+    });
+    for (const e of endedExecutions) released += await releaseRunWorkspaces(this.workspaces, e.id, null, now);
+
+    if (released > 0) this.logger.log(`released ${released} workspace(s) of ended runs`);
+    return released;
   }
 
   /**

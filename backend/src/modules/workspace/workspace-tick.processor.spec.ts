@@ -30,6 +30,7 @@ describe('WorkspaceTickProcessor', () => {
           return 2;
         }),
       sweepExpired: overrides.sweep ?? jest.fn(async () => { calls.push('sweep'); return []; }),
+      releaseForEndedRuns: jest.fn(async () => { calls.push('release-ended'); return 0; }),
     };
     const dataSource = {
       transaction: overrides.transaction ??
@@ -54,7 +55,7 @@ describe('WorkspaceTickProcessor', () => {
 
     await processor.tick({} as any);
 
-    expect(calls).toEqual(['tx-begin', 'tick(in-tx)', 'strand(in-tx)', 'tx-commit', 'sweep']);
+    expect(calls).toEqual(['tx-begin', 'tick(in-tx)', 'strand(in-tx)', 'tx-commit', 'sweep', 'release-ended']);
   });
 
   it('passes the transaction manager to both writes, so neither lands alone', async () => {
@@ -87,5 +88,17 @@ describe('WorkspaceTickProcessor', () => {
 
     expect(workspaces.markStrandedForRunners).not.toHaveBeenCalled();
     expect(workspaces.sweepExpired).toHaveBeenCalled();
+  });
+
+  it('releases the workspaces of runs that ended where nothing released them, every beat', async () => {
+    const { processor, workspaces } = makeProcessor();
+    await processor.tick({} as any);
+    expect(workspaces.releaseForEndedRuns).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed ended-run release does not fail the tick', async () => {
+    const { processor, workspaces } = makeProcessor();
+    workspaces.releaseForEndedRuns.mockRejectedValueOnce(new Error('db down'));
+    await expect(processor.tick({} as any)).resolves.toBeUndefined();
   });
 });

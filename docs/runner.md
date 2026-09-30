@@ -199,7 +199,7 @@ The walkthrough lives at [docs/runner-demo.md](runner-demo.md): start a runner w
 Four pages, all conforming to the existing UI patterns in the repo (React Router v6, TanStack Query inline in pages, shadcn/ui components, custom `<table>`s with the same header/Card/empty-state shape `agents.tsx` uses):
 
 - `/runners` — list page with state badge (a runner whose daemon never connected reads "never connected"), visibility badge, OS/arch, last heartbeat, capacity, labels, and a Delete action behind a one-line confirmation. Lists every runner the caller may see: their own (private ones included), org-wide ones, and team ones for their teams. Polls every 15s (half the runner heartbeat interval). Empty state links to the start-a-runner page.
-- `/runners/:id` — detail page with runtime info, labels, capabilities (binary detection results) and a Workspaces tab: the caller's workspaces on the runner in a table with cwd search, the agent and run each was made for, status, isolation, time left and a Release action (with a confirmation) on active rows. No create button: agent runs get workspaces automatically (see "Workspaces for agent runs"). The owner changes visibility in place on this page. Delete renders when the runner is `offline` or has never connected and requires confirmation.
+- `/runners/:id` — detail page with runtime info, labels, capabilities (binary detection results) and a Workspaces tab: the workspaces on the runner the viewer may see (their own; all of them for the runner's owner; all on a team or org-wide runner for org owners/admins, see "Who sees a workspace") in a table with cwd search, the agent and run each was made for, status, isolation, time left and a Release action (with a confirmation) on active rows. No create button: agent runs get workspaces automatically (see "Workspaces for agent runs"). The owner changes visibility in place on this page. Delete renders when the runner is `offline` or has never connected and requires confirmation.
 - `/runners/new` — the setup page. Step 1: name, labels, visibility (Private by default, Team, Org-wide). "Generate command" creates the runner record (`POST /runners`, pending: never connected) holding all of that, so step 2's commands need only the name: `npm i -g @almyty/runner @almyty/auth`, `almyty-auth login`, `almyty-runner start --name X --org <org-id>`. From step 2 the user can go Back (the pending record is updated in place with `PATCH /runners/:id`, rename allowed only while pending) or Cancel (the pending record is deleted). Step 3 polls the record and opens the runner on its first heartbeat. An abandoned setup stays visible on `/runners` as "never connected" and can be deleted there.
 - `/runners/:runnerId/workspaces/:id` — one workspace: metadata (including the agent and run it was made for), close reason (only for terminated workspaces), Release action (only for active).
 
@@ -266,14 +266,42 @@ remains for scripts.
   `agentId` (nulled when the agent is deleted) and `runId`, the default one-hour
   TTL and the runner's isolation. Release, TTL expiry, stranding and the
   heartbeat reclaim apply unchanged.
-- **Reuse**: one workspace per (run, runner). Later calls of the same run find
-  the active row by `runId` and `runnerId`; concurrent calls on one pod share
-  one in-flight acquisition, and a partial unique index
-  (`UQ_workspaces_active_run_runner`, active rows only) makes a second pod
-  take the first pod's row. A run whose workspace was released or expired gets
-  a new one on its next call, in the same folder. An expired row the sweep has
-  not reached yet is expired on the spot. A different run, or a later run of the
-  same agent, gets its own.
+- **Reuse**: one workspace per (job, runner), where the job is the top-level
+  run. Later calls of the same run find the active row by `runId` and
+  `runnerId`; concurrent calls on one pod share one in-flight acquisition, and
+  a partial unique index (`UQ_workspaces_active_run_runner`, active rows only)
+  makes a second pod take the first pod's row. A run whose workspace was
+  released or expired gets a new one on its next call, in the same folder. An
+  expired row the sweep has not reached yet is expired on the spot. A different
+  run, or a later run of the same agent, gets its own.
+- **Sub-agents share it (one job, one folder)**: a helper, collaboration member
+  or spawned agent is an autonomous child run, and `RunWorkspaceService.jobOf`
+  walks its `parentRunId` chain (same organization, cycle-safe, at most 32
+  hops) to the top-level run. A workflow `sub_agent` node hands the top-level
+  execution's id down as `EngineInternalOptions.workspaceRunId`, which the
+  engine puts in the correlation scope, and the executor uses it as the run.
+  So a child on the same runner works in the parent's workspace. A child sent
+  to another runner gets the job's workspace on that runner. Either way the
+  row's `runId` and `agentId` are the top-level run's and its agent's, and the
+  folder is named after them.
+- **Released when the job ends**: `releaseRunWorkspaces`
+  (`backend/src/modules/workspace/run-end-release.ts`) is called where runs
+  end: the autonomous step loop when a step reports the run done, the queue's
+  exhausted-retry failure and the timeout check, `cancelRun`, an approval
+  rejection, and the workflow engine's `finally` on every way out of
+  `execute`. For an autonomous run it finds the job's top-level run
+  (`jobRootOf`, the same walk as `jobOf`) and releases the job's active rows
+  only if no run of the job, the top-level run or any descendant, is still
+  pending, running, sleeping, waiting for input or waiting for an approval
+  (`jobHasLiveRun`). So a parent that ends before its helpers leaves them the
+  folder, and the last run of the job to end releases it. A workflow's
+  sub-agents run inside its `execute` and end before it, so a workflow run is
+  released as it ends. The transition is conditional, like every one out of
+  `active` (`closeReason: { kind: 'released', detail: 'run <top-level id>
+  ended' }`). The workspace tick's `releaseForEndedRuns` applies the same
+  rule, within one beat, to whatever a run that ended elsewhere (the reaper,
+  a collaboration step) left active. The folder stays on the machine; the
+  heartbeat stops the processes. The one-hour TTL remains the safety net.
 - **Capacity**: the runner holds at most `config.maxConcurrent` active
   workspaces; past that the call fails with `runner_at_capacity`.
 - **Failure** is the tool call's error (`<code>: <sentence>`), which the agent
@@ -281,8 +309,25 @@ remains for scripts.
   (the runner could not make the folder, or is too old to), `workspace_required`
   (no one to own it), `runner_offline`, `runner_not_found`.
 
-The runner's Workspaces tab lists each workspace with the agent and run it was
-made for (`GET /workspaces` attaches `agent: { id, name }`) and a Release action.
+### Who sees a workspace
+
+`GET /workspaces`, `GET /workspaces/:id` and `DELETE /workspaces/:id`
+(release) answer, per `WorkspaceService.listForOwner` and `getOne`:
+
+- the workspace's owner;
+- the owner of the runner it is on, for every workspace on it, including those
+  other members' agent runs were given;
+- org owners and admins, for every workspace on the organization's team and
+  org-wide runners. A private runner's workspaces are its owner's alone, admins
+  included, the same as the runner itself.
+
+Anyone else gets 404. Dispatch into a workspace (`findForDispatch`) is
+unchanged: only the owner's runs, or a gateway covering the owner, may send
+work into it.
+
+The runner's Workspaces tab lists each workspace the viewer may see with the
+agent and run it was made for (`GET /workspaces` attaches `agent: { id, name }`)
+and a Release action.
 
 ## Isolation: host is what runs
 

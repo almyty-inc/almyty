@@ -99,6 +99,8 @@ export interface NodeExecutionOptions {
   principal?: ExecutionPrincipal;
   nestingDepth?: number;
   maxNestingDepth?: number;
+  /** The run whose runner workspaces this run's work shares (EngineInternalOptions). */
+  workspaceRunId?: string;
   edges?: AgentPipelineEdge[];
   /**
    * Cancellation signal from the owning agent execution. Flows

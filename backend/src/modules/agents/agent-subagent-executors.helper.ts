@@ -149,6 +149,9 @@ export class AgentSubAgentExecutors {
         {
           nestingDepth: currentDepth + 1,
           maxNestingDepth: maxDepth,
+          // One job, one folder: the sub-agent works in its parent's
+          // runner workspaces.
+          workspaceRunId: options.workspaceRunId,
         },
       );
     } catch (err: any) {
