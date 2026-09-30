@@ -1,6 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import {
+  BaseAdapter,
+  NormalizedMessage,
+  AdapterResponse,
+  AttachmentFetchLimits,
+  FetchedAttachment,
+  InboundAttachment,
+} from './base.adapter';
 import * as crypto from 'crypto';
+
+/** Message types whose `url` is a file (mxc://server/mediaId). */
+const FILE_MSGTYPES = new Set(['m.image', 'm.file', 'm.audio', 'm.video']);
 
 @Injectable()
 export class MatrixAdapter extends BaseAdapter {
@@ -11,10 +21,31 @@ export class MatrixAdapter extends BaseAdapter {
     // Matrix client-server API event format
     const event = rawPayload;
     const content = event.content || {};
+    const isFile = FILE_MSGTYPES.has(content.msgtype);
+    // An unencrypted file carries an mxc:// URI; an encrypted one (`file`)
+    // cannot be read by a bridge that does not hold the room keys.
+    const attachments: InboundAttachment[] =
+      isFile && typeof content.url === 'string' && content.url.startsWith('mxc://')
+        ? [{
+            ref: content.url,
+            type: content.info?.mimetype || 'application/octet-stream',
+            name: content.filename || content.body || 'attachment',
+            ...(typeof content.info?.size === 'number' ? { size: content.info.size } : {}),
+          }]
+        : [];
+    // A file's body is its filename unless a separate filename makes it a caption.
+    const text = isFile ? (content.filename && content.body !== content.filename ? content.body : '') : content.body || '';
+    const sender = typeof event.sender === 'string' ? event.sender : undefined;
     return {
-      text: content.body || '',
+      text: text || '',
       userId: event.sender || 'unknown',
       threadId: event.room_id || undefined,
+      ...(attachments.length ? { attachments } : {}),
+      // "@anna:example.org" reads as "anna".
+      ...(sender ? { sender: { id: sender, name: sender.replace(/^@/, '').split(':')[0] || undefined } } : {}),
+      // A room is where several people can talk, and an event does not say
+      // whether this one is a direct chat, so every message is named.
+      group: true,
       metadata: {
         eventId: event.event_id,
         roomId: event.room_id,
@@ -22,6 +53,22 @@ export class MatrixAdapter extends BaseAdapter {
         source: 'matrix',
       },
     };
+  }
+
+  /**
+   * An mxc:// URI read from the configured homeserver's authenticated media
+   * endpoint, with the access token, through the egress guard.
+   */
+  async fetchAttachment(
+    attachment: InboundAttachment,
+    config: Record<string, any>,
+    limits: AttachmentFetchLimits,
+  ): Promise<FetchedAttachment | null> {
+    const match = /^mxc:\/\/([A-Za-z0-9.:\-\[\]]+)\/([A-Za-z0-9_-]+)$/.exec(attachment.ref ?? '');
+    if (!match || !config.homeserver_url || !config.access_token) return null;
+    const base = String(config.homeserver_url).replace(/(?<!\/)\/+$/, '');
+    const url = `${base}/_matrix/client/v1/media/download/${encodeURIComponent(match[1])}/${encodeURIComponent(match[2])}`;
+    return this.fetchBytes(url, limits, { Authorization: `Bearer ${config.access_token}` });
   }
 
   /** The Matrix event id, globally unique and stable on replay. */

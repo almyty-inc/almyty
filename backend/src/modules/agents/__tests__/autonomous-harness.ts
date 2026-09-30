@@ -21,7 +21,8 @@ import { Readable } from 'stream';
 import { NotFoundException } from '@nestjs/common';
 
 import { LlmProvider, LlmProviderStatus, LlmProviderType } from '../../../entities/llm-provider.entity';
-import { Message } from '../../../entities/message.entity';
+import { Message, MessageContent } from '../../../entities/message.entity';
+import { MessageAttachmentResolver } from '../../llm-providers/message-attachments.resolver';
 import { Conversation } from '../../../entities/conversation.entity';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
@@ -135,6 +136,10 @@ export async function runAgent(opts: {
   tools?: Array<Record<string, any>>;
   /** The tool executor's executeTool, when a case needs to see its options. */
   executeTool?: jest.Mock;
+  /** The run's first user message, when a case sends files with it (parts, attached-files.ts). */
+  userMessage?: string | MessageContent[];
+  /** The files resolver the model calls go through (message-attachments.resolver.ts). */
+  attachmentResolver?: MessageAttachmentResolver;
 }) {
   const bodies: Array<{ model: string; body: any }> = [];
   const queues: Streams = JSON.parse(JSON.stringify(opts.streams));
@@ -154,7 +159,7 @@ export async function runAgent(opts: {
     if (!entity.createdAt) entity.createdAt = new Date(clock++);
     return storeMessage(entity);
   });
-  await messageRepository.save(Message.createUserMessage('conv-1', 'Where is my order 4411?'));
+  await messageRepository.save(Message.createUserMessage('conv-1', opts.userMessage ?? 'Where is my order 4411?'));
 
   const agent = {
     id: 'agent-1',
@@ -231,6 +236,10 @@ export async function runAgent(opts: {
     { bumpSessionStats: async () => undefined, bumpProviderStats: async () => undefined } as any,
     {
       resolveProviderSecrets: async () => undefined,
+      // The real resolver when a case hands one in (files a message refers
+      // to), else the request as it is.
+      resolveAttachments: async (org: string | undefined, p: any, request: any) =>
+        opts.attachmentResolver ? opts.attachmentResolver.resolve(org, p, request) : request,
       planRouteHead: async (_org: string, request: any) => {
         const route = opts.routes?.[request.routing?.objective];
         if (!route) throw new UnmodelledQueryError('no route is modelled for this policy');

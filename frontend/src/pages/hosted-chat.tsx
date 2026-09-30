@@ -25,6 +25,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { cn } from '@/lib/utils'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { AttachButton, AttachmentChips, useChatAttachments } from '@/components/hosted-chat/chat-attachments'
 import {
   disclosureLine,
   downloadBlob,
@@ -315,6 +316,10 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
   const [visitorAction, setVisitorAction] = useState<VisitorAction | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const streamRef = useRef<EventSource | null>(null)
+  // Files the visitor attaches to the next message, uploaded as picked.
+  const uploadAttachment = useCallback((file: File) => hostedChatApi.uploadAttachment(slug, file), [slug])
+  const attachments = useChatAttachments(uploadAttachment)
+  const clearAttachments = attachments.clear
 
   const {
     data: branding,
@@ -411,7 +416,9 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
     setLoadingThread(false)
     setError(null)
     setSidebarOpen(false)
-  }, [])
+    // Files picked for the old thread are not sent into the new one.
+    clearAttachments()
+  }, [clearAttachments])
 
   const downloadMyData = useCallback(async () => {
     setError(null)
@@ -458,7 +465,9 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
 
   const send = useCallback(async () => {
     const text = draft.trim()
-    if (!text || sending) return
+    // A message can be files alone; it waits for an upload still running.
+    const attachmentIds = attachments.readyIds
+    if ((!text && !attachmentIds.length) || sending || attachments.uploading) return
 
     setError(null)
     setDraft('')
@@ -468,7 +477,8 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
       {
         id: `local-${current.length}`,
         role: 'user',
-        content: text,
+        // The files as the transcript names them once the message is stored.
+        content: [text, ...attachments.readyNames.map((name) => `[Attachment: ${name}]`)].filter(Boolean).join('\n\n'),
         createdAt: new Date().toISOString(),
       },
     ])
@@ -478,7 +488,10 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         slug,
         text,
         conversationId ?? undefined,
+        attachmentIds,
       )
+      // Sent: the files belong to the message now.
+      attachments.clear()
       setConversationId(threadId)
       // Synchronously too: the effect that mirrors state into this ref
       // runs after render, and the stream handlers below are registered
@@ -611,7 +624,7 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
       // Drop the optimistic user turn: leaving it implies it was sent.
       setMessages((current) => current.filter((m) => !m.id.startsWith('local-')))
     }
-  }, [conversationId, draft, refetchConversations, sending, slug])
+  }, [attachments, conversationId, draft, refetchConversations, sending, slug])
 
   if (isLoading) {
     return (
@@ -741,32 +754,36 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
           )}
 
           <div className="sticky bottom-0 bg-background pb-4 pt-2">
-            <div className="flex items-end gap-2 rounded-2xl border bg-card p-2 shadow-sm focus-within:ring-2 focus-within:ring-[var(--tenant)]">
-              <Textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    void send()
-                  }
-                }}
-                rows={1}
-                aria-label="Message"
-                placeholder={`Message ${branding.appName}`}
-                className="max-h-40 min-h-[2.5rem] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
-              />
-              <Button
-                type="button"
-                size="icon"
-                aria-label="Send"
-                disabled={!draft.trim() || sending}
-                onClick={() => void send()}
-                className="h-9 w-9 shrink-0 rounded-xl"
-                style={{ background: 'var(--tenant)', color: 'var(--on-tenant)' }}
-              >
-                {sending ? <LoadingSpinner className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
-              </Button>
+            <div className="rounded-2xl border bg-card p-2 shadow-sm focus-within:ring-2 focus-within:ring-[var(--tenant)]">
+              <AttachmentChips items={attachments.items} onRemove={attachments.remove} />
+              <div className="flex items-end gap-2">
+                <AttachButton onFiles={attachments.add} disabled={sending || attachments.full} />
+                <Textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      void send()
+                    }
+                  }}
+                  rows={1}
+                  aria-label="Message"
+                  placeholder={`Message ${branding.appName}`}
+                  className="max-h-40 min-h-[2.5rem] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  aria-label="Send"
+                  disabled={(!draft.trim() && !attachments.readyIds.length) || sending || attachments.uploading}
+                  onClick={() => void send()}
+                  className="h-9 w-9 shrink-0 rounded-xl"
+                  style={{ background: 'var(--tenant)', color: 'var(--on-tenant)' }}
+                >
+                  {sending ? <LoadingSpinner className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
 
             {/* EU AI Act Art. 50: present unless the tenant holds the

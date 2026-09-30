@@ -6,6 +6,7 @@ import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse, StreamChunk } from '../llm-providers.service';
 import { stepKindSignal } from '../dto/llm-providers.dto';
 import { callLlmProviderHttp, callLlmProviderHttpStream } from './safe-request';
+import { toAnthropicContent } from '../content-parts';
 import { requireModel } from '../model-errors';
 
 
@@ -64,7 +65,7 @@ export async function callAnthropic(
     stop_sequences: request.stopSequences || conversation.context?.stopSequences,
     messages: nonSystemMessages.map(msg => ({
       role: msg.role === MessageRole.ASSISTANT ? 'assistant' : 'user',
-      content: msg.content,
+      content: toAnthropicContent(msg.content),
     })),
   };
 
@@ -162,7 +163,7 @@ function buildAnthropicRequestBody(
     stream,
     messages: nonSystemMessages.map(msg => ({
       role: msg.role === MessageRole.ASSISTANT ? 'assistant' : 'user',
-      content: msg.content,
+      content: toAnthropicContent(msg.content),
     })),
   };
 

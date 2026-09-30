@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import { BaseAdapter, NormalizedMessage, AdapterResponse, InboundAttachment } from './base.adapter';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -8,10 +8,20 @@ export class WebhookAdapter extends BaseAdapter {
   readonly type = 'webhook';
 
   normalizeInbound(rawPayload: any): NormalizedMessage {
+    // Files the caller links to: `attachments: [{url, type?, name?}]`, https
+    // links fetched like any URL someone else chose (base adapter default).
+    const attachments: InboundAttachment[] = (Array.isArray(rawPayload?.attachments) ? rawPayload.attachments : [])
+      .filter((a: any) => a && typeof a.url === 'string' && /^https:\/\//i.test(a.url))
+      .map((a: any) => ({
+        url: a.url,
+        type: typeof a.type === 'string' ? a.type : 'application/octet-stream',
+        name: typeof a.name === 'string' && a.name ? a.name : a.url.split('?')[0].split('/').pop() || 'attachment',
+      }));
     return {
       text: rawPayload.text || rawPayload.message || rawPayload.input || JSON.stringify(rawPayload),
       userId: rawPayload.userId || 'webhook',
       threadId: rawPayload.threadId || rawPayload.requestId,
+      ...(attachments.length ? { attachments } : {}),
       metadata: { source: 'webhook', raw: rawPayload },
     };
   }

@@ -19,6 +19,7 @@ import { EE_ENTITLEMENTS } from '../../licensing/license.constants';
 import { isPrivateGateway } from '../private-gateway';
 import { providerLabel, visitorOAuthConfigured } from './visitor-oauth';
 import { ChannelLinkService } from '../channel-link.service';
+import { FilesService } from '../../files/files.service';
 
 /**
  * The tenant-facing half of the hosted chat app.
@@ -77,6 +78,10 @@ export class HostedChatService {
     // Required: Nest must inject it, so a surface never serves branding
     // from the gateway. Typed optional only for positional unit specs.
     private readonly channelLink?: ChannelLinkService,
+    // Files the visitor sent (attachments), erased with them. Optional for
+    // positional unit specs; Nest always injects it.
+    @Optional()
+    private readonly files?: FilesService,
   ) {}
 
   /**
@@ -317,6 +322,9 @@ export class HostedChatService {
   /** Remove one conversation, its messages, and the runs behind it. */
   async deleteConversation(endUser: EndUser, conversationId: string): Promise<void> {
     const conversation = await this.findConversation(endUser, conversationId);
+    // Files sent in it go first, stored objects included: the foreign key
+    // would take the rows, but not what they point at.
+    await this.files?.removeForConversations(conversation.organizationId, [conversation.id]);
     // Runs reference the conversation with SET NULL, so delete them first
     // or they outlive the transcript they belong to.
     await this.runRepository.delete({ conversationId: conversation.id, endUserId: endUser.id });
@@ -326,6 +334,13 @@ export class HostedChatService {
 
   /** Erase everything this surface holds about the visitor. The cookie dies with the row. */
   async deleteVisitor(gateway: Gateway, endUser: EndUser): Promise<void> {
+    // The files they sent, in any conversation or not sent yet, before the
+    // conversations cascade away with the visitor row.
+    if (this.files) {
+      const conversations = await this.conversationRepository.find({ where: { endUserId: endUser.id }, select: { id: true } });
+      await this.files.removeForConversations(gateway.organizationId, conversations.map((c) => c.id));
+      await this.files.removeUnsentUploads(gateway.organizationId, { gatewayId: gateway.id, endUserId: endUser.id });
+    }
     // agent_runs.endUserId has no foreign key; take them out explicitly.
     await this.runRepository.delete({ endUserId: endUser.id });
     // conversations (and their messages) cascade from the visitor row.

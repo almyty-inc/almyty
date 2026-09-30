@@ -1,5 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import {
+  BaseAdapter,
+  NormalizedMessage,
+  AdapterResponse,
+  AttachmentFetchLimits,
+  FetchedAttachment,
+  InboundAttachment,
+} from './base.adapter';
+import { isImage, textWithMedia } from '../reply-media';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -25,10 +33,17 @@ export class MicrosoftTeamsAdapter extends BaseAdapter {
   normalizeInbound(rawPayload: any): NormalizedMessage {
     // Bot Framework activity format
     const activity = rawPayload;
+    const attachments = MicrosoftTeamsAdapter.attachmentsOf(activity);
+    const from = activity.from;
+    const senderId = from?.id || from?.aadObjectId;
     return {
       text: activity.text || '',
       userId: activity.from?.id || activity.from?.aadObjectId || 'unknown',
       threadId: activity.conversation?.id || undefined,
+      ...(attachments.length ? { attachments } : {}),
+      ...(senderId ? { sender: { id: senderId, name: from?.name || undefined } } : {}),
+      // A group chat or a team channel has several people in it; a personal chat has one.
+      group: ['groupChat', 'channel'].includes(activity.conversation?.conversationType) || activity.conversation?.isGroup === true,
       metadata: {
         activityId: activity.id,
         conversationId: activity.conversation?.id,
@@ -40,17 +55,69 @@ export class MicrosoftTeamsAdapter extends BaseAdapter {
     };
   }
 
+  /**
+   * Files on a Teams activity. An image pasted into the message is an
+   * attachment with an image content type and a `contentUrl` on the Bot
+   * Framework's attachment service, read with the bot's token. A file
+   * shared in a personal chat is a `file.download.info` card whose
+   * `downloadUrl` is a pre-authorized SharePoint link, read with nothing.
+   * The `text/html` copy of the message itself is not a file.
+   */
+  static attachmentsOf(activity: any): InboundAttachment[] {
+    const out: InboundAttachment[] = [];
+    for (const a of Array.isArray(activity?.attachments) ? activity.attachments : []) {
+      if (a?.contentType === 'application/vnd.microsoft.teams.file.download.info' && a.content?.downloadUrl) {
+        out.push({ url: a.content.downloadUrl, ref: 'download', type: 'application/octet-stream', name: a.name || 'attachment' });
+      } else if (typeof a?.contentType === 'string' && a.contentType.startsWith('image/') && a.contentUrl) {
+        out.push({ url: a.contentUrl, ref: 'inline', type: a.contentType, name: a.name || 'image' });
+      }
+    }
+    return out;
+  }
+
+  /** The Bot Framework's attachment service, which takes the bot token. */
+  static readonly INLINE_HOSTS = ['smba.trafficmanager.net', '.botframework.com', '.asm.skype.com'];
+  /** Where a shared file's pre-authorized download link points. */
+  static readonly DOWNLOAD_HOSTS = ['.sharepoint.com'];
+
+  async fetchAttachment(
+    attachment: InboundAttachment,
+    config: Record<string, any>,
+    limits: AttachmentFetchLimits,
+  ): Promise<FetchedAttachment | null> {
+    if (attachment.ref === 'download') {
+      if (!BaseAdapter.onHost(attachment.url, MicrosoftTeamsAdapter.DOWNLOAD_HOSTS)) return null;
+      return this.fetchBytes(attachment.url!, limits);
+    }
+    if (!BaseAdapter.onHost(attachment.url, MicrosoftTeamsAdapter.INLINE_HOSTS)) return null;
+    const token = config.bot_id && config.bot_password ? await this.getAccessToken(config.bot_id, config.bot_password) : null;
+    if (!token) return null;
+    return this.fetchBytes(attachment.url!, limits, { Authorization: `Bearer ${token}` });
+  }
+
   /** The Bot Framework activity id, stable across a retried POST. */
   deliveryId(rawPayload: any): string | undefined {
     return rawPayload?.id ? `microsoft_teams:${rawPayload.id}` : undefined;
   }
 
+  /**
+   * Images go as attachments Teams shows in the message, by link. A PDF or
+   * other file would need the file-consent flow, so it stays a link.
+   */
   formatOutbound(response: AdapterResponse): any {
-    return {
-      type: 'message',
-      text: response.text,
-    };
+    const images = (response.attachments ?? []).filter(isImage).slice(0, MicrosoftTeamsAdapter.MAX_IMAGES);
+    const text = textWithMedia(response, images);
+    return images.length
+      ? {
+          type: 'message',
+          text,
+          attachments: images.map((image) => ({ contentType: image.type, contentUrl: image.url, name: image.name })),
+        }
+      : { type: 'message', text };
   }
+
+  /** Images one reply shows. */
+  static readonly MAX_IMAGES = 5;
 
   /**
    * Post the reply as an activity on the conversation.

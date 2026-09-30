@@ -630,7 +630,7 @@ const SLACK_AUTH_TEST: HttpProbe = {
  * builder joins `scopes` with spaces, so the comma list travels as one
  * entry. `scopesNeeded` carries them individually for display.
  */
-const SLACK_SCOPES = ['chat:write', 'app_mentions:read', 'im:history'];
+const SLACK_SCOPES = ['chat:write', 'app_mentions:read', 'im:history', 'files:read', 'users:read'];
 
 const TWILIO_CONSOLE = 'https://console.twilio.com/';
 

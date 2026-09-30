@@ -106,7 +106,6 @@ describe('IMessageLoopMessageAdapter', () => {
         { url: 'https://cdn.loopmessage.com/attachments/abc/mug.jpeg', type: 'image/jpeg', name: 'mug.jpeg' },
         { url: 'https://cdn.example/voice.m4a', type: 'audio/mp4', name: 'voice.m4a' },
       ]);
-      expect(adapter.fetchesInboundAttachments).toBe(true);
     });
 
     it('sends reply files as `attachments`, at most ten, https and at most 256 characters each', async () => {

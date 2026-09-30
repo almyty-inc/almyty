@@ -70,6 +70,19 @@ export interface HostedChatMessage {
   createdAt: string
 }
 
+/** A file the visitor uploaded to send with a message. */
+export interface HostedChatAttachment {
+  id: string
+  name: string
+  mimeType: string
+  size: number
+}
+
+/** What the page accepts in its file picker: what the surface stores (images, PDFs, text files). */
+export const HOSTED_CHAT_ATTACHMENT_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/csv,text/markdown,application/json,.md,.csv,.txt,.json'
+/** The most files one message carries, and the largest one; the surface refuses more. */
+export const HOSTED_CHAT_MAX_ATTACHMENTS = 5
+export const HOSTED_CHAT_MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 /** Mirrors ChannelGatewayService.DEFAULT_AI_DISCLOSURE on the backend. */
 export const DEFAULT_AI_DISCLOSURE = 'You are chatting with an AI assistant.'
 
@@ -169,9 +182,26 @@ export const hostedChatApi = {
         filename: exportFilename(r.headers['content-disposition'], slug),
       })),
 
-  send: (slug: string, message: string, conversationId?: string) =>
+  /**
+   * Upload a file to send with the next message (an image, a PDF or a text
+   * file). Answers the id the message names in `attachmentIds`; a file the
+   * surface does not take is refused with a sentence the page shows.
+   */
+  uploadAttachment: (slug: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return client()
+      .post(`/public/chat/${slug}/attachments`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then((r) => unwrap<HostedChatAttachment>(r.data))
+  },
+
+  send: (slug: string, message: string, conversationId?: string, attachmentIds?: string[]) =>
     client()
-      .post(`/public/chat/${slug}/messages`, { message, conversationId })
+      .post(`/public/chat/${slug}/messages`, {
+        message,
+        conversationId,
+        ...(attachmentIds?.length ? { attachmentIds } : {}),
+      })
       .then((r) => unwrap<{ runId: string; conversationId: string }>(r.data)),
 
   /** Who the visitor is and whether the surface admits them (issues the cookie). */

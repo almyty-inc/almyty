@@ -21,6 +21,7 @@ const optionalPrice = z
 const capabilitiesSchema = z.object({
   tools: z.boolean().optional(),
   vision: z.boolean().optional(),
+  pdfInput: z.boolean().optional(),
   reasoning: z.boolean().optional(),
   embedding: z.boolean().optional(),
   structuredOutput: z.boolean().optional(),

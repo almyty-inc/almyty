@@ -29,6 +29,7 @@ function toForm(card: ModelCard): EditModelFormData {
     capabilities: {
       tools: !!card.capabilities?.tools,
       vision: !!card.capabilities?.vision,
+      pdfInput: !!card.capabilities?.pdfInput,
       reasoning: !!card.capabilities?.reasoning,
       embedding: !!card.capabilities?.embedding,
       structuredOutput: !!card.capabilities?.structuredOutput,

@@ -6,12 +6,15 @@ import {
   Get,
   HttpException,
   HttpStatus,
+  NotFoundException,
   Param,
   Post,
   Query,
   Req,
   Res,
   Optional,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -29,6 +32,10 @@ import { withholdsCandidateAnswers } from '../../agents/final-answer';
 import { answerStreamFilter } from '../../agents/answer-stream.filter';
 import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
 import { ChannelPolicyService, withChannelPolicy } from '../channel-policy.service';
+import { ChannelAttachmentReader, attachmentIdsFrom, type ReadAttachments } from './channel-attachments.service';
+import { FilesService } from '../../files/files.service';
+import { TempFileInterceptor } from '../../files/temp-upload';
+import { readFile } from 'fs/promises';
 
 /**
  * The public API behind {slug}.almyty.app.
@@ -55,6 +62,10 @@ export class HostedChatController {
     // only so positional unit specs construct the controller; Nest always
     // injects it (channel-policy.guard.spec.ts).
     @Optional() private readonly channelPolicy?: ChannelPolicyService,
+    // Files a visitor sends with a message: stored, checked, and handed to
+    // the agent by reference. Optional for positional specs; Nest injects them.
+    @Optional() private readonly attachments?: ChannelAttachmentReader,
+    @Optional() private readonly files?: FilesService,
   ) {}
 
   /**
@@ -277,16 +288,84 @@ export class HostedChatController {
     };
   }
 
+  /**
+   * Upload a file to send with the next message: an image, a PDF or a text
+   * file, up to ChannelAttachmentReader.MAX_BYTES. The same surface and
+   * visitor limits as a message apply, so uploads cannot be used to get
+   * round them. The file waits for the message that names it
+   * (`attachmentIds`); one never sent is removed a day later.
+   */
+  @Post(':slug/attachments')
+  @ApiOperation({ summary: 'Upload a file to send with the next message' })
+  // ChannelAttachmentReader.MAX_BYTES, written out: the upload guard reads the cap as a literal.
+  @UseInterceptors(TempFileInterceptor('file', 10 * 1024 * 1024))
+  async uploadAttachment(
+    @Param('slug') slug: string,
+    @UploadedFile() file: any,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (!this.attachments) throw new NotFoundException('Attachments are not available here.');
+    if (!file?.path) throw new BadRequestException('file is required');
+
+    const gateway = await this.hostedChat.findBySlug(slug);
+    const rate = await this.gatewayRateLimit.check(gateway);
+    if (rate.limited) {
+      if (rate.retryAfterSeconds) res.setHeader('Retry-After', String(rate.retryAfterSeconds));
+      throw new HttpException(
+        { code: rate.code ?? 'SURFACE_RATE_LIMITED', message: rate.message ?? 'This chat is busy right now, please try again shortly.' },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    const { endUser, issuedSessionKey } = await this.hostedChat.resolveEndUser(gateway, this.sessionFrom(req), this.clientIp(req));
+    this.setSessionCookie(res, issuedSessionKey);
+    await this.requireVisitor(gateway, endUser);
+    const own = await this.gatewayRateLimit.checkVisitor(gateway, {
+      endUserId: endUser.id,
+      clientHash: HostedChatService.hashClient(this.clientIp(req)),
+    });
+    if (own.limited) {
+      if (own.retryAfterSeconds) res.setHeader('Retry-After', String(own.retryAfterSeconds));
+      throw new HttpException(
+        { code: own.code ?? 'VISITOR_RATE_LIMITED', message: own.message ?? 'Too many messages. Please wait a moment.' },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    // At most the multer cap, already on disk (files/temp-upload.ts).
+    const bytes = await readFile(file.path);
+    const stored = await this.attachments.storeUpload(
+      bytes,
+      file.originalname,
+      file.mimetype,
+      { organizationId: gateway.organizationId, agentId: gateway.agentId ?? null, gatewayId: gateway.id, endUserId: endUser.id },
+      'web_chat_upload',
+    );
+    if ('refused' in stored) throw new BadRequestException(stored.refused);
+    return { success: true, data: stored };
+  }
+
+  /** The visitor's unsent uploads a message names, as the agent gets them; 400 when any is not theirs. */
+  private async uploadedFiles(gateway: Gateway, endUser: EndUser, ids: string[]): Promise<ReadAttachments> {
+    if (!ids.length) return { lines: [], parts: [], fileIds: [] };
+    const files = this.files
+      ? await this.files.findUnsentUploads(gateway.organizationId, ids, { gatewayId: gateway.id, endUserId: endUser.id })
+      : null;
+    if (!files) throw new BadRequestException('An attachment was not found. Upload it again.');
+    return ChannelAttachmentReader.fromFiles(files);
+  }
+
   @Post(':slug/messages')
   @ApiOperation({ summary: 'Send a message to the hosted agent' })
   async postMessage(
     @Param('slug') slug: string,
-    @Body() body: { message?: string; conversationId?: string },
+    @Body() body: { message?: string; conversationId?: string; attachmentIds?: unknown },
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const message = typeof body?.message === 'string' ? body.message.trim() : '';
-    if (!message) throw new BadRequestException('message is required');
+    const attachmentIds = attachmentIdsFrom(body?.attachmentIds);
+    if (!message && !attachmentIds.length) throw new BadRequestException('message is required');
     if (message.length > 4000) {
       throw new BadRequestException('message too long (max 4000 chars)');
     }
@@ -333,9 +412,15 @@ export class HostedChatController {
     // spent for the day (or month), with a sentence rather than a number.
     const policy = this.channelPolicy ? await this.channelPolicy.admit(gateway) : null;
 
+    // The files this message names: the visitor's own uploads to this
+    // surface, not sent yet. Checked before anything is created, so a bad
+    // id costs nothing.
+    const sent = await this.uploadedFiles(gateway, endUser, attachmentIds);
+    const input = ChannelAttachmentReader.textWith(message, sent.lines);
+
     const conversation = body?.conversationId
       ? await this.hostedChat.findConversation(endUser, body.conversationId)
-      : await this.hostedChat.startConversation(gateway, endUser, message);
+      : await this.hostedChat.startConversation(gateway, endUser, message || sent.parts[0]?.name || 'Attachment');
 
     const run = await this.agentRuntimeService.startRun(
       gateway.agentId,
@@ -345,13 +430,15 @@ export class HostedChatController {
       // `users`, and every conversation write after it failed, so a
       // hosted chat could not answer at all.
       null,
-      message,
+      input,
       // Still traceable back to whoever actually sent it, in the column
       // that means a visitor. The policy adds the per-run cost cap and
       // stamps the run with its channel for the spend cap.
       withChannelPolicy(policy, {
         conversationId: conversation.id,
         endUserId: endUser.id,
+        // The files the message came with, by reference (attached-files.ts).
+        ...(sent.parts.length ? { attachments: sent.parts } : {}),
         metadata: {
           // Whether this product lets visitor conversations feed shared
           // memory; the runtime's auto-save policy reads it off the run.
@@ -366,6 +453,9 @@ export class HostedChatController {
         principal: gatewayPrincipal(gateway),
       }),
     );
+    // The files go with the conversation that read them: retention and the
+    // visitor's own erasure find them there.
+    await this.attachments?.fileUnder(gateway.organizationId, sent.fileIds, conversation.id, run.id);
 
     return {
       success: true,
