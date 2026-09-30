@@ -370,7 +370,7 @@ export function ToolDetailPage() {
                       <span className="text-muted-foreground">Endpoint:</span>
                       <code className="ml-2 break-all">{tool.graphqlConfig.endpoint}</code>
                     </div>
-                    <CodeBlock value={tool.graphqlConfig.query} language="graphql" maxHeight="200px" />
+                    <CodeBlock value={tool.graphqlConfig.query} language="text" maxHeight="200px" />
                   </>
                 )}
                 {tool.soapConfig && (

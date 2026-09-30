@@ -1167,7 +1167,7 @@
       "title": "A tool that posts to Slack",
       "path": "screenshots/guides/ops-2-slack-tool.png",
       "capturedAt": "2026-09-30T16:36:20.491Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "85bcc80914eef82366db42c8881e1be16c062fd546ea79bf0d2beac157f6508d",
       "source": {
         "kind": "browser",
@@ -1182,7 +1182,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "e58414fb1f97cdb2151ddd39381a9747ac9ee8b05e2dd92831a8b9f145de0f1f",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "The Create tool form and tool detail page changed for GraphQL, SOAP and gRPC tools (PR #889). The captured HTTP/imported-tool states look the same, but the sources moved; recapture to confirm."
     },
     {
       "id": "guides-ops-3-agent",
@@ -2372,7 +2373,7 @@
       "title": "Tool test",
       "path": "screenshots/tool-detail.png",
       "capturedAt": "2026-09-30T16:39:17.525Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6060c3bd3b88b8c7e8c0df729350b1e7514b99e51eebeb34a3114e8bba2e8840",
       "source": {
         "kind": "browser",
@@ -2387,14 +2388,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b2a8a7c1ebe0985e24dfa89609b6bee89deb199c29e3ce641683fdccb4cd00f7",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The Create tool form and tool detail page changed for GraphQL, SOAP and gRPC tools (PR #889). The captured HTTP/imported-tool states look the same, but the sources moved; recapture to confirm."
     },
     {
       "id": "tools-list",
       "title": "Tools list",
       "path": "screenshots/tools-list.png",
       "capturedAt": "2026-09-30T16:32:15.909Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "406ee85143d1b98ddefae4faa1ee5b74ca1abdd9da69d1069b03c0ef2850d418",
       "source": {
         "kind": "browser",
@@ -2409,7 +2411,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6e31b4943d1cf05db697d4ab45f519abaeae248d1dfa7ed0f78164f95fa8c471",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The Create tool form and tool detail page changed for GraphQL, SOAP and gRPC tools (PR #889). The captured HTTP/imported-tool states look the same, but the sources moved; recapture to confirm."
     },
     {
       "id": "versioning-history",

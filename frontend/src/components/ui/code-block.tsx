@@ -20,7 +20,6 @@ const languageExtensions: Record<string, any> = {
   python: [],
   py: [],
   text: [],
-  graphql: [],
 }
 
 interface CodeBlockProps {
