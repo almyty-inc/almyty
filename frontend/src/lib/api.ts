@@ -1110,12 +1110,14 @@ export const filesApi = {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
     return apiGet(`/files${qs}`)
   },
-  upload: (file: File, agentId?: string, runId?: string) => {
+  /** `purpose: 'app_icon'` marks a branding page's icon, cleared a day later if never saved. */
+  upload: (file: File, agentId?: string, runId?: string, purpose?: 'app_icon') => {
     const formData = new FormData()
     formData.append('file', file)
     const params = new URLSearchParams()
     if (agentId) params.set('agentId', agentId)
     if (runId) params.set('runId', runId)
+    if (purpose) params.set('purpose', purpose)
     const qs = params.toString() ? `?${params.toString()}` : ''
     return apiPost(`/files/upload${qs}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

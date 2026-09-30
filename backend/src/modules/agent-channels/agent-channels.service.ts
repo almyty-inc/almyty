@@ -124,6 +124,9 @@ export type ChannelView = AgentChannel & {
 /** Ceiling on one list of an agent's channels; the page is not paginated. */
 export const MAX_CHANNELS_PER_AGENT = 200;
 
+/** How long an app icon uploaded on the branding page may wait to be saved before the sweep clears it. */
+export const UNSAVED_ICON_TTL_MS = 24 * 60 * 60 * 1000;
+
 /**
  * Channels on an agent: adding, configuring, publishing and removing
  * them, and the agent's public settings (branding and visitor rules) they
@@ -572,9 +575,25 @@ export class AgentChannelsService {
    * branding or any channel's (a channel copying the agent's, say) stays.
    * Never fails the save that let go of it.
    */
-  private async releaseIconFiles(organizationId: string, previous: Array<string | null | undefined>): Promise<void> {
+  private async releaseIconFiles(organizationId: string, previous: Array<string | null | undefined>): Promise<number> {
     const candidates = [...new Set(previous.filter((id): id is string => !!id))];
-    if (!candidates.length || !this.files) return;
+    if (!candidates.length || !this.files) return 0;
+    const inUse = await this.iconFilesInUse(organizationId);
+    let removed = 0;
+    for (const id of candidates) {
+      if (inUse.has(id)) continue;
+      try {
+        await this.files.remove(id, organizationId);
+        removed++;
+      } catch (err: any) {
+        this.logger.warn(`Could not delete the app icon file ${id}: ${err?.message ?? err}`);
+      }
+    }
+    return removed;
+  }
+
+  /** The icon files the organization's agents and channels name in their branding. */
+  private async iconFilesInUse(organizationId: string): Promise<Set<string>> {
     const [agents, channels] = await Promise.all([
       this.agentRepository.find({ where: { organizationId }, select: { id: true, branding: true } }),
       this.channelRepository.find({ where: { organizationId }, select: { id: true, branding: true } }),
@@ -584,14 +603,23 @@ export class AgentChannelsService {
       const id = (row.branding as ChannelBranding | null | undefined)?.iconFileId;
       if (id) inUse.add(id);
     }
-    for (const id of candidates) {
-      if (inUse.has(id)) continue;
-      try {
-        await this.files.remove(id, organizationId);
-      } catch (err: any) {
-        this.logger.warn(`Could not delete the app icon file ${id}: ${err?.message ?? err}`);
-      }
-    }
+    return inUse;
+  }
+
+  /**
+   * Clear app icons uploaded on the branding page and never saved: an
+   * upload (purpose app_icon) older than a day that no agent's or
+   * channel's branding names. A day, so a page someone is still filling in
+   * keeps its icon. Run by the hourly channel housekeeping sweep.
+   */
+  async sweepUnsavedIcons(now: Date = new Date()): Promise<number> {
+    if (!this.files) return 0;
+    const stale = await this.files.findForPurposeBefore('app_icon', new Date(now.getTime() - UNSAVED_ICON_TTL_MS));
+    const byOrg = new Map<string, string[]>();
+    for (const file of stale) byOrg.set(file.organizationId, [...(byOrg.get(file.organizationId) ?? []), file.id]);
+    let removed = 0;
+    for (const [organizationId, ids] of byOrg) removed += await this.releaseIconFiles(organizationId, ids);
+    return removed;
   }
 
   /**

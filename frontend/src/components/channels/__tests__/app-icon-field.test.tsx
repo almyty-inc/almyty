@@ -60,9 +60,11 @@ describe('AppIconField', () => {
 
     await waitFor(() => expect(onValue).toHaveBeenCalledWith('file-1'))
     expect(toSquarePng).toHaveBeenCalled()
-    const [sent, agentId] = vi.mocked(filesApi.upload).mock.calls[0]
+    const [sent, agentId, , purpose] = vi.mocked(filesApi.upload).mock.calls[0]
     expect(sent).toMatchObject({ name: 'app-icon.png', type: 'image/png' })
     expect(agentId).toBe('agent-1')
+    // Marked, so an icon that is never saved is cleared a day later.
+    expect(purpose).toBe('app_icon')
     expect(await screen.findByAltText('App icon')).toHaveAttribute('src', 'blob:preview')
     expect(screen.getByRole('button', { name: 'Replace icon' })).toBeInTheDocument()
     // Shown from memory, not fetched back.

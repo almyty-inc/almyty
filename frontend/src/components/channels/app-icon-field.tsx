@@ -70,7 +70,7 @@ export function AppIconField({ id, value, onChange, agentId }: AppIconFieldProps
     setBusy(true)
     try {
       const png = await toSquarePng(file)
-      const uploaded: any = await filesApi.upload(new File([png], 'app-icon.png', { type: 'image/png' }), agentId)
+      const uploaded: any = await filesApi.upload(new File([png], 'app-icon.png', { type: 'image/png' }), agentId, undefined, 'app_icon')
       if (!uploaded?.id) throw new Error('The icon was not stored.')
       setLocal({ fileId: uploaded.id, url: URL.createObjectURL(png) })
       onChange(uploaded.id)
