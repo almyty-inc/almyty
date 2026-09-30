@@ -18,6 +18,8 @@ export const NOTIFICATION_EVENT_TYPES = [
   'connections.expired',
   'connections.rotation_due',
   'domains.unverified',
+  'models.new',
+  'models.unavailable',
   'account.welcome',
   'account.verify_email',
   'account.password_reset',
@@ -53,6 +55,8 @@ export interface NotificationChannelPreference {
    */
   locked?: boolean
   emailLocked?: boolean
+  /** Always shown in the app; only the email can be turned off. */
+  inAppLocked?: boolean
 }
 
 export type NotificationPreferenceMatrix = Record<string, NotificationChannelPreference>

@@ -10,6 +10,7 @@ import { ZepBackend } from './backends/zep.backend';
 import { SupermemoryBackend } from './backends/supermemory.backend';
 import { VertexMemoryBankBackend } from './backends/vertex-memory-bank.backend';
 import {
+  BackendCredentials,
   BackendRoutingConfig,
   MemoryBackend,
   TransferReport,
@@ -100,12 +101,60 @@ export class MemoryRouter implements OnModuleInit {
 
   // ── selection ───────────────────────────────────────────────
 
-  list_backends(): Array<{ id: string; capabilities: Capability[]; modes: Mode[] }> {
+  list_backends(): Array<{ id: string; capabilities: Capability[]; modes: Mode[]; canExpire: boolean }> {
     return Array.from(this.backends.values()).map((b) => ({
       id: b.id,
       capabilities: Array.from(b.capabilities),
       modes: Array.from(b.supported_modes),
+      // Whether a memory saved there can be given a time limit: the backend
+      // expires it itself, or almyty can delete it by its id (nativeId).
+      canExpire: b.capabilities.has('ttl') || typeof b.nativeId === 'function',
     }));
+  }
+
+  /** One backend by id, or undefined. */
+  backend(id: string): MemoryBackend | undefined {
+    return this.backends.get(id);
+  }
+
+  // ── explicit-backend operations (an agent's chosen memory account) ──
+  //
+  // An agent names the account its memories go to, whatever scope they
+  // are in (its own, a person's, the organization's). The account's
+  // credential is the organization's (it sits on the workspace memory
+  // settings, `credentialScope` here), unless the agent has an account of
+  // its own: then the caller resolved it and passes `creds`.
+
+  async putOn(backendId: string, item: MemoryItem, credentialScope: ScopeRef, creds?: BackendCredentials): Promise<MemoryItem> {
+    const b = this.explicit(backendId, item.mode);
+    return b.put(item, creds ?? (await this.credsResolver.resolve(credentialScope, b.id)) ?? undefined);
+  }
+
+  async searchOn(
+    backendId: string,
+    query: SearchQuery,
+    credentialScope: ScopeRef,
+    creds?: BackendCredentials,
+  ): Promise<ReturnType<MemoryBackend['search']>> {
+    const b = this.explicit(backendId, query.mode ?? 'memory');
+    this.require(b, 'vector_search');
+    return b.search(query, creds ?? (await this.credsResolver.resolve(credentialScope, b.id)) ?? undefined);
+  }
+
+  /** Delete one memory by the id the backend knows it by (MemoryBackend.nativeId). */
+  async deleteOn(backendId: string, nativeId: string, credentialScope: ScopeRef, creds?: BackendCredentials): Promise<boolean> {
+    const b = this.backends.get(backendId);
+    if (!b) throw new Error(`unknown memory backend: ${backendId}`);
+    return b.delete(nativeId, 'hard', creds ?? (await this.credsResolver.resolve(credentialScope, b.id)) ?? undefined);
+  }
+
+  private explicit(backendId: string, mode: Mode): MemoryBackend {
+    const b = this.backends.get(backendId);
+    if (!b) throw new Error(`unknown memory backend: ${backendId}`);
+    if (!b.supported_modes.has(mode)) {
+      throw new MemoryError({ kind: 'unsupported_capability', backend: b.id, capability: mode === 'memory' ? 'mode_memory' : 'mode_document' });
+    }
+    return b;
   }
 
   async healthAll(scope?: ScopeRef): Promise<Record<string, { ok: boolean; latency_ms: number }>> {

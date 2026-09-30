@@ -37,7 +37,7 @@ import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.se
 import { EmailProvisioningService } from './channels/email-provisioning.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { withGatewayQuota } from './gateway-quota';
-import { APP_SURFACE_NEEDS_APP, isAppSurfaceGatewayType } from './app-surface';
+import { CHANNEL_GATEWAY_NEEDS_AGENT, isChannelGatewayType } from './channel-surface';
 
 /**
  * The partial unique index that actually reserves a hosted-chat slug.
@@ -276,7 +276,7 @@ export class GatewaysService {
     //
     // canPublishHostedChat also gates a public link on a cost cap and
     // rate limits, and those values do not exist on a gateway: they live
-    // on AgentApp.limits, and the builder reads them from the gateway row
+    // on the agent's visitor rules, and the builder reads them from the gateway row
     // rather than from this config blob. Passing the blob's (absent) keys
     // in made the context permanently null, so every public_link save --
     // the schema default, and the ordinary case -- was refused with
@@ -526,20 +526,20 @@ export class GatewaysService {
       // gateway routable as soon as it commits.
       initialStatus?: GatewayStatus;
       /**
-       * The app this gateway is a place of. A web chat or messaging
-       * channel (APP_SURFACE_GATEWAY_TYPES) is made only for an app, by
-       * upsertForDistribution when the app publishes the place; without
-       * one it is refused.
+       * The agent channel this gateway answers for. A web chat, widget,
+       * messaging channel or A2A endpoint (CHANNEL_GATEWAY_TYPES) is made
+       * only for a channel, by upsertForChannel when the agent's channel
+       * is published; without one it is refused.
        */
-      forApp?: { appId: string };
+      forChannel?: { channelId: string };
     } = {},
   ): Promise<Gateway> {
     const initialStatus = options.initialStatus ?? GatewayStatus.ACTIVE;
     try {
       this.logger.log(`[CREATE_GATEWAY] Creating gateway '${createGatewayDto.name}' for org=${organizationId}, user=${userId}`);
 
-      if (isAppSurfaceGatewayType(createGatewayDto.type) && !options.forApp?.appId) {
-        throw new BadRequestException(APP_SURFACE_NEEDS_APP);
+      if (isChannelGatewayType(createGatewayDto.type) && !options.forChannel?.channelId) {
+        throw new BadRequestException(CHANNEL_GATEWAY_NEEDS_AGENT);
       }
 
       // Verify organization and user permissions
@@ -1031,7 +1031,7 @@ export class GatewaysService {
     }
 
     if (filters.kind) {
-      const toolTypes = [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS, GatewayType.TOOLS];
+      const toolTypes = [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS];
       if (filters.kind === GatewayKind.TOOL) {
         queryBuilder.andWhere('gateway.type IN (:...toolTypes)', { toolTypes });
       } else {
@@ -1124,14 +1124,13 @@ export class GatewaysService {
   }
 
   /**
-   * The gateway a published app distribution answers on.
+   * The gateway a published agent channel answers on.
    *
    * Find-or-create rather than create, because publishing is idempotent:
    * doing it twice is usually someone reapplying a settings change, and
    * the endpoint is unique per organization so a second create would
-   * simply fail. An existing one is re-synced with the product's current
-   * name, branding and limits, and reactivated if it had been taken
-   * down.
+   * simply fail. An existing one is re-synced with the channel's current
+   * name, agent and limits, and reactivated if it had been taken down.
    *
    * Goes through createGateway and updateGateway rather than touching
    * the repository, so permission checks, organization limits and the
@@ -1139,19 +1138,19 @@ export class GatewaysService {
    *
    * `activate: false` hands the caller a gateway that exists but does
    * not answer yet, for a publish that has its own bookkeeping to
-   * finish before the surface goes live.
+   * finish before the channel goes live.
    *
-   * `gatewayId` is the gateway the distribution already answers on. It
-   * wins over the endpoint, so a surface whose endpoint is not the
-   * distribution's (one an app took over rather than stood up) is
-   * re-synced rather than joined by a second gateway on the same address.
+   * `gatewayId` is the gateway the channel already answers on. It wins
+   * over the endpoint, so a channel whose endpoint is not the default one
+   * (one moved from an app keeps the address platforms were given) is
+   * re-synced rather than joined by a second gateway.
    */
-  async upsertForDistribution(
+  async upsertForChannel(
     dto: CreateGatewayDto,
     organizationId: string,
     userId: string,
-    // The app this gateway is a place of: the only way one of its types is made.
-    options: { appId: string; activate?: boolean; gatewayId?: string | null },
+    // The channel this gateway answers for: the only way one of its types is made.
+    options: { channelId: string; activate?: boolean; gatewayId?: string | null },
   ): Promise<Gateway> {
     const activate = options.activate ?? true;
     const endpoint = dto.endpoint.startsWith('/') ? dto.endpoint : `/${dto.endpoint}`;
@@ -1166,7 +1165,7 @@ export class GatewaysService {
     if (!existing) {
       return this.createGateway(dto, organizationId, userId, {
         initialStatus: activate ? GatewayStatus.ACTIVE : GatewayStatus.INACTIVE,
-        forApp: { appId: options.appId },
+        forChannel: { channelId: options.channelId },
       });
     }
 
@@ -1175,10 +1174,10 @@ export class GatewaysService {
       {
         name: dto.name,
         description: dto.description,
-        // Repointed on every publish, so changing which agent an app
-        // uses and republishing actually moves the surface.
+        // Repointed on every publish, so the gateway always answers
+        // with the channel's agent.
         agentId: dto.agentId,
-        // Settings made on the surface itself survive: the distribution
+        // Settings made on the gateway itself survive: the channel
         // never carries them, so a plain replace would wipe them.
         configuration: dto.configuration && { ...keptOnRepublish(existing.configuration), ...dto.configuration },
         rateLimitConfig: dto.rateLimitConfig,
@@ -1292,5 +1291,5 @@ export class GatewaysService {
 
 /** A name as a URL slug: lowercase a-z and 0-9, single dashes, none at either end. */
 export function cleanSlug(name: string): string {
-  return (name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return (name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|(?<!-)-+$/g, '');
 }

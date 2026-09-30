@@ -109,8 +109,13 @@ and maps them into a `GET` request:
 
 ## Authentication
 
-Reference vaulted credentials with `{{env.*}}` expressions in headers so secrets
-never live in the tool body:
+On **Create tool**, **Authentication** says how the tool signs its calls (an
+API key, a bearer token, or a username and password) and the credential it
+uses, picked from Credentials or created right there. The tool keeps only
+which credential it uses.
+
+In a tool's configuration, reference credentials with `{{env.*}}` expressions
+in headers so secrets never live in the tool body:
 
 **API Key**
 

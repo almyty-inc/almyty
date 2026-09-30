@@ -18,6 +18,7 @@ import * as protobuf from 'protobufjs';
 
 import { ApiType } from '../../entities/api.entity';
 import { stripTags } from '../../common/security/strip-tags';
+import { hasDelimited, replaceDelimited } from '../../common/security/linear-text';
 
 export type DetectedFormat = 'openapi3' | 'swagger2' | 'graphql-sdl' | 'graphql-introspection' | 'wsdl' | 'proto';
 
@@ -187,11 +188,13 @@ function describeSwagger2(doc: any, text: string, opts: DetectOptions): Detected
 function resolveServerUrl(server: any, sourceUrl?: string): string | null {
   let url = String(server.url).trim();
   const vars = server.variables && typeof server.variables === 'object' ? server.variables : {};
-  url = url.replace(/\{([^}]+)\}/g, (whole, name) => {
+  // Not /\{([^}]+)\}/g: from every `{` of a URL with no `}` after it, that
+  // rescanned to the end (linear-text.ts).
+  url = replaceDelimited(url, '{', '}', (whole, name) => {
     const v = vars[name];
     return v && v.default != null ? String(v.default) : whole;
   });
-  if (/\{[^}]+\}/.test(url)) return null;
+  if (hasDelimited(url, '{', '}')) return null;
   return absolute(url, sourceUrl);
 }
 
@@ -227,7 +230,7 @@ function originOf(sourceUrl?: string): string | null {
 }
 
 function trimSlash(url: string): string {
-  return url.length > 1 && url.endsWith('/') && !/^https?:\/\/$/.test(url) ? url.replace(/\/+$/, '') : url;
+  return url.length > 1 && url.endsWith('/') && !/^https?:\/\/$/.test(url) ? url.replace(/(?<!\/)\/+$/, '') : url;
 }
 
 /**
@@ -424,7 +427,9 @@ function tryProto(text: string, opts: DetectOptions): DetectedApi | null {
   walk(parsed.root);
   const pkg = parsed.package ?? null;
   const version = pkg ? /(?:^|\.)(v\d+(?:(?:alpha|beta)\d*)?)$/.exec(pkg)?.[1] ?? null : null;
-  const leading = /^[ \t]*\/\/[ \t]*(.+)$/m.exec(text.split(/^[ \t]*syntax\b/m)[0] ?? '');
+  // `(?![ \t]).+|[ \t]` is what `[ \t]*(.+)` captured after the spaces,
+  // without the two quantifiers trading a run of them back and forth.
+  const leading = /^[ \t]*\/\/[ \t]*((?![ \t]).+|[ \t])$/m.exec(text.split(/^[ \t]*syntax\b/m)[0] ?? '');
   return {
     type: ApiType.GRPC,
     format: 'proto',

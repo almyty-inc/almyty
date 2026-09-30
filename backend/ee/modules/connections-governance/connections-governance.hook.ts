@@ -9,7 +9,7 @@ import { ConnectionsGovernanceHook, GovernanceUseContext } from './seams';
 /**
  * The runtime hook core consults, `@Optional()`, under the
  * `CONNECTIONS_GOVERNANCE_HOOK` token. Entitlement is checked per org
- * at call time: an org without `connections_governance` gets exactly
+ * at call time: an org without `credentials_governance` gets exactly
  * the community behaviour, whatever policies its rows hold.
  *
  * Core calls it, both `@Optional() @Inject(CONNECTIONS_GOVERNANCE_HOOK)`:
@@ -28,7 +28,7 @@ export class ConnectionsGovernanceHookImpl implements ConnectionsGovernanceHook 
 
   private async licensed(organizationId: string): Promise<boolean> {
     try {
-      return await this.licenses.hasForOrg(organizationId, EE_ENTITLEMENTS.CONNECTIONS_GOVERNANCE);
+      return await this.licenses.hasForOrg(organizationId, EE_ENTITLEMENTS.CREDENTIALS_GOVERNANCE);
     } catch {
       return false;
     }
@@ -41,7 +41,7 @@ export class ConnectionsGovernanceHookImpl implements ConnectionsGovernanceHook 
   }
 
   async evaluateUse(organizationId: string, connection: GovernedConnection, principal: UsePrincipal, context: GovernanceUseContext = {}): Promise<PolicyDecision> {
-    if (!(await this.licensed(organizationId))) return { allowed: true, reason: 'connections governance is not licensed for this organization' };
+    if (!(await this.licensed(organizationId))) return { allowed: true, reason: 'credentials governance is not licensed for this organization' };
     return this.governance.decideUse(organizationId, connection, principal, context);
   }
 

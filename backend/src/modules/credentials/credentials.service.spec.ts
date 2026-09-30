@@ -51,6 +51,7 @@ describe('CredentialsService', () => {
           provide: getRepositoryToken(LlmProvider),
           useValue: {
             find: jest.fn(),
+            update: jest.fn().mockResolvedValue({ affected: 1 }),
             createQueryBuilder: jest.fn(),
           },
         },
@@ -318,6 +319,30 @@ describe('CredentialsService', () => {
   });
 
   describe('update', () => {
+    it('renaming the key a provider connection made for itself renames the connection, and nothing else does', async () => {
+      const managed: any = {
+        id: 'cred-9',
+        name: 'OpenAI',
+        organizationId: 'org-1',
+        config: {},
+        metadata: { managedBy: { kind: 'llm_provider', id: 'prov-1' } },
+        encryptSensitiveDataForOrg: jest.fn().mockResolvedValue(undefined),
+      };
+      credentialRepository.findOne.mockResolvedValue(managed);
+      credentialRepository.save.mockImplementation(async (row: any) => row);
+
+      await service.update('cred-9', { name: 'OpenAI - research' }, 'org-1');
+      expect(llmProviderRepository.update).toHaveBeenCalledWith({ id: 'prov-1', organizationId: 'org-1', credentialId: 'cred-9' }, { name: 'OpenAI - research' });
+
+      llmProviderRepository.update.mockClear();
+      await service.update('cred-9', { description: 'no rename' }, 'org-1');
+      managed.metadata = { managedBy: { kind: 'llm_provider_usage', id: 'prov-1' } };
+      await service.update('cred-9', { name: 'Usage' }, 'org-1');
+      managed.metadata = null;
+      await service.update('cred-9', { name: 'Shared' }, 'org-1');
+      expect(llmProviderRepository.update).not.toHaveBeenCalled();
+    });
+
     it('should update credential and re-encrypt if config changed', async () => {
       const existing = {
         id: 'cred-1',

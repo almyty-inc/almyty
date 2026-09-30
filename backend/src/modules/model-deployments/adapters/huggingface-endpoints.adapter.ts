@@ -192,7 +192,7 @@ export class HuggingFaceEndpointsAdapter implements ModelProviderAdapter {
         state: STATE_MAP[raw] ?? 'deploying',
         url,
         // vLLM, SGLang and TGI all serve the OpenAI routes under /v1 on the endpoint host.
-        ...(url ? { openAiBase: `${String(url).replace(/\/+$/, '')}/v1` } : {}),
+        ...(url ? { openAiBase: `${String(url).replace(/(?<!\/)\/+$/, '')}/v1` } : {}),
         replicas: typeof status.readyReplica === 'number' ? status.readyReplica : undefined,
         hardware: res.data?.compute?.instanceType,
         region: res.data?.provider?.region,

@@ -94,7 +94,7 @@ configuration. The following views still need captures or end-to-end evidence
 from an authorized, seeded organization with the corresponding entitlements:
 
 - Audit export controls and a downloaded evidence file
-- Connections governance controls
+- Credentials governance controls
 - Customer-managed encryption key status and configuration
 - Chargeback report
 - White-label surface controls

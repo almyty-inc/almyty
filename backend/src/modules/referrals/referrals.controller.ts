@@ -113,7 +113,7 @@ export class ReferralsController {
   }
 
   private redirectToRegister(res: Response) {
-    const base = (process.env.FRONTEND_URL || 'http://localhost:3002').replace(/\/+$/, '');
+    const base = (process.env.FRONTEND_URL || 'http://localhost:3002').replace(/(?<!\/)\/+$/, '');
     res.redirect(HttpStatus.FOUND, `${base}/auth/register`);
     return undefined;
   }

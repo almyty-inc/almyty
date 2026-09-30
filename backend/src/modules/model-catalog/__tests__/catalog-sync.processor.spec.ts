@@ -1,9 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bull';
 
-import { CatalogSyncProcessor, MODEL_CATALOG_BACKFILL_JOB, MODEL_CATALOG_SWEEP_JOB, MODEL_CATALOG_SYNC_QUEUE } from '../catalog-sync.processor';
+import { CatalogSyncProcessor, MODEL_CATALOG_BACKFILL_JOB, MODEL_CATALOG_SWEEP_JOB, MODEL_CATALOG_SYNC_QUEUE, MODEL_CHANGE_DIGEST_JOB } from '../catalog-sync.processor';
 import { ModelCatalogService } from '../model-catalog.service';
 import { CatalogWarmupService } from '../catalog-warmup.service';
+import { ModelChangeNoticesService } from '../notices/model-change-notices.service';
 import { snapshotEnv } from '../../../test/env';
 
 describe('CatalogSyncProcessor', () => {
@@ -11,7 +12,8 @@ describe('CatalogSyncProcessor', () => {
   let queue: { add: jest.Mock; getRepeatableJobs: jest.Mock; removeRepeatableByKey: jest.Mock };
   let catalog: { syncEveryProvider: jest.Mock; reconcileReadiness: jest.Mock };
   let warmup: { syncNeverSynced: jest.Mock };
-  const restore = snapshotEnv('MODEL_CATALOG_BACKFILL', 'MODEL_CATALOG_SYNC_CRON', 'NODE_ENV');
+  const restore = snapshotEnv('MODEL_CATALOG_BACKFILL', 'MODEL_CATALOG_SYNC_CRON', 'MODEL_CHANGE_DIGEST_CRON', 'NODE_ENV');
+  let notices: { sendDigest: jest.Mock };
 
   afterEach(() => {
     restore();
@@ -21,6 +23,8 @@ describe('CatalogSyncProcessor', () => {
   beforeEach(async () => {
     delete process.env.MODEL_CATALOG_BACKFILL;
     delete process.env.MODEL_CATALOG_SYNC_CRON;
+    delete process.env.MODEL_CHANGE_DIGEST_CRON;
+    notices = { sendDigest: jest.fn().mockResolvedValue({ rows: 4, emails: 2 }) };
     queue = {
       add: jest.fn().mockResolvedValue(undefined),
       getRepeatableJobs: jest.fn().mockResolvedValue([]),
@@ -37,6 +41,7 @@ describe('CatalogSyncProcessor', () => {
         { provide: getQueueToken(MODEL_CATALOG_SYNC_QUEUE), useValue: queue },
         { provide: ModelCatalogService, useValue: catalog },
         { provide: CatalogWarmupService, useValue: warmup },
+        { provide: ModelChangeNoticesService, useValue: notices },
       ],
     }).compile();
     processor = module.get(CatalogSyncProcessor);
@@ -100,12 +105,27 @@ describe('CatalogSyncProcessor', () => {
     expect(queue.add).not.toHaveBeenCalledWith(MODEL_CATALOG_SWEEP_JOB, expect.anything(), expect.anything());
   });
 
-  it('MODEL_CATALOG_BACKFILL=off disables it', async () => {
+  it('MODEL_CATALOG_BACKFILL=off disables the backfill and the sweep, not the model change email', async () => {
     process.env.NODE_ENV = 'production';
     process.env.MODEL_CATALOG_BACKFILL = 'off';
     expect(processor.isEnabled()).toBe(false);
     await processor.onApplicationBootstrap();
-    expect(queue.add).not.toHaveBeenCalled();
+    expect(queue.add.mock.calls.map((c) => c[0])).toEqual([MODEL_CHANGE_DIGEST_JOB]);
+  });
+
+  it('looks for people whose 08:00 it is every hour unless MODEL_CHANGE_DIGEST_CRON says otherwise, and runs it', async () => {
+    process.env.NODE_ENV = 'production';
+    await processor.onApplicationBootstrap();
+    expect(queue.add).toHaveBeenCalledWith(MODEL_CHANGE_DIGEST_JOB, {}, expect.objectContaining({ jobId: 'model-change-digest', repeat: { cron: '0 * * * *' } }));
+
+    queue.add.mockClear();
+    process.env.MODEL_CHANGE_DIGEST_CRON = 'off';
+    queue.getRepeatableJobs.mockResolvedValue([{ id: 'model-change-digest', cron: '0 * * * *', key: 'digest' }]);
+    await processor.onApplicationBootstrap();
+    expect(queue.removeRepeatableByKey).toHaveBeenCalledWith('digest');
+    expect(queue.add).not.toHaveBeenCalledWith(MODEL_CHANGE_DIGEST_JOB, expect.anything(), expect.anything());
+
+    await expect(processor.handleDigest()).resolves.toEqual({ rows: 4, emails: 2 });
   });
 
   it('a queue failure at bootstrap is logged, not thrown', async () => {

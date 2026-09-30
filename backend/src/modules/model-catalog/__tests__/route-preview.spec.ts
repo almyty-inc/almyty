@@ -78,6 +78,8 @@ describe('preview answers with the decision, and never with a credential', () =>
     const service = Object.create(ModelRouterService.prototype) as ModelRouterService;
     Object.assign(service, {
       models: { find: async () => cards },
+      // No connection hides any of them.
+      providers: { find: async () => [] },
       // Every card is callable, with a provider row that carries a secret.
       providerFor: async () => ({
         id: 'p1',

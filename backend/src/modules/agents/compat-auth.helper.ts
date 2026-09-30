@@ -43,6 +43,16 @@ export async function authenticateCompatKey(apiKeys: Repository<ApiKey>, token: 
     throw new UnauthorizedException('This is a gateway API key. Use it against the gateway endpoint.');
   }
 
+  // A platform key with scopes is refused by ApiKeyStrategy, because no
+  // route enforces them and a ['read'] key would otherwise act with its
+  // user's full role. Running an agent is not a read either, so the same
+  // row is refused here rather than being the one surface it still works on.
+  if (apiKey.scopes?.length) {
+    throw new UnauthorizedException(
+      'Per-key scopes are not enforced on platform API keys. Mint a key without scopes, or use a gateway key.',
+    );
+  }
+
   // Every agent lookup below is scoped to the key's organization; a key
   // with none has nothing it may run.
   if (!apiKey.organizationId) {
@@ -125,4 +135,27 @@ export function compatPrincipal(apiKey: ApiKey): ExecutionPrincipal {
 /** The agents a key may list: all visible ones, or the one it was minted for. */
 export function agentsForKey<T extends { id: string }>(agents: T[], apiKey: ApiKey): T[] {
   return apiKey.agentId ? agents.filter((agent) => agent.id === apiKey.agentId) : agents;
+}
+
+/**
+ * Throttle window for `lastUsedAt` writes. Without it every compat request
+ * issued one UPDATE, which is wasteful and races with any concurrent change
+ * to the key row (revocation, scope change).
+ */
+const LAST_USED_THROTTLE_MS = 60_000;
+
+/**
+ * Touch the key's `lastUsedAt`, at most once a minute, as a partial UPDATE
+ * rather than `save(entity)`: saving the in-memory copy would write stale
+ * fields back over a concurrent revocation. Both compat routes call this, so
+ * a key used only through /v1/messages no longer looks unused.
+ */
+export async function touchCompatKeyLastUsed(apiKeys: Pick<Repository<ApiKey>, 'update'>, apiKey: ApiKey): Promise<void> {
+  const now = Date.now();
+  const last = apiKey.lastUsedAt ? new Date(apiKey.lastUsedAt).getTime() : 0;
+  if (now - last < LAST_USED_THROTTLE_MS) return;
+
+  const nowDate = new Date(now);
+  await apiKeys.update({ id: apiKey.id }, { lastUsedAt: nowDate });
+  apiKey.lastUsedAt = nowDate;
 }

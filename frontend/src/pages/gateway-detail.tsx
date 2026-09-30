@@ -26,19 +26,11 @@ import {
   type ScopingPreset,
 } from '@/components/gateways/detail/tools-tab'
 import { GatewayEventsTab } from '@/components/gateways/detail/events-tab'
-import {
-  ChannelConfigForm,
-  isChannelType,
-} from '@/components/gateways/detail/channel-config-form'
-import { ManagedByAppBanner, useManagedByApp } from '@/components/gateways/managed-by-app-banner'
-import { CustomDomainCard } from '@/components/gateways/custom-domain-card'
-import { VisitorOAuthCard } from '@/components/gateways/visitor-oauth-card'
-import { AllowedOriginsCard } from '@/components/gateways/allowed-origins-card'
+import { ManagedByChannelBanner, useManagedByChannel } from '@/components/gateways/managed-by-channel-banner'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { orgSlugOf } from '@/lib/gateway-connect'
 import { ConnectSnippets } from '@/components/gateways/connect-snippets'
 import { GatewayStatusSwitch } from '@/components/gateways/detail/gateway-status-switch'
-import { Disclosure } from '@/components/ui/disclosure'
 import { pluralized } from '@/lib/utils'
 
 /** The tabs `?tab=` may open. */
@@ -79,8 +71,8 @@ export function GatewayDetailPage() {
     enabled: !!id,
   })
 
-  // The app this gateway was published from, if any: its settings live there.
-  const managedBy = useManagedByApp(id)
+  // The agent channel this gateway answers for, if any: its settings live there.
+  const managedBy = useManagedByChannel(id)
 
   useEffect(() => {
     const name = (gatewayData as any)?.name
@@ -191,21 +183,6 @@ export function GatewayDetailPage() {
 
   const gateway = gatewayData
 
-
-  // Channel-config mutation: PATCHes only the configuration object.
-  // Used by the per-channel-type credential form.
-  const updateChannelConfigMutation = useMutation({
-    mutationFn: (configuration: Record<string, any>) =>
-      gatewaysApi.update(id!, { configuration }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['gateway', id] })
-      success('Channel configuration saved', 'Credentials have been encrypted and stored.')
-    },
-    onError: (err: any) => {
-      errorNotif('Failed to save channel config', getApiErrorMessage(err, 'Please try again.'))
-    },
-  })
-
   const updateToolConfigMutation = useMutation({
     mutationFn: ({ gatewayToolId, data }: { gatewayToolId: string; data: any }) =>
       gatewaysApi.updateToolConfig(id!, gatewayToolId, data),
@@ -297,9 +274,11 @@ export function GatewayDetailPage() {
     )
   }
 
-  const isSharedTools = gateway.type === 'tools'
+  // A tool gateway serves its tools over one protocol: its setup per client
+  // shows up top.
+  const isToolGateway = !gateway.isSystem && ['mcp', 'utcp', 'skills'].includes(gateway.type)
   const orgSlug = orgSlugOf(currentOrganization)
-  // What the Share tools page could not attach, handed over with the key.
+  // What the create page could not attach, handed over with the key.
   const skippedTools: Array<{ toolId: string; reason: string }> =
     (location.state as { sharedTools?: { skipped?: Array<{ toolId: string; reason: string }> } } | null)?.sharedTools?.skipped ?? []
 
@@ -325,7 +304,6 @@ export function GatewayDetailPage() {
       onAssign={(toolId) => assignToolMutation.mutate({ toolId })}
       onRemove={(toolId) => removeToolMutation.mutate({ toolId })}
       securitySaving={updateToolConfigMutation.isPending}
-      hidePresets={isSharedTools}
       onSaveSecurity={(target) =>
         updateToolConfigMutation.mutateAsync({
           gatewayToolId: target.gatewayToolId,
@@ -391,7 +369,7 @@ export function GatewayDetailPage() {
             </div>
             <div>
               <h1 className={DETAIL_TITLE_CLASSES}>{gateway.name}</h1>
-              <p className="text-muted-foreground">{gateway.description || (isSharedTools ? 'One address for MCP, UTCP and Skills' : 'API Gateway')}</p>
+              <p className="text-muted-foreground">{gateway.description || 'API Gateway'}</p>
             </div>
           </div>
         </div>
@@ -415,9 +393,9 @@ export function GatewayDetailPage() {
         >
           <p className="flex items-center gap-2 font-medium">
             <KeyRound className="h-4 w-4" aria-hidden="true" />
-            {isSharedTools ? 'Your access key' : "Your gateway's first API key"}
+            {isToolGateway ? 'Your access key' : "Your gateway's first API key"}
           </p>
-          <CopyField value={initialApiKey} label={isSharedTools ? 'Access key' : 'API key'} />
+          <CopyField value={initialApiKey} label={isToolGateway ? 'Access key' : 'API key'} />
           <p className="text-sm text-amber-800 dark:text-amber-300">
             Copy it now. You won't see it again: once you leave this page, only its first characters are shown.
           </p>
@@ -427,7 +405,7 @@ export function GatewayDetailPage() {
       {skippedTools.length > 0 && (
         <div data-testid="shared-tools-skipped" className="space-y-1 rounded-lg border border-amber-400/60 bg-amber-50 p-4 text-sm dark:bg-amber-950/30">
           <p className="font-medium">
-            {skippedTools.length} tool{skippedTools.length === 1 ? " wasn't" : "s weren't"} shared
+            {skippedTools.length} tool{skippedTools.length === 1 ? " wasn't" : "s weren't"} added
           </p>
           <ul className="list-inside list-disc text-amber-800 dark:text-amber-300">
             {[...new Set(skippedTools.map((s) => s.reason))].slice(0, 3).map((reason) => (
@@ -437,7 +415,7 @@ export function GatewayDetailPage() {
         </div>
       )}
 
-      {isSharedTools && <ConnectSnippets gateway={gateway} orgSlug={orgSlug} accessKey={initialApiKey} />}
+      {isToolGateway && <ConnectSnippets gateway={gateway} orgSlug={orgSlug} accessKey={initialApiKey} />}
 
       {/*
         Webhook registration failed and nothing said so.
@@ -478,8 +456,8 @@ export function GatewayDetailPage() {
         </div>
       )}
 
-      {/* An app's place: configured on the app, linked from here. */}
-      {managedBy && <ManagedByAppBanner managedBy={managedBy} />}
+      {/* An agent's channel: configured on the agent, linked from here. */}
+      {managedBy && <ManagedByChannelBanner managedBy={managedBy} />}
 
       {/* Gateway Configuration — type-specific */}
       <GatewayConfigurationCard
@@ -489,64 +467,6 @@ export function GatewayDetailPage() {
         onCopyError={errorNotif}
       />
 
-      {/* Channel-type credential form (per-adapter token / webhook / OAuth fields) */}
-      {isChannelType(gateway.type) && !managedBy && (
-        <ChannelConfigForm
-          gateway={gateway}
-          type={gateway.type}
-          isSaving={updateChannelConfigMutation.isPending}
-          onSave={async (cfg) => {
-            await updateChannelConfigMutation.mutateAsync(cfg)
-          }}
-          onTestConnection={async () => {
-            const res: any = await gatewaysApi.testChannelConnection(gateway.id)
-            // backend returns { success, data: { ok, detail } }; apiPost
-            // already unwraps `data` so we usually get { ok, detail }
-            // directly, but tolerate both shapes here.
-            const data = res?.data ?? res
-            return { ok: !!data?.ok, detail: data?.detail || '' }
-          }}
-        />
-      )}
-
-      {/* A hosted chat or a website widget is an app's place: its look, who
-          can use it, its domain, sign-in, embed snippet and allowed sites
-          are all on the app's page for that place. Only a surface no app
-          owns keeps these cards here. */}
-      {gateway.type === 'hosted_chat' && !managedBy && <CustomDomainCard gatewayId={gateway.id} />}
-      {gateway.type === 'hosted_chat' && !managedBy && (
-        <VisitorOAuthCard gatewayId={gateway.id} authMode={gateway.configuration?.hostedChat?.authMode} />
-      )}
-      {/* Which third-party sites may call this public surface from the
-          browser. Keyed on the gateway so the card resets when the saved
-          list changes underneath it. */}
-      {(gateway.type === 'chat_widget' || gateway.type === 'hosted_chat') && !managedBy && (
-        <AllowedOriginsCard
-          key={`${gateway.id}:${JSON.stringify(gateway.configuration?.allowedOrigins ?? [])}`}
-          gateway={{ id: gateway.id, type: gateway.type, configuration: gateway.configuration }}
-        />
-      )}
-
-      {isSharedTools ? (
-        <>
-          {/* Shared tools: what is shared, then everything else folded
-              away. Keys, extra sign-in methods, usage and events are
-              there for whoever needs them; the address and snippets
-              above are all a first visit needs. */}
-          <section aria-labelledby="shared-tools-heading" className="space-y-3">
-            <h2 id="shared-tools-heading" className="text-lg font-semibold">
-              Shared tools <span className="text-sm font-normal text-muted-foreground">({gatewayTools.length})</span>
-            </h2>
-            {toolsTab}
-          </section>
-          <Disclosure title="Advanced" summary="Access keys, sign-in methods, usage and events">
-            <GatewayAuthSection gatewayId={gateway.id} gatewayName={gateway.name} />
-            {metricsCard}
-            <GatewayEventsTab gatewayId={id!} />
-          </Disclosure>
-        </>
-      ) : (
-        <>
       {/* Authentication */}
       {gateway.type !== 'skills' && (
         <GatewayAuthSection gatewayId={gateway.id} gatewayName={gateway.name} />
@@ -582,8 +502,6 @@ export function GatewayDetailPage() {
           <GatewayEventsTab gatewayId={id!} />
         </TabsContent>
       </Tabs>
-        </>
-      )}
 
       {confirmDialog}
 

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpException,
   HttpStatus,
@@ -17,9 +18,11 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { HostedChatService } from './hosted-chat.service';
 
-
+import type { Gateway } from '../../../entities/gateway.entity';
+import { visitorPrivacyFrom } from '../../../entities/agent-channel.entity';
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
-import { GatewayAppLinkService } from '../gateway-app-link.service';
+import { ChannelLinkService, ownerOf } from '../channel-link.service';
+import { ChannelPolicyService } from '../channel-policy.service';
 import { ChannelGatewayService } from './channel-gateway.service';
 import { buildWidgetScript, widgetConfigFor } from './widget-script';
 import { trustedClientIp } from '../../../common/security/client-ip';
@@ -35,8 +38,12 @@ import { trustedClientIp } from '../../../common/security/client-ip';
  *   1. POST /gateways/:id/widget/messages  { message, threadId? }
  *      -> { runId, threadId }  (threadId is a server-minted run UUID on
  *         the first message; the widget echoes it back afterwards)
- *   2. GET /gateways/:id/widget/messages?threadId=...&after=<ISO>
+ *   2. GET /gateways/:id/widget/messages?threadId=...&after=
  *      -> agent replies persisted by ChatWidgetAdapter, oldest first
+ *   3. GET /gateways/:id/widget/threads/:threadId/export
+ *      DELETE /gateways/:id/widget/threads/:threadId
+ *      -> the visitor's own copy of the conversation, or its erasure,
+ *         when the agent lets visitors do that (403 VISITOR_RIGHT_DISABLED)
  *
  * Security: the gateway must be an active chat_widget gateway (404
  * otherwise), per-gateway rate limits are enforced on POST, and thread
@@ -48,9 +55,12 @@ export class ChannelWidgetController {
   constructor(
     private readonly channelGatewayService: ChannelGatewayService,
     private readonly gatewayRateLimit: GatewayRateLimitService,
-    // The app the widget is a place of, whose look it shows. Optional so
+    // The channel the widget is, whose agent's look it shows. Optional so
     // positional unit tests can construct the controller without it.
-    @Optional() private readonly appLink?: GatewayAppLinkService,
+    @Optional() private readonly channelLink?: ChannelLinkService,
+    // The agent's cost and spend caps and memory rule. Optional for the same
+    // reason; Nest always injects it (channel-policy.guard.spec.ts).
+    @Optional() private readonly channelPolicy?: ChannelPolicyService,
   ) {}
 
   @Get(':id/widget.js')
@@ -85,12 +95,12 @@ export class ChannelWidgetController {
     // chat_widget and is active. The response is a strict whitelist of
     // presentation fields (see widgetConfigFor) — the raw configuration
     // jsonb also holds channel credentials and must never leak through
-    // this public endpoint. The look is the owning app's.
+    // this public endpoint. The look is the owning agent's, with the channel's overrides.
     const gateway = await this.channelGatewayService.findWidgetGateway(id);
-    const place = this.appLink ? await this.appLink.distributionFor(gateway.organizationId, gateway.id) : null;
+    const channel = this.channelLink ? await this.channelLink.channelFor(gateway.organizationId, gateway.id) : null;
 
     res.setHeader('Cache-Control', 'public, max-age=60');
-    return { success: true, data: widgetConfigFor(gateway.configuration, place?.app ?? null) };
+    return { success: true, data: widgetConfigFor(gateway.configuration, channel ? ownerOf(channel) : null) };
   }
 
   @Post(':id/widget/messages')
@@ -150,12 +160,19 @@ export class ChannelWidgetController {
       );
     }
 
-    const result = await this.channelGatewayService.handleWidgetMessage(gateway, {
+    // The spend allowance this channel draws on, and the per-run cost cap
+    // and memory rule for the run this message starts.
+    const policy = this.channelPolicy ? await this.channelPolicy.admit(gateway) : null;
 
-      message,
-      sessionId: body?.sessionId,
-      threadId: body?.threadId,
-    });
+    const result = await this.channelGatewayService.handleWidgetMessage(
+      gateway,
+      {
+        message,
+        sessionId: body?.sessionId,
+        threadId: body?.threadId,
+      },
+      policy,
+    );
     return { success: true, data: result };
   }
 
@@ -183,5 +200,54 @@ export class ChannelWidgetController {
       afterDate,
     );
     return { success: true, data: messages };
+  }
+
+  /**
+   * Everything the widget holds about this browser's conversation, for the
+   * visitor to keep. The widget has no session of ours, so the visitor is
+   * the thread: the unguessable id the browser was handed on its first
+   * message and keeps on the customer's site.
+   */
+  @Get(':id/widget/threads/:threadId/export')
+  @ApiOperation({ summary: 'Download this widget conversation' })
+  async exportThread(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('threadId') threadId: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const gateway = await this.channelGatewayService.findWidgetGateway(id);
+    await this.requireVisitorRight(gateway, 'visitorCanExport');
+    const own = await this.gatewayRateLimit.checkVisitor(gateway, {
+      endUserId: threadId,
+      clientHash: HostedChatService.hashClient(trustedClientIp(req as any)),
+    });
+    if (own.limited) {
+      if (own.retryAfterSeconds) res.setHeader('Retry-After', String(own.retryAfterSeconds));
+      throw new HttpException({ code: own.code ?? 'VISITOR_RATE_LIMITED', message: own.message }, HttpStatus.TOO_MANY_REQUESTS);
+    }
+    const data = await this.channelGatewayService.exportWidgetThread(gateway, threadId);
+    res.setHeader('Content-Disposition', 'attachment; filename="my-chat.json"');
+    return data;
+  }
+
+  /** Erase this browser's conversation: its runs, transcript and stored replies. */
+  @Delete(':id/widget/threads/:threadId')
+  @ApiOperation({ summary: 'Delete this widget conversation' })
+  async deleteThread(@Param('id', ParseUUIDPipe) id: string, @Param('threadId') threadId: string) {
+    const gateway = await this.channelGatewayService.findWidgetGateway(id);
+    await this.requireVisitorRight(gateway, 'visitorCanDelete');
+    await this.channelGatewayService.deleteWidgetThread(gateway, threadId);
+    return { success: true };
+  }
+
+  /** The agent (or the channel) may switch visitor self-service off; say so with the hosted chat's code. */
+  private async requireVisitorRight(gateway: Gateway, right: 'visitorCanDelete' | 'visitorCanExport'): Promise<void> {
+    const channel = this.channelLink ? await this.channelLink.channelFor(gateway.organizationId, gateway.id) : null;
+    if ((channel ? ownerOf(channel).privacy : visitorPrivacyFrom(null))[right]) return;
+    throw new HttpException(
+      { code: 'VISITOR_RIGHT_DISABLED', message: 'This chat does not offer that. Please contact the operator of this site.' },
+      HttpStatus.FORBIDDEN,
+    );
   }
 }

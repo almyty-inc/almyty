@@ -8,6 +8,7 @@ import { ModelCatalogService } from './model-catalog.service';
 import { ListModelsQueryDto, RegisterModelBodyDto, RoutePreviewBodyDto, SyncModelsBodyDto, UpdateModelBodyDto } from './dto/model-catalog-controller.dto';
 import { ModelRouterService } from './routing/model-router.service';
 import { CatalogWarmupService } from './catalog-warmup.service';
+import { ModelChangeNoticesService } from './notices/model-change-notices.service';
 
 /**
  * Cards in, cards out. Nothing here calls a provider except the validation
@@ -23,6 +24,7 @@ export class ModelCatalogController {
     private readonly catalog: ModelCatalogService,
     private readonly router: ModelRouterService,
     @Optional() private readonly warmup?: CatalogWarmupService,
+    @Optional() private readonly notices?: ModelChangeNoticesService,
   ) {}
 
   private orgId(req: any): string {
@@ -72,7 +74,21 @@ export class ModelCatalogController {
     if (this.warmup && !rows.some((r) => view(r).selectable) && (await this.warmup.warmOnLoad(organizationId, viewerId, query?.providerId))) {
       rows = await this.catalog.list(organizationId, query, viewerId);
     }
-    return { success: true, data: rows.map(view) };
+    // "New": a model a connection started listing within the last week.
+    const fresh = this.notices ? await this.notices.recentlyNew(organizationId) : new Set<string>();
+    return { success: true, data: rows.map((r) => ({ ...view(r), isNew: fresh.has(r.id) })) };
+  }
+
+  /**
+   * The models an agent names that cannot be used now, and why. The banner
+   * on the agent reads this; it is empty once every model is usable again.
+   */
+  @Get('agents/:agentId/issues')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Models an agent uses that are not available now' })
+  async agentIssues(@Request() req: any, @Param('agentId', ParseUUIDPipe) agentId: string) {
+    if (!this.notices) return { success: true, data: [] };
+    return { success: true, data: await this.notices.agentModelIssues(this.orgId(req), agentId, req.user?.id) };
   }
 
   @Post()

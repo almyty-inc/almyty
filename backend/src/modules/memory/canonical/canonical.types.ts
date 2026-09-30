@@ -22,8 +22,12 @@ export const MODE_VALUES: readonly Mode[] = ['memory', 'document'] as const;
 export type Tier = 'short' | 'project' | 'long' | 'shared';
 export const TIER_VALUES: readonly Tier[] = ['short', 'project', 'long', 'shared'] as const;
 
-export type ScopeType = 'user' | 'workspace' | 'project' | 'collab';
-export const SCOPE_TYPE_VALUES: readonly ScopeType[] = ['user', 'workspace', 'project', 'collab'] as const;
+/**
+ * `agent` is one agent's own memory (an agent whose memory is "per
+ * agent"), keyed `<org>:agent:<agentId>`; see agentScopeId.
+ */
+export type ScopeType = 'user' | 'workspace' | 'project' | 'collab' | 'agent';
+export const SCOPE_TYPE_VALUES: readonly ScopeType[] = ['user', 'workspace', 'project', 'collab', 'agent'] as const;
 
 export type ContentFormat = 'text' | 'markdown' | 'json';
 export const CONTENT_FORMAT_VALUES: readonly ContentFormat[] = ['text', 'markdown', 'json'] as const;

@@ -4,7 +4,7 @@
  * export, test toggle, and save button.
  */
 import React from 'react'
-import { ArrowLeft, Save, Loader2, Download, Undo2, Redo2, Play, Lock, Users, Globe } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Download, Undo2, Redo2, Play, Lock, Users, Globe, Settings2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,6 +46,13 @@ export interface BuilderToolbarProps {
   visibility?: 'private' | 'team' | 'org'
   visibilityOpen?: boolean
   onVisibilityClick?: () => void
+  /**
+   * The agent's own settings (run limits), opened inline under the
+   * toolbar. Given only for a workflow agent: the autonomous page shows
+   * the same cards in its body.
+   */
+  settingsOpen?: boolean
+  onSettingsClick?: () => void
 }
 
 const VISIBILITY_LABEL = {
@@ -75,6 +82,8 @@ export function BuilderToolbar({
   visibility,
   visibilityOpen,
   onVisibilityClick,
+  settingsOpen,
+  onSettingsClick,
 }: BuilderToolbarProps) {
   const scope = visibility ? VISIBILITY_LABEL[visibility] : null
   return (
@@ -178,6 +187,20 @@ export function BuilderToolbar({
           <Badge variant="outline" className="text-xs hidden sm:inline-flex">
             v{agentVersion}
           </Badge>
+        )}
+        {onSettingsClick && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onSettingsClick}
+            aria-expanded={!!settingsOpen}
+            aria-controls="agent-settings-panel"
+            aria-label="Agent settings"
+            title="Settings for the whole agent, such as its run limits"
+          >
+            <Settings2 className="h-4 w-4 sm:mr-2" aria-hidden="true" />
+            <span className="hidden sm:inline">Settings</span>
+          </Button>
         )}
         {isEditing && (
           <Button

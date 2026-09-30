@@ -32,6 +32,11 @@ import { BackendCredentials, BackendHealth, MemoryBackend } from './memory-backe
 export class SupermemoryBackend implements MemoryBackend {
   readonly id = 'supermemory';
   readonly schema_version = 1;
+
+  nativeId(item: MemoryItem): string | null {
+    const id = (item.metadata as Record<string, unknown>)?.supermemory_id;
+    return typeof id === 'string' && id ? id : null;
+  }
   readonly capabilities = new Set<Capability>([
     'mode_memory', 'mode_document', 'vector_search', 'fts',
     'hybrid_search', 'multi_tenant', 'batch_writes', 'export',

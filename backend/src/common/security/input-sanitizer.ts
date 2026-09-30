@@ -15,26 +15,76 @@ export interface SanitizationResult {
   sanitized: Record<string, any>;
 }
 
+const LINE_BREAK = /[\n\r\u2028\u2029]/;
+const SHELL_META = /[;&|`$]/;
+const SHELL_COMMAND = /(?:rm|curl|wget|nc|ncat|bash|sh|python|perl|ruby|php)\b/i;
+
+/**
+ * The patterns below that span "X, then Y later on the line" used to be
+ * written `/X.*Y/`, which the engine retries from every X: 100 KB of `;`,
+ * `{{` or `${` in one tool argument (an LLM or an MCP client chooses
+ * those) held the event loop for three to six seconds. Each is now
+ * answered from the first X on each line, with the same result: a later
+ * X on the same line can only see less of it.
+ */
+
+/** `/[;&|`$].*(?:rm|curl|...|php)\b/i` */
+function hasShellCommand(value: string): boolean {
+  for (const line of value.split(LINE_BREAK)) {
+    const meta = line.search(SHELL_META);
+    if (meta !== -1 && SHELL_COMMAND.test(line.slice(meta + 1))) return true;
+  }
+  return false;
+}
+
+/** `/<open>.*<close>/`: `open`, then `close` after it on the same line. */
+function hasOnOneLine(value: string, open: string, close: string): boolean {
+  for (const line of value.split(LINE_BREAK)) {
+    const start = line.indexOf(open);
+    if (start !== -1 && line.indexOf(close, start + open.length) !== -1) return true;
+  }
+  return false;
+}
+
+/**
+ * `/<!DOCTYPE[^>]*SYSTEM/i`. Every `<!DOCTYPE` before the same `>` sees
+ * a suffix of the first one's declaration, so one look per declaration.
+ */
+function hasDoctypeSystem(value: string): boolean {
+  const lower = value.toLowerCase();
+  let at = 0;
+  for (;;) {
+    const start = lower.indexOf('<!doctype', at);
+    if (start === -1) return false;
+    const gt = lower.indexOf('>', start + 9);
+    if (lower.slice(start + 9, gt === -1 ? lower.length : gt).includes('system')) return true;
+    if (gt === -1) return false;
+    at = gt + 1;
+  }
+}
+
+const matches = (pattern: RegExp) => (value: string) => pattern.test(value);
+
 // Patterns that suggest injection attempts
-const INJECTION_PATTERNS: Array<{ name: string; pattern: RegExp; severity: 'block' | 'warn' }> = [
+const INJECTION_PATTERNS: Array<{ name: string; test: (value: string) => boolean; severity: 'block' | 'warn' }> = [
   // Command injection
-  { name: 'shell-command', pattern: /[;&|`$].*(?:rm|curl|wget|nc|ncat|bash|sh|python|perl|ruby|php)\b/i, severity: 'block' },
-  { name: 'backtick-exec', pattern: /`[^`]+`/, severity: 'warn' },
+  { name: 'shell-command', test: hasShellCommand, severity: 'block' },
+  { name: 'backtick-exec', test: matches(/`[^`]+`/), severity: 'warn' },
 
   // XML entity injection (XXE)
-  { name: 'xxe-entity', pattern: /<!ENTITY\s/i, severity: 'block' },
-  { name: 'xxe-system', pattern: /<!DOCTYPE[^>]*SYSTEM/i, severity: 'block' },
+  { name: 'xxe-entity', test: matches(/<!ENTITY\s/i), severity: 'block' },
+  { name: 'xxe-system', test: hasDoctypeSystem, severity: 'block' },
 
   // Path traversal
-  { name: 'path-traversal', pattern: /\.\.[/\\]/, severity: 'warn' },
+  { name: 'path-traversal', test: matches(/\.\.[/\\]/), severity: 'warn' },
 
   // SSRF via parameter values
-  { name: 'ssrf-localhost', pattern: /(?:^|\s)(?:localhost|127\.0\.0\.1|0\.0\.0\.0|::1)(?::\d+)?(?:\s|$|\/)/i, severity: 'warn' },
-  { name: 'ssrf-metadata', pattern: /169\.254\.169\.254/i, severity: 'block' },
+  { name: 'ssrf-localhost', test: matches(/(?:^|\s)(?:localhost|127\.0\.0\.1|0\.0\.0\.0|::1)(?::\d+)?(?:\s|$|\/)/i), severity: 'warn' },
+  { name: 'ssrf-metadata', test: matches(/169\.254\.169\.254/i), severity: 'block' },
 
   // Template injection
-  { name: 'template-injection', pattern: /\{\{.*\}\}/, severity: 'warn' },
-  { name: 'ssti', pattern: /\$\{.*\}/, severity: 'warn' },
+  { name: 'template-injection', test: (value) => hasOnOneLine(value, '{{', '}}'), severity: 'warn' },
+  { name: 'ssti', test: (value) => hasOnOneLine(value, '${', '}'), severity: 'warn' },
 ];
 
 /**
@@ -51,8 +101,8 @@ export function sanitizeToolParameters(
 
   function scanValue(value: any, path: string): any {
     if (typeof value === 'string') {
-      for (const { name, pattern, severity } of INJECTION_PATTERNS) {
-        if (pattern.test(value)) {
+      for (const { name, test, severity } of INJECTION_PATTERNS) {
+        if (test(value)) {
           const msg = `[${severity}] ${name} pattern detected in ${path}`;
           warnings.push(msg);
 

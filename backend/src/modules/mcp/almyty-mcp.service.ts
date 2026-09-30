@@ -14,8 +14,17 @@ import { agentIsInvokable, runsOnAutonomousRuntime } from '../agents/agent-invoc
 import { AgentsService } from '../agents/agents.service';
 import { AgentExecutionEngine } from '../agents/agent-execution.engine';
 import { AgentRuntimeService } from '../agents/agent-runtime.service';
-import { AgentAppsService } from '../agent-apps/agent-apps.service';
-import { AppBuildsService } from '../agent-apps/app-builds.service';
+import { AgentChannelsService } from '../agent-channels/agent-channels.service';
+import { AppBuildsService } from '../agent-channels/app-builds.service';
+import { ChannelType } from '../../entities/agent-channel.entity';
+
+/** The channel types an MCP caller may name. */
+const CHANNEL_TYPE_NAMES: string[] = Object.values(ChannelType);
+
+/** What the channel tools say about a channel: never its configuration. */
+function channelSummary(channel: { id: string; name?: string; type: string; status: string; slug: string | null; gatewayId: string | null; endpoint?: string }) {
+  return { id: channel.id, name: channel.name, type: channel.type, status: channel.status, slug: channel.slug, gatewayId: channel.gatewayId, endpoint: channel.endpoint };
+}
 import { LlmProvidersService } from '../llm-providers/llm-providers.service';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
 import {
@@ -101,7 +110,7 @@ const TOOLS = [
   { name: 'activate_tool', description: 'Activate tools so gateways can serve them. Generated tools (from import_schema) land in DRAFT and a gateway only attaches ACTIVE ones — this is the step between import_schema and create_gateway. Accepts one toolId or many toolIds; each id is reported separately, so one failure does not lose the rest.', inputSchema: { type: 'object', properties: { toolId: { type: 'string', description: 'Single tool ID.' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Several tool IDs. Takes precedence over toolId.' } } } },
   { name: 'list_gateways', description: 'List all gateways', inputSchema: { type: 'object', properties: {} } },
   { name: 'delete_gateway', description: 'Delete a gateway by ID', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string', description: 'Gateway ID to delete' } }, required: ['gatewayId'] } },
-  { name: 'create_gateway', description: 'Create a gateway. For tool-kind types (tools, mcp, utcp, skills), tools are auto-assigned; "tools" serves MCP, UTCP and Skills at one address. For agent-kind types (acp, openai_chat), pass agentId. A web chat, website widget, messaging channel or A2A endpoint is a place on an app and is refused here. Only ACTIVE tools can be attached — freshly generated tools are DRAFT, so run activate_tool first or read `toolsSkipped` in the result to see exactly what was left off.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['tools', 'mcp', 'utcp', 'skills', 'acp', 'openai_chat'] }, endpoint: { type: 'string', description: 'URL slug. Auto-generated from name if omitted.' }, agentId: { type: 'string', description: 'Agent ID for agent-kind gateways (acp, openai_chat)' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Specific tool IDs to assign (tool-kind only)' }, apiIds: { type: 'array', items: { type: 'string' }, description: 'Assign all tools from these API IDs (tool-kind only)' }, assignTools: { type: 'boolean', description: 'Auto-assign all org tools if no toolIds/apiIds given. Default: true for tool-kind.' }, configuration: { type: 'object', description: 'Gateway-type-specific config. MCP: {transport: http|sse|websocket}. UTCP: {protocol: http|tcp}. Defaults are sensible per type.', additionalProperties: true } }, required: ['name', 'type'] } },
+  { name: 'create_gateway', description: 'Create a gateway. Each gateway serves one protocol. For tool-kind types (mcp, utcp, skills), tools are auto-assigned. For agent-kind types (acp, openai_chat), pass agentId. A web chat, website widget, messaging channel or A2A endpoint is a channel on an agent (add_channel) and is refused here. Only ACTIVE tools can be attached — freshly generated tools are DRAFT, so run activate_tool first or read `toolsSkipped` in the result to see exactly what was left off.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['mcp', 'utcp', 'skills', 'acp', 'openai_chat'] }, endpoint: { type: 'string', description: 'URL slug. Auto-generated from name if omitted.' }, agentId: { type: 'string', description: 'Agent ID for agent-kind gateways (acp, openai_chat)' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Specific tool IDs to assign (tool-kind only)' }, apiIds: { type: 'array', items: { type: 'string' }, description: 'Assign all tools from these API IDs (tool-kind only)' }, assignTools: { type: 'boolean', description: 'Auto-assign all org tools if no toolIds/apiIds given. Default: true for tool-kind.' }, configuration: { type: 'object', description: 'Gateway-type-specific config. MCP: {transport: http|sse|websocket}. UTCP: {protocol: http|tcp}. Defaults are sensible per type.', additionalProperties: true } }, required: ['name', 'type'] } },
   { name: 'assign_tools_to_gateway', description: 'Assign tools to a gateway by tool IDs or by API name (assigns all tools from that API). Only ACTIVE tools attach; DRAFT ones come back in `toolsSkipped` with a reason — activate_tool them and call again. `toolsAssigned` is the number that actually attached, not the number requested.', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Tool IDs to assign' }, apiName: { type: 'string', description: 'Assign all tools from this API (by name)' } }, required: ['gatewayId'] } },
   { name: 'add_auth_to_gateway', description: 'Add an auth method to a gateway. Per-type `configuration`: api_key needs {keyHeader} and/or {keyQuery} (defaults to x-api-key / api_key when omitted); jwt REQUIRES {secret} — a gateway-specific one, not the platform JWT secret; bearer_token, basic_auth, oauth2 and none need no configuration (they validate against org API keys, user credentials and issued OAuth tokens respectively).', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, type: { type: 'string', enum: ['api_key', 'bearer_token', 'basic_auth', 'oauth2', 'jwt', 'none'], description: 'Auth type to add' }, configuration: { type: 'object', description: 'Type-specific config. Required for jwt ({secret}); optional for api_key ({keyHeader, keyQuery}); ignored by the rest.', additionalProperties: true } }, required: ['gatewayId', 'type'] } },
   { name: 'remove_auth_from_gateway', description: 'Remove an auth method from a gateway', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, authId: { type: 'string', description: 'Auth config ID to remove' } }, required: ['gatewayId', 'authId'] } },
@@ -132,10 +141,10 @@ const TOOLS = [
         },
         toolIds: { type: 'array', items: { type: 'string' }, description: 'Tools this agent may call. Use list_tools for ids; a DRAFT tool needs activate_tool first.' },
         modelConfig: { type: 'object', description: '{providerId, model, temperature, maxTokens}. Leave model blank to take the provider\'s live default.', additionalProperties: true },
-        memoryConfig: { type: 'object', description: '{enabled, autoSave, scopes}', additionalProperties: true },
-        agentConfig: { type: 'object', description: '{canCallAgents, canCreateAgents}', additionalProperties: true },
+        memoryConfig: { type: 'object', description: '{enabled, account ("almyty-native" or an outside backend id), whose (person|agent|shared), save (facts|conversations|asked), neverSave (rules, one per line), retentionDays (null keeps until deleted), credentialId (a connection of the agent itself for that service)}', additionalProperties: true },
+        agentConfig: { type: 'object', description: '{callableAgentIds (agents it may call), apiIds (APIs whose tools it may use, including later ones), runnerLabels, canCreateAgents, maxTemporaryAgents (per run), maxTemporaryAgentsAlive (at once)}', additionalProperties: true },
         collaboration: { type: 'object', description: '{strategy: sequential|parallel|race|debate, participants: [{kind: "agent", agentId, role?} | {kind: "model", providerId?, model?, routing?, role?, instructions?, temperature?, maxTokens?}] (a model participant needs providerId or routing), sharedBrief?, rules?: {maxTotalCost?, maxChainDepth?, outputFormat?: text|json, escalation?, conflictResolution?}, judge?: <participant>, maxRounds?}', additionalProperties: true },
-        models: { type: 'object', description: 'Autonomous mode: the roles and how they work together. {strategy: single|cascade|best_of_n|panel|explore_extract_patch, roles: [{key, name, purpose: main|drafter|checker|panelist|explorer|summariser|teammate, kind: "model", providerId?, model?, routing?, temperature?, maxTokens?, instructions?} | {key, name, purpose: panelist|teammate, kind: "agent", agentId}], candidates?: 2-5 (best_of_n)}. Exactly one main role. Slots each strategy needs: cascade drafter+checker+main; best_of_n main+checker; panel main+2 panelists; explore_extract_patch explorer+summariser+main+checker. The main role is mirrored into modelConfig.', additionalProperties: true },
+        models: { type: 'object', description: 'Autonomous mode: the roles and how they work together. {strategy: single|cascade|best_of_n|panel|explore_extract_patch, roles: [{key, name, purpose: main|drafter|checker|panelist|judge|explorer|summariser|teammate, kind: "model", providerId?, model?, routing?, temperature?, maxTokens?, instructions?} | {key, name, purpose: panelist|teammate, kind: "agent", agentId}], candidates?: 2-5 (best_of_n)}. Exactly one main role. Slots each strategy needs: cascade drafter+checker+main; best_of_n main+checker; panel main+2 panelists (an optional judge writes the agreed answer; without one the main role judges); explore_extract_patch explorer+summariser+main+checker. The main role is mirrored into modelConfig.', additionalProperties: true },
         heartbeat: { type: 'object', description: '{enabled, intervalMinutes, prompt}', additionalProperties: true },
         variables: { type: 'object', description: 'Default variable values available to the pipeline.', additionalProperties: true },
         settings: { type: 'object', additionalProperties: true },
@@ -153,19 +162,19 @@ const TOOLS = [
   { name: 'invoke_agent', description: 'Run an agent and return the result. Workflow agents execute their pipeline synchronously and return the execution id plus output; autonomous agents start a run and return the run id. Requires an ACTIVE agent — call activate_agent first.', inputSchema: { type: 'object', properties: { agentId: { type: 'string' }, input: { type: 'object', description: 'Run input. Workflow agents read it in their input node; autonomous agents typically take {message: "..."}.', additionalProperties: true }, variables: { type: 'object', description: 'Workflow mode: overrides the agent\'s default variables for this run.', additionalProperties: true }, metadata: { type: 'object', description: 'Stamped onto the execution record.', additionalProperties: true } }, required: ['agentId'] } },
   { name: 'list_providers', description: 'List providers', inputSchema: { type: 'object', properties: {} } },
   { name: 'add_provider', description: 'Add a provider', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string' }, apiKey: { type: 'string' } }, required: ['name', 'type', 'apiKey'] } },
-  // -- Agent Factory (/apps): turn an agent into a shipped product --
-  { name: 'list_apps', description: 'List agent-factory apps (products built from your agents)', inputSchema: { type: 'object', properties: {} } },
-  { name: 'create_app', description: 'Create an app: a product built from one or more agents, shipped under its own name. slug is the address it ships under (unique per org, lowercase-kebab).', inputSchema: { type: 'object', properties: { name: { type: 'string' }, slug: { type: 'string', description: 'Lowercase-kebab, unique per org. This is the address the product ships under.' }, description: { type: 'string' }, agentIds: { type: 'array', items: { type: 'string' }, description: 'Agents this product exposes; the first is the default.' }, authMode: { type: 'string', description: 'public_link (default) or sso' } }, required: ['name', 'slug'] } },
-  { name: 'get_app', description: 'Get one app by slug with its distributions', inputSchema: { type: 'object', properties: { slug: { type: 'string' } }, required: ['slug'] } },
-  { name: 'check_app', description: 'What is stopping this app from shipping (unmet rules: cost cap, rate limits, auth). Read this before publishing.', inputSchema: { type: 'object', properties: { slug: { type: 'string' } }, required: ['slug'] } },
-  { name: 'update_app', description: 'Update an app: name, description, agents, branding, auth mode, and the limits a public product needs (costCapCents, perUserRateLimit, perIpRateLimit).', inputSchema: { type: 'object', properties: { slug: { type: 'string', description: 'Current slug of the app to update.' }, name: { type: 'string' }, description: { type: 'string' }, agentIds: { type: 'array', items: { type: 'string' } }, authMode: { type: 'string', description: 'public_link or sso' }, branding: { type: 'object', description: 'appName, greeting, primaryColor, iconUrl, disclosure', additionalProperties: true }, limits: { type: 'object', description: '{costCapCents, perUserRateLimit, perIpRateLimit} — cents, not currency. Null clears a limit.', additionalProperties: true } }, required: ['slug'] } },
-  { name: 'delete_app', description: 'Delete an app by slug', inputSchema: { type: 'object', properties: { slug: { type: 'string' } }, required: ['slug'] } },
-  { name: 'add_distribution', description: 'Ship an app to a target (one per target). web = hosted chat; channels (slack, telegram, ...) take their platform credentials in `configuration`; tui/desktop/binary are downloadable builds.', inputSchema: { type: 'object', properties: { slug: { type: 'string' }, target: { type: 'string', enum: ['web', 'tui', 'desktop', 'binary', 'slack', 'discord', 'telegram', 'whatsapp', 'whatsapp_cloud', 'sms', 'microsoft_teams', 'google_chat', 'email', 'signal', 'matrix', 'irc', 'webhook'] }, configuration: { type: 'object', description: 'Target config, incl. platform credentials for channels (e.g. Slack {botToken, signingSecret}) and configuration.agentId to override the answering agent.', additionalProperties: true }, gatewayId: { type: 'string', description: 'Attach to an existing gateway instead of creating one on publish.' } }, required: ['slug', 'target'] } },
-  { name: 'remove_distribution', description: 'Stop shipping an app to a target', inputSchema: { type: 'object', properties: { slug: { type: 'string' }, target: { type: 'string', enum: ['web', 'tui', 'desktop', 'binary', 'slack', 'discord', 'telegram', 'whatsapp', 'whatsapp_cloud', 'sms', 'microsoft_teams', 'google_chat', 'email', 'signal', 'matrix', 'irc', 'webhook'] } }, required: ['slug', 'target'] } },
-  { name: 'publish_distribution', description: 'Publish a distribution so it answers. Stands up the matching gateway with the product branding and limits. Refuses when required channel credentials are missing, when a public product has no cost cap / rate limit, or when a workflow agent is put behind a chat surface.', inputSchema: { type: 'object', properties: { slug: { type: 'string' }, target: { type: 'string', enum: ['web', 'tui', 'desktop', 'binary', 'slack', 'discord', 'telegram', 'whatsapp', 'whatsapp_cloud', 'sms', 'microsoft_teams', 'google_chat', 'email', 'signal', 'matrix', 'irc', 'webhook'] } }, required: ['slug', 'target'] } },
-  { name: 'unpublish_distribution', description: 'Stop a distribution answering, keeping its settings and credentials (the gateway is deactivated, not deleted).', inputSchema: { type: 'object', properties: { slug: { type: 'string' }, target: { type: 'string', enum: ['web', 'tui', 'desktop', 'binary', 'slack', 'discord', 'telegram', 'whatsapp', 'whatsapp_cloud', 'sms', 'microsoft_teams', 'google_chat', 'email', 'signal', 'matrix', 'irc', 'webhook'] } }, required: ['slug', 'target'] } },
-  { name: 'build_app', description: 'Queue a downloadable build (tui/desktop/binary) on the server for one platform. Returns a build record; poll list_builds for status.', inputSchema: { type: 'object', properties: { slug: { type: 'string' }, target: { type: 'string', enum: ['tui', 'desktop', 'binary'] }, platform: { type: 'string', description: 'e.g. linux-x64, darwin-arm64, win-x64' }, version: { type: 'string' }, macPackaging: { type: 'string', description: 'macOS desktop only: how to package the .app' } }, required: ['slug', 'target', 'platform'] } },
-  { name: 'list_builds', description: 'Build history for an app', inputSchema: { type: 'object', properties: { slug: { type: 'string' } }, required: ['slug'] } },
+  // -- Channels on an agent: where people (or other agents) reach it --
+  { name: 'list_channels', description: "List an agent's channels: web chat, website widget, messaging platforms, A2A, desktop and terminal apps", inputSchema: { type: 'object', properties: { agentId: { type: 'string' } }, required: ['agentId'] } },
+  { name: 'add_channel', description: 'Add a channel to an agent. web = web chat on its own link, widget = chat bubble for a website, a2a = other agents, tui/desktop = downloadable apps, the rest are messaging platforms whose keys come from a credential on Credentials, picked with `credentialId`. Keys sent in `configuration` are refused.', inputSchema: { type: 'object', properties: { agentId: { type: 'string' }, type: { type: 'string', enum: CHANNEL_TYPE_NAMES }, name: { type: 'string', description: 'What to call it, unique among the agent\'s channels. The type\'s label when left out.' }, slug: { type: 'string', description: 'Web chat address or download name. Made from the agent name when left out.' }, configuration: { type: 'object', description: 'Platform settings that are not keys, e.g. a desktop app {bundleId}.', additionalProperties: true }, credentialId: { type: 'string', description: 'The credential holding the platform keys.' } }, required: ['agentId', 'type'] } },
+  { name: 'get_channel', description: 'Get one channel of an agent, with what its branding and visitor rules resolve to', inputSchema: { type: 'object', properties: { agentId: { type: 'string' }, channelId: { type: 'string' } }, required: ['agentId', 'channelId'] } },
+  { name: 'check_channel', description: 'What is stopping this channel from going live or being built (missing keys, cost cap, rate limits, sign-in). Read this before publishing.', inputSchema: { type: 'object', properties: { agentId: { type: 'string' }, channelId: { type: 'string' } }, required: ['agentId', 'channelId'] } },
+  { name: 'update_channel', description: "Change a channel: its name, a web chat's address (slug), its platform settings (configuration.aiDisclosure: false turns the AI disclosure off, white-label only), the credential holding its keys, and its own overrides of the agent's branding and visitor rules (null inherits).", inputSchema: { type: 'object', properties: { agentId: { type: 'string' }, channelId: { type: 'string' }, name: { type: 'string' }, slug: { type: 'string', description: 'Web chat only: its address, free across every organization' }, configuration: { type: 'object', additionalProperties: true }, credentialId: { type: ['string', 'null'] }, branding: { type: ['object', 'null'], additionalProperties: true }, visitorRules: { type: ['object', 'null'], additionalProperties: true } }, required: ['agentId', 'channelId'] } },
+  { name: 'delete_channel', description: 'Delete a channel (and the gateway it answered on)', inputSchema: { type: 'object', properties: { agentId: { type: 'string' }, channelId: { type: 'string' } }, required: ['agentId', 'channelId'] } },
+  { name: 'publish_channel', description: 'Publish a channel so it answers. Stands up the matching gateway. Refuses when platform keys are missing, when an open channel has no cost cap or rate limits, or when the agent is a workflow.', inputSchema: { type: 'object', properties: { agentId: { type: 'string' }, channelId: { type: 'string' } }, required: ['agentId', 'channelId'] } },
+  { name: 'unpublish_channel', description: 'Stop a channel answering, keeping its settings and keys (the gateway is deactivated, not deleted).', inputSchema: { type: 'object', properties: { agentId: { type: 'string' }, channelId: { type: 'string' } }, required: ['agentId', 'channelId'] } },
+  { name: 'get_public_settings', description: "An agent's branding and visitor rules, which every channel inherits", inputSchema: { type: 'object', properties: { agentId: { type: 'string' } }, required: ['agentId'] } },
+  { name: 'update_public_settings', description: "Change an agent's branding (appName, primaryColor, logoUrl, greeting, theme, suggestedPrompts, aiDisclosure, whiteLabel) and visitor rules ({authMode, limits: {costCapCents, perUserRateLimit, perIpRateLimit, dailySpendCapCents, monthlySpendCapCents}, privacy: {retentionDays, visitorCanDelete, visitorCanExport, visitorMemory}}). Cents, not currency.", inputSchema: { type: 'object', properties: { agentId: { type: 'string' }, branding: { type: ['object', 'null'], additionalProperties: true }, visitorRules: { type: ['object', 'null'], additionalProperties: true } }, required: ['agentId'] } },
+  { name: 'build_channel', description: 'Queue a downloadable build of a desktop or terminal app channel for one platform. Poll list_builds for status.', inputSchema: { type: 'object', properties: { agentId: { type: 'string' }, channelId: { type: 'string' }, platform: { type: 'string', description: 'e.g. linux-x64, macos-arm64, windows-x64' }, version: { type: 'string' }, macPackaging: { type: 'string', description: 'macOS desktop only: zip or dmg' } }, required: ['agentId', 'channelId', 'platform'] } },
+  { name: 'list_builds', description: 'Build history of a desktop or terminal app channel', inputSchema: { type: 'object', properties: { agentId: { type: 'string' }, channelId: { type: 'string' } }, required: ['agentId', 'channelId'] } },
   // ── Memory (canonical schema v1) ──────────────────────────────
   { name: 'memory_put', description: 'Write a memory or document item. memory mode = agent-written facts/preferences; document mode = chunked imported text.', inputSchema: { type: 'object', properties: { mode: { type: 'string', enum: ['memory', 'document'] }, scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'], description: 'Defaults to workspace if omitted.' }, content: { type: 'string' }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'], description: 'Memory mode only. Defaults to short.' }, tags: { type: 'array', items: { type: 'string' } }, ttl_seconds: { type: 'number' }, source_uri: { type: 'string', description: 'Document mode: where the text came from.' }, source_version: { type: 'number' } }, required: ['mode', 'content'] } },
   { name: 'memory_search', description: 'Hybrid (vector + FTS) search across a scope.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, mode: { type: 'string', enum: ['memory', 'document'] }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'] }, top_k: { type: 'number' }, fts_only: { type: 'boolean' } }, required: ['query'] } },
@@ -188,7 +197,7 @@ const TOOLS = [
   // ── Connections + credentials: the one store for third-party secrets ──
   { name: 'list_connectors', description: 'The connector catalog: built-in, provider-derived and this organization\'s custom connectors, each with the connect methods it offers and the field names each method wants. Catalog data, never secrets. Read this before start_connection to learn the connectorKey and which method to use.', inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['inference', 'deployment', 'memory', 'mcp', 'tool_source', 'channel', 'cloud', 'registry'] } } } },
   { name: 'list_connections', description: 'List the organization\'s connections. A connection is a stored third-party account; rows come back masked — connector, account label, health, granted scopes and expiry, never a secret value.', inputSchema: { type: 'object', properties: {} } },
-  { name: 'start_connection', description: 'Start connecting a third-party account. For a redirect method (oauth2_pkce, oauth2_code, installation) this returns an authorize URL and a state: open the URL, then finish with complete_connection. For any other method (api_key, service_account, cloud_iam, oauth2_client_credentials) it refuses and names the fields it wanted — a raw secret must not travel through this tool, so use the /credentials page or `npx @almyty/connections connect`. There is deliberately no secret parameter here.', inputSchema: { type: 'object', properties: { connectorKey: { type: 'string', description: 'From list_connectors.' }, method: { type: 'string', enum: ['oauth2_pkce', 'oauth2_code', 'oauth2_client_credentials', 'api_key', 'cloud_iam', 'service_account', 'installation'], description: 'Defaults to the connector\'s first method.' }, owner: { type: 'string', enum: ['org', 'user'], description: 'org (default), or scoped to the calling user.' }, mode: { type: 'string', enum: ['browser', 'headless'], description: 'headless asks the provider to print a code you paste back through complete_connection.' }, name: { type: 'string', description: 'Label for the connection.' } }, required: ['connectorKey'] } },
+  { name: 'start_connection', description: 'Start connecting a third-party account. For a redirect method (oauth2_pkce, oauth2_code, installation) this returns an authorize URL and a state: open the URL, then finish with complete_connection. For any other method (api_key, service_account, cloud_iam, oauth2_client_credentials) it refuses and names the fields it wanted — a raw secret must not travel through this tool, so use the /credentials page or `npx @almyty/credentials add`. There is deliberately no secret parameter here.', inputSchema: { type: 'object', properties: { connectorKey: { type: 'string', description: 'From list_connectors.' }, method: { type: 'string', enum: ['oauth2_pkce', 'oauth2_code', 'oauth2_client_credentials', 'api_key', 'cloud_iam', 'service_account', 'installation'], description: 'Defaults to the connector\'s first method.' }, owner: { type: 'string', enum: ['org', 'user'], description: 'org (default), or scoped to the calling user.' }, mode: { type: 'string', enum: ['browser', 'headless'], description: 'headless asks the provider to print a code you paste back through complete_connection.' }, name: { type: 'string', description: 'Label for the connection.' } }, required: ['connectorKey'] } },
   { name: 'complete_connection', description: 'Finish a headless redirect connect: hand back the state from start_connection plus the one-time authorization code the provider printed. The code is exchanged and the resulting tokens are stored encrypted in the credentials vault; nothing is echoed back.', inputSchema: { type: 'object', properties: { state: { type: 'string', description: 'The state returned by start_connection.' }, code: { type: 'string', description: 'The one-time authorization code the provider displayed.' } }, required: ['state', 'code'] } },
   { name: 'list_connection_grants', description: 'The grants on one connection: which user, team, role, agent or workspace may use or manage it, with any budget and expiry. Anything but the connection\'s owner reaches a connection only through a grant.', inputSchema: { type: 'object', properties: { connectionId: { type: 'string' } }, required: ['connectionId'] } },
   { name: 'grant_connection', description: 'Let a user, team, role, agent or workspace use (or manage) a connection. This is what makes a stored account reachable from an agent run: without a grant the resolve is refused at run time. principalId is a uuid, except for principalType "role" where it is the role name (owner, admin, member, viewer).', inputSchema: { type: 'object', properties: { connectionId: { type: 'string' }, principalType: { type: 'string', enum: ['user', 'team', 'role', 'agent', 'workspace'] }, principalId: { type: 'string', description: 'uuid, or the role name when principalType is "role".' }, permission: { type: 'string', enum: ['use', 'manage'], description: 'use (default) resolves the secret for a run; manage also edits grants.' }, budgetId: { type: 'string', description: 'Optional spend ceiling for this grant.' }, expiresAt: { type: 'string', description: 'ISO-8601 instant.' } }, required: ['connectionId', 'principalType', 'principalId'] } },
@@ -420,7 +429,7 @@ export class AlmytyMcpService {
       }
       case 'create_gateway': {
         const endpoint = args.endpoint || `/${args.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
-        const toolTypes = ['mcp', 'utcp', 'skills', 'tools'];
+        const toolTypes = ['mcp', 'utcp', 'skills'];
         const isToolKind = toolTypes.includes(args.type);
         // Per-type default configuration. MCP requires `transport`, UTCP requires `protocol`.
         // A bare `{transport: http}` blocks UTCP gateway creation through this tool.
@@ -632,53 +641,59 @@ export class AlmytyMcpService {
       case 'list_providers': return get(LlmProvidersService).getProviders({ organizationId: orgId, caller: { id: userId } });
       case 'add_provider': return get(LlmProvidersService).createProvider({ name: args.name, type: args.type, configuration: { apiKey: args.apiKey } }, orgId, userId);
 
-      // -- Agent Factory (/apps) --
-      case 'list_apps': {
-        const apps = await get(AgentAppsService).list(orgId);
-        return { total: apps.length, apps: apps.map((a) => ({ slug: a.slug, name: a.name, authMode: a.authMode, isActive: a.isActive, agentIds: a.agentIds ?? [] })) };
+      // -- Channels on an agent --
+      case 'list_channels': {
+        const channels = await get(AgentChannelsService).list(orgId, args.agentId, { id: userId });
+        return { total: channels.length, channels: channels.map(channelSummary) };
       }
-      case 'create_app': {
-        const app = await get(AgentAppsService).create(orgId, args);
-        return { slug: app.slug, name: app.name, authMode: app.authMode, agentIds: app.agentIds ?? [] };
+      case 'add_channel': {
+        const channel = await get(AgentChannelsService).add(orgId, args.agentId, { id: userId }, {
+          type: args.type,
+          name: args.name,
+          slug: args.slug,
+          configuration: args.configuration ?? {},
+          credentialId: args.credentialId ?? undefined,
+        });
+        return channelSummary(channel);
       }
-      case 'get_app': {
-        const app = await get(AgentAppsService).findOne(orgId, args.slug);
-        return { slug: app.slug, name: app.name, description: app.description, authMode: app.authMode, isActive: app.isActive, agentIds: app.agentIds ?? [], branding: app.branding, limits: app.limits, distributions: (app.distributions ?? []).map((d) => ({ target: d.target, status: d.status, gatewayId: d.gatewayId })) };
+      case 'get_channel': {
+        const channel = await get(AgentChannelsService).get(orgId, args.agentId, args.channelId, { id: userId });
+        return { ...channelSummary(channel), effective: channel.effective };
       }
-      case 'check_app': return get(AgentAppsService).check(orgId, args.slug);
-      case 'update_app': {
-        const { slug, ...patch } = args;
-        const app = await get(AgentAppsService).update(orgId, slug, patch);
-        return { slug: app.slug, name: app.name, authMode: app.authMode, limits: app.limits };
+      case 'check_channel': return get(AgentChannelsService).check(orgId, args.agentId, args.channelId, { id: userId });
+      case 'update_channel': {
+        const { agentId, channelId, ...patch } = args;
+        const channel = await get(AgentChannelsService).update(orgId, agentId, channelId, { id: userId }, patch);
+        return channelSummary(channel);
       }
-      case 'delete_app': {
-        await get(AgentAppsService).remove(orgId, args.slug);
-        return { deleted: true, slug: args.slug };
+      case 'delete_channel': {
+        await get(AgentChannelsService).remove(orgId, args.agentId, args.channelId, { id: userId });
+        return { deleted: true };
       }
-      case 'add_distribution': {
-        const d = await get(AgentAppsService).addDistribution(orgId, args.slug, args.target, args.configuration ?? {}, args.gatewayId ?? null);
-        return { target: d.target, status: d.status, gatewayId: d.gatewayId };
+      case 'publish_channel': {
+        const channel = await get(AgentChannelsService).publish(orgId, args.agentId, args.channelId, { id: userId });
+        return channelSummary(channel);
       }
-      case 'remove_distribution': {
-        await get(AgentAppsService).removeDistribution(orgId, args.slug, args.target);
-        return { removed: true, target: args.target };
+      case 'unpublish_channel': {
+        const channel = await get(AgentChannelsService).unpublish(orgId, args.agentId, args.channelId, { id: userId });
+        return channelSummary(channel);
       }
-      case 'publish_distribution': {
-        const d = await get(AgentAppsService).publishDistribution(orgId, args.slug, args.target, userId);
-        return { target: d.target, status: d.status, gatewayId: d.gatewayId };
+      case 'get_public_settings': return get(AgentChannelsService).publicSettings(orgId, args.agentId, { id: userId });
+      case 'update_public_settings': {
+        const { agentId, ...patch } = args;
+        return get(AgentChannelsService).updatePublicSettings(orgId, agentId, { id: userId }, patch);
       }
-      case 'unpublish_distribution': {
-        const d = await get(AgentAppsService).unpublishDistribution(orgId, args.slug, args.target, userId);
-        return { target: d.target, status: d.status };
-      }
-      case 'build_app': {
-        const { slug, ...dto } = args;
-        const build: any = await get(AppBuildsService).request(orgId, slug, dto, userId);
-        return { id: build.id, status: build.status, target: build.target, platform: build.platform, version: build.version };
+      case 'build_channel': {
+        const { agentId, channelId, ...dto } = args;
+        await get(AgentChannelsService).manageableAgent(orgId, agentId, { id: userId });
+        const channel = await get(AgentChannelsService).get(orgId, agentId, channelId, { id: userId });
+        const build: any = await get(AppBuildsService).request(orgId, channel, dto, userId);
+        return { id: build.id, status: build.status, type: build.target, platform: build.platform, version: build.version };
       }
       case 'list_builds': {
-        const builds = await get(AppBuildsService).list(orgId, args.slug);
-        return { total: builds.length, builds: builds.map((b: any) => ({ id: b.id, target: b.target, platform: b.platform, version: b.version, status: b.status, signed: b.signed })) };
+        const channel = await get(AgentChannelsService).get(orgId, args.agentId, args.channelId, { id: userId });
+        const builds = await get(AppBuildsService).list(orgId, channel.id);
+        return { total: builds.length, builds: builds.map((b: any) => ({ id: b.id, type: b.target, platform: b.platform, version: b.version, status: b.status, signed: b.signed })) };
       }
 
       // ── Memory (canonical) ─────────────────────────────────────

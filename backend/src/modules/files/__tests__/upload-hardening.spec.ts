@@ -8,6 +8,16 @@ import { StorageService } from '../storage.service';
 import { TextExtractorService } from '../text-extractor.service';
 import { AgentFile } from '../../../entities/file.entity';
 
+/** Uploads reach the service as a file multer spooled to disk (files/temp-upload.ts). */
+const spoolDir = fs.mkdtempSync(path.join(os.tmpdir(), 'almyty-test-spool-'));
+afterAll(() => fs.rmSync(spoolDir, { recursive: true, force: true }));
+let spoolCount = 0;
+function spooled(buffer: Buffer): string {
+  const file = path.join(spoolDir, `upload-${spoolCount++}`);
+  fs.writeFileSync(file, buffer);
+  return file;
+}
+
 /**
  * Upload-path hardening, exercised against the real local storage
  * provider and the real text extractor. Only the repository is faked.
@@ -53,7 +63,7 @@ describe('FilesService upload hardening', () => {
 
   const txt = (body: Buffer | string, name = 'notes.txt') => {
     const buffer = Buffer.isBuffer(body) ? body : Buffer.from(body);
-    return { buffer, originalname: name, mimetype: 'text/plain', size: buffer.length };
+    return { path: spooled(buffer), originalname: name, mimetype: 'text/plain', size: buffer.length };
   };
 
   it('refuses an agentId that walks the storage key into another org', async () => {

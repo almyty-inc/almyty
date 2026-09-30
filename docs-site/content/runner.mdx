@@ -61,10 +61,10 @@ agent can call them: one you built, or a Claude Code session over MCP.
 Labels say what a machine has, such as `os=mac` or `gpu=yes`. Work that asks
 for labels runs only on an online runner that carries all of them:
 
-- **An agent**: on its edit page, under **Agent capabilities**, fill
-  **Machine labels** (for example `gpu=yes, os=mac`). Every runner tool the
-  agent calls then runs on a matching online runner, the tool's own runner
-  when it matches.
+- **An agent**: on its edit page, under **Capabilities > Machine**, fill
+  **Machine labels** (for example `gpu=yes, os=mac`). The page lists the
+  machines that carry them. Every runner tool the agent calls then runs on a
+  matching online runner, the tool's own runner when it matches.
 - **A workspace**: one created with `labels` is placed on a matching online
   runner. Work inside a workspace always stays on that workspace's runner.
 
@@ -88,7 +88,11 @@ the orchestration; the runner runs the members.
 ## Workspaces
 
 Work happens inside a **workspace**: a reservation of a working directory on the
-runner, with a time limit. Processes are tracked per workspace and cleaned up
+runner, with a time limit. Each runner's page has a **Workspaces** tab
+(`/runners/:id?tab=workspaces`) listing that runner's workspaces, active ones first,
+with the folder, status, isolation and time left; a row opens the workspace's own
+page under the runner, where an active one can be released. Agents make workspaces
+when a job needs a folder; you don't create them by hand. Processes are tracked per workspace and cleaned up
 when it is released. The current runner uses host execution, not a filesystem
 or network sandbox: a workspace does not prevent a command from accessing other
 files the daemon's operating-system user can read. Set local path and command

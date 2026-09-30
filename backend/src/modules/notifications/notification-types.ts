@@ -18,6 +18,8 @@ export const NOTIFICATION_EVENT_TYPES = [
   'connections.expired',
   'connections.rotation_due',
   'domains.unverified',
+  'models.new',
+  'models.unavailable',
   'account.welcome',
   'account.verify_email',
   'account.password_reset',
@@ -28,6 +30,8 @@ export type NotificationEventType = (typeof NOTIFICATION_EVENT_TYPES)[number];
 export interface ChannelPrefs {
   inApp: boolean;
   email: boolean;
+  /** Shown in the app whatever the person set; only the email can be turned off. */
+  inAppLocked?: boolean;
 }
 
 /**
@@ -50,6 +54,11 @@ export const NOTIFICATION_DEFAULTS: Record<NotificationEventType, ChannelPrefs> 
   'connections.expired': { inApp: true, email: true },
   'connections.rotation_due': { inApp: true, email: false },
   'domains.unverified': { inApp: true, email: true },
+  // A model appearing or going away on a provider connection: always in
+  // the app; the email (at once for a model an agent uses, else in the
+  // daily digest) is each person's to turn off.
+  'models.new': { inApp: true, email: true, inAppLocked: true },
+  'models.unavailable': { inApp: true, email: true, inAppLocked: true },
   'invite.received': { inApp: true, email: true },
   'referral.qualified': { inApp: true, email: true },
   'referral.rewarded': { inApp: true, email: true },

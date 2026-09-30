@@ -312,7 +312,7 @@ export const authApi = {
   getProfile: () => apiGet('/auth/profile'),
   
   /** A changed email needs `currentPassword`; the server refuses without it. */
-  updateProfile: (data: Partial<{ name: string; email: string; currentPassword: string }>) =>
+  updateProfile: (data: Partial<{ name: string; email: string; currentPassword: string; timezone: string | null }>) =>
     apiPatch('/auth/profile', data),
   
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
@@ -491,8 +491,6 @@ export const gatewaysApi = {
 
   deactivate: (id: string) => apiPost(`/gateways/${id}/deactivate`),
 
-  testChannelConnection: (id: string) => apiPost(`/gateways/${id}/test-connection`),
-
   // Multi-workspace channel installations (e.g. Slack OAuth installs)
   getInstallations: (id: string) => apiGet(`/gateways/${id}/installations`),
 
@@ -586,6 +584,15 @@ export const apisApi = {
     apiGet(`/apis/${id}/schemas/${schemaId}/parsed`),
 
   createSdkApi: (data: any) => apiPost('/apis/sdk', data),
+  /** An API without a description: a base URL, with tools added by hand. */
+  createHttpApi: (data: {
+    name: string
+    baseUrl: string
+    description?: string
+    authentication?: { type: string; config?: Record<string, unknown> }
+    visibility?: 'org' | 'team' | 'private'
+    teamId?: string | null
+  }) => apiPost('/apis/http', data),
   getSdkMaps: (apiId: string) => apiGet(`/apis/${apiId}/sdk-maps`),
 
   // Connect an API from its description in one call: a link, a file or
@@ -691,6 +698,9 @@ export const llmProvidersApi = {
   update: (id: string, data: any) => apiPatch(`/llm-providers/${id}`, data),
   
   delete: (id: string) => apiDel(`/llm-providers/${id}`),
+
+  /** The agents whose model runs on this connection: the ones the caller can see by name, the rest as a count. */
+  agents: (id: string) => apiGet<{ agents: Array<{ id: string; name: string }>; others: number }>(`/llm-providers/${id}/agents`),
   
   test: (id: string) => apiPost(`/llm-providers/${id}/test`),
   
@@ -1001,7 +1011,7 @@ export const workspacesApi = {
 // Items are scoped via { scope_type, scope_id }; the UI defaults
 // scope_type=workspace and scope_id=current organization id when
 // the caller doesn't override.
-export type MemoryScopeType = 'user' | 'workspace' | 'project' | 'collab'
+export type MemoryScopeType = 'user' | 'workspace' | 'project' | 'collab' | 'agent'
 export type MemoryMode = 'memory' | 'document'
 export type MemoryTier = 'short' | 'project' | 'long' | 'shared'
 
@@ -1057,6 +1067,8 @@ export const memoriesApi = {
     apiDel(`/memory/canonical/${id}?mode=${mode}`),
   // Backend roster + transfer (router-level operations)
   listBackends: () => apiGet('/memory/canonical/backends'),
+  /** almyty's own memory and every outside memory account the organization has set up. */
+  listAccounts: () => apiGet('/memory/canonical/accounts'),
   backendsHealth: () => apiGet('/memory/canonical/backends/health'),
   // Workspace config (per-scope routing + softcap behavior + credentials wiring)
   getConfig: (scope_type: MemoryScopeType, scope_id: string) =>
@@ -1140,6 +1152,10 @@ export const auditExportApi = {
 // Credentials Vault API
 export const credentialsApi = {
   getAll: () => apiGet('/credentials'),
+  /** One credential, secrets masked. */
+  getById: (id: string) => apiGet(`/credentials/${encodeURIComponent(id)}`),
+  /** Delete a key a single API, MCP server, channel or app keeps (a shared one goes through the connections endpoint). */
+  remove: (id: string) => apiDel(`/credentials/${encodeURIComponent(id)}`),
   create: (data: any) => apiPost('/credentials', data),
   /** Start an OAuth 2.0 sign-in; the browser goes to authorizationUrl and comes back to returnTo. */
   oauth2Authorize: (data: {
@@ -1278,15 +1294,13 @@ export interface OnboardingState {
     external_client: boolean
     agent: boolean
     agent_run: boolean
-    app: boolean
-    distribution: boolean
+    channel: boolean
     runner: boolean
   }
   /** The org's own objects a step deep-links into, when they exist. */
   links: {
     gateway: { id: string; name: string; type: string; endpoint: string } | null
     agent: { id: string; name: string } | null
-    app: { slug: string; name: string } | null
   }
   dismissed: boolean
   /** Page intros this user closed. */
@@ -1318,14 +1332,12 @@ export function normalizeOnboardingState(raw: Partial<OnboardingState> | null | 
       external_client: step('external_client'),
       agent: step('agent'),
       agent_run: step('agent_run'),
-      app: step('app'),
-      distribution: step('distribution'),
+      channel: step('channel'),
       runner: step('runner'),
     },
     links: {
       gateway: links.gateway ?? null,
       agent: links.agent ?? null,
-      app: links.app ?? null,
     },
     dismissed: raw?.dismissed === true,
     dismissedIntros: Array.isArray(raw?.dismissedIntros) ? raw!.dismissedIntros! : [],

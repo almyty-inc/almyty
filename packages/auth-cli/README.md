@@ -3,7 +3,7 @@
 Browser-based authentication for every almyty CLI. Credentials are
 stored at `~/.almyty/credentials.json` (mode `0600`, in a `0700`
 directory) and shared by `@almyty/agents`, `@almyty/chat`,
-`@almyty/skills`, `@almyty/models`, `@almyty/connections`,
+`@almyty/skills`, `@almyty/models`, `@almyty/credentials`,
 `@almyty/mcp-server` and `@almyty/runner`.
 
 ## Quick start

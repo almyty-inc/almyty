@@ -9,6 +9,31 @@ import {
   GatewayToolSecurityPolicy,
 } from '../../../common/security/gateway-tool-policy';
 
+/**
+ * `header.match(/<([^>]+)>;\s*rel="next"/)?.[1] ?? null`: the target of
+ * the first `rel="next"` link in a Link header.
+ *
+ * The header is the remote API's, and the regex rescanned from every `<`
+ * to the next `>`: 100 KB of `<` took six seconds. Every `<` before the
+ * same `>` names the same link and fails the same way, so each `>` is
+ * looked past once.
+ */
+export function nextLinkTarget(header: string): string | null {
+  let at = 0;
+  for (;;) {
+    const lt = header.indexOf('<', at);
+    if (lt === -1) return null;
+    const gt = header.indexOf('>', lt + 1);
+    if (gt === -1) return null;
+    if (gt > lt + 1 && header[gt + 1] === ';') {
+      let rel = gt + 2;
+      while (rel < header.length && /\s/.test(header[rel])) rel++;
+      if (header.startsWith('rel="next"', rel)) return header.slice(lt + 1, gt);
+    }
+    at = gt + 1;
+  }
+}
+
 export function processHttpResponse(response: any, httpConfig: any): any {
   const mapping = httpConfig.responseMapping;
   let data = response.data;
@@ -138,9 +163,9 @@ export async function executeWithPagination(
       case 'link-header': {
         const linkHeader = response.headers?.link || response.headers?.Link;
         if (linkHeader) {
-          const m = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
-          if (m) {
-            nextUrl = m[1];
+          const target = nextLinkTarget(String(linkHeader));
+          if (target !== null) {
+            nextUrl = target;
             hasNext = true;
           }
         }

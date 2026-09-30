@@ -62,6 +62,8 @@ interface DataTableProps<TData, TValue> {
   onPageChange?: (pageIndex: number) => void
   /** Page size for manual pagination (default: 10) */
   pageSize?: number
+  /** Rows per page when the table pages its own data (default: 10). */
+  initialPageSize?: number
 }
 
 export function DataTable<TData, TValue>({
@@ -81,6 +83,7 @@ export function DataTable<TData, TValue>({
   pageIndex,
   onPageChange,
   pageSize = 10,
+  initialPageSize,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -105,6 +108,7 @@ export function DataTable<TData, TValue>({
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
+    ...(!manualPagination && initialPageSize ? { initialState: { pagination: { pageIndex: 0, pageSize: initialPageSize } } } : {}),
     state: {
       sorting,
       columnFilters,

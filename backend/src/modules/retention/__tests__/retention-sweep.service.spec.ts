@@ -352,15 +352,16 @@ describe('RetentionSweepService', () => {
       restoreEnv('NODE_ENV', prev);
     }
   });
-  describe('per-app retention (sweepApps)', () => {
-    let appRepo: any;
-    let distributionRepo: any;
-    let withApps: RetentionSweepService;
+  describe('channel retention (sweepChannels)', () => {
+    let channelRepo: any;
+    let withChannels: RetentionSweepService;
+
+    const agent = (visitorRules: any) => ({ id: 'agent-1', name: 'Support', visitorRules });
+    const channel = (over: any) => ({ id: 'c-1', gatewayId: 'gw-1', visitorRules: null, agent: agent(null), ...over });
 
     beforeEach(() => {
-      appRepo = mockRepo();
-      distributionRepo = mockRepo();
-      withApps = new RetentionSweepService(
+      channelRepo = mockRepo();
+      withChannels = new RetentionSweepService(
         policyRepo,
         runRepo,
         conversationRepo,
@@ -372,22 +373,21 @@ describe('RetentionSweepService', () => {
         notificationRepo,
         auditLogService,
         undefined,
-        appRepo,
-        distributionRepo,
+        channelRepo,
       );
     });
 
-    it('sweeps an app conversations through its gateways, runs first, at the app cutoff', async () => {
-      appRepo.find.mockResolvedValue([{ id: 'app-1', privacy: { retentionDays: 7 } }]);
-      distributionRepo.find.mockResolvedValue([{ gatewayId: 'gw-1' }, { gatewayId: null }]);
+    it("sweeps a channel's conversations through its gateway, runs first, at the agent's cutoff", async () => {
+      channelRepo.find.mockResolvedValue([channel({ agent: agent({ privacy: { retentionDays: 7 } }) })]);
       conversationRepo.find.mockResolvedValueOnce([{ id: 'c1' }, { id: 'c2' }]);
       runRepo.delete.mockResolvedValueOnce({ affected: 3 });
       messageRepo.delete.mockResolvedValueOnce({ affected: 8 });
       conversationRepo.delete.mockResolvedValueOnce({ affected: 2 });
 
-      const out = await withApps.sweepApps('org-1', 30);
+      const out = await withChannels.sweepChannels('org-1', 30);
 
-      expect(out).toEqual({ conversations: 2, messages: 8, runs: 3 });
+      expect(out).toEqual({ conversations: 2, messages: 8, runs: 3, channelEvents: 0 });
+      expect(channelRepo.find.mock.calls[0][0].where.organizationId).toBe('org-1');
       const where = conversationRepo.find.mock.calls[0][0].where;
       expect(where.organizationId).toBe('org-1');
       expect(where.gatewayId).toEqual(In(['gw-1']));
@@ -398,44 +398,72 @@ describe('RetentionSweepService', () => {
       expect(runRepo.delete.mock.calls[0][0]).toMatchObject({ conversationId: In(['c1', 'c2']) });
     });
 
-    it('never keeps longer than the organization policy', async () => {
-      appRepo.find.mockResolvedValue([{ id: 'app-1', privacy: { retentionDays: 60 } }]);
-      distributionRepo.find.mockResolvedValue([{ gatewayId: 'gw-1' }]);
-      conversationRepo.find.mockResolvedValueOnce([]);
-
-      await withApps.sweepApps('org-1', 30);
-
-      const where = conversationRepo.find.mock.calls[0][0].where;
-      const thirtyDays = Date.now() - 30 * 24 * 3600 * 1000;
-      expect(Math.abs(where.createdAt.value.getTime() - thirtyDays)).toBeLessThan(5000);
-    });
-
-    it('applies the app days alone when the organization keeps forever', async () => {
-      appRepo.find.mockResolvedValue([{ id: 'app-1', privacy: { retentionDays: 14 } }]);
-      distributionRepo.find.mockResolvedValue([{ gatewayId: 'gw-1' }]);
-      conversationRepo.find.mockResolvedValueOnce([]);
-
-      await withApps.sweepApps('org-1', null);
-
-      const fourteen = Date.now() - 14 * 24 * 3600 * 1000;
-      expect(Math.abs(conversationRepo.find.mock.calls[0][0].where.createdAt.value.getTime() - fourteen)).toBeLessThan(5000);
-    });
-
-    it('leaves apps alone that inherit the policy or have nothing published', async () => {
-      appRepo.find.mockResolvedValue([
-        { id: 'inherits', privacy: null },
-        { id: 'unpublished', privacy: { retentionDays: 3 } },
+    it("takes a channel's own days over its agent's", async () => {
+      channelRepo.find.mockResolvedValue([
+        channel({ agent: agent({ privacy: { retentionDays: 30 } }), visitorRules: { privacy: { retentionDays: 3 } } }),
       ]);
-      distributionRepo.find.mockResolvedValue([]);
+      conversationRepo.find.mockResolvedValueOnce([]);
 
-      const out = await withApps.sweepApps('org-1', 30);
+      await withChannels.sweepChannels('org-1', null);
 
-      expect(out).toEqual({ conversations: 0, messages: 0, runs: 0 });
+      const three = Date.now() - 3 * 24 * 3600 * 1000;
+      expect(Math.abs(conversationRepo.find.mock.calls[0][0].where.createdAt.value.getTime() - three)).toBeLessThan(5000);
+    });
+
+    it('never keeps longer than the organization policy', async () => {
+      channelRepo.find.mockResolvedValue([channel({ agent: agent({ privacy: { retentionDays: 60 } }) })]);
+      conversationRepo.find.mockResolvedValueOnce([]);
+
+      await withChannels.sweepChannels('org-1', 30);
+
+      const thirtyDays = Date.now() - 30 * 24 * 3600 * 1000;
+      expect(Math.abs(conversationRepo.find.mock.calls[0][0].where.createdAt.value.getTime() - thirtyDays)).toBeLessThan(5000);
+    });
+
+    it('groups the gateways that keep data for the same days into one sweep', async () => {
+      channelRepo.find.mockResolvedValue([
+        channel({ id: 'a', gatewayId: 'gw-a', agent: agent({ privacy: { retentionDays: 7 } }) }),
+        channel({ id: 'b', gatewayId: 'gw-b', agent: agent({ privacy: { retentionDays: 7 } }) }),
+      ]);
+      conversationRepo.find.mockResolvedValueOnce([]);
+
+      await withChannels.sweepChannels('org-1', null);
+
+      expect(conversationRepo.find).toHaveBeenCalledTimes(1);
+      expect(conversationRepo.find.mock.calls[0][0].where.gatewayId).toEqual(In(['gw-a', 'gw-b']));
+    });
+
+    it('leaves channels alone that inherit the organization policy', async () => {
+      channelRepo.find.mockResolvedValue([channel({}), channel({ id: 'no-agent', agent: null })]);
+
+      const out = await withChannels.sweepChannels('org-1', 30);
+
+      expect(out).toEqual({ conversations: 0, messages: 0, runs: 0, channelEvents: 0 });
       expect(conversationRepo.find).not.toHaveBeenCalled();
     });
 
-    it('is a no-op on the service built without the app repositories', async () => {
-      await expect(service.sweepApps('org-1', 30)).resolves.toEqual({ conversations: 0, messages: 0, runs: 0 });
+    it('is a no-op on the service built without the channel repository', async () => {
+      await expect(service.sweepChannels('org-1', 30)).resolves.toEqual({ conversations: 0, messages: 0, runs: 0, channelEvents: 0 });
+    });
+
+    it('sweeps the stored widget replies and channel deliveries at the same cutoff', async () => {
+      const eventRepo = mockRepo();
+      eventRepo.delete.mockResolvedValue({ affected: 4 });
+      const withEvents = new RetentionSweepService(
+        policyRepo, runRepo, conversationRepo, messageRepo, requestLogRepo, usageMetricRepo, auditLogRepo,
+        toolExecutionRepo, notificationRepo, auditLogService, undefined, channelRepo, eventRepo as any,
+      );
+      channelRepo.find.mockResolvedValue([channel({ gatewayId: 'gw-widget', agent: agent({ privacy: { retentionDays: 7 } }) })]);
+      conversationRepo.find.mockResolvedValueOnce([]);
+
+      const out = await withEvents.sweepChannels('org-1', null);
+
+      expect(out.channelEvents).toBe(4);
+      const where = eventRepo.delete.mock.calls[0][0];
+      expect(where.organizationId).toBe('org-1');
+      expect(where.gatewayId).toEqual(In(['gw-widget']));
+      const sevenDays = Date.now() - 7 * 24 * 3600 * 1000;
+      expect(Math.abs(where.createdAt.value.getTime() - sevenDays)).toBeLessThan(5000);
     });
   });
 

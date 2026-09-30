@@ -2,12 +2,13 @@ import { AgentReadinessService } from '../agent-readiness.service';
 import { AgentValidationHelper } from '../agent-validation.helper';
 import { AgentRolesService } from '../agent-roles.service';
 import { Agent } from '../../../entities/agent.entity';
-import { StrategyCompileError } from '../strategies/strategy-compiler';
+import { compileStrategy, StrategyCompileError } from '../strategies/strategy-compiler';
+import { STRATEGY_SEEDS } from '../strategies/strategy-seeds';
 
 const graph = (config: any) => ({
   nodes: [
     { id: 'input', type: 'input', config: {} },
-    { id: 'answer', type: 'llm_call', config },
+    { id: 'answer', type: 'llm_call', config: { userPromptTemplate: '{{input.message}}', ...config } },
     { id: 'output', type: 'output', config: { mapping: '{{nodes.answer.output}}' } },
   ],
   edges: [{ source: 'input', target: 'answer' }, { source: 'answer', target: 'output' }],
@@ -100,5 +101,25 @@ describe('Agent model readiness (no provider calls)', () => {
     agent.pipeline = { nodes: [{ id: 'input', type: 'input', config: {} }, { id: 'output', type: 'output', config: { mapping: '{{input}}' } }], edges: [{ source: 'input', target: 'output' }] } as any;
     await expect(service.inspect(agent)).resolves.toEqual({ ready: true });
     expect(router.plan).not.toHaveBeenCalled();
+  });
+
+  it('checks the model a judged merge calls, so a panel nothing can judge is not ready', async () => {
+    const panel = STRATEGY_SEEDS.find((s) => s.key === 'panel')!;
+    const panelists = ['panelist_one', 'panelist_two', 'panelist_three'];
+    rolesRepo.find.mockResolvedValue(panelists.map((key) => ({ key, binding: { mode: 'pinned', modelId: 'model' } })));
+    strategies.compileStanding.mockResolvedValue(compileStrategy(panel, Object.fromEntries(panelists.map((k) => [k, k]))));
+    agent.settings.execution = { strategyKey: 'panel' };
+    const result = await service.inspect(agent);
+    expect(result.ready).toBe(false);
+    expect(result.message).toContain('Judge on "consensus" needs a provider or routing policy');
+  });
+
+  it('a panel with a judge role is ready', async () => {
+    const panel = STRATEGY_SEEDS.find((s) => s.key === 'panel')!;
+    const keys = ['panelist_one', 'panelist_two', 'panelist_three', 'judge'];
+    rolesRepo.find.mockResolvedValue(keys.map((key) => ({ key, binding: { mode: 'pinned', modelId: 'model' } })));
+    strategies.compileStanding.mockResolvedValue(compileStrategy(panel, Object.fromEntries(keys.map((k) => [k, k]))));
+    agent.settings.execution = { strategyKey: 'panel' };
+    await expect(service.inspect(agent)).resolves.toEqual({ ready: true });
   });
 });

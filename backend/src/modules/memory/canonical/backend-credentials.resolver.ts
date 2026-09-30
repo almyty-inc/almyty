@@ -85,7 +85,7 @@ export class BackendCredentialsResolver {
   }
 }
 
-function pickKnownFields(config: Record<string, unknown>): BackendCredentials {
+export function pickKnownFields(config: Record<string, unknown>): BackendCredentials {
   const allowed: Array<keyof BackendCredentials> = [
     'apiKey', 'baseUrl', 'project', 'location', 'engine', 'bearer',
   ];

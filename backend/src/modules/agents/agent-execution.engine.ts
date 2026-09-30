@@ -10,6 +10,7 @@ import { AgentWebhookService } from './agent-webhook.service';
 import { AgentExecutionStateHelper } from './agent-execution-state.helper';
 import { ExecutionContext } from './agent-template-resolver';
 import { StreamEvent } from './stream-event.types';
+import { streamableAnswerNode } from './answer-node';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Organization } from '../../entities/organization.entity';
 import { resolveRunLimits } from './run-limits';
@@ -56,6 +57,14 @@ export interface ExecuteAgentOptions {
    * `userId`'s.
    */
   principal?: ExecutionPrincipal;
+  /**
+   * Emit the answer's tokens as `answer.chunk` events while the model writes
+   * them, when one llm_call's text is the whole answer (answer-node.ts).
+   * Other shapes emit nothing extra and answer when the run ends. Needs
+   * `onEvent`; a caller that sets this must still read the finished output,
+   * which is the answer either way.
+   */
+  streamAnswer?: boolean;
 }
 
 export interface EngineInternalOptions {
@@ -323,6 +332,11 @@ export class AgentExecutionEngine {
       // Validate pipeline size
       validatePipelineSize(pipeline);
 
+      // Decided on the pipeline that actually runs, a compiled strategy's
+      // included: its shape is what says whether one model call's text is
+      // the answer.
+      const answerNodeId = options.streamAnswer && onEvent ? streamableAnswerNode(pipeline) : null;
+
       // 2. Build graph
       const { adjacencyList, inDegree } = buildGraph(pipeline);
 
@@ -353,7 +367,15 @@ export class AgentExecutionEngine {
         input: options.input || {},
         nodes: {},
         variables: { ...(agent.variables || {}), ...(options.variables || {}) },
-        runLimits: { maxSteps: runLimits.maxSteps, maxToolCalls: runLimits.maxToolCalls },
+        runLimits: {
+          maxSteps: runLimits.maxSteps,
+          maxToolCalls: runLimits.maxToolCalls,
+          // How often a failing tool is retried. Resolved for every run and,
+          // before this, handed to the tool executor by nothing on the
+          // workflow path, so a tool_call node retried on the executor's own
+          // default whatever the agent's Run limits said.
+          toolErrorRetries: runLimits.toolErrorRetries,
+        },
         // The run-scoped tool-call ledger. `maxToolCalls` was resolved,
         // written onto the context, and compared by nothing -- the comment
         // above claims the node executor clamps on it, and no such clamp
@@ -380,11 +402,23 @@ export class AgentExecutionEngine {
       let outputCaptured = false;
       const skippedNodes = new Set<string>();
 
-      // Timeout and budget settings
-      const maxExecutionTime = agent.settings?.maxExecutionTime || 300000; // 5 minutes default
+      // Timeout and budget settings.
+      //
+      // Each is the tighter of the agent's own setting and the run limit
+      // resolved above. Only the setting was read before, so the run limits
+      // -- the operator's RUN_LIMIT_MAX_DURATION_MS / RUN_LIMIT_MAX_COST_CENTS
+      // ceiling, the organization's maxCostPerRun, the agent's Run limits --
+      // bound autonomous runs and did nothing to a workflow run: an agent
+      // asking for a ten-hour timeout got ten hours, and a workflow with no
+      // budgetLimit had no cost ceiling at all.
+      const maxExecutionTime = Math.min(
+        agent.settings?.maxExecutionTime || 300000, // 5 minutes default
+        runLimits.maxDurationMs,
+      );
       // Use ?? not || so a user-supplied budgetLimit of 0 ("don't spend
       // anything") is honoured instead of being silently replaced with Infinity.
-      const budgetLimit = agent.settings?.budgetLimit ?? Infinity;
+      // maxCostCents is in cents and the run's cost is in dollars.
+      const budgetLimit = Math.min(agent.settings?.budgetLimit ?? Infinity, runLimits.maxCostCents / 100);
 
       // 5. Process each layer
       for (const layer of layers) {
@@ -491,6 +525,28 @@ export class AgentExecutionEngine {
         // Filter out skipped nodes in this layer
         const activeNodes = layer.filter(nodeId => !skippedNodes.has(nodeId));
 
+        // Record this layer's skipped nodes before deciding whether there is
+        // anything left to run. This used to happen at the end of the layer,
+        // after the `continue` below -- so a layer whose nodes were ALL
+        // skipped (the second step of an untaken branch, everything after a
+        // failed node) never reached it: those nodes had no entry in the run
+        // record, no node.skipped event, and read as "did not run" rather
+        // than "skipped" to anything downstream.
+        for (const nodeId of layer) {
+          if (skippedNodes.has(nodeId) && !nodeResults[nodeId]) {
+            const node = nodeMap.get(nodeId);
+            nodeResults[nodeId] = { skipped: true };
+            context.nodes[nodeId] = { output: undefined, status: 'skipped' };
+
+            this.state.emitEvent(onEvent, {
+              type: 'node.skipped',
+              nodeId,
+              nodeType: node?.type,
+              timestamp: Date.now(),
+            });
+          }
+        }
+
         if (activeNodes.length === 0) continue;
 
         // Budget-aware cancellation for this layer. A fan-out layer runs all
@@ -565,6 +621,20 @@ export class AgentExecutionEngine {
                     resolvedRoles,
                     // The machine this agent's runner-backed tools run on.
                     runnerLabels: agent.agentConfig?.runnerLabels,
+                    // The answering model call streams its text as it
+                    // arrives, when the caller asked and this is that node.
+                    ...(nodeId === answerNodeId
+                      ? {
+                          onAnswerChunk: (content: string) =>
+                            this.state.emitEvent(onEvent, {
+                              type: 'answer.chunk',
+                              nodeId,
+                              nodeType: node.type,
+                              data: { content },
+                              timestamp: Date.now(),
+                            }),
+                        }
+                      : {}),
                   },
                 ),
             );
@@ -750,7 +820,12 @@ export class AgentExecutionEngine {
           // Store result in context
           context.nodes[nodeId] = { output: result.output };
           nodeResults[nodeId] = {
-            output: result.output,
+            // Capped like the input beside it. The context above keeps the
+            // whole value, so the next node still reads all of it; only the
+            // run record is bounded. A 10MB tool result used to be written
+            // into the row once per node that passed it along, and the row
+            // is rewritten whole on every terminal write.
+            output: capPersistedPayload(result.output),
             cost: result.cost || 0,
             tokens: result.tokens || 0,
             executionTime: result.executionTime || 0,
@@ -852,22 +927,6 @@ export class AgentExecutionEngine {
         // Carried to the next iteration's budget check: the layer just
         // finished is the closest thing to an estimate of the next one.
         lastLayerCost = layerCost;
-
-        // Mark skipped nodes in nodeResults
-        for (const nodeId of layer) {
-          if (skippedNodes.has(nodeId) && !nodeResults[nodeId]) {
-            const node = nodeMap.get(nodeId);
-            nodeResults[nodeId] = { skipped: true };
-            context.nodes[nodeId] = { output: undefined, status: 'skipped' };
-
-            this.state.emitEvent(onEvent, {
-              type: 'node.skipped',
-              nodeId,
-              nodeType: node?.type,
-              timestamp: Date.now(),
-            });
-          }
-        }
       }
 
       // Final budget check. The between-layer check only fires before a NEXT

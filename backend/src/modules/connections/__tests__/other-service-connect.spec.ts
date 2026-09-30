@@ -35,6 +35,24 @@ describe('other service connector', () => {
     expect(h.audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'connection_connect' }));
   });
 
+  it('saves a username and password as a credential, the username as its account', async () => {
+    const h = buildHarness({ routes: [] });
+    const done = await h.service.connect(admin, ORG, 'basic-auth', { input: { username: 'ops', password: 'pw-123456' }, name: 'Weather login' });
+    if (done.pending !== false) throw new Error('expected a connection');
+    expect(done.connection).toMatchObject({ name: 'Weather login', connectorKey: 'basic-auth', accountLabel: 'ops', health: { status: 'valid' } });
+    expect(JSON.stringify(done.connection)).not.toContain('pw-123456');
+    expect(h.credentials.rows[0].config.password).toMatch(/^encrypted:/);
+    expect(h.http.calls).toHaveLength(0);
+  });
+
+  it('saves a pasted OAuth 2.0 access token as a sign-in credential', async () => {
+    const h = buildHarness({ routes: [] });
+    const done = await h.service.connect(admin, ORG, 'oauth2', { input: { accessToken: 'at-123456789' }, name: 'Calendar' });
+    if (done.pending !== false) throw new Error('expected a connection');
+    expect(done.connection).toMatchObject({ connectorKey: 'oauth2', health: { status: 'valid' } });
+    expect(h.credentials.rows[0].config.accessToken).toMatch(/^encrypted:/);
+  });
+
   it('refuses an empty key before storing anything', async () => {
     const h = buildHarness({ routes: [] });
     await expect(h.service.connect(admin, ORG, 'other', { input: {}, name: 'Acme CRM' })).rejects.toMatchObject({ response: { code: 'CONNECT_INPUT_INVALID' } });

@@ -1,18 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { QueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { render } from '../../../test/setup'
 
-import { CustomDomainCard, type CustomDomainView } from '../custom-domain-card'
+import { CustomDomainField, type CustomDomainView } from '../custom-domain-card'
 
 vi.mock('@/lib/api', () => ({
   gatewaysApi: {
-    getCustomDomain: vi.fn(),
-    setCustomDomain: vi.fn(),
     verifyCustomDomain: vi.fn(),
-    removeCustomDomain: vi.fn(),
   },
 }))
 
@@ -32,93 +31,85 @@ const pending: CustomDomainView = {
   },
 }
 
+/** The field as the channel page holds it: its value is the page's. */
+function Held({ domain, onChange = vi.fn(), error }: { domain: CustomDomainView | null; onChange?: (v: string) => void; error?: string }) {
+  const [value, setValue] = useState(domain?.hostname ?? '')
+  return (
+    <CustomDomainField
+      gatewayId={GW}
+      domain={domain}
+      value={value}
+      onChange={(v) => {
+        setValue(v)
+        onChange(v)
+      }}
+      error={error}
+    />
+  )
+}
+
 beforeEach(() => {
-  vi.mocked(gatewaysApi.getCustomDomain).mockReset()
-  vi.mocked(gatewaysApi.setCustomDomain).mockReset()
   vi.mocked(gatewaysApi.verifyCustomDomain).mockReset()
-  vi.mocked(gatewaysApi.removeCustomDomain).mockReset()
 })
 
-describe('CustomDomainCard', () => {
-  it('sets a domain and shows the TXT and CNAME records to publish', async () => {
-    vi.mocked(gatewaysApi.getCustomDomain).mockResolvedValue(null)
-    vi.mocked(gatewaysApi.setCustomDomain).mockResolvedValue(pending)
+describe('CustomDomainField', () => {
+  it('is a field of the page, with no save button of its own', async () => {
+    const onChange = vi.fn()
     const user = userEvent.setup()
-    render(<CustomDomainCard gatewayId={GW} />)
+    render(<Held domain={null} onChange={onChange} />)
+    await user.type(screen.getByLabelText('Domain'), 'chat.acme.com')
+    expect(onChange).toHaveBeenLastCalledWith('chat.acme.com')
+    expect(screen.queryByRole('button', { name: /save/i })).toBeNull()
+    expect(screen.getByText('Save to get the DNS records for it.')).toBeInTheDocument()
+  })
 
-    await user.type(await screen.findByLabelText('Domain'), 'chat.acme.com')
-    await user.click(screen.getByRole('button', { name: 'Save domain' }))
-
-    await waitFor(() => expect(gatewaysApi.setCustomDomain).toHaveBeenCalledWith(GW, 'chat.acme.com'))
-    expect(await screen.findByText('_almyty-verify.chat.acme.com')).toBeInTheDocument()
+  it('shows the saved domain with the TXT and CNAME records to publish', () => {
+    render(<Held domain={pending} />)
+    expect(screen.getByLabelText('Domain')).toHaveValue('chat.acme.com')
+    expect(screen.getByText('_almyty-verify.chat.acme.com')).toBeInTheDocument()
     expect(screen.getByText('almyty-domain-verification=abc123')).toBeInTheDocument()
     expect(screen.getByText('acme.almyty.app')).toBeInTheDocument()
     expect(screen.getByText('Waiting for DNS')).toBeInTheDocument()
   })
 
   it('checks DNS and shows the domain live once verified', async () => {
-    vi.mocked(gatewaysApi.getCustomDomain).mockResolvedValue(pending)
-    vi.mocked(gatewaysApi.verifyCustomDomain).mockResolvedValue({
-      ...pending,
-      status: 'active',
-      verifiedAt: '2026-09-24T10:00:00Z',
-    })
+    vi.mocked(gatewaysApi.verifyCustomDomain).mockResolvedValue({ ...pending, status: 'active', verifiedAt: '2026-09-24T10:00:00Z' })
     const user = userEvent.setup()
-    render(<CustomDomainCard gatewayId={GW} />)
-
-    await user.click(await screen.findByRole('button', { name: 'Check DNS' }))
-    expect(await screen.findByText('Live')).toBeInTheDocument()
-    expect(screen.getByText(/Visitors can reach this chat at https:\/\/chat.acme.com/)).toBeInTheDocument()
+    // The check writes the domain into the query cache the page reads it from.
+    const queryClient = new QueryClient()
+    render(<Held domain={pending} />, { queryClient })
+    await user.click(screen.getByRole('button', { name: 'Check DNS' }))
+    expect(gatewaysApi.verifyCustomDomain).toHaveBeenCalledWith(GW)
+    await waitFor(() => expect(queryClient.getQueryData(['gateway-custom-domain', GW])).toMatchObject({ status: 'active' }))
   })
 
-  it('shows why a check failed and does not claim the domain is live', async () => {
-    vi.mocked(gatewaysApi.getCustomDomain).mockResolvedValue(pending)
-    vi.mocked(gatewaysApi.verifyCustomDomain).mockResolvedValue({
-      ...pending,
-      status: 'failed',
-      lastError: 'No TXT record found at that name yet.',
-    })
-    const user = userEvent.setup()
-    render(<CustomDomainCard gatewayId={GW} />)
-
-    await user.click(await screen.findByRole('button', { name: 'Check DNS' }))
-    expect(await screen.findByText('No TXT record found at that name yet.')).toBeInTheDocument()
+  it('shows why the last check failed and does not claim the domain is live', () => {
+    render(<Held domain={{ ...pending, status: 'failed', lastError: 'No TXT record found at that name yet.' }} />)
+    expect(screen.getByText('No TXT record found at that name yet.')).toBeInTheDocument()
     expect(screen.queryByText('Live')).toBeNull()
   })
 
-  it('surfaces a server refusal, such as a domain another surface serves', async () => {
-    vi.mocked(gatewaysApi.getCustomDomain).mockResolvedValue(null)
-    vi.mocked(gatewaysApi.setCustomDomain).mockRejectedValue({
-      response: { status: 409, data: { error: { code: 'DOMAIN_ALREADY_CLAIMED', message: 'Another surface is already serving that domain.' } } },
-    })
-    const user = userEvent.setup()
-    render(<CustomDomainCard gatewayId={GW} />)
-    await user.type(await screen.findByLabelText('Domain'), 'chat.taken.com')
-    await user.click(screen.getByRole('button', { name: 'Save domain' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(/already serving/)
+  it('says a refusal from the save next to the field', () => {
+    render(<Held domain={null} error="Another surface is already serving that domain." />)
+    expect(screen.getByText('Another surface is already serving that domain.')).toBeInTheDocument()
   })
 
-  it('removes only after an inline one-line confirm', async () => {
-    vi.mocked(gatewaysApi.getCustomDomain).mockResolvedValue(pending)
-    vi.mocked(gatewaysApi.removeCustomDomain).mockResolvedValue(undefined)
+  it('hides the old records while a new domain is typed', async () => {
     const user = userEvent.setup()
-    render(<CustomDomainCard gatewayId={GW} />)
-
-    await user.click(await screen.findByRole('button', { name: 'Remove domain' }))
-    expect(gatewaysApi.removeCustomDomain).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: 'Remove' }))
-    await waitFor(() => expect(gatewaysApi.removeCustomDomain).toHaveBeenCalledWith(GW))
-    expect(await screen.findByLabelText('Domain')).toBeInTheDocument()
+    render(<Held domain={pending} />)
+    await user.clear(screen.getByLabelText('Domain'))
+    await user.type(screen.getByLabelText('Domain'), 'help.acme.com')
+    expect(screen.queryByTestId('custom-domain-status')).toBeNull()
   })
 })
 
-describe('the card is on the app web page', () => {
-  it('is rendered inline on the web app page, keyed by its gateway, and on the gateway page only for a surface no app owns', () => {
-    const web = readFileSync(join(__dirname, '../../agent-apps/web-place.tsx'), 'utf8')
-    expect(web).toMatch(/<CustomDomainCard gatewayId=\{gatewayId\} \/>/)
+describe('where the field is', () => {
+  it('is on the web chat channel page only, inline (no dialog)', () => {
+    const web = readFileSync(join(__dirname, '../../channels/hosted-channels.tsx'), 'utf8')
+    expect(web).toMatch(/<CustomDomainField\s/)
     const page = readFileSync(join(__dirname, '../../../pages/gateway-detail.tsx'), 'utf8')
-    expect(page).toMatch(/gateway\.type === 'hosted_chat' && !managedBy && <CustomDomainCard gatewayId=\{gateway\.id\} \/>/)
+    expect(page).not.toMatch(/CustomDomain/)
     const card = readFileSync(join(__dirname, '../custom-domain-card.tsx'), 'utf8')
-    expect(card).not.toMatch(/Dialog/)
+    expect(card).not.toMatch(/Dialog|Save domain/)
   })
 })

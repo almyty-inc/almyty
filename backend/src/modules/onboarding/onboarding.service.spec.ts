@@ -10,8 +10,7 @@ import { Agent } from '../../entities/agent.entity';
 import { User } from '../../entities/user.entity';
 import { RequestLog } from '../../entities/request-log.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
-import { AgentApp } from '../../entities/agent-app.entity';
-import { AppDistribution, DistributionStatus } from '../../entities/agent-app-distribution.entity';
+import { AgentChannel, ChannelStatus } from '../../entities/agent-channel.entity';
 import { Runner } from '../../entities/runner.entity';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
@@ -47,8 +46,7 @@ describe('OnboardingService', () => {
   let requestLogRepo: any;
   let userRepo: any;
   let toolRepo: any;
-  let appRepo: any;
-  let distributionRepo: any;
+  let channelRepo: any;
   let runnerRepo: any;
   let accessPolicy: any;
 
@@ -60,8 +58,7 @@ describe('OnboardingService', () => {
     requestLogRepo = { createQueryBuilder: jest.fn() };
     userRepo = { findOne: jest.fn().mockResolvedValue(null), update: jest.fn() };
     toolRepo = { count: jest.fn().mockResolvedValue(0) };
-    appRepo = { findOne: jest.fn().mockResolvedValue(null) };
-    distributionRepo = { count: jest.fn().mockResolvedValue(0) };
+    channelRepo = { count: jest.fn().mockResolvedValue(0) };
     runnerRepo = { count: jest.fn().mockResolvedValue(0) };
     accessPolicy = {
       visibleWhere: jest.fn(async (_user: any, org: string, base: any) => [{ ...base, organizationId: org }]),
@@ -78,8 +75,7 @@ describe('OnboardingService', () => {
         { provide: getRepositoryToken(RequestLog), useValue: requestLogRepo },
         { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: getRepositoryToken(Tool), useValue: toolRepo },
-        { provide: getRepositoryToken(AgentApp), useValue: appRepo },
-        { provide: getRepositoryToken(AppDistribution), useValue: distributionRepo },
+        { provide: getRepositoryToken(AgentChannel), useValue: channelRepo },
         { provide: getRepositoryToken(Runner), useValue: runnerRepo },
         { provide: AccessPolicyService, useValue: accessPolicy },
       ],
@@ -121,11 +117,10 @@ describe('OnboardingService', () => {
         external_client: false,
         agent: false,
         agent_run: false,
-        app: false,
-        distribution: false,
+        channel: false,
         runner: false,
       });
-      expect(state.links).toEqual({ gateway: null, agent: null, app: null });
+      expect(state.links).toEqual({ gateway: null, agent: null });
       expect(state.dismissed).toBe(false);
       expect(state.activatedRealAt).toBeNull();
       expect(state).not.toHaveProperty('sampleWorkspace');
@@ -227,28 +222,17 @@ describe('OnboardingService', () => {
     });
   });
 
-  describe('app steps', () => {
-    it('app is true once an app exists and links to it by slug', async () => {
+  describe('channel step', () => {
+    it('counts only channels that are live or built, not drafts', async () => {
       stubEmpty();
-      appRepo.findOne.mockResolvedValue({ slug: 'helpdesk', name: 'Helpdesk' });
+      channelRepo.count.mockResolvedValue(1);
       const state = await service.getState(ORG, USER);
-      expect(state.steps.app).toBe(true);
-      expect(state.links.app).toEqual({ slug: 'helpdesk', name: 'Helpdesk' });
-      expect(whereOf(appRepo.findOne)).toEqual({ organizationId: ORG });
-    });
-
-    it('distribution counts only live or built ones, not drafts', async () => {
-      stubEmpty();
-      distributionRepo.count.mockResolvedValue(1);
-      const state = await service.getState(ORG, USER);
-      expect(state.steps.distribution).toBe(true);
-      const where = whereOf(distributionRepo.count);
+      expect(state.steps.channel).toBe(true);
+      const where = whereOf(channelRepo.count);
       expect(where.organizationId).toBe(ORG);
       expect(where.status.type).toBe('in');
-      expect([...where.status.value].sort()).toEqual(
-        [DistributionStatus.BUILT, DistributionStatus.LIVE].sort(),
-      );
-      expect(where.status.value).not.toContain(DistributionStatus.DRAFT);
+      expect([...where.status.value].sort()).toEqual([ChannelStatus.BUILT, ChannelStatus.LIVE].sort());
+      expect(where.status.value).not.toContain(ChannelStatus.DRAFT);
     });
   });
 

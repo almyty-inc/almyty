@@ -17,6 +17,7 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 import { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats } from './dto/tools.dto';
 import { ToolsOperationHelper } from './tools-operation.helper';
+import { assertToolAuthHoldsNoSecret } from './tool-auth-config';
 import { ToolsStatsHelper } from './tools-stats.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import {
@@ -67,6 +68,7 @@ export class ToolsService {
     organizationId: string,
     userId: string
   ): Promise<Tool> {
+    assertToolAuthHoldsNoSecret(createToolDto.authConfig);
     try {
       // Verify organization and user permissions
       const organization = await this.organizationRepository.findOne({
@@ -315,6 +317,7 @@ export class ToolsService {
       }
 
       if (updateToolDto.authConfig !== undefined) {
+        assertToolAuthHoldsNoSecret(updateToolDto.authConfig);
         tool.authConfig = updateToolDto.authConfig;
       }
 

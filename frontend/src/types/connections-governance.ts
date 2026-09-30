@@ -1,5 +1,5 @@
 /**
- * Connections governance (EE, entitlement `connections_governance`):
+ * Credentials governance (EE, entitlement `credentials_governance`):
  * org-wide policies over the Connections layer, the review of user-scoped
  * connections granted to agents and workspaces, expiry and rotation runs,
  * and the audit export.
@@ -36,7 +36,7 @@ export const POLICY_KIND_LABELS: Record<ConnectionPolicyKind, string> = {
 export const POLICY_KIND_DESCRIPTIONS: Record<ConnectionPolicyKind, string> = {
   connector_allowlist: 'Only these connectors may be connected. Several allow lists are unioned.',
   connector_denylist: 'These connectors may never be connected, whatever the allow lists say.',
-  scope_rule: 'What a kind of principal may resolve, for example: production agents only use organization connections from approved connectors.',
+  scope_rule: 'What a kind of principal may resolve, for example: production agents only use organization credentials from approved connectors.',
   expiry_rule: 'A secret older than the maximum age is expired. Owners are warned ahead; with enforcement, expiry also revokes the grants.',
   rotation_rule: 'Rotate secrets on a schedule through the provider API. Connectors without API rotation are reported to their owners.',
 }
@@ -180,7 +180,7 @@ export interface ExpiryAction {
   policyId: string | null
 }
 
-/** GET /ee/connections/expiring: what the sweep would act on, without acting. */
+/** GET /ee/credentials/expiring: what the sweep would act on, without acting. */
 export interface ExpiryActions {
   warn: ExpiryAction[]
   expire: ExpiryAction[]
@@ -205,7 +205,7 @@ export interface RotationCandidate {
   policyId: string | null
 }
 
-/** GET /ee/connections/rotate-due. */
+/** GET /ee/credentials/rotate-due. */
 export interface RotationDue {
   /** Rotated through the provider API by the sweep. */
   due: RotationCandidate[]

@@ -511,6 +511,20 @@ describe('HostedChatPage', { retry: 2 }, () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Too many messages from you (60 per hour). Please wait 40 seconds.')
   })
 
+  it('tells a visitor the chat has reached its limit for today, not that it is busy', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockRejectedValue({
+      response: { status: 429, data: { error: { code: 'CHANNEL_SPEND_CAP_REACHED', message: 'This chat has reached its limit for today.' } } },
+    })
+
+    render(<HostedChatPage slug="acme" />)
+    await sendMessage('hello')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('This chat has reached its limit for today.')
+    expect(alert).not.toHaveTextContent(/busy/)
+  })
+
   it('removes the optimistic turn when sending failed', async () => {
     ;(hostedChatApi.branding as any).mockResolvedValue(branding())
     ;(hostedChatApi.send as any).mockRejectedValue({ response: { status: 500 } })

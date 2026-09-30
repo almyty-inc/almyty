@@ -18,9 +18,9 @@ test.describe('APIs - importing a description', () => {
   test('[CRITICAL VERIFICATION] connects Petstore from its link and extracts its operations', async ({ authenticatedPage: page, assertHelper }) => {
     test.setTimeout(120000)
 
-    await page.goto('/apis/new')
-    await page.getByLabel(BOX).fill(TEST_APIS.PETSTORE.schemaUrl)
-    await page.getByRole('button', { name: 'Import' }).click()
+    await page.goto('/apis/new/openapi')
+    await page.getByLabel('Link to the description').fill(TEST_APIS.PETSTORE.schemaUrl)
+    await page.getByRole('button', { name: 'Connect API' }).click()
 
     // Petstore declares a key: the next page asks for it, and only that.
     await expect(page).toHaveURL(/\/apis\/[^/]+\/setup\?/)

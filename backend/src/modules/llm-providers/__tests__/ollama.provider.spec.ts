@@ -42,8 +42,9 @@ const chatResponse = {
 };
 
 describe('ollama URL resolution', () => {
-  it('getApiUrl defaults to the local server with the /v1 compat suffix', () => {
-    expect(ollamaProvider().getApiUrl()).toBe('http://localhost:11434/v1');
+  it('getApiUrl defaults to Ollama Cloud with the /v1 compat suffix', () => {
+    expect(ollamaProvider().getApiUrl()).toBe('https://ollama.com/v1');
+    expect(ollamaProvider({ apiUrl: 'http://localhost:11434' }).getApiUrl()).toBe('http://localhost:11434/v1');
   });
 
   it('getApiUrl appends /v1 to a configured server root', () => {
@@ -57,7 +58,7 @@ describe('ollama URL resolution', () => {
   });
 
   it('getOllamaBaseUrl strips a configured /v1 suffix for the native endpoints', () => {
-    expect(ollamaProvider().getOllamaBaseUrl()).toBe('http://localhost:11434');
+    expect(ollamaProvider().getOllamaBaseUrl()).toBe('https://ollama.com');
     expect(ollamaProvider({ apiUrl: 'https://ollama.example.com/v1' }).getOllamaBaseUrl())
       .toBe('https://ollama.example.com');
     expect(ollamaProvider({ apiUrl: 'https://ollama.example.com/' }).getOllamaBaseUrl())
@@ -170,7 +171,7 @@ describe('ollama models list (/api/tags)', () => {
     const models = await helper.fetchModelsByType(LlmProviderType.OLLAMA, '');
 
     const cfg = (callLlmProviderHttp as jest.Mock).mock.calls[0][0];
-    expect(cfg.url).toBe('http://localhost:11434/api/tags');
+    expect(cfg.url).toBe('https://ollama.com/api/tags');
     expect(cfg.headers['Authorization']).toBeUndefined();
     expect(models).toHaveLength(2);
   });

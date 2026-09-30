@@ -1,5 +1,5 @@
 /**
- * Connections > Advanced > Governance (EE, `connections_governance`).
+ * Credentials > Advanced > Governance (EE, `credentials_governance`).
  * Locked without the entitlement; with it, a sub-navigation over the
  * policies table, the review dashboard, and expiry, rotation and export.
  */
@@ -38,8 +38,8 @@ export function ConnectionsGovernanceSection({ initialView = 'policies' }: { ini
           <div data-testid="governance-locked">
             <UpgradePrompt
               feature={CONNECTIONS_GOVERNANCE_ENTITLEMENT}
-              title="Connections governance"
-              description="Allow and deny lists, scope rules for production agents, secret expiry and scheduled rotation, a review of personal connections granted to agents, and an audit export."
+              title="Credentials governance"
+              description="Allow and deny lists, scope rules for production agents, secret expiry and scheduled rotation, a review of personal credentials granted to agents, and an audit export."
             />
           </div>
         }

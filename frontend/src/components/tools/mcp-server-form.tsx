@@ -11,10 +11,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { Field, FormPage, FormSection } from '@/components/layout/form-page'
 import { Input } from '@/components/ui/input'
-import { SecretInput } from '@/components/ui/secret-input'
-import { ConnectAccountButton } from '@/components/connections/connect-flow'
-import { ConnectedChip } from '@/components/connections/connected-chip'
-import { ConnectionSelect } from '@/components/connections/connection-select'
+import { OTHER_SERVICE_KEY } from '@/components/connections/connect-flow'
+import { CredentialPicker } from '@/components/credentials/credential-picker'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { mcpSourcesApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -37,23 +35,22 @@ export function McpServerForm({ organizationId }: { organizationId?: string }) {
 
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
-  const [bearerToken, setBearerToken] = useState('')
   const [connection, setConnection] = useState<Connection | null>(null)
   const [errors, setErrors] = useState<{ name?: string; url?: string }>({})
 
-  const guard = useLeaveGuard(name !== '' || url !== '' || bearerToken !== '' || !!connection)
+  const guard = useLeaveGuard(name !== '' || url !== '' || !!connection)
 
   const createMutation = useMutation({
     mutationFn: () => {
       if (!organizationId) {
         return Promise.reject(new Error('No organization context'))
       }
-      // A connection stands in for the pasted token: the backend resolves
-      // the secret from the credential row it points at.
+      // The token is a credential: the backend resolves the secret from the
+      // credential row it points at, so nothing secret is kept on the server row.
       const payload: Parameters<typeof mcpSourcesApi.create>[1] = {
         name: name.trim(),
         url: url.trim(),
-        ...(connection ? { credentialId: connection.id } : bearerToken.trim() ? { bearerToken: bearerToken.trim() } : {}),
+        ...(connection ? { credentialId: connection.id } : {}),
       }
       return mcpSourcesApi.create(organizationId, payload)
     },
@@ -118,47 +115,17 @@ export function McpServerForm({ organizationId }: { organizationId?: string }) {
       </FormSection>
 
       <FormSection title="Authentication" description="Only if the server requires it.">
-        <Field
+        <CredentialPicker
           id="mcp-source-token"
-          label="Auth token (optional)"
-          hint={
-            connection
-              ? 'The connection supplies the token; nothing is pasted here.'
-              : 'Sent as an Authorization header. Stored encrypted.'
-          }
-        >
-          <SecretInput
-            placeholder="Bearer token, if the server requires auth"
-            value={bearerToken}
-            maxLength={4096}
-            onChange={(e) => setBearerToken(e.target.value)}
-            disabled={!!connection}
-          />
-        </Field>
-        {connection ? (
-          <ConnectedChip connection={connection} onClear={() => setConnection(null)} />
-        ) : (
-          <div className="space-y-2">
-            <ConnectionSelect
-              id="mcp-source-connection"
-              kind="mcp"
-              value=""
-              onChange={(next) => {
-                if (!next) return
-                setConnection(next)
-                setBearerToken('')
-              }}
-              helper="A connection made earlier, of kind MCP server."
-            />
-            <ConnectAccountButton
-              kind="mcp"
-              onConnected={(next) => {
-                setConnection(next)
-                setBearerToken('')
-              }}
-            />
-          </div>
-        )}
+          label="Token (optional)"
+          value={connection?.id ?? ''}
+          onChange={setConnection}
+          allowNone
+          placeholder="None"
+          connectorKey={OTHER_SERVICE_KEY}
+          defaultName={name.trim() ? `${name.trim()} token` : undefined}
+          hint="Sent as a bearer token in the Authorization header."
+        />
       </FormSection>
     </FormPage>
   )

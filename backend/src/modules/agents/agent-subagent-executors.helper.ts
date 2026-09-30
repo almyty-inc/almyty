@@ -158,8 +158,12 @@ export class AgentSubAgentExecutors {
 
     const executionTime = Date.now() - startTime;
 
-    if (result.status === 'failed') {
-      throw new Error(`Sub-agent execution failed: ${result.error}`);
+    // Anything but a completed child is a failed step. Only `failed` was
+    // caught, so a child that timed out or was cancelled came back as a
+    // success whose output was null: the parent carried on, its output node
+    // captured the null, and the run was saved COMPLETED.
+    if (result.status !== 'completed') {
+      throw new Error(`Sub-agent execution ${result.status}: ${result.error ?? 'no answer'}`);
     }
 
     return {

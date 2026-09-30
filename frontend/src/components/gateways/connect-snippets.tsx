@@ -4,14 +4,22 @@ import { CopyField } from '@/components/ui/copy-field'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   ACCESS_KEY_PLACEHOLDER,
+  gatewaySnippets,
+  gatewayUsesAccessKey,
   mcpEndpointFor,
-  sharedToolsSnippets,
   type ConnectableGateway,
 } from '@/lib/gateway-connect'
 
+/** One line under "Connect a client", by protocol. */
+const DESCRIPTIONS: Record<string, string> = {
+  mcp: 'Paste one of these into your MCP client.',
+  utcp: 'Read the manual, then run a tool with a POST to /execute.',
+  skills: 'Install the skills into your coding agent.',
+}
+
 /**
- * "Connect a client": the one address, and what to paste into each client
- * to use it. The snippets come from lib/gateway-connect.ts, the same place
+ * "Connect a client": the address, and what to paste into each client that
+ * speaks the gateway's protocol. The snippets come from lib/gateway-connect.ts, the same place
  * the guide's command comes from, so the two never show different things.
  *
  * `accessKey` is the key minted with the gateway, known only on the page
@@ -27,13 +35,14 @@ export function ConnectSnippets({
   orgSlug: string
   accessKey?: string | null
 }) {
-  const snippets = sharedToolsSnippets(gateway, orgSlug, accessKey)
+  const snippets = gatewaySnippets(gateway, orgSlug, accessKey)
+  const usesKey = gatewayUsesAccessKey(gateway.type)
   const address = mcpEndpointFor(gateway, orgSlug)
   return (
     <Card data-testid="connect-snippets">
       <CardHeader>
         <CardTitle>Connect a client</CardTitle>
-        <CardDescription>One address works in every client: MCP, UTCP and Skills.</CardDescription>
+        <CardDescription>{DESCRIPTIONS[(gateway.type || 'mcp').toLowerCase()] ?? DESCRIPTIONS.mcp}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <CopyField value={address} label="Address" />
@@ -52,7 +61,7 @@ export function ConnectSnippets({
             </TabsContent>
           ))}
         </Tabs>
-        {!accessKey && (
+        {usesKey && !accessKey && (
           <p className="text-xs text-muted-foreground" data-testid="key-placeholder-note">
             Replace {ACCESS_KEY_PLACEHOLDER} with an access key. Make one under Advanced, with Generate key.
           </p>

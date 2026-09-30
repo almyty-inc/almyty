@@ -18,30 +18,26 @@ export const PAGE_INTROS = {
   },
   gateways: {
     page: '/gateways',
-    text: 'A gateway serves the tools you pick at one address, so Claude Code, Cursor or another agent can use them. Share tools to make one.',
+    text: 'A gateway serves the tools you pick over one protocol (MCP, UTCP or Skills), so Claude Code, Cursor or another agent can use them. Create a gateway to start.',
   },
   agents: {
     page: '/agents',
     text: 'An agent uses models and tools to do a job. Build a workflow when you know the steps, or an autonomous agent when you would rather give it a goal.',
-  },
-  apps: {
-    page: '/apps',
-    text: 'An app is how people reach your agents: a hosted web chat, a messaging channel, a terminal command or a desktop app. Create one, then add where it ships.',
   },
   runners: {
     page: '/runners',
     text: 'A runner connects a machine you control so agents can do work on it. Set one up; it shows here once it checks in.',
   },
   credentials: {
-    page: '/connections',
-    // Adds to the subtitle rather than repeating it: where keys go, and
-    // where AI providers are connected instead.
-    text: 'Keys are stored encrypted and never shown again once saved. AI model providers are connected on Models, where their models come with them.',
+    page: '/credentials',
+    // Adds to the subtitle rather than repeating it: where keys are kept,
+    // and that a key typed anywhere else lands here too.
+    text: 'Keys are stored encrypted and never shown again once saved. A key you add while setting up an API, a tool or a channel lands here too, and so do model providers.',
   },
   models: {
     page: '/models',
     // Adds to the subtitle rather than repeating it: prices, and when a model can be picked.
-    text: 'Prices fill in by themselves and stay current. A new model can be picked once a first test call to it has worked.',
+    text: 'Every model your provider connections reach, with prices that fill in by themselves. A model can be picked once its connection\'s key works and the connection offers it.',
   },
   memories: {
     page: '/memories',

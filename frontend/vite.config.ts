@@ -125,14 +125,6 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: true,
       },
-      // The agent factory. /apps is both an API prefix and a router
-      // path, so HTML GETs stay with the SPA and everything else
-      // (including /apps/:slug/builds) reaches the backend.
-      '/apps': {
-        target: apiTarget,
-        changeOrigin: true,
-        bypass: bypassHtmlGetRequests,
-      },
       '/gateways': {
         target: apiTarget,
         changeOrigin: true,
@@ -267,6 +259,8 @@ export default defineConfig({
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
+      // Served by the credentials controller, which has no prefix of its own.
+      '/access-keys': { target: apiTarget, changeOrigin: true },
       '/external-agents': {
         target: apiTarget,
         changeOrigin: true,

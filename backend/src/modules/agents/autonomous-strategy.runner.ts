@@ -91,6 +91,24 @@ export function answeredBy(
   };
 }
 
+/**
+ * Which model gave a one-checker verdict, for the verify step it is
+ * recorded on: a check is a step a role answered, and the step says which
+ * model that was the same way a call does. A panel of several checkers
+ * keeps the attribution per checker, in `checkers`.
+ */
+export function checkedBy(
+  panel: Pick<VerifyPanelResult, 'checkers'>,
+): { model?: string; providerId?: string; routing?: ChatResponse['routing'] } {
+  if (panel.checkers.length !== 1) return {};
+  const { model, providerId, routing } = panel.checkers[0];
+  return {
+    ...(model ? { model } : {}),
+    ...(providerId ? { providerId } : {}),
+    ...(routing ? { routing } : {}),
+  };
+}
+
 /** The request a model role makes: the base request on the role's model and sampling. */
 export function requestFor(role: ModelRoleCall, base: ChatRequest): ChatRequest {
   const { routing: _routing, model: _model, temperature: _t, maxTokens: _m, ...rest } = base;

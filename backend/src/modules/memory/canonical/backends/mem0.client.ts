@@ -61,7 +61,7 @@ export class Mem0Client {
     host = 'https://api.mem0.ai',
   ) {
     if (!apiKey || !apiKey.trim()) throw new Error('Mem0 API key is required');
-    this.host = host.replace(/\/+$/, '');
+    this.host = host.replace(/(?<!\/)\/+$/, '');
   }
 
   async ping(): Promise<void> {

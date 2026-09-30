@@ -28,6 +28,27 @@ export const DEFAULT_PATTERN_MAX_LENGTH = 512;
 export const DEFAULT_INPUT_MAX_LENGTH = 2048;
 
 /**
+ * Whether a group with no parentheses inside it contains `+`, `*`, `?` or
+ * a `{m,n}` bound and is followed by `+`, `*`, `?` or `{`.
+ */
+function hasQuantifiedGroupOfQuantifier(pattern: string): boolean {
+  let open = -1;
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === '(') {
+      open = i;
+    } else if (ch === ')') {
+      if (open !== -1 && '+*?{'.includes(pattern[i + 1] ?? ' ')) {
+        const body = pattern.slice(open + 1, i);
+        if (/[+*?]/.test(body) || /\{\d+(?:,\d*)?\}/.test(body)) return true;
+      }
+      open = -1;
+    }
+  }
+  return false;
+}
+
+/**
  * Heuristic catastrophic-backtracking detector. Intentionally over-eager:
  * a legitimate pattern that trips this check just needs to be rewritten
  * more carefully, and the failure mode for a false positive ("admin
@@ -43,13 +64,11 @@ export const DEFAULT_INPUT_MAX_LENGTH = 2048;
  * Returns true when the pattern looks unsafe.
  */
 export function isLikelyCatastrophicRegex(pattern: string): boolean {
-  // 1. Any parenthesised group whose body contains a quantifier and
-  // which is itself followed by a quantifier. Works across character
-  // classes because JS regex `.` doesn't match newlines by default —
-  // we explicitly use non-capturing non-greedy inside to keep the
-  // check short-circuited. The non-greedy body avoids matching across
-  // unrelated groups.
-  if (/\(([^()]*[+*?][^()]*|[^()]*\{\d+,?\d*\}[^()]*)\)[+*?{]/.test(pattern)) {
+  // 1. Any innermost parenthesised group whose body contains a quantifier
+  // and which is itself followed by a quantifier. Read by hand: as the
+  // regex /\(([^()]*[+*?][^()]*|[^()]*\{\d+,?\d*\}[^()]*)\)[+*?{]/ the
+  // check was itself polynomial in the pattern it vetted.
+  if (hasQuantifiedGroupOfQuantifier(pattern)) {
     return true;
   }
 

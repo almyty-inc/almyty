@@ -56,6 +56,7 @@ curl -X POST https://api.almyty.com/apis/import \
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
+| `type` | string | The kind picked on Connect an API: `openapi`, `graphql`, `soap` or `grpc`. A description of another kind is refused with `400` `API_TYPE_MISMATCH`, saying what it is. Leave it out to accept any of them |
 | `url` | string | Link to the description, or a GraphQL endpoint's own URL (almyty asks it to describe itself) |
 | `content` | string | The description itself, pasted |
 | `name` | string | Name to use instead of the one in the description. Refused with `409` if taken |

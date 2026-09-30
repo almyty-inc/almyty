@@ -104,6 +104,6 @@ describe('PauseReasonBanner', () => {
 
   it('is rendered on the agent detail page, next to the model banner', () => {
     const page = readFileSync(join(process.cwd(), 'src/pages/agent-detail.tsx'), 'utf8')
-    expect(page).toMatch(/<ModelIssueBanner agent=\{agent\} \/>\s*<PauseReasonBanner agent=\{agent\} \/>/)
+    expect(page).toMatch(/<ModelIssueBanner agent=\{agent\} \/>\s*<ModelAvailabilityBanner agentId=\{agent\.id\} \/>\s*<PauseReasonBanner agent=\{agent\} \/>/)
   })
 })

@@ -67,7 +67,7 @@ describe('built-in create_agent / invoke_agent stay inside the parent', () => {
       waitForRun: jest.fn(async () => ({ status: AgentRunStatus.COMPLETED, output: 'done' })),
       executionAccess: m.executionAccess,
     };
-    helper = new AgentBuiltInToolsHelper(agents as any, {} as any, {} as any, runtime as any, {} as any);
+    helper = new AgentBuiltInToolsHelper(agents as any, {} as any, runtime as any, {} as any);
   });
 
   describe('create_agent', () => {

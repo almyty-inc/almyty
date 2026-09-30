@@ -196,7 +196,7 @@ export class ModalAdapter implements ModelProviderAdapter {
   }
 
   static urlFromOutput(stdout: string, stderr = ''): string | undefined {
-    return `${stdout}\n${stderr}`.match(/https:\/\/[A-Za-z0-9._~:/?#@!$&'*+,;=%-]*modal\.run[A-Za-z0-9._~:/?#@!$&'*+,;=%-]*/)?.[0]?.replace(/[.,)\]]+$/, '');
+    return `${stdout}\n${stderr}`.match(/https:\/\/[A-Za-z0-9._~:/?#@!$&'*+,;=%-]*modal\.run[A-Za-z0-9._~:/?#@!$&'*+,;=%-]*/)?.[0]?.replace(/(?<![.,)\]])[.,)\]]+$/, '');
   }
 
   private async list(ref: { environment?: string | null; [key: string]: any }, credentials: AdapterCredentials): Promise<any[]> {
@@ -231,7 +231,7 @@ export class ModalAdapter implements ModelProviderAdapter {
       environment: cfg.environment ?? null,
       model: ModalAdapter.baseModel(request),
       endpointUrl: base,
-      url: base ? `${base.replace(/\/+$/, '')}/v1` : undefined,
+      url: base ? `${base.replace(/(?<!\/)\/+$/, '')}/v1` : undefined,
       maxContainers: request.desired.replicas ?? cfg.maxContainers ?? 1,
       createdAt: new Date().toISOString(),
       hourlyRateCents: cfg.hourlyRateCents ?? 0,
@@ -244,7 +244,7 @@ export class ModalAdapter implements ModelProviderAdapter {
     if (!row) return { state: 'missing', message: 'endpoint not found in workspace' };
     const raw = (ModalAdapter.pick(row, STATE_KEYS) ?? '').toLowerCase();
     const base = ModalAdapter.pick(row, URL_KEYS) ?? ref.endpointUrl;
-    const url = base ? `${String(base).replace(/\/+$/, '')}/v1` : ref.url;
+    const url = base ? `${String(base).replace(/(?<!\/)\/+$/, '')}/v1` : ref.url;
     const ceiling = Number(ref.maxContainers ?? 1);
     let state = STATE_MAP[raw] ?? 'deploying';
     let message: string | undefined;

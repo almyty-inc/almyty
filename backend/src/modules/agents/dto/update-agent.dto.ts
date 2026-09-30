@@ -4,6 +4,8 @@ import { Transform } from 'class-transformer';
 import { AgentStatus } from '../../../entities/agent.entity';
 import type { AgentCollaboration } from '../collaboration-participants';
 import type { AgentModels } from '../autonomous-models';
+import type { AgentMemoryConfig } from '../agent-memory-settings';
+import type { AgentConfigInput } from '../agents.service';
 
 import { stripHtmlTransform as stripHtml } from '../../../common/security/strip-tags';
 
@@ -82,18 +84,13 @@ export class UpdateAgentDto {
 
   @IsOptional()
   @IsObject()
-  memoryConfig?: {
-    enabled?: boolean;
-    autoSave?: boolean;
-    scopes?: string[];
-  };
+  // Shape checked in AgentsService (memoryConfigProblems), which names each problem.
+  memoryConfig?: AgentMemoryConfig;
 
+  // Shape checked in AgentsService (capabilityProblems), which names each problem.
   @IsOptional()
   @IsObject()
-  agentConfig?: {
-    canCallAgents?: boolean;
-    canCreateAgents?: boolean;
-  };
+  agentConfig?: AgentConfigInput;
 
   // Shape checked in AgentsService (collaborationProblems) so a bad
   // participant is refused with a sentence naming it.

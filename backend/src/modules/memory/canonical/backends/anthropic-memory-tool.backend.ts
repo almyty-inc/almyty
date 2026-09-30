@@ -32,6 +32,11 @@ const FILES_API_BETA = 'files-api-2025-04-14';
 export class AnthropicMemoryToolBackend implements MemoryBackend {
   readonly id = 'anthropic-memory-tool';
   readonly schema_version = 1;
+
+  nativeId(item: MemoryItem): string | null {
+    const id = (item.metadata as Record<string, unknown>)?.anthropic_file_id;
+    return typeof id === 'string' && id ? id : null;
+  }
   readonly capabilities = new Set<Capability>([
     'mode_memory', 'mode_document', 'vector_search', 'multi_tenant', 'batch_writes',
   ]);
@@ -162,7 +167,11 @@ export class AnthropicMemoryToolBackend implements MemoryBackend {
 
   toCanonical(raw: any): MemoryItem {
     const filename: string = raw?.filename ?? '';
-    const m = filename.match(/^([^_]+)_([^_]+(?:[^_]+)*?)__([0-9a-f-]{36})\.md$/i);
+    // `[^_]+` where this read `[^_]+(?:[^_]+)*?`, which matches the same
+    // text but tries every way of splitting it: a listed filename (the
+    // Files API returns whatever the account holds) of a few hundred
+    // characters that did not end in a uuid took minutes.
+    const m = filename.match(/^([^_]+)_([^_]+)__([0-9a-f-]{36})\.md$/i);
     const content = typeof raw?._content === 'string' ? raw._content : String(raw?.content ?? '');
     const now = new Date();
     return {

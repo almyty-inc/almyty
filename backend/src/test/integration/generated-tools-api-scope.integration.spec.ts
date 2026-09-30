@@ -164,6 +164,16 @@ describeIfDb('generated tools take their API scope (real Postgres)', () => {
     expect(await scopes(org)).toEqual([['org', null], ['org', null]]);
   });
 
+  it('both generators record the API a tool came from, so an agent given the whole API gets it', async () => {
+    const imported = await apiWithOperations({ visibility: 'org', teamId: null });
+    await importGenerator().generateToolsFromApi(imported.id, organizationId, undefined, undefined, users.teammate);
+    expect((await toolsOf(imported)).map((t) => t.apiId)).toEqual([imported.id, imported.id]);
+
+    const generated = await apiWithOperations({ visibility: 'org', teamId: null });
+    await restGenerator().generateToolsFromApi(generated, { createdBy: users.teammate, namePrefix: 'rest-api-id' });
+    expect((await toolsOf(generated)).map((t) => t.apiId)).toEqual([generated.id, generated.id]);
+  });
+
   it('regeneration puts a generated tool written org-wide back into its API scope', async () => {
     const api = await apiWithOperations({ visibility: 'team', teamId });
     await importGenerator().generateToolsFromApi(api.id, organizationId);

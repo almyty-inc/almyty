@@ -137,7 +137,7 @@ export class NotificationsService {
       for (const userId of targetIds) {
         try {
           const pref = prefByUser.get(userId);
-          const inApp = pref ? pref.inApp : defaults.inApp;
+          const inApp = defaults.inAppLocked === true || (pref ? pref.inApp : defaults.inApp);
           const emailOn = pref ? pref.email : defaults.email;
           const mandatoryEmail = MANDATORY_EMAIL_TYPES.has(input.type);
 
@@ -373,6 +373,7 @@ export class NotificationsService {
       const row = byType.get(type);
       const d = NOTIFICATION_DEFAULTS[type];
       matrix[type] = row ? { inApp: row.inApp, email: row.email } : { ...d };
+      if (d.inAppLocked) matrix[type] = { ...matrix[type], inApp: true, inAppLocked: true };
     }
     return { matrix, defaults: { ...NOTIFICATION_DEFAULTS } };
   }

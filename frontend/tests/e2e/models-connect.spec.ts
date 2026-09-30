@@ -6,7 +6,7 @@ import { randomBytes } from 'crypto'
 import { AuthHelper } from './helpers/auth.helper'
 
 /**
- * Models, the way a new user meets it: Models -> Connect a provider ->
+ * Models, the way a new user meets it: Models -> Connect a provider (under Credentials) ->
  * a tile -> a key (here, your own server) -> its models -> pick one in a
  * single search box. Nothing asks where a model runs.
  *
@@ -111,21 +111,18 @@ test.describe('Models: connect a provider, see its models, pick one', () => {
   test.beforeEach(async ({ page }) => { violations = guardJsonResponses(page) })
   test.afterEach(async () => { expect(violations, 'non-JSON API responses').toEqual([]) })
 
-  test('an empty Models page goes straight to connecting, and the old addresses redirect', async ({ page }) => {
+  test('an empty Models page goes straight to connecting, under Credentials', async ({ page }) => {
     await page.goto('/models')
     await expect(page.getByRole('heading', { name: 'Models', exact: true })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Connect your first provider' })).toBeVisible()
+    await expect(page.getByText('No models yet')).toBeVisible()
     await expect(page.getByText(/Where does it run/i)).toHaveCount(0)
-
-    for (const [from, to] of [['/llm-providers', /\/models$/], ['/llm-providers/new', /\/models\/connect$/], ['/models/new?type=anthropic', /\/models\/connect\?type=anthropic$/]] as const) {
-      await page.goto(from)
-      await expect(page).toHaveURL(to)
-    }
+    await page.getByRole('link', { name: 'Connect a provider' }).first().click()
+    await expect(page).toHaveURL(/\/credentials\/providers\/new$/)
   })
 
   test('a refused key is said plainly, and nothing is saved', async ({ page }) => {
     test.skip(!llmUrl, 'no reachable fake LLM server (set E2E_FAKE_LLM_URL)')
-    await page.goto('/models/connect?type=custom')
+    await page.goto('/credentials/providers/new?type=custom')
     await page.getByLabel('Server URL').fill(llmUrl!)
     await page.getByLabel('API key (optional)').fill(REFUSED)
     const connected = page.waitForResponse((r) => new URL(r.url()).pathname === '/llm-providers/connect')
@@ -141,7 +138,7 @@ test.describe('Models: connect a provider, see its models, pick one', () => {
     test.skip(!llmUrl, 'no reachable fake LLM server (set E2E_FAKE_LLM_URL)')
     await page.goto('/models')
     await page.getByRole('link', { name: 'Connect a provider' }).first().click()
-    await expect(page).toHaveURL(/\/models\/connect$/)
+    await expect(page).toHaveURL(/\/credentials\/providers\/new$/)
     await page.getByRole('textbox', { name: 'Search providers' }).fill('own server')
     await page.getByTestId('provider-tile-custom').click()
     await expect(page).toHaveURL(/\?type=custom$/)
@@ -156,8 +153,11 @@ test.describe('Models: connect a provider, see its models, pick one', () => {
     await expect(done).toContainText('e2e-small')
     await done.getByRole('button', { name: 'Done' }).click()
 
-    await expect(page).toHaveURL(/\/models$/)
-    await expect(page.getByRole('link', { name: /My server/ })).toBeVisible()
+    // Done opens the new connection; the catalog lists its models.
+    await expect(page).toHaveURL(/\/credentials\/providers\/[0-9a-f-]{36}$/)
+    await expect(page.getByRole('heading', { name: 'My server' })).toBeVisible()
+    await page.goto('/models')
+    await expect(page.getByRole('link', { name: /My server/ }).first()).toBeVisible()
     await expect(page.getByText('e2e-small').first()).toBeVisible()
 
     await page.goto('/chat')

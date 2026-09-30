@@ -80,8 +80,12 @@ export interface ModelCard {
   metadata: Record<string, any> | null
   createdAt: string
   updatedAt: string
-  /** status active + a dispatch path + a passing validation run. */
+  /** status active + a dispatch path + a passing validation run + not turned off on its connection. */
   selectable: boolean
+  /** False when its connection's owner turned the model off (unticked it). */
+  allowed?: boolean
+  /** Its connection started listing it within the last week. */
+  isNew?: boolean
   /** The override when set, else the feed price. */
   effectivePricing: ModelPricing | null
 }

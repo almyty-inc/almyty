@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { type Node, type Edge } from '@xyflow/react'
 import { ArrowLeft } from 'lucide-react'
@@ -28,6 +28,7 @@ import type {
 import { AgentHeader } from '@/components/agents/detail/agent-header'
 import { AgentStats } from '@/components/agents/detail/agent-stats'
 import { ModelIssueBanner } from '@/components/agents/detail/model-issue-banner'
+import { ModelAvailabilityBanner } from '@/components/agents/detail/model-availability-banner'
 import { PauseReasonBanner } from '@/components/agents/detail/pause-reason-banner'
 import { RunFailureBanner } from '@/components/agents/detail/run-failure-banner'
 import { ExecutionPlan } from '@/components/agents/detail/execution-plan'
@@ -38,8 +39,9 @@ import { PipelineCanvas } from '@/components/agents/detail/pipeline-canvas'
 import { OverviewTab } from '@/components/agents/detail/overview-tab'
 import { RunsTab } from '@/components/agents/detail/runs-tab'
 import { MemoryTab } from '@/components/agents/detail/memory-tab'
+import { agentMemoryScope } from '@/components/agents/agent-memory-scope'
 import { FilesTab } from '@/components/agents/detail/files-tab'
-import { InterfacesTab } from '@/components/agents/detail/interfaces-tab'
+import { ChannelsTab } from '@/components/channels/channels-tab'
 import { AgentAccessKeysSection } from '@/components/access-keys/access-keys-section'
 import { PromotedSkillsTab } from '@/components/agents/detail/promoted-skills-tab'
 import { ConstraintsTab } from '@/components/agents/detail/constraints-tab'
@@ -59,7 +61,9 @@ export function AgentDetailPage() {
   const orgId = useOrganizationStore((s) => s.currentOrganization?.id)
 
   const [runPanelOpen, setRunPanelOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState('overview')
+  // `?tab=channels` opens a tab directly: the channel pages link back to it.
+  const [searchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview')
 
   // Webhook state (lifted so overview tab can use it, synced from agent data)
   const [webhookUrl, setWebhookUrl] = useState('')
@@ -155,16 +159,15 @@ export function AgentDetailPage() {
 
   const runs: AgentRun[] = Array.isArray(runsData) ? runsData : []
 
-  // Fetch memories — agent-scoped reads route through the canonical
-  // store via the workspace scope. We don't filter by agent_id here
-  // because canonical scoping is per-workspace; the memory tab can
-  // narrow client-side via tags or use search if needed.
+  // Fetch memories: the memory this agent's runs read and write, per its
+  // Memory section (whose memory: its own, each person's, or shared).
+  const memoryScope = orgId && id ? agentMemoryScope(agent?.memoryConfig, orgId, id) : null
   const { data: memoriesData, error: memoriesError, refetch: refetchMemories } = useQuery({
-    queryKey: ['agent-memories', id, orgId],
+    queryKey: ['agent-memories', id, orgId, memoryScope?.scope_type],
     queryFn: async () => {
-      if (!orgId) return []
+      if (!memoryScope) return []
       const d: any = await memoriesApi.list({
-        scope: { scope_type: 'workspace', scope_id: orgId },
+        scope: memoryScope,
         mode: 'memory',
         limit: 100,
       })
@@ -365,6 +368,7 @@ export function AgentDetailPage() {
       {workflow && <ReadinessBanner result={readiness.data} pending={readiness.isPending} failed={readiness.isError} onRetry={() => readiness.refetch()} onConfigure={() => setActiveTab('execution')} />}
 
       <ModelIssueBanner agent={agent} />
+      <ModelAvailabilityBanner agentId={agent.id} />
       <PauseReasonBanner agent={agent} />
       <RunFailureBanner agent={agent} executions={executions} />
 
@@ -389,7 +393,7 @@ export function AgentDetailPage() {
           <TabsTrigger value="execution">Execution</TabsTrigger>
           <TabsTrigger value="memory">Memory</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
-          <TabsTrigger value="interfaces">Interfaces</TabsTrigger>
+          <TabsTrigger value="channels">Channels</TabsTrigger>
           <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="constraints">Constraints</TabsTrigger>
         </TabsList>
@@ -421,6 +425,9 @@ export function AgentDetailPage() {
             scheduleInput={scheduleInput}
             setScheduleInput={setScheduleInput}
           />
+          {/* The keys that call this agent's API sit by that API. A channel's
+              own keys (an A2A channel's callers) are on the channel. */}
+          <AgentAccessKeysSection agentId={id!} agentName={agent?.name} />
         </TabsContent>
 
         <TabsContent value="runs" className="space-y-4">
@@ -430,16 +437,15 @@ export function AgentDetailPage() {
         <TabsContent value="memory" className="space-y-4">
           {/* The tabs render QueryError when handed a failure; without
               these props those branches were unreachable. */}
-          <MemoryTab agentId={id!} memories={memories} error={memoriesError} onRetry={() => refetchMemories()} />
+          <MemoryTab agentId={id!} scope={memoryScope ?? undefined} memories={memories} error={memoriesError} onRetry={() => refetchMemories()} />
         </TabsContent>
 
         <TabsContent value="files" className="space-y-4">
           <FilesTab agentId={id!} files={files} error={filesError} onRetry={() => refetchFiles()} />
         </TabsContent>
 
-        <TabsContent value="interfaces" className="space-y-4">
-          <InterfacesTab agentId={id!} agentName={agent?.name} />
-          <AgentAccessKeysSection agentId={id!} agentName={agent?.name} />
+        <TabsContent value="channels" className="space-y-4">
+          <ChannelsTab agentId={id!} agentName={agent?.name} />
         </TabsContent>
 
         <TabsContent value="skills" className="space-y-4">

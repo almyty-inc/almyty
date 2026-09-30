@@ -8,7 +8,7 @@
       "path": "screenshots/agent-builder-autonomous.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh, and Agent capabilities now has a Machine labels field (label routing). Recapture on staging.",
+      "reason": "The autonomous form is reorganised: Work mode comes first as one dropdown (Single, Cascade, Best of N, Panel, Explore, extract, patch) with the model slots it needs under it; Memory has account, whose memory, what it saves, never save and how long it keeps memories; Capabilities has tools and APIs, other agents it can call, machine and temporary agents. The model chooser also shows each model's price and status and has Add a connection. Recapture on staging.",
       "sha256": "c94b58f0f0c815fbb223492905bb6a79c98972f42157f255c2a44cf5cd844466"
     },
     {
@@ -26,7 +26,7 @@
       "path": "screenshots/agent-builder.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Legacy image predates the UI refresh, and the workflow toolbar now has a Settings button that opens the Run limits card inline above the canvas. Tracked for #675, not verified current.",
       "sha256": "aec23af9c643ccc4bd4957ae080a1dc4fc9ac41794999e73f56a0bcb689fc287"
     },
     {
@@ -35,7 +35,7 @@
       "path": "screenshots/agent-collab-debate.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Collaboration is no longer on the autonomous form: several models work together through the work mode, and the cross-vendor contract review example now describes Panel. Recapture as the Work mode section set to Panel, with panelists on different providers and a judge (the example page and autonomous page use this image). Tracked for #675, not verified current.",
       "sha256": "0151ac29672c9601e031e34476a394c11370c36883f61a1cd0feff3cbf85436b"
     },
     {
@@ -67,7 +67,7 @@
       "path": "screenshots/agent-detail-overview.png",
       "capturedAt": "2026-09-22T15:02:31.998Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733), and the overview memory chip now names what the agent saves (facts it learns, whole conversations, only when asked). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "b2f5761e661b123b4ac9b14adbc07cd48d90cdcfca9257e204dd59cc043b9359",
       "source": {
         "kind": "browser",
@@ -264,7 +264,7 @@
       "path": "screenshots/apis-list.png",
       "capturedAt": "2026-09-22T15:12:24.622Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "Connect an API picks the kind first. Recapture /apis on staging.",
       "sha256": "90353bd3bc69fc6356e168ebc2365f25761db69c10e335f868657ddbeb187bcc",
       "source": {
         "kind": "browser",
@@ -305,7 +305,7 @@
       "path": "screenshots/apps-agents.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The Apps page and its Agents tab are gone: channels are added on the agent. Recapture as the agent Channels tab.",
       "sha256": "c6d2dc6577758abf0317e3a632f586a4972e213c8dee161795963c57bb773ee9"
     },
     {
@@ -314,7 +314,7 @@
       "path": "screenshots/apps-build-capabilities.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Builds moved to the desktop and terminal app channels on the agent. Recapture a Terminal app channel page.",
       "sha256": "a54a37231df9605022d3f408f64fecd6195ddb0077a69382cafe75a3524fb8fd"
     },
     {
@@ -323,7 +323,7 @@
       "path": "screenshots/apps-detail.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The app detail page is gone: channels are added on the agent. Recapture as the agent Channels tab.",
       "sha256": "95b14e9928eddd271f9fa47d3960cee055507ddc689a440c36d66904b4bc88a2"
     },
     {
@@ -332,7 +332,7 @@
       "path": "screenshots/apps-empty.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The app detail page is gone. Recapture as the agent Channels tab with no channels yet.",
       "sha256": "d80ca650f5f082f9e2d803cbd375dd8087f35443921aa0771d648574ce6fbe7c"
     },
     {
@@ -341,7 +341,7 @@
       "path": "screenshots/apps-hosted-chat-privacy.png",
       "capturedAt": "2026-09-08T08:04:35.743Z",
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Visitor rights now come from the agent branding and visitor rules. Recapture after the channels move.",
       "sha256": "90449095be6a2c379383d6d016278be9d5c7bcd7263df10857626682d6b1b577"
     },
     {
@@ -359,7 +359,7 @@
       "path": "screenshots/apps-hosted-chat.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The hosted chat now takes its branding from the agent (or its web chat channel). Recapture after the channels move.",
       "sha256": "2b26f59866e2c3dd9729a1714c362bc04e9b2c7db86bc29355ede88547364899"
     },
     {
@@ -368,7 +368,7 @@
       "path": "screenshots/apps-list.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The Apps page is gone: channels are added on the agent. Recapture as the agent Channels tab.",
       "sha256": "929359bfe6fd59140f7e18764d02813664cdb4c76c5879ccebcdb792cf9f3c54"
     },
     {
@@ -377,7 +377,7 @@
       "path": "screenshots/apps-settings.png",
       "capturedAt": "2026-09-08T07:59:28.902Z",
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "App settings moved to the agent: Branding and visitor rules (/agents/:id/channels/settings). Recapture there.",
       "sha256": "61aeb5b71e0b969ab6367e30ef369f0fb38cfa9424488dfaef0bcf7087ba74ba"
     },
     {
@@ -386,7 +386,7 @@
       "path": "screenshots/apps-slack-credentials.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The Slack place is now a Slack channel on the agent (/agents/:id/channels/:channelId), with keys entered or picked. Recapture there.",
       "sha256": "8ad236a0c90022ab382d59f5ff91fc04c5b4588c14192e59ca2d0e20c4a13d92"
     },
     {
@@ -395,7 +395,7 @@
       "path": "screenshots/apps-slack-live.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The Slack place is now a Slack channel on the agent. Recapture the published channel page.",
       "sha256": "8ad236a0c90022ab382d59f5ff91fc04c5b4588c14192e59ca2d0e20c4a13d92"
     },
     {
@@ -404,7 +404,7 @@
       "path": "screenshots/apps-web-published.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The web app place is now the Web chat channel on the agent. Recapture the published channel page.",
       "sha256": "73a8ceaf9161f967acb65a0739628d7aaa130eaa5f548b8193be984aa553b322"
     },
     {
@@ -460,7 +460,8 @@
       "title": "Auth CLI 1.5.0 help",
       "path": "screenshots/cli/auth-help.png",
       "capturedAt": "2026-09-22T13:42:14.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The help names @almyty/credentials among the CLIs that read the login. Recapture from the next published @almyty/auth.",
       "sha256": "bb5f75fd765b191b74ec5178246ed59c2375cec367bca8541d38ee636f9df54d",
       "source": {
         "kind": "published-cli",
@@ -479,7 +480,7 @@
       "title": "Chat CLI 1.5.0 help",
       "path": "screenshots/cli/chat-help.png",
       "capturedAt": "2026-09-22T13:42:14.000Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7bd2f9304e5fd0b835700609dd4fc65a2e1875070670e879c411b13507da17e4",
       "source": {
         "kind": "published-cli",
@@ -491,7 +492,8 @@
         "packages/chat-cli/package.json"
       ],
       "sourceDigest": "88395f17b7d2b46ab8ae4344a1dea58a9aa632b9ab7d7e4d77764a26d83426ba",
-      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
+      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved.",
+      "reason": "chat-cli source changed (linear trailing-newline trim, #853); help text likely unchanged, recapture from the next published @almyty/chat"
     },
     {
       "id": "cli-mcp-server-help",
@@ -535,11 +537,11 @@
     },
     {
       "id": "connections",
-      "title": "Connections catalog with all Settings sections visible",
+      "title": "Credentials page",
       "path": "screenshots/connections.png",
       "capturedAt": "2026-09-23T05:53:42.281Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "Credentials is a table of every credential, model provider keys as their own group, Add credential and the Advanced tab. Capture /credentials and /credentials/advanced on staging.",
       "sha256": "d91157a54e07217ba91b2f90efe289387fd80c0477f697747a1ac992471f5afd",
       "source": {
         "kind": "browser",
@@ -562,7 +564,7 @@
       "path": "screenshots/credentials-vault.png",
       "capturedAt": "2026-09-23T10:44:29.981Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "Credentials is a sidebar page again: one table of every key, token and account, with Model providers as their own group, which lists every provider connection and has its own Connect a provider button. Recapture /credentials on staging.",
       "sha256": "cf1d4b266fe8a01145e730c45415a1923364769634bb231fe551f705e6faa174",
       "source": {
         "kind": "browser",
@@ -581,11 +583,11 @@
     },
     {
       "id": "gateway-detail-tools",
-      "title": "Gateway detail \u2014 Tools tab with scoping",
+      "title": "Gateway detail — Tools tab with scoping",
       "path": "screenshots/gateway-detail-tools.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Share tools became Create gateway with a protocol pick. Recapture a new MCP gateway on staging.",
       "sha256": "c638eca3e8262999cb2a9015d486ec11e84b8f0337b06fc7c820478d997828c4"
     },
     {
@@ -594,7 +596,7 @@
       "path": "screenshots/gateway-detail.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Gateways are created with an explicit protocol pick; the detail page shows the setup for that protocol only. Recapture a new MCP gateway on staging.",
       "sha256": "341c3513b9c2d32056a1f2a8bd0e7c5494e946eb61f975d1ea5e5754bf6ae76a"
     },
     {
@@ -603,7 +605,7 @@
       "path": "screenshots/gateway-petstore-config.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Share tools became Create gateway with a protocol pick. Recapture on staging.",
       "sha256": "a18d4dc7315900a7268221676d2ef15c793f39fc5bd33c1b945d971f3fade1b2"
     },
     {
@@ -612,7 +614,7 @@
       "path": "screenshots/gateway-petstore-integration.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Share tools became Create gateway with a protocol pick. Recapture the Integrations tab of an MCP gateway on staging.",
       "sha256": "8ce35bad186b518728f4f61f25a05718db98a9edb94154da5333ea9f26878420"
     },
     {
@@ -621,7 +623,7 @@
       "path": "screenshots/interfaces-channel-config.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The Interfaces tab is now the Channels tab; channel settings are on each channel page. Recapture there.",
       "sha256": "5acf3f1ffb3494a664e19f5589e626d7a1396ee1cd6e1fc4736f9f1603e4f73b"
     },
     {
@@ -630,7 +632,7 @@
       "path": "screenshots/interfaces-channel-setup.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Shows the Channel Setup panel, which is gone: a channel is now set up as a place on an app (Apps > Where people use it > Add a place). Recapture from an app's channel place, e.g. /apps/<app>/distributions/whatsapp_cloud, showing its settings and callback URL.",
+      "reason": "The Interfaces tab is now the Channels tab; a channel is added with Add channel. Recapture there.",
       "sha256": "981ad7f99f7e76e0d34d788f046417d0caba96e2fc133b53c60b40a11ee657ab"
     },
     {
@@ -639,7 +641,7 @@
       "path": "screenshots/llm-providers-create.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Connecting a provider is a page under Credentials (/credentials/providers/new): it asks for a connection name, offers a saved key from Credentials instead of a pasted one, shows Ollama Cloud and your own server as a choice on the Ollama tile, and ends with the models found, all ticked, to untick before Done. Recapture after the provider-connections rework reaches staging.",
       "sha256": "b890a50dca4543856c488141c13a8988cc3bf08ed257e84e28c5c8ea55137943"
     },
     {
@@ -671,7 +673,7 @@
       "path": "screenshots/memory.png",
       "capturedAt": "2026-09-23T10:47:32.593Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733), and memory has a fifth scope, one agent's own (an agent whose memory is per agent). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "2b9544dc9b7fa57e4435dd0d436c46be9ea00dbc9bc311a4fae2fa1b44fa5e72",
       "source": {
         "kind": "browser",
@@ -694,7 +696,7 @@
       "path": "screenshots/models.png",
       "capturedAt": "2026-09-23T05:31:21.070Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "Models is now a catalog table of every model from every provider connection (connection, price, context, status, New), with no connected-provider cards; connections are named, several per provider, and choose which models they offer. Recapture after the provider-connections rework reaches staging.",
       "sha256": "43650583b6d8cea1468aab7833a72f97f7d78a03f3928cbfb490b4dd72460e72",
       "source": {
         "kind": "browser",
@@ -717,7 +719,7 @@
       "path": "screenshots/quickstart-api-imported.png",
       "capturedAt": "2026-09-23T09:18:25.838Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "Connect an API picks the kind first, then its own form; the key is picked or created with the credential control. Recapture on staging.",
       "sha256": "cfc481629a98c618201e51c93cadbb3d23ce69f7c1a8a684d0025ff2854d887e",
       "source": {
         "kind": "browser",
@@ -749,7 +751,7 @@
       "path": "screenshots/quickstart-gateway-mcp.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The quickstart now creates an MCP gateway with Create gateway. Recapture on staging.",
       "sha256": "a99843fba87607e705e1d7dc8414225592b1e8fc14fbabf77637ad5885d4ce10"
     },
     {
@@ -767,7 +769,7 @@
       "path": "screenshots/runner-detail.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh, and the Labels card now says labels send work to a matching machine (label routing). Recapture on staging.",
+      "reason": "Runner pages have Overview and Workspaces tabs; the Workspaces sidebar item is gone. Recapture /runners/:id and its Workspaces tab on staging.",
       "sha256": "1b1cd0d9afbed153cd9e0a2018e6b8cdb044b93920be5080745dc94b411db426"
     },
     {
@@ -776,7 +778,7 @@
       "path": "screenshots/runners-list.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The Workspaces sidebar item moved onto each runner page. Recapture /runners on staging.",
       "sha256": "3beefba3a06dfb389778a1034ac8a99329a34bd1dd2e90c7a6245ab5f596a632"
     },
     {
@@ -1219,7 +1221,7 @@
       "path": "screenshots/widget-builder.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Shows the old widget builder on the gateway page. The widget is now the On your website place on an app: the embed line, position and launcher icon with a live preview (its look comes from the app), and allowed sites. Recapture from /apps/<app>/distributions/widget once published.",
+      "reason": "Shows the old widget builder on the gateway page. The widget is now the On your website place on an app: the embed line, position and launcher icon with a live preview (its look comes from the app), and allowed sites; the widget also shows Download my chat and Delete my chat when the app lets visitors. Recapture from /apps/<app>/distributions/widget once published.",
       "sha256": "3e007ef828b2789531a98aa22d9ba9f573f0fbc419ec4fea57d99accf938a991"
     }
   ]

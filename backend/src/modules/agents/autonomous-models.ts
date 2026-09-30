@@ -40,6 +40,8 @@ export const ROLE_PURPOSES = [
   'drafter',
   'checker',
   'panelist',
+  // Writes the answer a panel agrees on. Optional: without one, the main role judges.
+  'judge',
   'explorer',
   'summariser',
   'teammate',
@@ -95,8 +97,9 @@ const STRATEGY_OPTIONAL: Record<AutonomousStrategyKey, RolePurpose[]> = {
   single: [],
   cascade: [],
   best_of_n: [],
-  // The checker judges the panel when there is one; the main role otherwise.
-  panel: ['checker'],
+  // The judge writes the panel's agreed answer when there is one; the
+  // main role judges otherwise.
+  panel: ['judge'],
   explore_extract_patch: [],
 };
 

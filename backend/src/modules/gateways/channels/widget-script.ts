@@ -26,6 +26,8 @@
  *   GET  /gateways/:id/widget-config              sanitized presentation config
  *   POST /gateways/:id/widget/messages            { message, threadId? }
  *   GET  /gateways/:id/widget/messages?threadId=&after=
+ *   GET  /gateways/:id/widget/threads/:threadId/export   the visitor's own copy
+ *   DELETE /gateways/:id/widget/threads/:threadId        erase the conversation
  */
 
 export type WidgetPosition = 'bottom-right' | 'bottom-left';
@@ -42,6 +44,10 @@ export interface WidgetPublicConfig {
   theme: WidgetTheme;
   aiDisclosure: string | null;
   poweredBy: boolean;
+  /** The agent lets visitors delete their conversation (its privacy setting). */
+  visitorCanDelete: boolean;
+  /** The agent lets visitors download their conversation. */
+  visitorCanExport: boolean;
 }
 
 export const WIDGET_TITLE_MAX = 60;
@@ -64,6 +70,10 @@ export const WIDGET_CONFIG_DEFAULTS: WidgetPublicConfig = Object.freeze({
   theme: 'auto' as WidgetTheme,
   aiDisclosure: null,
   poweredBy: true,
+  // The visitor privacy defaults (VISITOR_PRIVACY_DEFAULTS): visitors may
+  // delete and download their own conversation unless the agent turns that off.
+  visitorCanDelete: true,
+  visitorCanExport: true,
 });
 
 const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -120,9 +130,11 @@ export function sanitizeWidgetConfig(
   return out;
 }
 
-/** The app a widget is a place of, as far as its look goes. */
+/** The channel a widget is, as far as its look and visitor rights go (resolved from its agent). */
 export interface WidgetOwner {
   name: string;
+  /** The channel's AI disclosure switch is off: the widget shows no disclosure line. */
+  disclosureOff?: boolean;
   branding?: {
     appName?: string;
     primaryColor?: string;
@@ -131,17 +143,23 @@ export interface WidgetOwner {
     aiDisclosure?: string | null;
     whiteLabel?: boolean;
   } | null;
+  /** The visitor privacy settings; a missing flag is the default (allowed). */
+  privacy?: { visitorCanDelete?: boolean; visitorCanExport?: boolean } | null;
 }
 
 /**
  * What the public widget-config endpoint answers for a widget.
  *
- * Branding has one home, the app: a widget an app owns takes its colour,
- * name, greeting, theme, AI disclosure line and almyty mark from the app,
- * read on every request, and keeps only where it sits on the page and
- * which launcher icon it shows. The disclosure line is always shown on an
- * app's widget (the app's own wording, or the default). A widget no app
- * owns keeps its own block, sanitized the same way.
+ * Branding has one home, the agent (overridden per channel): a widget
+ * channel takes its colour, name, greeting, theme, AI disclosure line and
+ * almyty mark from there, read on every request, and keeps only where it
+ * sits on the page and which launcher icon it shows. The disclosure line is
+ * always shown on a channel's widget (its own wording, or the default). A
+ * widget no channel owns keeps its own block, sanitized the same way.
+ *
+ * What visitors may do with their conversation is the agent's privacy
+ * setting too, so the widget offers "Download" and "Delete" exactly when
+ * the endpoints behind them would allow it.
  */
 export function widgetConfigFor(
   configuration: Record<string, any> | null | undefined,
@@ -158,9 +176,19 @@ export function widgetConfigFor(
       theme: branding.theme,
       poweredBy: !branding.whiteLabel,
     },
-    aiDisclosure: typeof branding.aiDisclosure === 'string' && branding.aiDisclosure.trim() ? branding.aiDisclosure : true,
+    aiDisclosure: owner.disclosureOff
+      ? false
+      : typeof branding.aiDisclosure === 'string' && branding.aiDisclosure.trim()
+        ? branding.aiDisclosure
+        : true,
   });
-  return { ...look, position: own.position, launcherIcon: own.launcherIcon };
+  return {
+    ...look,
+    position: own.position,
+    launcherIcon: own.launcherIcon,
+    visitorCanDelete: owner.privacy?.visitorCanDelete !== false,
+    visitorCanExport: owner.privacy?.visitorCanExport !== false,
+  };
 }
 export function buildWidgetScript(gatewayId: string): string {
   // Defense in depth: the controller already ParseUUIDPipe-validates,
@@ -182,6 +210,7 @@ export function buildWidgetScript(gatewayId: string): string {
     base = src.split('/gateways/')[0];
   } catch (e) { base = ''; }
   var API = base + '/gateways/' + GATEWAY_ID + '/widget/messages';
+  var THREADS = base + '/gateways/' + GATEWAY_ID + '/widget/threads';
   var CONFIG_URL = base + '/gateways/' + GATEWAY_ID + '/widget-config';
   var LS_KEY = 'almyty-widget-' + GATEWAY_ID + '-thread';
 
@@ -203,7 +232,11 @@ export function buildWidgetScript(gatewayId: string): string {
     title: 'Chat with us',
     theme: 'auto',
     aiDisclosure: null,
-    poweredBy: true
+    poweredBy: true,
+    // Off until the app's config says otherwise, so a failed config fetch
+    // never offers a button the server would refuse.
+    visitorCanDelete: false,
+    visitorCanExport: false
   };
   var cfg = DEFAULTS;
 
@@ -232,7 +265,9 @@ export function buildWidgetScript(gatewayId: string): string {
     '.almyty-widget-form{display:flex;border-top:1px solid var(--aw-border);background:var(--aw-panel-bg)}',
     '.almyty-widget-input{flex:1;border:none;outline:none;padding:12px;font-size:13px;font-family:inherit;background:transparent;color:var(--aw-text)}',
     '.almyty-widget-send{border:none;background:none;color:var(--aw-primary);font-weight:600;font-size:13px;cursor:pointer;padding:0 14px}',
-    '.almyty-widget-footer{font-size:10px;text-align:center;color:var(--aw-muted);padding:4px 0 6px;background:var(--aw-panel-bg)}'
+    '.almyty-widget-footer{font-size:10px;text-align:center;color:var(--aw-muted);padding:4px 0 6px;background:var(--aw-panel-bg)}',
+    '.almyty-widget-privacy{text-align:center;padding:4px 0 0;background:var(--aw-panel-bg)}',
+    '.almyty-widget-privacy button{border:none;background:none;color:var(--aw-muted);cursor:pointer;text-decoration:underline;font-size:10px;padding:0 6px}'
   ].join('');
 
   var style = document.createElement('style');
@@ -278,10 +313,23 @@ export function buildWidgetScript(gatewayId: string): string {
   footer.className = 'almyty-widget-footer';
   footer.textContent = 'powered by almyty';
 
+  var privacy = document.createElement('div');
+  privacy.className = 'almyty-widget-privacy';
+  privacy.style.display = 'none';
+  var download = document.createElement('button');
+  download.type = 'button';
+  download.textContent = 'Download my chat';
+  var erase = document.createElement('button');
+  erase.type = 'button';
+  erase.textContent = 'Delete my chat';
+  privacy.appendChild(download);
+  privacy.appendChild(erase);
+
   panel.appendChild(header);
   panel.appendChild(note);
   panel.appendChild(messages);
   panel.appendChild(form);
+  panel.appendChild(privacy);
   panel.appendChild(footer);
   root.appendChild(panel);
   root.appendChild(bubble);
@@ -337,6 +385,8 @@ export function buildWidgetScript(gatewayId: string): string {
     if (c.theme === 'dark' || c.theme === 'light' || c.theme === 'auto') m.theme = c.theme;
     if (typeof c.aiDisclosure === 'string' && c.aiDisclosure) m.aiDisclosure = c.aiDisclosure.slice(0, 200);
     if (typeof c.poweredBy === 'boolean') m.poweredBy = c.poweredBy;
+    if (typeof c.visitorCanDelete === 'boolean') m.visitorCanDelete = c.visitorCanDelete;
+    if (typeof c.visitorCanExport === 'boolean') m.visitorCanExport = c.visitorCanExport;
     return m;
   }
 
@@ -351,6 +401,7 @@ export function buildWidgetScript(gatewayId: string): string {
     note.textContent = c.aiDisclosure || '';
     note.style.display = c.aiDisclosure ? 'block' : 'none';
     footer.style.display = c.poweredBy ? 'block' : 'none';
+    updatePrivacy();
     if (c.greeting && !greeted) {
       greeted = true;
       addMessage(c.greeting, 'agent');
@@ -404,15 +455,81 @@ export function buildWidgetScript(gatewayId: string): string {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: text, threadId: threadId || undefined })
-    }).then(function (r) { return r.json(); }).then(function (out) {
-      var data = out && out.data;
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (out) { return { ok: r.ok, out: out }; });
+    }).then(function (res) {
+      // A refusal (too many messages, or the chat has reached its limit)
+      // is said in the server's own plain words.
+      if (!res.ok) {
+        var said = res.out && typeof res.out.message === 'string' ? res.out.message : '';
+        addMessage(said || 'Message could not be sent. Please try again.', 'agent');
+        return;
+      }
+      var data = res.out && res.out.data;
       if (data && data.threadId && data.threadId !== threadId) {
         threadId = data.threadId;
         try { window.localStorage.setItem(LS_KEY, threadId); } catch (e) {}
       }
+      updatePrivacy();
       startPolling();
     }).catch(function () {
       addMessage('Message could not be sent. Please try again.', 'agent');
+    });
+  });
+
+  // The visitor's own data: download or delete this conversation, when
+  // the app allows it. The thread id is the visitor; nothing else is sent.
+  function threadUrl() {
+    return THREADS + '/' + encodeURIComponent(threadId);
+  }
+
+  function updatePrivacy() {
+    var any = !!threadId && (cfg.visitorCanDelete || cfg.visitorCanExport);
+    privacy.style.display = any ? 'block' : 'none';
+    download.style.display = cfg.visitorCanExport ? 'inline' : 'none';
+    erase.style.display = cfg.visitorCanDelete ? 'inline' : 'none';
+    erase.textContent = 'Delete my chat';
+    armed = false;
+  }
+
+  download.addEventListener('click', function () {
+    if (!threadId) return;
+    fetch(threadUrl() + '/export').then(function (r) {
+      if (!r.ok) throw new Error('export ' + r.status);
+      return r.blob();
+    }).then(function (blob) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'my-chat.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }).catch(function () {
+      addMessage('Your chat could not be downloaded. Please try again.', 'agent');
+    });
+  });
+
+  // Two presses, not a dialog: the first says what the second will do.
+  var armed = false;
+  erase.addEventListener('click', function () {
+    if (!threadId) return;
+    if (!armed) {
+      armed = true;
+      erase.textContent = 'Press again to delete this chat for good';
+      return;
+    }
+    fetch(threadUrl(), { method: 'DELETE' }).then(function (r) {
+      if (!r.ok) throw new Error('delete ' + r.status);
+      threadId = null;
+      lastAt = null;
+      try { window.localStorage.removeItem(LS_KEY); } catch (e) {}
+      while (messages.firstChild) messages.removeChild(messages.firstChild);
+      stopPolling();
+      addMessage('Your chat was deleted.', 'agent');
+      updatePrivacy();
+    }).catch(function () {
+      addMessage('Your chat could not be deleted. Please try again.', 'agent');
+      updatePrivacy();
     });
   });
 })();

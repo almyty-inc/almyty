@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
 import { isUniqueViolation } from '../../../common/utils/unique-violation';
@@ -38,6 +38,10 @@ import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { outboundFailureDetail, safeFetch } from '../../../common/security/safe-fetch';
 import { isPrivateGateway } from '../private-gateway';
 import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
+import { Message } from '../../../entities/message.entity';
+import { Conversation } from '../../../entities/conversation.entity';
+import { HostedChatService } from './hosted-chat.service';
+import { SPEND_CAP_MESSAGES, ChannelPolicy, ChannelPolicyService, withChannelPolicy } from '../channel-policy.service';
 
 /**
  * A handle on a `channel_events` row, so a later step can finish it.
@@ -99,6 +103,11 @@ export class ChannelGatewayService {
     // the unique index, so an absent or unreachable Redis costs a DB
     // round trip and nothing else.
     @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
+    // The agent channel each gateway answers for: its per-run cost cap, the
+    // spend allowance it draws on, and whether sender conversations may reach
+    // shared memory. Optional for the same positional-construction reason;
+    // Nest always injects it (channel-policy.guard.spec.ts).
+    @Optional() private readonly channelPolicy?: ChannelPolicyService,
   ) {
 
     this.adapters = new Map<string, BaseAdapter>([
@@ -288,6 +297,17 @@ export class ChannelGatewayService {
       }
     }
 
+    // The spend allowance this channel draws on. Once it is spent
+    // the sender is told so in plain words, and no run starts: the reply
+    // is a platform message, not a model call, so it costs nothing.
+    const policy = this.channelPolicy ? await this.channelPolicy.forGateway(gateway) : null;
+    const reached = policy && this.channelPolicy ? await this.channelPolicy.reachedFor(policy) : null;
+    if (reached) {
+      await this.replyWithoutRun(gateway, adapter, normalized, SPEND_CAP_MESSAGES[reached.reached], effectiveConfig);
+      await this.markInboundOutcome(claim, { status: 'failed', errorMessage: 'spend limit reached' });
+      return;
+    }
+
     // Find existing run for this thread on this gateway, or start a new
     // one. Scoped to the gateway, not just the agent: one agent sits
     // behind several surfaces, and the public widget lets its caller
@@ -337,7 +357,10 @@ export class ChannelGatewayService {
         // channel's facts already live.
         null,
         normalized.text,
-        {
+        // The policy adds the per-run cost cap, the channel id for the spend
+        // cap, the visitor mark for shared memory, and files the
+        // conversation under this gateway for retention.
+        withChannelPolicy(policy, {
           maxSteps: 25,
           metadata: {
             channelUserId: normalized.userId,
@@ -350,7 +373,7 @@ export class ChannelGatewayService {
           // while the gateway's own visibility covers it, checked on every
           // message.
           principal: gatewayPrincipal(gateway),
-        },
+        }),
       ).catch(async (err: any) => {
         // Refused before it started: the agent is outside this gateway's
         // scope (a team agent behind a gateway not scoped to its team, or
@@ -444,6 +467,61 @@ export class ChannelGatewayService {
   private static readonly DELIVERY_CLAIM_TTL_SECONDS = 10 * 60;
 
   /**
+   * The thread context an adapter's sendResponse reads to route a reply.
+   *
+   * Every key normalizeInbound recorded is forwarded, because adapters
+   * read reply-routing hints straight off this object under the
+   * platform's own name: Telegram wants chatId, Discord wants channelId,
+   * email wants messageId/references for In-Reply-To. Listing them one by
+   * one is how those three ended up undefined at send time, which sent
+   * Telegram and Discord replies to a literal "undefined" id and silently
+   * dropped mail threading.
+   */
+  private replyContext(gateway: Gateway, normalized: NormalizedMessage, runId: string | null): Record<string, any> {
+    return {
+      ...(normalized.metadata ?? {}),
+      threadId: normalized.threadId,
+      channel: normalized.metadata?.channel,
+      userId: normalized.userId,
+      // Reply-routing hints some platforms need (Teams serviceUrl,
+      // email from/subject, Signal groupId, ...).
+      from: normalized.metadata?.from,
+      subject: normalized.metadata?.subject,
+      metadata: normalized.metadata,
+      // Identity for adapters that persist rather than push
+      // (chat widget files the reply as a channel event).
+      gatewayId: gateway.id,
+      organizationId: gateway.organizationId,
+      runId,
+    };
+  }
+
+  /**
+   * Answer a sender with a fixed sentence and no run: the spend allowance
+   * is used up, and saying so must not cost a model call. Delivery is
+   * best effort and recorded like any other outbound message.
+   */
+  private async replyWithoutRun(
+    gateway: Gateway,
+    adapter: BaseAdapter,
+    normalized: NormalizedMessage,
+    text: string,
+    sendConfig?: Record<string, any>,
+  ): Promise<void> {
+    const formatted = adapter.formatOutbound({ text });
+    try {
+      await adapter.sendResponse(
+        sendConfig ?? (await this.channelConfig(gateway, 'channel_outbound')),
+        formatted,
+        this.replyContext(gateway, normalized, null),
+      );
+      await this.logEvent(gateway, 'outbound', 'processed', this.truncatePayload(formatted), null);
+    } catch (err: any) {
+      await this.logEvent(gateway, 'outbound', 'failed', this.truncatePayload(formatted), err?.message ?? String(err));
+    }
+  }
+
+  /**
    * Listen for a run to complete and send the response back via the adapter.
    * `sendConfig` (optional) carries installation-resolved credentials for
    * multi-workspace gateways; omitted, the gateway's own configuration
@@ -500,30 +578,8 @@ export class ChannelGatewayService {
             await adapter.sendResponse(
               sendConfig ?? (await this.channelConfig(gateway, 'channel_outbound')),
               formatted,
-              {
-              // Every key normalizeInbound recorded is forwarded, because
-              // adapters read reply-routing hints straight off this object
-              // under the platform's own name: Telegram wants chatId,
-              // Discord wants channelId, email wants messageId/references
-              // for In-Reply-To. Listing them one by one is how those three
-              // ended up undefined at send time, which sent Telegram and
-              // Discord replies to a literal "undefined" id and silently
-              // dropped mail threading.
-              ...(normalized.metadata ?? {}),
-              threadId: normalized.threadId,
-              channel: normalized.metadata?.channel,
-              userId: normalized.userId,
-              // Reply-routing hints some platforms need (Teams serviceUrl,
-              // email from/subject, Signal groupId, ...).
-              from: normalized.metadata?.from,
-              subject: normalized.metadata?.subject,
-              metadata: normalized.metadata,
-              // Identity for adapters that persist rather than push
-              // (chat widget files the reply as a channel event).
-              gatewayId: gateway.id,
-              organizationId: gateway.organizationId,
-              runId,
-            });
+              this.replyContext(gateway, normalized, runId),
+            );
             // sendResponse resolves only when the platform accepted the
             // message, so this row means delivered rather than
             // attempted.
@@ -600,6 +656,7 @@ export class ChannelGatewayService {
   async handleWidgetMessage(
     gateway: Gateway,
     body: { message: string; sessionId?: string; threadId?: string },
+    policy?: ChannelPolicy | null,
   ): Promise<{ runId: string; threadId: string }> {
     if (!gateway.isActive()) {
       throw new BadRequestException('Gateway is not active');
@@ -661,7 +718,10 @@ export class ChannelGatewayService {
         normalized.text,
         // Runs in the gateway's scope: a channel serves its agent only while
         // the gateway's own visibility covers it, checked on every message.
-        { maxSteps: 25, metadata: channelMetadata, principal: gatewayPrincipal(gateway) },
+        // The policy adds the per-run cost cap, the channel id for the spend
+        // cap, the visitor mark for shared memory, and files the
+        // conversation under this gateway for retention and erasure.
+        withChannelPolicy(policy, { maxSteps: 25, metadata: channelMetadata, principal: gatewayPrincipal(gateway) }),
       );
 
       run.metadata = {
@@ -731,6 +791,75 @@ export class ChannelGatewayService {
       attachments: e.payload?.attachments ?? null,
       createdAt: e.createdAt,
     }));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Widget visitor rights: the visitor's own copy, and erasure
+  // ---------------------------------------------------------------------------
+
+  /**
+   * The runs behind one widget thread on this gateway. The widget has no
+   * visitor row, so the thread is the visitor: every run filed under the
+   * gateway with that threadId (a thread can outlive one run).
+   */
+  private async widgetThreadRuns(gateway: Gateway, threadId: string): Promise<AgentRun[]> {
+    if (!threadId) return [];
+    return this.runRepository
+      .createQueryBuilder('run')
+      .where('run.organizationId = :organizationId', { organizationId: gateway.organizationId })
+      .andWhere("run.metadata->>'gatewayId' = :gatewayId", { gatewayId: gateway.id })
+      .andWhere("run.metadata->>'threadId' = :threadId", { threadId })
+      .orderBy('run.createdAt', 'ASC')
+      .limit(500)
+      .getMany();
+  }
+
+  /** Everything the widget holds about one thread, for the visitor to keep. */
+  async exportWidgetThread(gateway: Gateway, threadId: string): Promise<Record<string, unknown>> {
+    const runs = await this.widgetThreadRuns(gateway, threadId);
+    const conversationIds = [...new Set(runs.map((r) => r.conversationId).filter((id): id is string => !!id))];
+    const messages = conversationIds.length
+      ? await this.runRepository.manager.getRepository(Message).find({
+          where: { conversationId: In(conversationIds) },
+          order: { createdAt: 'ASC' },
+          take: 25_000,
+        })
+      : [];
+    return {
+      exportedAt: new Date().toISOString(),
+      threadId,
+      messages: messages
+        .filter((m) => HostedChatService.isPublicTurn(m))
+        .map((m) => {
+          const { role, content, createdAt } = HostedChatService.toTranscript(m);
+          return { role, content, createdAt };
+        }),
+    };
+  }
+
+  /**
+   * Erase one widget thread: its runs, their conversations and messages,
+   * and the replies stored for the poll endpoint. Scoped to this gateway
+   * and organization, so a thread id can only ever reach its own rows.
+   */
+  async deleteWidgetThread(gateway: Gateway, threadId: string): Promise<void> {
+    const runs = await this.widgetThreadRuns(gateway, threadId);
+    const conversationIds = [...new Set(runs.map((r) => r.conversationId).filter((id): id is string => !!id))];
+    if (runs.length) await this.runRepository.delete({ id: In(runs.map((r) => r.id)) });
+    if (conversationIds.length) {
+      await this.runRepository.manager.getRepository(Message).delete({ conversationId: In(conversationIds) });
+      await this.runRepository.manager
+        .getRepository(Conversation)
+        .delete({ id: In(conversationIds), organizationId: gateway.organizationId });
+    }
+    await this.eventRepository
+      .createQueryBuilder()
+      .delete()
+      .from(ChannelEvent)
+      .where('"gatewayId" = :gatewayId', { gatewayId: gateway.id })
+      .andWhere(`payload->>'threadId' = :threadId`, { threadId })
+      .execute();
+    this.logger.log(`[widget] visitor thread erased gateway=${gateway.id} runs=${runs.length}`);
   }
 
   // ---------------------------------------------------------------------------

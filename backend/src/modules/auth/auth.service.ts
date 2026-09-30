@@ -890,6 +890,8 @@ export class AuthService {
       }
     }
 
+    if (updateProfileDto.timezone !== undefined) user.timezone = updateProfileDto.timezone || null;
+
     // A new login address goes through changeEmail, never a plain field
     // write: it needs the current password, resets verification, and
     // tells both mailboxes. Done first, so a refused change leaves the

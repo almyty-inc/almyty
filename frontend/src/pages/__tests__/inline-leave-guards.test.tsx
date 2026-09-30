@@ -126,8 +126,8 @@ describe('organization settings and invite', () => {
 describe('provider settings', () => {
   const at = () =>
     renderAtRoute(<ProviderPage />, {
-      path: '/models/providers/:id',
-      url: '/models/providers/p1',
+      path: '/credentials/providers/:id',
+      url: '/credentials/providers/p1?tab=settings',
       paths: ['/elsewhere'],
     })
 

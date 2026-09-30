@@ -18,7 +18,7 @@ import { OrgLicenseResolver } from '../../licensing/org-license.resolver';
 import { EE_ENTITLEMENTS } from '../../licensing/license.constants';
 import { isPrivateGateway } from '../private-gateway';
 import { providerLabel, visitorOAuthConfigured } from './visitor-oauth';
-import { GatewayAppLinkService } from '../gateway-app-link.service';
+import { ChannelLinkService } from '../channel-link.service';
 
 /**
  * The tenant-facing half of the hosted chat app.
@@ -76,7 +76,7 @@ export class HostedChatService {
     private readonly orgLicense?: OrgLicenseResolver,
     // Required: Nest must inject it, so a surface never serves branding
     // from the gateway. Typed optional only for positional unit specs.
-    private readonly appLink?: GatewayAppLinkService,
+    private readonly channelLink?: ChannelLinkService,
   ) {}
 
   /**
@@ -117,16 +117,16 @@ export class HostedChatService {
     }
 
     if (active.length !== 1) throw new NotFoundException('Chat app not found');
-    return this.withAppSettings(active[0]);
+    return this.withChannelSettings(active[0]);
   }
 
   /**
-   * The surface with its app's branding, sign-in rule and visitor rights.
+   * The surface with its agent's branding, sign-in rule and visitor rights (with the channel's overrides).
    * Every public read resolves through findBySlug or findByHost, so this
-   * is the one place the hosted chat learns what the app decided.
+   * is the one place the hosted chat learns what the agent and channel decided.
    */
-  private async withAppSettings(gateway: Gateway): Promise<Gateway> {
-    return this.appLink ? this.appLink.withAppSettings(gateway) : gateway;
+  private async withChannelSettings(gateway: Gateway): Promise<Gateway> {
+    return this.channelLink ? this.channelLink.withChannelSettings(gateway) : gateway;
   }
 
   /**
@@ -395,12 +395,12 @@ export class HostedChatService {
     });
 
     for (const m of rows) {
-      if (!this.isPublicTurn(m)) continue;
+      if (!HostedChatService.isPublicTurn(m)) continue;
       const bucket = grouped.get(m.conversationId);
       if (bucket) {
-        if (bucket.length < MESSAGE_PAGE_LIMIT) bucket.push(this.toTranscript(m));
+        if (bucket.length < MESSAGE_PAGE_LIMIT) bucket.push(HostedChatService.toTranscript(m));
       } else {
-        grouped.set(m.conversationId, [this.toTranscript(m)]);
+        grouped.set(m.conversationId, [HostedChatService.toTranscript(m)]);
       }
     }
     return grouped;
@@ -412,7 +412,7 @@ export class HostedChatService {
    * agent narrating its working (what it is about to look up, what the
    * last tool said), saved alongside the call, not an answer.
    */
-  private isPublicTurn(m: Message): boolean {
+  static isPublicTurn(m: Message): boolean {
     return (
       (m.role === MessageRole.USER || m.role === MessageRole.ASSISTANT) &&
       m.type !== MessageType.TOOL_CALL &&
@@ -422,7 +422,7 @@ export class HostedChatService {
   }
 
   /** The shape a transcript turn is exposed as. */
-  private toTranscript(m: Message): { id: string; role: string; content: string; createdAt: Date } {
+  static toTranscript(m: Message): { id: string; role: string; content: string; createdAt: Date } {
     return {
       id: m.id,
       role: m.role,
@@ -500,7 +500,7 @@ export class HostedChatService {
       take: MESSAGE_PAGE_LIMIT,
     });
 
-    return messages.filter((m) => this.isPublicTurn(m)).map((m) => this.toTranscript(m));
+    return messages.filter((m) => HostedChatService.isPublicTurn(m)).map((m) => HostedChatService.toTranscript(m));
   }
 
   /**
@@ -545,7 +545,7 @@ export class HostedChatService {
       return null;
     }
 
-    return active[0] ? this.withAppSettings(active[0]) : null;
+    return active[0] ? this.withChannelSettings(active[0]) : null;
   }
 
   /**

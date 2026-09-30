@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -11,13 +11,12 @@ import {
   checkRunLimits,
   resolveRunLimits,
 } from './run-limits';
-import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
-import { Provenance } from '../memory/canonical/canonical.types';
 
 /**
  * Small private helpers split out of AgentRuntimeService:
- * temp-agent cleanup, run-status polling, post-run memory snapshot,
- * resource-limit checks, sleep, and the atomic stats bump.
+ * temp-agent cleanup, run-status polling, resource-limit checks, sleep,
+ * and the atomic stats bump. What a run leaves in memory is
+ * AgentMemoryKeeper's.
  *
  * These are short enough on their own; bundling them into a single
  * helper keeps the runtime service focused on the step processor.
@@ -33,8 +32,6 @@ export class AgentRuntimeMiscHelper {
     private readonly runRepository: Repository<AgentRun>,
     @InjectRepository(Organization)
     private readonly organizationRepository: Repository<Organization>,
-    @Inject(forwardRef(() => CanonicalMemoryService))
-    private readonly memoryService: CanonicalMemoryService,
   ) {}
 
   async cleanupTemporaryAgents(runId: string): Promise<void> {
@@ -73,45 +70,6 @@ export class AgentRuntimeMiscHelper {
       return run;
     } catch {
       return null;
-    }
-  }
-
-  /** Auto-save a summary of the run as a canonical memory entry. */
-  async autoSaveMemory(run: AgentRun, agent: Agent): Promise<void> {
-    try {
-      if (run.status !== AgentRunStatus.COMPLETED || !run.output) return;
-
-      const inputSummary = typeof run.input === 'string' ? run.input : JSON.stringify(run.input);
-      const outputSummary = typeof run.output === 'string' ? run.output : JSON.stringify(run.output);
-
-      if (inputSummary.length < 20 && outputSummary.length < 20) return;
-
-      const content = `Task: ${inputSummary.substring(0, 500)}\nResult: ${outputSummary.substring(0, 500)}`;
-
-      const provenance: Provenance = {
-        agent_id: agent.id,
-        session_id: run.id,
-        collab_id: null,
-        model: null,
-        provider: null,
-        tool_chain: ['auto_save'],
-        created_by: 'agent',
-        source_backend: 'almyty-native',
-      };
-      await this.memoryService.put(
-        {
-          mode: 'memory',
-          scope: { scope_type: 'workspace', scope_id: run.organizationId },
-          content,
-          tier: 'project',
-          tags: ['auto-saved', 'agent-run'],
-          metadata: { source: { type: 'agent_runtime', id: run.id, name: agent.name } },
-          provenance,
-        },
-        { user_id: run.userId },
-      );
-    } catch (err: any) {
-      this.logger.warn(`Failed to auto-save memory for run ${run.id}: ${err.message}`);
     }
   }
 

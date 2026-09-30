@@ -514,6 +514,7 @@ export class ConnectionsService {
       expiresAt: row.expiresAt ?? null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      providerId: row.metadata?.managedBy?.kind === 'llm_provider' && typeof row.metadata.managedBy.id === 'string' ? row.metadata.managedBy.id : null,
     };
   }
 
@@ -636,7 +637,7 @@ export class ConnectionsService {
       requestBase ||
       'http://localhost:3000'
     ).replace(/\/$/, '');
-    return `${base}/connections/oauth/callback`;
+    return `${base}/credentials/oauth/callback`;
   }
 
   private platformClient(connectorKey: string): { clientId: string; clientSecret: string } {

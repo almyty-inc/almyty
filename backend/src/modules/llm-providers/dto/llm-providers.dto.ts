@@ -3,6 +3,7 @@ import type { RouteAttribution } from '../../model-catalog/routing/model-router.
 import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../../entities/llm-provider.entity';
 import { MessageRole, MessageContent, ToolCall } from '../../../entities/message.entity';
 import { type ResourceVisibility } from '../../../common/authorization/access-policy.service';
+import type { ModelAccessInput } from '../allowed-models';
 
 /**
  * One piece of a streamed model reply.
@@ -40,7 +41,7 @@ export function stepKindSignal(onChunk: (chunk: StreamChunk) => void): {
   };
 }
 
-export interface CreateLlmProviderDto {
+export interface CreateLlmProviderDto extends ModelAccessInput {
   name: string;
   description?: string;
   type: LlmProviderType;
@@ -57,7 +58,7 @@ export interface CreateLlmProviderDto {
 }
 
 /** Connect a provider in one step (POST /llm-providers/connect); the name defaults to the provider's own. */
-export interface ConnectProviderInput {
+export interface ConnectProviderInput extends ModelAccessInput {
   type: LlmProviderType;
   name?: string;
   configuration?: LlmProviderConfig;
@@ -66,7 +67,7 @@ export interface ConnectProviderInput {
   teamId?: string | null;
 }
 
-export interface UpdateLlmProviderDto {
+export interface UpdateLlmProviderDto extends ModelAccessInput {
   name?: string;
   description?: string;
   configuration?: Partial<LlmProviderConfig>;

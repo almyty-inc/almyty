@@ -28,7 +28,7 @@ import { ConnectionsRotatorBridge } from '../../../src/modules/connections/conne
 import { GrantsService } from '../../../src/modules/connections/grants/grants.service';
 
 /**
- * EE (connections_governance): org-wide policy over the Connections
+ * EE (credentials_governance): org-wide policy over the Connections
  * layer. Safety is free (catalog, single store, health, grants, manual
  * rotation, disconnect, audit events live in core); governance is paid
  * (policy rules, review, scheduled rotation, expiry enforcement, team

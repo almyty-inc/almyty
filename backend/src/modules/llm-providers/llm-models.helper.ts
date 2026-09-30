@@ -265,7 +265,7 @@ export class LlmModelsHelper {
     // The key travels in the x-goog-api-key header (Google's documented
     // scheme) rather than a ?key= query parameter. The base is the
     // provider's, so a configured apiUrl is honoured here too.
-    const base = (provider.getApiUrl() || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/+$/, '');
+    const base = (provider.getApiUrl() || 'https://generativelanguage.googleapis.com/v1beta').replace(/(?<!\/)\/+$/, '');
     const response = await callLlmProviderHttp({
       method: 'GET',
       url: `${base}/models?pageSize=1000`,

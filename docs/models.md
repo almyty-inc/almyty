@@ -12,13 +12,22 @@ Design and provider deltas: `docs/design/models-layer.md`. Registry details: `do
 
 ## Support is data, not a list
 
-There is one concept a person deals with: a **connected provider**. You connect a provider once (a vendor API key, your own OpenAI-compatible server, Ollama, or a cloud account); every model it lists appears on its own, everywhere a model is chosen. Nothing is added per model.
+There is one concept a person deals with: a **provider connection**, an `llm_providers` row with a name, a key (a Credential row it manages, named like the connection; renaming either renames both) and the models it offers. You connect a provider (a vendor API key, your own OpenAI-compatible server, Ollama Cloud or an Ollama you run, or a cloud account) as often as you like; every model a connection's key reaches appears on its own, everywhere a model is chosen. Nothing is added per model.
 
 There is no code list of supported models. A model is usable when its card exists in the org's catalog and:
 
 1. it has a way to be called (a stored LLM provider row, or an endpoint URL from a model running on the customer's cloud account),
-2. its status is `active`, and
-3. it is **checked**.
+2. its status is `active`,
+3. it is **checked**, and
+4. its connection **offers** it (below).
+
+### Which models a connection offers
+
+`llm_providers.allowNewModels` (default `true`), `hiddenModels` and `allowedModels` (`llm-providers/allowed-models.ts`, the one reader). Switch on: every model except `hiddenModels`, and a model listed later is offered. Switch off: only `allowedModels` (at least one), and a model listed later is not offered until added. Both lists are stored, so flipping loses nothing. The rule is applied in five places: the catalog stamps `allowed` on each card it returns (`ModelCatalogService.markAllowed`, so `isSelectable()`, `GET /models`, `?selectable=true` and the MCP tools agree); the router removes a card its connection hides before ranking (a pin or fallback entry for that id then finds the copy another connection offers) and rejects it with the reason; a role naming a hidden card is refused (`providerForModelId`); the default model a call falls back to is picked from the offered ones; and the call itself (`LlmChatRunnerHelper.callWithRetries`, and the streaming path) throws `MODEL_NOT_ALLOWED` before anything is sent.
+
+### Model change notices
+
+A sync that creates cards (not the first import of a connection) or retires usable ones, a key check that takes a connection's models away, and a `MODEL_NOT_FOUND` on a call are reported to `ModelChangeNoticesService` (`model-catalog/notices`, injected as `MODEL_CHANGE_LISTENER`). Each change becomes `model_change_events` rows: a model is new once per connection, and unavailable at most once a day per connection and model, serialized per connection with an advisory lock. Recipients are the connection's owner and the org's owners and admins (the owner alone for a private connection), plus the owners of agents that name a lost model (`collectModelReferences` and pinned `agent_roles`), one message each. In-app (`models.new`, `models.unavailable`, `inAppLocked`) always; email at once for a lost model an agent uses, otherwise in the daily digest, each following the person's email preference. The digest job runs hourly (`MODEL_CHANGE_DIGEST_CRON`) and sends to each person whose local time (`users.timezone`, UTC when unset) is 08:00, claiming them with a conditional update of `users.modelDigestSentAt` so two instances never both send. A model a connection does not offer (switch off) is still announced, with `offered: false` on its row and a "not allowed on" line. Removing a connection announces its agent-used models as gone (`connectionRemoved`). Unticking a model an agent uses is refused with `MODEL_IN_USE` (`LlmProvidersService.assertNoAgentLosesModel`, reading `ModelUsageService`); a connection may offer no model at all (paused). The agent's banner reads `GET /models/agents/:agentId/issues`, worked out from the cards as they are.
 
 ### Readiness
 
@@ -34,7 +43,7 @@ A provider's models become usable when the **provider's key check** passes, all 
 
 ### Connect
 
-`POST /llm-providers/connect { type, name?, configuration?, credentialId?, visibility?, teamId? }` does the whole thing in one request: saves the provider (the name defaults to the provider's own; visibility to org-wide), runs the key check, lists the models and answers `{ provider, models, check }`. A check that fails leaves nothing behind (the provider and the key row it made are removed, the removal audited) and answers 400 with `error: KEY_REJECTED | CHECK_FAILED | INVALID_CONFIGURATION`, one plain sentence in `message` ("OpenAI rejected this key."), the vendor's own words in `detail` and where to get a key in `keyUrl`. There is no model field: the models come from the provider. The key lives in `credentials` like every other secret.
+`POST /llm-providers/connect { type, name?, configuration?, credentialId?, visibility?, teamId?, allowNewModels?, hiddenModels?, allowedModels? }` does the whole thing in one request: saves the provider (the name defaults to the provider's own; visibility to org-wide), runs the key check, lists the models and answers `{ provider, models, check }`. A check that fails leaves nothing behind (the provider and the key row it made are removed, the removal audited) and answers 400 with `error: KEY_REJECTED | CHECK_FAILED | INVALID_CONFIGURATION`, one plain sentence in `message` ("OpenAI rejected this key."), the vendor's own words in `detail` and where to get a key in `keyUrl`. There is no model field: the models come from the provider. The key lives in `credentials` like every other secret.
 
 ## Provider profiles and protocols
 
@@ -136,7 +145,7 @@ the same transcript, ahead of the turns. `temperature` and `max_tokens` are
 applied to the run's `llm_call` nodes and to `modelConfig` for the length of
 the request; nothing is written back to the stored agent.
 
-Three limits, stated because finding them at run time is worse.
+Three things worth knowing before a client finds them at run time.
 
 **Client-declared tools are refused.** An almyty agent runs its own
 tools: a `tool_call` node executes inside the run and the answer comes
@@ -148,16 +157,20 @@ Claude Code, which always sends tools, does not work against this
 endpoint yet — the loop would have to run on our side and be reported
 back, which is not built.
 
-**Streaming is not implemented here.** `"stream": true` is refused
-saying so, rather than answered with one JSON object where the client is
-waiting for SSE.
+**Streaming follows the agent's shape.** `"stream": true` answers with
+Anthropic's event stream. The answer streams token by token when it is one
+model call's text (a workflow `llm_call` feeding the output node unchanged, or
+an autonomous agent's answer step) and arrives in one piece at the end
+otherwise. `/v1/messages` and `/v1/chat/completions` run agents through the
+same invocation path (`CompatAgentInvoker`), so this, autonomous agents, key
+scoping and budgets behave identically on both; see the Anthropic- and
+OpenAI-compatible API reference pages.
 
-**Usage is not split.** A run records one token total and nothing keeps the
-input and output halves apart, so `usage.input_tokens` reports 0 and
-`output_tokens` carries the whole run rather than the completion alone. Every
-response on both compat routes carries `x-almyty-usage-split: unavailable` so
-a caller can tell the split apart from a measurement. Do not attribute cost
-from it.
+**Usage is split only where it was measured.** A workflow run records the
+input/output split each provider reported, and `usage` carries it. An
+autonomous run records one total, so `input_tokens` and `output_tokens` are 0
+there. The `x-almyty-usage-split` header (`measured`, `unavailable`,
+`in-stream`) says which case a response is.
 
 Compatibility shims are a fallback, not the default: Anthropic's
 OpenAI-compatible endpoint drops thinking blocks, Gemini's shim loses
@@ -369,6 +382,7 @@ Exit codes are the suite's shared table: 0 success, 1 unexpected, 2 usage,
 |----------|---------|---------|
 | `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time sync of providers that have never been synced, and the periodic sweep |
 | `MODEL_CATALOG_SYNC_CRON` | `17 */6 * * *` | The sweep that lists every active provider again, so new models appear and retired ones are marked unavailable; `off` disables |
+| `MODEL_CHANGE_DIGEST_CRON` | `0 * * * *` | How often the daily email of new models and models no agent used that went away looks for people whose 08:00 it is; `off` disables (in-app notices and the immediate email stay) |
 | `MODEL_PRICE_FEED_CRON` | `0 4 * * *` | Price feed refresh; `off` disables |
 | `MODEL_RECONCILE_CRON` | `*/2 * * * *` | Reconcile sweep for models on cloud accounts; `off` disables |
 | `MODEL_STUB_ADAPTER` | unset | `true` registers the stub adapter in production too |

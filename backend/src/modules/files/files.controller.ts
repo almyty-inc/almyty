@@ -3,14 +3,14 @@ import {
   ParseUUIDPipe, HttpStatus, HttpException, Logger, UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
 import { FilesService } from './files.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { uploadLimits } from './upload-limits';
+import { TempFileInterceptor } from './temp-upload';
+import { allowedUploadType, attachmentDisposition } from './media-type';
 
 @Controller('files')
 @ApiTags('Files')
@@ -42,35 +42,9 @@ export class FilesController {
     return organizationId;
   }
 
-  /**
-   * Build a safe Content-Disposition header value. The filename lives
-   * in a quoted-string context and would otherwise let an attacker
-   * inject additional headers by uploading a file named
-   *   `foo.jpg"; Content-Type: text/html; x="`
-   * We escape `\`, `"` and newlines per RFC 6266, and additionally
-   * emit a UTF-8 `filename*` parameter for non-ASCII names.
-   */
+  /** A safe Content-Disposition for a stored name (media-type.ts). */
   private buildContentDisposition(name: string): string {
-    const fallback = (name || 'download')
-      .replace(/[\\"\r\n]/g, '_')
-      .replace(/[^\x20-\x7e]/g, '_'); // strip non-ASCII for the plain filename
-    // Encode the UTF-8 name for the RFC 5987 `filename*` parameter.
-    // encodeURIComponent handles almost everything; RFC 5987 requires
-    // the three extra characters ' ( ) to be percent-encoded as well.
-    // The old code piped through the deprecated global `escape()` as
-    // a shortcut — correct in practice but relying on a legacy API
-    // that behaves differently from encodeURIComponent for non-ASCII.
-    // Replace it with an explicit lookup so the intent is obvious.
-    const extraEncode: Record<string, string> = {
-      "'": '%27',
-      '(': '%28',
-      ')': '%29',
-    };
-    const utf8 = encodeURIComponent(name || 'download').replace(
-      /['()]/g,
-      (c) => extraEncode[c],
-    );
-    return `attachment; filename="${fallback}"; filename*=UTF-8''${utf8}`;
+    return attachmentDisposition(name);
   }
 
   /**
@@ -94,55 +68,9 @@ export class FilesController {
     if (typeof size === 'number') res.setHeader('Content-Length', size);
   }
 
-  /**
-   * MIME-type allowlist for user uploads. Anything not in this
-   * prefix list is refused with a 400 before the file is written
-   * to storage. The list intentionally omits:
-   *   - `application/x-msdownload` / `.exe` / shell scripts
-   *   - `text/html` (stored-XSS surface if ever served inline)
-   *   - `image/svg+xml` (embedded <script> tag can execute)
-   *   - `application/java-archive`, `application/x-sharedlib`,
-   *     `application/vnd.android.package-archive`
-   * A 50 MB fileSize cap was already enforced by Multer; the
-   * allowlist closes the "store anything, serve anything" gap
-   * that would otherwise let a malicious client upload native
-   * binaries or scriptable content that a future downstream
-   * consumer renders without further validation.
-   */
-  private static readonly ALLOWED_MIME_PREFIXES: readonly string[] = [
-    'image/png',
-    'image/jpeg',
-    'image/gif',
-    'image/webp',
-    'image/bmp',
-    'text/plain',
-    'text/csv',
-    'text/markdown',
-    'application/json',
-    'application/yaml',
-    'application/x-yaml',
-    'application/pdf',
-    'application/zip',
-    'application/vnd.openxmlformats-officedocument.',
-    'application/msword',
-    'application/vnd.ms-excel',
-    'application/octet-stream', // generic — allowed so non-web
-                                // binary artifacts (zipped deps,
-                                // models) can still upload; the
-                                // download path always serves as
-                                // octet-stream anyway and nosniff
-                                // prevents browser reinterpretation.
-  ];
-
-  private isAllowedMimeType(mime: string | undefined): boolean {
-    if (!mime) return false;
-    const lower = mime.toLowerCase();
-    return FilesController.ALLOWED_MIME_PREFIXES.some((p) => lower.startsWith(p));
-  }
-
   @Post('upload')
   @Roles('member', 'admin', 'owner')
-  @UseInterceptors(FileInterceptor('file', { limits: uploadLimits(50 * 1024 * 1024) }))
+  @UseInterceptors(TempFileInterceptor('file', 50 * 1024 * 1024))
   async upload(
     @UploadedFile() file: any,
     @Query('agentId', new ParseUUIDPipe({ optional: true })) agentId: string,
@@ -153,7 +81,10 @@ export class FilesController {
       if (!file) {
         throw new HttpException({ success: false, message: 'No file provided', error: 'NO_FILE' }, HttpStatus.BAD_REQUEST);
       }
-      if (!this.isAllowedMimeType(file.mimetype)) {
+      // Parsed exactly and stored as parsed (media-type.ts): a prefix match
+      // let `text/plain, text/html` through, and it went to storage as given.
+      const mimetype = allowedUploadType(file.mimetype);
+      if (!mimetype) {
         throw new HttpException(
           {
             success: false,
@@ -165,7 +96,7 @@ export class FilesController {
       }
       const organizationId = this.getOrgId(req);
       const userId = req.user.sub || req.user.id;
-      const result = await this.filesService.upload(organizationId, file, { agentId, runId, uploadedBy: userId });
+      const result = await this.filesService.upload(organizationId, { ...file, mimetype }, { agentId, runId, uploadedBy: userId });
       return { success: true, data: result, message: 'File uploaded successfully' };
     } catch (error) {
       throw new HttpException({ success: false, message: error.message, error: 'FILE_UPLOAD_FAILED' }, error.status || HttpStatus.BAD_REQUEST);
