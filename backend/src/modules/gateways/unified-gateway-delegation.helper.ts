@@ -79,6 +79,8 @@ export class UnifiedGatewayDelegation {
     GatewayType.WHATSAPP,
     GatewayType.WHATSAPP_CLOUD,
     GatewayType.SMS,
+    GatewayType.IMESSAGE_SENDBLUE,
+    GatewayType.IMESSAGE_LOOPMESSAGE,
     GatewayType.EMAIL,
     GatewayType.WEBHOOK,
     GatewayType.GOOGLE_CHAT,

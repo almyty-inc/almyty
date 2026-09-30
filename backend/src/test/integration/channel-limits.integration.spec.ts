@@ -302,7 +302,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
       events,
       runtime as any,
       new ChatWidgetAdapter(events),
-      stub, stub, telegram, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub,
+      stub, stub, telegram, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub,
       undefined,
       undefined,
       rateLimit,

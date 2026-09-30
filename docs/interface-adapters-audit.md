@@ -14,12 +14,15 @@ backend/src/modules/gateways/channels/
     ├── mime.helper.ts                # dependency-free MIME parser for the email adapter
     ├── twilio-signature.helper.ts    # X-Twilio-Signature check, shared by whatsapp + sms
     ├── svix-signature.helper.ts      # svix signature check, used by the email adapter
+    ├── shared-secret.helper.ts       # constant-time header-secret check, shared by the two iMessage relays
     ├── slack.adapter.ts
     ├── discord.adapter.ts
     ├── telegram.adapter.ts
     ├── whatsapp.adapter.ts
     ├── whatsapp-cloud.adapter.ts
     ├── sms.adapter.ts
+    ├── imessage-sendblue.adapter.ts
+    ├── imessage-loopmessage.adapter.ts
     ├── email.adapter.ts
     ├── webhook.adapter.ts
     ├── google-chat.adapter.ts
@@ -30,16 +33,15 @@ backend/src/modules/gateways/channels/
     └── chat-widget.adapter.ts
 ```
 
-**The count is 14.** There are 14 concrete channel adapters, one implementation
+**The count is 16.** There are 16 concrete channel adapters, one implementation
 file each, and every one is registered in `ChannelGatewayService`'s adapter map.
 `base.adapter.ts` is scaffolding rather than a channel and is not counted; the
-two `*-signature.helper.ts` files and `mime.helper.ts` are shared helpers, not
-adapters either.
+`*.helper.ts` files are shared helpers, not adapters either.
 
-The adapter map has 15 entries for those 14 classes: `ChatWidgetAdapter` is
+The adapter map has 17 entries for those 16 classes: `ChatWidgetAdapter` is
 registered under both `CHAT_WIDGET` and `HOSTED_CHAT`, because a hosted chat app
 persists replies exactly as the widget does and only the front end and the URL
-differ. So `GatewayType` defines 15 channel types served by 14 adapters.
+differ. So `GatewayType` defines 17 channel types served by 16 adapters.
 
 ## What each adapter must implement
 
@@ -68,14 +70,15 @@ platform's own success signal: `json.ok` for Slack and Telegram, the status plus
 `{code, message}` for Discord and Twilio, the status plus an `error` object for
 the Graph API, Google Chat and the Bot Framework, `errcode` for Matrix, the
 status for Resend and for the three operator-hosted endpoints (signal-cli
-bridge, IRC bridge, generic callback). `channel-gateway.service.ts` dispatches
+bridge, IRC bridge, generic callback), `status`/`error_key` for Sendblue and
+`success: false` for LoopMessage. `channel-gateway.service.ts` dispatches
 the send from a run-completion listener and files the outcome on both the
 outbound row and the delivery's inbound row, so an unanswered message can be
 traced to the platform's reason and to the run it belonged to.
 
 ## Per-adapter status
 
-All 14 adapters are **fully implemented at the code level**: real inbound
+All 16 adapters are **fully implemented at the code level**: real inbound
 parsing + real outbound platform call (or persistence, for the widget) +
 signature/token verification wherever the platform or bridge contract supports
 one. What remains open per adapter is live end-to-end validation, which needs
@@ -97,6 +100,8 @@ real credentials/infrastructure — tracked in **#242** ("live e2e cred-gated").
 | 12 | WhatsApp Cloud | `whatsapp_cloud` | Real — `entry[].changes[].value.messages[]`, `text.body`, sender E.164 as thread key, contact profile name | Real — `POST graph.facebook.com/v20.0/{phone_number_id}/messages`, Bearer `access_token`, `{ messaging_product: "whatsapp", to, text }` | `X-Hub-Signature-256` HMAC-SHA256 over the raw body w/ `app_secret`, timing-safe, **fail-closed** when `app_secret` is unset. The `hub.challenge` GET handshake is answered by `handleVerification()` via the unified delegation layer | **Fully-implemented** | cred-gated (#242) | `access_token`, `phone_number_id`, `verify_token`, `app_secret` |
 | 13 | SMS | `sms` | Real — Twilio form fields (`Body`, `From`, `To`, `MessageSid`), bare E.164 as thread key | Real — `POST` Twilio Messages.json, Basic auth, form-encoded, replies truncated at 1600 chars (Twilio's concatenated-body limit) with a warning | `X-Twilio-Signature` via the shared `twilio-signature.helper.ts` (same algorithm and skip semantics as WhatsApp) | **Fully-implemented** | cred-gated (#242) | `twilio_account_sid`, `twilio_auth_token`, `phone_number`, `webhook_url` (for signature check) |
 | 14 | Chat Widget | `chat_widget`, `hosted_chat` | Real — `message`/`text`, `sessionId`→threadId, public `POST /gateways/:id/widget/messages` | Real — replies persisted as `channel_events` rows (`payload.kind='widget_message'`), fetched via public `GET /gateways/:id/widget/messages?threadId=` (polling) or run SSE | n/a (active-gateway check + unguessable thread UUIDs + per-gateway rate limit) | **Fully-implemented** | none needed | none (in-app; no external creds) |
+| 15 | iMessage (Sendblue) | `imessage_sendblue` | Real — receive-webhook JSON (`content`, `from_number`, `to_number`, `message_handle`); sender E.164 as thread key; outbound echoes (`is_outbound`), status callbacks and group messages (`group_id`) are acknowledged without a run (`carriesMessage`) | Real — `POST api.sendblue.co/api/send-message`, `sb-api-key-id` + `sb-api-secret-key` headers, `{ number, from_number, content }`, truncated at 18,996 chars; a 2xx with `status: ERROR` or an `error_key` is a refusal | Sendblue does not sign: it echoes the webhook's configured secret in `sb-signing-secret`, compared timing-safe against `signing_secret`, **fail-closed** when unset | **Fully-implemented** | cred-gated (#242) | `api_key_id`, `api_secret_key`, `phone_number`, `signing_secret` |
+| 16 | iMessage (LoopMessage) | `imessage_loopmessage` | Real — webhook JSON (`event`, `contact`, `text`, `message_id`); only `event: message_inbound` without `group` runs, every other event is acknowledged without a run; `contact` (E.164 or Apple ID) as thread key | Real — `POST a.loopmessage.com/api/v1/message/send/`, bare API key as `Authorization`, `{ contact, text, sender? }`, truncated at 9,999 chars; `success: false` is a refusal at any status | LoopMessage does not sign: it sends the `Authorization` value set for webhooks in its dashboard, compared timing-safe against `inbound_token` (bare or `Bearer`), **fail-closed** when unset | **Fully-implemented** | cred-gated (#242) | `api_key`, `inbound_token`, `sender_name` (optional) |
 
 ### Notes
 
@@ -116,6 +121,24 @@ real credentials/infrastructure — tracked in **#242** ("live e2e cred-gated").
   and an `X-Hub-Signature-256` HMAC on every inbound POST. Unlike the Twilio
   adapters, this one fails closed — a missing `app_secret` is treated as a
   misconfiguration rather than a reason to trust the payload.
+- **iMessage** has no public API, so it goes through a relay that owns the
+  Apple-side number, and there are two, picked when the channel is added:
+  `imessage_sendblue` and `imessage_loopmessage`, each its own channel type,
+  gateway type, adapter and connector (the same split as WhatsApp via Twilio
+  vs WhatsApp Cloud). Neither relay signs its webhooks; each sends back a
+  shared value in a header, so that value is required to publish and the
+  adapters fail closed without it (`shared-secret.helper.ts`). Both relays
+  post every event to the one webhook URL, so both adapters override
+  `carriesMessage` and the pipeline acknowledges an outbound echo, a status
+  callback or a group message without starting a run or writing an event
+  row. Text, one to one, only: attachments and group chats are not handled.
+  Sources: Sendblue
+  <https://docs.sendblue.com/api/resources/messages/methods/send/>,
+  <https://docs.sendblue.com/getting-started/webhooks/>,
+  <https://docs.sendblue.com/guides/chat-sdk-adapter/> (`sb-signing-secret`);
+  LoopMessage <https://loopmessage.com/apidocs/send-message>,
+  <https://loopmessage.com/apidocs/conversation-api-webhooks>,
+  <https://loopmessage.com/apidocs/credentials>.
 - **Microsoft Teams** JWT verification fetches the Bot Framework OpenID
   metadata + JWKS once and caches keys for 24h (refresh floor 60s on unknown
   kids). RS256 only; `alg=none` and foreign-issuer tokens are rejected.
@@ -149,7 +172,7 @@ real credentials/infrastructure — tracked in **#242** ("live e2e cred-gated").
 ## EU AI Act Art. 50 disclosure
 
 `ChannelGatewayService.applyAiDisclosure` implements the transparency
-obligation centrally in the outbound dispatch path, so all 14 adapters inherit
+obligation centrally in the outbound dispatch path, so all 16 adapters inherit
 it. Opt-in per gateway via `configuration.aiDisclosure`:
 
 - `true` → the first outbound message of each conversation is prefixed with
@@ -166,9 +189,12 @@ are not re-prefixed, and each new conversation discloses again.
 `ChannelGatewayService.testConnection(gateway)` performs a **live, no-message**
 auth check per type (Slack `auth.test`, Telegram `getMe`, Discord `users/@me`,
 a Twilio account fetch shared by `whatsapp` and `sms`, a Graph API
-`{phone_number_id}?fields=id` fetch for `whatsapp_cloud`, Teams token issuance,
+`{phone_number_id}?fields=id` fetch for `whatsapp_cloud`, Sendblue
+`GET /api/lines` for `imessage_sendblue`, Teams token issuance,
 Matrix `whoami`, Resend `domains`, signal-cli `/v1/about`, and a `HEAD` probe
-for webhook/google_chat/irc). Widget always returns ok. This is surfaced via
+for webhook/google_chat/irc). LoopMessage documents no read-only call, so
+`imessage_loopmessage` only checks its keys are present and says so. Widget
+always returns ok. This is surfaced via
 `POST /gateways/:id/test-connection` (admin/owner only).
 
 ## Test coverage
@@ -176,13 +202,17 @@ for webhook/google_chat/irc). Widget always returns ok. This is surfaced via
 All tests mock `globalThis.fetch` / repositories (see
 `adapters/__tests__/test-helpers.ts`) and touch **no network or database**.
 
-- 14 adapter specs (`adapters/__tests__/*.adapter.spec.ts`), one per adapter —
+- 16 adapter specs (`adapters/__tests__/*.adapter.spec.ts`), one per adapter —
   inbound sample payload → normalized shape, outbound → correct
   endpoint/payload/auth, and signature verification (Slack HMAC, Webhook HMAC,
   Google Chat token, Twilio HMAC-SHA1 for both WhatsApp and SMS, Meta
   `X-Hub-Signature-256` for WhatsApp Cloud, Teams JWT incl. JWKS
-  caching/rotation/`alg=none` rejection, IRC shared token), MIME parsing matrix
-  for email, widget persistence.
+  caching/rotation/`alg=none` rejection, IRC shared token, the Sendblue and
+  LoopMessage header secrets pass/fail/unset), MIME parsing matrix for email,
+  widget persistence. The iMessage specs replay payloads recorded from the
+  relays' documentation, since no live account exists.
+- `gateways/__tests__/unified-gateway-delegation-imessage.spec.ts` — both
+  relays through the unified endpoint: accepted with the secret, 401 without.
 - `adapters/__tests__/svix-signature.helper.spec.ts` — the shared svix check the
   email adapter verifies inbound with.
 - `channels/__tests__/channel-gateway.service.spec.ts` — adapter-registry
@@ -192,10 +222,11 @@ All tests mock `globalThis.fetch` / repositories (see
 - `channels/__tests__/channel-widget.controller.spec.ts` — public widget
   surface validation, rate limiting, delegation.
 
-**Total: 225 mocked tests across those 17 suites, all green.** The whole
-`channels/` directory is 535 tests across 35 suites, the rest covering
-installations, credential/KMS wiring, the Discord gateway lease, hosted chat and
-the surface round-trip.
+**Total: 297 mocked tests across the 16 adapter, svix, service and widget suites, all green.** The whole
+`channels/` directory is 890 tests across 54 suites, the rest covering
+installations, credential/KMS wiring, the Discord gateway lease, hosted chat,
+the surface round-trip and the inbound pipeline (including the iMessage relays'
+echo/status filtering, dedupe and disclosure).
 
 ## Live e2e validation (cred-gated, #242)
 
@@ -210,6 +241,8 @@ network-touching adapter still needs a live round-trip with real credentials:
 | WhatsApp | Twilio account SID + auth token + a WhatsApp-enabled sender number |
 | WhatsApp Cloud | Meta app: system-user `access_token`, `phone_number_id`, `verify_token` for the handshake, `app_secret` for inbound signatures, and a publicly reachable webhook URL |
 | SMS | Twilio account SID + auth token + an SMS-capable sender number, and `webhook_url` matching the console exactly |
+| iMessage (Sendblue) | Sendblue account: API key ID + secret key, a Sendblue line, and a receive webhook with a secret pointed at the channel's callback URL |
+| iMessage (LoopMessage) | LoopMessage organization API key, an active sender name, and the webhook URL + authorization header value set in its dashboard |
 | Email | Resend API key + a verified sending domain + an inbound-email webhook source + the `whsec_…` inbound signing secret |
 | Webhook | A reachable `callback_url` receiver (+ shared `secret`) |
 | Google Chat | Space incoming-webhook URL (+ verification token) |

@@ -59,6 +59,8 @@ import { MicrosoftTeamsAdapter } from './channels/adapters/microsoft-teams.adapt
 import { SignalAdapter } from './channels/adapters/signal.adapter';
 import { MatrixAdapter } from './channels/adapters/matrix.adapter';
 import { IrcAdapter } from './channels/adapters/irc.adapter';
+import { IMessageSendblueAdapter } from './channels/adapters/imessage-sendblue.adapter';
+import { IMessageLoopMessageAdapter } from './channels/adapters/imessage-loopmessage.adapter';
 import { ChannelGatewayService } from './channels/channel-gateway.service';
 import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
@@ -150,6 +152,8 @@ import { ChannelInstallationsController } from './channels/channel-installations
     SignalAdapter,
     MatrixAdapter,
     IrcAdapter,
+    IMessageSendblueAdapter,
+    IMessageLoopMessageAdapter,
   ],
   controllers: [
     // GatewayInfoController has literal-path routes (all-skills,

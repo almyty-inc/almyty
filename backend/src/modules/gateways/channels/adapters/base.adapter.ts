@@ -164,6 +164,21 @@ export abstract class BaseAdapter {
     return undefined;
   }
 
+  /**
+   * Whether this delivery is a message a person sent, to be answered.
+   *
+   * Most platforms post only messages to a channel webhook, and the
+   * default says yes. The iMessage relays post everything to the one URL:
+   * our own outbound echoes, delivery statuses, reactions and group
+   * traffic. Answering one of those would at best waste a run and at
+   * worst have the agent reply to itself, so those adapters say no and
+   * the pipeline acknowledges the delivery without starting anything.
+   * Asked only after the delivery has been verified.
+   */
+  carriesMessage(_rawPayload: any): boolean {
+    return true;
+  }
+
   // ---------------------------------------------------------------------
   // Delivery confirmation
   // ---------------------------------------------------------------------

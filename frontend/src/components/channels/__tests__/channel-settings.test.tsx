@@ -33,6 +33,8 @@ vi.mock('@/lib/connections-api', async () => {
         { id: 'cred-slack-app', name: 'Our Slack app', connectorKey: 'channel-slack-app', connectorDisplayName: 'Slack app (Add to Slack)', kind: 'channel', owner: 'org', health: { status: 'valid' }, createdAt: '' },
         { id: 'cred-slack-bot', name: 'One workspace bot', connectorKey: 'channel-slack', connectorDisplayName: 'Slack', kind: 'channel', owner: 'org', health: { status: 'valid' }, createdAt: '' },
         { id: 'cred-telegram', name: 'Telegram bot', connectorKey: 'channel-telegram', connectorDisplayName: 'Telegram', kind: 'channel', owner: 'org', health: { status: 'valid' }, createdAt: '' },
+        { id: 'cred-sendblue', name: 'Our Sendblue line', connectorKey: 'channel-imessage-sendblue', connectorDisplayName: 'iMessage (Sendblue)', kind: 'channel', owner: 'org', health: { status: 'valid' }, createdAt: '' },
+        { id: 'cred-loop', name: 'Our LoopMessage sender', connectorKey: 'channel-imessage-loopmessage', connectorDisplayName: 'iMessage (LoopMessage)', kind: 'channel', owner: 'org', health: { status: 'valid' }, createdAt: '' },
         { id: 'cred-openai', name: 'OpenAI', connectorKey: 'openai', connectorDisplayName: 'OpenAI', kind: 'inference', owner: 'org', health: { status: 'valid' }, createdAt: '' },
       ]),
       connect: vi.fn(),
@@ -141,6 +143,39 @@ describe('a channel page', () => {
     expect(screen.queryByLabelText(/Signing secret|Client secret|Bot token/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(agentChannelsApi.update).toHaveBeenCalledWith('agent-1', 'c-slack', { credentialId: 'cred-slack-app' }))
+  })
+
+  // iMessage goes through a relay. Its keys are a credential of that
+  // relay's connector, picked or created here, and the relay is told
+  // where to deliver by the callback URL on the same page.
+  describe.each([
+    ['imessage_sendblue', 'iMessage (Sendblue)', 'cred-sendblue', /Sendblue line/, /LoopMessage sender/, /Sendblue dashboard/],
+    ['imessage_loopmessage', 'iMessage (LoopMessage)', 'cred-loop', /LoopMessage sender/, /Sendblue line/, /LoopMessage dashboard/],
+  ] as const)('an iMessage channel through %s', (type, label, credId, own, other, where) => {
+    const channel = () =>
+      slack({ id: 'c-imsg', type, name: label, endpoint: '/channels/c-imsg', configuration: {} })
+
+    it("offers only that relay's credentials and saves the one picked", async () => {
+      vi.mocked(agentChannelsApi.update).mockImplementation(async (_a, _c, body: any) => ({ ...channel(), configuration: { credentialId: body.credentialId } }))
+      render(<ChannelSettings agent={agent} channel={channel()} inherited={inherited} />)
+      expect(await screen.findByRole('heading', { name: label, level: 1 })).toBeInTheDocument()
+      const picker = await screen.findByRole('combobox', { name: /Credential/ })
+      await waitFor(() => expect(picker).toBeEnabled())
+      fireEvent.click(picker)
+      fireEvent.click(await screen.findByRole('option', { name: own }))
+      expect(screen.queryByRole('option', { name: other })).toBeNull()
+      expect(screen.queryByLabelText(/API key|Secret key|Webhook secret/)).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      await waitFor(() => expect(agentChannelsApi.update).toHaveBeenCalledWith('agent-1', 'c-imsg', { credentialId: credId }))
+    })
+
+    it('shows the callback URL to paste into the relay, and the AI disclosure', async () => {
+      render(<ChannelSettings agent={agent} channel={channel()} inherited={inherited} />)
+      expect(await screen.findByText('https://api.test/acme/channels/c-imsg')).toBeInTheDocument()
+      expect(screen.getByText(where)).toBeInTheDocument()
+      expect(screen.getByRole('switch', { name: 'Tell people they are talking to an AI' })).toBeChecked()
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
   })
 
 

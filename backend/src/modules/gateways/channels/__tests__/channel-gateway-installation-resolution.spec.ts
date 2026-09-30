@@ -17,6 +17,8 @@ import { MicrosoftTeamsAdapter } from '../adapters/microsoft-teams.adapter';
 import { SignalAdapter } from '../adapters/signal.adapter';
 import { MatrixAdapter } from '../adapters/matrix.adapter';
 import { IrcAdapter } from '../adapters/irc.adapter';
+import { IMessageSendblueAdapter } from '../adapters/imessage-sendblue.adapter';
+import { IMessageLoopMessageAdapter } from '../adapters/imessage-loopmessage.adapter';
 import { installFetchMock, parseSentJson } from '../adapters/__tests__/test-helpers';
 
 /**
@@ -88,7 +90,7 @@ describe('ChannelGatewayService installation resolution', () => {
       new MicrosoftTeamsAdapter(),
       new SignalAdapter(),
       new MatrixAdapter(),
-      new IrcAdapter(),
+      new IrcAdapter(), new IMessageSendblueAdapter(), new IMessageLoopMessageAdapter(),
       withInstallations ? installationService : undefined,
       undefined,
       rateLimit,
