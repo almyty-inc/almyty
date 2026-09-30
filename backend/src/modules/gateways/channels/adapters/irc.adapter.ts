@@ -33,10 +33,16 @@ export class IrcAdapter extends BaseAdapter {
 
   normalizeInbound(rawPayload: any): NormalizedMessage {
     // IRC via webhook bridge format (e.g., Ergo ircd webhook, matterbridge, etc.)
+    // IRC carries no files; a link someone pastes is text.
+    const nick = rawPayload.nick || rawPayload.username || rawPayload.from;
+    const channel = typeof rawPayload.channel === 'string' ? rawPayload.channel : undefined;
     return {
       text: rawPayload.text || rawPayload.message || '',
       userId: rawPayload.nick || rawPayload.username || rawPayload.from || 'unknown',
       threadId: rawPayload.channel || undefined,
+      ...(nick ? { sender: { id: String(nick), name: String(nick) } } : {}),
+      // A channel (#name, &name) has several people in it; a private message has one.
+      group: !!channel && /^[#&]/.test(channel),
       metadata: {
         channel: rawPayload.channel,
         server: rawPayload.server,

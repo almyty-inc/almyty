@@ -44,7 +44,10 @@ import { Message } from '../../../entities/message.entity';
 import { Conversation } from '../../../entities/conversation.entity';
 import { HostedChatService } from './hosted-chat.service';
 import { SPEND_CAP_MESSAGES, ChannelPolicy, ChannelPolicyService, withChannelPolicy } from '../channel-policy.service';
-import { ChannelAttachmentReader } from './channel-attachments.service';
+import { ChannelAttachmentReader, type ReadAttachments } from './channel-attachments.service';
+import { withSpeaker } from './channel-speaker';
+import { extractReplyMedia, replyMedia } from './reply-media';
+import type { MessageContent } from '../../../entities/message.entity';
 
 /**
  * A handle on a `channel_events` row, so a later step can finish it.
@@ -324,10 +327,13 @@ export class ChannelGatewayService {
       return;
     }
 
-    // What the agent reads: the text, and the files the relay handed over
-    // as links, fetched through the egress guard and described. Only after
-    // the sender and spend checks, so a limited sender costs no download.
-    const input = await this.inboundInput(adapter, normalized);
+    // What the agent reads: the text, prefixed with who wrote it in a group
+    // (channel-speaker.ts), and the files the message came with, fetched
+    // the way the platform wants, stored under the conversation and passed
+    // by reference (channel-attachments.service.ts). Only after the sender
+    // and spend checks, so a limited sender costs no download.
+    const read = await this.inboundInput(gateway, adapter, normalized, effectiveConfig);
+    const input = read.text;
     // Find existing run for this thread on this gateway, or start a new
     // one. Scoped to the gateway, not just the agent: one agent sits
     // behind several surfaces, and the public widget lets its caller
@@ -352,7 +358,13 @@ export class ChannelGatewayService {
     }
 
     if (run) {
-      await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, input);
+      try {
+        await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, input, undefined, read.parts);
+      } catch (err) {
+        await this.discardAttachments(gateway, read.fileIds);
+        throw err;
+      }
+      await this.attachmentReader?.fileUnder(gateway.organizationId, read.fileIds, run.conversationId, run.id);
       // The cross-link the claim row was always meant to carry: without
       // it an operator holding "the bot never answered me at 14:05" has
       // an inbound row and no way to reach the run that answered it.
@@ -382,6 +394,8 @@ export class ChannelGatewayService {
         // conversation under this gateway for retention.
         withChannelPolicy(policy, {
           maxSteps: 25,
+          // The files the message came with, by reference (attached-files.ts).
+          ...(read.parts.length ? { attachments: read.parts } : {}),
           metadata: {
             channelUserId: normalized.userId,
             threadId: normalized.threadId,
@@ -395,6 +409,8 @@ export class ChannelGatewayService {
           principal: gatewayPrincipal(gateway),
         }),
       ).catch(async (err: any) => {
+        // No run, so nothing refers to the files it would have read.
+        await this.discardAttachments(gateway, read.fileIds);
         // Refused before it started: the agent is outside this gateway's
         // scope (a team agent behind a gateway not scoped to its team, or
         // one moved to another team since). Recorded on the delivery with
@@ -408,7 +424,11 @@ export class ChannelGatewayService {
         }
         throw err;
       });
+      // Refused (and its files discarded) above.
       if (!newRun) return;
+      // The files it read go with the conversation it filed them under, so
+      // retention and erasure take them with it.
+      await this.attachmentReader?.fileUnder(gateway.organizationId, read.fileIds, newRun.conversationId, newRun.id);
 
       await this.markInboundOutcome(claim, { runId: newRun.id });
       this.listenForCompletionAndRespond(newRun.id, gateway, adapter, normalized, effectiveConfig, claim);
@@ -427,18 +447,48 @@ export class ChannelGatewayService {
   }
 
   /**
-   * The message as the agent reads it. Most adapters hand over text only;
-   * one that says its attachments are fetchable links has each read and
-   * described (channel-attachments.service.ts). The others keep what they
-   * always had: the text alone.
+   * The message as the agent reads it: the text, with a line per file the
+   * message came with, and "Name: " in front in a conversation that has
+   * several people (channel-speaker.ts). The files themselves become
+   * stored-file references (`parts`) the model call resolves.
    */
-  private async inboundInput(adapter: BaseAdapter, normalized: NormalizedMessage): Promise<string> {
-    if (!adapter.fetchesInboundAttachments || !normalized.attachments?.length) return normalized.text;
-    if (!this.attachmentReader) {
-      const named = normalized.attachments.map((a) => `[Attachment: ${a.name} (${a.type}) was not read]`);
-      return [normalized.text.trim(), ...named].filter(Boolean).join('\n\n');
+  private async inboundInput(
+    gateway: Gateway,
+    adapter: BaseAdapter,
+    normalized: NormalizedMessage,
+    config: Record<string, any>,
+  ): Promise<{ text: string; parts: MessageContent[]; fileIds: string[] }> {
+    // Who wrote a group message is named; the name is looked up when the
+    // delivery left it out and the platform can say it.
+    if (normalized.group && normalized.sender && !normalized.sender.name) {
+      const name = await adapter.senderName(normalized, config).catch(() => undefined);
+      if (name) normalized = { ...normalized, sender: { ...normalized.sender, name } };
     }
-    return this.attachmentReader.inputWith(normalized.text, normalized.attachments);
+    const sent = normalized.attachments ?? [];
+    if (!sent.length) return { text: withSpeaker(normalized, normalized.text), parts: [], fileIds: [] };
+    if (!this.attachmentReader) {
+      const named = sent.map((a) => `[Attachment: ${String(a.name ?? 'attachment').replace(/[\r\n\[\]]+/g, ' ').slice(0, 120)} was not read]`);
+      return { text: withSpeaker(normalized, ChannelAttachmentReader.textWith(normalized.text, named)), parts: [], fileIds: [] };
+    }
+    const read = await this.attachmentReader.read(adapter, config, sent, {
+      organizationId: gateway.organizationId,
+      agentId: gateway.agentId ?? null,
+      gatewayId: gateway.id,
+      threadId: normalized.threadId ?? null,
+    });
+    return {
+      text: withSpeaker(normalized, ChannelAttachmentReader.textWith(normalized.text, read.lines)),
+      parts: read.parts,
+      fileIds: read.fileIds,
+    };
+  }
+
+  /** Files stored for a message no run will read: removed with their objects. */
+  private async discardAttachments(gateway: Gateway, fileIds: string[]): Promise<void> {
+    if (!fileIds.length || !this.attachmentReader) return;
+    await this.attachmentReader.discard(gateway.organizationId, fileIds).catch((err: any) =>
+      this.logger.warn(`Could not remove unused attachments on gateway ${gateway.id}: ${err?.message ?? err}`),
+    );
   }
 
   /**
@@ -621,11 +671,14 @@ export class ChannelGatewayService {
           // outbound message of a conversation when the gateway opts in.
           const responseText = await this.applyAiDisclosure(gateway, finalRun, rawText);
 
-          // Files the run handed back travel with the text, on the adapters
-          // that send media (the iMessage relays); the rest send the text.
+          // Images and files the reply links to (reply-media.ts), and any the
+          // run handed back as attachments, go as media on the adapters that
+          // send media; the others send the text, links and all.
+          const media = extractReplyMedia(responseText);
           const formatted = adapter.formatOutbound({
             text: responseText,
-            attachments: ChannelGatewayService.replyAttachments(finalRun.output),
+            textWithoutMedia: media.textWithoutMedia,
+            attachments: replyMedia(ChannelGatewayService.replyAttachments(finalRun.output), media.attachments),
           });
           try {
             await adapter.sendResponse(
@@ -710,6 +763,8 @@ export class ChannelGatewayService {
     gateway: Gateway,
     body: { message: string; sessionId?: string; threadId?: string },
     policy?: ChannelPolicy | null,
+    /** Files the visitor uploaded for this message (channel-widget.controller.ts). */
+    sent?: ReadAttachments,
   ): Promise<{ runId: string; threadId: string }> {
     if (!gateway.isActive()) {
       throw new BadRequestException('Gateway is not active');
@@ -747,8 +802,11 @@ export class ChannelGatewayService {
       run = existingRuns[0] || null;
     }
 
+    // What the agent reads: the text and a line per uploaded file, with the
+    // files themselves by reference (channel-attachments.service.ts).
+    const input = ChannelAttachmentReader.textWith(normalized.text, sent?.lines ?? []);
     if (run) {
-      run = await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, normalized.text);
+      run = await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, input, undefined, sent?.parts);
     } else {
       const channelMetadata = {
         channelUserId: normalized.userId,
@@ -768,13 +826,18 @@ export class ChannelGatewayService {
         // channel's facts already live. Written with the insert so the
         // gateway-scoped thread lookup above can see the run at once.
         null,
-        normalized.text,
+        input,
         // Runs in the gateway's scope: a channel serves its agent only while
         // the gateway's own visibility covers it, checked on every message.
         // The policy adds the per-run cost cap, the channel id for the spend
         // cap, the visitor mark for shared memory, and files the
         // conversation under this gateway for retention and erasure.
-        withChannelPolicy(policy, { maxSteps: 25, metadata: channelMetadata, principal: gatewayPrincipal(gateway) }),
+        withChannelPolicy(policy, {
+          maxSteps: 25,
+          metadata: channelMetadata,
+          principal: gatewayPrincipal(gateway),
+          ...(sent?.parts.length ? { attachments: sent.parts } : {}),
+        }),
       );
 
       run.metadata = {
@@ -784,6 +847,8 @@ export class ChannelGatewayService {
       };
       await this.runRepository.save(run);
     }
+    // The files go with the conversation that read them.
+    await this.attachmentReader?.fileUnder(gateway.organizationId, sent?.fileIds ?? [], run.conversationId, run.id);
 
     // Persist the agent's reply for the widget poll endpoint once the
     // run completes (the widget can also stream live via the run SSE).
@@ -898,6 +963,8 @@ export class ChannelGatewayService {
   async deleteWidgetThread(gateway: Gateway, threadId: string): Promise<void> {
     const runs = await this.widgetThreadRuns(gateway, threadId);
     const conversationIds = [...new Set(runs.map((r) => r.conversationId).filter((id): id is string => !!id))];
+    // The files the visitor sent, in the thread or uploaded and not sent.
+    await this.attachmentReader?.erase(gateway.organizationId, conversationIds, { gatewayId: gateway.id, threadId });
     if (runs.length) await this.runRepository.delete({ id: In(runs.map((r) => r.id)) });
     if (conversationIds.length) {
       await this.runRepository.manager.getRepository(Message).delete({ conversationId: In(conversationIds) });

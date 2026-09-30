@@ -24,7 +24,8 @@
  *
  * The script talks to the existing public widget surface:
  *   GET  /gateways/:id/widget-config              sanitized presentation config
- *   POST /gateways/:id/widget/messages            { message, threadId? }
+ *   POST /gateways/:id/widget/messages            { message, threadId?, attachmentIds? }
+ *   POST /gateways/:id/widget/attachments         multipart: file, threadId (a file to send next)
  *   GET  /gateways/:id/widget/messages?threadId=&after=
  *   GET  /gateways/:id/widget/threads/:threadId/export   the visitor's own copy
  *   DELETE /gateways/:id/widget/threads/:threadId        erase the conversation
@@ -197,7 +198,7 @@ export function buildWidgetScript(gatewayId: string): string {
     throw new Error('invalid gateway id for widget script');
   }
 
-  return `(function () {
+  const source = `(function () {
   'use strict';
   if (window.__almytyWidgetLoaded) return;
   window.__almytyWidgetLoaded = true;
@@ -213,6 +214,7 @@ export function buildWidgetScript(gatewayId: string): string {
   var THREADS = base + '/gateways/' + GATEWAY_ID + '/widget/threads';
   var CONFIG_URL = base + '/gateways/' + GATEWAY_ID + '/widget-config';
   var LS_KEY = 'almyty-widget-' + GATEWAY_ID + '-thread';
+  var ATTACH = base + '/gateways/' + GATEWAY_ID + '/widget/attachments';
 
   var threadId = null;
   try { threadId = window.localStorage.getItem(LS_KEY); } catch (e) {}
@@ -267,7 +269,9 @@ export function buildWidgetScript(gatewayId: string): string {
     '.almyty-widget-send{border:none;background:none;color:var(--aw-primary);font-weight:600;font-size:13px;cursor:pointer;padding:0 14px}',
     '.almyty-widget-footer{font-size:10px;text-align:center;color:var(--aw-muted);padding:4px 0 6px;background:var(--aw-panel-bg)}',
     '.almyty-widget-privacy{text-align:center;padding:4px 0 0;background:var(--aw-panel-bg)}',
-    '.almyty-widget-privacy button{border:none;background:none;color:var(--aw-muted);cursor:pointer;text-decoration:underline;font-size:10px;padding:0 6px}'
+    '.almyty-widget-privacy button{border:none;background:none;color:var(--aw-muted);cursor:pointer;text-decoration:underline;font-size:10px;padding:0 6px}',
+    '.almyty-widget-files{flex-wrap:wrap;gap:4px;padding:6px 8px 0;background:var(--aw-panel-bg)}',
+    '.almyty-widget-file{font-size:11px;border:1px solid var(--aw-border);border-radius:6px;background:none;color:var(--aw-text)}'
   ].join('');
 
   var style = document.createElement('style');
@@ -306,6 +310,21 @@ export function buildWidgetScript(gatewayId: string): string {
   send.className = 'almyty-widget-send';
   send.type = 'submit';
   send.textContent = 'Send';
+  var attach = document.createElement('button');
+  attach.className = 'almyty-widget-send';
+  attach.type = 'button';
+  attach.setAttribute('aria-label', 'Attach files');
+  attach.textContent = '+';
+  var picker = document.createElement('input');
+  picker.type = 'file';
+  picker.multiple = true;
+  picker.accept = 'image/*,.pdf,.txt,.csv,.md,.json';
+  picker.style.display = 'none';
+  var filesEl = document.createElement('div');
+  filesEl.className = 'almyty-widget-files';
+  filesEl.style.display = 'none';
+  form.appendChild(attach);
+  form.appendChild(picker);
   form.appendChild(input);
   form.appendChild(send);
 
@@ -328,6 +347,7 @@ export function buildWidgetScript(gatewayId: string): string {
   panel.appendChild(header);
   panel.appendChild(note);
   panel.appendChild(messages);
+  panel.appendChild(filesEl);
   panel.appendChild(form);
   panel.appendChild(privacy);
   panel.appendChild(footer);
@@ -445,16 +465,81 @@ export function buildWidgetScript(gatewayId: string): string {
     if (open) { input.focus(); poll(); startPolling(); } else { stopPolling(); }
   });
 
+  // Files the visitor attaches to the next message, uploaded as picked
+  // under the thread the message will name: { name, id, state, error },
+  // state 'up' (uploading), 'ok' or 'err'. Each shows as a chip; pressing
+  // it takes the file back.
+  var files = [];
+
+  // A thread of its own before the first message, so an upload has one to
+  // be filed under. Random and unguessable, like the ones the server makes.
+  function ensureThread() {
+    if (!threadId) {
+      threadId = 'w-' + window.crypto.randomUUID();
+      try { window.localStorage.setItem(LS_KEY, threadId); } catch (e) {}
+    }
+    return threadId;
+  }
+
+  function renderFiles() {
+    while (filesEl.firstChild) filesEl.removeChild(filesEl.firstChild);
+    files.forEach(function (f) {
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'almyty-widget-file';
+      chip.title = 'Remove';
+      chip.textContent = f.name + (f.state === 'up' ? ' \\u2026' : f.state === 'err' ? ': ' + f.error : '') + ' \\u00d7';
+      chip.addEventListener('click', function () { files.splice(files.indexOf(f), 1); renderFiles(); });
+      filesEl.appendChild(chip);
+    });
+    filesEl.style.display = files.length ? 'flex' : 'none';
+  }
+
+  function upload(file) {
+    var f = { name: file.name, state: 'up' };
+    files.push(f);
+    if (files.filter(function (x) { return x.state !== 'err'; }).length > 5) f.error = 'up to 5 files';
+    else if (file.size > 10485760) f.error = 'over 10 MB';
+    if (f.error) f.state = 'err';
+    renderFiles();
+    if (f.error) return;
+    var body = new FormData();
+    body.append('threadId', ensureThread());
+    body.append('file', file);
+    fetch(ATTACH, { method: 'POST', body: body }).then(function (r) {
+      return r.json().then(function (out) {
+        if (!r.ok || !out.data) throw new Error(out.message);
+        f.id = out.data.id;
+        f.state = 'ok';
+      });
+    }).catch(function (e) {
+      f.state = 'err';
+      f.error = (e && e.message) || 'not sent';
+    }).then(renderFiles);
+  }
+
+  attach.addEventListener('click', function () { picker.click(); });
+  picker.addEventListener('change', function () {
+    for (var i = 0; i < picker.files.length; i++) upload(picker.files[i]);
+    picker.value = '';
+  });
+
   form.addEventListener('submit', function (ev) {
     ev.preventDefault();
     var text = input.value.replace(/^\\s+|\\s+$/g, '');
-    if (!text) return;
+    // A message can be files alone; it waits for an upload still running.
+    if (files.some(function (f) { return f.state === 'up'; })) return;
+    var ready = files.filter(function (f) { return f.state === 'ok'; });
+    if (!text && !ready.length) return;
     input.value = '';
-    addMessage(text, 'user');
+    addMessage([text].concat(ready.map(function (f) { return '[Attachment: ' + f.name + ']'; })).filter(Boolean).join('\\n'), 'user');
+    var ids = ready.map(function (f) { return f.id; });
+    files = [];
+    renderFiles();
     fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text, threadId: threadId || undefined })
+      body: JSON.stringify({ message: text, threadId: threadId || undefined, attachmentIds: ids.length ? ids : undefined })
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (out) { return { ok: r.ok, out: out }; });
     }).then(function (res) {
@@ -534,4 +619,13 @@ export function buildWidgetScript(gatewayId: string): string {
   });
 })();
 `;
+  // The comments and layout above are for whoever maintains this file, not
+  // for every page it is embedded in: whole-line // comments, indentation
+  // and blank lines are not shipped, which is what keeps the script inside
+  // its budget. No string in it spans a line, so none of this touches one;
+  // a // inside a line (a URL, a trailing note) is left alone.
+  return source
+    .replace(/^[ \t]*\/\/.*\n/gm, '')
+    .replace(/^[ \t]+/gm, '')
+    .replace(/\n{2,}/g, '\n');
 }

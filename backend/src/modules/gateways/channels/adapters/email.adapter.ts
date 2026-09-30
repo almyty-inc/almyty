@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import { BaseAdapter, NormalizedMessage, AdapterResponse, InboundAttachment } from './base.adapter';
+import { textWithMedia } from '../reply-media';
 import {
   htmlToText,
   looksLikeMime,
@@ -52,20 +53,20 @@ export class EmailAdapter extends BaseAdapter {
   }
 
   /**
-   * Project parsed MIME attachment metadata onto the shared
-   * NormalizedMessage attachment shape (`{ url, type, name }`). Inbound
-   * MIME attachments carry no fetchable URL (we retain metadata only,
-   * not the bytes), so `url` is left empty; richer detail (size,
-   * contentId, disposition) rides along in message metadata.
+   * Project parsed MIME attachments onto the shared attachment shape. An
+   * email carries its files in the message itself, so each one arrives
+   * with its bytes (`data`, the first few and bounded; see mime.helper.ts)
+   * and nothing is fetched; one without bytes is named and not read.
+   * Richer detail (size, contentId, disposition) rides along in message
+   * metadata.
    */
-  static mapAttachments(
-    attachments: ParsedMimeAttachment[] | undefined,
-  ): Array<{ url: string; type: string; name: string }> {
+  static mapAttachments(attachments: ParsedMimeAttachment[] | undefined): InboundAttachment[] {
     if (!Array.isArray(attachments)) return [];
     return attachments.map((a) => ({
-      url: '',
       type: a.contentType,
       name: a.filename || '',
+      size: a.size,
+      ...(a.content ? { data: a.content } : {}),
     }));
   }
 
@@ -189,8 +190,9 @@ export class EmailAdapter extends BaseAdapter {
           messageId: parsed.messageId,
           references: parsed.references,
           // Full per-part detail (size, contentId, disposition) beyond
-          // the normalized {url,type,name} triple.
-          attachments: parsed.attachments,
+          // the normalized attachment, without the bytes: metadata travels
+          // with the reply context, and the bytes go to the agent only.
+          attachments: parsed.attachments.map(({ content: _bytes, ...detail }) => detail),
           source: 'email',
         },
       };
@@ -218,10 +220,16 @@ export class EmailAdapter extends BaseAdapter {
       (typeof payload.references === 'string' ? payload.references : undefined) ||
       EmailAdapter.headerOf(payload.headers, 'references');
     const root = EmailAdapter.referencesRoot(references) || inReplyTo || messageId;
+    // A provider that posts JSON rather than the raw message names the
+    // files but does not carry them; they are named to the agent, not read.
+    const named: InboundAttachment[] = (Array.isArray(payload.attachments) ? payload.attachments : [])
+      .filter((a: any) => a && (a.filename || a.name))
+      .map((a: any) => ({ type: a.content_type || a.contentType || 'application/octet-stream', name: a.filename || a.name }));
     return {
       text,
       userId: fromString || 'unknown',
       threadId: EmailAdapter.threadKey(from, root || payload.subject),
+      ...(named.length ? { attachments: named } : {}),
       metadata: {
         subject: payload.subject,
         from: fromString,
@@ -251,9 +259,20 @@ export class EmailAdapter extends BaseAdapter {
     return messageId ? `email:${messageId}` : undefined;
   }
 
+  /**
+   * Files the reply links to go as attachments of the mail, by link
+   * (Resend fetches them), with the links taken out of the text.
+   */
   formatOutbound(response: AdapterResponse): any {
-    return { html: response.text, text: response.text };
+    const sent = (response.attachments ?? []).slice(0, EmailAdapter.MAX_REPLY_ATTACHMENTS);
+    const text = textWithMedia(response, sent);
+    return sent.length
+      ? { html: text, text, attachments: sent.map((a) => ({ filename: a.name || 'attachment', path: a.url })) }
+      : { html: text, text };
   }
+
+  /** Files one reply mail attaches. */
+  static readonly MAX_REPLY_ATTACHMENTS = 10;
 
   /**
    * Resend webhooks are svix-signed. Verification is opt-in per
@@ -321,6 +340,10 @@ export class EmailAdapter extends BaseAdapter {
       to,
       subject,
       html: formattedResponse.html,
+      // Files the reply carries, by link: Resend fetches each one.
+      ...(Array.isArray(formattedResponse.attachments) && formattedResponse.attachments.length
+        ? { attachments: formattedResponse.attachments }
+        : {}),
     };
     if (config.inbound_address) payload.reply_to = config.inbound_address;
     if (Object.keys(headers).length > 0) payload.headers = headers;

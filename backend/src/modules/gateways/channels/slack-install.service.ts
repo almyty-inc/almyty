@@ -9,8 +9,8 @@ import { ChannelInstallation } from '../../../entities/channel-installation.enti
 import { MASKED_CHANNEL_SECRET, hasChannelSecret } from './channel-config.helper';
 import { ChannelCredentialService } from './channel-credential.service';
 
-/** Bot scopes requested on install. */
-export const SLACK_INSTALL_SCOPES = 'chat:write,app_mentions:read,im:history';
+/** Bot scopes requested on install: reply, hear mentions and DMs, read the files people share, and look up a sender's name. */
+export const SLACK_INSTALL_SCOPES = 'chat:write,app_mentions:read,im:history,files:read,users:read';
 
 /** State nonces are valid for 10 minutes. */
 const STATE_TTL_MS = 10 * 60 * 1000;

@@ -203,7 +203,6 @@ describe('IMessageSendblueAdapter', () => {
       expect(adapter.normalizeInbound(photo).attachments).toEqual([
         { url: 'https://storage.googleapis.com/inbound-file-store/abc/IMG_0042.heic', type: 'image/heic', name: 'IMG_0042.heic' },
       ]);
-      expect(adapter.fetchesInboundAttachments).toBe(true);
     });
 
     it('ignores a media_url that is not an https link', () => {

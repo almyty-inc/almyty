@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
 import { sharedSecretMatches } from './shared-secret.helper';
-import { attachmentFromUrl, outboundMediaUrls, type ChannelAttachment } from './relay-media.helper';
+import { attachmentFromUrl, outboundMediaUrls, sentAttachments, type ChannelAttachment } from './relay-media.helper';
+import { textWithMedia } from '../reply-media';
 
 /**
  * iMessage through LoopMessage, a relay that owns the Apple-side sender.
@@ -38,7 +39,6 @@ import { attachmentFromUrl, outboundMediaUrls, type ChannelAttachment } from './
 export class IMessageLoopMessageAdapter extends BaseAdapter {
   private readonly logger = new Logger(IMessageLoopMessageAdapter.name);
   readonly type = 'imessage_loopmessage';
-  readonly fetchesInboundAttachments = true;
 
   static readonly SEND_URL = 'https://a.loopmessage.com/api/v1/message/send/';
   /** LoopMessage takes "less than 10000 characters" per message. */
@@ -61,6 +61,11 @@ export class IMessageLoopMessageAdapter extends BaseAdapter {
       // The conversation: the group when there is one, else the sender.
       threadId: groupId ?? contact,
       ...(attachments.length ? { attachments } : {}),
+      // In a group each message is read as its writer's; the relay names
+      // them only by number or address, so they read as a short id
+      // (channel-speaker.ts).
+      ...(contact ? { sender: { id: contact } } : {}),
+      group: !!groupId,
       metadata: {
         from: contact,
         messageId: rawPayload?.message_id,
@@ -103,7 +108,8 @@ export class IMessageLoopMessageAdapter extends BaseAdapter {
       IMessageLoopMessageAdapter.MAX_ATTACHMENTS,
       IMessageLoopMessageAdapter.MAX_ATTACHMENT_URL_CHARS,
     );
-    return attachments.length ? { text: response.text, attachments } : { text: response.text };
+    const text = textWithMedia(response, sentAttachments(response.attachments, attachments));
+    return attachments.length ? { text, attachments } : { text };
   }
 
   /**

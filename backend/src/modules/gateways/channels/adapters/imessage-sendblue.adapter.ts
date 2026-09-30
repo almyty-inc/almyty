@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
 import { sharedSecretMatches } from './shared-secret.helper';
-import { attachmentFromUrl, outboundMediaUrls } from './relay-media.helper';
+import { attachmentFromUrl, outboundMediaUrls, sentAttachments } from './relay-media.helper';
+import { textWithMedia } from '../reply-media';
 
 /**
  * iMessage through Sendblue, a relay that owns the Apple-side number.
@@ -43,7 +44,6 @@ import { attachmentFromUrl, outboundMediaUrls } from './relay-media.helper';
 export class IMessageSendblueAdapter extends BaseAdapter {
   private readonly logger = new Logger(IMessageSendblueAdapter.name);
   readonly type = 'imessage_sendblue';
-  readonly fetchesInboundAttachments = true;
 
   static readonly SEND_URL = 'https://api.sendblue.co/api/send-message';
   static readonly SEND_GROUP_URL = 'https://api.sendblue.co/api/send-group-message';
@@ -66,6 +66,10 @@ export class IMessageSendblueAdapter extends BaseAdapter {
       // The conversation: the group when there is one, else the sender.
       threadId: groupId ?? from,
       ...(media ? { attachments: [media] } : {}),
+      // In a group each message is read as its writer's; the relay names
+      // them only by number, so they read as a short id (channel-speaker.ts).
+      ...(from ? { sender: { id: from } } : {}),
+      group: !!groupId,
       metadata: {
         from,
         to: rawPayload?.to_number,
@@ -110,7 +114,8 @@ export class IMessageSendblueAdapter extends BaseAdapter {
 
   formatOutbound(response: AdapterResponse): any {
     const media = outboundMediaUrls(response.attachments, IMessageSendblueAdapter.MAX_MEDIA);
-    return media.length ? { content: response.text, media } : { content: response.text };
+    const content = textWithMedia(response, sentAttachments(response.attachments, media));
+    return media.length ? { content, media } : { content };
   }
 
   /**

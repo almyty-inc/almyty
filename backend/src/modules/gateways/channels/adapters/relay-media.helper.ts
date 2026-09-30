@@ -77,3 +77,13 @@ export function outboundMediaUrls(
   }
   return urls;
 }
+
+/** The reply attachments whose links made it into `urls` (outboundMediaUrls), for the text that goes with them. */
+export function sentAttachments<T extends { url?: string }>(attachments: T[] | null | undefined, urls: string[]): T[] {
+  if (!Array.isArray(attachments) || !urls.length) return [];
+  const sent = new Set(urls);
+  return attachments.filter((a) => {
+    const found = attachmentFromUrl(a?.url);
+    return !!found && sent.has(found.url);
+  });
+}

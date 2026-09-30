@@ -1,5 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import {
+  BaseAdapter,
+  NormalizedMessage,
+  AdapterResponse,
+  AttachmentFetchLimits,
+  FetchedAttachment,
+  InboundAttachment,
+  OutboundAttachment,
+} from './base.adapter';
+import { textWithMedia } from '../reply-media';
+import { ResponseTooLargeError, safeFetch } from '../../../../common/security/safe-fetch';
 import * as crypto from 'crypto';
 
 /**
@@ -14,7 +24,8 @@ import * as crypto from 'crypto';
  *                      on inbound POSTs (HMAC-SHA256 over the raw body)
  *
  * Inbound shape (POST): entry[].changes[].value.messages[] — text
- * messages carry text.body; `from` is the sender's E.164 (no prefix)
+ * messages carry text.body, image and document messages a media id and
+ * a caption; `from` is the sender's E.164 (no prefix)
  * and doubles as the conversation thread key.
  *
  * Outbound: POST graph.facebook.com/<ver>/<phone_number_id>/messages
@@ -29,15 +40,29 @@ export class WhatsAppCloudAdapter extends BaseAdapter {
   readonly type = 'whatsapp_cloud';
 
   static readonly GRAPH_API_BASE = 'https://graph.facebook.com/v20.0';
+  /** Where Meta serves media bytes; only this host is sent the access token. */
+  static readonly MEDIA_HOSTS = ['lookaside.fbsbx.com'];
+  /** The most media one reply sends; each is a message of its own. */
+  static readonly MAX_MEDIA = 5;
 
   normalizeInbound(rawPayload: any): NormalizedMessage {
     const value = rawPayload?.entry?.[0]?.changes?.[0]?.value ?? {};
     const message = value?.messages?.[0] ?? {};
     const contact = value?.contacts?.[0];
+    // An image or a document arrives as a media id, with its caption as the text.
+    const media = message?.type === 'image' ? message.image : message?.type === 'document' ? message.document : null;
+    const attachments: InboundAttachment[] = media?.id
+      ? [{
+          ref: String(media.id),
+          type: media.mime_type || 'application/octet-stream',
+          name: media.filename || (message.type === 'image' ? 'image.jpg' : 'document'),
+        }]
+      : [];
     return {
-      text: message?.text?.body || '',
+      text: message?.text?.body || media?.caption || '',
       userId: message?.from || 'unknown',
       threadId: message?.from, // sender E.164 is the conversation key
+      ...(attachments.length ? { attachments } : {}),
       metadata: {
         from: message?.from,
         messageId: message?.id,
@@ -48,18 +73,61 @@ export class WhatsAppCloudAdapter extends BaseAdapter {
     };
   }
 
+  /**
+   * A media id becomes bytes in two Graph calls, both with the access
+   * token: the media's own node names a short-lived URL, and the URL is
+   * read. The URL comes from Meta's answer, and the token goes with it only
+   * when it is on Meta's media host.
+   */
+  async fetchAttachment(
+    attachment: InboundAttachment,
+    config: Record<string, any>,
+    limits: AttachmentFetchLimits,
+  ): Promise<FetchedAttachment | null> {
+    if (!attachment.ref || !config.access_token || !/^[A-Za-z0-9_-]+$/.test(attachment.ref)) return null;
+    const auth = { Authorization: `Bearer ${config.access_token}` };
+    const res = await safeFetch(`${WhatsAppCloudAdapter.GRAPH_API_BASE}/${attachment.ref}`, {
+      method: 'GET',
+      headers: auth,
+      maxBytes: 64 * 1024,
+      timeoutMs: limits.timeoutMs,
+    });
+    const node = await this.readJsonBody(res);
+    if (typeof node?.file_size === 'number' && node.file_size > limits.maxBytes) throw new ResponseTooLargeError(limits.maxBytes);
+    if (!BaseAdapter.onHost(node?.url, WhatsAppCloudAdapter.MEDIA_HOSTS)) throw new Error('the media node named no file on the media host');
+    return this.fetchBytes(node.url, limits, auth);
+  }
+
   /** The `wamid.` message id Meta assigns, stable across redelivery. */
   deliveryId(rawPayload: any): string | undefined {
     const id = rawPayload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.id;
     return id ? `whatsapp_cloud:${id}` : undefined;
   }
 
+  /**
+   * Media the Cloud API sends by link: a JPEG or PNG as an image, a PDF as
+   * a document. Anything else stays a link in the text.
+   */
   formatOutbound(response: AdapterResponse): any {
-    return { body: response.text };
+    const media: Array<Record<string, unknown>> = [];
+    const sent: OutboundAttachment[] = [];
+    for (const a of response.attachments ?? []) {
+      if (media.length >= WhatsAppCloudAdapter.MAX_MEDIA) break;
+      if (a.type === 'image/jpeg' || a.type === 'image/png') {
+        media.push({ type: 'image', image: { link: a.url } });
+      } else if (a.type === 'application/pdf') {
+        media.push({ type: 'document', document: { link: a.url, filename: a.name } });
+      } else {
+        continue;
+      }
+      sent.push(a);
+    }
+    const body = textWithMedia(response, sent);
+    return media.length ? { body, media } : { body };
   }
 
   /**
-   * Send through the Cloud API.
+   * Send through the Cloud API: the text, then one message per file.
    *
    * The Graph API is HTTP-shaped: 200 with
    * `{messaging_product, contacts, messages: [{id: "wamid..."}]}` on
@@ -73,6 +141,14 @@ export class WhatsAppCloudAdapter extends BaseAdapter {
    */
   async sendResponse(config: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void> {
     const to = threadContext?.from || threadContext?.threadId;
+    const media: Array<Record<string, unknown>> = Array.isArray(formattedResponse.media) ? formattedResponse.media : [];
+    if (formattedResponse.body || !media.length) {
+      await this.send(config, { messaging_product: 'whatsapp', to, text: { body: formattedResponse.body } });
+    }
+    for (const item of media) await this.send(config, { messaging_product: 'whatsapp', to, ...item });
+  }
+
+  private async send(config: Record<string, any>, message: Record<string, unknown>): Promise<void> {
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
     const res = await (fetch as any)(
       `${WhatsAppCloudAdapter.GRAPH_API_BASE}/${config.phone_number_id}/messages`,
@@ -82,11 +158,7 @@ export class WhatsAppCloudAdapter extends BaseAdapter {
           'Authorization': `Bearer ${config.access_token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to,
-          text: { body: formattedResponse.body },
-        }),
+        body: JSON.stringify(message),
       },
     );
 
