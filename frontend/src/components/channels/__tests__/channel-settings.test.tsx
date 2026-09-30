@@ -1,15 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, fireEvent, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 import { render } from '../../../test/setup'
-import { ChannelSettings } from '../channel-settings'
-import { formFromEffective, overridesFromForm, settingsFromForm } from '../public-settings-fields'
+import { ChannelSettings, missingKeysLine } from '../channel-settings'
+import { advancedSummary, formFromEffective, overridesFromForm, settingsFromForm } from '../public-settings-fields'
 import type { AgentChannel, EffectiveSettings } from '@/lib/agent-channels'
 import type { Agent } from '@/types'
 
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 vi.mock('@/lib/api', () => ({
-  gatewaysApi: { getById: vi.fn().mockResolvedValue(null) },
+  gatewaysApi: {
+    getById: vi.fn().mockResolvedValue(null),
+    update: vi.fn(),
+    getCustomDomain: vi.fn().mockResolvedValue(null),
+    setCustomDomain: vi.fn(),
+    removeCustomDomain: vi.fn(),
+    verifyCustomDomain: vi.fn(),
+    getVisitorOAuth: vi.fn(),
+    setVisitorOAuth: vi.fn(),
+  },
   getApiBaseUrl: () => 'https://api.test',
 }))
 // Every key is a credential on Credentials, listed by the shared picker.
@@ -57,6 +67,7 @@ vi.mock('@/store/organization', () => ({
 }))
 
 import { agentChannelsApi } from '@/lib/agent-channels'
+import { gatewaysApi } from '@/lib/api'
 
 const inherited: EffectiveSettings = {
   branding: { appName: 'Acme help', primaryColor: '#0f766e', greeting: 'Hi', theme: 'auto', suggestedPrompts: [], aiDisclosure: null, whiteLabel: false },
@@ -91,6 +102,9 @@ const web = (over: Partial<AgentChannel> = {}): AgentChannel =>
   slack({ id: 'c-web', type: 'web', name: 'Web chat', slug: 'support', endpoint: '/channels/c-web', configuration: {}, ...over })
 
 beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(agentChannelsApi.check).mockResolvedValue({ ok: true, refusals: [] } as any)
+  vi.mocked(gatewaysApi.getById).mockResolvedValue(null)
   vi.mocked(agentChannelsApi.update).mockReset()
   vi.mocked(agentChannelsApi.update).mockImplementation(async (_a, _c, body: any) =>
     slack({ name: body.name ?? 'Slack', slug: body.slug ?? null, configuration: body.configuration ?? {} }),
@@ -203,6 +217,103 @@ describe('a channel page', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Save' }))
       expect(await screen.findByText('acme-help is already taken as a web chat address. Pick another.')).toBeInTheDocument()
     })
+
+  describe('keys a messaging channel still needs', () => {
+    const missing = { ok: false, refusals: [{ code: 'MISSING_CREDENTIALS', message: 'This platform still needs its keys before it can go live: bot_token, signing_secret' }] }
+
+    it('are not an error on first view', async () => {
+      vi.mocked(agentChannelsApi.check).mockResolvedValue(missing as any)
+      render(<ChannelSettings agent={agent} channel={slack()} inherited={inherited} />)
+      await screen.findByRole('button', { name: 'Publish' })
+      await waitFor(() => expect(agentChannelsApi.check).toHaveBeenCalled())
+      await new Promise((r) => setTimeout(r, 0))
+      expect(screen.queryByText(/Pick or create/)).toBeNull()
+      expect(screen.queryByText(/bot_token|signing_secret|still needs its keys/)).toBeNull()
+    })
+
+    it('are said in plain words when publishing is tried, and nothing is published', async () => {
+      vi.mocked(agentChannelsApi.check).mockResolvedValue(missing as any)
+      render(<ChannelSettings agent={agent} channel={slack()} inherited={inherited} />)
+      const publish = await screen.findByRole('button', { name: 'Publish' })
+      await waitFor(() => expect(agentChannelsApi.check).toHaveBeenCalled())
+      await new Promise((r) => setTimeout(r, 0))
+      fireEvent.click(publish)
+      expect((await screen.findAllByText('Pick or create the Slack app credential first.')).length).toBeGreaterThan(0)
+      expect(screen.queryByText(/bot_token|signing_secret/)).toBeNull()
+      expect(agentChannelsApi.publish).not.toHaveBeenCalled()
+    })
+
+    it('name the platform for the others', () => {
+      expect(missingKeysLine('telegram')).toBe('Pick or create the Telegram credential first.')
+    })
+  })
+
+  describe('the web chat and the widget', () => {
+    beforeEach(() => {
+      if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false)
+      if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = vi.fn()
+    })
+
+    it('save the domain and the allowed sites with the page, under its one Save', async () => {
+      vi.mocked(gatewaysApi.getById).mockResolvedValue({
+        id: 'gw-web',
+        type: 'hosted_chat',
+        configuration: { hostedChat: { theme: 'dark' }, allowedOrigins: ['https://shop.example.com'] },
+      })
+      vi.mocked(gatewaysApi.getCustomDomain).mockResolvedValue(null)
+      vi.mocked(gatewaysApi.setCustomDomain).mockResolvedValue(null)
+      vi.mocked(gatewaysApi.update).mockResolvedValue({})
+      render(<ChannelSettings agent={agent} channel={web({ status: 'live', gatewayId: 'gw-web' })} inherited={inherited} />)
+
+      fireEvent.change(await screen.findByLabelText('Domain'), { target: { value: 'chat.acme.com' } })
+      fireEvent.change(await screen.findByLabelText('Add a site'), { target: { value: 'https://blog.example.com' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+      expect(screen.getAllByRole('button', { name: /save/i }).map((b) => b.textContent)).toEqual(['Save'])
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      await waitFor(() => expect(gatewaysApi.setCustomDomain).toHaveBeenCalledWith('gw-web', 'chat.acme.com'))
+      expect(gatewaysApi.update).toHaveBeenCalledWith('gw-web', {
+        configuration: { hostedChat: { theme: 'dark' }, allowedOrigins: ['https://shop.example.com', 'https://blog.example.com'] },
+      })
+      expect(agentChannelsApi.update).not.toHaveBeenCalled()
+    })
+
+    it('say a refused domain next to the domain', async () => {
+      vi.mocked(gatewaysApi.getById).mockResolvedValue({ id: 'gw-web', type: 'hosted_chat', configuration: {} })
+      vi.mocked(gatewaysApi.getCustomDomain).mockResolvedValue(null)
+      vi.mocked(gatewaysApi.setCustomDomain).mockRejectedValue({ response: { data: { message: 'Another surface is already serving that domain.' } } })
+      render(<ChannelSettings agent={agent} channel={web({ status: 'live', gatewayId: 'gw-web' })} inherited={inherited} />)
+      fireEvent.change(await screen.findByLabelText('Domain'), { target: { value: 'chat.taken.com' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      expect(await screen.findByText('Another surface is already serving that domain.')).toBeInTheDocument()
+    })
+
+    it("save where the widget sits with the page, merged into the gateway's configuration", async () => {
+      vi.mocked(gatewaysApi.getById).mockResolvedValue({
+        id: 'gw-widget',
+        type: 'chat_widget',
+        configuration: { appId: 'app-1', widget: { position: 'bottom-right', launcherIcon: 'help', title: 'Old' } },
+      })
+      vi.mocked(gatewaysApi.update).mockResolvedValue({})
+      render(
+        <ChannelSettings
+          agent={agent}
+          channel={web({ id: 'c-widget', type: 'widget', name: 'Website widget', slug: null, status: 'live', gatewayId: 'gw-widget' })}
+          inherited={inherited}
+        />,
+      )
+      const user = userEvent.setup()
+      await user.click(await screen.findByLabelText('Position'))
+      await user.click(await screen.findByRole('option', { name: 'Bottom left' }))
+      expect(screen.getAllByRole('button', { name: /save/i }).map((b) => b.textContent)).toEqual(['Save'])
+      await user.click(screen.getByRole('button', { name: 'Save' }))
+      await waitFor(() =>
+        expect(gatewaysApi.update).toHaveBeenCalledWith('gw-widget', {
+          configuration: { appId: 'app-1', allowedOrigins: [], widget: { title: 'Old', position: 'bottom-left', launcherIcon: 'help' } },
+        }),
+      )
+    })
+  })
   })
 })
 
@@ -214,6 +325,10 @@ describe('the settings form', () => {
       limits: { costCapCents: 50, perUserRateLimit: 60, perIpRateLimit: 120, dailySpendCapCents: 500, monthlySpendCapCents: 5000 },
     })
     expect(overridesFromForm(form, inherited)).toEqual({ branding: null, visitorRules: null })
+  })
+
+  it('sums up the spend limits as money', () => {
+    expect(advancedSummary(formFromEffective(inherited))).toMatch(/^\$0\.50 per run · \$5 a day, \$50 a month · /)
   })
 
   it("keeps a channel following its agent on every field it does not change", () => {

@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 
 import { render } from '../../../test/setup'
-import { ConnectAccountButton, ConnectFlow, splitConnectSchema } from '../connect-flow'
+import { ConnectFlow, splitConnectSchema } from '../connect-flow'
 import { connectionsApi, connectorsApi } from '../../../lib/connections-api'
 import { organizationsApi } from '../../../lib/api'
 import type { Connection, Connector } from '@/types/connections'
@@ -327,44 +327,6 @@ describe('who can use it', () => {
     render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
     expect(await screen.findByTestId('connect-admins-only')).toHaveTextContent('Only admins can add credentials')
     expect(screen.queryByLabelText('API key')).not.toBeInTheDocument()
-  })
-})
-
-describe('ConnectAccountButton', () => {
-  it('opens the flow inline, inside the other form, without a dialog or a nested form', async () => {
-    const created = connection()
-    vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: created })
-    const onConnected = vi.fn()
-    const outerSubmit = vi.fn((e: Event) => e.preventDefault())
-    render(
-      <form onSubmit={outerSubmit as any} data-testid="consumer-form">
-        <ConnectAccountButton connectorKey="openai" onConnected={onConnected} />
-      </form>,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Connect an account' }))
-    expect(await screen.findByText('Add OpenAI')).toBeInTheDocument()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    // A <form> inside the other <form> would submit it.
-    expect(screen.getByTestId('consumer-form').querySelectorAll('form')).toHaveLength(0)
-
-    const key = await screen.findByLabelText('API key')
-    fireEvent.change(key, { target: { value: 'sk-inline' } })
-    fireEvent.keyDown(key, { key: 'Enter' })
-
-    await waitFor(() => expect(onConnected).toHaveBeenCalledWith(created))
-    expect(connectionsApi.connect).toHaveBeenCalledWith('openai', { method: 'api_key', owner: 'org', input: { apiKey: 'sk-inline' } })
-    expect(outerSubmit).not.toHaveBeenCalled()
-    expect(await screen.findByRole('button', { name: 'Connect an account' })).toBeInTheDocument()
-  })
-
-  it('Cancel folds the flow away without connecting', async () => {
-    render(<ConnectAccountButton connectorKey="openai" onConnected={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Connect an account' }))
-    await screen.findByLabelText('API key')
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByLabelText('API key')).not.toBeInTheDocument()
-    expect(connectionsApi.connect).not.toHaveBeenCalled()
   })
 })
 

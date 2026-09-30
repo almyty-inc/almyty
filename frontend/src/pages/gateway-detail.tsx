@@ -26,14 +26,7 @@ import {
   type ScopingPreset,
 } from '@/components/gateways/detail/tools-tab'
 import { GatewayEventsTab } from '@/components/gateways/detail/events-tab'
-import {
-  ChannelConfigForm,
-  isChannelType,
-} from '@/components/gateways/detail/channel-config-form'
 import { ManagedByChannelBanner, useManagedByChannel } from '@/components/gateways/managed-by-channel-banner'
-import { CustomDomainCard } from '@/components/gateways/custom-domain-card'
-import { VisitorOAuthCard } from '@/components/gateways/visitor-oauth-card'
-import { AllowedOriginsCard } from '@/components/gateways/allowed-origins-card'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { orgSlugOf } from '@/lib/gateway-connect'
 import { ConnectSnippets } from '@/components/gateways/connect-snippets'
@@ -189,21 +182,6 @@ export function GatewayDetailPage() {
   })
 
   const gateway = gatewayData
-
-
-  // Channel-config mutation: PATCHes only the configuration object.
-  // Used by the per-channel-type credential form.
-  const updateChannelConfigMutation = useMutation({
-    mutationFn: (configuration: Record<string, any>) =>
-      gatewaysApi.update(id!, { configuration }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['gateway', id] })
-      success('Channel configuration saved', 'Credentials have been encrypted and stored.')
-    },
-    onError: (err: any) => {
-      errorNotif('Failed to save channel config', getApiErrorMessage(err, 'Please try again.'))
-    },
-  })
 
   const updateToolConfigMutation = useMutation({
     mutationFn: ({ gatewayToolId, data }: { gatewayToolId: string; data: any }) =>
@@ -488,44 +466,6 @@ export function GatewayDetailPage() {
         onCopySuccess={success}
         onCopyError={errorNotif}
       />
-
-      {/* Channel-type credential form (per-adapter token / webhook / OAuth fields) */}
-      {isChannelType(gateway.type) && !managedBy && (
-        <ChannelConfigForm
-          gateway={gateway}
-          type={gateway.type}
-          isSaving={updateChannelConfigMutation.isPending}
-          onSave={async (cfg) => {
-            await updateChannelConfigMutation.mutateAsync(cfg)
-          }}
-          onTestConnection={async () => {
-            const res: any = await gatewaysApi.testChannelConnection(gateway.id)
-            // backend returns { success, data: { ok, detail } }; apiPost
-            // already unwraps `data` so we usually get { ok, detail }
-            // directly, but tolerate both shapes here.
-            const data = res?.data ?? res
-            return { ok: !!data?.ok, detail: data?.detail || '' }
-          }}
-        />
-      )}
-
-      {/* A hosted chat or a website widget is an agent's channel: its look,
-          who can use it, its domain, sign-in, embed snippet and allowed
-          sites are all on that channel's page. Only a surface no channel
-          owns keeps these cards here. */}
-      {gateway.type === 'hosted_chat' && !managedBy && <CustomDomainCard gatewayId={gateway.id} />}
-      {gateway.type === 'hosted_chat' && !managedBy && (
-        <VisitorOAuthCard gatewayId={gateway.id} authMode={gateway.configuration?.hostedChat?.authMode} />
-      )}
-      {/* Which third-party sites may call this public surface from the
-          browser. Keyed on the gateway so the card resets when the saved
-          list changes underneath it. */}
-      {(gateway.type === 'chat_widget' || gateway.type === 'hosted_chat') && !managedBy && (
-        <AllowedOriginsCard
-          key={`${gateway.id}:${JSON.stringify(gateway.configuration?.allowedOrigins ?? [])}`}
-          gateway={{ id: gateway.id, type: gateway.type, configuration: gateway.configuration }}
-        />
-      )}
 
       {/* Authentication */}
       {gateway.type !== 'skills' && (

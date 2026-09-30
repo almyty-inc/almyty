@@ -128,7 +128,7 @@ describe('a gateway an agent channel manages', () => {
     expect(screen.queryByLabelText(/Bot token/i)).toBeNull()
   })
 
-  it('shows no banner, and keeps the widget cards, for a gateway no channel owns', async () => {
+  it('shows no banner, and no channel cards, for a gateway no channel owns', async () => {
     vi.mocked(gatewaysApi.getById).mockResolvedValue({
       ...hostedChat,
       id: 'gw-widget',
@@ -137,8 +137,10 @@ describe('a gateway an agent channel manages', () => {
     } as any)
     vi.mocked(channelLinkApi.channelForGateway).mockResolvedValue(null)
     renderAt('/gateways/gw-widget')
-    expect(await screen.findByText('Allowed sites')).toBeInTheDocument()
     await waitFor(() => expect(channelLinkApi.channelForGateway).toHaveBeenCalledWith('gw-widget'))
+    await waitFor(() => expect(gatewaysApi.getById).toHaveBeenCalled())
+    // A web chat or widget is set up on its agent's channel page, not here.
+    expect(screen.queryByText('Allowed sites')).toBeNull()
     expect(screen.queryByTestId('managed-by-channel')).toBeNull()
   })
 })

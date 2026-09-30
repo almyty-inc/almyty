@@ -15,6 +15,7 @@ import { pluralized } from '@/lib/utils'
 import {
   AUTH_MODE_HINTS,
   AUTH_MODE_LABELS,
+  formatCents,
   type ChannelBranding,
   type EffectiveSettings,
   type VisitorAuthMode,
@@ -155,14 +156,21 @@ export function overridesFromForm(
   return { branding, visitorRules: Object.keys(rules).length ? rules : null }
 }
 
+/** A money field (whole currency, as typed) the way the owner reads money: "$5", "$0.50". */
+function asMoney(text: string): string {
+  const value = Number(text)
+  return Number.isFinite(value) ? formatCents(Math.round(value * 100)) : text
+}
+
 /** The one-line summary the Advanced disclosure shows while closed. */
 export function advancedSummary(form: PublicSettingsForm): string {
+  const run = form.costCap.trim()
   const day = form.dailyCap.trim()
   const month = form.monthlyCap.trim()
-  const total = [day ? `${day} a day` : '', month ? `${month} a month` : ''].filter(Boolean).join(', ')
+  const total = [day ? `${asMoney(day)} a day` : '', month ? `${asMoney(month)} a month` : ''].filter(Boolean).join(', ')
   return [
-    form.costCap.trim() ? `Spend limit ${form.costCap.trim()} per run` : 'No spend limit',
-    total ? `Total limit ${total}` : 'No total limit',
+    run ? `${asMoney(run)} per run` : 'No spend limit per run',
+    total || 'No total spend limit',
     form.perUser.trim() ? `${pluralized(Number(form.perUser.trim()), 'message')} per visitor an hour` : 'No visitor limit',
     form.retentionDays.trim()
       ? `visitor data deleted after ${form.retentionDays.trim()} days`

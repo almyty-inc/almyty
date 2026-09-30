@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { render } from '../../../test/setup'
 
@@ -13,13 +13,8 @@ import {
 } from '../widget-builder'
 
 vi.mock('@/lib/api', () => ({
-  gatewaysApi: {
-    update: vi.fn().mockResolvedValue({}),
-  },
   getApiBaseUrl: () => 'https://api.test',
 }))
-
-import { gatewaysApi } from '@/lib/api'
 
 const baseGateway = {
   id: '3e7f8f3a-4a5b-4c6d-8e9f-0a1b2c3d4e5f',
@@ -34,7 +29,6 @@ const app = {
 }
 
 beforeEach(() => {
-  vi.mocked(gatewaysApi.update).mockClear()
   if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false)
   if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = vi.fn()
 })
@@ -106,8 +100,10 @@ describe('buildPreviewSrcDoc', () => {
 })
 
 describe('WidgetBuilder', () => {
+  const placement = widgetPlacementFrom(baseGateway.configuration)
+
   it('shows the embed snippet and a live preview in the channel look, asking only where it sits', () => {
-    const { container } = render(<WidgetBuilder gateway={baseGateway} app={app} />)
+    const { container } = render(<WidgetBuilder gateway={baseGateway} app={app} placement={placement} onPlacementChange={vi.fn()} />)
 
     // The look is the app's: nothing here edits it.
     expect(screen.queryByLabelText('Title')).toBeNull()
@@ -128,22 +124,22 @@ describe('WidgetBuilder', () => {
     expect(srcdoc).toContain('You are chatting with an AI assistant.')
   })
 
-  it('saves where it sits by merging into the stored widget block', async () => {
+  it('hands where it sits to the page, which saves it; it has no save button of its own', async () => {
+    const onPlacementChange = vi.fn()
     const user = userEvent.setup()
-    render(<WidgetBuilder gateway={{ ...baseGateway, configuration: { ...baseGateway.configuration, widget: { position: 'bottom-right', launcherIcon: 'help', title: 'Old' } } }} app={app} />)
+    render(
+      <WidgetBuilder
+        gateway={baseGateway}
+        app={app}
+        placement={{ position: 'bottom-right', launcherIcon: 'help' }}
+        onPlacementChange={onPlacementChange}
+      />,
+    )
 
     // Radix Select: open it and pick.
     await user.click(screen.getByLabelText('Position'))
     await user.click(await screen.findByRole('option', { name: 'Bottom left' }))
-    await user.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => expect(gatewaysApi.update).toHaveBeenCalledTimes(1))
-    expect(gatewaysApi.update).toHaveBeenCalledWith(baseGateway.id, {
-      configuration: {
-        appId: 'app-1',
-        some_channel_key: 'keep-me',
-        widget: { title: 'Old', position: 'bottom-left', launcherIcon: 'help' },
-      },
-    })
+    expect(onPlacementChange).toHaveBeenCalledWith({ position: 'bottom-left', launcherIcon: 'help' })
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
   })
 })

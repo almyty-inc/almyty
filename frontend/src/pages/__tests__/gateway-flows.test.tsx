@@ -37,7 +37,6 @@ vi.mock('@/lib/api', async () => {
       generateApiKey: vi.fn(),
       revokeApiKey: vi.fn(),
       getEvents: vi.fn(),
-      testChannelConnection: vi.fn(),
       activate: vi.fn(),
       deactivate: vi.fn(),
     },

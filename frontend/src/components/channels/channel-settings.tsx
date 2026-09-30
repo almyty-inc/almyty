@@ -45,7 +45,14 @@ import type { Agent } from '@/types'
 import { BuildPanel } from './build-panel'
 import { CHANNEL_STATUS } from './channel-meta'
 import { channelKeys, channelsTabPath } from './channel-page-loader'
-import { A2aChannelSettings, WebChatLink, WebChatSettings, WidgetChannelSettings } from './hosted-channels'
+import {
+  A2aChannelSettings,
+  SurfaceFieldError,
+  WebChatLink,
+  WebChatSettings,
+  WidgetChannelSettings,
+  useSurfaceSettings,
+} from './hosted-channels'
 import {
   PublicSettingsFields,
   formFromEffective,
@@ -65,6 +72,12 @@ export interface ChannelSettingsProps {
   inherited: EffectiveSettings
 }
 
+/** What to do when a messaging channel has no keys yet, in plain words. */
+export function missingKeysLine(type: AgentChannel['type']): string {
+  if (type === 'slack') return 'Pick or create the Slack app credential first.'
+  return `Pick or create the ${CHANNEL_LABELS[type] ?? type} credential first.`
+}
+
 const list = (text: string) =>
   text
     .split(',')
@@ -78,7 +91,8 @@ const list = (text: string) =>
  *
  * The settings are one form with one Save. Publishing and building are
  * actions on what is saved, so they are buttons of their own. The web
- * chat's sign-in, domain and allowed-site cards save themselves.
+ * chat's sign-in provider, domain and allowed sites, and where the widget
+ * sits, are stored on the gateway it answers on and saved by the same Save.
  */
 export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsProps) {
   const { success, error: errorNotif } = useNotifications()
@@ -156,7 +170,11 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
     (packaged && bundleId !== storedBundleId) ||
     capabilitiesChanged ||
     overridesChanged
-  const guard = useLeaveGuard(dirty)
+  const surface = useSurfaceSettings(stored)
+  const pageDirty = dirty || surface.dirty
+  const guard = useLeaveGuard(pageDirty)
+  // Missing keys are said once someone tries to publish, not on first view.
+  const [triedPublish, setTriedPublish] = useState(false)
 
   const { data: check } = useQuery({
     queryKey: channelKeys.check(agent.id, channel.id),
@@ -174,15 +192,22 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   }
 
   const save = useMutation({
-    mutationFn: (body: Parameters<typeof agentChannelsApi.update>[2]) => agentChannelsApi.update(agent.id, channel.id, body),
+    mutationFn: async (body: Parameters<typeof agentChannelsApi.update>[2]) => {
+      const saved = Object.keys(body).length ? await agentChannelsApi.update(agent.id, channel.id, body) : null
+      await surface.save()
+      return saved
+    },
     onSuccess: (saved) => {
-      success('Saved', `${saved.name} is updated.`)
+      success('Saved', `${(saved ?? stored).name} is updated.`)
+      if (!saved) return refresh()
       setCredentialTouched(false)
       setName(saved.name)
       setSlug(saved.slug ?? '')
       refresh(saved)
     },
     onError: (err: unknown, body) => {
+      // The field it failed on says why.
+      if (err instanceof SurfaceFieldError) return
       const message = getApiErrorMessage(err, 'Please try again.')
       // A taken name or address is said next to the field it is about.
       if (body.slug !== undefined && /address/i.test(message)) setSlugError(message)
@@ -278,7 +303,8 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
       body.branding = overrides.branding
       body.visitorRules = overrides.visitorRules
     }
-    if (Object.keys(body).length === 0) return
+    if (!surface.validate()) return
+    if (Object.keys(body).length === 0 && !surface.dirty) return
     save.mutate(body)
   }
 
@@ -289,7 +315,16 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   const status = CHANNEL_STATUS[stored.status] ?? CHANNEL_STATUS.draft
 
   const usingCredential = credentialTouched ? credentialId : storedCredential
-  const missingKeys = (check?.refusals ?? []).find((r) => r.code === 'MISSING_CREDENTIALS')?.message
+  const keysMissing = !live && (check?.refusals ?? []).some((r) => r.code === 'MISSING_CREDENTIALS')
+  const missingKeys = triedPublish && keysMissing ? missingKeysLine(type) : undefined
+  const tryPublish = () => {
+    if (keysMissing) {
+      setTriedPublish(true)
+      errorNotif('Could not publish', missingKeysLine(type))
+      return
+    }
+    publish.mutate()
+  }
   const disclosureRefusal = (check?.refusals ?? []).find((r) => r.code === 'DISCLOSURE_REMOVAL_NOT_ENTITLED')?.message
   const disclosureLine = stored.effective.branding.aiDisclosure?.trim() || DEFAULT_AI_DISCLOSURE
 
@@ -305,6 +340,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
       onChange={(picked) => {
         setCredentialTouched(true)
         setCredentialId(picked?.id ?? null)
+        setTriedPublish(false)
       }}
       required
       hint={hint}
@@ -354,10 +390,10 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
       {type === 'web' && !slugChanged && <WebChatLink channel={stored} />}
       {notReady}
       <div>
-        <Button type="button" variant="outline" disabled={publish.isPending || dirty} onClick={() => publish.mutate()}>
+        <Button type="button" variant="outline" disabled={publish.isPending || pageDirty} onClick={tryPublish}>
           {publish.isPending ? (live ? 'Unpublishing...' : 'Publishing...') : live ? 'Unpublish' : 'Publish'}
         </Button>
-        {dirty && <p className="mt-1 text-xs text-muted-foreground">Save your changes first.</p>}
+        {pageDirty && <p className="mt-1 text-xs text-muted-foreground">Save your changes first.</p>}
       </div>
     </FormSection>
   )
@@ -385,7 +421,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
       onSubmit={submit}
       submitLabel="Save"
       submitting={save.isPending}
-      submitDisabled={!dirty || (own && retentionInvalid(overrideForm))}
+      submitDisabled={!pageDirty || (own && retentionInvalid(overrideForm))}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">{label}</Badge>
@@ -485,8 +521,8 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
 
       {messaging && publishSection}
 
-      {type === 'web' && <WebChatSettings channel={stored} />}
-      {type === 'widget' && <WidgetChannelSettings channel={stored} />}
+      {type === 'web' && <WebChatSettings channel={stored} surface={surface} />}
+      {type === 'widget' && <WidgetChannelSettings channel={stored} surface={surface} />}
       {type === 'a2a' && <A2aChannelSettings channel={stored} orgSlug={orgSlug} />}
 
       {buildable && (

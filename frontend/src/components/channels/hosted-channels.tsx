@@ -1,17 +1,26 @@
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink } from 'lucide-react'
 
 import { FormSection } from '@/components/layout/form-page'
 import { CopyField } from '@/components/ui/copy-field'
 import { WhoCanUseLine } from '@/components/connect/who-can-use'
-import { AllowedOriginsCard } from '@/components/gateways/allowed-origins-card'
-import { CustomDomainCard } from '@/components/gateways/custom-domain-card'
+import { AllowedOriginsField, allowedOriginsFrom } from '@/components/gateways/allowed-origins-card'
+import { CustomDomainField, customDomainKey, type CustomDomainView } from '@/components/gateways/custom-domain-card'
 import { GatewayAuthSection } from '@/components/gateways/detail/gateway-auth-section'
 import { HostedChatSsoUrls } from '@/components/gateways/hosted-chat-sso-urls'
-import { VisitorOAuthCard } from '@/components/gateways/visitor-oauth-card'
-import { WidgetBuilder } from '@/components/gateways/widget-builder'
+import {
+  VisitorOAuthCard,
+  visitorOAuthBody,
+  visitorOAuthKey,
+  visitorOAuthProblem,
+  type VisitorOAuthDraft,
+  type VisitorOAuthState,
+} from '@/components/gateways/visitor-oauth-card'
+import { WidgetBuilder, widgetPlacementFrom, type WidgetPlacement } from '@/components/gateways/widget-builder'
 import { useEntitlements } from '@/hooks/use-entitlement'
 import { gatewaysApi, getApiBaseUrl } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { a2aAddresses, webChatUrl, type AgentChannel } from '@/lib/agent-channels'
 
 /** The gateway a published channel answers on, once there is one. */
@@ -22,6 +31,121 @@ function useChannelGateway(gatewayId: string | null) {
     enabled: !!gatewayId,
   }).data
 }
+
+/** A save that failed on a field of the page; the field says why, so no toast is needed. */
+export class SurfaceFieldError extends Error {}
+
+interface SurfaceEdits {
+  domain?: string
+  allowedOrigins?: string[]
+  placement?: WidgetPlacement
+  oauth?: VisitorOAuthDraft | null
+}
+
+/**
+ * The web chat's and the widget's settings that live on the gateway they
+ * answer on: the custom domain, the allowed sites, where the widget sits
+ * and the visitor sign-in provider. They are fields of the channel page,
+ * saved by its one Save.
+ */
+export function useSurfaceSettings(channel: AgentChannel) {
+  const queryClient = useQueryClient()
+  const web = channel.type === 'web'
+  const gatewayId = web || channel.type === 'widget' ? channel.gatewayId : null
+  const gateway = useChannelGateway(gatewayId)
+  const { data: domain } = useQuery<CustomDomainView | null>({
+    queryKey: customDomainKey(gatewayId ?? ''),
+    queryFn: () => gatewaysApi.getCustomDomain(gatewayId!),
+    enabled: web && !!gatewayId,
+  })
+  const oauthOn = web && channel.effective.visitorRules.authMode === 'oauth'
+  const { data: oauth } = useQuery<VisitorOAuthState>({
+    queryKey: visitorOAuthKey(gatewayId ?? ''),
+    queryFn: () => gatewaysApi.getVisitorOAuth(gatewayId!),
+    enabled: oauthOn && !!gatewayId,
+  })
+
+  const [edits, setEdits] = useState<SurfaceEdits>({})
+  const [errors, setErrors] = useState<{ domain?: string; oauth?: string }>({})
+
+  const saved = {
+    domain: domain?.hostname ?? '',
+    allowedOrigins: allowedOriginsFrom(gateway?.configuration),
+    placement: widgetPlacementFrom(gateway?.configuration),
+  }
+  const values = {
+    domain: edits.domain ?? saved.domain,
+    allowedOrigins: edits.allowedOrigins ?? saved.allowedOrigins,
+    placement: edits.placement ?? saved.placement,
+    oauth: edits.oauth ?? null,
+  }
+  const changed = {
+    domain: web && values.domain.trim().toLowerCase() !== saved.domain,
+    allowedOrigins: JSON.stringify(values.allowedOrigins) !== JSON.stringify(saved.allowedOrigins),
+    placement: channel.type === 'widget' && JSON.stringify(values.placement) !== JSON.stringify(saved.placement),
+    oauth: oauthOn && values.oauth !== null,
+  }
+  const dirty = !!gatewayId && Object.values(changed).some(Boolean)
+
+  const set = (patch: SurfaceEdits) => {
+    setEdits((e) => ({ ...e, ...patch }))
+    if ('domain' in patch) setErrors((e) => ({ ...e, domain: undefined }))
+    if ('oauth' in patch) setErrors((e) => ({ ...e, oauth: undefined }))
+  }
+
+  /** Says, next to the field, what is missing before a save; false when something is. */
+  const validate = (): boolean => {
+    if (!changed.oauth || !values.oauth) return true
+    const problem = visitorOAuthProblem(values.oauth, oauth?.provider ?? null)
+    setErrors((e) => ({ ...e, oauth: problem ?? undefined }))
+    return !problem
+  }
+
+  const save = async () => {
+    if (!gatewayId || !dirty) return
+    if (changed.allowedOrigins || changed.placement) {
+      // Merge, never replace: the configuration also carries the channel
+      // link and whatever else the gateway holds.
+      const configuration = gateway?.configuration ?? {}
+      const widget = configuration.widget && typeof configuration.widget === 'object' ? configuration.widget : {}
+      await gatewaysApi.update(gatewayId, {
+        configuration: {
+          ...configuration,
+          allowedOrigins: values.allowedOrigins,
+          ...(channel.type === 'widget' ? { widget: { ...widget, ...values.placement } } : {}),
+        },
+      })
+      await queryClient.invalidateQueries({ queryKey: ['gateway', gatewayId] })
+      setEdits(({ allowedOrigins: _o, placement: _p, ...rest }) => rest)
+    }
+    if (changed.domain) {
+      const hostname = values.domain.trim()
+      try {
+        const next = hostname ? await gatewaysApi.setCustomDomain(gatewayId, hostname) : null
+        if (!hostname) await gatewaysApi.removeCustomDomain(gatewayId)
+        queryClient.setQueryData(customDomainKey(gatewayId), next)
+        setEdits(({ domain: _d, ...rest }) => rest)
+      } catch (err) {
+        setErrors((e) => ({ ...e, domain: getApiErrorMessage(err, 'Please try again.') }))
+        throw new SurfaceFieldError()
+      }
+    }
+    if (changed.oauth && values.oauth) {
+      try {
+        const next = await gatewaysApi.setVisitorOAuth(gatewayId, visitorOAuthBody(values.oauth))
+        queryClient.setQueryData(visitorOAuthKey(gatewayId), next)
+        setEdits(({ oauth: _a, ...rest }) => rest)
+      } catch (err) {
+        setErrors((e) => ({ ...e, oauth: getApiErrorMessage(err, 'Please try again.') }))
+        throw new SurfaceFieldError()
+      }
+    }
+  }
+
+  return { gateway, domain, values, set, errors, dirty, validate, save }
+}
+
+export type SurfaceSettings = ReturnType<typeof useSurfaceSettings>
 
 /**
  * The live web chat's link, to copy and open. Before it is published the
@@ -44,26 +168,29 @@ export function WebChatLink({ channel }: { channel: AgentChannel }) {
 /**
  * Everything about the web chat that is not the link: how people sign in
  * (the sign-in rule itself is under branding and visitor rules), your own
- * domain, and which sites may embed it. These cards save themselves and
- * are keyed by the gateway the chat was published as.
+ * domain, and which sites may embed it. All saved with the page.
  */
-export function WebChatSettings({ channel }: { channel: AgentChannel }) {
+export function WebChatSettings({ channel, surface }: { channel: AgentChannel; surface: SurfaceSettings }) {
   const entitlements = useEntitlements()
   const gatewayId = channel.gatewayId
-  const gateway = useChannelGateway(gatewayId)
   const authMode = channel.effective.visitorRules.authMode
 
   return (
     <>
-      {authMode === 'oauth' && (
-        <FormSection title="Sign-in">
-          {gatewayId ? (
-            <VisitorOAuthCard gatewayId={gatewayId} authMode={authMode} />
-          ) : (
+      {authMode === 'oauth' &&
+        (gatewayId ? (
+          <VisitorOAuthCard
+            gatewayId={gatewayId}
+            authMode={authMode}
+            draft={surface.values.oauth}
+            onDraftChange={(oauth) => surface.set({ oauth })}
+            error={surface.errors.oauth}
+          />
+        ) : (
+          <FormSection title="Sign-in">
             <p className="text-sm text-muted-foreground">Publish it, then pick the provider people sign in with.</p>
-          )}
-        </FormSection>
-      )}
+          </FormSection>
+        ))}
       {authMode === 'sso' && gatewayId && entitlements.has('sso') && channel.slug && (
         <FormSection title="Sign-in">
           <HostedChatSsoUrls gatewayId={gatewayId} savedSlug={channel.slug} />
@@ -71,11 +198,19 @@ export function WebChatSettings({ channel }: { channel: AgentChannel }) {
       )}
       {gatewayId ? (
         <>
-          <CustomDomainCard gatewayId={gatewayId} />
-          {gateway && (
-            <AllowedOriginsCard
-              key={`${gateway.id}:${JSON.stringify(gateway.configuration?.allowedOrigins ?? [])}`}
-              gateway={{ id: gateway.id, type: gateway.type, configuration: gateway.configuration }}
+          <CustomDomainField
+            gatewayId={gatewayId}
+            domain={surface.domain}
+            value={surface.values.domain}
+            onChange={(domain) => surface.set({ domain })}
+            error={surface.errors.domain}
+          />
+          {surface.gateway && (
+            <AllowedOriginsField
+              id={`allowed-origin-${gatewayId}`}
+              what="this web chat"
+              value={surface.values.allowedOrigins}
+              onChange={(allowedOrigins) => surface.set({ allowedOrigins })}
             />
           )}
         </>
@@ -94,8 +229,8 @@ export function WebChatSettings({ channel }: { channel: AgentChannel }) {
  * There is no sign-in on a widget, so who can use it is whoever visits a
  * site it is allowed on.
  */
-export function WidgetChannelSettings({ channel }: { channel: AgentChannel }) {
-  const gateway = useChannelGateway(channel.gatewayId)
+export function WidgetChannelSettings({ channel, surface }: { channel: AgentChannel; surface: SurfaceSettings }) {
+  const gateway = surface.gateway
 
   if (!channel.gatewayId) {
     return (
@@ -116,10 +251,14 @@ export function WidgetChannelSettings({ channel }: { channel: AgentChannel }) {
       <WidgetBuilder
         gateway={gateway}
         app={{ name: channel.effective.branding.appName, branding: channel.effective.branding }}
+        placement={surface.values.placement}
+        onPlacementChange={(placement) => surface.set({ placement })}
       />
-      <AllowedOriginsCard
-        key={`${gateway.id}:${JSON.stringify(gateway.configuration?.allowedOrigins ?? [])}`}
-        gateway={{ id: gateway.id, type: gateway.type, configuration: gateway.configuration }}
+      <AllowedOriginsField
+        id={`allowed-origin-${gateway.id}`}
+        what="this widget"
+        value={surface.values.allowedOrigins}
+        onChange={(allowedOrigins) => surface.set({ allowedOrigins })}
       />
     </>
   )

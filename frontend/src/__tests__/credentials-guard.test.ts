@@ -144,17 +144,14 @@ describe('one pick-or-create control', () => {
     }
   })
 
-  it('has no new look-alikes: the older add button and select are used only where they were', () => {
-    // The channel form moves to CredentialPicker with its own rework;
-    // nothing new may join it. The model provider forms already have.
+  it('has no look-alikes: the older add button and select stay inside components/connections', () => {
+    // Every key is picked or created with CredentialPicker.
     const users = sourceFiles(SRC)
       .filter((f) => /\b(ConnectAccountButton|ConnectionSelect)\b/.test(readFileSync(f, 'utf8')))
       .map((f) => relative(SRC, f))
       .filter((rel) => !rel.startsWith('components/connections/'))
       .sort()
-    expect(users).toEqual([
-      'components/gateways/detail/channel-config-form.tsx',
-    ])
+    expect(users).toEqual([])
   })
 
   it('leaves no secret to be typed into an API, tool or package form itself', () => {

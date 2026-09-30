@@ -491,8 +491,6 @@ export const gatewaysApi = {
 
   deactivate: (id: string) => apiPost(`/gateways/${id}/deactivate`),
 
-  testChannelConnection: (id: string) => apiPost(`/gateways/${id}/test-connection`),
-
   // Multi-workspace channel installations (e.g. Slack OAuth installs)
   getInstallations: (id: string) => apiGet(`/gateways/${id}/installations`),
 

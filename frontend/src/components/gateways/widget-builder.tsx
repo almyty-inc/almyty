@@ -8,8 +8,8 @@
  * (widgetConfigFor in the backend), so it is edited under branding and
  * visitor rules, and not here.
  * What is the widget's own is where it sits and which launcher icon it
- * shows: `gateway.configuration.widget`, saved as a MERGE so everything
- * else on the gateway is left alone.
+ * shows: `gateway.configuration.widget`, edited here and saved with the
+ * channel page as a MERGE so everything else on the gateway is left alone.
  *
  * Live preview: an iframe (srcdoc) loads the REAL widget.js from the API
  * for this gateway, so the preview is exactly what the site embeds. The
@@ -18,13 +18,9 @@
  * current (unsaved) placement.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { Field, FormSection } from '@/components/layout/form-page'
-import { Button } from '@/components/ui/button'
 import { CopyField } from '@/components/ui/copy-field'
 import { Label } from '@/components/ui/label'
 import {
@@ -35,11 +31,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-import { gatewaysApi, getApiBaseUrl } from '@/lib/api'
-import { useNotifications } from '@/store/app'
+import { getApiBaseUrl } from '@/lib/api'
 import { buildWidgetEmbedSnippet } from '@/components/gateways/widget-embed'
-import { getApiErrorMessage } from '@/lib/api-error'
-import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 /** Where the widget sits and how its launcher looks: the widget's own settings. */
 export const widgetPlacementSchema = z.object({
@@ -157,58 +150,25 @@ export interface WidgetBuilderProps {
   }
   /** The channel's resolved branding (the agent's, or its own), whose look it shows. */
   app: WidgetOwnerApp
+  /** Where it sits, as edited on the page; saved with the page. */
+  placement: WidgetPlacement
+  onPlacementChange: (placement: WidgetPlacement) => void
 }
 
-export function WidgetBuilder({ gateway, app }: WidgetBuilderProps) {
-  const queryClient = useQueryClient()
-  const { success, error: errorNotif } = useNotifications()
-
-  const saved = widgetPlacementFrom(gateway.configuration)
-  const form = useForm<WidgetPlacement>({
-    resolver: zodResolver(widgetPlacementSchema),
-    values: saved,
-  })
-
-  const saveMutation = useMutation({
-    mutationFn: (placement: WidgetPlacement) => {
-      // Merge, never replace: the configuration also carries the channel link
-      // and whatever else the gateway holds.
-      const configuration = gateway.configuration ?? {}
-      const widget = configuration.widget && typeof configuration.widget === 'object' ? configuration.widget : {}
-      return gatewaysApi.update(gateway.id, {
-        configuration: { ...configuration, widget: { ...widget, ...placement } },
-      })
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['gateway', gateway.id] })
-      success('Saved', 'Websites with the widget pick this up within a minute.')
-    },
-    onError: (err: unknown) => {
-      errorNotif('Could not save', getApiErrorMessage(err, 'Please try again.'))
-    },
-  })
-
-  // A moved widget not yet saved asks before a navigation throws it away.
-  // A save refetches the gateway, which resets the form to it.
-  const guard = useLeaveGuard(form.formState.isDirty && !saveMutation.isPending)
-
+export function WidgetBuilder({ gateway, app, placement, onPlacementChange }: WidgetBuilderProps) {
   const apiBase = getApiBaseUrl()
   const scriptSrc = `${apiBase}/gateways/${gateway.id}/widget.js`
   const embedSnippet = buildWidgetEmbedSnippet(apiBase, gateway.id)
   const look = widgetLookFromApp(app)
 
   // Debounced preview: re-render the iframe once the placement settles.
-  const watched = form.watch()
-  const watchedKey = JSON.stringify(watched)
-  const [previewPlacement, setPreviewPlacement] = useState<WidgetPlacement>(saved)
+  const placementKey = JSON.stringify(placement)
+  const [previewPlacement, setPreviewPlacement] = useState<WidgetPlacement>(placement)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const parsed = widgetPlacementSchema.safeParse(watched)
-      if (parsed.success) setPreviewPlacement(parsed.data)
-    }, 300)
+    const timer = setTimeout(() => setPreviewPlacement(placement), 300)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchedKey])
+  }, [placementKey])
 
   const lookKey = JSON.stringify(look)
   const previewSrcDoc = useMemo(
@@ -231,11 +191,11 @@ export function WidgetBuilder({ gateway, app }: WidgetBuilderProps) {
         description="The colour, name, greeting and theme come from the branding and visitor rules, so it looks the same everywhere."
       >
         <div className="grid gap-6 lg:grid-cols-2">
-          <form className="space-y-4" onSubmit={form.handleSubmit((data) => saveMutation.mutate(data))}>
+          <div className="space-y-4">
             <Field id="widget-position" label="Position">
               <Select
-                value={form.watch('position')}
-                onValueChange={(v) => form.setValue('position', v as WidgetPlacement['position'], { shouldDirty: true })}
+                value={placement.position}
+                onValueChange={(v) => onPlacementChange({ ...placement, position: v as WidgetPlacement['position'] })}
               >
                 <SelectTrigger id="widget-position" aria-label="Position">
                   <SelectValue />
@@ -248,8 +208,8 @@ export function WidgetBuilder({ gateway, app }: WidgetBuilderProps) {
             </Field>
             <Field id="widget-launcher-icon" label="Launcher icon">
               <Select
-                value={form.watch('launcherIcon')}
-                onValueChange={(v) => form.setValue('launcherIcon', v as WidgetPlacement['launcherIcon'], { shouldDirty: true })}
+                value={placement.launcherIcon}
+                onValueChange={(v) => onPlacementChange({ ...placement, launcherIcon: v as WidgetPlacement['launcherIcon'] })}
               >
                 <SelectTrigger id="widget-launcher-icon" aria-label="Launcher icon">
                   <SelectValue />
@@ -261,10 +221,7 @@ export function WidgetBuilder({ gateway, app }: WidgetBuilderProps) {
                 </SelectContent>
               </Select>
             </Field>
-            <Button type="submit" variant="outline" disabled={!form.formState.isDirty || saveMutation.isPending}>
-              {saveMutation.isPending ? 'Saving...' : 'Save'}
-            </Button>
-          </form>
+          </div>
 
           <div>
             <Label>Preview</Label>
@@ -280,7 +237,6 @@ export function WidgetBuilder({ gateway, app }: WidgetBuilderProps) {
           </div>
         </div>
       </FormSection>
-      {guard.element}
     </>
   )
 }

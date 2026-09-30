@@ -4,7 +4,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { render } from '../../../test/setup'
 
-import { WebChatSettings } from '../../channels/hosted-channels'
+import { WebChatSettings, useSurfaceSettings } from '../../channels/hosted-channels'
 import type { AgentChannel } from '@/lib/agent-channels'
 
 vi.mock('@/lib/api', () => ({
@@ -44,7 +44,11 @@ const web = (authMode = 'sso') =>
     visitorRules: null,
     effective: { branding: { appName: 'Acme' }, visitorRules: { authMode } },
   }) as unknown as AgentChannel
-const renderWeb = (authMode = 'sso') => render(<WebChatSettings channel={web(authMode)} />)
+function Web({ channel }: { channel: AgentChannel }) {
+  const surface = useSurfaceSettings(channel)
+  return <WebChatSettings channel={channel} surface={surface} />
+}
+const renderWeb = (authMode = 'sso') => render(<Web channel={web(authMode)} />)
 
 let writeText: ReturnType<typeof vi.fn>
 
