@@ -53,6 +53,8 @@ import { ToolScriptExecutor } from './executors/tool-script.executor';
 import { ToolCacheRateLimitHelper } from './tool-cache-rate-limit.helper';
 import { ToolStatsHelper } from './tool-stats.helper';
 import { RunnerCallService, RunnerCallError } from '../runner/runner-call.service';
+import { RunWorkspaceService } from '../runner/run-workspace.service';
+import { getRequestContext } from '../../common/request-context';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
 import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
 import { McpClientError } from '../mcp-sources/mcp-client.service';
@@ -117,6 +119,10 @@ export class ToolExecutorService {
     // absence is not tolerated -- executeTool refuses to run anything
     // without it. ToolsModule imports AuthorizationModule, which provides it.
     @Optional() private readonly executionAccess?: ExecutionAccessService,
+    // Workspaces for agent runs whose runner tool needs one and names none.
+    // @Optional() only so the positional spec harnesses keep their order;
+    // without it such a call is told it needs a workspaceId.
+    @Optional() private readonly runWorkspaces?: RunWorkspaceService,
   ) {}
 
   // ─── Public entry point ────────────────────────────────────────
@@ -670,12 +676,12 @@ export class ToolExecutorService {
    * MCP handlers) sees uniform shape regardless of how dispatch
    * failed.
    *
-   * Workspace handling: tools whose runnerConfig.requiresWorkspace
-   * is true require parameters.workspaceId to be set by the caller.
-   * The runner resolves workspaceId to a process-bound workspace dir
-   * and refuses if the workspace isn't ACTIVE for that runner. We
-   * surface the missing-workspace case here so the runner doesn't
-   * have to guess what the caller intended.
+   * Workspace handling: a tool whose runnerConfig.requiresWorkspace is
+   * true runs inside a workspace. The caller may name one
+   * (parameters.workspaceId). An agent run that names none gets one on
+   * the runner the call goes to, made and reused for the rest of the run
+   * by RunWorkspaceService; failing to get one is the call's error. Any
+   * other caller with no workspaceId is told it needs one.
    */
   private async executeRunnerCall(
     tool: Tool,
@@ -684,9 +690,11 @@ export class ToolExecutorService {
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
     const cfg = tool.runnerConfig!;
-    const workspaceId = typeof parameters.workspaceId === 'string' ? parameters.workspaceId : undefined;
+    let workspaceId = typeof parameters.workspaceId === 'string' ? parameters.workspaceId : undefined;
+    const scope = getRequestContext();
+    const runId = options.runId ?? scope?.runId ?? null;
 
-    if (cfg.requiresWorkspace && !workspaceId) {
+    if (cfg.requiresWorkspace && !workspaceId && !(runId && this.runWorkspaces)) {
       return {
         success: false,
         error: `Tool '${tool.name}' requires a workspaceId parameter; runner-backed methods scoped to a workspace cannot run without one.`,
@@ -703,6 +711,19 @@ export class ToolExecutorService {
     const { workspaceId: _ws, ...callParams } = parameters;
 
     try {
+      if (cfg.requiresWorkspace && !workspaceId && runId && this.runWorkspaces) {
+        const workspace = await this.runWorkspaces.acquire({
+          runnerId: cfg.runnerId,
+          organizationId: options.organizationId,
+          runId,
+          agentId: options.agentId ?? scope?.agentId ?? null,
+          callerUserId: options.userId ?? null,
+          principal: options.principal,
+          labels: options.runnerLabels,
+          signal: options.signal,
+        });
+        workspaceId = workspace.id;
+      }
       const response = await this.runnerCalls.dispatch(
         cfg.runnerId,
         cfg.method,

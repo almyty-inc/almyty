@@ -1041,7 +1041,8 @@
       "title": "Runner detail",
       "path": "screenshots/runner-detail.png",
       "capturedAt": "2026-09-30T11:23:08.842Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The runner's Workspaces tab now shows the agent and run each workspace was made for and a Release button; recapture the runner page to confirm.",
       "sha256": "cfef5f1482e3477cfca4d98118dcffb687171b13531b09b64d8f1e6bdda1d33b",
       "source": {
         "kind": "browser",
@@ -1064,7 +1065,8 @@
       "title": "Runners",
       "path": "screenshots/runners-list.png",
       "capturedAt": "2026-09-30T11:23:06.295Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The shared runner components changed (the Workspaces tab gained agent/run and Release columns); the runners list should look the same, but recapture it to confirm.",
       "sha256": "68fe07c48ed6f75381ff9c753b580c5705ed901412b95825f17a1d5be726e829",
       "source": {
         "kind": "browser",
@@ -1406,7 +1408,8 @@
       "title": "Tool test",
       "path": "screenshots/tool-detail.png",
       "capturedAt": "2026-09-30T11:22:24.846Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The Test tab's no-workspace line now says agent runs get a workspace automatically instead of pointing at POST /workspaces; recapture the page to confirm.",
       "sha256": "512e0732f1250cfcaf175345d27bc5da6cfeb884a68554f15eacf36fc701d0cf",
       "source": {
         "kind": "browser",

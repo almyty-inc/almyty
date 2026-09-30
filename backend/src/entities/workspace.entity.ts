@@ -11,6 +11,7 @@ import {
 import { User } from './user.entity';
 import { Organization } from './organization.entity';
 import { Runner, RunnerIsolationTier } from './runner.entity';
+import { Agent } from './agent.entity';
 
 /**
  * Workspace lifecycle. Once a workspace is in a terminal state
@@ -108,4 +109,31 @@ export class Workspace {
 
   @Column({ type: 'timestamptz', nullable: true })
   closedAt: Date | null;
+
+  /**
+   * The folder's name on the runner, for a workspace an agent run was
+   * given automatically (`<agent>-<run>`). Null for one made through
+   * `POST /workspaces`.
+   */
+  @Column({ type: 'text', nullable: true })
+  name: string | null;
+
+  /**
+   * The agent whose run needed this workspace (RunWorkspaceService). Null
+   * for one made through `POST /workspaces`, and once the agent is deleted.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  agentId: string | null;
+
+  @ManyToOne(() => Agent, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'agentId' })
+  agent?: Agent | null;
+
+  /**
+   * The run that needed it: an autonomous run (agent_runs) or a workflow
+   * execution (agent_executions), so no foreign key. The rest of that run
+   * reuses the workspace; at most one active workspace per (run, runner).
+   */
+  @Column({ type: 'uuid', nullable: true })
+  runId: string | null;
 }

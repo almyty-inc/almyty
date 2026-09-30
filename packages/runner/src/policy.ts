@@ -172,3 +172,15 @@ export function enforceShellPolicy(
   assertCommandAllowed(config, cmd);
   return { env: sanitizeEnv(env) };
 }
+
+/**
+ * Enforce policy for a workspace folder the runner is asked to make
+ * (`workspace.prepare`). The folder is held to `allowedCwdRoots` like any
+ * cwd, and a runner that refuses every command (container isolation,
+ * networkBlocked) refuses the folder too rather than making one nothing
+ * can run in.
+ */
+export function enforceWorkspaceFolderPolicy(config: RunnerConfig, dir: string): void {
+  assertIsolationSupported(config);
+  assertCwdAllowed(config, dir);
+}

@@ -38,7 +38,10 @@ export class WorkspaceController {
   @Get(':id')
   async getOne(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     const { ownerUserId, organizationId } = ctx(req);
-    const data = await this.service.getOne(id, ownerUserId, organizationId);
+    const [data] = await this.service.attachAgentNames(
+      [await this.service.getOne(id, ownerUserId, organizationId)],
+      organizationId,
+    );
     return { success: true, data };
   }
 

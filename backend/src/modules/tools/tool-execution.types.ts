@@ -59,6 +59,12 @@ export interface ToolExecutionOptions {
   gatewayId?: string | null;
   runId?: string | null;
   /**
+   * The agent whose run made this call (else the correlation scope's).
+   * A runner-backed tool that needs a workspace and was given none gets
+   * one for this run, attributed to this agent (RunWorkspaceService).
+   */
+  agentId?: string | null;
+  /**
    * The `gateway_tools.securityPolicy` row governing this call.
    *
    * Normally left undefined: `ToolExecutorService.executeTool` resolves it

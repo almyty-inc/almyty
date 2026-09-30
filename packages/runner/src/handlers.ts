@@ -1,6 +1,8 @@
-import { isAbsolute, resolve as resolvePath } from 'path';
+import { mkdir, realpath } from 'fs/promises';
+import { homedir } from 'os';
+import { isAbsolute, join, resolve as resolvePath } from 'path';
 import { ProcessManager, shellExec } from './process-manager.js';
-import { enforceSpawnPolicy, enforceShellPolicy } from './policy.js';
+import { enforceSpawnPolicy, enforceShellPolicy, enforceWorkspaceFolderPolicy } from './policy.js';
 import { detectRuntimeInfo, RUNNER_VERSION } from './runtime-info.js';
 import { RequestPayload, ResponsePayload, WORKER_ERROR_CODES } from './protocol.js';
 import {
@@ -54,6 +56,11 @@ export interface HandlerContext {
   coding?: CodingSessionManager;
   /** Test injection for coding.list's binary probing. */
   probeExec?: ProbeExec;
+  /**
+   * Where `workspace.prepare` makes folders. Unset: under the first
+   * allowedCwdRoot, else ~/.almyty/workspaces (workspaceFolderRoot).
+   */
+  workspacesRoot?: string;
 }
 
 export async function dispatchHandler(ctx: HandlerContext, req: RequestPayload): Promise<ResponsePayload> {
@@ -69,6 +76,7 @@ export async function dispatchHandler(ctx: HandlerContext, req: RequestPayload):
       case 'process.wait': return ok(await waitH(ctx, req));
       case 'shell.exec': return ok(await shell(ctx, req));
       case 'runner.info': return ok(await info(ctx));
+      case 'workspace.prepare': return ok(await workspacePrepare(ctx, req));
       case 'agent.list': return ok(agentList());
       case 'agent.spawn': return ok(await agentSpawn(ctx, req));
       case 'agent.status': return ok(agentStatus(ctx, req));
@@ -375,6 +383,44 @@ function codingStop(ctx: HandlerContext, req: RequestPayload): unknown {
   const coding = requireCoding(ctx);
   const p = req.params as { sessionId?: string; force?: boolean };
   return coding.stop(requireString(p.sessionId, 'sessionId'), p.force === true);
+}
+
+// ── workspace folders ───────────────────────────────────────────────
+
+/** A folder name the backend may ask for: `<agent>-<run>`, nothing path-like. */
+const WORKSPACE_FOLDER_NAME = /^[a-z0-9][a-z0-9-]{0,79}$/;
+
+/**
+ * Where automatic workspace folders go on this machine: `almyty-workspaces`
+ * under the first allowedCwdRoot when roots are configured (so the folder
+ * passes the same policy every command in it is held to), else
+ * ~/.almyty/workspaces.
+ */
+export function workspaceFolderRoot(config: RunnerConfig, home: string = homedir()): string {
+  const root = config.allowedCwdRoots?.[0];
+  return root ? join(root, 'almyty-workspaces') : join(home, '.almyty', 'workspaces');
+}
+
+/**
+ * Make (or reuse) the folder for a workspace an agent run was given, and
+ * say where it is. The backend calls this before it records the workspace,
+ * because only the machine knows its own home directory and cwd roots.
+ * Idempotent: the same name is the same folder, so a run whose workspace
+ * expired and was replaced keeps working in the files it already made.
+ */
+async function workspacePrepare(ctx: HandlerContext, req: RequestPayload): Promise<{ cwd: string }> {
+  const p = req.params as { name?: unknown };
+  const name = requireString(p?.name, 'name');
+  if (!WORKSPACE_FOLDER_NAME.test(name)) {
+    throw new RunnerError(
+      'workspace folder name must be lowercase letters, digits and dashes',
+      RUNNER_ERROR_CODES.PATH_DENIED,
+    );
+  }
+  const dir = join(ctx.workspacesRoot ?? workspaceFolderRoot(ctx.config), name);
+  enforceWorkspaceFolderPolicy(ctx.config, dir);
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  return { cwd: await realpath(dir) };
 }
 
 // ── helpers ─────────────────────────────────────────────────────────
