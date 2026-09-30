@@ -329,6 +329,13 @@ function decide({ messages, tools, system }) {
   const called = turn.flatMap((m) => (m.tool_calls || []).map((c) => c.function?.name))
   const convo = `${system || ''} ${messages.map((m) => text(m.content)).join(' ')}`
   const promptTokens = Math.max(180, Math.round(convo.length / 3.8))
+  // A question the organization's shared memory answers (the internal help
+  // desk guide adds the office Wi-Fi document there): answered from what the
+  // agent was given, without a tool. Without the document it goes on as usual.
+  if (/wi-?fi/i.test(question) && /NW-Guest/.test(convo)) {
+    const content = 'The guest Wi-Fi is NW-Guest. The password changes every Monday and is on the card at reception. Staff laptops join NW-Staff automatically. (From the office guide in shared memory.)'
+    return { content, promptTokens, completionTokens: Math.round(content.length / 4) }
+  }
   if (tools?.length && !hasToolResult) {
     const tool = pickTool(tools, question)
     return { toolCall: { name: tool.name, args: sampleArgs(tool.parameters, question) }, promptTokens, completionTokens: 42 }

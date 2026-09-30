@@ -12,7 +12,7 @@ For a full walk-through with screenshots, see [Website product chat](/examples/w
 
 ## How to build it
 
-1. **Give it your docs.** Either open **APIs**, click **Connect an API** and connect your help center's search, or, for a smaller set of pages, open **Memory**, click **Add memory**, paste a page, and under **Advanced** set **Kind** to **Document**.
+1. **Give it your docs.** Either open **APIs**, click **Connect an API** and connect your help center's search, or, for a small set of answers, open **Memory**, click **Add memory**, paste one answer per memory, and under **Advanced** set **How long to keep it** to **Shared by all agents**.
 2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write: "Answer only from the docs, and always name the page you used. If the docs don't cover it, say so and open a ticket."
 3. **Add the tools.** Under **Tools and APIs**, pick the docs search and your ticket system's "create ticket" tool. If you used memory, turn on **Remember between conversations** and set **Whose memory** to **Shared by all agents**, so it reads what you added. Save.
 4. **Add a rule it can't argue with.** On its **Constraints** tab, add "Never invent a feature or a limit that isn't in the docs."

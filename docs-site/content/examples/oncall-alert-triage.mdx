@@ -1,4 +1,4 @@
-# Summarise on-call alerts
+# Summarize on-call alerts
 
 For on-call engineers woken by a wall of alerts with no context. When an alert fires, the assistant gathers the related metrics and recent logs, compares them with past incidents, and posts a plain-language summary with the most likely runbook to your incident channel. The person on call starts fixing instead of gathering.
 
@@ -13,7 +13,7 @@ For on-call engineers woken by a wall of alerts with no context. When an alert f
 1. **Connect your signals.** Open **APIs** and click **Connect an API** for your monitoring and logging tools, and for your runbook search. For posting the summary, create a tool under **Tools**, **Create tool** that calls Slack's "post message" with your app's token from [Credentials](/credentials).
 2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write: "Given an alert, gather the related metrics and the last 15 minutes of logs, compare with earlier incidents, and post a short summary with the likely cause and runbook to #incidents." Pick the tools under **Tools and APIs**.
 3. **Let it remember.** Turn on **Remember between conversations** with **This agent's own** memory, so a recurring incident comes with last time's fix attached.
-4. **Keep it advisory.** It summarises and suggests; give it no tools that change your systems. If you later want it to act, have it ask for approval first (see [Approvals](/approvals)).
+4. **Keep it advisory.** It summarizes and suggests; give it no tools that change your systems. If you later want it to act, have it ask for approval first (see [Approvals](/approvals)).
 5. **Trigger it.** Point your alerting tool's webhook at the assistant (see below).
 
 ## Ideas
