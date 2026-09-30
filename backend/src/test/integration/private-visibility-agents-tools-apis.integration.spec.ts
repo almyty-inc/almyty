@@ -279,7 +279,6 @@ describeIfDb('private visibility on agents, tools and APIs (real Postgres)', () 
       const helper = new AgentBuiltInToolsHelper(
         ds.getRepository(Agent),
         {} as any,
-        {} as any,
         { executionAccess } as any,
         {} as any,
       );

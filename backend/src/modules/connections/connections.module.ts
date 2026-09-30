@@ -9,7 +9,7 @@ import { ModelDeploymentsModule } from '../model-deployments/model-deployments.m
 import { ConnectStateStoreFactory } from './connect-state.store';
 import { ConnectionValidationService } from './connection-validation.service';
 import { ConnectionsResolverService } from './connections-resolver.service';
-import { ConnectionsController, ConnectorsController } from './connections.controller';
+import { CredentialSignInController } from './connections.controller';
 import { ConnectionsService } from './connections.service';
 import { ConnectorCatalogService } from './connector-catalog.service';
 import { CustomConnector } from './connector.entity';
@@ -32,7 +32,7 @@ import { ConnectionOffboardingService } from './connection-offboarding.service';
     GrantsModule,
     RotationModule,
   ],
-  controllers: [ConnectorsController, ConnectionsController],
+  controllers: [CredentialSignInController],
   providers: [
     ConnectorCatalogService,
     ConnectionValidationService,

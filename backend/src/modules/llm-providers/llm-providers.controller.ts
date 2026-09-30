@@ -339,15 +339,34 @@ export class LlmProvidersController {
         message: 'Provider updated',
       };
     } catch (error) {
+      // A refusal with a code of its own (MODEL_IN_USE) keeps it, and what it names.
+      const response = error instanceof HttpException ? error.getResponse() : null;
+      const coded = response && typeof response === 'object' ? (response as Record<string, any>) : {};
       throw new HttpException(
         {
           success: false,
           message: error.message,
-          error: 'PROVIDER_UPDATE_FAILED',
+          error: typeof coded.code === 'string' ? coded.code : 'PROVIDER_UPDATE_FAILED',
+          ...(Array.isArray(coded.agents) ? { agents: coded.agents, otherAgents: coded.otherAgents ?? 0, models: coded.models } : {}),
         },
         failureStatus(error, HttpStatus.BAD_REQUEST),
       );
     }
+  }
+
+  /**
+   * The agents that use this connection, for the confirmation before it is
+   * removed. Only agents you may see are named; the rest are counted.
+   */
+  @Get(':providerId/agents')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Agents that use this provider connection' })
+  async agentsUsingProvider(@Param('providerId', ParseUUIDPipe) providerId: string, @Request() req: any) {
+    const organizationId = req.user.currentOrganizationId;
+    if (!organizationId) {
+      throw new HttpException({ success: false, message: 'No organization found', error: 'NO_ORGANIZATION' }, HttpStatus.BAD_REQUEST);
+    }
+    return { success: true, data: await this.llmProvidersService.agentsUsingProvider(providerId, organizationId, req.user.id) };
   }
 
   @Delete(':providerId')

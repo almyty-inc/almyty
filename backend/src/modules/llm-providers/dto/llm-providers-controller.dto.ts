@@ -1,11 +1,37 @@
-import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsNumber, Min, Max, IsBoolean, MaxLength, IsUUID, ValidateIf } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsNumber, Min, Max, IsBoolean, MaxLength, IsUUID, ValidateIf, ArrayMaxSize } from 'class-validator';
 import { Type } from 'class-transformer';
 
 import { LlmProviderType, LlmProviderStatus } from '../../../entities/llm-provider.entity';
 import { MessageRole, MessageContent } from '../../../entities/message.entity';
 import { RESOURCE_VISIBILITIES, type ResourceVisibility } from '../../../common/authorization/access-policy.service';
 
-export class CreateLlmProviderBodyDto {
+/**
+ * Which models a connection may be used for (llm-providers/allowed-models.ts).
+ * allowNewModels on: every model except hiddenModels. Off: only allowedModels.
+ */
+export class ModelAccessBodyDto {
+  @IsOptional()
+  @IsBoolean()
+  allowNewModels?: boolean;
+
+  @IsOptional()
+  @ValidateIf((o) => o.hiddenModels !== null)
+  @IsArray()
+  @ArrayMaxSize(2000)
+  @IsString({ each: true })
+  @MaxLength(300, { each: true })
+  hiddenModels?: string[] | null;
+
+  @IsOptional()
+  @ValidateIf((o) => o.allowedModels !== null)
+  @IsArray()
+  @ArrayMaxSize(2000)
+  @IsString({ each: true })
+  @MaxLength(300, { each: true })
+  allowedModels?: string[] | null;
+}
+
+export class CreateLlmProviderBodyDto extends ModelAccessBodyDto {
   @IsString()
   @MaxLength(100)
   name: string;
@@ -118,7 +144,7 @@ export class CreateLlmProviderBodyDto {
   usageCredentialId?: string | null;
 }
 
-export class UpdateLlmProviderBodyDto {
+export class UpdateLlmProviderBodyDto extends ModelAccessBodyDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
@@ -301,7 +327,7 @@ export class LlmProviderSearchQueryDto {
  * provider's own and can be changed later. There is no model field: the
  * provider's models are listed from the provider once the key checks out.
  */
-export class ConnectLlmProviderBodyDto {
+export class ConnectLlmProviderBodyDto extends ModelAccessBodyDto {
   @IsEnum(LlmProviderType)
   type: LlmProviderType;
 

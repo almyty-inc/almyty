@@ -143,8 +143,8 @@ Hosting:
                                                                  a model already on that platform
                                        \`adapters\` lists what each provider accepts; one that
                                        cannot read your source is refused before anything runs.
-                                       Prefer --credential (a connection made with
-                                       \`almyty connections connect\`) over pasting a key.
+                                       Prefer --credential (a credential added with
+                                       \`almyty credentials add\`) over pasting a key.
   hosted                               List hosted models: desired vs actual, state, spend
   hosted <id>                          One hosted model in full
   scale <hostedId> <replicas>          Set desired replicas; 0 scales to zero
@@ -530,7 +530,7 @@ function readStdin(): Promise<string> {
 const CONFIG_ALTERNATIVES = [
   '--config-file <path>       read the JSON object from a file',
   '--config-stdin             read the JSON object from stdin',
-  '--credential <id>          use a connection made with `almyty connections connect`',
+  '--credential <id>          use a credential added with `almyty credentials add`',
 ];
 
 /**

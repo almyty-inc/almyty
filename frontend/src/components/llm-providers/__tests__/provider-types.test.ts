@@ -8,7 +8,7 @@ import { PROVIDER_TILE_GROUPS, PROVIDER_TILE_ORDER, defaultProviderName, provide
  * The frontend's counterpart to the backend's dispatch-completeness spec.
  *
  * Hand-maintained provider lists drift the moment a type is added: a
- * provider the backend can call but /models/connect has no tile for cannot
+ * provider the backend can call but /credentials/providers/new has no tile for cannot
  * be connected at all. Deriving from the enum only helps if something fails
  * when an entry is missing, which is this.
  */
@@ -20,7 +20,7 @@ describe('every provider type can be connected, and is named', () => {
     expect(missing).toEqual([])
   })
 
-  it('has exactly one tile on /models/connect for every type', () => {
+  it('has exactly one tile on /credentials/providers/new for every type', () => {
     const missing = all.filter((t) => !PROVIDER_TILE_ORDER.includes(t))
     expect(missing).toEqual([])
     // No type twice, and nothing that is not a type.

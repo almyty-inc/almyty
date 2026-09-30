@@ -35,10 +35,10 @@ The control endpoint exposes 69 management tools, grouped by the part of the pla
 | **Tool hub** | Search the ready-made template catalog and install a template as an API plus its tools. `list_tool_templates`, `install_tool_template` |
 | **Gateways** | Create and delete gateways, assign tools, add or remove auth. `create_gateway`, `list_gateways`, `delete_gateway`, `assign_tools_to_gateway`, `add_auth_to_gateway`, `remove_auth_from_gateway` |
 | **Agents** | Full lifecycle: create, update, activate, deactivate, delete, and run. `create_agent`, `list_agents`, `update_agent`, `activate_agent`, `deactivate_agent`, `delete_agent`, `invoke_agent` |
-| **Agent Factory** | Ship an agent as a product: apps, distributions, builds. `list_apps`, `create_app`, `get_app`, `check_app`, `update_app`, `delete_app`, `add_distribution`, `remove_distribution`, `publish_distribution`, `unpublish_distribution`, `build_app`, `list_builds` |
+| **Channels** | Put an agent where people are: channels, branding and visitor rules, builds. `list_channels`, `add_channel`, `get_channel`, `check_channel`, `update_channel`, `delete_channel`, `publish_channel`, `unpublish_channel`, `get_public_settings`, `update_public_settings`, `build_channel`, `list_builds` |
 | **Providers** | Connect and list providers. `add_provider`, `list_providers` |
 | **Models** | The catalog: models, sync, validation, routing preview, models on your cloud accounts and registered versions. `list_models`, `sync_models`, `validate_model`, `preview_model_routing`, `list_model_deployments`, `list_model_versions` |
-| **Connections + credentials** | The one store for third-party secrets: connectors, connections, the connect handshake, grants, and the vault view. `list_connectors`, `list_connections`, `start_connection`, `complete_connection`, `list_connection_grants`, `grant_connection`, `list_credentials` |
+| **Credentials** | The one store for third-party secrets (the Credentials page): services (connectors), credentials (connections in the tool names), adding one, who can use it, and the full list. `list_connectors`, `list_connections`, `start_connection`, `complete_connection`, `list_connection_grants`, `grant_connection`, `list_credentials` |
 | **Memory** | Read, write, search and maintain agent memory across backends. `memory_put`, `memory_get`, `memory_list`, `memory_search`, `memory_delete`, `memory_supersede`, `memory_consolidate`, `memory_sync`, `memory_transfer`, `memory_list_backends`, `memory_backends_health` |
 | **Runners** | The daemons that accept dispatched work, and the workspaces open on them. `list_runners` |
 | **Organization** | Members and their roles, useful for picking a grant principal or an approver. `list_org_members` |
@@ -56,15 +56,15 @@ Ask your assistant, in plain language:
 
 It chains the management tools: `import_schema`, `check_import_status`, `list_tools`, `create_gateway`, `assign_tools_to_gateway`, `add_auth_to_gateway`, and hands you back a ready endpoint, without you touching the UI.
 
-Or ship an agent as a product, end to end:
+Or put an agent in front of people, end to end:
 
 ```text
-> Turn my support-bot agent into an app called Acme Support, set a $2 cost
-> cap, add a Slack distribution, and publish it.
+> Put my support-bot agent on Slack as Acme Support, with a $2 limit per
+> run, and publish it.
 ```
 
-It chains `create_app`, `update_app` (the limits a public product needs),
-`add_distribution`, `check_app`, and `publish_distribution`, and hands you
+It chains `update_public_settings` (the name and the limits a public channel
+needs), `add_channel`, `check_channel`, and `publish_channel`, and hands you
 back a live channel.
 
 ## What's not exposed

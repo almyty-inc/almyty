@@ -278,4 +278,10 @@ export interface ConnectionView {
   expiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  /**
+   * Set when this is the key of a model provider connection (the key the
+   * connection made for itself): the connection it belongs to, whose page
+   * is where the key, its models and its settings are changed.
+   */
+  providerId: string | null;
 }

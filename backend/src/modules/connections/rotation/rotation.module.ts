@@ -9,8 +9,8 @@ import { RotationService } from './rotation.service';
 
 /**
  * Connections gate 5. ConnectionsModule imports this and calls
- * RotationService from POST /connections/:id/rotate and
- * DELETE /connections/:id; the EE scheduler will call the same methods
+ * RotationService from POST /credentials/:id/rotate and
+ * DELETE /credentials/:id; the EE scheduler will call the same methods
  * on a timer. Specs build the registry by hand with a fixture HTTP.
  */
 export function buildRotationRegistry(http: RotationHttp): RotationRegistry {

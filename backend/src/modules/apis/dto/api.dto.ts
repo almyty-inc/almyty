@@ -258,6 +258,12 @@ const emptyToUndefined = ({ value }: { value: unknown }) =>
  * arrive as strings, hence the transforms.
  */
 export class ConnectApiDto {
+  /** The kind picked on "Connect an API"; a description of another kind is refused. */
+  @Transform(emptyToUndefined)
+  @IsOptional()
+  @IsEnum(['openapi', 'graphql', 'soap', 'grpc'])
+  type?: 'openapi' | 'graphql' | 'soap' | 'grpc';
+
   @Transform(emptyToUndefined)
   @IsOptional()
   @Matches(/^https?:\/\/.+/i, { message: 'A link starts with http:// or https://.' })

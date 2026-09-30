@@ -33,7 +33,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 PACKAGES_DIR="$REPO_ROOT/packages"
 
 # Five packages we expect to find. The umbrella depends on all of them,
-# plus @almyty/models, @almyty/connections, @almyty/mcp-server,
+# plus @almyty/models, @almyty/credentials, @almyty/mcp-server,
 # @almyty/acp-server and @almyty/runner, which this script does not
 # build (their node_modules may be absent in a bare checkout).
 PACKAGES=(auth-cli agents-cli chat-cli skills-cli almyty-cli)

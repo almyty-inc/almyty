@@ -28,9 +28,8 @@ import { AcpDiscoveryService } from '../acp/acp-discovery.service';
 import { isPrivateGateway } from './private-gateway';
 import { findServableGatewayAgent } from './gateway-servable';
 import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
-import { SkillGeneratorService } from '../tools/skill-generator.service';
 import { assertOAuthScope } from '../mcp/services/mcp-oauth-scope';
-import { AppPlace, AppPlacePolicyService, a2aCallerId } from './app-place-policy.service';
+import { ChannelPolicy, ChannelPolicyService, a2aCallerId } from './channel-policy.service';
 import { HostedChatService } from './channels/hosted-chat.service';
 import { trustedClientIp } from '../../common/security/client-ip';
 
@@ -112,13 +111,10 @@ export class UnifiedGatewayDelegation {
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
     // Optional for the same reason; resolves the gateway's connection.
     @Optional() private readonly channelCredentials?: ChannelCredentialService,
-    // A shared-tools gateway's Skills listing. Optional for the same reason;
-    // without it /skills answers not found rather than an empty list.
-    @Optional() private readonly skills?: SkillGeneratorService,
-    // The app an A2A place belongs to: its spend cap, per-run cost cap and
+    // The agent channel an A2A gateway is: its spend cap, per-run cost cap and
     // visitor memory rule. Optional for the same reason; Nest always
-    // injects it (app-place-policy.guard.spec.ts).
-    @Optional() private readonly places?: AppPlacePolicyService,
+    // injects it (channel-policy.guard.spec.ts).
+    @Optional() private readonly channelPolicy?: ChannelPolicyService,
   ) {}
 
   async handleGatewayRequest(
@@ -134,12 +130,11 @@ export class UnifiedGatewayDelegation {
     const action = afterGateway.replace(/^\//, '') || '';
 
     // Tag the request so the logging interceptor can attribute it — the
-    // slug path alone identifies neither gateway nor protocol. A shared-tools
-    // gateway is tagged with the protocol this request actually speaks.
+    // slug path alone identifies neither gateway nor protocol.
     setProtocolContext(req, {
       gatewayId: gateway.id,
       organizationId: organization.id,
-      protocol: gateway.type === GatewayType.TOOLS ? (toolsGatewayProtocol(action) ?? gateway.type) : gateway.type,
+      protocol: gateway.type,
     });
 
     // Per-gateway rate limits (configured in the dashboard). Enforced
@@ -217,8 +212,6 @@ export class UnifiedGatewayDelegation {
         this.bumpGatewayCounters(gateway.id, res.statusCode < 400);
         return out;
       }
-      case GatewayType.TOOLS:
-        return this.delegateTools(gateway, organization, orgSlug, action, auth, req, res, body);
       default:
         throw new HttpException(
           `Gateway type '${gateway.type}' does not support direct requests. Use the protocol-specific endpoint or the Skills CLI.`,
@@ -430,10 +423,10 @@ export class UnifiedGatewayDelegation {
     if (!agent) {
       throw new HttpException('Agent not found for this A2A gateway', HttpStatus.NOT_FOUND);
     }
-    // A message that starts or continues a task spends against the app:
+    // A message that starts or continues a task spends against the channel:
     // the caller's own share first (per credential, and per address), then
-    // the app's allowance across every place. Reads and cancels do not.
-    const place = A2A_RUN_METHODS.has(body?.method) ? await this.admitA2ACall(gateway, auth, req, res) : null;
+    // the spend allowance the channel draws on. Reads and cancels do not.
+    const policy = A2A_RUN_METHODS.has(body?.method) ? await this.admitA2ACall(gateway, auth, req, res) : null;
 
     const baseUrl =
       this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
@@ -441,22 +434,22 @@ export class UnifiedGatewayDelegation {
       agent,
       org: organization,
       baseUrl,
-      place,
+      policy,
     });
   }
 
   /**
-   * One A2A caller's share, and the app's allowance.
+   * One A2A caller's share, and the channel's spend allowance.
    *
    * A2A callers are machines holding a credential, so each credential (API
    * key, OAuth client, signed-in user) is a visitor with its own bucket,
-   * the app's per-visitor limit, as well as the per-address one. Before
-   * this an A2A place had only the surface ceiling: one caller could use
-   * the whole hour for every other caller. Then the app's spend cap, and
-   * the run options (per-run cost cap, app stamp, visitor memory rule)
+   * the per-visitor limit, as well as the per-address one. Before
+   * this an A2A channel had only the surface ceiling: one caller could use
+   * the whole hour for every other caller. Then the spend cap, and
+   * the run options (per-run cost cap, channel stamp, visitor memory rule)
    * the task's run starts with.
    */
-  private async admitA2ACall(gateway: Gateway, auth: any, req: Request, res: Response): Promise<AppPlace | null> {
+  private async admitA2ACall(gateway: Gateway, auth: any, req: Request, res: Response): Promise<ChannelPolicy | null> {
     const own = await this.gatewayRateLimit.checkVisitor(gateway, {
       endUserId: a2aCallerId(auth),
       clientHash: HostedChatService.hashClient(trustedClientIp(req as any)),
@@ -474,7 +467,7 @@ export class UnifiedGatewayDelegation {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-    return this.places ? this.places.admit(gateway) : null;
+    return this.channelPolicy ? this.channelPolicy.admit(gateway) : null;
   }
 
   private async delegateACP(
@@ -516,53 +509,6 @@ export class UnifiedGatewayDelegation {
       throw new HttpException('Agent not found for this ACP gateway', HttpStatus.NOT_FOUND);
     }
     await this.acpServerService.handleJsonRpc(gateway, req, body, res);
-  }
-
-  /**
-   * A shared-tools gateway: one address, three protocols, one servable set.
-   * Which protocol a request speaks follows from its path alone
-   * (`toolsGatewayProtocol`), so a client never has to be told to pick one.
-   * Auth has already run above, exactly as for a single-protocol gateway,
-   * and each branch is the same code a single-protocol gateway runs, so MCP,
-   * UTCP and Skills list and call from `servableToolsOnGateway` alike.
-   */
-  private async delegateTools(
-    gateway: Gateway,
-    organization: Organization,
-    orgSlug: string,
-    action: string,
-    auth: any,
-    req: Request,
-    res: Response,
-    body: any,
-  ) {
-    switch (toolsGatewayProtocol(action)) {
-      case 'mcp':
-        // MCP bumps the gateway request counters inside McpService.
-        return this.delegateMcp(gateway, auth, body, req, res);
-      case 'utcp': {
-        const out = await this.delegateUtcp(gateway, organization, action, auth, req, res, body);
-        this.bumpGatewayCounters(gateway.id, res.statusCode < 400);
-        return out;
-      }
-      case 'skills': {
-        if (req.method !== 'GET') {
-          throw new HttpException('Skills are listed with GET', HttpStatus.METHOD_NOT_ALLOWED);
-        }
-        if (!this.skills) {
-          throw new HttpException('Skills are not available on this server', HttpStatus.NOT_FOUND);
-        }
-        const gatewaySlug = (gateway.endpoint || '').replace(/^\/+/, '');
-        const skills = await this.skills.generateIndividualSkills(gateway.id, organization.id, {
-          orgSlug: organization.slug || orgSlug,
-          gatewaySlug,
-        });
-        this.bumpGatewayCounters(gateway.id, true);
-        return res.json({ success: true, data: { skills } });
-      }
-      default:
-        throw new HttpException(`Unknown action: ${action}`, HttpStatus.NOT_FOUND);
-    }
   }
 
   private async delegateUtcp(
@@ -655,28 +601,6 @@ export class UnifiedGatewayDelegation {
         this.logger.warn(`Failed to bump gateway counters: ${err.message}`);
       });
   }
-}
-
-/**
- * Which protocol a request to a shared-tools gateway speaks, from the path
- * after the gateway's address:
- *
- *   ''                          MCP (JSON-RPC over Streamable HTTP)
- *   '.well-known/utcp'          UTCP discovery
- *   'manual', 'execute'         UTCP
- *   'execute/<toolId>'          UTCP, one tool's own call template
- *   'skills'                    Agent Skills
- *   any other '.well-known/...' MCP, as on an MCP gateway
- *
- * Anything else is null: not found, never a guess.
- */
-export function toolsGatewayProtocol(action: string): 'mcp' | 'utcp' | 'skills' | null {
-  if (action === '') return 'mcp';
-  if (action === '.well-known/utcp' || action === 'manual' || action === 'execute') return 'utcp';
-  if (utcpExecuteToolId(action)) return 'utcp';
-  if (action === 'skills') return 'skills';
-  if (action.startsWith('.well-known/')) return 'mcp';
-  return null;
 }
 
 /** The tool id of an `execute/<toolId>` path: one plain segment, or null. */

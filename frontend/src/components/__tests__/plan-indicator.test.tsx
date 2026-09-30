@@ -73,7 +73,7 @@ describe('planFromEntitlements', () => {
   })
 
   it('returns business when the full business entitlement set is present', () => {
-    const businessEnts = ['sso', 'advanced_rbac', 'approval_policy', 'compliance_pack', 'audit_export', 'connections_governance']
+    const businessEnts = ['sso', 'advanced_rbac', 'approval_policy', 'compliance_pack', 'audit_export', 'credentials_governance']
     expect(planFromEntitlements(businessEnts)).toBe('business')
   })
 
@@ -84,7 +84,7 @@ describe('planFromEntitlements', () => {
       'approval_policy',
       'compliance_pack',
       'audit_export',
-      'connections_governance',
+      'credentials_governance',
       'byo_kms',
       'chargeback',
       'white_label',

@@ -513,7 +513,8 @@ describe('LlmProvider Entity', () => {
   describe('isSelfHostedOllama', () => {
     it('is true for an Ollama server someone runs and false for Ollama Cloud or another vendor', () => {
       const ollama = (apiUrl?: string) => ({ type: LlmProviderType.OLLAMA, configuration: apiUrl ? { apiUrl } : {} }) as any;
-      expect(isSelfHostedOllama(ollama())).toBe(true);
+      expect(isSelfHostedOllama(ollama())).toBe(false);
+      expect(isSelfHostedOllama(ollama('http://localhost:11434'))).toBe(true);
       expect(isSelfHostedOllama(ollama('http://10.0.0.5:11434/v1'))).toBe(true);
       expect(isSelfHostedOllama(ollama('https://ollama.com'))).toBe(false);
       expect(isSelfHostedOllama(ollama('https://api.ollama.com/v1'))).toBe(false);

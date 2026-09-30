@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
 import axios from 'axios';
-import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
+import { LlmProvider, LlmProviderType, LlmProviderStatus, OLLAMA_DEFAULT_URL } from '../../entities/llm-provider.entity';
 import {
   validateUrl,
   validateUrlAllowingPrivate,
@@ -83,7 +83,7 @@ const EMBEDDING_BACKENDS: Partial<Record<LlmProviderType, EmbeddingBackend>> = {
     // per model and each stored vector records its model + dim, so the
     // read side never cosine-compares across models (see EmbeddingResult).
     defaultModel: 'nomic-embed-text',
-    defaultBaseUrl: 'http://localhost:11434',
+    defaultBaseUrl: OLLAMA_DEFAULT_URL,
     // Native embed endpoint (POST /api/embed { model, input }) — the
     // OpenAI-compat /v1/embeddings surface exists but /api/embed is the
     // canonical one and supports every embedding-capable local model.

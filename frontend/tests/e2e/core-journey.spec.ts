@@ -6,12 +6,14 @@ import { startFakeUpstreams, type FakeUpstreams, FINAL_ANSWER, FORECAST, MODEL_I
 
 /**
  * The core journey, through the UI, the way a new user takes it: sign up,
- * connect a model, import an API, share its tools over MCP/UTCP/Skills,
- * build an autonomous agent on that model and tool and run it, put it in
- * an app on the web and chat with it as a visitor, then look at
- * Connections. Unit suites cannot see the seams between these (a client
- * calling a route the server shadows, a proxy rule missing, a response
- * shape the page does not wait for); this walks across all of them.
+ * add a provider connection under Credentials, connect an API (its kind
+ * first), create a gateway for its tools over MCP and call it (and one each
+ * over UTCP and Skills), build an autonomous agent (work mode, model,
+ * the API as a capability) and run it, then add a web chat channel on the
+ * agent and chat with it as a visitor. Unit suites cannot see the seams
+ * between these (a client calling a route the server shadows, a proxy rule
+ * missing, a response shape the page does not wait for); this walks across
+ * all of them.
  *
  * Nothing leaves the machine and no key is real: the model, the API and
  * its description are one local fake (helpers/fake-upstreams.ts). The fake
@@ -106,12 +108,13 @@ function watch(page: Page, who: string, trouble: Trouble) {
   })
 }
 
-test('core journey: sign up, model, API, shared tools, agent, app, connections', async ({ browser, page, request }) => {
+test('core journey: sign up, credentials, API, gateway, agent, channel', async ({ browser, page, request }) => {
   test.setTimeout(120_000)
   const fake: FakeUpstreams = await startFakeUpstreams()
   const trouble: Trouble = { consoleErrors: [], failedRequests: [] }
   watch(page, 'user', trouble)
   const user = AuthHelper.generateTestUser('journey')
+  let agentPath = ''
 
   try {
     await test.step('register, verify, sign in', async () => {
@@ -137,9 +140,20 @@ test('core journey: sign up, model, API, shared tools, agent, app, connections',
       await page.waitForURL(/\/dashboard/)
     })
 
-    await test.step('Models: connect your own server', async () => {
-      await page.getByRole('link', { name: 'Models', exact: true }).click()
-      await page.getByRole('link', { name: 'Connect a provider' }).first().click()
+    await test.step('Credentials: the Add credential tiles, then a provider connection to your own server', async () => {
+      await page.getByTestId('sidebar-nav').getByRole('link', { name: 'Credentials', exact: true }).click()
+      await expect(page.getByRole('heading', { name: 'Credentials', level: 1 })).toBeVisible()
+      await page.getByRole('link', { name: 'Add credential' }).first().click()
+      await expect(page).toHaveURL(/\/credentials\/new$/)
+      await expect(page.getByRole('heading', { name: 'Add credential', level: 1 })).toBeVisible()
+      await expect(page.locator('[data-testid^="service-tile-"]').first()).toBeVisible()
+      await page.getByLabel('Search services').fill('zzzz-no-such-service')
+      await expect(page.getByRole('button', { name: 'Save its key as another service' })).toBeVisible()
+
+      // Model providers are one tile here, which leads to their own connect flow.
+      await page.getByLabel('Search services').fill('')
+      await page.getByTestId('service-tile-ai-models').click()
+      await expect(page).toHaveURL(/\/credentials\/providers\/new$/)
       await page.getByRole('textbox', { name: 'Search providers' }).fill('own server')
       await page.getByTestId('provider-tile-custom').click()
       await page.getByLabel('Server URL').fill(fake.llmUrl)
@@ -147,35 +161,62 @@ test('core journey: sign up, model, API, shared tools, agent, app, connections',
       const done = page.getByTestId('connect-success')
       await expect(done).toContainText(MODEL_ID)
       await done.getByRole('button', { name: 'Done' }).click()
-      await expect(page).toHaveURL(/\/models$/)
+      // Done opens the new connection, with its models ticked.
+      await expect(page).toHaveURL(/\/credentials\/providers\/[0-9a-f-]{36}$/)
     })
 
-    await test.step('APIs: import one through the one box', async () => {
+    let apiId = ''
+    await test.step('APIs: pick the kind, then give its description', async () => {
       await page.goto('/apis/new')
+      await page.getByTestId('api-kind-openapi').click()
+      await expect(page).toHaveURL(/\/apis\/new\/openapi$/)
       // A link to a local address is refused on purpose, so the description goes in as a file.
+      await page.getByRole('tab', { name: 'File' }).click()
       await page.locator('input[type=file]').setInputFiles({ name: 'forecast.json', mimeType: 'application/json', buffer: Buffer.from(fake.openApi()) })
-      await page.getByRole('button', { name: 'Import' }).click()
+      await page.getByRole('button', { name: 'Connect API' }).click()
       await page.waitForURL(/\/apis\/[0-9a-f-]{36}$/)
+      apiId = new URL(page.url()).pathname.split('/')[2]
       await expect(page.getByRole('heading', { name: 'E2E Forecast', level: 1 })).toBeVisible()
       await expect(page.getByRole('button', { name: /GET \/forecast/ })).toBeVisible()
     })
 
+    /** Create gateway for the API's tools over one protocol; the key (none for Skills) and the address. */
+    const createGateway = async (protocol: 'mcp' | 'utcp' | 'skills', path: string) => {
+      await page.goto(`/gateways/new?protocol=${protocol}&api=${apiId}`)
+      await expect(page.getByTestId(`gateway-protocol-${protocol}`)).toHaveAttribute('aria-pressed', 'true')
+      await expect(page.getByTestId(`share-api-${apiId}`)).toHaveAttribute('aria-pressed', 'true')
+      // One gateway per protocol over the same tools: each its own path.
+      await page.getByRole('button', { name: /^Advanced/ }).click()
+      await page.getByLabel('Path').fill(path)
+      await page.getByRole('button', { name: 'Create gateway' }).click()
+      await page.waitForURL(/\/gateways\/[0-9a-f-]{36}$/)
+      const id = new URL(page.url()).pathname.split('/')[2]
+      const key = protocol === 'skills' ? '' : (await page.getByTestId('initial-api-key').locator('code').innerText()).trim()
+      const address = (await page.getByTestId('connect-snippets').locator('code').filter({ hasText: /^https?:\/\// }).first().innerText()).trim()
+      // The address is on the API's origin, which in dev is vite; a client talks to the API itself.
+      return { id, key, url: `${API_ORIGIN}${new URL(address).pathname}` }
+    }
+
     let gatewayUrl = ''
     let accessKey = ''
-    await test.step('Share tools: get the address and key', async () => {
-      await page.getByRole('link', { name: 'Share tools' }).click()
-      await page.getByRole('button', { name: 'Share 1 tool' }).click()
+    await test.step('Create gateway: MCP, from the API page, with the key and the MCP setups', async () => {
+      await page.getByRole('link', { name: 'Create gateway' }).click()
+      await expect(page).toHaveURL(new RegExp(`/gateways/new\\?api=${apiId}$`))
+      await page.getByTestId('gateway-protocol-mcp').click()
+      await page.getByRole('button', { name: 'Create gateway' }).click()
       await page.waitForURL(/\/gateways\/[0-9a-f-]{36}$/)
       accessKey = (await page.getByTestId('initial-api-key').locator('code').innerText()).trim()
       expect(accessKey).toMatch(/^gw_/)
-      const address = (await page.locator('code').filter({ hasText: /^https?:\/\// }).first().innerText()).trim()
-      // The address is on the API's origin, which in dev is vite; a client talks to the API itself.
+      const snippets = page.getByTestId('connect-snippets')
+      await expect(snippets.getByRole('tab', { name: 'Claude Code' })).toBeVisible()
+      await expect(snippets.getByRole('tab', { name: 'UTCP' })).toHaveCount(0)
+      const address = (await snippets.locator('code').filter({ hasText: /^https?:\/\// }).first().innerText()).trim()
       gatewayUrl = `${API_ORIGIN}${new URL(address).pathname}`
-      await expect(page.getByRole('region', { name: 'Shared tools (1)' })).toBeVisible()
+      await expect(page.getByRole('tab', { name: /Tool scoping \(1\// })).toBeVisible()
     })
 
     let forecastTool = ''
-    await test.step('call the shared tools over MCP, and list them over UTCP and Skills', async () => {
+    await test.step('call the tools over MCP; a UTCP and a Skills gateway list the same tool', async () => {
       // The fake API is on localhost: the organization says that host is its own.
       const orgId = sql(`SELECT uo."organizationId" FROM user_organizations uo JOIN users u ON u.id = uo."userId" WHERE u.email = '${user.email}' LIMIT 1;`)
       const allowed = await page.request.patch(`/organizations/${orgId}`, { data: { settings: { egressAllowlist: ['localhost'] } } })
@@ -190,30 +231,37 @@ test('core journey: sign up, model, API, shared tools, agent, app, connections',
       expect(JSON.stringify(called.content)).toContain(FORECAST)
       expect(fake.apiCalls).toContain('GET /api/forecast?city=Lisbon')
 
-      const manual = await request.get(`${gatewayUrl}/manual`, { headers: { 'x-api-key': accessKey } })
+      const utcp = await createGateway('utcp', '/forecast-utcp')
+      const manual = await request.get(`${utcp.url}/manual`, { headers: { 'x-api-key': utcp.key } })
       expect(manual.status(), await manual.text()).toBe(200)
       const manualNames: string[] = ((await manual.json()).tools ?? []).map((t: { name: string }) => t.name)
       expect(manualNames.some((n) => n === forecastTool || n.endsWith(`.${forecastTool}`)), `UTCP manual: ${manualNames.join(', ')}`).toBe(true)
 
-      const skills = await request.get(`${gatewayUrl}/skills`, { headers: { 'x-api-key': accessKey } })
+      // A Skills gateway has no access key: the Skills CLI reads it signed in as you, from here.
+      const skillsGateway = await createGateway('skills', '/forecast-skills')
+      const skills = await page.request.get(`/gateways/${skillsGateway.id}/skills/individual`)
       expect(skills.status(), await skills.text()).toBe(200)
-      // The same tool, in the Agent Skills spelling: lowercase with dashes.
-      const skillNames = ((await skills.json()).data?.skills ?? []).map((s: { name: string }) => s.name)
-      expect(skillNames).toEqual([forecastTool.replace(/_/g, '-')])
+      // The same tool, in the Agent Skills spelling (lowercase with dashes), under the gateway's name.
+      const body = await skills.json()
+      const skillNames: string[] = (body.data?.skills ?? []).map((s: { name: string }) => s.name)
+      expect(skillNames).toEqual([`forecast-skills-${forecastTool.replace(/_/g, '-')}`])
     })
 
-    await test.step('Agents: an autonomous agent on that model and tool, run from the UI', async () => {
+    await test.step('Agents: an autonomous agent, its work mode and model, the API as a capability, run from the UI', async () => {
       await page.goto('/agents/new')
       await page.getByRole('group', { name: 'Agent mode' }).getByRole('button', { name: 'Autonomous' }).click()
       await page.getByRole('textbox', { name: 'Agent name' }).fill('Forecaster')
       await page.getByPlaceholder('You are a helpful assistant that...').fill('Answer weather questions with the forecast tool.')
+      // Work mode comes first, with the model slots it needs under it.
+      await expect(page.getByRole('combobox', { name: 'Work mode' })).toContainText('Single')
       const model = page.getByRole('combobox', { name: 'Model' })
       await model.click()
       await page.getByRole('searchbox', { name: 'Search models' }).fill(MODEL_ID)
       await page.getByRole('option', { name: new RegExp(MODEL_ID) }).click()
       await expect(model).toContainText(MODEL_ID)
-      await page.getByRole('button', { name: 'Select all in Other' }).click()
-      await expect(page.getByText('1 tool selected')).toBeVisible()
+      // Capabilities: the whole API, so its tools (and later ones) are the agent's.
+      await page.getByRole('checkbox', { name: 'All tools of E2E Forecast, including ones added later' }).click()
+      await expect(page.getByTestId('capability-tools-chosen')).toContainText('E2E Forecast, all tools')
       await page.getByRole('button', { name: 'Save' }).click()
       await expect(page.getByText('Agent "Forecaster" saved successfully.', { exact: true })).toBeVisible()
       const agentId = new URL(page.url()).pathname.split('/')[2]
@@ -225,20 +273,16 @@ test('core journey: sign up, model, API, shared tools, agent, app, connections',
       await page.getByPlaceholder('Type a message to test this agent...').fill('What is the weather in Lisbon?')
       await page.getByRole('button', { name: 'Run test' }).click()
       await expect(page.getByRole('status').filter({ hasText: FINAL_ANSWER })).toContainText(FORECAST, { timeout: 30_000 })
+      agentPath = `/agents/${agentId}`
     })
 
-    await test.step('Apps: an app on the web, published, answering a visitor', async () => {
-      await page.goto('/apps/new')
-      await page.getByRole('combobox', { name: 'Agent' }).click()
-      await page.getByRole('option', { name: /Forecaster/ }).click()
-      // Web addresses are one namespace across organizations: a fresh one per run.
-      const appName = `Forecast desk ${Date.now().toString(36)}`
-      await page.getByRole('textbox', { name: 'Name' }).fill(appName)
-      await page.getByRole('button', { name: 'Create app' }).click()
-      await expect(page.getByRole('heading', { name: appName, level: 1 })).toBeVisible()
-      await page.getByRole('link', { name: 'Add a place' }).first().click()
-      await page.getByRole('button', { name: /^Web app/ }).click()
-      await expect(page.getByRole('heading', { name: 'Web app', level: 1 })).toBeVisible()
+    await test.step('Channels: a web chat on the agent, published, answering a visitor', async () => {
+      await page.goto(`${agentPath}?tab=channels`)
+      await expect(page.getByRole('heading', { name: 'Channels', level: 2 })).toBeVisible()
+      await page.getByRole('link', { name: 'Add channel' }).first().click()
+      await expect(page.getByRole('heading', { name: 'Add channel', level: 1 })).toBeVisible()
+      await page.getByRole('button', { name: /^Web chat/ }).click()
+      await expect(page.getByRole('heading', { name: 'Web chat', level: 1 })).toBeVisible()
       await page.getByRole('button', { name: 'Publish', exact: true }).click()
       await expect(page.getByRole('heading', { name: 'Live', level: 2 })).toBeVisible()
       const link = await page.getByRole('link', { name: 'Open it' }).getAttribute('href')
@@ -258,17 +302,6 @@ test('core journey: sign up, model, API, shared tools, agent, app, connections',
       } finally {
         await visitorContext.close()
       }
-    })
-
-    await test.step('Connections: the page and the connect-a-service tiles', async () => {
-      await page.getByRole('link', { name: 'Connections', exact: true }).click()
-      await expect(page.getByRole('heading', { name: 'Connections', level: 1 })).toBeVisible()
-      await page.getByRole('link', { name: 'Connect a service' }).first().click()
-      await expect(page).toHaveURL(/\/connections\/connect$/)
-      await expect(page.getByRole('heading', { name: 'Connect a service', level: 1 })).toBeVisible()
-      await expect(page.locator('[data-testid^="service-tile-"]').first()).toBeVisible()
-      await page.getByLabel('Search services').fill('zzzz-no-such-service')
-      await expect(page.getByRole('button', { name: 'Save its key as another service' })).toBeVisible()
     })
 
     expect(trouble.failedRequests, 'failed requests').toEqual([])

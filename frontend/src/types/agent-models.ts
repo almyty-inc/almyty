@@ -7,7 +7,7 @@ import type { RoutingPolicy } from './models'
  */
 export type AutonomousStrategyKey = 'single' | 'cascade' | 'best_of_n' | 'panel' | 'explore_extract_patch'
 
-export type RolePurpose = 'main' | 'drafter' | 'checker' | 'panelist' | 'explorer' | 'summariser' | 'teammate'
+export type RolePurpose = 'main' | 'drafter' | 'checker' | 'panelist' | 'judge' | 'explorer' | 'summariser' | 'teammate'
 
 export interface AgentModelRole {
   /** Stable id within the agent; steps and cost lines name it. */
@@ -49,4 +49,40 @@ export interface RoleCost {
   cost: number
   tokens: number | { input: number; output: number }
   calls: number
+}
+
+/** Whose memory an agent reads and writes. */
+export type MemoryWhose = 'person' | 'agent' | 'shared'
+/** What an agent saves on its own. */
+export type MemorySave = 'facts' | 'conversations' | 'asked'
+
+/**
+ * An autonomous agent's Memory section. Mirrors AgentMemoryConfig in
+ * backend/src/modules/agents/agent-memory-settings.ts.
+ */
+export interface AgentMemoryConfig {
+  enabled?: boolean
+  /** Before `save` existed: on means `facts`. */
+  autoSave?: boolean
+  scopes?: string[]
+  /** 'almyty-native', or an outside account's backend id ('mem0', 'zep', ...). */
+  account?: string
+  whose?: MemoryWhose
+  save?: MemorySave
+  /** Rules, one per line; every save is screened against them. */
+  neverSave?: string
+  /** Days a memory is kept; null or absent until deleted. */
+  retentionDays?: number | null
+  /** An account of the agent's own for `account` (a connection added from its page). */
+  credentialId?: string | null
+}
+
+/** A memory account an agent can keep its memories in (GET /memory/canonical/accounts). */
+export interface MemoryAccount {
+  id: string
+  name: string
+  /** Whether memories there can be given a time limit. */
+  canExpire: boolean
+  /** Whether the service expires them itself; false means almyty deletes them on a schedule. */
+  expiresItself: boolean
 }

@@ -35,7 +35,7 @@ function printHelp(): void {
 
 One login for every almyty CLI. The credentials it writes are read by
 @almyty/agents, @almyty/chat, @almyty/skills, @almyty/models,
-@almyty/connections, @almyty/mcp-server and @almyty/runner.
+@almyty/credentials, @almyty/mcp-server and @almyty/runner.
 
 Usage:
   npx @almyty/auth <command> [options]

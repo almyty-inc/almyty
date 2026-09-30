@@ -68,8 +68,8 @@ passed as a tool argument would be written into the assistant's transcript and
 the host editor's logs, so the key goes through the connections flow instead:
 
 ```bash
-npx @almyty/connections connect openai
-npx @almyty/connections list        # -> the id to hand the tool
+npx @almyty/credentials add openai
+npx @almyty/credentials list        # -> the id to hand the tool
 ```
 
 ## When almyty is not reachable

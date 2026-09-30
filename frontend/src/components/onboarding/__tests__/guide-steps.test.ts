@@ -74,7 +74,7 @@ function placeMatchesTarget(place: string, to: string): boolean {
 
 const STEP_KEYS: StepKey[] = [
   'provider', 'api', 'tools', 'gateway', 'first_call', 'external_client',
-  'agent', 'agent_run', 'app', 'distribution', 'runner',
+  'agent', 'agent_run', 'channel', 'runner',
 ]
 
 function state(done: Partial<Record<StepKey, boolean>> = {}, withLinks = false): OnboardingState {
@@ -85,9 +85,8 @@ function state(done: Partial<Record<StepKey, boolean>> = {}, withLinks = false):
       ? {
           gateway: { id: 'gw-1', name: 'Weather', type: 'mcp', endpoint: '/weather' },
           agent: { id: 'ag-1', name: 'Support bot' },
-          app: { slug: 'helpdesk', name: 'Helpdesk' },
         }
-      : { gateway: null, agent: null, app: null },
+      : { gateway: null, agent: null },
     dismissed: false,
     dismissedIntros: [],
     activatedRealAt: null,
@@ -96,7 +95,7 @@ function state(done: Partial<Record<StepKey, boolean>> = {}, withLinks = false):
 
 const SCENARIOS = [
   ['a brand-new account', state()],
-  ['an account with a gateway, an agent and an app', state({ api: true, gateway: true, agent: true, app: true }, true)],
+  ['an account with a gateway and an agent', state({ api: true, gateway: true, agent: true }, true)],
 ] as const
 
 describe('guide steps: the words match the link', () => {
@@ -145,13 +144,14 @@ describe('guide steps: the words match the link', () => {
     expect(initialGatewayTab('integrations', false)).toBe('integrations')
   })
 
-  it('names the org\'s own agent and app when the step is about them', () => {
-    const s = state({ agent: true, app: true }, true)
+  it('names the org\'s own agent when the step is about it', () => {
+    const s = state({ agent: true }, true)
     const run = ALL_STEPS.find((x) => x.key === 'agent_run')!
     expect(run.target(s)).toEqual({ to: '/agents/ag-1', place: 'Agents › Support bot' })
     expect(run.description(s)).toContain('Support bot')
-    const ship = ALL_STEPS.find((x) => x.key === 'distribution')!
-    expect(ship.target(s).to).toBe('/apps/helpdesk/distributions/new')
+    const ship = ALL_STEPS.find((x) => x.key === 'channel')!
+    expect(ship.target(s)).toEqual({ to: '/agents/ag-1/channels/new', place: 'Agents › Support bot › Channels › Add channel' })
+    expect(ship.description(s)).toContain('Support bot')
   })
 })
 
@@ -176,7 +176,7 @@ describe('guide steps: done comes from the server', () => {
       'Put it where people are',
       'Run it on your machines',
     ])
-    expect(ALL_STEPS.length).toBe(10)
+    expect(ALL_STEPS.length).toBe(9)
   })
 
   it('counts done steps from state', () => {

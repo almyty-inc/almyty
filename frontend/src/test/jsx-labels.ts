@@ -149,14 +149,15 @@ export const LABEL_PROPER_NOUNS = new Set([
   'Microsoft', 'OAuth', 'OIDC', 'Ollama', 'OpenAI', 'OpenAPI', 'PDF', 'PNG', 'Protobuf',
   'RBAC', 'REST', 'S3', 'SAML', 'SDK', 'SMS', 'SOAP', 'SQL', 'SSO', 'SVG', 'Signal', 'Slack', 'Stripe',
   'TOTP', 'Teams', 'Telegram', 'UTCP', 'URL', 'URLs', 'Vertex', 'WhatsApp', 'YAML', 'gRPC',
+  'Swagger', 'WSDL',
 ])
 
 /** Multi-word names that keep their capitals: named surfaces and specs. */
 export const LABEL_PROPER_PHRASES = [
-  'Tool Hub', 'Agent Skills', 'Hugging Face', 'Google Chat', 'Microsoft Teams', 'Claude Code', 'Claude Desktop',
+  'Tool Hub', 'Agent Skills', 'Hugging Face Hub', 'Hugging Face', 'Google Chat', 'Microsoft Teams', 'Claude Code', 'Claude Desktop',
   'Amazon Bedrock', 'Cloud Storage', 'Universal Tool Call Protocol', 'Google Cloud Storage', 'VS Code', 'OpenID Connect',
   'EU AI Act', 'App Store Connect', 'Twilio Account SID', 'Terms of Service', 'Privacy Policy',
-  'Server-Sent Events', 'Google Cloud', 'Microsoft App ID', 'Azure AI Foundry', 'Ctrl+Z', 'Ctrl+Shift+Z', 'Ctrl+K',
+  'Server-Sent Events', 'Google Cloud', 'Microsoft App ID', 'Azure AI Foundry', 'Ctrl+Z', 'Ctrl+Shift+Z', 'Ctrl+K', 'Ollama Cloud',
 ]
 
 /** Words after the first that are capitalised without being a proper noun. */

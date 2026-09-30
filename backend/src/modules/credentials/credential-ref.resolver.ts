@@ -146,7 +146,7 @@ export interface ResolvedCredential {
 
 /** Who created a managed row; stored in `metadata.managedBy` so it can be rotated and released by the same consumer only. */
 export interface ManagedBy {
-  kind: 'llm_provider' | 'llm_provider_usage' | 'mcp_source' | 'channel_installation' | 'api' | 'gateway_channel' | 'app_distribution' | 'hosted_chat_oauth';
+  kind: 'llm_provider' | 'llm_provider_usage' | 'mcp_source' | 'channel_installation' | 'api' | 'gateway_channel' | 'hosted_chat_oauth';
   id?: string;
   label?: string;
 }
@@ -506,7 +506,7 @@ export class CredentialRefResolver {
     if (!CredentialRefResolver.isManagedBy(credential, patch.managedBy)) {
       throw new ForbiddenException({
         code: 'CREDENTIAL_NOT_MANAGED',
-        message: 'this credential is a shared connection; rotate it through /connections',
+        message: 'this credential is shared; replace its key through /credentials/:id/rotate',
       });
     }
     const merged = { ...(credential.config ?? {}), ...patch.config };
@@ -596,6 +596,19 @@ export class CredentialRefResolver {
       (credential.ownerUserId ?? null) === (scope.ownerUserId ?? null)
     ) return;
     await this.credentials.update({ id: credential.id, organizationId }, scope);
+  }
+
+  /** Rename a row its consumer manages (a provider renamed); a shared connection keeps its own name. */
+  async renameManaged(
+    organizationId: string,
+    credentialId: string | null | undefined,
+    managedBy: Pick<ManagedBy, 'kind' | 'id'>,
+    name: string,
+  ): Promise<void> {
+    if (!credentialId || !name) return;
+    const credential = await this.credentials.findOne({ where: { id: credentialId, organizationId } });
+    if (!credential || !CredentialRefResolver.isManagedBy(credential, managedBy) || credential.name === name) return;
+    await this.credentials.update({ id: credential.id, organizationId }, { name });
   }
 
   /** Load a row of this org or throw CREDENTIAL_NOT_FOUND. */

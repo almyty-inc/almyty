@@ -17,7 +17,7 @@ consumers call to use it.
 A connector describes one third party. It is data, not code: the
 built-in list is a TypeScript array in
 `backend/src/modules/connections/connector-catalog.ts`, org admins add
-their own through `POST /connectors`, and connectors of kind
+their own through `POST /credentials/services`, and connectors of kind
 `deployment` are derived at runtime from the deployment adapter
 registry (`AdapterRegistry.describe()`): the adapter's `x-secret`
 config fields become the form, nothing is copied.
@@ -120,11 +120,11 @@ only for connectors that name an escape-hatch env var
   a client bound (any replica can take the callback), an in-memory map
   otherwise; the store is injectable for specs.
 - Redirect URL: `<PUBLIC_API_URL | BASE_URL | API_BASE_URL | request
-  host>/connections/oauth/callback`, the same resolution the Slack
+  host>/credentials/oauth/callback`, the same resolution the Slack
   install and hosted-chat SSO use.
 - Headless: `mode: 'headless'` on a provider that prints the code
   on-screen (OpenRouter) omits the callback URL; the client then calls
-  `POST /connections/connect/:connectorKey/complete { state, code }`.
+  `POST /credentials/connect/:connectorKey/complete { state, code }`.
 - Audit: `connection_connect`, `connection_validate`,
   `connection_rotate`, `connection_disconnect`, `connection_resolve`
   and `connector_create` on resource `connection` / `connector`, with
@@ -145,16 +145,16 @@ only for connectors that name an escape-hatch env var
 
 | route | who | does |
 | --- | --- | --- |
-| `GET /connectors?kind=` | connections:read | catalog: built-in, adapter-derived, custom; cloud_iam methods carry a rendered `quickCreateUrl` when `CONNECTIONS_AWS_CFN_TEMPLATE_URL` and `CONNECTIONS_AWS_TRUSTED_ACCOUNT_ID` are set |
-| `POST /connectors` | admin, connections:manage | custom connector; validated with `validateConnectorDefinition`, may not shadow a built-in key |
-| `POST /connections/connect/:connectorKey` | connections:read (+manage for owner org) | `{ method?, owner: 'org' \| 'user', mode?, input?, name? }`. Form methods validate live and return `{ pending: false, connection }`; OAuth methods return `{ pending: true, authorizeUrl, state, completeWith }` |
-| `GET /connections/oauth/callback?code&state` | nobody (state is the credential) | completes the exchange; 302 to `FRONTEND_URL/connections?connection=&status=` when configured, JSON otherwise |
-| `POST /connections/connect/:connectorKey/complete` | member | `{ state, code }` headless completion |
-| `GET /connections` | connections:read | masked list; user connections visible to their owner and to connections:manage |
-| `GET /connections/:id` | same | one connection |
-| `POST /connections/:id/validate` | owner or manage | re-runs validation, updates health and label |
-| `POST /connections/:id/rotate` | owner or manage | form methods: without `input` returns the form, with `input` replaces the secret in place; OAuth: returns a new `authorizeUrl` whose completion updates the same row |
-| `DELETE /connections/:id` | owner or manage | calls the connector's revoke endpoint when declared, then deletes |
+| `GET /credentials/services?kind=` | connections:read | catalog: built-in, adapter-derived, custom; cloud_iam methods carry a rendered `quickCreateUrl` when `CONNECTIONS_AWS_CFN_TEMPLATE_URL` and `CONNECTIONS_AWS_TRUSTED_ACCOUNT_ID` are set |
+| `POST /credentials/services` | admin, connections:manage | custom connector; validated with `validateConnectorDefinition`, may not shadow a built-in key |
+| `POST /credentials/connect/:connectorKey` | connections:read (+manage for owner org) | `{ method?, owner: 'org' \| 'user', mode?, input?, name? }`. Form methods validate live and return `{ pending: false, connection }`; OAuth methods return `{ pending: true, authorizeUrl, state, completeWith }` |
+| `GET /credentials/oauth/callback?code&state` | nobody (state is the credential) | completes the exchange; 302 to `FRONTEND_URL/credentials?connection=&status=` when configured, JSON otherwise |
+| `POST /credentials/connect/:connectorKey/complete` | member | `{ state, code }` headless completion |
+| `GET /credentials` | connections:read | masked list; user connections visible to their owner and to connections:manage |
+| `GET /credentials/:id` | same | one connection |
+| `POST /credentials/:id/validate` | owner or manage | re-runs validation, updates health and label |
+| `POST /credentials/:id/rotate` | owner or manage | form methods: without `input` returns the form, with `input` replaces the secret in place; OAuth: returns a new `authorizeUrl` whose completion updates the same row |
+| `DELETE /credentials/:id` | owner or manage | calls the connector's revoke endpoint when declared, then deletes |
 
 `/credentials` and `/oauth2` stay as primitives.
 

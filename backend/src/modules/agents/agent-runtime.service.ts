@@ -15,6 +15,7 @@ import { EventEmitter } from 'events';
 import { LlmProvidersService } from '../llm-providers/llm-providers.service';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
+import { MemoryAccountsService } from '../memory/canonical/memory-accounts.service';
 import { Tier } from '../memory/canonical/canonical.types';
 import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
@@ -200,6 +201,10 @@ export class AgentRuntimeService implements OnModuleInit {
     readonly budgets: BudgetsService,
     // The team/private execution gate every run start goes through.
     readonly executionAccess: ExecutionAccessService,
+    // The memory account an agent chose (almyty's own or an outside one),
+    // its retention, and the organization's accounts (AgentMemoryKeeper).
+    @Optional()
+    readonly memoryAccounts?: MemoryAccountsService,
   ) {}
 
   /**
@@ -227,11 +232,11 @@ export class AgentRuntimeService implements OnModuleInit {
       conversationId?: string;
       endUserId?: string | null;
       /**
-       * The app place this run answers on: the app whose spend cap it counts
-       * against (run.appId), and the gateway a new conversation is filed
-       * under, which is what per-app retention and visitor erasure find it by.
+       * The agent channel this run answers on: whose spend cap it counts
+       * against (run.channelId), and the gateway a new conversation is filed
+       * under, which is what channel retention and visitor erasure find it by.
        */
-      appId?: string | null;
+      channelId?: string | null;
       gatewayId?: string | null;
       /** Extra run metadata the surface wants the runtime to see (e.g. visitorMemory). */
       metadata?: Record<string, any>;
@@ -388,7 +393,7 @@ export class AgentRuntimeService implements OnModuleInit {
       organizationId,
       userId: userId ?? null,
       endUserId: options?.endUserId ?? null,
-      appId: options?.appId ?? null,
+      channelId: options?.channelId ?? null,
       conversationId: savedConversation.id,
       mode: AgentMode.AUTONOMOUS,
       status: AgentRunStatus.RUNNING,

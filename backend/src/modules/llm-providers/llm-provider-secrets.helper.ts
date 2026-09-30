@@ -10,6 +10,15 @@ import {
 } from '../credentials/credential-ref.resolver';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 
+/**
+ * The name of a key a provider made for itself. The inference key is the
+ * connection, as far as a person is concerned, so it has the connection's
+ * name; the usage (admin) key says what it is.
+ */
+export function managedKeyName(providerName: string, kind: 'inference' | 'usage'): string {
+  return kind === 'inference' ? providerName : `${providerName} usage key`;
+}
+
 /** The marker maskSensitiveData() puts in place of a key; a client that round-trips it is not rotating. */
 export const MASKED_PROVIDER_KEY = '***masked***';
 
@@ -125,7 +134,7 @@ export class LlmProviderSecretsHelper {
         });
       } else {
         row = await this.credentialRefs.createManaged(provider.organizationId, {
-          name: kind === 'inference' ? `${provider.name} API key` : `${provider.name} usage API key`,
+          name: managedKeyName(provider.name, kind),
           description: kind === 'inference'
             ? `Inference key for the ${provider.type} provider "${provider.name}"`
             : `Usage/admin key for the ${provider.type} provider "${provider.name}"`,
@@ -213,6 +222,16 @@ export class LlmProviderSecretsHelper {
           : { visibility: 'org', teamId: null, ownerUserId: null };
     await this.credentialRefs.setManagedScope(provider.organizationId, provider.credentialId, this.managedBy(provider, 'inference'), scope);
     await this.credentialRefs.setManagedScope(provider.organizationId, provider.usageCredentialId, this.managedBy(provider, 'usage'), scope);
+  }
+
+  /**
+   * The key a provider made for itself carries the connection's name, so
+   * Credentials lists the connection by the name people gave it. A shared
+   * credential the provider points at keeps its own name.
+   */
+  async syncManagedName(provider: Pick<LlmProvider, 'id' | 'organizationId' | 'name' | 'credentialId' | 'usageCredentialId'>): Promise<void> {
+    await this.credentialRefs.renameManaged(provider.organizationId, provider.credentialId, this.managedBy(provider as LlmProvider, 'inference'), managedKeyName(provider.name, 'inference'));
+    await this.credentialRefs.renameManaged(provider.organizationId, provider.usageCredentialId, this.managedBy(provider as LlmProvider, 'usage'), managedKeyName(provider.name, 'usage'));
   }
 
   /** Delete the rows this provider manages (shared connections are left alone). */

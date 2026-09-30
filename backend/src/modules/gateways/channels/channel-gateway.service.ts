@@ -41,7 +41,7 @@ import { gatewayPrincipal } from '../../../common/authorization/execution-access
 import { Message } from '../../../entities/message.entity';
 import { Conversation } from '../../../entities/conversation.entity';
 import { HostedChatService } from './hosted-chat.service';
-import { APP_SPEND_CAP_MESSAGES, AppPlace, AppPlacePolicyService, withPlace } from '../app-place-policy.service';
+import { SPEND_CAP_MESSAGES, ChannelPolicy, ChannelPolicyService, withChannelPolicy } from '../channel-policy.service';
 
 /**
  * A handle on a `channel_events` row, so a later step can finish it.
@@ -103,11 +103,11 @@ export class ChannelGatewayService {
     // the unique index, so an absent or unreachable Redis costs a DB
     // round trip and nothing else.
     @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
-    // The app each channel is a place of: its per-run cost cap, its spend
-    // cap across every place, and whether sender conversations may reach
+    // The agent channel each gateway answers for: its per-run cost cap, the
+    // spend allowance it draws on, and whether sender conversations may reach
     // shared memory. Optional for the same positional-construction reason;
-    // Nest always injects it (app-place-policy.guard.spec.ts).
-    @Optional() private readonly places?: AppPlacePolicyService,
+    // Nest always injects it (channel-policy.guard.spec.ts).
+    @Optional() private readonly channelPolicy?: ChannelPolicyService,
   ) {
 
     this.adapters = new Map<string, BaseAdapter>([
@@ -297,14 +297,14 @@ export class ChannelGatewayService {
       }
     }
 
-    // The app's allowance across every place and sender. Once it is spent
+    // The spend allowance this channel draws on. Once it is spent
     // the sender is told so in plain words, and no run starts: the reply
     // is a platform message, not a model call, so it costs nothing.
-    const place = this.places ? await this.places.forGateway(gateway) : null;
-    const reached = place && this.places ? await this.places.reachedFor(place) : null;
+    const policy = this.channelPolicy ? await this.channelPolicy.forGateway(gateway) : null;
+    const reached = policy && this.channelPolicy ? await this.channelPolicy.reachedFor(policy) : null;
     if (reached) {
-      await this.replyWithoutRun(gateway, adapter, normalized, APP_SPEND_CAP_MESSAGES[reached.reached], effectiveConfig);
-      await this.markInboundOutcome(claim, { status: 'failed', errorMessage: 'app spend limit reached' });
+      await this.replyWithoutRun(gateway, adapter, normalized, SPEND_CAP_MESSAGES[reached.reached], effectiveConfig);
+      await this.markInboundOutcome(claim, { status: 'failed', errorMessage: 'spend limit reached' });
       return;
     }
 
@@ -357,10 +357,10 @@ export class ChannelGatewayService {
         // channel's facts already live.
         null,
         normalized.text,
-        // The place adds the app's per-run cost cap, its id for the spend
+        // The policy adds the per-run cost cap, the channel id for the spend
         // cap, the visitor mark for shared memory, and files the
         // conversation under this gateway for retention.
-        withPlace(place, {
+        withChannelPolicy(policy, {
           maxSteps: 25,
           metadata: {
             channelUserId: normalized.userId,
@@ -497,8 +497,8 @@ export class ChannelGatewayService {
   }
 
   /**
-   * Answer a sender with a fixed sentence and no run: the app has spent
-   * its allowance, and saying so must not cost a model call. Delivery is
+   * Answer a sender with a fixed sentence and no run: the spend allowance
+   * is used up, and saying so must not cost a model call. Delivery is
    * best effort and recorded like any other outbound message.
    */
   private async replyWithoutRun(
@@ -656,7 +656,7 @@ export class ChannelGatewayService {
   async handleWidgetMessage(
     gateway: Gateway,
     body: { message: string; sessionId?: string; threadId?: string },
-    place?: AppPlace | null,
+    policy?: ChannelPolicy | null,
   ): Promise<{ runId: string; threadId: string }> {
     if (!gateway.isActive()) {
       throw new BadRequestException('Gateway is not active');
@@ -718,10 +718,10 @@ export class ChannelGatewayService {
         normalized.text,
         // Runs in the gateway's scope: a channel serves its agent only while
         // the gateway's own visibility covers it, checked on every message.
-        // The place adds the app's per-run cost cap, its id for the spend
+        // The policy adds the per-run cost cap, the channel id for the spend
         // cap, the visitor mark for shared memory, and files the
         // conversation under this gateway for retention and erasure.
-        withPlace(place, { maxSteps: 25, metadata: channelMetadata, principal: gatewayPrincipal(gateway) }),
+        withChannelPolicy(policy, { maxSteps: 25, metadata: channelMetadata, principal: gatewayPrincipal(gateway) }),
       );
 
       run.metadata = {

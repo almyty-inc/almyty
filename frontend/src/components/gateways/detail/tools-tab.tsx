@@ -164,8 +164,7 @@ export function GatewayToolsTab({
 
   return (
     <>
-      {/* Scoping presets. A shared-tools page leaves them out: its list
-          below is the whole story. */}
+      {/* Scoping presets, unless the caller wants just the list. */}
       {!hidePresets && (
       <Card>
         <CardHeader>

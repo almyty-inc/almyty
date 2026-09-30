@@ -16,6 +16,21 @@ export function formatRunnerLabels(value: Record<string, string> | string | null
   return Object.entries(value).map(([k, v]) => `${k}=${v}`).join(', ')
 }
 
+/** The labels as an object, from the stored object or the typed text; malformed parts left out. */
+export function parseRunnerLabels(value: Record<string, string> | string | null | undefined): Record<string, string> {
+  if (!value) return {}
+  if (typeof value !== 'string') return { ...value }
+  const out: Record<string, string> = {}
+  for (const part of value.split(/[,\n]/)) {
+    const at = part.indexOf('=')
+    if (at <= 0) continue
+    const key = part.slice(0, at).trim()
+    const val = part.slice(at + 1).trim()
+    if (key && val) out[key] = val
+  }
+  return out
+}
+
 /** The parts of the typed text that are not key=value, for a hint in place. */
 export function malformedRunnerLabels(text: string): string[] {
   return text

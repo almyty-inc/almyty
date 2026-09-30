@@ -31,6 +31,14 @@ export interface StrategyStep {
   kind: StrategyStepKind;
   /** Which role slot performs this step. Absent for pure structure (parallel, merge). */
   roleSlot?: string;
+  /**
+   * Makes `roleSlot` optional. When the agent has no role for it, the
+   * first of these slots it does have a role for stands in; with none of
+   * them, the step names no role and takes the organization's default
+   * routing policy. The panel's judge is the case: a judge role, else the
+   * principal. Slot names only, never a model.
+   */
+  fallbackSlots?: string[];
   /** Step-kind parameters: merge strategy, candidate count, thresholds. Never a model. */
   params?: Record<string, unknown>;
   /** Step ids this one feeds. */

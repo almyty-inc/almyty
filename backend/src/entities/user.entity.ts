@@ -84,6 +84,18 @@ export class User {
   @Column({ type: 'json', nullable: true })
   preferences: Record<string, any>;
 
+  /**
+   * The person's time zone, an IANA name such as `Europe/Berlin`. Emails
+   * sent at a time of day (the daily model digest, 08:00) use it; UTC while
+   * unset.
+   */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  timezone: string | null;
+
+  /** When this person's last daily model digest went out (model-catalog/notices). */
+  @Column({ type: 'timestamptz', nullable: true })
+  modelDigestSentAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

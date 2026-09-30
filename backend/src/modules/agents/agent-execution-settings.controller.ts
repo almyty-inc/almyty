@@ -132,6 +132,20 @@ export class AgentExecutionSettingsController {
       }
     }
 
+    // A shape with an optional slot -- the panel's judge -- runs only when
+    // a role, a stand-in role or the organization's default routing fills
+    // it. With none, the run would pay for every panelist and then fail at
+    // the judge, so the choice is refused now, in words that say what to add.
+    if (body.strategyKey) {
+      const unfilled = await this.resolver.unfilledOptionalSlot(agent, body.strategyKey);
+      if (unfilled) {
+        throw new HttpException(
+          { success: false, message: unfilled, code: 'STRATEGY_ROLE_MISSING' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
     const current = (agent.settings?.execution ?? {}) as AgentExecutionSettings;
     const execution: AgentExecutionSettings = {
       ...current,

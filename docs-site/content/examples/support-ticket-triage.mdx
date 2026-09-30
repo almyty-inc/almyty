@@ -30,7 +30,7 @@ checks the draft before it ships. Two real runs from its history:
    **GPT-4o at temp 0.3**: and instructions to triage the ticket, look up the order, and draft
    a reply in your voice.
 2. **Attach the tools** it needs, here an **order-lookup** tool generated from a connected
-   orders API. (Connect yours in *APIs → Connect an API*: paste the spec link, click **Import**.)
+   orders API. (Connect yours in *APIs → Connect an API*: pick its kind, give the spec link, click **Connect API**.)
 3. **Add a verifier panel** (*Models & Verification → Configure*): add reviewers from more than
    one vendor, this agent runs **GPT-4o + Gemini 1.5 Pro** with `any_fail_blocks` and up to
    **2 revisions**, triggered `on_final_output`. The primary drafts, the reviewers try to

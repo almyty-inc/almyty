@@ -1,10 +1,11 @@
 /**
- * Connections layer types: connectors (what can be connected), connections
- * (an account the org or a user connected) and grants (who may use one).
+ * Credential types: services (what a credential can be added for, a
+ * "connector" in the code), credentials added for one (a "connection")
+ * and grants (who may use one).
  *
  * Mirrors backend/src/modules/connections/connector.types.ts and the
- * /connectors, /connections and /connections/:id/grants controllers. Secret
- * values never travel in any of these shapes.
+ * /credentials/services, /credentials and /credentials/:id/grants routes.
+ * Secret values never travel in any of these shapes.
  */
 import type { JsonSchemaObject } from './deployments'
 
@@ -166,6 +167,8 @@ export interface Connection {
   createdAt: string
   updatedAt?: string
   expiresAt?: string | null
+  /** The model provider connection this is the key of, when it is one; changed on that connection's page. */
+  providerId?: string | null
 }
 
 export interface ConnectBody {

@@ -1,15 +1,15 @@
 /**
- * The connect flow every place uses: pick a service from the tiles, then
- * give it the one thing it needs (its key, or a sign-in at the service),
- * say who can use it, and it is checked on save. Everything else (other
- * ways to connect, optional settings, pasting a sign-in code) waits under
- * Advanced.
+ * The add-a-credential flow every place uses: pick a service from the
+ * tiles, then give it the one thing it needs (its key, or a sign-in at the
+ * service), say who can use it, and it is checked on save. Everything else
+ * (other ways to sign in, optional settings, pasting a sign-in code) waits
+ * under Advanced.
  *
  * It is never a dialog. It renders in one of two places:
- *   - the Connections page, /connections/connect (pages/connections-connect.tsx);
- *   - inline, right under a form's "Connect an account" button
- *     (ConnectAccountButton below), so a half-filled form keeps its state and
- *     gets the new connection handed straight back.
+ *   - the Credentials page, /credentials/new (pages/credential-new.tsx);
+ *   - inline, under "Create one here" in the pick-or-create control
+ *     (components/credentials/credential-picker.tsx), so a half-filled form
+ *     keeps its state and gets the new credential handed straight back.
  *
  * Inline, it sits inside the other form's <form>, so it renders no <form>
  * of its own there (a nested form is invalid and would submit the outer
@@ -17,7 +17,7 @@
  * call the handler directly.
  *
  * With `rotateConnection` the same form replaces the key of an existing
- * connection (POST /connections/:id/rotate) instead of making a new one.
+ * credential (POST /connections/:id/rotate) instead of making a new one.
  */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type SyntheticEvent } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -152,6 +152,10 @@ export interface ConnectFlowProps {
   embedded?: boolean
   /** Picking a tile. On a page this navigates to the tile's URL; absent, the pick is kept here. */
   onPick?: (connector: Connector) => void
+  /** "Other service": the name the new credential starts with, e.g. "Acme API key". */
+  defaultName?: string
+  /** Told whether a value has been typed and not saved yet, so the host can ask before leaving. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 type SignIn =
@@ -169,7 +173,8 @@ interface Failure {
 /** What a connect is about to do, as a title. */
 export function connectTitle(connector: Connector | null | undefined, rotateConnection?: Connection | null): string {
   if (rotateConnection) return `Replace the key of ${rotateConnection.name}`
-  return connector ? `Connect ${connector.displayName}` : 'Connect a service'
+  if (connector?.key === OTHER_SERVICE_KEY) return 'Add a key'
+  return connector ? `Add ${connector.displayName}` : 'Add credential'
 }
 
 /** A <form> on a page; a group that submits on its buttons and Enter when embedded. */
@@ -222,10 +227,10 @@ function readFailure(error: unknown, connector: Connector): Failure {
           : `${connector.displayName} did not accept this.`
     return { message, detail: validation.message, connection: validation.connection }
   }
-  return { message: errorMessage(error, `${connector.displayName} could not be connected.`) }
+  return { message: errorMessage(error, `${connector.displayName} was not saved.`) }
 }
 
-export function ConnectFlow({ kind, connectorKey, onConnected, onCancel, rotateConnection, pollIntervalMs = 2000, embedded = false, onPick }: ConnectFlowProps) {
+export function ConnectFlow({ kind, connectorKey, onConnected, onCancel, rotateConnection, pollIntervalMs = 2000, embedded = false, onPick, defaultName, onDirtyChange }: ConnectFlowProps) {
   const targetKey = rotateConnection?.connectorKey ?? connectorKey
   const [search, setSearch] = useState('')
   const [pickedKey, setPickedKey] = useState<string | null>(targetKey ?? null)
@@ -280,7 +285,7 @@ export function ConnectFlow({ kind, connectorKey, onConnected, onCancel, rotateC
           onPick={pick}
           searchLabel="Search services"
           testIdPrefix="service-tile"
-          empty={<p className="text-sm text-muted-foreground">Nothing to connect here yet.</p>}
+          empty={<p className="text-sm text-muted-foreground">Nothing to add here yet.</p>}
         />
       )}
 
@@ -294,6 +299,8 @@ export function ConnectFlow({ kind, connectorKey, onConnected, onCancel, rotateC
           onConnected={onConnected}
           onCancel={embedded ? onCancel : undefined}
           onChooseAnother={embedded && !targetKey ? () => setPickedKey(null) : undefined}
+          defaultName={defaultName}
+          onDirtyChange={onDirtyChange}
         />
       )}
 
@@ -324,18 +331,22 @@ export interface ConnectServiceFormProps {
   onCancel?: () => void
   /** Inline only: back to the tiles. */
   onChooseAnother?: () => void
+  /** "Other service": the name the new credential starts with. */
+  defaultName?: string
+  /** Told whether a value has been typed and not saved yet. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 /**
  * One service: its key (or a sign-in at the service), who can use it, and
- * Connect. Saving checks it with the service; a refusal is said in plain
+ * Save. Saving checks it with the service; a refusal is said in plain
  * words next to the key and the form stays filled.
  */
-export function ConnectServiceForm({ connector, onConnected, embedded = false, rotateConnection, pollIntervalMs = 2000, onCancel, onChooseAnother }: ConnectServiceFormProps) {
+export function ConnectServiceForm({ connector, onConnected, embedded = false, rotateConnection, pollIntervalMs = 2000, onCancel, onChooseAnother, defaultName, onDirtyChange }: ConnectServiceFormProps) {
   const owners = useConnectOwners()
   const [methodType, setMethodType] = useState<ConnectMethod['type'] | null>(rotateConnection?.method ?? null)
   const [who, setWho] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
-  const [name, setName] = useState('')
+  const [name, setName] = useState(defaultName ?? '')
   const [values, setValues] = useState<SchemaFormValues>({})
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [failure, setFailure] = useState<Failure | null>(null)
@@ -359,6 +370,14 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
     setFieldErrors({})
     setFailure(null)
   }, [method?.type])
+
+  // Something typed that is not a default yet: a half-entered key.
+  const defaults = useMemo(() => schemaDefaults(method?.schema), [method?.schema])
+  const dirty = Object.entries(values).some(([k, v]) => v !== undefined && v !== '' && v !== defaults[k])
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty])
+  useEffect(() => () => onDirtyChange?.(false), [])
 
   const stopPolling = () => {
     pollAbort.current?.abort()
@@ -453,12 +472,12 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
   const redirect = !!method && isRedirectMethod(method.type)
   const others = connector.connect.filter((m) => m.type !== method?.type)
 
-  if (!method) return <p className="text-sm text-muted-foreground">This service has no way to connect yet.</p>
+  if (!method) return <p className="text-sm text-muted-foreground">This service can't be added yet.</p>
 
   if (!rotateConnection && !owners.loading && owners.options.length === 0) {
     return (
       <p className="text-sm text-muted-foreground" data-testid="connect-admins-only">
-        Only admins can connect services for your organization. Ask one to connect {connector.displayName}, or to allow personal keys.
+        Only admins can add credentials for your organization. Ask one to add {connector.displayName}, or to allow personal keys.
       </p>
     )
   }
@@ -483,15 +502,15 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
   )
 
   const whoLine = !rotateConnection && (
-    <WhoCanUse value={who} onChange={setWho} disabled={busy} noun="this connection" options={owners.options.length > 0 ? owners.options : ['org']} />
+    <WhoCanUse value={who} onChange={setWho} disabled={busy} noun="this credential" options={owners.options.length > 0 ? owners.options : ['org']} />
   )
 
   const advanced = (others.length > 0 || extra || method.description || (redirect && signIn.phase !== 'idle' && !signIn.byCode)) && (
     <Disclosure title="Advanced" testId="connect-advanced">
       {others.length > 0 && (
         <div className="space-y-1.5">
-          <Label>Another way to connect</Label>
-          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Another way to connect">
+          <Label>Another way to sign in</Label>
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Another way to sign in">
             {connector.connect.map((m) => (
               <Button key={m.type} type="button" size="sm" variant={m.type === method.type ? 'default' : 'outline'} role="radio" aria-checked={m.type === method.type} onClick={() => setMethodType(m.type)}>
                 {m.label || CONNECT_METHOD_LABELS[m.type]}
@@ -524,7 +543,7 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" onClick={startSignIn} disabled={busy}>
                 {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : <ExternalLink className="mr-2 h-4 w-4" aria-hidden />}
-                Connect
+                Sign in
               </Button>
               {onCancel && (
                 <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>
@@ -561,7 +580,7 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
     )
   }
 
-  if (!isFormMethod(method.type)) return <p className="text-sm text-muted-foreground">This service has no way to connect yet.</p>
+  if (!isFormMethod(method.type)) return <p className="text-sm text-muted-foreground">This service can't be added yet.</p>
 
   return (
     <FormBox embedded={embedded} onSubmit={submitForm} className="space-y-4" testId="connect-form" label={connectTitle(connector, rotateConnection)}>
@@ -595,7 +614,7 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
       <div className="flex flex-wrap items-center gap-3">
         <Button type={submitType} onClick={embedded ? submitForm : undefined} disabled={busy}>
           {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
-          {busy ? (shapeOnly ? 'Saving...' : 'Checking your key...') : rotateConnection ? 'Replace key' : 'Connect'}
+          {busy ? (shapeOnly ? 'Saving...' : 'Checking your key...') : rotateConnection ? 'Replace key' : 'Save'}
         </Button>
         {onCancel && (
           <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>
@@ -629,47 +648,5 @@ function PasteCode({ embedded, code, onCode, onSubmit, busy, submitType, pending
         </Button>
       </div>
     </FormBox>
-  )
-}
-
-export interface ConnectAccountButtonProps {
-  kind?: ConnectorKind
-  connectorKey?: string
-  onConnected: (connection: Connection) => void
-  label?: string
-  variant?: 'outline' | 'ghost' | 'link' | 'secondary' | 'default'
-  size?: 'sm' | 'default'
-  className?: string
-}
-
-/**
- * "Connect an account" next to a form's own key field. The connect flow
- * opens inline under the button, so the half-filled form stays where it is
- * and the new connection is handed straight back through `onConnected`.
- */
-export function ConnectAccountButton({ kind, connectorKey, onConnected, label = 'Connect an account', variant = 'outline', size = 'sm', className }: ConnectAccountButtonProps) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className={cn('space-y-3', open && 'w-full basis-full')}>
-      {!open && (
-        <Button type="button" variant={variant} size={size} className={cn('gap-1.5', className)} onClick={() => setOpen(true)} aria-expanded={false}>
-          <Plug className="h-3.5 w-3.5" aria-hidden />
-          {label}
-        </Button>
-      )}
-      {/* Mounted only while open: some forms render outside a QueryClientProvider in tests, and nothing is needed until then. */}
-      {open && (
-        <ConnectFlow
-          embedded
-          kind={kind}
-          connectorKey={connectorKey}
-          onCancel={() => setOpen(false)}
-          onConnected={(connection) => {
-            setOpen(false)
-            onConnected(connection)
-          }}
-        />
-      )}
-    </div>
   )
 }

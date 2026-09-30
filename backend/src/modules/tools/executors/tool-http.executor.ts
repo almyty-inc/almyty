@@ -246,7 +246,7 @@ export class ToolHttpExecutor {
       if (api) {
         await this.authService.applyApiAuth(axiosConfig, api, options);
       } else if (tool.authConfig) {
-        this.authService.applyInlineToolAuth(axiosConfig, tool.authConfig);
+        await this.authService.applyToolAuth(axiosConfig, tool, options);
       }
 
       // 9. Body encoding.

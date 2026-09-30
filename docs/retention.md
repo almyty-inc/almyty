@@ -40,10 +40,11 @@ Like every other class, both default to null. Unlimited growth is the
 default for all seven; these two are simply the ones where it costs the
 most.
 
-## Per-app retention
+## Per-agent and per-channel retention
 
-An app under `/apps` can carry its own `privacy.retentionDays`, which
-sweeps the conversations reaching it through its gateways. It never keeps
+An agent can carry its own `privacy.retentionDays` in its visitor rules,
+and a channel can override it; the sweep removes the conversations reaching
+each channel through its gateway after the effective period. It never keeps
 data **longer** than the organization policy — the shorter of the two
 wins.
 

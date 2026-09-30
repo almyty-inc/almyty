@@ -56,7 +56,7 @@ describe('PoliciesTable', () => {
     const row1 = await screen.findByTestId('policy-row-p1')
     expect(within(row1).getByTestId('policy-kind-badge')).toHaveAttribute('data-kind', 'connector_allowlist')
     expect(row1).toHaveTextContent('Approved vendors')
-    await waitFor(() => expect(within(row1).getByTestId('policy-summary')).toHaveTextContent('Organization connections may only use OpenAI, Anthropic'))
+    await waitFor(() => expect(within(row1).getByTestId('policy-summary')).toHaveTextContent('Organization credentials may only use OpenAI, Anthropic'))
     expect(within(row1).getByRole('switch', { name: 'Disable Approved vendors' })).toHaveAttribute('aria-checked', 'true')
 
     const row2 = screen.getByTestId('policy-row-p2')
@@ -64,7 +64,7 @@ describe('PoliciesTable', () => {
     expect(within(row2).getByTestId('policy-summary')).toHaveTextContent('Secrets expire after 90 days, warning 7 days ahead, grants are revoked on expiry')
     expect(within(row2).getByRole('switch', { name: 'Enable Expiry rule' })).toHaveAttribute('aria-checked', 'false')
 
-    expect(within(screen.getByTestId('policy-row-p3')).getByTestId('policy-summary')).toHaveTextContent('Agents in production may only use organization connections from approved connectors')
+    expect(within(screen.getByTestId('policy-row-p3')).getByTestId('policy-summary')).toHaveTextContent('Agents in production may only use organization credentials from approved connectors')
   })
 
   it('toggles enabled through PATCH', async () => {
@@ -89,7 +89,7 @@ describe('PoliciesTable', () => {
   // Add and edit are pages now (policy-form.test.tsx drives them).
   it('links each row to its edit page', async () => {
     render(<PoliciesTable />)
-    expect(await screen.findByRole('link', { name: 'Edit Approved vendors' })).toHaveAttribute('href', '/connections/policies/p1')
+    expect(await screen.findByRole('link', { name: 'Edit Approved vendors' })).toHaveAttribute('href', '/credentials/policies/p1')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -99,6 +99,6 @@ describe('PoliciesTable', () => {
     expect(await screen.findByText('No policies yet')).toBeInTheDocument()
     const links = screen.getAllByRole('link', { name: 'Add policy' })
     expect(links).toHaveLength(2)
-    for (const link of links) expect(link).toHaveAttribute('href', '/connections/policies/new')
+    for (const link of links) expect(link).toHaveAttribute('href', '/credentials/policies/new')
   })
 })

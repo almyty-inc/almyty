@@ -40,10 +40,7 @@ describe('modelsApi', () => {
     expect(postSpy).toHaveBeenLastCalledWith('/models/sync', undefined, undefined)
   })
 
-  it('gets and updates by id', async () => {
-    await modelsApi.get('c1')
-    expect(getSpy).toHaveBeenCalledWith('/models/c1', undefined)
-
+  it('updates by id', async () => {
     await modelsApi.update('c1', { privacyTier: 'private_cloud', pricingOverride: null })
     expect(patchSpy).toHaveBeenCalledWith('/models/c1', { privacyTier: 'private_cloud', pricingOverride: null }, undefined)
   })

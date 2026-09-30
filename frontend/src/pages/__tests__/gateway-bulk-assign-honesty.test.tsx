@@ -31,7 +31,6 @@ vi.mock('../../lib/api', () => ({
     getEvents: vi.fn().mockResolvedValue([]),
     getAuthConfig: vi.fn().mockResolvedValue({}),
     getApiKeys: vi.fn().mockResolvedValue([]),
-    testChannelConnection: vi.fn(),
   },
   toolsApi: { getAll: vi.fn() },
   organizationsApi: { getTeams: vi.fn().mockResolvedValue([]) },

@@ -10,6 +10,23 @@ import { Message } from '../../entities/message.entity';
 import { BUILT_IN_TOOLS } from './agent-runtime.service';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
 import { buildCollaborationContext } from './collaboration-participants';
+import { memorySettings, type AgentMemoryConfig } from './agent-memory-settings';
+
+/**
+ * What the store_memory tool tells the model: when to save (every time it
+ * learns something lasting, or only when the person asks it to remember
+ * something) and what never to save. The rules are enforced too: every
+ * save is screened against them (AgentMemoryKeeper), so this is guidance,
+ * not the guard.
+ */
+export function storeMemoryDescription(agent: Pick<Agent, 'memoryConfig'>): string {
+  const s = memorySettings(agent.memoryConfig as AgentMemoryConfig);
+  const when =
+    s.save === 'asked'
+      ? 'Save something to your memory, only when the person asks you to remember it.'
+      : 'Save an important fact, preference, or piece of context to your memory for later conversations.';
+  return s.neverSave.length ? `${when} Never save: ${s.neverSave.join('; ')}.` : when;
+}
 
 /**
  * How many recent messages a run rebuilds its thread from by default.
@@ -93,8 +110,10 @@ export class AgentRuntimeBuilders {
     toolLines.push('- wait: Pause execution');
     toolLines.push('- ask_user: Ask user a question');
     toolLines.push('- request_approval: Pause for human approval before continuing');
-    toolLines.push('- store_memory: Save to long-term memory');
-    toolLines.push('- recall_memory: Search long-term memory');
+    if (agent.memoryConfig?.enabled) {
+      toolLines.push(`- store_memory: ${storeMemoryDescription(agent)}`);
+      toolLines.push('- recall_memory: Search your memory');
+    }
     parts.push(`[AVAILABLE TOOLS]\nYou have access to these tools:\n${toolLines.join('\n')}`);
 
     const systemPrompt = parts.join('\n\n');
@@ -155,7 +174,7 @@ export class AgentRuntimeBuilders {
     defs.push(BUILT_IN_TOOLS.ask_user);
     defs.push(BUILT_IN_TOOLS.request_approval);
     if (agent.memoryConfig?.enabled) {
-      defs.push(BUILT_IN_TOOLS.store_memory);
+      defs.push({ ...BUILT_IN_TOOLS.store_memory, description: storeMemoryDescription(agent) });
       defs.push(BUILT_IN_TOOLS.recall_memory);
     }
 

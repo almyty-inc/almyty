@@ -2,41 +2,40 @@
 
 Let other AI agents call your agent. almyty speaks Google's Agent-to-Agent protocol: any A2A-compatible client reads your agent's Agent Card, sees what the agent can do, and sends it messages over JSON-RPC.
 
-An agent that other agents call is an agent in front of someone, so it is a place on an app, next to its web app, its website widget and its chat channels. There is no separate A2A gateway to create.
+An agent that other agents call is an agent in front of someone, so it is a channel on the agent, next to its web chat, its website widget and its messaging channels. There is no separate A2A gateway to create.
 
 ## Put your agent in front of other agents
 
-1. Open **Apps** and pick the app, or create one with **Create app** and add the agent on its **Agents** tab
-2. On **Where people use it**, select **Add a place** and pick **Other agents (A2A)**
-3. If the app has several agents, choose under **Answered by** which one other agents reach
-4. Select **Publish**
-5. Under **How other agents sign in**, generate a key for each caller. Every JSON-RPC call sends one in the `x-api-key` header
+1. Open the agent and go to its **Channels** tab
+2. Select **Add channel** and pick **Other agents (A2A)**
+3. Select **Publish**
+4. Under **How other agents sign in**, generate a key for each caller. Every JSON-RPC call sends one in the `x-api-key` header
 
-Only an autonomous agent can go on this place: the A2A server runs a conversation, which a workflow agent does not hold, so publishing refuses one.
+Only an autonomous agent can have this channel: the A2A server runs a conversation, which a workflow agent does not hold, so publishing refuses one.
 
-The place's page shows both addresses once it is published. The endpoint follows this pattern:
+The channel's page shows both addresses once it is published. The endpoint follows this pattern:
 
 ```
-https://api.almyty.com/{org}/apps/{app}/a2a
+https://api.almyty.com/{org}/channels/{channel-id}
 ```
 
 The Agent Card is generated automatically next to it:
 
 ```
-https://api.almyty.com/{org}/apps/{app}/a2a/.well-known/agent-card.json
+https://api.almyty.com/{org}/channels/{channel-id}/.well-known/agent-card.json
 ```
 
 `.well-known/agent.json` is accepted as an alias, and a plain `GET` on the endpoint
 returns the same card. Those three reads are public; the JSON-RPC endpoint is not. The
-card and the endpoint answer only while the place is published and its agent is active:
-unpublish the place, or switch the agent off, and both answer not found.
+card and the endpoint answer only while the channel is published and its agent is active:
+unpublish the channel, or switch the agent off, and both answer not found.
 
 ## Connect an agent
 
 Give the calling agent your Agent Card URL and one of the keys. It reads the card, discovers your skills, and starts sending tasks. No manual request building on your side.
 
 ```
-https://api.almyty.com/acme/apps/support/a2a/.well-known/agent-card.json
+https://api.almyty.com/acme/channels/5b1f0c2e-8d4a-4c7e-9a31-2f6d7e8c9b10/.well-known/agent-card.json
 ```
 
 almyty emits A2A **v1.0**, so the card carries `supportedInterfaces` rather than a bare
@@ -49,7 +48,7 @@ almyty emits A2A **v1.0**, so the card carries `supportedInterfaces` rather than
   "version": "1.0.0",
   "supportedInterfaces": [
     {
-      "url": "https://api.almyty.com/acme/apps/support/a2a",
+      "url": "https://api.almyty.com/acme/channels/5b1f0c2e-8d4a-4c7e-9a31-2f6d7e8c9b10",
       "protocolBinding": "JSONRPC",
       "protocolVersion": "1.0"
     }
@@ -72,7 +71,7 @@ almyty emits A2A **v1.0**, so the card carries `supportedInterfaces` rather than
   ],
   "defaultInputModes": ["text"],
   "defaultOutputModes": ["text"],
-  "url": "https://api.almyty.com/acme/apps/support/a2a"
+  "url": "https://api.almyty.com/acme/channels/5b1f0c2e-8d4a-4c7e-9a31-2f6d7e8c9b10"
 }
 ```
 
@@ -100,7 +99,7 @@ accepts all three dialects on input (`{ "type": "text", ... }`, `{ "kind": "text
 `{ "text": ... }`), so a v0.x client does not have to change.
 
 ```bash
-curl -X POST https://api.almyty.com/acme/apps/support/a2a \
+curl -X POST https://api.almyty.com/acme/channels/5b1f0c2e-8d4a-4c7e-9a31-2f6d7e8c9b10 \
   -H "x-api-key: your-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -196,4 +195,4 @@ kebab-case ones from v0.2.x / v0.3.x.
 `TASK_STATE_COMPLETED`, `TASK_STATE_FAILED`, `TASK_STATE_CANCELED`, and
 `TASK_STATE_REJECTED` are terminal — nothing transitions out of them.
 
-The keys on the place's page are gateway keys, so [Gateway Authentication](/gateways/authentication) applies to them: add another sign-in method there, or revoke a key. Discovery endpoints such as the Agent Card stay public so other agents can find you.
+The keys on the channel's page are gateway keys, so [Gateway Authentication](/gateways/authentication) applies to them: add another sign-in method there, or revoke a key. Discovery endpoints such as the Agent Card stay public so other agents can find you.

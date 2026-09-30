@@ -1,6 +1,7 @@
 /**
- * Client for the EE connections governance routes under /ee/connections.
- * Every route needs the `connections_governance` entitlement (402 without
+ * Client for the EE credentials governance routes under /ee/credentials
+ * (/ee/connections still answers the same).
+ * Every route needs the `credentials_governance` entitlement (402 without
  * it) and an owner or admin; the UI gates on the entitlement first. The
  * helpers below unwrap the `{ success, data }` envelope.
  */
@@ -33,9 +34,9 @@ import {
 } from '@/types/connections-governance'
 import { pluralized } from './utils'
 
-export const CONNECTIONS_GOVERNANCE_ENTITLEMENT = 'connections_governance'
+export const CONNECTIONS_GOVERNANCE_ENTITLEMENT = 'credentials_governance'
 
-const BASE = '/ee/connections'
+const BASE = '/ee/credentials'
 
 export const POLICIES_QUERY_KEY = ['connections-governance', 'policies'] as const
 export const REVIEW_QUERY_KEY = ['connections-governance', 'review'] as const
@@ -285,7 +286,7 @@ export function describePolicyRule(policy: Pick<ConnectionPolicy, 'kind' | 'rule
     case 'connector_allowlist':
     case 'connector_denylist': {
       if (!isConnectorListRule(rule)) return POLICY_KIND_LABELS[policy.kind]
-      const who = rule.owners?.length === 1 ? (rule.owners[0] === 'org' ? 'Organization connections' : 'Personal connections') : 'All connections'
+      const who = rule.owners?.length === 1 ? (rule.owners[0] === 'org' ? 'Organization credentials' : 'Personal credentials') : 'All credentials'
       const verb = policy.kind === 'connector_allowlist' ? 'may only use' : 'may never use'
       return `${who} ${verb} ${listWords(rule.connectorKeys.map(nameOf))}`
     }
@@ -294,7 +295,7 @@ export function describePolicyRule(policy: Pick<ConnectionPolicy, 'kind' | 'rule
       const kinds = listWords(rule.principalKinds.map((k) => SCOPE_PRINCIPAL_KIND_LABELS[k] ?? k))
       const where = rule.environments?.length ? ` in ${listWords(rule.environments)}` : ''
       const approved = rule.approvedConnectorsOnly ? ' from approved connectors' : ''
-      return `${kinds}${where} may only use organization connections${approved}`
+      return `${kinds}${where} may only use organization credentials${approved}`
     }
     case 'expiry_rule': {
       if (!isExpiryRule(rule)) return POLICY_KIND_LABELS[policy.kind]

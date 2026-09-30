@@ -169,8 +169,14 @@ export function compileStrategy(
   };
 
   shape.steps.forEach((step, i) => {
-    const slotRole = step.roleSlot ? bindings[step.roleSlot] : undefined;
-    if (step.roleSlot && !slotRole) {
+    // An optional slot (one with fallbackSlots) takes the first stand-in
+    // the agent has a role for, and with none names no role at all: the
+    // node then takes the organization's default routing, the same as any
+    // model node that names neither a role nor a provider.
+    const slotRole = step.roleSlot
+      ? (bindings[step.roleSlot] ?? (step.fallbackSlots ?? []).map((s) => bindings[s]).find(Boolean))
+      : undefined;
+    if (step.roleSlot && !slotRole && !step.fallbackSlots) {
       throw new StrategyCompileError(`Step "${step.id}" uses slot "${step.roleSlot}", which is not bound`);
     }
     const copies = idsFor(step.id);
@@ -229,9 +235,47 @@ export function compileStrategy(
     });
   });
 
+  // What the run answers with. An output node with no mapping hands back
+  // every node's output keyed by node id, which was every compiled
+  // strategy's answer: the draft, the verdict, each candidate and the
+  // judge's pick as one JSON object, and for explore-extract-patch, whose
+  // last step is its check, a verdict where the answer should be.
+  //
+  // The answer is what the last step that writes one produced: a call's
+  // text, the candidate a best-of-n judge picked, the answer a consensus
+  // judge wrote. A check writes no answer, so a check that ends a shape
+  // answers with what it checked. A check with a failure path answers two
+  // ways: the escalation when it ran (it runs only when the check failed),
+  // otherwise what the check passed. The output node reads those in that
+  // order and takes the first a step that ran produced.
+  //
+  // A shape that ends on more than one step, or on a replicated one, has
+  // no single answer; its output stays the map rather than a guess.
+  const pathSafe = (id: string) => /^[A-Za-z0-9_-]+$/.test(id);
+  const answerOf = (step: StrategyStep, seen = new Set<string>()): string | null => {
+    if (seen.has(step.id)) return null;
+    seen.add(step.id);
+    if (step.kind === 'verify') {
+      const checked = shape.steps.filter((s) => s.kind !== 'parallel' && (s.next ?? []).includes(step.id));
+      return checked.length === 1 ? answerOf(checked[0], seen) : null;
+    }
+    if (step.kind === 'parallel' || idsFor(step.id).length !== 1 || !pathSafe(step.id)) return null;
+    if (step.kind === 'merge' && step.params?.strategy === 'consensus') return `nodes.${step.id}.output.answer`;
+    return `nodes.${step.id}.output`;
+  };
+  const leaves = shape.steps.filter((s) => !(s.next ?? []).length);
+  const answerSources = leaves.length === 1 ? [leaves[0], ...shape.steps.filter(isGated)].map((s) => answerOf(s)) : [null];
+  const answer = answerSources.every((s): s is string => typeof s === 'string') ? [...new Set(answerSources)] : [];
+
   // The output node has to exist before the edges that reach it: a gate's
   // pass path goes straight there.
-  nodes.push({ id: 'output', type: 'output', label: 'Output', position: { x: 220 * (shape.steps.length + 1), y: 0 } });
+  nodes.push({
+    id: 'output',
+    type: 'output',
+    label: 'Output',
+    position: { x: 220 * (shape.steps.length + 1), y: 0 },
+    ...(answer.length ? { data: { source: answer.length === 1 ? answer[0] : answer, strategyKey: strategy.key } } : {}),
+  });
 
   for (const entryId of idsFor(shape.entry)) {
     edges.push({ id: `e-input-${entryId}`, source: 'input', target: entryId });
@@ -287,6 +331,15 @@ export function compileStrategy(
   return { nodes, edges };
 }
 
+/** The slots a shape reads when bound and stands in for when not: steps with fallbackSlots. */
+export function optionalRoleSlots(strategy: Pick<Strategy, 'roleSlots' | 'shape'>): string[] {
+  const required = new Set(strategy.roleSlots ?? []);
+  const optional = (strategy.shape?.steps ?? [])
+    .filter((s) => s.roleSlot && s.fallbackSlots && !required.has(s.roleSlot))
+    .map((s) => s.roleSlot as string);
+  return [...new Set(optional)];
+}
+
 /**
  * What a strategy needs and roughly what it costs, for the picker.
  *
@@ -298,6 +351,8 @@ export function describeStrategy(strategy: Pick<Strategy, 'key' | 'displayName' 
   key: string;
   displayName: string;
   roleSlots: string[];
+  /** Slots the shape uses when the agent fills them, and stands in for when it does not (fallbackSlots). */
+  optionalRoleSlots: string[];
   steps: number;
   costBand: 'low' | 'medium' | 'high';
   latencyBand: 'low' | 'medium' | 'high';
@@ -335,6 +390,7 @@ export function describeStrategy(strategy: Pick<Strategy, 'key' | 'displayName' 
     key: strategy.key,
     displayName: strategy.displayName,
     roleSlots: strategy.roleSlots ?? [],
+    optionalRoleSlots: optionalRoleSlots(strategy),
     experimental: Boolean(strategy.experimental),
     steps: steps.length,
     costBand: band(weight),

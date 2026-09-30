@@ -8,8 +8,8 @@ import { GatewaysService } from '../../gateways/gateways.service';
 import { AgentsService } from '../../agents/agents.service';
 import { AgentExecutionEngine } from '../../agents/agent-execution.engine';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
-import { AgentAppsService } from '../../agent-apps/agent-apps.service';
-import { AppBuildsService } from '../../agent-apps/app-builds.service';
+import { AgentChannelsService } from '../../agent-channels/agent-channels.service';
+import { AppBuildsService } from '../../agent-channels/app-builds.service';
 import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
 import { CanonicalMemoryService } from '../../memory/canonical/canonical-memory.service';
 import { ConsolidationService } from '../../memory/canonical/consolidation.service';
@@ -127,23 +127,19 @@ describe('AlmytyMcpService', () => {
     }),
   };
 
-  const mockAgentAppsService: any = {
-    list: jest.fn().mockResolvedValue([
-      { slug: 'acme', name: 'Acme', authMode: 'public_link', isActive: true, agentIds: ['agent-1'] },
-    ]),
-    create: jest.fn().mockResolvedValue({ slug: 'acme', name: 'Acme', authMode: 'public_link', agentIds: ['agent-1'] }),
-    findOne: jest.fn().mockResolvedValue({
-      slug: 'acme', name: 'Acme', description: null, authMode: 'public_link', isActive: true,
-      agentIds: ['agent-1'], branding: {}, limits: null,
-      distributions: [{ target: 'slack', status: 'draft', gatewayId: null }],
-    }),
-    check: jest.fn().mockResolvedValue({ refusals: [{ code: 'PUBLIC_NEEDS_COST_CAP', message: 'A public product needs a cost cap.' }] }),
-    update: jest.fn().mockResolvedValue({ slug: 'acme', name: 'Acme', authMode: 'public_link', limits: { costCapCents: 50 } }),
+  const channelRow = { id: 'channel-1', type: 'slack', status: 'draft', slug: null, gatewayId: null, endpoint: '/channels/channel-1', configuration: { credentialId: 'c-1' } };
+  const mockAgentChannelsService: any = {
+    list: jest.fn().mockResolvedValue([channelRow]),
+    add: jest.fn().mockResolvedValue(channelRow),
+    get: jest.fn().mockResolvedValue({ ...channelRow, type: 'tui', effective: { branding: { appName: 'Acme' } } }),
+    check: jest.fn().mockResolvedValue({ ok: false, refusals: [{ code: 'PUBLIC_NEEDS_COST_CAP', message: 'It needs a spend limit per run.' }] }),
+    update: jest.fn().mockResolvedValue(channelRow),
     remove: jest.fn().mockResolvedValue(undefined),
-    addDistribution: jest.fn().mockResolvedValue({ target: 'slack', status: 'draft', gatewayId: null }),
-    removeDistribution: jest.fn().mockResolvedValue(undefined),
-    publishDistribution: jest.fn().mockResolvedValue({ target: 'slack', status: 'live', gatewayId: 'gw-1' }),
-    unpublishDistribution: jest.fn().mockResolvedValue({ target: 'slack', status: 'draft' }),
+    publish: jest.fn().mockResolvedValue({ ...channelRow, status: 'live', gatewayId: 'gw-1' }),
+    unpublish: jest.fn().mockResolvedValue(channelRow),
+    publicSettings: jest.fn().mockResolvedValue({ branding: null, visitorRules: null }),
+    updatePublicSettings: jest.fn().mockResolvedValue({ branding: { appName: 'Acme' }, visitorRules: null }),
+    manageableAgent: jest.fn().mockResolvedValue({ id: 'agent-1' }),
   };
   const mockAppBuildsService: any = {
     request: jest.fn().mockResolvedValue({ id: 'build-1', status: 'queued', target: 'tui', platform: 'linux-x64', version: '1.0.0' }),
@@ -298,7 +294,7 @@ describe('AlmytyMcpService', () => {
       if (cls === ConsolidationService) return mockConsolidation;
       if (cls === MemoryRouter) return mockRouter;
       if (cls === MemorySyncService) return mockMemorySync;
-      if (cls === AgentAppsService) return mockAgentAppsService;
+      if (cls === AgentChannelsService) return mockAgentChannelsService;
       if (cls === AppBuildsService) return mockAppBuildsService;
       if (typeof cls === 'string' && cls === 'BullQueue_schema-import') return mockSchemaImportQueue;
       // Dynamic require() imports resolve by class name
@@ -848,87 +844,94 @@ describe('AlmytyMcpService', () => {
     });
   });
 
-  describe('Agent Factory (/apps) tools', () => {
+  describe('channel tools', () => {
     const callTool = (name: string, args: any = {}) =>
       call('tools/call', { name, arguments: args });
     const parse = (res: any) => JSON.parse(res.result.content[0].text);
+    const ME = { id: 'user-1' };
 
-    it('advertises the Agent Factory tools', async () => {
+    it('advertises the channel tools, and no app tools', async () => {
       const res = await call('tools/list');
       const names = res.result.tools.map((t: any) => t.name);
-      for (const n of ['list_apps', 'create_app', 'get_app', 'check_app', 'update_app',
-        'delete_app', 'add_distribution', 'remove_distribution', 'publish_distribution',
-        'unpublish_distribution', 'build_app', 'list_builds']) {
+      for (const n of ['list_channels', 'add_channel', 'get_channel', 'check_channel', 'update_channel', 'delete_channel',
+        'publish_channel', 'unpublish_channel', 'get_public_settings', 'update_public_settings', 'build_channel', 'list_builds']) {
         expect(names).toContain(n);
+      }
+      for (const gone of ['list_apps', 'create_app', 'add_distribution', 'publish_distribution', 'build_app']) {
+        expect(names).not.toContain(gone);
       }
     });
 
-    it('create_app forwards name + slug to the service', async () => {
-      const res = await callTool('create_app', { name: 'Acme', slug: 'acme', agentIds: ['agent-1'] });
-      expect(mockAgentAppsService.create).toHaveBeenCalledWith('org-1', { name: 'Acme', slug: 'acme', agentIds: ['agent-1'] });
-      expect(parse(res).slug).toBe('acme');
-    });
-
-    it('list_apps summarises the org apps', async () => {
-      const res = await callTool('list_apps');
-      expect(mockAgentAppsService.list).toHaveBeenCalledWith('org-1');
+    it('list_channels summarises an agent channels, never their configuration', async () => {
+      const res = await callTool('list_channels', { agentId: 'agent-1' });
+      expect(mockAgentChannelsService.list).toHaveBeenCalledWith('org-1', 'agent-1', ME);
       expect(parse(res).total).toBe(1);
-      expect(parse(res).apps[0].slug).toBe('acme');
+      expect(parse(res).channels[0]).toEqual({
+        id: 'channel-1', type: 'slack', status: 'draft', slug: null, gatewayId: null, endpoint: '/channels/channel-1',
+      });
     });
 
-    it('check_app surfaces what blocks shipping', async () => {
-      const res = await callTool('check_app', { slug: 'acme' });
-      expect(mockAgentAppsService.check).toHaveBeenCalledWith('org-1', 'acme');
+    it('add_channel forwards the type, settings and credential as the caller', async () => {
+      await callTool('add_channel', { agentId: 'agent-1', type: 'slack', configuration: { signing_secret: 'x' }, credentialId: 'c-1' });
+      expect(mockAgentChannelsService.add).toHaveBeenCalledWith('org-1', 'agent-1', ME, {
+        type: 'slack',
+        slug: undefined,
+        configuration: { signing_secret: 'x' },
+        credentialId: 'c-1',
+      });
+    });
+
+    it('check_channel surfaces what blocks it', async () => {
+      const res = await callTool('check_channel', { agentId: 'agent-1', channelId: 'channel-1' });
       expect(parse(res).refusals[0].code).toBe('PUBLIC_NEEDS_COST_CAP');
     });
 
-    it('update_app passes the patch without the slug', async () => {
-      await callTool('update_app', { slug: 'acme', limits: { costCapCents: 50 } });
-      expect(mockAgentAppsService.update).toHaveBeenCalledWith('org-1', 'acme', { limits: { costCapCents: 50 } });
+    it('update_channel passes the patch without the ids', async () => {
+      await callTool('update_channel', { agentId: 'agent-1', channelId: 'channel-1', visitorRules: { limits: { costCapCents: 50 } } });
+      expect(mockAgentChannelsService.update).toHaveBeenCalledWith('org-1', 'agent-1', 'channel-1', ME, {
+        visitorRules: { limits: { costCapCents: 50 } },
+      });
     });
 
-    it('add_distribution forwards target, configuration and gatewayId', async () => {
-      await callTool('add_distribution', { slug: 'acme', target: 'slack', configuration: { botToken: 'x' } });
-      expect(mockAgentAppsService.addDistribution).toHaveBeenCalledWith('org-1', 'acme', 'slack', { botToken: 'x' }, null);
-    });
-
-    it('publish_distribution passes the calling user id', async () => {
-      const res = await callTool('publish_distribution', { slug: 'acme', target: 'slack' });
-      expect(mockAgentAppsService.publishDistribution).toHaveBeenCalledWith('org-1', 'acme', 'slack', 'user-1');
+    it('publish_channel and unpublish_channel act as the caller', async () => {
+      const res = await callTool('publish_channel', { agentId: 'agent-1', channelId: 'channel-1' });
+      expect(mockAgentChannelsService.publish).toHaveBeenCalledWith('org-1', 'agent-1', 'channel-1', ME);
       expect(parse(res).status).toBe('live');
+      await callTool('unpublish_channel', { agentId: 'agent-1', channelId: 'channel-1' });
+      expect(mockAgentChannelsService.unpublish).toHaveBeenCalledWith('org-1', 'agent-1', 'channel-1', ME);
     });
 
-    it('unpublish_distribution passes the calling user id', async () => {
-      await callTool('unpublish_distribution', { slug: 'acme', target: 'slack' });
-      expect(mockAgentAppsService.unpublishDistribution).toHaveBeenCalledWith('org-1', 'acme', 'slack', 'user-1');
+    it('update_public_settings changes what every channel of the agent inherits', async () => {
+      await callTool('update_public_settings', { agentId: 'agent-1', branding: { appName: 'Acme' } });
+      expect(mockAgentChannelsService.updatePublicSettings).toHaveBeenCalledWith('org-1', 'agent-1', ME, { branding: { appName: 'Acme' } });
     });
 
-    it('build_app queues a server build for a platform', async () => {
-      const res = await callTool('build_app', { slug: 'acme', target: 'tui', platform: 'linux-x64' });
-      expect(mockAppBuildsService.request).toHaveBeenCalledWith('org-1', 'acme', { target: 'tui', platform: 'linux-x64' }, 'user-1');
+    it('build_channel checks the caller may manage the agent, then queues a build of that channel', async () => {
+      const res = await callTool('build_channel', { agentId: 'agent-1', channelId: 'channel-1', platform: 'linux-x64' });
+      expect(mockAgentChannelsService.manageableAgent).toHaveBeenCalledWith('org-1', 'agent-1', ME);
+      expect(mockAppBuildsService.request).toHaveBeenCalledWith('org-1', expect.objectContaining({ id: 'channel-1' }), { platform: 'linux-x64' }, 'user-1');
       expect(parse(res).id).toBe('build-1');
     });
 
-    it('list_builds returns the build history', async () => {
-      const res = await callTool('list_builds', { slug: 'acme' });
-      expect(mockAppBuildsService.list).toHaveBeenCalledWith('org-1', 'acme');
+    it('list_builds returns the channel build history', async () => {
+      const res = await callTool('list_builds', { agentId: 'agent-1', channelId: 'channel-1' });
+      expect(mockAppBuildsService.list).toHaveBeenCalledWith('org-1', 'channel-1');
       expect(parse(res).builds[0].id).toBe('build-1');
     });
 
-    it('delete_app removes the app', async () => {
-      const res = await callTool('delete_app', { slug: 'acme' });
-      expect(mockAgentAppsService.remove).toHaveBeenCalledWith('org-1', 'acme');
+    it('delete_channel removes the channel', async () => {
+      const res = await callTool('delete_channel', { agentId: 'agent-1', channelId: 'channel-1' });
+      expect(mockAgentChannelsService.remove).toHaveBeenCalledWith('org-1', 'agent-1', 'channel-1', ME);
       expect(parse(res).deleted).toBe(true);
     });
 
     it('surfaces a service error as an MCP tool error', async () => {
-      mockAgentAppsService.publishDistribution.mockRejectedValueOnce(new Error('A public product needs a cost cap.'));
-      const res = await callTool('publish_distribution', { slug: 'acme', target: 'slack' });
+      mockAgentChannelsService.publish.mockRejectedValueOnce(new Error('It needs a spend limit per run.'));
+      const res = await callTool('publish_channel', { agentId: 'agent-1', channelId: 'channel-1' });
       expect(res.result.isError).toBe(true);
-      expect(res.result.content[0].text).toContain('cost cap');
+      expect(res.result.content[0].text).toContain('spend limit');
     });
   });
-
 
   // ── Agent lifecycle + invocation over MCP ──────────────────────
   //
@@ -1615,7 +1618,7 @@ describe('AlmytyMcpService', () => {
       for (const tool of res.result.tools) {
         // Tools that predate this pass and already take a platform
         // credential keep doing so; the surfaces added here must not.
-        if (['add_provider', 'create_api', 'update_api', 'add_distribution'].includes(tool.name)) continue;
+        if (['add_provider', 'create_api', 'update_api'].includes(tool.name)) continue;
         for (const prop of Object.keys(tool.inputSchema?.properties ?? {})) {
           if (secretish.test(prop)) offenders.push(`${tool.name}.${prop}`);
         }

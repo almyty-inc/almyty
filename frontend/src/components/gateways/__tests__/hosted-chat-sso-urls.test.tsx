@@ -4,8 +4,8 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { render } from '../../../test/setup'
 
-import { WebPlaceSettings } from '../../agent-apps/web-place'
-import type { AgentApp, AppDistribution } from '@/lib/agent-apps'
+import { WebChatSettings, useSurfaceSettings } from '../../channels/hosted-channels'
+import type { AgentChannel } from '@/lib/agent-channels'
 
 vi.mock('@/lib/api', () => ({
   gatewaysApi: {
@@ -31,9 +31,24 @@ const ACS = 'https://acme.edge.example/tenant-api/public/chat/acme/auth/sso/saml
 const CUSTOM_ACS = 'https://chat.acme.example/tenant-api/public/chat/acme/auth/sso/saml/acs'
 const OIDC = 'https://acme.edge.example/tenant-api/public/chat/acme/auth/sso/callback'
 
-const app = (authMode = 'sso') => ({ slug: 'acme', name: 'Acme', authMode, agentIds: [], branding: {} }) as unknown as AgentApp
-const web = { id: 'd-1', appId: 'a-1', target: 'web', status: 'live', gatewayId: GW } as AppDistribution
-const renderWeb = (authMode = 'sso') => render(<WebPlaceSettings app={app(authMode)} distribution={web} />)
+const web = (authMode = 'sso') =>
+  ({
+    id: 'c-1',
+    agentId: 'a-1',
+    type: 'web',
+    status: 'live',
+    slug: 'acme',
+    gatewayId: GW,
+    endpoint: '/channels/c-1',
+    branding: null,
+    visitorRules: null,
+    effective: { branding: { appName: 'Acme' }, visitorRules: { authMode } },
+  }) as unknown as AgentChannel
+function Web({ channel }: { channel: AgentChannel }) {
+  const surface = useSurfaceSettings(channel)
+  return <WebChatSettings channel={channel} surface={surface} />
+}
+const renderWeb = (authMode = 'sso') => render(<Web channel={web(authMode)} />)
 
 let writeText: ReturnType<typeof vi.fn>
 
@@ -44,7 +59,7 @@ beforeEach(() => {
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
 })
 
-describe('hosted chat SSO sign-in URLs on the web app page', () => {
+describe('hosted chat SSO sign-in URLs on the web chat channel page', () => {
   it('shows the ACS URLs the API answers, inline, each with a copy button', async () => {
     vi.mocked(gatewaysApi.getHostedChatSso).mockResolvedValue({
       protocol: 'saml',

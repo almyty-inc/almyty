@@ -7,8 +7,8 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
 /**
- * The connect pages' building blocks, shared by Models (/models/connect)
- * and Connections (/connections/connect): a searchable grid of tiles, the
+ * The connect pages' building blocks, shared by provider connections (/credentials/providers/new)
+ * and Credentials (/credentials/new): a searchable grid of tiles, the
  * card a picked tile opens into, and the list of what is connected.
  */
 
@@ -179,10 +179,10 @@ export function ChoiceTile({
   )
 }
 
-/** The grid tiles sit in. */
-export function ChoiceTiles({ children, label }: { children: ReactNode; label?: string }) {
+/** The grid tiles sit in; `className` narrows it where tiles carry long labels. */
+export function ChoiceTiles({ children, label, className }: { children: ReactNode; label?: string; className?: string }) {
   return (
-    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4" aria-label={label}>
+    <ul className={cn('grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4', className)} aria-label={label}>
       {children}
     </ul>
   )

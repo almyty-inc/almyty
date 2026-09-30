@@ -28,10 +28,8 @@ export interface OnboardingSteps {
   agent: boolean;
   /** >=1 such agent has finished a run successfully (workflow or autonomous). */
   agent_run: boolean;
-  /** >=1 app (the product an agent ships as). */
-  app: boolean;
-  /** >=1 app distribution that is live (served) or built (artifact produced). */
-  distribution: boolean;
+  /** >=1 agent channel that is live (served) or built (download produced). */
+  channel: boolean;
   /** The requesting user's runner has sent at least one heartbeat. */
   runner: boolean;
 }
@@ -46,8 +44,6 @@ export interface OnboardingLinks {
   gateway: { id: string; name: string; type: string; endpoint: string } | null;
   /** The oldest agent the org built. */
   agent: { id: string; name: string } | null;
-  /** The oldest app. */
-  app: { slug: string; name: string } | null;
 }
 
 /**
@@ -60,7 +56,6 @@ export const PAGE_INTRO_TOPICS = [
   'tools',
   'gateways',
   'agents',
-  'apps',
   'runners',
   'credentials',
   'models',

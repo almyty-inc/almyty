@@ -59,6 +59,24 @@ describe('NotificationPreferences', () => {
     ).toBeChecked()
   })
 
+  it('always shows model changes in the app, and lets each person turn the email off', async () => {
+    mockedGetPreferences.mockResolvedValue({
+      matrix: { 'models.unavailable': { inApp: true, email: true, inAppLocked: true } },
+      defaults: { 'models.unavailable': { inApp: true, email: true, inAppLocked: true } },
+    })
+    render(<NotificationPreferences />)
+    expect(await screen.findByText('Model no longer available')).toBeInTheDocument()
+    expect(screen.getByText('Always shown in the app')).toBeInTheDocument()
+    const inApp = screen.getByRole('checkbox', { name: 'Model no longer available in-app notifications' })
+    expect(inApp).toBeChecked()
+    expect(inApp).toBeDisabled()
+    const email = screen.getByRole('checkbox', { name: 'Model no longer available email notifications' })
+    expect(email).toBeEnabled()
+    fireEvent.click(email)
+    await waitFor(() => expect(mockedUpdatePreferences).toHaveBeenCalled())
+    expect(mockedUpdatePreferences.mock.calls[0][0]['models.unavailable']).toMatchObject({ email: false })
+  })
+
   it('PUTs the full updated matrix when a checkbox is toggled', async () => {
     const updatedMatrix = {
       ...basePreferences.matrix,

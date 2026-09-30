@@ -10,7 +10,7 @@ import {
 import { isConnectorListRule, isExpiryRule, isRotationRule, isScopeRule } from './connection-policy.rules';
 
 /**
- * Pure policy decisions for the Connections governance module. No I/O:
+ * Pure policy decisions for the credentials governance module. No I/O:
  * the service loads the org's policies and the rows, this module
  * answers. Every function ignores disabled policies.
  */

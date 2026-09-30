@@ -107,6 +107,8 @@ export function inlineApiAuthView(auth: InlineApiAuth, resolvedConfig: Record<st
  */
 const CONNECTION_SECRET_FIELDS = [
   'apiKey', 'api_key', 'token', 'accessToken', 'access_token', 'bearerToken', 'bearer', 'key', 'bot_token', 'secret',
+  // A username and password credential: its password is what is sent.
+  'password',
 ];
 
 /** The key a connection carries, or null when it has none an API call could send. */

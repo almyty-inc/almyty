@@ -154,6 +154,21 @@ function assertSafeOAuthUrl(kind: 'authorizationUrl' | 'tokenUrl', value: string
  */
 const OAUTH_TOKEN_MAX_BYTES = 256 * 1024;
 
+/**
+ * What makes a sign-in's credential a credential like the rest: the
+ * "OAuth 2.0 sign-in" service, the token host as its account, and a
+ * working health (the token was just issued).
+ */
+export function signInConnection(tokenUrl: string): { connectorKey: string; accountLabel: string | null; healthStatus: 'valid'; healthCheckedAt: Date } {
+  let host: string | null = null;
+  try {
+    host = new URL(tokenUrl).host;
+  } catch {
+    host = null;
+  }
+  return { connectorKey: 'oauth2', accountLabel: host, healthStatus: 'valid', healthCheckedAt: new Date() };
+}
+
 async function readTokenJson(response: Response): Promise<any> {
   const declared = response.headers.get('content-length');
   const contentLength = declared == null ? undefined : Number(declared);
@@ -459,12 +474,14 @@ export class OAuth2Service {
       expiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
     }
 
-    // Create credential entity
+    // Create credential entity: an "OAuth 2.0 sign-in" credential, listed
+    // on Credentials and pickable wherever a key is used.
     const credential = this.credentialRepository.create({
       name: credentialName,
       type: CredentialType.OAUTH2,
       organizationId,
       apiId: apiId || null,
+      ...signInConnection(tokenUrl),
       scopes: scopes || [],
       expiresAt,
       config: {
@@ -558,12 +575,14 @@ export class OAuth2Service {
       expiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
     }
 
-    // Create credential entity
+    // Create credential entity: an "OAuth 2.0 sign-in" credential, listed
+    // on Credentials and pickable wherever a key is used.
     const credential = this.credentialRepository.create({
       name: credentialName || 'OAuth2 Client Credentials',
       type: CredentialType.OAUTH2,
       organizationId,
       apiId: apiId || null,
+      ...signInConnection(tokenUrl),
       scopes: scopes || [],
       expiresAt,
       config: {

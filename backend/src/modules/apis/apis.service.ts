@@ -28,6 +28,7 @@ import { Credential } from '../../entities/credential.entity';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { connectionAuthConfig, hasInlineApiSecret, inlineApiAuthView, splitInlineApiAuth } from '../credentials/inline-api-auth.helper';
 import { generatedToolScope } from '../tools/generated-tool-scope';
+import { assertRegistryHoldsNoSecret } from '../tools/tool-auth-config';
 
 import { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions } from './dto/apis.dto';
 export type { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions };
@@ -427,6 +428,7 @@ export class ApisService {
     if (!data.dependencies || Object.keys(data.dependencies).length === 0) {
       throw new BadRequestException('At least one npm package is required');
     }
+    assertRegistryHoldsNoSecret(data.npmRegistry);
 
     const api = this.apiRepository.create({
       name: data.name,

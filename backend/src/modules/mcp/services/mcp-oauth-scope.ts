@@ -38,7 +38,7 @@ export function missingOAuthScope(gatewayType: GatewayType | string, auth: Scope
   const granted = new Set(auth.scopes ?? []);
   if (granted.has(MCP_WILDCARD_SCOPE)) return null;
 
-  if (gatewayType === GatewayType.UTCP || gatewayType === GatewayType.TOOLS) {
+  if (gatewayType === GatewayType.UTCP) {
     return granted.has('mcp:tools') ? null : 'mcp:tools';
   }
   if (gatewayType !== GatewayType.MCP) return null;

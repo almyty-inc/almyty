@@ -73,7 +73,7 @@ export function getProviderDescription(type: LlmProviderType): string {
     [LlmProviderType.AWS_BEDROCK]: 'Foundation models through AWS',
     [LlmProviderType.COHERE]: 'Enterprise language models',
     [LlmProviderType.HUGGINGFACE]: 'Open-source model inference',
-    [LlmProviderType.OLLAMA]: 'Run open models locally — llama, qwen, mistral, and more',
+    [LlmProviderType.OLLAMA]: 'Open models on Ollama Cloud, or on an Ollama server you run',
     [LlmProviderType.FIREWORKS]: 'Fast serverless inference for open models',
     [LlmProviderType.CEREBRAS]: 'Wafer-scale inference for open models',
     [LlmProviderType.DEEPINFRA]: 'Low-cost hosting for open models',
@@ -117,7 +117,7 @@ export function getProviderFeatures(type: LlmProviderType): string[] {
     [LlmProviderType.AWS_BEDROCK]: ['Multiple Providers', 'Enterprise Security'],
     [LlmProviderType.COHERE]: ['Tool Use', 'Streaming', 'Enterprise'],
     [LlmProviderType.HUGGINGFACE]: ['Open Source', 'Multiple Models'],
-    [LlmProviderType.OLLAMA]: ['Tool Use', 'Streaming', 'Local Inference', 'Zero Cost'],
+    [LlmProviderType.OLLAMA]: ['Tool Use', 'Streaming', 'Open Models', 'Cloud or Self-Hosted'],
     [LlmProviderType.FIREWORKS]: ['Tool Use', 'Streaming', 'Open Source Models', 'Fast Inference'],
     [LlmProviderType.CEREBRAS]: ['Tool Use', 'Streaming', 'Ultra-fast Inference'],
     [LlmProviderType.DEEPINFRA]: ['Tool Use', 'Streaming', 'Open Source Models'],
@@ -178,10 +178,8 @@ export function getProviderKeyUrl(type: LlmProviderType): string | null | undefi
     [LlmProviderType.AWS_BEDROCK]: 'https://console.aws.amazon.com/bedrock',
     [LlmProviderType.COHERE]: 'https://dashboard.cohere.com/api-keys',
     [LlmProviderType.HUGGINGFACE]: 'https://huggingface.co/settings/tokens',
-    // Ollama needs no API key — it runs on the user's own machine (an
-    // optional key exists only for auth proxies), so like CUSTOM there
-    // is no canonical key page.
-    // Local Ollama needs no key; this is the CLOUD key page (ollama.com).
+    // Ollama Cloud (ollama.com) takes an API key from this page. A server
+    // you run needs none (an optional key exists only for auth proxies).
     [LlmProviderType.OLLAMA]: 'https://ollama.com/settings/keys',
     // OpenAI-compatible inference hosts (verified 2026-09-08, see
     // docs/design/call-only-vendors.md).

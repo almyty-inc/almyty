@@ -1,7 +1,7 @@
 # @almyty/chat
 
-Interactive chat REPL for almyty agents, and the terminal client the
-`/apps` **tui** build target compiles. Built with
+Interactive chat REPL for almyty agents, and the terminal client a
+**Terminal app** channel compiles. Built with
 [ink](https://github.com/vadimdemedes/ink) (React for CLI).
 
 ## Quick start

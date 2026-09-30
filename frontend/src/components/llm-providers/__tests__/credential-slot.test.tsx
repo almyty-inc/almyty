@@ -93,20 +93,20 @@ describe('CredentialSlot', () => {
     expect(data.apiKey).toBe('')
   })
 
-  it('lists inference connections of the vendor first and submits the picked one as credentialId', async () => {
+  it('picks a saved key with the shared credential picker, the vendor first, and submits it as credentialId', async () => {
     const onUpdate = vi.fn()
     render(<SlotHarness provider={withRef} onSubmit={onUpdate} />)
     const slot = within(screen.getByTestId('credential-slot-credentialId'))
-    fireEvent.click(slot.getByRole('button', { name: 'Use existing connection' }))
+    fireEvent.click(slot.getByRole('button', { name: 'Use a saved key' }))
 
-    const select = (await slot.findByLabelText('Use an existing connection')) as HTMLSelectElement
-    // Only the OpenAI connection: the vendor has one, so the Anthropic and MCP rows stay out.
-    await waitFor(() => expect(Array.from(select.options).map((o) => o.value)).toEqual(['', 'conn-openai']))
-    expect(slot.getByRole('button', { name: 'Connect an account' })).toBeInTheDocument()
-
-    fireEvent.change(select, { target: { value: 'conn-openai' } })
-    expect(await slot.findByTestId('connected-chip')).toHaveTextContent('OpenAI prod')
-
+    // The same control every form picks a credential with, not a look-alike.
+    expect(slot.getByRole('button', { name: /Create one here/ })).toBeInTheDocument()
+    fireEvent.click(await slot.findByRole('combobox', { name: 'Saved key' }))
+    const options = await screen.findAllByRole('option')
+    // Model keys only (no MCP row), this vendor's first.
+    expect(options.map((o) => o.textContent)).toEqual([expect.stringMatching(/^OpenAI prod/), expect.stringMatching(/^Anthropic/)])
+    fireEvent.click(options[0])
+    expect(await slot.findByTestId('credential-picker-open')).toHaveTextContent('Open OpenAI prod')
     fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
     const data = onUpdate.mock.calls[0][0]

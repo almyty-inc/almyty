@@ -215,6 +215,8 @@ export function buildHarness(opts: HarnessOptions = {}) {
     executeTool,
     cancellations,
     assertCanExecute,
+    /** The real execution gate, over the harness's one member (USER in ORG). */
+    executionAccess: membership.executionAccess,
     events,
     /** Run an agent to its end, collecting its stream events. */
     run(agent: Agent, input: Record<string, any> = {}, extra: Record<string, any> = {}): Promise<AgentExecution> {

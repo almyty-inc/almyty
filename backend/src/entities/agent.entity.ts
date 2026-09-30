@@ -1,6 +1,7 @@
 import type { RoutingPolicy } from '../modules/model-catalog/routing/model-router';
 import type { AgentCollaboration } from '../modules/agents/collaboration-participants';
 import type { AgentModels } from '../modules/agents/autonomous-models';
+import type { ChannelBranding, VisitorRules } from './agent-channel.entity';
 export type {
   AgentCollaboration,
   CollaborationParticipant,
@@ -172,17 +173,38 @@ export class Agent {
     };
   };
 
+  /**
+   * The Memory section of an autonomous agent: which account its memories
+   * are kept in, whose memory it is, what gets saved (and what never is),
+   * and how long it is kept. See AgentMemoryConfig in
+   * modules/agents/agent-memory-settings.ts.
+   */
   @Column({ type: 'json', nullable: true })
   memoryConfig: {
     enabled?: boolean;
     autoSave?: boolean;
     scopes?: string[];
+    account?: string;
+    whose?: 'person' | 'agent' | 'shared';
+    save?: 'facts' | 'conversations' | 'asked';
+    neverSave?: string;
+    retentionDays?: number | null;
+    credentialId?: string | null;
   };
 
   @Column({ type: 'json', nullable: true })
   agentConfig: {
+    /** Kept equal to "callableAgentIds is not empty" (normaliseCapabilities). */
     canCallAgents?: boolean;
+    /** The other agents it may call or hand work to (agent-capabilities.ts). */
+    callableAgentIds?: string[];
+    /** APIs it may use: every active tool of each, including tools added later. */
+    apiIds?: string[];
     canCreateAgents?: boolean;
+    /** Temporary agents it may create in one run. */
+    maxTemporaryAgents?: number;
+    /** Temporary agents of its runs that may exist at once. */
+    maxTemporaryAgentsAlive?: number;
     /**
      * Label requirements for the machine the agent's runner-backed tools
      * run on (`{ gpu: 'yes' }`). Each such call goes to an online runner
@@ -273,6 +295,24 @@ export class Agent {
    */
   @Column({ type: 'json', nullable: true })
   models: AgentModels | null;
+
+  /**
+   * The name, colours, logo and greeting people see on every channel of
+   * this agent (web chat, widget, desktop and terminal apps). A channel
+   * may override any field of it (AgentChannel.branding). Null means the
+   * defaults, with the agent's own name.
+   */
+  @Column({ type: 'json', nullable: true })
+  branding: ChannelBranding | null;
+
+  /**
+   * Who can use this agent's channels and what they may cost and keep:
+   * sign-in, rate limits, spend caps, data retention and visitor rights.
+   * A channel may override any of it (AgentChannel.visitorRules). Missing
+   * fields take the defaults in agent-channels/channel-rules.ts.
+   */
+  @Column({ type: 'json', nullable: true })
+  visitorRules: VisitorRules | null;
 
   @Column({ type: 'varchar', nullable: true })
   webhookUrl: string;

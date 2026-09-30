@@ -93,7 +93,13 @@ describe('S3 storage, if enabled', () => {
       const put = sent[0].input;
       expect(put).toMatchObject({ Key: 'org/general/id/a.txt', ContentType: 'text/plain', ContentLength: 5, ContentDisposition: 'attachment' });
       expect(Buffer.isBuffer(put.Body)).toBe(false);
-      put.Body.destroy();
+      // Let the lazily opened file stream close before its folder goes,
+      // or its open fails after this test and lands in another suite.
+      await new Promise((resolve) => {
+        put.Body.once('close', resolve);
+        put.Body.once('error', resolve);
+        put.Body.destroy();
+      });
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
