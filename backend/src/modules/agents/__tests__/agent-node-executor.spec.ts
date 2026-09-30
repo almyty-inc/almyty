@@ -772,35 +772,51 @@ describe('AgentNodeExecutor', () => {
     // for a method call.
     //
     // Linear is asserted as growth, not as a wall-clock budget a slow CI
-    // runner blows: four times the input may take at most eight times as long
-    // (linear is about 4x, quadratic about 16x), taking the median of three
-    // runs of each size. The absolute bound only catches the pathological
-    // case the ratio would take minutes to show.
+    // runner blows: sixteen times the input may take at most 64 times as
+    // long. Linear is about 16x, quadratic about 256x (cubic 4096x), so a GC
+    // pause or a busy runner has 4x of room either way. Each size is timed as
+    // the median of five runs after a warm-up, and below a few milliseconds
+    // the clock is noise, not growth, so the small time counts as at least
+    // 5ms. The large input is 100 KB, except for the method call, whose old
+    // regex was cubic and would not finish one run at that size; 4 KB
+    // already takes it seconds.
+    const RUNS = 5;
+    const GROWTH = 16;
+    const MAX_RATIO = 64;
+    const NOISE_FLOOR_MS = 5;
     const conditionTime = async (text: string): Promise<number> => {
-      const runs: number[] = [];
-      for (let i = 0; i < 3; i++) {
-        const started = performance.now();
-        await executor
-          .execute(node('condition', { expression: '{{input.text}}' }), buildContext({ input: { text } }), 'org-1')
-          .catch(() => undefined);
-        runs.push(performance.now() - started);
-      }
-      return runs.sort((a, b) => a - b)[1];
+      const started = performance.now();
+      await executor
+        .execute(node('condition', { expression: '{{input.text}}' }), buildContext({ input: { text } }), 'org-1')
+        .catch(() => undefined);
+      return performance.now() - started;
     };
+    const median = (runs: number[]) => [...runs].sort((a, b) => a - b)[Math.floor(runs.length / 2)];
 
     it.each([
-      ['a method call with a spaced argument', (n: number) => `a.includes(${' '.repeat(n)}x`],
-      ['a spaced receiver', (n: number) => `!${' '.repeat(n)}x)`],
-      ['a line of spaces', (n: number) => `${' '.repeat(n)}\n`],
-      ['spaces before an operator', (n: number) => `a${' '.repeat(n)}=`],
-      ['repeated calls', (n: number) => '.a('.repeat(Math.floor(n / 3))],
-    ])('reads upstream output with %s in linear time', async (_label, make) => {
-      const small = await conditionTime(make(25_000));
-      const large = await conditionTime(make(100_000));
-      expect(large).toBeLessThan(5_000);
-      // Below a couple of milliseconds the clock is noise, not growth.
-      expect(large / Math.max(small, 2)).toBeLessThan(8);
-    });
+      ['a method call with a spaced argument', 250, (n: number) => `a.includes(${' '.repeat(n)}x`],
+      ['a spaced receiver', 6_250, (n: number) => `!${' '.repeat(n)}x)`],
+      ['a line of spaces', 6_250, (n: number) => `${' '.repeat(n)}\n`],
+      ['spaces before an operator', 6_250, (n: number) => `a${' '.repeat(n)}=`],
+      ['repeated calls', 6_250, (n: number) => '.a('.repeat(Math.floor(n / 3))],
+    ] as const)('reads upstream output with %s in linear time', async (_label, size, make) => {
+      const smallInput = make(size);
+      const largeInput = make(size * GROWTH);
+      await conditionTime(smallInput); // warm-up: JIT and first-call costs are not growth
+      const smallRuns: number[] = [];
+      for (let i = 0; i < RUNS; i++) smallRuns.push(await conditionTime(smallInput));
+      const budget = Math.max(median(smallRuns), NOISE_FLOOR_MS) * MAX_RATIO;
+
+      // Once most runs are over budget the median is too, so stop there
+      // rather than sit through the rest of a superlinear reader.
+      const largeRuns: number[] = [];
+      while (largeRuns.length < RUNS && largeRuns.filter((t) => t >= budget).length <= RUNS / 2) {
+        largeRuns.push(await conditionTime(largeInput));
+      }
+      expect(median(largeRuns)).toBeLessThan(budget);
+      // Generous: a green run takes milliseconds; this only lets a
+      // superlinear reader reach the assertion instead of the test timeout.
+    }, 180_000);
   });
 
   // ==========================================================================
