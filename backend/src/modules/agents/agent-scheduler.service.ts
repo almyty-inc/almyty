@@ -1,7 +1,7 @@
-import { BadRequestException, Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, OnModuleInit, Optional, forwardRef } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { InjectQueue, Process, Processor } from '@nestjs/bull';
 import { Job, Queue } from 'bull';
 
@@ -67,6 +67,50 @@ export interface ScheduleRequest extends Partial<ScheduleTiming> {
 }
 
 import { NotificationsService } from '../notifications/notifications.service';
+import { AgentRuntimeService } from './agent-runtime.service';
+import { AgentWebhookService } from './agent-webhook.service';
+import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
+import { runsOnAutonomousRuntime } from './agent-invocation';
+import { ScheduledResult } from './scheduled-result-poster';
+
+/** What a scheduled tick asks an autonomous agent: the input's message, else the input itself. */
+export function scheduledTask(input: Record<string, any> | null | undefined): string {
+  if (typeof input?.message === 'string' && input.message.trim()) return input.message;
+  if (input && Object.keys(input).length > 0) return JSON.stringify(input);
+  return 'Do your scheduled task now.';
+}
+
+/** A finished workflow execution, as the poster reads it. */
+export function resultOfExecution(execution: AgentExecution): ScheduledResult {
+  return {
+    kind: 'execution',
+    id: execution.id,
+    status: execution.status,
+    output: execution.output,
+    userId: execution.userId ?? null,
+    error: execution.error ?? null,
+    executionTime: execution.executionTime,
+    totalCost: execution.totalCost,
+    totalTokens: execution.totalTokens,
+    metadata: execution.metadata ?? {},
+  };
+}
+
+/** A finished autonomous run, as the poster reads it. */
+export function resultOfRun(run: AgentRun): ScheduledResult {
+  return {
+    kind: 'run',
+    id: run.id,
+    status: run.status,
+    output: run.output,
+    userId: run.userId ?? null,
+    error: run.error ?? null,
+    executionTime: run.executionTime,
+    totalCost: run.totalCost,
+    totalTokens: run.totalTokens,
+    metadata: run.metadata ?? {},
+  };
+}
 
 /**
  * Recorded on agent.settings.modelIssue when a vendor reports that the
@@ -127,6 +171,16 @@ export class AgentSchedulerService implements OnModuleInit {
     private readonly moduleRef?: ModuleRef,
     @Optional()
     private readonly notifications?: NotificationsService,
+    // Runs an autonomous agent's scheduled tick (the workflow engine runs
+    // the others). Optional so the positional unit tests construct this.
+    @Optional()
+    @Inject(forwardRef(() => AgentRuntimeService))
+    private readonly runtime?: AgentRuntimeService,
+    @Optional()
+    @InjectRepository(AgentRun)
+    private readonly runRepo?: Repository<AgentRun>,
+    @Optional()
+    private readonly webhooks?: AgentWebhookService,
   ) {}
 
   async onModuleInit() {
@@ -698,6 +752,23 @@ export class AgentSchedulerService implements OnModuleInit {
         }
       }
 
+      // Run it on the engine that owns the agent: an autonomous agent on
+      // the autonomous runtime, a workflow on the workflow engine -- the
+      // same dispatch every other entry point makes (runsOnAutonomousRuntime).
+      // Sending an autonomous agent to the workflow engine ran its (empty)
+      // pipeline, which finished at once with no output.
+      if (runsOnAutonomousRuntime(agent)) {
+        if (!this.runtime) throw new Error('The autonomous runtime is not available on this server');
+        await this.runtime.startRun(agent.id, organizationId, owner, scheduledTask(input), {
+          principal,
+          // Where the result goes is decided now and carried by the run, so
+          // it is posted when the run finishes (deliverScheduledRun), on
+          // whichever worker that is, without holding this queue meanwhile.
+          metadata: { triggerType: 'scheduled', scheduledDelivery: schedule.deliverTo ?? null, scheduleTimezone: schedule.timezone ?? null },
+        });
+        return;
+      }
+
       const execution = await this.executionEngine.execute(
         agent,
         organizationId,
@@ -715,7 +786,7 @@ export class AgentSchedulerService implements OnModuleInit {
         await this.pauseForBrokenModel(agentId, organizationId, broken);
       }
       if (delivery && poster && execution?.id) {
-        await poster.post(agent, execution, delivery, { timezone: schedule.timezone });
+        await poster.post(agent, resultOfExecution(execution), delivery, { timezone: schedule.timezone });
       }
     } catch (err: any) {
       this.logger.error(`[SCHEDULED_RUN] Failed for agent ${agentId}: ${err.message}`);
@@ -727,6 +798,50 @@ export class AgentSchedulerService implements OnModuleInit {
         await this.pauseForBrokenModel(agentId, organizationId, err);
       }
 
+    }
+  }
+
+  /**
+   * Hand on the result of a scheduled autonomous run once it has finished:
+   * to the channel or the webhook its schedule named when it started.
+   * Called by the runtime's step processor whenever a run ends, on
+   * whichever worker ran its last step; `deliveredAt` is claimed first, so
+   * a step processed twice cannot post twice.
+   */
+  async deliverScheduledRun(runId: string): Promise<void> {
+    try {
+      if (!this.runRepo) return;
+      const run = await this.runRepo.findOne({ where: { id: runId } });
+      if (!run || run.metadata?.triggerType !== 'scheduled' || !run.isDone()) return;
+      const claim = await this.runRepo.update({ id: run.id, deliveredAt: IsNull() }, { deliveredAt: new Date() });
+      if (!claim.affected) return;
+
+      const agent = await this.agentRepo.findOne({ where: { id: run.agentId, organizationId: run.organizationId } });
+      if (!agent) return;
+
+      // A model the vendor retired fails the same way on every tick: pause
+      // the schedule, as a workflow run's does. The step processor recorded
+      // the issue on the agent while this run failed.
+      const issue = agent.settings?.modelIssue as AgentModelIssue | undefined;
+      if (run.status === AgentRunStatus.FAILED && issue?.code === 'MODEL_NOT_FOUND' && Date.parse(issue.detectedAt) >= run.createdAt.getTime() - 1000) {
+        await this.pauseForBrokenModel(agent.id, agent.organizationId, issue);
+      }
+
+      const delivery = run.metadata?.scheduledDelivery as ScheduleDelivery | null | undefined;
+      const result = resultOfRun(run);
+      if (delivery?.kind === 'channel') {
+        const poster = this.poster();
+        if (poster) await poster.post(agent, result, delivery, { timezone: run.metadata?.scheduleTimezone ?? undefined });
+      } else if (delivery?.kind === 'webhook' && this.webhooks) {
+        await this.webhooks.sendExecutionWebhook(agent, result as any, {
+          chosen: true,
+          record: async (outcome) => {
+            await this.runRepo!.update({ id: run.id }, { metadata: { ...(run.metadata ?? {}), webhookDelivery: outcome } });
+          },
+        });
+      }
+    } catch (err: any) {
+      this.logger.error(`[SCHEDULED_RUN] Could not hand on the result of run ${runId}: ${err?.message ?? err}`);
     }
   }
 

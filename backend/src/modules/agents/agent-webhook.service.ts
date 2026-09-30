@@ -52,9 +52,36 @@ export class AgentWebhookService {
     }
   }
 
-  async sendExecutionWebhook(agent: Agent, execution: AgentExecution): Promise<void> {
+  /**
+   * POST a finished run to the agent's webhook URL.
+   *
+   * A scheduled run goes to the webhook only when its schedule chose the
+   * webhook as where the result goes ("Send the result to"); a result
+   * bound for a channel, or for nowhere but the run history, does not also
+   * go to the webhook. Every other run (Try it, the API, a webhook
+   * trigger) goes as before. `chosen` says the caller already knows the
+   * webhook was chosen (an autonomous run's schedule, read when it
+   * started); `record` writes the outcome somewhere other than the
+   * executions table (an autonomous run's row).
+   */
+  async sendExecutionWebhook(
+    agent: Agent,
+    execution: AgentExecution,
+    opts: { chosen?: boolean; record?: (delivery: Record<string, any>) => Promise<void> } = {},
+  ): Promise<void> {
     const webhookUrl = agent.webhookUrl;
     if (!webhookUrl) return;
+    if (
+      !opts.chosen &&
+      execution.metadata?.triggerType === 'scheduled' &&
+      agent.settings?.schedule?.deliverTo?.kind !== 'webhook'
+    ) {
+      return;
+    }
+    const record = (delivery: { status: 'delivered' | 'failed' | 'blocked'; statusCode?: number; error?: string }) =>
+      opts.record
+        ? opts.record({ ...delivery, at: new Date().toISOString() }).catch(() => undefined)
+        : this.record(execution, delivery);
 
     // SSRF guard. webhookUrl is user-controlled per agent and would otherwise
     // let any user point at 169.254.169.254, localhost:6379, etc., and have
@@ -64,7 +91,7 @@ export class AgentWebhookService {
       this.logger.warn(
         `Webhook blocked for execution ${execution.id}: ${validation.error}`,
       );
-      await this.record(execution, { status: 'blocked', error: validation.error });
+      await record({ status: 'blocked', error: validation.error });
       return;
     }
 
@@ -109,12 +136,12 @@ export class AgentWebhookService {
         },
       );
       this.logger.log(`Webhook sent for execution ${execution.id} to ${webhookUrl}`);
-      await this.record(execution, { status: 'delivered', statusCode: response?.status });
+      await record({ status: 'delivered', statusCode: response?.status });
     } catch (err: any) {
       this.logger.warn(`Webhook failed for execution ${execution.id}: ${err.message}`);
       // Don't throw -- a webhook failure must not fail the execution.
       // It is written onto the run instead, so somebody can see it.
-      await this.record(execution, {
+      await record({
         status: 'failed',
         statusCode: err?.response?.status,
         error: String(err?.message ?? err).slice(0, 500),

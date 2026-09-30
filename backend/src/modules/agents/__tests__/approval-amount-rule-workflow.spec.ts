@@ -91,12 +91,24 @@ describe('approval over an amount in a workflow agent', () => {
     expect(execution.status).toBe(AgentExecutionStatus.COMPLETED);
     expect(mockedAxios).toHaveBeenCalledTimes(1);
   });
-
-  it('refuses a refund over the amount: not made, and the run says which rule stopped it', async () => {
+  it('holds a refund over the amount for a person: the run stops waiting, and the refund is made once approved', async () => {
     const execution = await run({ amount: 820, order: 'NW-44120' });
+    // A workflow cannot pause: the run stops, and says it is waiting and on what.
     expect(execution.status).toBe(AgentExecutionStatus.FAILED);
-    expect(execution.error).toContain('Needs approval: Ask before issue_refund when amount is over 500 (amount is 820)');
+    expect(execution.error).toContain('Waiting for approval: Ask before issue_refund when amount is over 500 (amount is 820)');
+    const refund = execution.nodeResults.refund;
+    expect(refund.errorCode).toBe('AWAITING_APPROVAL');
+    const [asked] = harness.approvals.created;
+    expect(refund.input.approvalId).toBe(asked.id);
     expect(mockedAxios).not.toHaveBeenCalled();
     expect(harness.audit.log).toHaveBeenCalledWith(expect.objectContaining({ status: 'held' }));
+
+    // Approved in Approvals: the held refund runs, exactly as the workflow asked for it.
+    await harness.approvals.decide(asked.id, 'approved');
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(mockedAxios).toHaveBeenCalledTimes(1);
+    // The parameters as the workflow resolved them (its templates give text).
+    expect(mockedAxios.mock.calls[0][0]).toMatchObject({ data: { amount: '820', order: 'NW-44120' } });
   });
 });

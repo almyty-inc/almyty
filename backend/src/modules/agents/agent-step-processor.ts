@@ -816,6 +816,8 @@ export class AgentStepProcessor {
               agentId: agent.id,
               // A team's approval rules hold only that team's agents' calls.
               agentTeamId: agent.teamId ?? null,
+              // This run pauses and asks a person itself (holdForApproval).
+              holdForApproval: 'caller',
             };
 
             const toolResult: ToolExecutionResult = await this.s.toolExecutorService.executeTool(
@@ -1719,6 +1721,7 @@ export class AgentStepProcessor {
             agentId: agent.id,
             agentTeamId: agent.teamId ?? null,
             approvedGate: { approvalId: call.approvalId },
+            holdForApproval: 'caller',
           })
         : {
             success: false,

@@ -137,6 +137,17 @@ describe('agent schedule timing', () => {
       expect(iso(before)).toEqual(['2026-10-29T12:00:00.000Z']);
     });
 
+    it('the last day of the month is the 31st, the 28th in February, the 30th in April', () => {
+      const timing = normalizeTiming({ kind: 'monthly', time: '18:00', dayOfMonth: 'last', timezone: 'Europe/Berlin' });
+      expect(timing).toEqual({ kind: 'monthly', time: '18:00', dayOfMonth: 'last', timezone: 'Europe/Berlin' });
+      expect(repeatFor(timing)).toEqual({ cron: '0 18 L * *', tz: 'Europe/Berlin' });
+      expect(iso(nextRuns(timing, new Date('2026-01-15T00:00:00Z'), 4))).toEqual([
+        '2026-01-31T17:00:00.000Z',
+        '2026-02-28T17:00:00.000Z',
+        '2026-03-31T16:00:00.000Z',
+        '2026-04-30T16:00:00.000Z',
+      ]);
+    });
     it('a monthly schedule fires on its day at the local time, summer and winter', () => {
       const runs = nextRuns(
         { kind: 'monthly', time: '09:00', dayOfMonth: 1, timezone: 'Europe/Berlin' },
@@ -165,6 +176,7 @@ describe('agent schedule timing', () => {
       [{ kind: 'monthly', time: '09:00', dayOfMonth: 1, timezone: 'America/New_York' }, 'On the 1st of every month at 9:00, America/New_York'],
       [{ kind: 'monthly', time: '09:00', dayOfMonth: 22, timezone: 'UTC' }, 'On the 22nd of every month at 9:00, UTC'],
       [{ kind: 'monthly', time: '09:00', dayOfMonth: 13, timezone: 'UTC' }, 'On the 13th of every month at 9:00, UTC'],
+      [{ kind: 'monthly', time: '18:00', dayOfMonth: 'last', timezone: 'UTC' }, 'On the last day of every month at 18:00, UTC'],
       [{ kind: 'interval', intervalMinutes: 15 }, 'Every 15 minutes'],
       [{ kind: 'interval', intervalMinutes: 60 }, 'Every hour'],
       [{ kind: 'interval', intervalMinutes: 180 }, 'Every 3 hours'],

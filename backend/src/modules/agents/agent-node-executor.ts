@@ -764,7 +764,11 @@ export class AgentNodeExecutor {
       // The resolved parameters ride on the error so a failed tool call's
       // input is persisted too, not just its message.
       throw Object.assign(new Error(result.error || 'Tool execution failed'), {
-        resolvedInput: { toolId, parameters: resolvedParams },
+        resolvedInput: { toolId, parameters: resolvedParams, ...(result.approvalId ? { approvalId: result.approvalId } : {}) },
+        // A call an approval policy held: it waits in Approvals and runs
+        // once a person approves it. A workflow cannot pause, so the run
+        // stops here and says so (the run history shows it as waiting).
+        ...(result.approvalRequired && result.approvalStatus === 'pending' ? { code: 'AWAITING_APPROVAL' } : {}),
       });
     }
 

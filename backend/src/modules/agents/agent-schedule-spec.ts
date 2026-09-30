@@ -30,8 +30,8 @@ export interface ScheduleTiming {
   time?: string;
   /** kind 'days': days of the week, 0 = Sunday ... 6 = Saturday, sorted, unique. */
   days?: number[];
-  /** kind 'monthly': the day of the month, 1-28 (every month has one). */
-  dayOfMonth?: number;
+  /** kind 'monthly': the day of the month, 1-28 (every month has one), or 'last' for its last day. */
+  dayOfMonth?: number | 'last';
   /** kinds 'days' and 'monthly': an IANA time zone name. */
   timezone?: string;
 }
@@ -111,9 +111,10 @@ export function normalizeTiming(body: Record<string, any>, fallbackZone?: string
   if (kind === 'days') {
     return { kind, time, days: normalizeDays(body.days), timezone: zone };
   }
+  if (body.dayOfMonth === 'last') return { kind, time, dayOfMonth: 'last', timezone: zone };
   const day = Number(body.dayOfMonth);
   if (!Number.isInteger(day) || day < 1 || day > MAX_DAY_OF_MONTH) {
-    throw new BadRequestException(`dayOfMonth must be between 1 and ${MAX_DAY_OF_MONTH}`);
+    throw new BadRequestException(`dayOfMonth must be between 1 and ${MAX_DAY_OF_MONTH}, or "last"`);
   }
   return { kind, time, dayOfMonth: day, timezone: zone };
 }
@@ -139,7 +140,8 @@ export function cronFor(timing: ScheduleTiming): string | null {
     const days = normalizeDays(timing.days);
     return `${minute} ${hour} * * ${days.length === 7 ? '*' : days.join(',')}`;
   }
-  return `${minute} ${hour} ${timing.dayOfMonth} * *`;
+  // 'L' is cron-parser's last day of the month (the 28th to the 31st, as the month has it).
+  return `${minute} ${hour} ${timing.dayOfMonth === 'last' ? 'L' : timing.dayOfMonth} * *`;
 }
 
 /**
@@ -207,7 +209,11 @@ export function describeTiming(timing: ScheduleTiming): string {
   }
   const { hour, minute } = parseTime(timing.time);
   const at = `at ${hour}:${String(minute).padStart(2, '0')}, ${timing.timezone ?? 'UTC'}`;
-  if (timing.kind === 'monthly') return `On the ${ordinal(Number(timing.dayOfMonth))} of every month ${at}`;
+  if (timing.kind === 'monthly') {
+    return timing.dayOfMonth === 'last'
+      ? `On the last day of every month ${at}`
+      : `On the ${ordinal(Number(timing.dayOfMonth))} of every month ${at}`;
+  }
   const days = normalizeDays(timing.days);
   if (days.length === 7) return `Every day ${at}`;
   if (days.length === 5 && WEEKDAYS.every((d) => days.includes(d))) return `Every weekday ${at}`;

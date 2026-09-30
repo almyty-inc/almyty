@@ -142,6 +142,8 @@ export async function runAgent(opts: {
   attachmentResolver?: MessageAttachmentResolver;
   /** The approvals service double (its create), for a case whose tool calls an approval rule holds. */
   approvals?: { create: jest.Mock };
+  /** More members of the organization, besides u-1 (a scheduled run acts as the agent's owner). */
+  members?: string[];
 }) {
   const bodies: Array<{ model: string; body: any }> = [];
   const queues: Streams = JSON.parse(JSON.stringify(opts.streams));
@@ -292,6 +294,7 @@ export async function runAgent(opts: {
   // The run's starter is a member of the org: every step re-checks it.
   const access = membershipFixture();
   access.member('org-1', 'u-1');
+  for (const member of opts.members ?? []) access.member('org-1', member);
   const s: any = {
     logger: { log: () => undefined, warn: () => undefined, debug: () => undefined, error: () => undefined },
     runRepository,

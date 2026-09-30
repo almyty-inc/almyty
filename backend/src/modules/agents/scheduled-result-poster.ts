@@ -1,5 +1,22 @@
 import type { Agent } from '../../entities/agent.entity';
-import type { AgentExecution } from '../../entities/agent-execution.entity';
+
+/**
+ * A finished scheduled run, whichever engine ran it: a workflow execution
+ * (agent_executions) or an autonomous run (agent_runs). The outcome of
+ * posting it is written back onto that row.
+ */
+export interface ScheduledResult {
+  kind: 'execution' | 'run';
+  id: string;
+  status: string;
+  output: unknown;
+  userId: string | null;
+  error?: string | null;
+  executionTime?: number;
+  totalCost?: number;
+  totalTokens?: number;
+  metadata?: Record<string, any>;
+}
 
 /**
  * Where a scheduled run's result goes, besides the run history.
@@ -94,7 +111,7 @@ export interface ScheduledResultPoster {
   /** Post a finished run's result. Never throws; the outcome is recorded on the run. */
   post(
     agent: Agent,
-    execution: AgentExecution,
+    result: ScheduledResult,
     delivery: ChannelDelivery,
     when?: { timezone?: string },
   ): Promise<ChannelDeliveryOutcome>;
