@@ -103,6 +103,8 @@ export class ToolsOperationHelper {
       configuration: toolConfiguration,
       organizationId: options.organizationId,
       operationId: operation.id,
+      // The API it came from, so an agent given the whole API gets it too.
+      apiId: operation.apiId,
       status: ToolStatus.ACTIVE,
       version: '1.0.0',
       // Who generated it (the importing user), or null when unknown. What

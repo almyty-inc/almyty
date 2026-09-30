@@ -1013,7 +1013,7 @@ export const workspacesApi = {
 // Items are scoped via { scope_type, scope_id }; the UI defaults
 // scope_type=workspace and scope_id=current organization id when
 // the caller doesn't override.
-export type MemoryScopeType = 'user' | 'workspace' | 'project' | 'collab'
+export type MemoryScopeType = 'user' | 'workspace' | 'project' | 'collab' | 'agent'
 export type MemoryMode = 'memory' | 'document'
 export type MemoryTier = 'short' | 'project' | 'long' | 'shared'
 
@@ -1069,6 +1069,8 @@ export const memoriesApi = {
     apiDel(`/memory/canonical/${id}?mode=${mode}`),
   // Backend roster + transfer (router-level operations)
   listBackends: () => apiGet('/memory/canonical/backends'),
+  /** almyty's own memory and every outside memory account the organization has set up. */
+  listAccounts: () => apiGet('/memory/canonical/accounts'),
   backendsHealth: () => apiGet('/memory/canonical/backends/health'),
   // Workspace config (per-scope routing + softcap behavior + credentials wiring)
   getConfig: (scope_type: MemoryScopeType, scope_id: string) =>

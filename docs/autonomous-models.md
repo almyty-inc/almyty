@@ -22,8 +22,9 @@ a job:
 |---|---|---|
 | `main` | Runs the loop. Exactly one. | no |
 | `drafter` | Cascade: takes each step first. | no |
-| `checker` | Refute-only review (cascade, explore-extract-patch); picks the best answer (best of N); judges the panel when present. | no |
+| `checker` | Refute-only review (cascade, explore-extract-patch); picks the best answer (best of N). | no |
 | `panelist` | Panel: answers the same question. | yes |
+| `judge` | Panel: writes the answer the panelists agree on. Optional; the main role judges without one. | no |
 | `explorer` | Explore-extract-patch: gathers with the tools. | no |
 | `summariser` | Explore-extract-patch: compresses what the explorers found. | no |
 | `teammate` | Offered to the loop's model as a tool, `ask_<key>`, in every strategy. | yes |
@@ -37,15 +38,19 @@ agent's model (readiness, the model-issue banner, compaction, a compat
 request's sampling override) therefore reads the model the loop uses, and
 the loop reads the main role's call settings from `modelConfig`.
 
-Teammates replace the old collaboration roster. Another agent is added as
-a teammate (or a panelist) role; the loop's model hands it work through
-its tool and gets the answer back as the tool result.
+Teammates replace the old collaboration roster. The page offers model
+teammates under the work mode's Advanced; other agents the agent may call
+are picked once, under Capabilities (`agentConfig.callableAgentIds`, offered
+as `call_agent_*` tools, see `agent-capabilities.ts`). An agent teammate
+role saved through the API still runs as `ask_<key>`; the page moves it
+into the Capabilities list when it opens the agent.
 
 ## Strategies
 
-The keys are `AUTONOMOUS_STRATEGY_KEYS`. The page offers exactly these,
-and a frontend source guard fails if it offers one the engine does not
-run or misses one it does. A strategy whose slots are not filled is
+The keys are `AUTONOMOUS_STRATEGY_KEYS`. The page calls the strategy the
+**work mode**: one dropdown offering exactly these, with the slots each needs
+under it (`WORK_MODE_SLOTS`), and a frontend source guard fails if it offers
+one the engine does not run or misses one it does. A strategy whose slots are not filled is
 refused at save time (`Invalid models: Cascade needs a drafter role`) and,
 should one reach a run anyway, fails the run with the same sentence rather
 than running as something else.
@@ -83,15 +88,17 @@ ceiling (`checkRunLimits`), a failed or empty one is dropped, and with one
 candidate left no judge is paid for. An unreadable pick keeps candidate 1
 and says so on the step.
 
-### Panel — needs `main` and at least two `panelist`s; optional `checker`
+### Panel — needs `main` and at least two `panelist`s; optional `judge`
 
 The main role runs the loop. When it answers, each panelist answers too:
 a model panelist over the same conversation with no tools, an agent
 panelist as its own run of that agent on the user's latest message. The
-checker, or the main role when there is none, then writes the answer
-they agree on (the workflow consensus prompt): the step records
-`agreement` and `consensusReached` (threshold 0.5). A judge that fails
-leaves the main role's answer.
+judge, or the main role when there is none, then writes the answer they
+agree on (the workflow consensus prompt): the step records `agreement`
+and `consensusReached` (threshold 0.5) and which model judged. A judge
+that fails leaves the main role's answer. The judge is a model, never
+another agent; the page shows it as an optional Judge slot under Panel,
+added with **Add a judge**.
 
 ### Explore, extract, patch — needs `explorer`s, `summariser`, `main`, `checker`
 
@@ -142,7 +149,12 @@ purpose, kind }`, its `cost`, `tokens`, and `output.model`,
 `output.providerId` and, for a routed call, `output.routing`. Step types:
 `llm_call` (`status`: `completed`, `drafted`, `revising`, `escalated`,
 `candidate`, `panel_answer`, `sleeping`, `waiting_input`), `verify`,
-`judge`, `explore`, `extract_context`, `teammate_call`.
+`judge`, `explore`, `extract_context`, `teammate_call`. A `verify` step is
+stamped the same way: the checker's verdict says which model gave it (and
+the verifier panel's `checkers` carry it per checker).
+`src/modules/agents/__tests__/autonomous-strategies-end-to-end.spec.ts`
+runs every strategy through the hosted chat with a different model per
+role and checks each step's model and the visitor's answer.
 `run.metadata.roleCosts` totals each role (`cost`, `tokens`, `calls`) and
 `run.metadata.strategy` names the strategy. The run detail shows both.
 
@@ -160,6 +172,53 @@ what each costs:
   plus one judge call.
 - Explore, extract, patch: one child run per explorer plus one summariser
   call, then the main role's calls plus one checker call per answer.
+
+## Memory and capabilities
+
+The agent's other two sections are read by the same loop, on every step.
+
+**Memory** (`agents.memoryConfig`, `agent-memory-settings.ts`,
+`AgentMemoryKeeper` in `agent-memory.keeper.ts`):
+
+- `whose` picks the scope a run reads and writes (`memoryScopeFor`):
+  `shared` the workspace, `agent` the agent's own (`<org>:agent:<id>`,
+  scope type `agent`), `person` the run's member (`user` scope) or visitor
+  (`<org>:user:visitor:<endUserId>`); a run for nobody has no memory.
+  Writes follow `runMayWriteSharedMemory`: a visitor's only when the
+  surface carried `visitorMemory: true`.
+- `account` is almyty's own store or an outside backend the organization
+  has a credential for (`MemoryAccountsService.accounts`); reads and writes
+  go through it (`MemoryRouter.putOn` / `searchOn`), signed in with the
+  workspace's credential. Unknown accounts are refused at save. With
+  `credentialId` the agent has an account of its own (connected from its
+  page by anyone who can edit it): resolved as the run's principal, checked
+  at save with `CredentialRefResolver.assertAttachable` against the
+  agent's scope and the saver, again when the agent's scope changes, and
+  used by the sweep as the system acting for the agent. An `agent` scope
+  is readable through the Memory API only by those who can see the agent
+  (`CanonicalMemoryController.scopeFor`).
+- `save`: `facts` makes one call on the main role after a completed run
+  and saves each fact (tier `long`); `conversations` saves the exchange
+  (tier `project`); `asked` saves nothing on its own, and `store_memory`
+  says so to the model. The after-run save is a `memory_save` step, and its
+  calls are the run's cost.
+- `neverSave` rules screen every write with a main-role call first (the
+  facts call carries them in its own prompt); `NOTHING` or a failed check
+  means nothing is written.
+- `retentionDays` is `ttl_seconds` in almyty's own store; outside, a
+  `memory_expiries` row per write that the hourly `expire-outside` job
+  deletes through the backend (`MemoryBackend.nativeId`). A backend without
+  `nativeId` refuses a time limit. A change applies to what the agent
+  already saved (`setAgentRetention`).
+
+**Capabilities** (`agents.agentConfig`, `agent-capabilities.ts`):
+`toolIds` plus `apiIds` (every active tool of the API, resolved per step,
+so later tools are included) are the only tools offered, and a call to any
+other name is "not found". `callableAgentIds` are the only `call_agent_*`
+tools offered and the only agents `invoke_agent` starts (an API client
+that sets only `canCallAgents` still means every agent). `runnerLabels` go
+with every tool call. `create_agent` refuses past `maxTemporaryAgents` in
+the run or `maxTemporaryAgentsAlive` across the agent's runs.
 
 ## Migration
 

@@ -445,7 +445,23 @@ export class AgentNodeExecutor {
       }
     }
 
-    // If there's a source reference, resolve it
+    // A source is a bare dot path, read as a raw value. A list of them is
+    // read in order and the first value a step that ran produced wins: that
+    // is how a graph with a branch names its answer -- a compiled cascade
+    // reads its escalation, which runs only when the check failed, then the
+    // draft the check passed. A skipped or failed step has no output, so it
+    // falls through to the next path; a list none of whose steps produced
+    // anything fails the node rather than answering with nothing.
+    if (Array.isArray(config.source)) {
+      const paths = config.source.filter((p: unknown): p is string => typeof p === 'string');
+      for (const path of paths) {
+        const resolved = this.templateResolver.resolveValue(path, context);
+        if (resolved !== undefined) return { output: resolved };
+      }
+      throw new Error(
+        `Output node '${node.id}' reads its answer from ${paths.join(', ') || 'nothing'}, and none of those steps produced one`,
+      );
+    }
     if (config.source) {
       const resolved = this.templateResolver.resolveValue(config.source, context);
       return { output: resolved };

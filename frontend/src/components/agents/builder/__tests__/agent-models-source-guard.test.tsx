@@ -2,21 +2,22 @@
  * The builder's strategies and rules are the engine's, read from the
  * engine's own file.
  *
- * The autonomous page offers strategies as radio cards and blocks Save on
+ * The autonomous page offers work modes as one dropdown and blocks Save on
  * missing slots. If it offered a strategy the loop does not implement, the
  * agent would save and quietly run something else; if it missed one, the
  * engine's shape would be unreachable. So this reads
  * backend/src/modules/agents/autonomous-models.ts and compares, rather
  * than trusting a copy to stay a copy.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-import { fireEvent, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 import { render } from '@/test/setup'
-import { StrategyChoice } from '../strategy-choice'
+import { WorkModeSection } from '../work-mode-section'
 import {
   AGENT_ALLOWED_PURPOSES,
   AUTONOMOUS_STRATEGY_KEYS,
@@ -62,11 +63,17 @@ function backendNumber(name: string): number {
 }
 
 describe('the autonomous builder mirrors the engine', () => {
-  it('offers exactly the strategies the engine implements, in its order', () => {
-    const { container } = render(<StrategyChoice models={newAgentModels()} onChange={() => {}} />)
-    // The less common ones wait under "More ways"; open it so all are counted.
-    fireEvent.click(screen.getByRole('button', { name: 'More ways' }))
-    const offered = [...container.querySelectorAll('[data-strategy-key]')].map((el) => el.getAttribute('data-strategy-key'))
+  it('offers exactly the strategies the engine implements, in its order, as one dropdown', async () => {
+    // Radix Select uses pointer capture, absent in jsdom.
+    if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false)
+    if (!Element.prototype.setPointerCapture) Element.prototype.setPointerCapture = vi.fn()
+    if (!Element.prototype.releasePointerCapture) Element.prototype.releasePointerCapture = vi.fn()
+    if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = vi.fn()
+    render(<WorkModeSection models={newAgentModels()} onChange={() => {}} availableAgents={[]} />)
+    // Nothing hidden under "More ways": every mode is an option of the one select.
+    expect(screen.queryByRole('button', { name: 'More ways' })).toBeNull()
+    await userEvent.click(screen.getByRole('combobox', { name: 'Work mode' }))
+    const offered = screen.getAllByRole('option').map((el) => el.getAttribute('data-strategy-key'))
     const engine = backendList('AUTONOMOUS_STRATEGY_KEYS')
     expect(engine.length).toBeGreaterThan(0)
     expect(offered).toEqual(engine)

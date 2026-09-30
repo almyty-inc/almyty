@@ -80,6 +80,15 @@ export interface MemoryBackend {
   readonly schema_version: number;
 
   /**
+   * The id this backend deletes a memory by, read off the item its `put`
+   * returned; null when there is none. Absent on a backend that cannot
+   * delete one memory (Vertex Memory Bank). An agent's retention on an
+   * outside account deletes each saved memory by this id once it is due
+   * (memory_expiries), so a backend without it cannot take a time limit.
+   */
+  nativeId?(item: MemoryItem): string | null;
+
+  /**
    * Called once on module init for any cache warmup. External
    * backends do per-call client construction now (see `creds`
    * arg below) — init exists for the native backend's TypeORM /

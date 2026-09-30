@@ -303,6 +303,8 @@ export class ToolGeneratorService {
         status: ToolStatus.DRAFT,
         version: '1.0.0',
         operationId: operation.id,
+        // The API it came from, so an agent given the whole API gets it too.
+        apiId: api.id,
         inputSchemaId: inputSchema?.id,
         outputSchemaId: outputSchema?.id,
         parameters,

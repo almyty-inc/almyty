@@ -1,6 +1,6 @@
 import type { Gateway, Tool, LlmProvider, User, Organization, ApiAuthType } from './index';
 import type { RouteAttribution, RoutingPolicy } from './models';
-import type { AgentModels } from './agent-models';
+import type { AgentMemoryConfig, AgentModels } from './agent-models';
 // Usage Metrics Types
 export interface UsageMetric {
   id: string
@@ -230,14 +230,20 @@ export interface Agent {
     temperature?: number
     maxTokens?: number
   }
-  memoryConfig?: {
-    enabled?: boolean
-    autoSave?: boolean
-    scopes?: string[]
-  }
+  /** The Memory section; see backend/src/modules/agents/agent-memory-settings.ts. */
+  memoryConfig?: AgentMemoryConfig
   agentConfig?: {
+    /** Kept equal to "callableAgentIds is not empty" by the server. */
     canCallAgents?: boolean
+    /** The other agents it may call or hand work to. */
+    callableAgentIds?: string[]
+    /** APIs it may use: every active tool of each, including tools added later. */
+    apiIds?: string[]
     canCreateAgents?: boolean
+    /** Temporary agents it may create in one run. */
+    maxTemporaryAgents?: number
+    /** Temporary agents of its runs that may exist at once. */
+    maxTemporaryAgentsAlive?: number
     /** Machine label requirements for runner-backed tools; the server stores an object, a save may send text. */
     runnerLabels?: Record<string, string> | string
     verify?: {

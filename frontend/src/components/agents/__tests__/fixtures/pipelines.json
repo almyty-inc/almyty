@@ -402,6 +402,10 @@
             "position": {
               "x": 440,
               "y": 0
+            },
+            "data": {
+              "source": "nodes.answer.output",
+              "strategyKey": "single"
             }
           }
         ],
@@ -504,6 +508,13 @@
             "position": {
               "x": 880,
               "y": 0
+            },
+            "data": {
+              "source": [
+                "nodes.escalate.output",
+                "nodes.draft.output"
+              ],
+              "strategyKey": "cascade"
             }
           }
         ],
@@ -642,6 +653,10 @@
             "position": {
               "x": 880,
               "y": 0
+            },
+            "data": {
+              "source": "nodes.judge.output",
+              "strategyKey": "best_of_n"
             }
           }
         ],
@@ -763,7 +778,7 @@
           {
             "id": "consensus",
             "type": "merge",
-            "label": "merge",
+            "label": "merge: judge",
             "position": {
               "x": 1100,
               "y": 0
@@ -782,6 +797,10 @@
             "position": {
               "x": 1320,
               "y": 0
+            },
+            "data": {
+              "source": "nodes.consensus.output.answer",
+              "strategyKey": "panel"
             }
           }
         ],
@@ -960,6 +979,10 @@
             "position": {
               "x": 1320,
               "y": 0
+            },
+            "data": {
+              "source": "nodes.patch.output",
+              "strategyKey": "explore_extract_patch"
             }
           }
         ],

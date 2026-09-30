@@ -267,4 +267,24 @@ describe('MemoryRouter', () => {
       ]);
     });
   });
+
+  describe("an agent's chosen account, whatever the scope's own routing says", () => {
+    it('puts, searches and deletes on the named backend, with the credential scope given', async () => {
+      const item = makeItem({ scope_type: 'agent' as any, scope_id: 'org-1:agent:a-1' });
+      await router.putOn('mem0', item, { scope_type: 'workspace', scope_id: 'org-1' });
+      expect(mem0.put).toHaveBeenCalledWith(item, undefined);
+      expect(native.put).not.toHaveBeenCalled();
+
+      await router.searchOn('mem0', { scope: { scope_type: 'agent' as any, scope_id: 'org-1:agent:a-1' }, query: 'q' }, { scope_type: 'workspace', scope_id: 'org-1' });
+      expect(mem0.search).toHaveBeenCalled();
+
+      await router.deleteOn('mem0', 'm0-1', { scope_type: 'workspace', scope_id: 'org-1' });
+      expect(mem0.delete).toHaveBeenCalledWith('m0-1', 'hard', undefined);
+    });
+
+    it('refuses an unknown backend, and a mode the backend does not serve', async () => {
+      await expect(router.putOn('nope', makeItem(), { scope_type: 'workspace', scope_id: 'org-1' })).rejects.toThrow('unknown memory backend: nope');
+      await expect(router.putOn('mem0', makeItem({ mode: 'document' }), { scope_type: 'workspace', scope_id: 'org-1' })).rejects.toBeInstanceOf(MemoryError);
+    });
+  });
 });

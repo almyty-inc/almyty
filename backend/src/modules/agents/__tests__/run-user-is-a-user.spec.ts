@@ -70,7 +70,6 @@ describe('invoke_agent from a visitor run', () => {
     const helper = new AgentBuiltInToolsHelper(
       childOf('run-v') as any,
       {} as any,
-      {} as any,
       { startRun, waitForRun } as any,
       {} as any,
     );
@@ -88,7 +87,7 @@ describe('invoke_agent from a visitor run', () => {
   it('keeps a member run\'s user', async () => {
     const startRun = jest.fn(async () => ({ id: 'child-2' }));
     const waitForRun = jest.fn(async () => ({ status: AgentRunStatus.COMPLETED, output: 'ok' }));
-    const helper = new AgentBuiltInToolsHelper(childOf('run-m') as any, {} as any, {} as any, { startRun, waitForRun } as any, {} as any);
+    const helper = new AgentBuiltInToolsHelper(childOf('run-m') as any, {} as any, { startRun, waitForRun } as any, {} as any);
     const memberRun: any = { id: 'run-m', organizationId: 'org-1', userId: OWNER, endUserId: null };
 
     await helper.executeBuiltInTool('invoke_agent', { agentId: 'child-agent', input: 'hi' }, memberRun, parent);

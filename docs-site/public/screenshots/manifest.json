@@ -8,7 +8,7 @@
       "path": "screenshots/agent-builder-autonomous.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh, and Agent capabilities now has a Machine labels field (label routing). The model chooser also shows each model's price and status and has Add a connection. Recapture on staging.",
+      "reason": "The autonomous form is reorganised: Work mode comes first as one dropdown (Single, Cascade, Best of N, Panel, Explore, extract, patch) with the model slots it needs under it; Memory has account, whose memory, what it saves, never save and how long it keeps memories; Capabilities has tools and APIs, other agents it can call, machine and temporary agents. The model chooser also shows each model's price and status and has Add a connection. Recapture on staging.",
       "sha256": "c94b58f0f0c815fbb223492905bb6a79c98972f42157f255c2a44cf5cd844466"
     },
     {
@@ -26,7 +26,7 @@
       "path": "screenshots/agent-builder.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Legacy image predates the UI refresh, and the workflow toolbar now has a Settings button that opens the Run limits card inline above the canvas. Tracked for #675, not verified current.",
       "sha256": "aec23af9c643ccc4bd4957ae080a1dc4fc9ac41794999e73f56a0bcb689fc287"
     },
     {
@@ -35,7 +35,7 @@
       "path": "screenshots/agent-collab-debate.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Collaboration is no longer on the autonomous form: several models work together through the work mode, and the cross-vendor contract review example now describes Panel. Recapture as the Work mode section set to Panel, with panelists on different providers and a judge (the example page and autonomous page use this image). Tracked for #675, not verified current.",
       "sha256": "0151ac29672c9601e031e34476a394c11370c36883f61a1cd0feff3cbf85436b"
     },
     {
@@ -67,7 +67,7 @@
       "path": "screenshots/agent-detail-overview.png",
       "capturedAt": "2026-09-22T15:02:31.998Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733), and the overview memory chip now names what the agent saves (facts it learns, whole conversations, only when asked). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "b2f5761e661b123b4ac9b14adbc07cd48d90cdcfca9257e204dd59cc043b9359",
       "source": {
         "kind": "browser",
@@ -673,7 +673,7 @@
       "path": "screenshots/memory.png",
       "capturedAt": "2026-09-23T10:47:32.593Z",
       "status": "needs-recapture",
-      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733), and memory has a fifth scope, one agent's own (an agent whose memory is per agent). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "2b9544dc9b7fa57e4435dd0d436c46be9ea00dbc9bc311a4fae2fa1b44fa5e72",
       "source": {
         "kind": "browser",

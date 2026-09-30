@@ -14,6 +14,7 @@ import { withholdsCandidateAnswers, composesFinalAnswer } from '../final-answer'
 const MAIN = { key: 'main', name: 'Main', purpose: 'main', kind: 'model', providerId: 'p1', model: 'claude-sonnet-5', temperature: 0.2 } as const;
 const DRAFTER = { key: 'drafter', name: 'Drafter', purpose: 'drafter', kind: 'model', providerId: 'p1', model: 'gpt-4o-mini' } as const;
 const CHECKER = { key: 'checker', name: 'Checker', purpose: 'checker', kind: 'model', routing: { objective: 'cheapest' } } as const;
+const JUDGE = { key: 'judge', name: 'Judge', purpose: 'judge', kind: 'model', providerId: 'p2', model: 'gpt-5' } as const;
 
 describe('agentModelsProblems', () => {
   it('accepts every strategy once its slots are filled, and no models at all', () => {
@@ -90,7 +91,25 @@ describe('agentModelsProblems', () => {
 
   it('reports purposes the strategy does not read, without refusing them', () => {
     expect(unusedPurposes({ strategy: 'single', roles: [MAIN, DRAFTER, CHECKER] })).toEqual(['drafter', 'checker']);
-    expect(unusedPurposes({ strategy: 'panel', roles: [MAIN, CHECKER] })).toEqual([]);
+    // The panel reads a judge; a checker is for the shapes that check.
+    expect(unusedPurposes({ strategy: 'panel', roles: [MAIN, JUDGE] })).toEqual([]);
+    expect(unusedPurposes({ strategy: 'panel', roles: [MAIN, CHECKER] })).toEqual(['checker']);
+    expect(unusedPurposes({ strategy: 'cascade', roles: [MAIN, DRAFTER, CHECKER, JUDGE] })).toEqual(['judge']);
+  });
+
+  it('takes an optional judge for the panel, which has to be one model', () => {
+    const panelists = [
+      { key: 'p1', name: 'A', purpose: 'panelist', kind: 'model', providerId: 'p1' },
+      { key: 'p2', name: 'B', purpose: 'panelist', kind: 'model', providerId: 'p2' },
+    ];
+    expect(agentModelsProblems({ strategy: 'panel', roles: [MAIN, ...panelists] })).toEqual([]);
+    expect(agentModelsProblems({ strategy: 'panel', roles: [MAIN, ...panelists, JUDGE] })).toEqual([]);
+    expect(
+      agentModelsProblems({ strategy: 'panel', roles: [MAIN, ...panelists, { key: 'judge', name: 'Judge', purpose: 'judge', kind: 'agent', agentId: 'a2' }] }),
+    ).toEqual(['Judge is another agent, and a judge has to be a model: only panelists and teammates can be agents']);
+    expect(agentModelsProblems({ strategy: 'panel', roles: [MAIN, ...panelists, JUDGE, { ...JUDGE, key: 'judge_2' }] })).toEqual([
+      'There are 2 judge roles; there can be one',
+    ]);
     expect(agentModelsProblems({ strategy: 'single', roles: [MAIN, DRAFTER] })).toEqual([]);
   });
 });
@@ -138,6 +157,14 @@ describe('teamOf', () => {
     expect(team.drafter).toMatchObject({ key: 'drafter', model: 'gpt-4o-mini' });
     expect(team.checker).toMatchObject({ key: 'checker', routing: { objective: 'cheapest' } });
     expect(team.teammates).toEqual([{ key: 'helper', name: 'Helper', purpose: 'teammate', kind: 'agent', agentId: 'a2' }]);
+  });
+
+  it('fills the judge from its role, and leaves it empty without one (the main role judges then)', () => {
+    const panelist = { key: 'p1', name: 'A', purpose: 'panelist', kind: 'model', providerId: 'p1' } as const;
+    const withJudge = teamOf({ models: { strategy: 'panel', roles: [MAIN, panelist, { ...panelist, key: 'p2' }, JUDGE] }, modelConfig: { providerId: 'p1' } });
+    expect(withJudge.judge).toMatchObject({ key: 'judge', providerId: 'p2', model: 'gpt-5' });
+    const without = teamOf({ models: { strategy: 'panel', roles: [MAIN, panelist, { ...panelist, key: 'p2' }] }, modelConfig: { providerId: 'p1' } });
+    expect(without.judge).toBeUndefined();
   });
 
   it('an explorer\'s own run acts as that role alone', () => {

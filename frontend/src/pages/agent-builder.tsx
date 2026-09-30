@@ -13,7 +13,10 @@ import { NextStepsBar } from '@/components/agents/builder/next-steps-bar'
 import { TestPanel } from '@/components/agents/builder/test-panel'
 import { CanvasArea } from '@/components/agents/builder/canvas-area'
 import { AutonomousConfig, type AutonomousConfigProps } from '@/components/agents/builder/autonomous-config'
-import { modelsFromAgent, modelsPayload, modelsProblems, newAgentModels } from '@/components/agents/builder/agent-models'
+import { RunLimitsSection, useOrgRunLimits } from '@/components/agents/builder/run-limits-section'
+import { modelsFromAgent, modelsPayload, modelsProblems, newAgentModels, splitAgentTeammates } from '@/components/agents/builder/agent-models'
+import { memoryProblems } from '@/components/agents/builder/memory-section'
+import { capabilityProblems } from '@/components/agents/builder/capabilities-section'
 import { workflowIssues, type BuilderIssue, type GraphNode, type GraphEdge } from '@/components/agents/builder/validate-graph'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 
@@ -21,7 +24,7 @@ import { agentsApi, toolsApi } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
-import type { Agent, AgentModels, PipelineNode, PipelineEdge } from '@/types'
+import type { Agent, AgentMemoryConfig, AgentModels, PipelineNode, PipelineEdge } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
 
 const DEFAULT_PIPELINE_NODES: PipelineNode[] = [
@@ -58,13 +61,15 @@ export function AgentBuilderPage() {
   // An autonomous agent's roles and strategy. A new agent starts with one
   // Main role, no model chosen yet, running Single.
   const [agentModels, setAgentModels] = useState<AgentModels>(newAgentModels)
-  const [agentMemoryConfig, setAgentMemoryConfig] = useState<{ enabled?: boolean; autoSave?: boolean }>({ enabled: false, autoSave: false })
+  const [agentMemoryConfig, setAgentMemoryConfig] = useState<AgentMemoryConfig>({ enabled: false, autoSave: false })
   // The whole agentConfig as loaded (verify, constraints, run limits): a save sends it back whole.
   const [agentConfig, setAgentConfig] = useState<AutonomousConfigProps['agentConfig']>({ canCallAgents: false, canCreateAgents: false })
 
   const [showTestPanel, setShowTestPanel] = useState(false)
   const [agentVisibility, setAgentVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [showVisibility, setShowVisibility] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const orgRunLimits = useOrgRunLimits()
 
   // ── Pipeline state (nodes, edges, undo/redo, CRUD) ─────────────────────
   const pipeline = useAgentPipeline()
@@ -131,9 +136,17 @@ export function AgentBuilderPage() {
       setAgentInstructions(agent.instructions || '')
       setAgentHeartbeat(agent.heartbeat || { enabled: false, intervalMinutes: 60, prompt: '' })
       setAgentToolIds(agent.toolIds || [])
-      setAgentModels(modelsFromAgent(agent))
+      // Agent teammates are listed under Capabilities, as agents it may call.
+      const split = splitAgentTeammates(modelsFromAgent(agent))
+      setAgentModels(split.models)
       setAgentMemoryConfig(agent.memoryConfig || { enabled: false, autoSave: false })
-      setAgentConfig(agent.agentConfig || { canCallAgents: false, canCreateAgents: false })
+      const loaded = agent.agentConfig || { canCallAgents: false, canCreateAgents: false }
+      const callable = [...new Set([...(loaded.callableAgentIds ?? []), ...split.agentIds])]
+      setAgentConfig(
+        callable.length || loaded.callableAgentIds
+          ? { ...loaded, callableAgentIds: callable, canCallAgents: callable.length > 0 }
+          : loaded,
+      )
       setAgentVisibility({ visibility: agent.visibility ?? 'org', teamId: agent.teamId ?? null })
       const pipelineNodes = (agent.pipeline?.nodes || []).map((n: PipelineNode) => ({
         id: n.id,
@@ -219,10 +232,12 @@ export function AgentBuilderPage() {
         errors.push({ text: 'Write the instructions', nodeIds: [] })
       }
       errors.push(...modelsProblems(agentModels).map((text) => ({ text, nodeIds: [] })))
+      errors.push(...memoryProblems(agentMemoryConfig).map((text) => ({ text, nodeIds: [] })))
+      errors.push(...capabilityProblems(agentConfig).map((text) => ({ text, nodeIds: [] })))
     }
 
     return errors
-  }, [agentName, agentMode, agentInstructions, agentModels, pipeline.nodes, pipeline.edges, currentOrganization?.settings?.defaultRouting])
+  }, [agentName, agentMode, agentInstructions, agentModels, agentMemoryConfig, agentConfig, pipeline.nodes, pipeline.edges, currentOrganization?.settings?.defaultRouting])
 
   const validationErrors = useMemo(() => validationIssues.map((issue) => issue.text), [validationIssues])
 
@@ -345,6 +360,8 @@ export function AgentBuilderPage() {
 
       if (agentMode === 'workflow') {
         payload.pipeline = buildPipeline()
+        // Run limits and the rest of agentConfig, saved back whole.
+        payload.agentConfig = agentConfig
       } else {
         // Autonomous mode -- save instructions + soul + heartbeat + tools + models
         payload.personality = agentPersonality || undefined
@@ -467,6 +484,8 @@ export function AgentBuilderPage() {
         visibility={agentVisibility.visibility}
         visibilityOpen={showVisibility}
         onVisibilityClick={() => setShowVisibility((open) => !open)}
+        settingsOpen={showSettings}
+        onSettingsClick={agentMode === 'workflow' ? () => setShowSettings((open) => !open) : undefined}
       />
 
       {/*
@@ -497,6 +516,29 @@ export function AgentBuilderPage() {
             onChange={setAgentVisibility}
             noun="this agent"
           />
+        </div>
+      )}
+      {/*
+        A workflow agent's own settings: the same Run limits card the
+        autonomous page shows in its body (summary first, fields under
+        Advanced), inline under the toolbar so the canvas stays in view.
+        Workflow runs honour these limits; without this they could only be
+        set through the API.
+      */}
+      {agentMode === 'workflow' && showSettings && (
+        <div
+          id="agent-settings-panel"
+          role="region"
+          aria-label="Agent settings"
+          className="px-4 py-3 border-b bg-background shrink-0 max-h-[60vh] overflow-y-auto"
+        >
+          <div className="max-w-4xl mx-auto">
+            <RunLimitsSection
+              value={agentConfig.runLimits ?? {}}
+              onChange={(runLimits) => setAgentConfig({ ...agentConfig, runLimits })}
+              inherited={orgRunLimits}
+            />
+          </div>
         </div>
       )}
       {/* Main content: Workflow pipeline or Autonomous config */}

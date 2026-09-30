@@ -1,10 +1,11 @@
 import { Process, Processor } from '@nestjs/bull';
-import { Logger } from '@nestjs/common';
+import { Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job } from 'bull';
 
 import { CanonicalMemory } from './canonical-memory.entity';
+import { MemoryAccountsService } from './memory-accounts.service';
 
 export const TTL_SWEEPER_QUEUE_NAME = 'canonical-memory-ttl-sweeper';
 
@@ -35,7 +36,22 @@ export class CanonicalMemoryTtlSweeperProcessor {
   constructor(
     @InjectRepository(CanonicalMemory)
     private readonly repo: Repository<CanonicalMemory>,
+    @Optional() private readonly accounts?: MemoryAccountsService,
   ) {}
+
+  /**
+   * An agent's memories in outside accounts whose retention is up, deleted
+   * through each service's API (MemoryAccountsService.sweepExpired).
+   */
+  @Process('expire-outside')
+  async expireOutside(_job: Job): Promise<{ deleted: number; failed: number }> {
+    if (!this.accounts) return { deleted: 0, failed: 0 };
+    const result = await this.accounts.sweepExpired();
+    if (result.deleted > 0 || result.failed > 0) {
+      this.logger.log(`outside memory expiry: deleted ${result.deleted}, failed ${result.failed}`);
+    }
+    return result;
+  }
 
   @Process('sweep')
   async handle(_job: Job): Promise<{ closed: number }> {

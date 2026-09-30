@@ -91,7 +91,7 @@ The exit point of the pipeline. Names the final result.
 | Property | Type | Description |
 |----------|------|-------------|
 | `mapping` | Template string or object | Rendered against the context. A string result; an object is rendered value by value. |
-| `source` | Dot path | Read instead of `mapping` when `mapping` is absent. Resolved as a raw value, so objects and arrays keep their type. |
+| `source` | Dot path, or a list of them | Read instead of `mapping` when `mapping` is absent. Resolved as a raw value, so objects and arrays keep their type. A list takes the first path a step that ran produced. |
 
 ```json
 {
@@ -108,6 +108,8 @@ output is an object or an array arrives at the pipeline result as JSON text.
 `source` instead takes a bare dot path with no `{{...}}` around it, for example
 `nodes.llm_1.output`, and preserves the value's type. It is reachable through
 the API; the builder does not write it yet.
+
+`source` may also be a list of dot paths, read in order: the first one a step that ran produced is the answer. A skipped or failed step has no output, so the next path is tried; when none produced anything the node fails, naming the paths. That is how a graph with a branch names its answer, and what a compiled strategy writes: a cascade reads `["nodes.escalate.output", "nodes.draft.output"]`, the escalation (which runs only when the check failed) and then the draft the check passed.
 
 With neither set, the node returns every node's output keyed by node id.
 

@@ -75,7 +75,7 @@ export async function findSharedDependents(
     where: { organizationId: target.organizationId, isTemporary: false },
     select: {
       id: true, name: true, organizationId: true, visibility: true, teamId: true, createdBy: true,
-      toolIds: true, pipeline: true, collaboration: true, models: true,
+      toolIds: true, pipeline: true, collaboration: true, models: true, agentConfig: true,
     },
   });
   const dependents: Dependent[] = [];
