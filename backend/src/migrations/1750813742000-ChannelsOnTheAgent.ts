@@ -1,46 +1,20 @@
-import { Logger } from '@nestjs/common';
 import { MigrationInterface, QueryRunner } from 'typeorm';
-
-import { moveAppsToChannels } from './support/channels-on-the-agent';
 
 /**
  * Channels on the agent.
  *
  * An agent has channels (web chat, website widget, messaging platforms,
  * A2A, desktop and terminal apps), and its branding and visitor rules live
- * on the agent, overridable per channel. This creates them from what the
- * apps held, then drops the app tables.
- *
- * - Each place becomes a channel with the same id, on the agent it answers
- *   with: the place's `configuration.agentId`, else the app's first agent.
- *   A place whose agent no longer exists in the organization is logged and
- *   dropped with the app tables. A standalone binary becomes a terminal
- *   app, which compiles to the same file.
- * - The app's branding (its name when branding has none) and visitor rules
- *   (sign-in, limits, privacy) are copied onto each agent that receives
- *   one of its places, or onto its first agent when it has none. When two
- *   apps put different settings on the same agent, the first app (oldest)
- *   wins on the agent and the later app's settings go onto its channels as
- *   overrides, so what visitors of those channels see does not change. Each
- *   such conflict is logged.
- * - Each channel is named after its kind, with the app's name added when
- *   the agent already has a channel of that name.
- * - Downloads keep what they may touch (`capabilities`), and a desktop app
- *   opens the web chat of the app it came from.
- * - A web chat keeps its address (the gateway's hostedChat slug).
- * - A published place's gateway answers at `/channels/<channel id>` and
- *   names its channel in `configuration.channelId`.
- * - The credential a place kept its keys in becomes an ordinary credential
- *   on Credentials, named after the agent and the channel.
- * - Builds point at their channel. A build whose place was not moved goes.
+ * on the agent, overridable per channel. This creates the channel schema
+ * and drops the apps: their tables, the gateways, managed credentials and
+ * builds that belonged to them, and the app ids on builds and runs. No app
+ * data is carried over.
  */
 export class ChannelsOnTheAgent1750813742000 implements MigrationInterface {
   name = 'ChannelsOnTheAgent1750813742000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    const logger = new Logger(this.name);
     await this.createChannelSchema(queryRunner);
-    await moveAppsToChannels(queryRunner, logger);
     await this.dropAppModel(queryRunner);
   }
 
@@ -107,6 +81,16 @@ export class ChannelsOnTheAgent1750813742000 implements MigrationInterface {
 
   /** What the apps held is on the agents and channels now: drop the app tables and what pointed at them. */
   async dropAppModel(queryRunner: Pick<QueryRunner, 'query'>): Promise<void> {
+    const [tables] = await queryRunner.query(
+      `SELECT to_regclass('agent_app_distributions') IS NOT NULL AS "places"`,
+    );
+    if (tables?.places) {
+      await queryRunner.query(
+        `DELETE FROM "gateways" WHERE id IN (SELECT "gatewayId" FROM "agent_app_distributions" WHERE "gatewayId" IS NOT NULL)`,
+      );
+    }
+    await queryRunner.query(`DELETE FROM "gateways" WHERE "configuration"::jsonb ? 'appId'`);
+    await queryRunner.query(`DELETE FROM "credentials" WHERE "metadata"::jsonb -> 'managedBy' ->> 'kind' = 'app_distribution'`);
     await queryRunner.query(`DELETE FROM "app_builds" WHERE "channelId" IS NULL`);
     await queryRunner.query(`ALTER TABLE "app_builds" DROP CONSTRAINT IF EXISTS "FK_app_builds_app"`);
     await queryRunner.query(`ALTER TABLE "app_builds" DROP COLUMN IF EXISTS "appId"`);
@@ -121,10 +105,7 @@ export class ChannelsOnTheAgent1750813742000 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE IF EXISTS "agent_apps" CASCADE`);
   }
 
-  /**
-   * The app tables are dropped and their rows are channels now; there is
-   * nothing to put back. Restore a backup taken before this migration.
-   */
+  /** The app tables and what belonged to them are dropped; restore a backup taken before this migration. */
   public async down(): Promise<void> {
     throw new Error('ChannelsOnTheAgent1750813742000 drops the app tables and cannot be reverted. Restore a backup taken before it.');
   }
