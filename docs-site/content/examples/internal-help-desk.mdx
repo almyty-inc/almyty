@@ -37,12 +37,13 @@ Add one memory per topic rather than one long page: the assistant looks up the o
 Open **Agents**, click **Create agent** and pick **Autonomous** at the top.
 
 - Click the name **New agent** and call it `Ask HR and IT`.
+- **Work mode**, the first section: open **Model** and pick one.
 - **Personality & style**: `Friendly and to the point, like a helpful colleague.`
 - **Instructions**:
 
 > You answer questions from Northwind staff about HR, IT and the office. Look things up before you answer: the staff handbook and policies, their leave balance (ask for their work email if you need it), and the office guide in shared memory. Say where the answer came from. If someone needs something done by IT, tell them how to open an IT request. Never share one person's details with another.
 
-Under **Work mode**, pick a model. Under **Memory**, turn on **Remember between conversations**, set **Whose memory** to **Shared by all agents** (so it reads what you added in step 2) and **What it saves** to **Only when asked** (so it does not fill your shared memory with chat). Under **Capabilities → Tools and APIs**, tick **All tools** next to your intranet.
+Further down, under **Memory**, turn on **Remember between conversations**, set **Whose memory** to **Shared by all agents** (so it reads what you added in step 2) and **What it saves** to **Only when asked** (so it does not fill your shared memory with chat). Under **Capabilities → Tools and APIs**, tick **All tools** next to your intranet.
 
 ![Shared memory on, and the intranet's tools ticked](/screenshots/guides/helpdesk-3-agent.png)
 

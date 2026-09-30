@@ -35,7 +35,7 @@ In the sidebar, open **Tools** and click **Create tool**. Leave **Execution meth
 - **Method**: **POST**
 - **URL**: the Slack address you copied.
 - Under **Parameters**, click **Add first property**. Name it `text`, leave the type on **String**, describe it as `The message to post` and turn on **Required**. Slack takes the message from a field called `text`, so the name matters.
-- Under **Visibility**, keep **Org-wide** so your team's assistants can use it.
+- Under **Who can use it**, keep **Everyone** so your organization's assistants can use it.
 
 ![The post_to_slack tool, with its one text field](/screenshots/guides/ops-2-slack-tool.png)
 
@@ -46,12 +46,13 @@ Click **Create tool**. (In the screenshot the address points at the demo's stand
 Open **Agents**, click **Create agent** and pick **Autonomous** at the top.
 
 - Click the name **New agent** and call it `Nightly systems check`.
+- **Work mode**, the first section: open **Model** and pick one; a low-cost model such as **gpt-4o-mini** is plenty for a daily summary.
 - **Personality & style**: `Plain and short. Lead with what needs attention.`
 - **Instructions**:
 
 > Every night, check the health of every Northwind system. Then post one short report to Slack with post_to_slack: first what needs attention (anything degraded, failing or above 80% full) with the detail, then one line saying everything else is fine. If everything is fine, say so in one line. Do not post more than one message.
 
-Under **Work mode**, pick a model; a low-cost one such as **gpt-4o-mini** is plenty for a daily summary. Under **Capabilities → Tools and APIs**, tick **All tools** next to your status system, then type `post_to_slack` in **Search tools** and tick it too.
+Then scroll to **Capabilities → Tools and APIs** and tick **All tools** next to your status system, then type `post_to_slack` in **Search tools** and tick it too.
 
 ![The nightly check with the status tools and the Slack tool](/screenshots/guides/ops-3-agent.png)
 

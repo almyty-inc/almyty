@@ -124,7 +124,8 @@ const SUPPORT_INSTRUCTIONS = 'You answer Northwind customers about their orders.
 
 const SUPPORT = [
   ['support-1-connect-model', 'Connect an AI model', src('frontend/src/pages/models-connect.tsx', 'frontend/src/components/llm-providers', 'frontend/src/components/connect'), async (page, h) => {
-    await h.go('/credentials')
+    await h.go('/dashboard')
+    await h.link('Models')
     await h.link('Connect a provider')
     await page.getByRole('button', { name: /OpenAI$/ }).first().click()
     await page.locator('#connect-api-key').fill('sk-demo-openai-0000000000')
@@ -151,13 +152,13 @@ const SUPPORT = [
     await h.click('Create agent')
     await h.click('Autonomous')
     await page.getByPlaceholder('Agent name').fill('Customer support assistant')
-    await page.getByLabel('Personality and style').fill('Friendly, brief and specific. Apologise once at most.')
-    await page.getByLabel('Instructions').fill(SUPPORT_INSTRUCTIONS)
-    await h.top()
-  }],
-  ['support-5-model-and-tools', 'Pick a model and the order tools', src('frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents'), async (page, h) => {
     await page.locator('#role-main-model').click()
     await page.getByRole('option', { name: /^gpt-4o(?!-)/ }).first().click()
+    await page.getByLabel('Personality and style').fill('Friendly, brief and specific. Apologise once at most.')
+    await page.getByLabel('Instructions').fill(SUPPORT_INSTRUCTIONS)
+    await h.show('Work mode')
+  }],
+  ['support-5-model-and-tools', 'Tick the order tools', src('frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents'), async (page, h) => {
     await page.getByRole('checkbox', { name: /All tools of Northwind Orders/ }).click()
     await h.show('Capabilities')
   }],
@@ -284,10 +285,10 @@ const SALES = [
     await h.click('Create agent')
     await h.click('Autonomous')
     await page.getByPlaceholder('Agent name').fill('Sales assistant')
-    await page.getByLabel('Personality and style').fill('Short and practical. Numbers first, no small talk.')
-    await page.getByLabel('Instructions').fill(SALES_INSTRUCTIONS)
     await page.locator('#role-main-model').click()
     await page.getByRole('option', { name: /^gpt-4o(?!-)/ }).first().click()
+    await page.getByLabel('Personality and style').fill('Short and practical. Numbers first, no small talk.')
+    await page.getByLabel('Instructions').fill(SALES_INSTRUCTIONS)
     await page.getByRole('checkbox', { name: /All tools of Northwind CRM/ }).click()
     await h.show('Capabilities')
   }],
@@ -354,10 +355,10 @@ const MARKETING = [
     await h.click('Create agent')
     await h.click('Autonomous')
     await page.getByPlaceholder('Agent name').fill('Product questions')
-    await page.getByLabel('Personality and style').fill('Warm and clear. Short answers, plain words.')
-    await page.getByLabel('Instructions').fill(MARKETING_INSTRUCTIONS)
     await page.locator('#role-main-model').click()
     await page.getByRole('option', { name: /^gpt-4o-mini/ }).first().click()
+    await page.getByLabel('Personality and style').fill('Warm and clear. Short answers, plain words.')
+    await page.getByLabel('Instructions').fill(MARKETING_INSTRUCTIONS)
     await page.getByRole('checkbox', { name: /All tools of Northwind Help Center/ }).click()
     await h.show('Capabilities')
   }],
@@ -447,7 +448,7 @@ const OPERATIONS = [
     await page.locator('#prop-property_1-name').fill('text')
     await page.getByPlaceholder('Describe this parameter').fill('The message to post')
     await page.getByRole('switch', { name: /required/i }).last().click().catch(async () => { await page.locator('[id$="-required"]').last().click() })
-    await page.getByRole('radio', { name: /^Org-wide/ }).click()
+    await page.getByRole('radio', { name: /^Everyone/ }).click()
     await h.show('Parameters')
   }],
   ['ops-3-agent', 'The nightly check, with its two kinds of tools', src('frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents'), async (page, h) => {
@@ -457,10 +458,10 @@ const OPERATIONS = [
     await h.click('Create agent')
     await h.click('Autonomous')
     await page.getByPlaceholder('Agent name').fill('Nightly systems check')
-    await page.getByLabel('Personality and style').fill('Plain and short. Lead with what needs attention.')
-    await page.getByLabel('Instructions').fill(OPS_INSTRUCTIONS)
     await page.locator('#role-main-model').click()
     await page.getByRole('option', { name: /^gpt-4o-mini/ }).first().click()
+    await page.getByLabel('Personality and style').fill('Plain and short. Lead with what needs attention.')
+    await page.getByLabel('Instructions').fill(OPS_INSTRUCTIONS)
     await page.getByRole('checkbox', { name: /All tools of Northwind Status/ }).click()
     await page.getByPlaceholder('Search tools').fill('post_to_slack')
     await h.settle()
@@ -536,10 +537,10 @@ const HELPDESK = [
     await h.click('Create agent')
     await h.click('Autonomous')
     await page.getByPlaceholder('Agent name').fill('Ask HR and IT')
-    await page.getByLabel('Personality and style').fill('Friendly and to the point, like a helpful colleague.')
-    await page.getByLabel('Instructions').fill(HELPDESK_INSTRUCTIONS)
     await page.locator('#role-main-model').click()
     await page.getByRole('option', { name: /^gpt-4o(?!-)/ }).first().click()
+    await page.getByLabel('Personality and style').fill('Friendly and to the point, like a helpful colleague.')
+    await page.getByLabel('Instructions').fill(HELPDESK_INSTRUCTIONS)
     const memory = page.locator('#memory-enabled')
     if ((await memory.getAttribute('aria-checked')) !== 'true') await memory.click()
     await page.locator('#memory-whose').click()
@@ -587,6 +588,7 @@ const DEVELOPERS = [
     await page.getByRole('button', { name: /^Northwind Orders/ }).click()
     await page.locator('#gateway-name').fill('Northwind Orders')
     await h.settle()
+    await h.show('Protocol')
   }],
   ['dev-2-gateway-setup', 'The address, the key and a ready-made setup', src('frontend/src/pages/gateway-detail.tsx', 'frontend/src/components/gateways'), async (page, h) => {
     await h.click('Create gateway')
@@ -598,7 +600,8 @@ const DEVELOPERS = [
     await h.click('Start a runner')
     await page.locator('#name').fill('build-server')
     await h.click('Add label')
-    await page.locator('input[placeholder*="="]').last().fill('os=linux').catch(() => {})
+    await page.getByPlaceholder('key').last().fill('os')
+    await page.getByPlaceholder('value').last().fill('linux')
     await h.settle()
   }],
   ['dev-4-runner-command', 'The commands to run on the machine', src('frontend/src/pages/runner-new.tsx', 'frontend/src/components/runners'), async (page, h) => {
@@ -639,6 +642,8 @@ async function walk(names, from) {
         break
       }
     }
+    // Later guides build on the earlier ones (the model connected in the first): stop at the first failure.
+    if (failed) break
   }
   writeFileSync(log, JSON.stringify(results, null, 2))
   await ctx.close()

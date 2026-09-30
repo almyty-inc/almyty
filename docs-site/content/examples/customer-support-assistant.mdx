@@ -13,7 +13,7 @@ This guide builds it for Northwind, a shop that sells coffee equipment. Every st
 
 ## 1. Connect an AI model
 
-In the sidebar, open **Credentials** and click **Connect a provider**. Pick **OpenAI** (or the model maker you use), paste your key into **API key** and click **Connect**.
+In the sidebar, open **Models** and click **Connect a provider**. (Later you will also find your connections under **Credentials**.) Pick **OpenAI** (or the model maker you use), paste your key into **API key** and click **Connect**.
 
 almyty checks the key and lists the models it gives you, with their prices. Leave them all ticked and click **Done**.
 
@@ -38,18 +38,17 @@ If your order system needs a key to be called, click **Add a key** on this page 
 In the sidebar, open **Agents** and click **Create agent**. An agent is what almyty calls an assistant that does work for you. At the top, pick **Autonomous**: you tell it the goal in plain words and it works out the steps. (**Workflow** is for when you want to draw every step yourself.)
 
 - At the top, click the name **New agent** and replace it with `Customer support assistant`.
+- Under **Work mode**, open **Model** and pick a model, for example **gpt-4o**. The list shows each model's price. You can come back and pick another model later without changing anything else. (The other work modes let several models share the work, for example a cheap one that answers first and a stronger one that checks it.)
 - Under **Personality & style**, say how it should sound: `Friendly, brief and specific. Apologise once at most.`
 - Under **Instructions**, say what it should do and where its limits are:
 
 > You answer Northwind customers about their orders. Always look the order up before you answer. You may refund up to $500 yourself. For any refund over $500, ask for approval first and tell the customer a person will confirm within one business day.
 
-![A new autonomous agent with its personality and instructions](/screenshots/guides/support-4-new-agent.png)
+![A new autonomous agent with its model, personality and instructions](/screenshots/guides/support-4-new-agent.png)
 
-## 4. Pick a model and what it may use
+## 4. Pick what it may use
 
-Under **Work mode**, open **Model** and pick a model, for example **gpt-4o**. The list shows each model's price. You can come back and pick another model later without changing anything else.
-
-Scroll to **Capabilities**. Under **Tools and APIs**, tick **All tools** next to **Northwind Orders**. The assistant may use those tools and nothing else: anything not ticked here is refused.
+Scroll down to **Capabilities**. Under **Tools and APIs**, tick **All tools** next to **Northwind Orders**. The assistant may use those tools and nothing else: anything not ticked here is refused.
 
 ![The order system's tools ticked under Capabilities](/screenshots/guides/support-5-model-and-tools.png)
 
