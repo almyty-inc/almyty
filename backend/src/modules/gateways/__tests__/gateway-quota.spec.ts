@@ -65,7 +65,7 @@ describe('gateway quota', () => {
 
   it('is asked with nothing to add when the gateway being made is a channel', () => {
     const src = readFileSync(join(__dirname, '..', 'gateways.service.ts'), 'utf8');
-    expect(src).toMatch(/withGatewayQuota\([\s\S]{0,300}countsTowardGatewayQuota\(gateway\.type\) \? 1 : 0/);
+    expect(src).toMatch(/withGatewayQuota\([\s\S]{0,300}countsTowardGatewayQuota\(createGatewayDto\.type\) \? 1 : 0/);
   });
 
   it('lets a gateway in while there is room', async () => {

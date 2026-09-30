@@ -666,7 +666,7 @@ export class GatewaysService {
         this.gatewayRepository.manager,
         organizationId,
         // A channel's gateway is not counted toward the plan's gateways.
-        countsTowardGatewayQuota(gateway.type) ? 1 : 0,
+        countsTowardGatewayQuota(createGatewayDto.type) ? 1 : 0,
         (tx) => tx.getRepository(Gateway).save(gateway),
       );
       try {
