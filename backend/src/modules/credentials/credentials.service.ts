@@ -314,7 +314,7 @@ export class CredentialsService {
    * (CredentialRefResolver.assertAttachable). Rows a consumer manages for
    * itself follow that consumer and are not checked here.
    */
-  private async assertConsumersCovered(credential: Credential): Promise<void> {
+  async assertConsumersCovered(credential: Credential): Promise<void> {
     if ((credential.visibility ?? 'org') === 'org' || !this.credentialRefs) return;
     if ((credential.metadata as Record<string, any> | null | undefined)?.managedBy) return;
     const organizationId = credential.organizationId;

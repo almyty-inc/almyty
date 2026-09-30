@@ -56,9 +56,9 @@ export interface BuilderToolbarProps {
 }
 
 const VISIBILITY_LABEL = {
-  private: { label: 'Private', Icon: Lock },
-  team: { label: 'Team', Icon: Users },
-  org: { label: 'Org-wide', Icon: Globe },
+  private: { label: 'Only you', Icon: Lock },
+  team: { label: 'One team', Icon: Users },
+  org: { label: 'Everyone', Icon: Globe },
 } as const
 
 export function BuilderToolbar({

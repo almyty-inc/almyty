@@ -91,6 +91,7 @@ export enum AuditAction {
   CONNECTION_RESOLVE = 'connection_resolve',
   CONNECTION_GRANT = 'connection_grant',
   CONNECTION_REVOKE_GRANT = 'connection_revoke_grant',
+  CONNECTION_SHARE = 'connection_share',
   CONNECTOR_CREATE = 'connector_create',
 
   // Governance: a departed member's private resources handed to someone

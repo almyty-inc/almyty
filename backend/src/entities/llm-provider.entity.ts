@@ -21,6 +21,9 @@ export { LlmProviderType } from './llm-provider-type';
 import { LlmProviderType } from './llm-provider-type';
 import { profileAuthHeaders, profileBaseUrl, providerProfile } from '../modules/llm-providers/provider-profile';
 
+/** Why a provider connection went inactive (see LlmProvider.inactiveReason). */
+export type LlmProviderInactiveReason = 'check_failed' | 'switched_off' | 'endpoint_stopped';
+
 export enum LlmProviderStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
@@ -250,6 +253,14 @@ export class LlmProvider {
     default: LlmProviderStatus.ACTIVE,
   })
   status: LlmProviderStatus;
+
+  /**
+   * Why an inactive connection is inactive; null while it is active.
+   * Check again turns it back on only for 'check_failed': never for one a
+   * person switched off, or whose endpoint stopped.
+   */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  inactiveReason: LlmProviderInactiveReason | null;
 
   @Column()
   organizationId: string;

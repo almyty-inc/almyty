@@ -474,9 +474,12 @@ export class LlmProvidersController {
           HttpStatus.BAD_REQUEST,
         );
       }
+      // Check again: a connection that is off comes back on when the key
+      // works and the caller may change it.
       const result = await this.llmProvidersService.performHealthCheck(
         providerId,
         organizationId,
+        { reactivateFor: req.user?.id },
       );
 
       return {

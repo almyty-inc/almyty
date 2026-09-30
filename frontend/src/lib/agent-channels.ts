@@ -91,6 +91,8 @@ export interface ChannelBranding {
   primaryColor?: string
   logoUrl?: string | null
   iconUrl?: string | null
+  /** The app icon uploaded on the branding page (a PNG in the organization's files). */
+  iconFileId?: string | null
   greeting?: string
   theme?: 'dark' | 'light' | 'auto'
   suggestedPrompts?: string[]

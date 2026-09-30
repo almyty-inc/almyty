@@ -17,6 +17,7 @@ import { AppBuildsService, APP_BUILD_QUEUE } from './app-builds.service';
 import { AppBuildProcessor } from './app-build.processor';
 import { buildProcessingEnabled } from './build-mode';
 import { BuildSignerService } from './build-signer.service';
+import { ChannelHousekeepingProcessor, CHANNEL_HOUSEKEEPING_QUEUE } from './channel-housekeeping.processor';
 
 /**
  * Channels on an agent: the web chat, the website widget, messaging
@@ -30,6 +31,7 @@ import { BuildSignerService } from './build-signer.service';
   imports: [
     TypeOrmModule.forFeature([AgentChannel, Agent, AppBuild, Credential, Gateway]),
     BullModule.registerQueue({ name: APP_BUILD_QUEUE }),
+    BullModule.registerQueue({ name: CHANNEL_HOUSEKEEPING_QUEUE }),
     // Downloads go through the same storage the rest of the product uses,
     // so a deployment on S3 gets signed download URLs for free.
     FilesModule,
@@ -43,6 +45,9 @@ import { BuildSignerService } from './build-signer.service';
     AgentChannelsService,
     AppBuildsService,
     BuildSignerService,
+    // Channel housekeeping (unsaved app icons) runs whatever the build
+    // mode: builds being off does not stop anyone uploading an icon.
+    ChannelHousekeepingProcessor,
     // Only consume build jobs when this process is meant to. An API pod
     // running alongside a dedicated build worker sets APP_BUILD_MODE=off
     // so it does not grab a job it cannot fully handle.

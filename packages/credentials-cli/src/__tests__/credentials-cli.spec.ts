@@ -5,6 +5,10 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   isEntrypoint,
+  isTeamId,
+  organizationOf,
+  pickTeam,
+  teamSlug,
   assertNoArgvSecrets,
   assertStdinIsPiped,
   chooseMethod,
@@ -68,7 +72,39 @@ describe('@almyty/credentials', () => {
     expect(connectBody({ name: 'prod key' })).toEqual({ owner: 'org', name: 'prod key' });
     // Private: yours alone, org admins included in nobody else.
     expect(connectBody({ owner: 'private' })).toEqual({ owner: 'private' });
-    expect(() => connectBody({ owner: 'team' })).toThrow('--owner must be org, user or private');
+    expect(() => connectBody({ owner: 'nobody' })).toThrow('--owner must be org, team, user or private');
+  });
+
+  it('shares with one team: --owner team needs --team, and --team needs --owner team', () => {
+    const TEAM = '11111111-1111-4111-8111-111111111111';
+    expect(connectBody({ owner: 'team', team: TEAM }, undefined, TEAM)).toEqual({ owner: 'team', teamId: TEAM });
+    expect(() => connectBody({ owner: 'team' })).toThrow('--owner team needs the team: --team <id|slug>');
+    expect(() => connectBody({ owner: 'org', team: 'support' })).toThrow('--team goes with --owner team');
+  });
+
+  it('finds the team --team names by id or by the slug of its name', () => {
+    const teams = [
+      { id: 't-1', name: 'Customer Support' },
+      { id: 't-2', name: 'Sales' },
+    ];
+    expect(isTeamId('11111111-1111-4111-8111-111111111111')).toBe(true);
+    expect(isTeamId('customer-support')).toBe(false);
+    expect(teamSlug('Customer Support')).toBe('customer-support');
+    expect(pickTeam(teams, 'customer-support')).toBe('t-1');
+    expect(pickTeam(teams, 'Sales')).toBe('t-2');
+    expect(() => pickTeam(teams, 'ops')).toThrow('no team ops in this organization (teams: customer-support, sales)');
+    expect(() => pickTeam([...teams, { id: 't-3', name: 'sales' }], 'sales')).toThrow('more than one team is called sales');
+  });
+
+  it('looks the slug up in the organization the login acts in', () => {
+    expect(organizationOf({ currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }, { id: 'org-2' }] })).toBe('org-1');
+    expect(organizationOf({ organizations: [{ id: 'org-9' }] })).toBe('org-9');
+    expect(() => organizationOf({ organizations: [{ id: 'a' }, { id: 'b' }] })).toThrow('pass the team id with --team');
+  });
+
+  it('shows the team of a team credential', () => {
+    expect(formatConnectionDetail({ id: 'c1', connectorKey: 'openai', owner: 'team', teamId: 't-1', health: { status: 'valid' } } as any)).toContain('owner       team (t-1)');
+
   });
 
   it('parses --input as a JSON object only', () => {
@@ -386,12 +422,14 @@ describe('routes the CLI calls exist on the backend', () => {
     expect(served().size).toBeGreaterThan(50);
   });
 
-  it('calls only /credentials routes the backend serves', () => {
+  it('calls only /credentials routes the backend serves, and the two it looks a team up with', () => {
     const routes = served();
+    const lookups = ['GET /auth/profile', 'GET /organizations/:p/teams'];
     for (const call of called()) {
-      expect(call).toMatch(/^[A-Z]+ \/credentials(\/|$)/);
+      if (!lookups.includes(call)) expect(call).toMatch(/^[A-Z]+ \/credentials(\/|$)/);
       expect(routes, call).toContain(call);
     }
+    for (const lookup of lookups) expect(called()).toContain(lookup);
   });
 });
 

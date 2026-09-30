@@ -17,6 +17,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   'connections.expiring',
   'connections.expired',
   'connections.rotation_due',
+  'connections.inactive',
   'domains.unverified',
   'models.new',
   'models.unavailable',

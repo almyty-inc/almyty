@@ -34,7 +34,7 @@ describe('create gateway reuses the shared pieces', () => {
 
   it('imports the shared form page, "Who can use it" line and Advanced fold', () => {
     expect(form).toMatch(/from '@\/components\/layout\/form-page'/)
-    expect(form).toMatch(/import \{ WhoCanUse \} from '@\/components\/connect\/who-can-use'/)
+    expect(form).toMatch(/import \{ (WHO_CAN_USE_LABELS, )?WhoCanUse \} from '@\/components\/connect\/who-can-use'/)
     expect(form).toMatch(/import \{ Disclosure \} from '@\/components\/ui\/disclosure'/)
   })
 

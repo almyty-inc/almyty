@@ -2,6 +2,7 @@ import { unlimitedQuotaManager } from '../../test/tool-quota.fake';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { In } from 'typeorm';
 import { GatewaysService } from './gateways.service';
 import { GatewaysStatsHelper, SERVABLE_TOOL_SCOPE_CLAUSE } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
@@ -321,7 +322,7 @@ describe('GatewaysService', () => {
       await expect(
         service.createGateway(createDto, 'org-1', 'user-1')
       ).rejects.toThrow('Organization has reached gateway limit');
-      expect(count).toHaveBeenCalledWith({ where: { organizationId: 'org-1', isSystem: false } });
+      expect(count).toHaveBeenCalledWith({ where: { organizationId: 'org-1', isSystem: false, type: In(['mcp', 'utcp', 'skills']) } });
       expect(txRepo.save).not.toHaveBeenCalled();
       expect(gatewayRepository.save).not.toHaveBeenCalled();
     });

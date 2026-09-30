@@ -362,22 +362,34 @@ describe('CatalogWarmupService', () => {
     });
 
     it('is debounced per provider across instances, and tries again once the window has passed', async () => {
-      const refused = await legacyProvider({ key: 'sk-revoked-000000' });
+      const provider = await legacyProvider();
+      vendorDown = true;
 
       expect(await warmup.warmOnLoad('org-1', 'user-a')).toBe(false);
       expect(vendorCalls.filter((c) => c.kind === 'chat')).toHaveLength(1);
-      expect(redis.pttlNow(`${WARM_CLAIM_PREFIX}${refused.id}`)).toBeGreaterThan(0);
+      expect(redis.pttlNow(`${WARM_CLAIM_PREFIX}${provider.id}`)).toBeGreaterThan(0);
 
       // Loads inside the window, on this instance and another one, call nobody.
       now += 5 * 60_000;
       expect(await warmup.warmOnLoad('org-1', 'user-a')).toBe(false);
-      expect(await buildWarmup().warmOnLoad('org-1', 'user-a', refused.id)).toBe(false);
+      expect(await buildWarmup().warmOnLoad('org-1', 'user-a', provider.id)).toBe(false);
       expect(vendorCalls.filter((c) => c.kind === 'chat')).toHaveLength(1);
-      expect(await usable(refused.id)).toEqual([]);
+      expect(await usable(provider.id)).toEqual([]);
 
       now += 6 * 60_000;
       await warmup.warmOnLoad('org-1', 'user-a');
       expect(vendorCalls.filter((c) => c.kind === 'chat')).toHaveLength(2);
+    });
+
+    it('stops asking about a key the vendor refused: the connection is off until a check passes', async () => {
+      const refused = await legacyProvider({ key: 'sk-revoked-000000' });
+
+      expect(await warmup.warmOnLoad('org-1', 'user-a')).toBe(false);
+      expect(providers.rows().find((p) => p.id === refused.id)).toMatchObject({ status: 'inactive', inactiveReason: 'check_failed' });
+
+      now += 11 * 60_000;
+      await warmup.warmOnLoad('org-1', 'user-a');
+      expect(vendorCalls.filter((c) => c.kind === 'chat')).toHaveLength(1);
     });
 
     it('does nothing when something is usable already, or for another org', async () => {
