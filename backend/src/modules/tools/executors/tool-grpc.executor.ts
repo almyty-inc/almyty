@@ -1,32 +1,26 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import axios, { AxiosRequestConfig } from 'axios';
+import { AxiosRequestConfig } from 'axios';
 import { Repository } from 'typeorm';
 
 import { Tool } from '../../../entities/tool.entity';
 import { Api } from '../../../entities/api.entity';
 import { ApiSchema } from '../../../entities/api-schema.entity';
 import { Operation } from '../../../entities/operation.entity';
-import { validateUrl, sanitizeHeaders } from '../../../common/security/url-validator';
-import {
-  decideToolRequest,
-  effectiveMaxResponseBytes,
-} from '../../../common/security/gateway-tool-policy';
+import { Organization } from '../../../entities/organization.entity';
+import { decideToolRequest } from '../../../common/security/gateway-tool-policy';
 import { ToolAuthService } from '../services/tool-auth.service';
 import { GrpcCallerService } from './grpc-caller.service';
+import { decideToolEgress } from './tool-egress';
 import { ToolExecutionOptions, ToolExecutionResult } from '../tool-execution.types';
 import { getByDotPath, generateRequestId } from '../tool-execution-utils';
 
-const MAX_CONTENT_LENGTH = 10 * 1024 * 1024;
-const MAX_BODY_LENGTH = 5 * 1024 * 1024;
-
 /**
  * gRPC / Protobuf execution paths split out of ToolProtocolExecutor.
- * Covers the structured `grpcConfig` shape (manual tool builder) and
- * the legacy operation-based path (auto-generated tools from a
- * parsed proto schema). Both share auth + SSRF hygiene via the
- * passed-in services.
+ * Covers the structured `grpcConfig` shape (a tool made on the Create
+ * tool page, carrying its own proto) and the operation-based path (tools
+ * generated from an imported proto). Both make a real gRPC call through
+ * GrpcCallerService, with the same auth and egress rules.
  */
 @Injectable()
 export class ToolGrpcExecutor {
@@ -37,78 +31,129 @@ export class ToolGrpcExecutor {
     private readonly grpcCaller: GrpcCallerService,
     @InjectRepository(ApiSchema)
     private readonly apiSchemaRepo: Repository<ApiSchema>,
+    // The organization's egress allowlist; see decideToolEgress.
+    @Optional()
+    @InjectRepository(Organization)
+    private readonly organizations?: Repository<Organization>,
   ) {}
 
-
+  /**
+   * A gRPC tool made on the Create tool page. It carries its own proto
+   * (`protoDefinition`), the service and the method, and the server's
+   * address (`endpoint`: https:// for TLS, http:// for plaintext). The
+   * call is a real gRPC call through the same caller an imported proto's
+   * tools use; whether the method streams is read from the proto. A tool
+   * linked to an imported gRPC API may leave the proto and endpoint out:
+   * the API's latest schema and base URL are used.
+   */
   async executeGrpcConfig(
     tool: Tool,
     parameters: Record<string, any>,
     options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
+    const grpcConfig = tool.grpcConfig!;
     const api = tool.api ?? tool.operation?.api ?? null;
-    const endpoint = tool.grpcConfig!.endpoint || api?.baseUrl || '';
-    const url = `${endpoint}/${tool.grpcConfig!.serviceName}/${tool.grpcConfig!.methodName}`;
-
-    const urlCheck = validateUrl(url);
-    if (!urlCheck.valid) {
-      this.logger.warn(`SSRF blocked for gRPC tool ${tool.name}: ${urlCheck.error}`);
-      return this.blocked(urlCheck.error!, startTime);
+    const endpoint = grpcConfig.endpoint || api?.baseUrl || '';
+    if (!grpcConfig.serviceName || !grpcConfig.methodName) {
+      return this.failure(`gRPC tool ${tool.name} names no service or method.`, startTime);
     }
 
-    // Gateway-tool security policy. gRPC here is JSON-over-HTTP POST, so
-    // allowed-domains, require-HTTPS and allowed-methods all apply.
-    const grpcPolicy = decideToolRequest(options.securityPolicy, url, 'POST');
+    const egress = await decideToolEgress(endpoint, api?.organizationId ?? tool.organizationId, this.organizations);
+    if (egress.error) {
+      this.logger.warn(`SSRF blocked for gRPC tool ${tool.name}: ${egress.error}`);
+      return this.blocked(egress.error, startTime);
+    }
+
+    // Gateway-tool security policy: domains and require-HTTPS judge the
+    // endpoint; a gRPC call is a POST on the wire.
+    const grpcPolicy = decideToolRequest(options.securityPolicy, endpoint, 'POST');
     if (!grpcPolicy.allowed) {
       this.logger.warn(`Security policy blocked gRPC tool ${tool.name}: ${grpcPolicy.reason}`);
       return this.blocked(grpcPolicy.reason!, startTime);
     }
 
-    const requestData: Record<string, any> = {};
-    if (tool.grpcConfig!.requestMapping) {
-      for (const [k, v] of Object.entries(tool.grpcConfig!.requestMapping)) {
-        requestData[k] =
-          typeof v === 'string'
-            ? v.replace(/\{(\w+)\}/g, (_, n) =>
-                n in parameters ? String(parameters[n]) : `{${n}}`,
-              )
-            : v;
-      }
-    } else {
-      Object.assign(requestData, parameters);
+    let protoSource = grpcConfig.protoDefinition || '';
+    if (!protoSource && api) {
+      const schemaRow = await this.apiSchemaRepo.findOne({
+        where: { apiId: api.id },
+        order: { createdAt: 'DESC' },
+      });
+      protoSource = schemaRow?.rawSchema || '';
+    }
+    if (!protoSource) {
+      return this.failure(
+        `gRPC tool ${tool.name} has no proto definition. Paste or upload the .proto on the tool.`,
+        startTime,
+      );
     }
 
-    const axConfig: AxiosRequestConfig = {
-      method: 'POST',
-      url,
-      headers: sanitizeHeaders({
-        'Content-Type': 'application/json',
-        ...(api?.headers || {}),
-      }),
-      data: requestData,
-      timeout: tool.configuration?.timeout ?? 30000,
-      maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
-      maxBodyLength: MAX_BODY_LENGTH,
-      // Its siblings (tool-http / tool-protocol) both pin DNS and refuse
-      // redirects; this one did neither, on the same tenant-supplied
-      // api.baseUrl.
-      maxRedirects: 0,
-      httpAgent: ssrfSafeHttpAgent,
-      httpsAgent: ssrfSafeHttpsAgent,
-    };
-
-    if (api) await this.authService.applyApiAuth(axConfig, api, options);
-
-    try {
-      const response = await axios(axConfig);
-      let data = response.data;
-      if (tool.grpcConfig!.responseMapping?.dataPath) {
-        data = getByDotPath(data, tool.grpcConfig!.responseMapping.dataPath);
+    let request: Record<string, any> = parameters || {};
+    if (grpcConfig.requestMapping && Object.keys(grpcConfig.requestMapping).length > 0) {
+      request = {};
+      for (const [k, v] of Object.entries(grpcConfig.requestMapping)) {
+        if (typeof v !== 'string') {
+          request[k] = v;
+          continue;
+        }
+        const whole = /^\{(\w+)\}$/.exec(v);
+        if (whole) {
+          if (whole[1] in parameters) request[k] = parameters[whole[1]];
+          continue;
+        }
+        request[k] = v.replace(/\{(\w+)\}/g, (_, n) =>
+          n in parameters ? String(parameters[n]) : `{${n}}`,
+        );
       }
-      return this.success(data, startTime);
-    } catch (error: any) {
-      return this.failure(error.message, startTime);
     }
+
+    const metadata = await this.authMetadata(tool, api, options);
+
+    const callRes = await this.grpcCaller.call({
+      protoSource,
+      baseUrl: endpoint,
+      tls: (api as any)?.configuration?.tls,
+      serviceName: grpcConfig.serviceName,
+      methodName: grpcConfig.methodName,
+      request,
+      metadata,
+      timeoutMs: options.timeout ?? tool.configuration?.timeout ?? 30000,
+      pinDns: true,
+      pinDnsExemptHost: egress.exemptHost,
+    });
+
+    const baseMeta: Record<string, any> = { grpcStatus: callRes.code, requestId: generateRequestId() };
+    if (callRes.streamMessageCount !== undefined) baseMeta.streamMessageCount = callRes.streamMessageCount;
+    if (callRes.streamTruncated) baseMeta.streamTruncated = true;
+    if (!callRes.success) {
+      return { ...this.failure(`gRPC request failed: ${callRes.error}`, startTime), metadata: baseMeta };
+    }
+    let data = callRes.data;
+    if (grpcConfig.responseMapping?.dataPath) {
+      data = getByDotPath(data, grpcConfig.responseMapping.dataPath);
+    }
+    return { ...this.success(data, startTime), metadata: baseMeta };
+  }
+
+  /**
+   * The credential a gRPC call carries, as metadata. The auth service
+   * writes headers onto an axios config; the same headers, lower-cased,
+   * are the gRPC metadata. An API's auth when the tool is linked to one,
+   * else the credential the tool itself points at.
+   */
+  private async authMetadata(
+    tool: Tool,
+    api: Api | null,
+    options: ToolExecutionOptions,
+  ): Promise<Record<string, string>> {
+    const holder: AxiosRequestConfig = { headers: {} };
+    if (api) await this.authService.applyApiAuth(holder, api, options);
+    else if (tool.authConfig) await this.authService.applyToolAuth(holder, tool, options);
+    const metadata: Record<string, string> = {};
+    for (const [k, v] of Object.entries((holder.headers || {}) as Record<string, any>)) {
+      if (typeof v === 'string') metadata[k.toLowerCase()] = v;
+    }
+    return metadata;
   }
 
   // ─── gRPC (legacy operation-based) ─────────────────────────────
@@ -121,10 +166,10 @@ export class ToolGrpcExecutor {
     options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
-    const baseValidation = validateUrl(api.baseUrl);
-    if (!baseValidation.valid) {
-      this.logger.warn(`SSRF blocked for gRPC tool ${tool.name}: ${baseValidation.error}`);
-      return this.blocked(baseValidation.error!, startTime);
+    const baseCheck = await decideToolEgress(api.baseUrl, api.organizationId ?? tool.organizationId, this.organizations);
+    if (baseCheck.error) {
+      this.logger.warn(`SSRF blocked for gRPC tool ${tool.name}: ${baseCheck.error}`);
+      return this.blocked(baseCheck.error, startTime);
     }
 
     const basePolicy = decideToolRequest(options.securityPolicy, api.baseUrl, 'POST');
@@ -164,12 +209,7 @@ export class ToolGrpcExecutor {
     // Build metadata for the call. Reuse the auth service to pick
     // up bearer/api_key/oauth2 headers exactly the way HTTP tools
     // do, then copy them onto the gRPC Metadata.
-    const fakeConfig: AxiosRequestConfig = { headers: {} };
-    await this.authService.applyApiAuth(fakeConfig, api, options);
-    const metadata: Record<string, string> = {};
-    for (const [k, v] of Object.entries((fakeConfig.headers || {}) as Record<string, any>)) {
-      if (typeof v === 'string') metadata[k.toLowerCase()] = v;
-    }
+    const metadata = await this.authMetadata(tool, api, options);
 
     // Streaming flags persisted by the parser (operation.metadata.
      // requestStream / responseStream). Caller passes a single message
@@ -196,6 +236,7 @@ export class ToolGrpcExecutor {
       // baseUrl is tenant-written: dial the address the pinned lookup
       // approved, not whatever grpc-js resolves on its own.
       pinDns: true,
+      pinDnsExemptHost: baseCheck.exemptHost,
     });
 
     const executionTime = Date.now() - startTime;
