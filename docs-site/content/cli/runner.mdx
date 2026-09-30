@@ -50,14 +50,14 @@ A runner uses **host isolation** by default: commands your agents dispatch run a
 |---------|---------|----------------------|
 | `defaultIsolation` | `host` | Commands run directly on the machine, as you |
 | `installBlocked` | `true` | Refuses `npm install`, `pip install`, `brew install` and friends |
-| `maxConcurrent` | `4` | Further commands are refused while at capacity |
+| `maxConcurrent` | `4` | Further commands are refused while at capacity; it also caps the active workspaces agent runs are given on this runner |
 | `networkBlocked` | `false` | Outbound network is available to dispatched commands |
 | `allowedCwdRoots` | `[]` | Empty means no restriction: commands may run in any directory |
 | `denyPatterns` | `[]` | Empty means nothing is denied by pattern |
 
 To narrow it, put any of these in `~/.almyty/config.json`:
 
-- `allowedCwdRoots`: directories commands may run in. Paths are canonicalized through `realpath`, so a symlink or `..` cannot escape.
+- `allowedCwdRoots`: directories commands may run in. Paths are canonicalized through `realpath`, so a symlink or `..` cannot escape. Folders for the workspaces agent runs are given go in `almyty-workspaces/` under the first root (without roots, in `~/.almyty/workspaces/`).
 - `denyPatterns`: regexes matched against the whole command line; a match is refused. An invalid regex falls back to a literal substring match, so a typo denies rather than silently allowing.
 - `installBlocked`: on by default. Set it to `false` only if your agents need to install packages.
 - `maxConcurrent`: how many commands may run at once.

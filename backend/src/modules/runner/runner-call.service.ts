@@ -38,6 +38,10 @@ export const RUNNER_CALL_ERRORS = {
   RUNNER_UNAVAILABLE: 'runner_unavailable',
   WORKSPACE_REQUIRED: 'workspace_required',
   WORKSPACE_NOT_FOUND: 'workspace_not_found',
+  /** An agent run needed a workspace and the runner could not give it one. */
+  WORKSPACE_UNAVAILABLE: 'workspace_unavailable',
+  /** The runner already holds as many active workspaces as it runs at once. */
+  RUNNER_AT_CAPACITY: 'runner_at_capacity',
   TIMEOUT: 'timeout',
   TRANSPORT: 'transport',
   RUNNER_ERROR: 'runner_error',

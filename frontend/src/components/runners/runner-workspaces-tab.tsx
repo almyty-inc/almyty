@@ -1,22 +1,27 @@
 /**
- * A runner's Workspaces tab: the directories agents reserved on this
- * machine, active first. Each row opens the workspace's own page under the
- * runner. Workspaces are made by agents when a job needs a directory, never
- * by hand, so there is no create button.
+ * A runner's Workspaces tab: the folders agent runs were given on this
+ * machine, active first, with the agent and run each was made for and a
+ * Release action. Each row opens the workspace's own page under the
+ * runner. An agent run gets a workspace automatically when a runner tool
+ * it calls needs one, so there is no create button.
  */
 import { useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { Link, useNavigate } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Layers } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DataTable } from '@/components/ui/data-table'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { workspacesApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
+import { useNotifications } from '@/store/app'
 import { RUNNER_HEARTBEAT_POLL_MS, workspaceStatusVariant } from '@/pages/runners-shared'
 
 export interface RunnerWorkspace {
@@ -28,6 +33,12 @@ export interface RunnerWorkspace {
   ttlAt: string | null
   closeReason: { kind: string; detail: string } | null
   createdAt: string
+  /** The folder name the runner made, for a workspace an agent run was given. */
+  name?: string | null
+  /** The agent and run it was made for; null for one made through the API. */
+  agentId?: string | null
+  runId?: string | null
+  agent?: { id: string; name: string } | null
 }
 
 /** Where one workspace's page is: under the runner it is pinned to. */
@@ -68,50 +79,121 @@ export function useRunnerWorkspaces(runnerId: string, { poll = true }: { poll?: 
   })
 }
 
-const columns: ColumnDef<RunnerWorkspace, any>[] = [
-  {
-    accessorKey: 'cwd',
-    header: 'Folder',
-    cell: ({ row }) => <span className="font-mono text-xs">{row.original.cwd}</span>,
-  },
-  {
-    accessorKey: 'status',
-    header: 'Status',
-    cell: ({ row }) => <Badge variant={workspaceStatusVariant[row.original.status]}>{row.original.status}</Badge>,
-  },
-  {
-    accessorKey: 'isolation',
-    header: 'Isolation',
-    cell: ({ row }) => (
-      <Badge variant="outline" className="font-normal">
-        {row.original.isolation}
-      </Badge>
-    ),
-  },
-  {
-    id: 'ttl',
-    header: 'Time limit',
-    cell: ({ row }) => {
-      const w = row.original
-      const text = w.status === 'active' ? (w.ttlAt ? `ends ${timeLeft(w.ttlAt)}` : 'none') : `closed: ${w.closeReason?.kind ?? w.status}`
-      return <span className="text-sm text-muted-foreground">{text}</span>
-    },
-  },
-  {
-    accessorKey: 'createdAt',
-    header: 'Created',
-    cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground" title={formatDateTime(row.original.createdAt)}>
-        {formatRelativeTime(row.original.createdAt)}
-      </span>
-    ),
-  },
-]
+/** Who made a workspace: the agent and run it was given to, or nobody named. */
+export function WorkspaceOrigin({ workspace }: { workspace: Pick<RunnerWorkspace, 'agentId' | 'agent' | 'runId'> }) {
+  if (!workspace.agentId && !workspace.runId) return <span className="text-sm text-muted-foreground">API</span>
+  const agentLabel = workspace.agent?.name ?? 'deleted agent'
+  return (
+    <span className="text-sm">
+      {workspace.agentId && workspace.agent ? (
+        <Link
+          to={`/agents/${encodeURIComponent(workspace.agentId)}?tab=runs`}
+          className="hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {agentLabel}
+        </Link>
+      ) : (
+        <span className="text-muted-foreground">{agentLabel}</span>
+      )}
+      {workspace.runId && (
+        <span className="ml-1 font-mono text-xs text-muted-foreground" title={workspace.runId}>
+          run {workspace.runId.slice(0, 8)}
+        </span>
+      )}
+    </span>
+  )
+}
 
 export function RunnerWorkspacesTab({ runnerId, poll = true }: { runnerId: string; poll?: boolean }) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { success, error: errNotif } = useNotifications()
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const query = useRunnerWorkspaces(runnerId, { poll })
   const rows = useMemo(() => query.data ?? [], [query.data])
+
+  const releaseMutation = useMutation({
+    mutationFn: (id: string) => workspacesApi.release(id),
+    onSuccess: () => {
+      success('Workspace released')
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] })
+    },
+    onError: (err: any) => errNotif('Release failed', getApiErrorMessage(err)),
+  })
+
+  const columns = useMemo<ColumnDef<RunnerWorkspace, any>[]>(
+    () => [
+      {
+        accessorKey: 'cwd',
+        header: 'Folder',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.cwd}</span>,
+      },
+      {
+        id: 'origin',
+        header: 'Made for',
+        cell: ({ row }) => <WorkspaceOrigin workspace={row.original} />,
+      },
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        cell: ({ row }) => <Badge variant={workspaceStatusVariant[row.original.status]}>{row.original.status}</Badge>,
+      },
+      {
+        accessorKey: 'isolation',
+        header: 'Isolation',
+        cell: ({ row }) => (
+          <Badge variant="outline" className="font-normal">
+            {row.original.isolation}
+          </Badge>
+        ),
+      },
+      {
+        id: 'ttl',
+        header: 'Time limit',
+        cell: ({ row }) => {
+          const w = row.original
+          const text = w.status === 'active' ? (w.ttlAt ? `ends ${timeLeft(w.ttlAt)}` : 'none') : `closed: ${w.closeReason?.kind ?? w.status}`
+          return <span className="text-sm text-muted-foreground">{text}</span>
+        },
+      },
+      {
+        accessorKey: 'createdAt',
+        header: 'Created',
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground" title={formatDateTime(row.original.createdAt)}>
+            {formatRelativeTime(row.original.createdAt)}
+          </span>
+        ),
+      },
+      {
+        id: 'actions',
+        header: '',
+        cell: ({ row }) =>
+          row.original.status === 'active' ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={releaseMutation.isPending}
+              onClick={async (e) => {
+                e.stopPropagation()
+                const ok = await confirm({
+                  title: 'Release this workspace?',
+                  description:
+                    "Every process it runs on the runner is stopped; the folder and its files stay on the machine. If an agent run was given it, the run's next runner call gets a new workspace in the same folder.",
+                  confirmLabel: 'Release workspace',
+                  destructive: true,
+                })
+                if (ok) releaseMutation.mutate(row.original.id)
+              }}
+            >
+              Release
+            </Button>
+          ) : null,
+      },
+    ],
+    [confirm, releaseMutation],
+  )
 
   if (query.isError) return <QueryError error={query.error as Error} onRetry={() => query.refetch()} title="Couldn't load workspaces" />
   return (
@@ -130,10 +212,11 @@ export function RunnerWorkspacesTab({ runnerId, poll = true }: { runnerId: strin
             <EmptyState
               icon={Layers}
               title="No workspaces yet"
-              description="An agent reserves a folder on this runner when a job needs one, for a limited time. You don't create them by hand."
+              description="When an agent run needs a folder on this runner, it gets one here automatically, for a limited time. You don't create them by hand."
             />
           }
         />
+        {confirmDialog}
       </CardContent>
     </Card>
   )

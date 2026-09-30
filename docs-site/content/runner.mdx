@@ -87,18 +87,40 @@ the orchestration; the runner runs the members.
 
 ## Workspaces
 
-Work happens inside a **workspace**: a reservation of a working directory on the
-runner, with a time limit. Each runner's page has a **Workspaces** tab
-(`/runners/:id?tab=workspaces`) listing that runner's workspaces, active ones first,
-with the folder, status, isolation and time left; a row opens the workspace's own
-page under the runner, where an active one can be released. A workspace is made
-through the API, `POST /workspaces` with the folder (`cwd`) and the runner
-(`runnerId`, or `labels` to let almyty pick a matching runner); the runner's
-page lists and releases workspaces but does not create them. Processes are tracked per workspace and cleaned up
-when it is released. The current runner uses host execution, not a filesystem
-or network sandbox: a workspace does not prevent a command from accessing other
-files the daemon's operating-system user can read. Set local path and command
-restrictions and review the [runner safety limits](/cli/runner#what-a-runner-can-do-on-your-machine).
+Work happens inside a **workspace**: a folder on the runner reserved for a limited
+time. Agents get them automatically. When an agent run calls a runner tool that
+works inside a workspace (such as `shell.exec`) and none is bound, almyty asks
+the runner to make a folder, records a workspace for it and runs the call there.
+The rest of that run reuses the same workspace on that runner; another run gets
+its own.
+
+- **The folder** is named after the agent and the run (`support-bot-1a2b3c4d`).
+  It goes in `~/.almyty/workspaces/` on the runner, or in `almyty-workspaces/`
+  under the first of the runner's `allowedCwdRoots` when those are set.
+  Releasing or expiring the workspace stops its processes; the folder and its
+  files stay on the machine.
+- **Whose it is**: the user who started the run, or the owner of the private or
+  team gateway the run came through. A run through an org-wide gateway has no
+  one to hold a workspace, and its call fails saying so.
+- **Time limit**: one hour. After a workspace is released or expires, the run's
+  next call gets a new one in the same folder. If the runner goes offline, its
+  workspaces are stranded.
+- **Capacity**: a runner holds at most its `maxConcurrent` active workspaces.
+  Past that, or when the runner cannot make the folder (outside its
+  `allowedCwdRoots`, or a runner too old to make folders), the tool call fails
+  with a message that says why, and the agent sees that error.
+
+Each runner's page has a **Workspaces** tab (`/runners/:id?tab=workspaces`)
+listing your workspaces on that runner, active ones first, with the folder, the
+agent and run it was made for, status, isolation and time left, and a
+**Release** button on each active one. A row opens the workspace's own page
+under the runner. There is no create button. A script can still make one
+through the API: `POST /workspaces` with the folder (`cwd`) and the runner
+(`runnerId`, or `labels` to let almyty pick a matching runner). Such a workspace
+is passed to a tool call as `workspaceId`. The current runner uses host
+execution, not a filesystem or network sandbox: a workspace does not prevent a
+command from accessing other files the daemon's operating-system user can read.
+Set local path and command restrictions and review the [runner safety limits](/cli/runner#what-a-runner-can-do-on-your-machine).
 
 ## Notes
 

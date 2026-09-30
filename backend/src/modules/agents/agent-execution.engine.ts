@@ -242,7 +242,7 @@ export class AgentExecutionEngine {
     // of the run, and every row written under it (a tool execution, a
     // model_routed audit row), picks the run up from here instead of
     // having it threaded through each signature in between.
-    updateRequestContext({ runId: execution.id, organizationId });
+    updateRequestContext({ runId: execution.id, agentId: agent.id, organizationId });
 
     // Emit execution started
     this.state.emitEvent(onEvent, {

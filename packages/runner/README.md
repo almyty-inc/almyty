@@ -97,6 +97,7 @@ The runner exposes a method surface over a persistent connection to almyty, and 
 
 - `process.*` — `spawn`, `write`, `close_input`, `read`, `signal`, `wait`, `wait_for_idle`, `list`
 - `runner.info` — capabilities and status
+- `workspace.prepare` — make the folder for a workspace an agent run was given: `almyty-workspaces/<name>` under the first `allowedCwdRoots` entry, else `~/.almyty/workspaces/<name>`. The folder stays when the workspace is released.
 - `agent.*` — `spawn`, `list`, `status` for almyty agent processes
 - `coding.*` — `start`, `input`, `list`, `status`, `stop` for coding-CLI sessions
 
