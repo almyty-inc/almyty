@@ -19,12 +19,12 @@ A real run from the demo's support agent: `tool_call`, *Lookup Order Status (NW-
 
 ## Loop engineering: the knobs almyty gives you
 
-The differentiator isn't that agents loop; it's that you can *engineer* the loop:
+Every agent loops; almyty lets you *engineer* the loop:
 
 - **Self-correction**: a cross-vendor **verifier panel** re-checks each result; on failure the agent revises and retries. See [verification](/agents/autonomous#verification).
 - **Termination**: a **revise budget** (e.g. 2 revisions, `any_fail_blocks`) is the stop condition, so a loop can't spin forever.
 - **Guardrails inside the loop**: always-on [constraints](/agents/autonomous#constraints), some *learned from past failures*, bound what each iteration may do.
-- **Multi-agent loops**: [collaboration](/agents/autonomous#collaboration) runs several participants (agents or models) in `sequential` chains, `parallel` fan-out, `race` first-to-finish, or `debate` (rounds of argument settled by a judge).
+- **Several models, several agents**: the [work mode](/agents/autonomous#work-mode-how-it-works-and-which-models-do-it) has models work together inside one agent (Cascade, Best of N, Panel, or Explore, extract, patch), and under [Capabilities](/agents/autonomous#capabilities) you tick the other agents it may hand work to.
 - **Human-in-the-loop**: [`request_approval`](/approvals) pauses the loop for a person before an irreversible step, then resumes.
 - **Loops that compound**: [memory](/memory) carries context across runs, and a good run can be promoted to a reusable [skill](/gateways/skills).
 
@@ -34,5 +34,5 @@ A bare model call answers once. An agentic loop keeps working: checking itself, 
 
 ## Related
 
-- [Autonomous agents](/agents/autonomous) · [Verification](/agents/autonomous#verification) · [Collaboration](/agents/autonomous#collaboration) · [Approvals](/approvals) · [Memory](/memory)
-- Recipes: [self-checking support agent](/examples/support-ticket-triage) · [multi-model debate](/examples/cross-vendor-contract-review) · [governed refund agent](/examples/governed-refund-agent)
+- [Autonomous agents](/agents/autonomous) · [Verification](/agents/autonomous#verification) · [Work mode](/agents/autonomous#work-mode-how-it-works-and-which-models-do-it) · [Approvals](/approvals) · [Memory](/memory)
+- Recipes: [self-checking support agent](/examples/support-ticket-triage) · [multi-model review](/examples/cross-vendor-contract-review) · [governed refund agent](/examples/governed-refund-agent)

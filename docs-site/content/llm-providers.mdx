@@ -90,7 +90,7 @@ Four more provider types ship and have tiles on the connect page, but no row abo
 
 ### Ollama
 
-The Ollama tile offers two places Ollama runs, and **Ollama Cloud** is picked first.
+The Ollama tile asks **Where Ollama runs**, with **Ollama Cloud** picked first.
 
 **Ollama Cloud** is Ollama's hosted service at `https://ollama.com`. Paste an API key from [ollama.com/settings/keys](https://ollama.com/settings/keys); nothing else is asked. You get the hosted model catalog (large open models like `gpt-oss:120b` or `qwen3.5:397b` without hardware of your own), listed from `GET /api/tags` and called through the OpenAI-compatible `/v1` surface with the key as a Bearer token. It is a public endpoint like any other provider, so no private-address setting is involved. Ollama bills hosted models by plan, so their price reads "Price unknown" rather than zero; track that spend in your Ollama account. Over the API, `configuration.apiUrl` is `https://ollama.com`, and a key is required with it.
 
@@ -118,7 +118,7 @@ There is no top-level `baseUrl`, `apiKey` or `model` field: all three nest under
 
 ## Cost tracking
 
-almyty tracks token usage and estimated cost for every LLM call. View aggregate costs per provider in the **Analytics** dashboard or on the provider detail page.
+almyty tracks token usage and estimated cost for every LLM call. View aggregate costs per provider in **Analytics**.
 
 Estimates use built-in list-price tables per provider type (OpenAI, Anthropic, Gemini, Mistral including Codestral and `mistral-embed`, xAI, DeepSeek, Groq, Together, Cohere, and OpenRouter passthrough), refreshed against published prices as of January 2026. Ollama usage is always recorded at $0 (an Ollama you run has no per-token price; Ollama Cloud bills by plan in your Ollama account). Configure per-model pricing on a connection to override the defaults. See [Cost governance](/cost-governance) for reconciliation against provider actuals.
 

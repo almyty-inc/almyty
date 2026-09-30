@@ -1,0 +1,291 @@
+#!/usr/bin/env node
+// The outside world of the demo organization, on one local port: three
+// OpenAI-compatible model vendors (each under its own prefix, so each
+// connects as its own provider) and two small company APIs with their
+// OpenAPI descriptions. Nothing here reaches the internet and no key is
+// checked. Answers are scripted and deterministic: offered tools and not
+// yet given a result, a model calls the tool that fits the question; given
+// the result, it answers in a sentence or two.
+import { createServer } from 'node:http'
+
+const PORT = Number(process.env.FAKE_PORT || 4290)
+const ORIGIN = `http://localhost:${PORT}`
+
+// Real model ids, so the price table and the model cards read like a real org.
+const MODELS = {
+  openai: [
+    { id: 'gpt-4o', created: 1715367049 },
+    { id: 'gpt-4o-mini', created: 1721172741 },
+    { id: 'gpt-4.1', created: 1744316542 },
+    { id: 'o4-mini', created: 1744225308 },
+  ],
+  openrouter: [
+    { id: 'anthropic/claude-sonnet-4.5', created: 1759104000 },
+    { id: 'google/gemini-2.5-pro', created: 1750118400 },
+    { id: 'meta-llama/llama-3.3-70b-instruct', created: 1733443200 },
+  ],
+  mistral: [
+    { id: 'mistral-large-latest', created: 1731974400 },
+    { id: 'mistral-small-latest', created: 1742169600 },
+  ],
+}
+
+// ---------- the company APIs ----------
+
+const ORDERS = {
+  'NW-10428': { id: 'NW-10428', customer: 'Harbor & Pine Outfitters', status: 'delayed', carrier: 'DHL Express', eta: '2026-10-02', total: 312.4, items: 3 },
+  'NW-44120': { id: 'NW-44120', customer: 'Brightway Logistics', status: 'delivered', carrier: 'UPS', eta: '2026-09-21', total: 820, items: 1, note: 'Reported defective on arrival' },
+  'NW-38801': { id: 'NW-38801', customer: 'Kestrel Coffee Co.', status: 'shipped', carrier: 'FedEx', eta: '2026-09-30', total: 1290.5, items: 12 },
+}
+
+function ordersOpenApi() {
+  const order = {
+    type: 'object',
+    properties: {
+      id: { type: 'string' }, customer: { type: 'string' }, status: { type: 'string', enum: ['pending', 'shipped', 'delayed', 'delivered', 'cancelled'] },
+      carrier: { type: 'string' }, eta: { type: 'string', format: 'date' }, total: { type: 'number' }, items: { type: 'integer' },
+    },
+  }
+  const idParam = { name: 'orderId', in: 'path', required: true, schema: { type: 'string', example: 'NW-10428' }, description: 'Order number, e.g. NW-10428' }
+  return {
+    openapi: '3.0.3',
+    info: { title: 'Northwind Orders', version: '2.3.0', description: 'Order lookup, shipment tracking and refunds for Northwind customers.' },
+    servers: [{ url: `${ORIGIN}/orders/v2` }],
+    paths: {
+      '/orders': {
+        get: {
+          operationId: 'listOrders', summary: 'List recent orders', tags: ['Orders'],
+          parameters: [
+            { name: 'customer', in: 'query', schema: { type: 'string' }, description: 'Filter by customer name' },
+            { name: 'status', in: 'query', schema: { type: 'string' }, description: 'Filter by status' },
+            { name: 'limit', in: 'query', schema: { type: 'integer', default: 20 }, description: 'Page size' },
+          ],
+          responses: { 200: { description: 'Orders', content: { 'application/json': { schema: { type: 'array', items: order } } } } },
+        },
+      },
+      '/orders/{orderId}': {
+        get: {
+          operationId: 'getOrder', summary: 'Get an order by number', tags: ['Orders'], parameters: [idParam],
+          responses: { 200: { description: 'The order', content: { 'application/json': { schema: order } } }, 404: { description: 'No such order' } },
+        },
+      },
+      '/orders/{orderId}/shipment': {
+        get: {
+          operationId: 'trackShipment', summary: 'Track the shipment for an order', tags: ['Shipping'], parameters: [idParam],
+          responses: { 200: { description: 'Tracking events', content: { 'application/json': { schema: { type: 'object' } } } } },
+        },
+      },
+      '/orders/{orderId}/refunds': {
+        post: {
+          operationId: 'createRefund', summary: 'Issue a refund for an order', tags: ['Refunds'], parameters: [idParam],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['amount', 'reason'], properties: { amount: { type: 'number' }, reason: { type: 'string' } } } } } },
+          responses: { 201: { description: 'Refund created' } },
+        },
+      },
+      '/customers/{customerId}': {
+        get: {
+          operationId: 'getCustomer', summary: 'Get a customer account', tags: ['Customers'],
+          parameters: [{ name: 'customerId', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { 200: { description: 'The customer' } },
+        },
+      },
+    },
+  }
+}
+
+function helpdeskOpenApi() {
+  return {
+    openapi: '3.0.3',
+    info: { title: 'Northwind Helpdesk', version: '1.8.0', description: 'Support tickets, macros and customer satisfaction for the Northwind support team.' },
+    servers: [{ url: `${ORIGIN}/helpdesk/api` }],
+    paths: {
+      '/tickets': {
+        get: { operationId: 'searchTickets', summary: 'Search support tickets', tags: ['Tickets'], parameters: [
+          { name: 'query', in: 'query', schema: { type: 'string' }, description: 'Free-text search' },
+          { name: 'priority', in: 'query', schema: { type: 'string', enum: ['low', 'normal', 'high', 'urgent'] } },
+        ], responses: { 200: { description: 'Tickets' } } },
+        post: { operationId: 'createTicket', summary: 'Open a ticket', tags: ['Tickets'], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['subject'], properties: { subject: { type: 'string' }, body: { type: 'string' }, priority: { type: 'string' } } } } } }, responses: { 201: { description: 'Created' } } },
+      },
+      '/tickets/{ticketId}': {
+        get: { operationId: 'getTicket', summary: 'Get a ticket', tags: ['Tickets'], parameters: [{ name: 'ticketId', in: 'path', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'The ticket' } } },
+        patch: { operationId: 'updateTicket', summary: 'Update status, priority or assignee', tags: ['Tickets'], parameters: [{ name: 'ticketId', in: 'path', required: true, schema: { type: 'string' } }], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { status: { type: 'string' }, priority: { type: 'string' }, assignee: { type: 'string' } } } } } }, responses: { 200: { description: 'Updated' } } },
+      },
+      '/tickets/{ticketId}/replies': {
+        post: { operationId: 'replyToTicket', summary: 'Post a reply to the customer', tags: ['Tickets'], parameters: [{ name: 'ticketId', in: 'path', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['body'], properties: { body: { type: 'string' }, internal: { type: 'boolean' } } } } } }, responses: { 201: { description: 'Posted' } } },
+      },
+      '/macros': {
+        get: { operationId: 'listMacros', summary: 'List saved reply macros', tags: ['Macros'], responses: { 200: { description: 'Macros' } } },
+      },
+      '/csat': {
+        get: { operationId: 'getCsatSummary', summary: 'Customer satisfaction for a period', tags: ['Reporting'], parameters: [{ name: 'days', in: 'query', schema: { type: 'integer', default: 7 } }], responses: { 200: { description: 'CSAT' } } },
+      },
+    },
+  }
+}
+
+function apiAnswer(method, path, url) {
+  let m
+  if ((m = path.match(/^\/orders\/v2\/orders\/([^/]+)\/shipment$/))) {
+    return { orderId: m[1], carrier: ORDERS[m[1]]?.carrier || 'DHL Express', events: [
+      { at: '2026-09-24T08:12:00Z', status: 'Picked up', location: 'Rotterdam, NL' },
+      { at: '2026-09-25T17:40:00Z', status: 'Held at customs', location: 'Leipzig, DE' },
+    ] }
+  }
+  if ((m = path.match(/^\/orders\/v2\/orders\/([^/]+)\/refunds$/))) return { refundId: 'RF-2291', orderId: m[1], status: 'pending_approval' }
+  if ((m = path.match(/^\/orders\/v2\/orders\/([^/]+)$/))) return ORDERS[m[1]] || { ...ORDERS['NW-10428'], id: m[1] }
+  if (path === '/orders/v2/orders') return Object.values(ORDERS)
+  if (path.startsWith('/orders/v2/customers/')) return { id: path.split('/').pop(), name: 'Brightway Logistics', tier: 'enterprise', since: '2021-04-12' }
+  if (path === '/helpdesk/api/tickets' && method === 'GET') return [
+    { id: 'T-5521', subject: 'Order NW-10428 still not here', priority: 'high', status: 'open' },
+    { id: 'T-5519', subject: 'Refund for damaged grinder', priority: 'urgent', status: 'pending' },
+  ]
+  if (path === '/helpdesk/api/csat') return { days: Number(url.searchParams.get('days') || 7), responses: 214, score: 4.6 }
+  if (path === '/helpdesk/api/macros') return [{ id: 'M-12', title: 'Shipping delay apology' }, { id: 'M-19', title: 'Refund over threshold' }]
+  if (path.startsWith('/helpdesk/api/tickets')) return { id: path.split('/')[4] || 'T-5530', status: method === 'POST' ? 'created' : 'ok' }
+  return null
+}
+
+// ---------- the scripted model ----------
+
+function text(content) {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) return content.map((c) => c?.text ?? (typeof c?.content === 'string' ? c.content : '')).join(' ')
+  return ''
+}
+
+function sampleArgs(schema, question) {
+  const args = {}
+  if (schema?.properties?.reason && schema?.properties?.payload) {
+    const order = (question.match(/NW-\d{5}/) || ['NW-44120'])[0]
+    return { reason: `Refund of $820 on order ${order} is over the $500 limit for automatic refunds`, payload: { orderId: order, amount: 820, currency: 'USD', customer: 'Brightway Logistics', tool: 'northwind_orders_create_refund' } }
+  }
+  const props = schema?.properties || {}
+  const order = (question.match(/NW-\d{5}/) || ['NW-10428'])[0]
+  for (const [name, prop] of Object.entries(props)) {
+    if (!(schema.required || []).includes(name) && !/order|id|query|city/i.test(name)) continue
+    if (/order/i.test(name)) args[name] = order
+    else if (/ticket/i.test(name)) args[name] = 'T-5521'
+    else if (/customer/i.test(name)) args[name] = 'C-1182'
+    else if (prop?.type === 'number' || prop?.type === 'integer') args[name] = 7
+    else if (prop?.type === 'boolean') args[name] = false
+    else args[name] = /query/i.test(name) ? question.slice(0, 60) : 'Northwind'
+  }
+  return args
+}
+
+function pickTool(tools, question) {
+  const q = question.toLowerCase()
+  const score = (t) => {
+    const n = `${t.name} ${t.description || ''}`.toLowerCase()
+    let s = 0
+    if (/track|ship|where|delay/.test(q) && /track|shipment/.test(n)) s += 3
+    if (/order|nw-/.test(q) && /get.?order|getorder/.test(n)) s += 2
+    if (/refund/.test(q) && /refund/.test(n)) s += 3
+    // A refund over the limit goes to a person first: the built-in approval tool.
+    if (/refund/.test(q) && /\$\d{3,}|over|approv/.test(q) && n.startsWith('request_approval')) s += 5
+    if (/ticket|triage/.test(q) && /ticket/.test(n)) s += 2
+    if (/csat|satisfaction/.test(q) && /csat/.test(n)) s += 3
+    if (/remember|recall|memory/.test(q) && /memory|recall/.test(n)) s += 2
+    return s
+  }
+  return [...tools].sort((a, b) => score(b) - score(a))[0]
+}
+
+const ANSWERS = [
+  [/verdict|refute|check (?:the|this) answer|verifier/i, '{"verdict":"pass","confidence":0.92,"issues":[]}'],
+  [/refund|NW-44120/i, 'Brightway Logistics reported order NW-44120 ($820) arrived defective. Refunds over $500 need a human decision, so I have escalated it for approval and let the customer know we will confirm within one business day.'],
+  [/delay|NW-10428|where is/i, 'Order NW-10428 for Harbor & Pine Outfitters is delayed: DHL Express is holding it at customs in Leipzig. The new delivery estimate is October 2. I drafted a reply apologising for the delay and offering free expedited shipping on the next order, per the delayed-shipment policy.'],
+  [/csat|satisfaction|digest|report/i, 'Last 7 days: 214 CSAT responses, average 4.6 out of 5. Two themes in the low scores: customs delays on EU shipments and slow refund confirmations. No action is overdue.'],
+  [/contract|clause|liabil/i, 'Clause 9.2 caps liability at twelve months of fees but excludes data-protection breaches, which leaves that exposure uncapped. Recommend asking for a separate cap of 2x annual fees for data claims.'],
+  [/triage|ticket/i, 'Ticket T-5521 is a shipping delay on a high-value account: priority high, routed to Tier 2, reply drafted from the "Shipping delay apology" macro.'],
+]
+
+// The question and what the tool returned decide the answer; the rest of the
+// conversation (system prompts mention refunds and policies) only breaks a tie.
+function answerFor(question, toolResult, conversation) {
+  const [verdict, ...rest] = ANSWERS
+  if (verdict[0].test(conversation)) return verdict[1]
+  for (const text of [question + ' ' + (toolResult || ''), conversation]) {
+    for (const [re, answer] of rest) if (re.test(text)) return answer
+  }
+  return 'Done. Everything checks out and nothing needs a follow-up.'
+}
+
+function decide({ messages, tools, system }) {
+  const last = messages[messages.length - 1] || {}
+  const users = messages.filter((m) => m.role === 'user')
+  const question = text(users[users.length - 1]?.content) || ''
+  const hasToolResult = messages.some((m) => m.role === 'tool' || m.role === 'function' ||
+    (Array.isArray(m.content) && m.content.some((c) => c?.type === 'tool_result' || c?.functionResponse)))
+  const convo = `${system || ''} ${messages.map((m) => text(m.content)).join(' ')}`
+  const promptTokens = Math.max(180, Math.round(convo.length / 3.8))
+  if (tools?.length && !hasToolResult) {
+    const tool = pickTool(tools, question)
+    return { toolCall: { name: tool.name, args: sampleArgs(tool.parameters, question) }, promptTokens, completionTokens: 42 }
+  }
+  const content = answerFor(question, hasToolResult ? text(last.content) : '', convo.slice(-4000))
+  return { content, promptTokens, completionTokens: Math.round(content.length / 4) }
+}
+
+// ---------- HTTP ----------
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = []
+    req.on('data', (c) => chunks.push(c))
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+    req.on('error', reject)
+  })
+}
+const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)) }
+let seq = 0
+const callId = () => `call_${(++seq).toString(36).padStart(6, '0')}`
+
+function openaiChat(res, body) {
+  const tools = (body.tools || []).map((t) => ({ name: t.function?.name, description: t.function?.description, parameters: t.function?.parameters }))
+  const d = decide({ messages: body.messages || [], tools })
+  const created = 1790000000
+  const model = body.model || 'gpt-4o'
+  const usage = { prompt_tokens: d.promptTokens, completion_tokens: d.completionTokens, total_tokens: d.promptTokens + d.completionTokens }
+  const toolCalls = d.toolCall ? [{ id: callId(), type: 'function', function: { name: d.toolCall.name, arguments: JSON.stringify(d.toolCall.args) } }] : undefined
+  const message = { role: 'assistant', content: d.content ?? null, ...(toolCalls ? { tool_calls: toolCalls } : {}) }
+  const finish = toolCalls ? 'tool_calls' : 'stop'
+  if (!body.stream) return json(res, 200, { id: 'chatcmpl-demo', object: 'chat.completion', created, model, choices: [{ index: 0, message, finish_reason: finish }], usage })
+  res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
+  const chunk = (delta, finish_reason, extra = {}) => res.write(`data: ${JSON.stringify({ id: 'chatcmpl-demo', object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta, finish_reason }], ...extra })}\n\n`)
+  if (toolCalls) chunk({ role: 'assistant', tool_calls: toolCalls.map((c, index) => ({ index, ...c })) }, null)
+  else for (const piece of d.content.match(/.{1,40}(\s|$)/g) || [d.content]) chunk({ content: piece }, null)
+  chunk({}, finish)
+  res.write(`data: ${JSON.stringify({ id: 'chatcmpl-demo', object: 'chat.completion.chunk', created, model, choices: [], usage })}\n\n`)
+  res.end('data: [DONE]\n\n')
+}
+
+const server = createServer(async (req, res) => {
+  const url = new URL(req.url || '/', ORIGIN)
+  const path = url.pathname
+  try {
+    if (path === '/health') return json(res, 200, { ok: true })
+    if (path === '/orders/openapi.json') return json(res, 200, ordersOpenApi())
+    if (path === '/helpdesk/openapi.json') return json(res, 200, helpdeskOpenApi())
+
+    let m
+    if ((m = path.match(/^\/(\w+)\/v1\/models$/)) && MODELS[m[1]]) {
+      return json(res, 200, { object: 'list', data: MODELS[m[1]].map((model) => ({ ...model, object: 'model', owned_by: model.id.split('/')[0] })) })
+    }
+    if ((m = path.match(/^\/(\w+)\/v1\/chat\/completions$/)) && MODELS[m[1]]) return openaiChat(res, JSON.parse(await readBody(req)))
+    if ((m = path.match(/^\/(\w+)\/v1\/embeddings$/)) && MODELS[m[1]]) {
+      const body = JSON.parse(await readBody(req))
+      const inputs = Array.isArray(body.input) ? body.input : [body.input]
+      const dims = Number(body.dimensions) || 1536
+      return json(res, 200, { object: 'list', model: body.model, data: inputs.map((s, index) => ({ object: 'embedding', index, embedding: Array.from({ length: dims }, (_, i) => Math.sin((String(s).length + 1) * (i + 1)) / 10) })), usage: { prompt_tokens: 8, total_tokens: 8 } })
+    }
+
+    const answer = apiAnswer(req.method, path, url)
+    if (answer) return json(res, req.method === 'POST' ? 201 : 200, answer)
+    json(res, 404, { error: 'not found', path })
+  } catch (error) {
+    json(res, 500, { error: String(error?.message || error) })
+  }
+})
+
+server.listen(PORT, () => console.log(`fake upstream on ${ORIGIN}`))

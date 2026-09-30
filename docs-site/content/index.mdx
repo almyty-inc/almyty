@@ -4,7 +4,7 @@ almyty turns any API into tools your AI agents can call, served over MCP, A2A, U
 
 Do every step in the UI or from the CLI. Start on the [hosted platform](https://app.almyty.com) (no card required), or [self-host](/self-hosting) with one container.
 
-In the app, open **Guide** in the sidebar footer (`/guide`). It groups the setup into four jobs: give an AI your API, build an agent, publish an app, or connect your own machine. Progress comes from the resources and successful calls in your organization, so work done through the CLI counts too. You can hide the dashboard guide card or page introductions without losing access to the guide.
+In the app, open **Guide** in the sidebar footer (`/guide`). It groups the setup into four jobs: give an AI your API, build an agent, put it where people are, and run it on your machines. Progress comes from the resources and successful calls in your organization, so work done through the CLI counts too. You can hide the dashboard guide card or page introductions without losing access to the guide.
 
 ```bash
 npm install -g @almyty/cli
@@ -36,9 +36,10 @@ Each gateway speaks the protocol you pick:
 | **Agent Skills** | 30+ AI coding agents via SKILL.md |
 
 An agent you build reaches other agents over **A2A** (Google's Agent-to-Agent protocol) as a channel on the agent: see [A2A](/gateways/a2a).
+
 ## 3. Call it from your AI (the payoff)
 
-Point your assistant at the gateway and your API is live inside it. Grab the endpoint from the gateway's **Integrations** tab (it looks like `https://api.almyty.com/your-org/petstore`) and a key from its **Authentication** panel. Then, in Claude Code:
+Point your assistant at the gateway and your API is live inside it. The gateway page shows its access key once, right after you create it, next to a ready-made setup for Claude Code, Cursor and Claude Desktop; the endpoint (it looks like `https://api.almyty.com/your-org/petstore`) is also on its **Integrations** tab, and more keys come from its **Authentication** section. Then, in Claude Code:
 
 ```bash
 claude mcp add petstore --transport http \
@@ -66,7 +67,7 @@ Instead of handing tools to someone else's AI, build your own agent on top of th
 
 ![An agent built on your tools](/screenshots/agent-detail-overview.png)
 
-Agents serve over the same protocols and an OpenAI-compatible endpoint, so anything that talks to OpenAI talks to your agent.
+An agent reaches people and other agents through the channels on its **Channels** tab (a web chat, a website widget, Slack and the other messaging apps, A2A for other agents), and it also has an OpenAI-compatible endpoint, so anything that talks to OpenAI talks to your agent.
 
 ## Where to next
 

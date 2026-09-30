@@ -260,7 +260,7 @@ The private-network exception applies only to the configured provider host. Othe
 | `GET /monitoring/health` | none | Computed status only: `healthy`, `degraded` or `unhealthy`. |
 | `GET /monitoring/health/details` | `Bearer $PLATFORM_METRICS_TOKEN` | Full per-component breakdown. |
 
-`GET /health` is a deliberate fixed 200. It used to return the full check result, which on failure serialised the underlying connection error (database hostname, port, sometimes a fragment of the connection string) to anyone who polled it. It now hands out nothing beyond "this process answered". Treat it as a reachability ping and nothing more.
+`GET /health` is a deliberate fixed 200. A full check result would, on failure, serialise the underlying connection error (database hostname, port, sometimes a fragment of the connection string) to anyone who polled it, so it hands out nothing beyond "this process answered". Treat it as a reachability ping and nothing more.
 
 For anything that needs to know whether the system is *working*, use `GET /health/ready` (dependencies) or the token-gated `GET /monitoring/health/details` (component breakdown). `PLATFORM_METRICS_TOKEN` fails closed: with it unset, the details endpoint refuses every request rather than serving the breakdown publicly.
 

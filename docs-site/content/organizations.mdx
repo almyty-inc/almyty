@@ -1,6 +1,6 @@
 # Organizations
 
-Keep every team's work isolated and control who can touch what. Organizations are the top-level tenant boundary in almyty: every resource (APIs, tools, gateways, agents, credentials, and LLM providers) belongs to exactly one organization. Users can belong to multiple organizations and switch between them, and roles decide what each member can do.
+Keep every team's work isolated and control who can touch what. Organizations are the top-level tenant boundary in almyty: every resource (APIs, tools, gateways, agents, credentials, and provider connections) belongs to exactly one organization. Users can belong to multiple organizations and switch between them, and roles decide what each member can do.
 
 ![Members and teams](/screenshots/settings-teams.png)
 
@@ -27,20 +27,20 @@ Open **Settings → People and access → Members and teams**.
 
 ### Inviting members
 
-1. Click **Invite Member**.
+1. Click **Invite member**.
 2. Enter their email address.
-3. Select a role (owner, admin, member, or viewer).
-4. Click **Send Invite**.
+3. Select a role (**Member** or **Admin**).
+4. Click **Send invitation**.
 
-The invitee receives an email with a link to accept. If they do not have an account, the link takes them to the sign-up page with the invite pre-attached.
+The invitee receives an email with a link to accept. If they do not have an account, the link takes them to the sign-up page with the invite pre-attached. Invitations not yet accepted are listed under **Pending invites**, where you can revoke one.
 
 ### Changing roles
 
-Click the role badge next to any member to change it. Only owners and admins can modify roles.
+Open the organization's page (`/organizations/:id`), then on a member's row open the actions menu and pick **Change role** (Viewer, Member, Admin or Owner). Only owners and admins can modify roles.
 
 ### Removing members
 
-Click the menu icon on a member row and select **Remove**. Removing a member revokes their access to all resources in the organization immediately.
+Click the remove button on a member's row and confirm **Remove member**. Removing a member revokes their access to all resources in the organization immediately; anything they created stays, and their private resources move to you.
 
 ## Roles
 
@@ -70,20 +70,20 @@ Organization roles do not override another person's **Private** resources. The t
 
 Teams are sub-groups within an organization for finer-grained access control. Every organization gets a default **"Everyone"** team on creation; every member is automatically a member of it. Org owners are added as `team_admin` (lead); other roles are added as `team_member`.
 
-Resources that expose a visibility selector (tools, agents, protocol gateways, runners, credentials, APIs and model providers) have three visibility settings:
+Resources that expose a visibility selector (tools, agents, protocol gateways, runners, credentials, APIs and provider connections) have three visibility settings:
 
 - **Private** (`visibility='private'`): only the resource's owner can see or use it. This is enforced by the backend, including against other org owners/admins, not just hidden in the UI.
 - **Org-wide** (`visibility='org'`): visible to every member of the organization.
 - **Team** (`visibility='team'`, with a `teamId`): visible only to members of that team.
 
-Private tools, APIs and sub-agents cannot be attached to a wider-access parent to expose them indirectly. Use a parent private to the same owner, or explicitly share the dependency first. Public chat-channel gateways do not offer Private visibility because their visitors do not have an almyty identity.
+Private tools, APIs and sub-agents cannot be attached to a wider-access parent to expose them indirectly. Use a parent private to the same owner, or explicitly share the dependency first. An agent private to its owner cannot have a published channel, because a channel's visitors do not have an almyty identity: share the agent with the organization first.
 
 When picking a team for a new resource, you can only park it in a team you are `team_admin` (lead) of. Org owners and admins can park resources in any team.
 
 ### Creating a team
 
-1. In **Settings → People and access → Members and teams**, open the **Teams** sub-tab.
-2. Click **Create Team**.
+1. In **Settings → People and access → Members and teams**, find the **Teams** card.
+2. Click **Create team**.
 3. Enter a name and (optional) description.
 4. Add members from the organization.
 
@@ -110,7 +110,7 @@ The full picture, for a member acting on a resource:
 | Org member, `team_member` of resource's team | `team` | Yes | No |
 | Org member, not in resource's team | `team` | No | No |
 
-Visibility, not the absence of a `teamId`, determines access: Private resources have no team and remain private; Team resources require a team. Legacy rows with no visibility value default to org-wide. The default "Everyone" team is *not* the same as org-wide: putting a resource in "Everyone" means every org member can see it (same effect today), but if you ever shrink the team's membership it becomes a real boundary.
+Visibility, not the absence of a `teamId`, determines access: Private resources have no team and remain private; Team resources require a team. A resource with no visibility value is treated as org-wide. The default "Everyone" team is *not* the same as org-wide: putting a resource in "Everyone" means every org member can see it (the same effect as org-wide while every member is in the team), but if you shrink the team's membership it becomes a real boundary.
 
 ## API
 

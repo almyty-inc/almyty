@@ -21,9 +21,10 @@ unfolds. See the [Agents CLI](/cli/agents) for the full command set.
 
 ## Work mode: how it works, and which models do it
 
-The **Work mode** section comes first on the agent's edit page. Pick the mode
-from the dropdown, and the model slots under it follow from the mode: each
-slot asks for exactly the model that mode needs.
+The **Work mode** section follows **Personality & style** and
+**Instructions** on the agent's edit page, ahead of Memory and Capabilities.
+Pick the mode from the dropdown, and the model slots under it follow from the
+mode: each slot asks for exactly the model that mode needs.
 
 | Work mode | What happens | Slots it shows |
 |---|---|---|
@@ -52,14 +53,14 @@ the checked draft or the main model's fix, the picked answer, the judge's
 answer, or the main model's answer from the brief. Each step on the run
 records which role took it and which model answered, including, for an
 automatic slot, what the router picked and why.
+
 ## Verification
 
-Open the **Models & Verification** panel and click **Configure** to set up
-verification: add reviewer models (each with its own provider and focus
-instructions), choose how their verdicts combine, decide when they run, and set
-how many times the agent may revise.
-
-Use **Configure verification** on the agent's Overview tab to edit the verifier panel inline, then **Save verification**.
+On the agent's **Overview** tab, the **Models & verification** card has
+**Configure verification**. It opens in place: turn on **Enable verification**,
+add reviewers (each a model with its own focus instructions), choose the
+**Merge policy** that combines their verdicts, pick the **Triggers** that
+decide when they run, and set **Max revise loops**, then **Save verification**.
 
 Reviewers are refute-only: each tries to find a reason the answer is wrong. How
 their verdicts combine:
@@ -106,6 +107,7 @@ nothing run.
 Several models working together inside one agent is the
 [work mode](#work-mode-how-it-works-and-which-models-do-it); several agents
 working together is this list.
+
 ## Constraints
 
 Constraints are per-agent rules that keep an agent from repeating mistakes. Add
@@ -151,6 +153,7 @@ saved earlier before it answers. Then choose:
 
 See [Memory](/memory#an-agents-memory-settings) for what each setting does
 at run time.
+
 ## Context compaction
 
 Long runs can outgrow the model's context window. Turn on compaction and almyty
@@ -160,10 +163,10 @@ automatically; there is nothing to watch.
 
 ## Create an autonomous agent
 
-In the UI: **Agents -> Create Agent -> Autonomous**. Write the instructions,
-pick the work mode and the models for its slots, then set memory and
-capabilities, all on one page. Constraints and the verifier panel are on the
-agent's own page once it is saved.
+In the UI: **Agents -> Create agent -> Autonomous**. Write the personality and
+instructions, pick the work mode and the models for its slots, then set
+memory, capabilities, run limits and an optional heartbeat, all on one page.
+Constraints and the verifier panel are on the agent's own page once it is saved.
 
 ![Autonomous agent form in the builder](/screenshots/agent-builder-autonomous.png)
 
