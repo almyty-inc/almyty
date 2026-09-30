@@ -24,7 +24,6 @@ import { hostedChatUrl } from '../gateways/channels/hosted-chat.config';
 import { effectiveBranding } from './channel-rules';
 import { writeBrandingIcon } from './build-icon';
 import { FilesService } from '../files/files.service';
-import { AgentChannelsService } from './agent-channels.service';
 import { resolveClientEntry } from './build-client-entry';
 import { buildVersionError, bundleIdError, defaultBundleId } from './channel-rules';
 
@@ -88,8 +87,6 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
     @InjectQueue(APP_BUILD_QUEUE) private readonly queue: Queue,
     // Where an app icon uploaded on the branding page is kept.
     @Optional() private readonly files?: FilesService,
-    // Clears app icons uploaded on a branding page and never saved.
-    @Optional() private readonly channels?: AgentChannelsService,
   ) {}
 
   /**
@@ -141,10 +138,6 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
 
     const removed = await this.builds.sweepExpiredArtifacts();
     if (removed > 0) this.logger.log(`Cleared ${removed} expired build artifacts`);
-
-    // App icons chosen on a branding page a day ago and never saved.
-    const icons = (await this.channels?.sweepUnsavedIcons()) ?? 0;
-    if (icons > 0) this.logger.log(`Cleared ${icons} unsaved app icons`);
   }
 
   @Process()
