@@ -147,16 +147,16 @@ export function AgentDetailPage() {
 
   const auditLog: AgentAuditEntry[] = Array.isArray(auditLogData) ? auditLogData : []
 
-  // Fetch runs (autonomous mode)
-  const { data: runsData } = useQuery({
+  // Fetch runs (autonomous mode). An autonomous agent's runs are its
+  // Recent runs on Overview too, so they are read there as well.
+  const { data: runsData, error: runsError, refetch: refetchRuns } = useQuery({
     queryKey: ['agent-runs', id],
     queryFn: async () => {
       const d = await agentsApi.listRuns(id!)
       return Array.isArray(d) ? d : d?.data || []
     },
-    enabled: !!id && activeTab === 'runs',
+    enabled: !!id && (activeTab === 'runs' || (activeTab === 'overview' && agent?.mode === 'autonomous')),
   })
-
   const runs: AgentRun[] = Array.isArray(runsData) ? runsData : []
 
   // Fetch memories: the memory this agent's runs read and write, per its
@@ -411,8 +411,9 @@ export function AgentDetailPage() {
           <OverviewTab
             agent={agent}
             executions={executions}
-            executionsError={executionsError as Error | null}
-            onRetryExecutions={() => refetchExecutions()}
+            executionsError={(executionsError ?? (agent.mode === 'autonomous' ? runsError : null)) as Error | null}
+            onRetryExecutions={() => { refetchExecutions(); if (agent.mode === 'autonomous') refetchRuns() }}
+            runs={agent.mode === 'autonomous' ? runs : []}
             versions={versions}
             entityVersions={entityVersions}
             auditLog={auditLog}

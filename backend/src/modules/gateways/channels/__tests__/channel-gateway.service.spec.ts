@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { ChannelGatewayService } from '../channel-gateway.service';
 import { Gateway, GatewayType } from '../../../../entities/gateway.entity';
 import { ChatWidgetAdapter } from '../adapters/chat-widget.adapter';
@@ -398,6 +399,7 @@ describe('ChannelGatewayService.testConnection', () => {
         id: 'gw-1',
         type: GatewayType.CHAT_WIDGET,
         organizationId: 'org-1',
+        agentId: 'agent-1',
         isActive: () => true,
       } as unknown as Gateway);
 
@@ -453,6 +455,13 @@ describe('ChannelGatewayService.testConnection', () => {
         id: 'gw-3', type: GatewayType.CHAT_WIDGET, isActive: () => false,
       });
       await expect(svc.findWidgetGateway('gw-3')).rejects.toThrow(/not found/i);
+    });
+
+    // A widget left behind by a deleted agent: whatever page still embeds
+    // it gets a clean 404 saying so, never a run against no agent.
+    it('findWidgetGateway 404s "This chat no longer exists" when the agent was deleted', async () => {
+      gatewayRepository.findOne.mockResolvedValueOnce({ ...widgetGateway(), agentId: null });
+      await expect(svc.findWidgetGateway('gw-1')).rejects.toThrow(new NotFoundException('This chat no longer exists'));
     });
 
     const T0 = new Date('2026-07-01T10:00:00Z');
@@ -536,7 +545,7 @@ describe('ChannelGatewayService — secrets through the credential store', () =>
     const eventRepository = { create: jest.fn((e: any) => e), save: jest.fn(async (e: any) => e) };
     (service as any).eventRepository = eventRepository;
     const gateway = {
-      id: 'gw-1', type: GatewayType.SLACK, organizationId: 'org-1', isActive: () => true,
+      id: 'gw-1', type: GatewayType.SLACK, organizationId: 'org-1', agentId: 'agent-1', isActive: () => true,
       configuration: { credentialId: 'cred-1', credentialKeys: ['signing_secret'] },
     } as unknown as Gateway;
 
@@ -544,5 +553,17 @@ describe('ChannelGatewayService — secrets through the credential store', () =>
 
     expect(channelCredentials.resolveConfig).toHaveBeenCalledWith(gateway, 'channel_inbound');
     expect(eventRepository.save.mock.calls[0][0]).toMatchObject({ status: 'failed', errorMessage: 'signature verification failed' });
+  });
+
+  it('handleInboundMessage drops a message to a gateway whose agent was deleted, before anything else', async () => {
+    const service = build();
+    const gateway = {
+      id: 'gw-1', type: GatewayType.SLACK, organizationId: 'org-1', agentId: null, isActive: () => true,
+      configuration: { credentialId: 'cred-1', credentialKeys: ['signing_secret'] },
+    } as unknown as Gateway;
+
+    await service.handleInboundMessage(gateway, { type: 'event_callback', event: { type: 'message', text: 'hi', user: 'U1' } }, {}, '{}');
+
+    expect(channelCredentials.resolveConfig).not.toHaveBeenCalled();
   });
 });

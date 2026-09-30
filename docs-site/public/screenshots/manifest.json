@@ -7,7 +7,7 @@
       "title": "Autonomous agent: work mode",
       "path": "screenshots/agent-builder-autonomous.png",
       "capturedAt": "2026-09-30T16:31:15.343Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "077e7cf0a3ae49e2d49762a9ea520da001b9b9981283b2f7f3e64b75f4e3f24a",
       "source": {
         "kind": "browser",
@@ -22,14 +22,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed; the Delete agent confirmation says its channels go too. Recapture against the current UI."
     },
     {
       "id": "agent-builder-node-palette",
       "title": "Steps palette",
       "path": "screenshots/agent-builder-node-palette.png",
       "capturedAt": "2026-09-30T16:31:23.724Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "16ed372b8779633c72addd328d2f8dd2adc8f8b263b09737d417c2bf07f6f256",
       "source": {
         "kind": "browser",
@@ -44,14 +45,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "agent-builder",
       "title": "Workflow builder",
       "path": "screenshots/agent-builder.png",
       "capturedAt": "2026-09-30T16:31:21.134Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7101205493af213b7b6dbbc67eb4730a8a9980de53c6384df3a440cf03dd1e06",
       "source": {
         "kind": "browser",
@@ -66,14 +68,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "agent-channels",
       "title": "An agent's Channels tab",
       "path": "screenshots/agent-channels.png",
       "capturedAt": "2026-09-30T16:31:38.871Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "530432af9fd768d2511d8a3cbf1e3b5141aed845c64f8f50dbe8252765cc3650",
       "source": {
         "kind": "browser",
@@ -89,14 +92,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "4984f7a4169c68ac30b9c3fbea699b0f6f0b86d90132bff7788c6ba8ea5bb60d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "agent-constraints",
       "title": "Agent constraints",
       "path": "screenshots/agent-constraints.png",
       "capturedAt": "2026-09-30T16:31:04.439Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
       "source": {
         "kind": "browser",
@@ -111,14 +115,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "agent-detail-overview",
       "title": "Autonomous agent overview",
       "path": "screenshots/agent-detail-overview.png",
       "capturedAt": "2026-09-30T16:30:59.155Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
       "source": {
         "kind": "browser",
@@ -133,14 +138,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "agent-skill-viewer",
       "title": "Agent skills",
       "path": "screenshots/agent-skill-viewer.png",
       "capturedAt": "2026-09-30T16:31:12.292Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c2b086bc7ce818fddb0a24c44b62a5666aff19edf03f2700901f0dc065a5595b",
       "source": {
         "kind": "browser",
@@ -155,14 +161,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "agent-work-mode-panel",
       "title": "Panel work mode",
       "path": "screenshots/agent-work-mode-panel.png",
       "capturedAt": "2026-09-30T16:31:18.460Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "472eceef77a0d801d628b27c6d94382300690462de91cd2aca8f40681c2c8108",
       "source": {
         "kind": "browser",
@@ -177,14 +184,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "agents-list",
       "title": "Agents list",
       "path": "screenshots/agents-list.png",
       "capturedAt": "2026-09-30T16:30:56.493Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "51439432f06dc456afb11b2269f589455ce90968ea8b12b619f5a5594a1d2f69",
       "source": {
         "kind": "browser",
@@ -199,7 +207,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "95e5fcadc2b793781f6186159b1fea52b955cb62daffa98a151fba314ee79456",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "analytics-agents",
@@ -360,7 +369,7 @@
       "title": "Refund approval",
       "path": "screenshots/approval-refund-820.png",
       "capturedAt": "2026-09-30T16:32:57.431Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "517a1f4fdebb03353058d72aa7a2948804a5a3751bc223783ef3f2f722abf53e",
       "source": {
         "kind": "browser",
@@ -375,14 +384,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "8538813d7a49c12abe17bef395a8e2a9a0aba0b23dfdb8a299204825d05815cf",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the Approvals page names the agent (or \"Deleted agent\") instead of \"agent <id>\". Recapture against the current UI."
     },
     {
       "id": "approvals-pending",
       "title": "Pending approvals",
       "path": "screenshots/approvals-pending.png",
       "capturedAt": "2026-09-30T16:32:54.318Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "517a1f4fdebb03353058d72aa7a2948804a5a3751bc223783ef3f2f722abf53e",
       "source": {
         "kind": "browser",
@@ -397,7 +407,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "8538813d7a49c12abe17bef395a8e2a9a0aba0b23dfdb8a299204825d05815cf",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the Approvals page names the agent (or \"Deleted agent\") instead of \"agent <id>\". Recapture against the current UI."
     },
     {
       "id": "apps-hosted-chat-routing-failure",
@@ -923,7 +934,7 @@
       "title": "The help desk assistant reads shared memory",
       "path": "screenshots/guides/helpdesk-3-agent.png",
       "capturedAt": "2026-09-30T16:36:58.800Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "81d2ad6fbc8b8c637699db44c59a9f9258706043876f12bb709d679e015f4066",
       "source": {
         "kind": "browser",
@@ -938,14 +949,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-helpdesk-4-leave",
       "title": "A question answered from the HR system",
       "path": "screenshots/guides/helpdesk-4-leave.png",
       "capturedAt": "2026-09-30T16:37:07.836Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4c0b07a3926301184d8314c5f937dfcc1cc6e4ea853759275c4492620e0e47e4",
       "source": {
         "kind": "browser",
@@ -960,14 +972,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-helpdesk-5-wifi",
       "title": "A question answered from the office guide",
       "path": "screenshots/guides/helpdesk-5-wifi.png",
       "capturedAt": "2026-09-30T16:37:09.905Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "9818c4f019dac507c46c43ffce8e8118864a59f168bd27b63c5e339d910a6869",
       "source": {
         "kind": "browser",
@@ -982,7 +995,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-helpdesk-6-teams",
@@ -1034,7 +1048,7 @@
       "title": "A product assistant that answers from the help center",
       "path": "screenshots/guides/marketing-2-agent.png",
       "capturedAt": "2026-09-30T16:35:40.234Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8d3bb4fe41c12f34d2926477238f0a487bb0bce2d2bb3746bbcb6127d2376fee",
       "source": {
         "kind": "browser",
@@ -1049,14 +1063,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-marketing-3-try",
       "title": "An answer with its source",
       "path": "screenshots/guides/marketing-3-try.png",
       "capturedAt": "2026-09-30T16:35:49.200Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4351a481fdc6122703320ae6ae23943e64a3e594fe9d0e6281bdeaf5d0272329",
       "source": {
         "kind": "browser",
@@ -1071,7 +1086,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-marketing-4-limits",
@@ -1190,7 +1206,7 @@
       "title": "The nightly check, with its two kinds of tools",
       "path": "screenshots/guides/ops-3-agent.png",
       "capturedAt": "2026-09-30T16:36:24.902Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d47222a14a888a56bf20db1cb2789601502ffd15b93072bc571b7949942701c0",
       "source": {
         "kind": "browser",
@@ -1205,14 +1221,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-ops-4-try",
       "title": "A test run posts the report",
       "path": "screenshots/guides/ops-4-try.png",
       "capturedAt": "2026-09-30T16:36:33.886Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "39acfbb597b745da38650e01ee7984bdcabd8bb84293e7097b76bc324ccf858c",
       "source": {
         "kind": "browser",
@@ -1227,14 +1244,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-ops-5-heartbeat",
       "title": "Wake it up every night",
       "path": "screenshots/guides/ops-5-heartbeat.png",
       "capturedAt": "2026-09-30T16:36:36.645Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "30ab4869aceedccf04e12cf8118ce345d00ce8234689a663c725c30e1f0ddcd7",
       "source": {
         "kind": "browser",
@@ -1249,14 +1267,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-ops-6-report-run",
       "title": "A report run, step by step",
       "path": "screenshots/guides/ops-6-report-run.png",
       "capturedAt": "2026-09-30T16:36:43.949Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c48426774dc05b80a387e27c029c541520dd9f812dca629090d1e95c264d2392",
       "source": {
         "kind": "browser",
@@ -1271,7 +1290,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-sales-1-connect-crm",
@@ -1300,7 +1320,7 @@
       "title": "The sales assistant and its CRM tools",
       "path": "screenshots/guides/sales-2-agent.png",
       "capturedAt": "2026-09-30T16:35:11.538Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4fdc31139f46c69b717a0af660bd44944ce1a4d4bceb45e20fb4656cd6d1be75",
       "source": {
         "kind": "browser",
@@ -1315,14 +1335,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-sales-3-brief",
       "title": "A brief before the call",
       "path": "screenshots/guides/sales-3-brief.png",
       "capturedAt": "2026-09-30T16:35:20.520Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "440c676a9696f39bda5db143ab32b27becff31c04fac068496c8c6d4c24031f2",
       "source": {
         "kind": "browser",
@@ -1337,14 +1358,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-sales-4-notes",
       "title": "Meeting notes saved to the CRM",
       "path": "screenshots/guides/sales-4-notes.png",
       "capturedAt": "2026-09-30T16:35:22.618Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0b87ef81d40d361ad1a0ecdab15026005ba2ad30f5d02d6bb6fbd6a23132e81e",
       "source": {
         "kind": "browser",
@@ -1359,7 +1381,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-sales-5-slack-keys",
@@ -1636,7 +1659,7 @@
       "title": "A new autonomous agent",
       "path": "screenshots/guides/support-4-new-agent.png",
       "capturedAt": "2026-09-30T16:34:12.409Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8b7fbc0acbdf108da5b2da89ae412583f05bbeb1544babe1ee28fb533700a692",
       "source": {
         "kind": "browser",
@@ -1651,14 +1674,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-support-5-model-and-tools",
       "title": "Tick the order tools",
       "path": "screenshots/guides/support-5-model-and-tools.png",
       "capturedAt": "2026-09-30T16:34:12.970Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b2ab86892dc57197e99f2657e4accc0b03a5c77eb47b7a4c8c622668bce32275",
       "source": {
         "kind": "browser",
@@ -1673,14 +1697,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-support-6-activate",
       "title": "Save and turn the agent on",
       "path": "screenshots/guides/support-6-activate.png",
       "capturedAt": "2026-09-30T16:34:16.317Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8ad15f6493a391fd6c65fd259535a6835447c5d31f728d1af17c58df80994c46",
       "source": {
         "kind": "browser",
@@ -1695,14 +1720,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-support-7-try-order",
       "title": "Ask about an order",
       "path": "screenshots/guides/support-7-try-order.png",
       "capturedAt": "2026-09-30T16:34:18.446Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7aa8b7fd269eeae351da00870fa2bab5d3ac56aa57f801ea2170fbcb6c0623aa",
       "source": {
         "kind": "browser",
@@ -1717,14 +1743,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-support-8-refund-waits",
       "title": "A big refund waits for approval",
       "path": "screenshots/guides/support-8-refund-waits.png",
       "capturedAt": "2026-09-30T16:34:28.727Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "9945c5591463923f72d3c1f32e2dd340c36884f329dd87d87d7bebabaf774ef5",
       "source": {
         "kind": "browser",
@@ -1738,14 +1765,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c7f2487bd278909887646363871e9764c3bdf55fe97445ff4a6b49364f316804",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the Approvals page names the agent (or \"Deleted agent\") instead of \"agent <id>\". Recapture against the current UI."
     },
     {
       "id": "guides-support-9-approve",
       "title": "Approve the refund",
       "path": "screenshots/guides/support-9-approve.png",
       "capturedAt": "2026-09-30T16:34:29.583Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "847b0b9ea9c976d3ca77ad17aecfada1415ffcdaca1c6b79f5d86acc75cb6769",
       "source": {
         "kind": "browser",
@@ -1759,7 +1787,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c7f2487bd278909887646363871e9764c3bdf55fe97445ff4a6b49364f316804",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Source changed after capture: the Approvals page names the agent (or \"Deleted agent\") instead of \"agent <id>\". Recapture against the current UI."
     },
     {
       "id": "hosted-chat-privacy",
@@ -1876,7 +1905,8 @@
       "title": "Memory",
       "path": "screenshots/memory.png",
       "capturedAt": "2026-09-30T16:32:49.148Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "memories.tsx now lists each document once (its chunks hidden); no visible change expected on the seeded page, recapture to refresh the source digest.",
       "sha256": "16eae1d86f93fe323b45a65aefe4d718c0bc102269e900e44d0f9987d12c5795",
       "source": {
         "kind": "browser",
@@ -2054,7 +2084,7 @@
       "title": "Schedule card",
       "path": "screenshots/schedule-config.png",
       "capturedAt": "2026-09-30T16:31:26.849Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5ea1a39891d2d5e6524c2d3067f19f48281fb7492174962f6dd681882dfc8906",
       "source": {
         "kind": "browser",
@@ -2069,7 +2099,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "self-hosting-compose",
@@ -2307,7 +2338,7 @@
       "title": "Support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
       "capturedAt": "2026-09-30T16:31:07.033Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
       "source": {
         "kind": "browser",
@@ -2322,14 +2353,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "support-agent-overview",
       "title": "Support agent overview",
       "path": "screenshots/support-agent-overview.png",
       "capturedAt": "2026-09-30T16:31:01.802Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
       "source": {
         "kind": "browser",
@@ -2344,14 +2376,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "support-agent-runs",
       "title": "Support agent runs",
       "path": "screenshots/support-agent-runs.png",
       "capturedAt": "2026-09-30T16:31:09.705Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5c532a613cf19c9621c2fca36392e49a9521a1ebdb73ce4d704539d4ecc33a32",
       "source": {
         "kind": "browser",
@@ -2366,7 +2399,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "tool-detail",
@@ -2419,7 +2453,7 @@
       "title": "Change history",
       "path": "screenshots/versioning-history.png",
       "capturedAt": "2026-09-30T16:31:36.193Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3d9337edb0726c49a6c1bb764422caf91f262d4088e84e772d216080c8c30ccf",
       "source": {
         "kind": "browser",
@@ -2434,14 +2468,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "versioning",
       "title": "Pipeline versions",
       "path": "screenshots/versioning.png",
       "capturedAt": "2026-09-30T16:31:33.132Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3ec54254ec29ece9dcb1ebe7ca165a1ee6b066f34b78598e3cc1f39b7cbcdb68",
       "source": {
         "kind": "browser",
@@ -2456,14 +2491,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "webhook-config",
       "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
       "capturedAt": "2026-09-30T16:31:29.999Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5ea1a39891d2d5e6524c2d3067f19f48281fb7492174962f6dd681882dfc8906",
       "source": {
         "kind": "browser",
@@ -2478,7 +2514,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "widget-builder",

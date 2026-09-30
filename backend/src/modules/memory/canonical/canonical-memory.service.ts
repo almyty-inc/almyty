@@ -1,7 +1,7 @@
 import { Inject, forwardRef } from '@nestjs/common';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, IsNull, Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { v7 as uuidv7 } from 'uuid';
@@ -20,6 +20,7 @@ import {
   BatchResult,
 } from './canonical.types';
 import { validateMemoryItem } from './canonical.validator';
+import { chunkLeavesOf, isWholeDocument } from './document-chunks.helper';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import {
@@ -105,21 +106,39 @@ export class CanonicalMemoryService {
     // `bi_temporal`, etc.). For now no capability is gated.
 
     // ── 12. Persist (synchronous) ────────────────────────────────────
-    await this.repo.save(itemToEntity(item));
+    // A whole document is split into chunk rows here, in the same
+    // transaction: the chunks are what is embedded and searched (agent
+    // recall included); the parent keeps the full text and is not
+    // embedded itself.
+    const chunks = isWholeDocument(item) ? chunkLeavesOf(item, now) : [];
+    if (chunks.length > 0) {
+      item.chunk_total = chunks.length;
+      item.embedding_status = 'skipped';
+      await this.dataSource.transaction(async (manager) => {
+        await manager.save(itemToEntity(item));
+        const BATCH = 200;
+        for (let i = 0; i < chunks.length; i += BATCH) {
+          await manager.insert(CanonicalMemory, chunks.slice(i, i + BATCH).map(itemToEntity));
+        }
+      });
+    } else {
+      await this.repo.save(itemToEntity(item));
+    }
 
     // ── 13. Enqueue async embedding job ──────────────────────────────
     // The worker pulls rows by id, calls EmbeddingService, writes the
     // vector + flips embedding_status. Skipped if the input already
     // declares `skipped` status (e.g. transfers preserving upstream
     // intent).
-    if (item.embedding_status === 'pending') {
+    for (const row of [item, ...chunks]) {
+      if (row.embedding_status !== 'pending') continue;
       await this.embeddingQueue.add(
         'embed',
-        { memory_id: item.id },
+        { memory_id: row.id },
         {
           // De-dup by id — if a row is enqueued twice (retry, sync,
           // etc.) only one job runs.
-          jobId: `embed:${item.id}`,
+          jobId: `embed:${row.id}`,
           attempts: 3,
           backoff: { type: 'exponential', delay: 5000 },
           removeOnComplete: true,
@@ -264,9 +283,14 @@ export class CanonicalMemoryService {
     if (mode === 'hard') {
       await this.repo.delete({ id });
     } else {
-      row.deletedAt = new Date();
+      const now = new Date();
+      row.deletedAt = now;
       row.deletedBy = actor.user_id ?? null;
       await this.repo.save(row);
+      // A document's chunks go with it: they are what search finds, so a
+      // deleted document left them answering recall. (A hard delete
+      // cascades on chunk_of.)
+      await this.repo.update({ chunkOf: id, deletedAt: IsNull() }, { deletedAt: now, deletedBy: actor.user_id ?? null });
     }
     this.auditLog.log({
       organizationId: scopeToOrganizationId(row.scopeType, row.scopeId),
@@ -383,6 +407,8 @@ export class CanonicalMemoryService {
     if (query.until) qb.andWhere('m.created_at <= :until', { until: query.until });
     if (!query.include_superseded) qb.andWhere('m.valid_until IS NULL');
     if (!query.include_deleted) qb.andWhere('m.deleted_at IS NULL');
+    // A document's chunks are its searchable pieces, not things to list.
+    if (query.hide_chunks) qb.andWhere('m.chunk_of IS NULL');
 
     qb.orderBy('m.created_at', 'DESC');
 

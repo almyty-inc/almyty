@@ -31,6 +31,7 @@ import { channelSecretKeysIn } from '../gateways/channels/channel-config.helper'
 import { ChannelPolicyService, SpendStatus } from '../gateways/channel-policy.service';
 import { FilesService } from '../files/files.service';
 import { MAX_ICON_BYTES } from './build-icon';
+import { AppBuildsService } from './app-builds.service';
 import {
   ChannelCheck,
   ChannelContext,
@@ -162,6 +163,9 @@ export class AgentChannelsService {
     // it an uploaded icon is refused.
     @Optional()
     private readonly files?: FilesService,
+    // The downloads built for a channel, whose stored files go with it.
+    @Optional()
+    private readonly builds?: AppBuildsService,
   ) {}
 
   // ─── Agents ──────────────────────────────────────────────────────────
@@ -417,8 +421,37 @@ export class AgentChannelsService {
       if (gateway) await this.gateways.deleteGateway(gateway.id, organizationId, caller.id);
     }
     // The credential it used stays on Credentials: it is the org's, not the channel's.
+    await this.builds?.removeArtifactsOf([channel.id]);
     await this.channelRepository.remove(channel);
     await this.releaseIconFiles(organizationId, [channel.branding?.iconFileId]);
+  }
+
+  /**
+   * Everything that reaches an agent that is being deleted: each of its
+   * channels with the gateway it answered on (platform webhook taken down,
+   * address freed), the stored files of its downloads and unused app
+   * icons, and any other agent gateway bound to it (an A2A endpoint made
+   * on the Gateways page). Its conversations stay, and go with the
+   * organization's retention like any other.
+   *
+   * The caller has already checked the user may delete the agent; this
+   * does not check again, so a gateway someone else made for the agent
+   * goes too. Called before the agent row is removed, while the channels
+   * still point at it.
+   */
+  async removeAllOf(organizationId: string, agentId: string, userId?: string | null): Promise<{ channels: number; gateways: number }> {
+    const channels = await this.channelRepository.find({ where: { organizationId, agentId } });
+    const gatewayIds = new Set(channels.map((c) => c.gatewayId).filter((id): id is string => !!id));
+    const bound = await this.gatewayRepository.find({ where: { organizationId, agentId } });
+    for (const gateway of bound) gatewayIds.add(gateway.id);
+    const gateways = gatewayIds.size
+      ? await this.gatewayRepository.find({ where: { id: In([...gatewayIds]), organizationId } })
+      : [];
+    for (const gateway of gateways) await this.gateways.deleteGatewayOfDeletedAgent(gateway, userId);
+    await this.builds?.removeArtifactsOf(channels.map((c) => c.id));
+    if (channels.length) await this.channelRepository.remove(channels);
+    await this.releaseIconFiles(organizationId, channels.map((c) => c.branding?.iconFileId));
+    return { channels: channels.length, gateways: gateways.length };
   }
 
   /** Whether the channel may go live or be built, and if not, why. */

@@ -703,6 +703,7 @@ export class CanonicalMemoryController {
       tags: body.tags,
       include_superseded: body.include_superseded,
       include_deleted: body.include_deleted,
+      hide_chunks: body.hide_chunks,
       limit: body.limit,
       cursor: body.cursor ?? null,
     });

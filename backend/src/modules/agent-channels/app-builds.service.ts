@@ -472,6 +472,30 @@ export class AppBuildsService {
   }
 
   /**
+   * Delete the stored artifacts of channels about to be deleted. Their
+   * build rows go with the channel (ON DELETE CASCADE), and the expiry
+   * sweep finds files through those rows, so a file not deleted here
+   * would stay in object storage with nothing pointing at it. A file that
+   * cannot be deleted is logged and does not stop the channel going.
+   */
+  async removeArtifactsOf(channelIds: string[]): Promise<number> {
+    if (!channelIds.length) return 0;
+    const builds = await this.buildRepository.find({
+      where: { channelId: In(channelIds), artifactKey: Not(IsNull()) },
+    });
+    let removed = 0;
+    for (const build of builds) {
+      try {
+        await this.storage.delete?.(build.artifactKey!);
+        removed += 1;
+      } catch (err: any) {
+        this.logger.warn(`Could not delete artifact ${build.artifactKey}: ${err?.message ?? err}`);
+      }
+    }
+    return removed;
+  }
+
+  /**
    * Give up on builds whose job is never coming back.
    *
    * Nothing else ever moves a build out of QUEUED or RUNNING except the

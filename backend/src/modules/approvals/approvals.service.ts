@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, ServiceUnavailableException, Optional, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
+import { Repository, LessThan, In } from 'typeorm';
 import { EventEmitter } from 'events';
 
 import { ApprovalRequest, ApprovalStatus } from '../../entities/approval-request.entity';
@@ -509,12 +509,26 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     return row;
   }
 
-  async listPending(args: { organizationId: string; caller: { id: string } }): Promise<ApprovalRequest[]> {
+  /**
+   * The pending requests the caller may see, each with the name of the
+   * agent that asked (`agentName`), so the page can say who is waiting
+   * rather than an id. null when that agent has since been deleted.
+   */
+  async listPending(args: { organizationId: string; caller: { id: string } }): Promise<Array<ApprovalRequest & { agentName: string | null }>> {
     const qb = this.approvals
       .createQueryBuilder('a')
       .where('a.status = :status', { status: 'pending' });
     await this.accessPolicy.applyListFilter(qb, args.caller, args.organizationId, 'a', { ownerColumn: 'ownerUserId' });
-    return qb.orderBy('a."createdAt"', 'DESC').take(200).getMany();
+    const rows = await qb.orderBy('a."createdAt"', 'DESC').take(200).getMany();
+    const agentIds = [...new Set(rows.map((r) => r.agentId).filter(Boolean))];
+    const agents = agentIds.length
+      ? await this.approvals.manager.getRepository(Agent).find({
+          where: { id: In(agentIds), organizationId: args.organizationId },
+          select: { id: true, name: true },
+        })
+      : [];
+    const names = new Map(agents.map((a) => [a.id, a.name]));
+    return rows.map((r) => Object.assign(r, { agentName: names.get(r.agentId) ?? null }));
   }
 
   async listForRun(runId: string): Promise<ApprovalRequest[]> {

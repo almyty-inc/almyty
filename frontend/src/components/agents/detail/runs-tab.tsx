@@ -38,6 +38,11 @@ interface RunsTabProps {
   agentId?: string
 }
 
+/** Whether any of the run's calls went through routing, so there is a route to show. */
+export function runRouted(run: Pick<AgentRun, 'steps'>): boolean {
+  return (run.steps ?? []).some((s) => !!(s.output as any)?.routing)
+}
+
 export function RunsTab({ runs, agentId }: RunsTabProps) {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
 
@@ -140,7 +145,7 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                             {/* Where the requests went. Only for runs that
                                 routed — a pinned-model run has no trace to
                                 show and an empty panel would read as broken. */}
-                            {agentId && (
+                            {agentId && runRouted(run) && (
                               <div>
                                 <h4 className="mb-2 text-sm font-medium">Route</h4>
                                 <RouteTraceTimeline agentId={agentId} executionId={run.id} />
