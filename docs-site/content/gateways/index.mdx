@@ -25,7 +25,8 @@ claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
 Create another gateway over the same tools to reach clients that speak another protocol.
 Putting an agent in front of
 people or other systems is a different job: web chats, website widgets, messaging
-channels and A2A endpoints for other agents are places on an app, set up under **Apps**.
+channels and A2A endpoints for other agents are channels of an agent, added on the agent's
+**Channels** tab.
 
 ## Create a gateway
 
@@ -56,8 +57,8 @@ create a gateway for each and pick the same tools.
 | [Agent Skills](/gateways/skills) | 30+ coding agents, via the Skills CLI | Installed as `SKILL.md` files |
 
 An agent, rather than a set of tools, reaches other agents over [A2A](/gateways/a2a): add
-**Other agents (A2A)** as a place on its app, and it answers at
-`api.almyty.com/{org}/apps/{app}/a2a` with its Agent Card next to it.
+**Other agents (A2A)** as a channel on the agent, and it answers at
+`api.almyty.com/{org}/channels/{channel-id}` with its Agent Card next to it.
 
 Agents you build on almyty also get an [OpenAI-compatible endpoint](/api-reference/openai-compatible),
 so anything that talks to the OpenAI API can call an agent without code changes.

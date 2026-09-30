@@ -25,9 +25,16 @@ const AI_MODELS_TILE = 'ai-models'
  * Every service but AI models, which have their own connect flow (models
  * come with them): here they are one tile that leads there. It stays
  * visible while a search matches an AI provider, so "openai" still finds it.
+ *
+ * Chat apps (Slack, Telegram, WhatsApp and the rest) are not here: they are
+ * channels, added on an agent's Channels tab, where their keys are entered
+ * or picked.
  */
 function serviceTileGroups(connectors: Connector[], search: string): ServiceTileGroup[] {
-  const services = connectorTileGroups(connectors.filter((c) => !MODELS_KINDS.includes(c.kind)), search)
+  const services = connectorTileGroups(
+    connectors.filter((c) => !MODELS_KINDS.includes(c.kind) && c.kind !== 'channel'),
+    search,
+  )
   const query = search.trim().toLowerCase()
   const showModels = !query || 'ai models'.includes(query) || connectors.some((c) => MODELS_KINDS.includes(c.kind) && matchesConnectorSearch(c, search))
   if (!showModels) return services

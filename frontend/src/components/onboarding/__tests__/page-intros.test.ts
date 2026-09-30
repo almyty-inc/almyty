@@ -38,7 +38,7 @@ describe('page intros', () => {
 
   it('covers the pages the guide promises', () => {
     expect([...PAGE_INTRO_TOPICS].sort()).toEqual(
-      ['agents', 'apis', 'apps', 'credentials', 'gateways', 'memories', 'models', 'runners', 'tools'],
+      ['agents', 'apis', 'credentials', 'gateways', 'memories', 'models', 'runners', 'tools'],
     )
   })
 

@@ -6,10 +6,10 @@ Agents are most useful where your users already are. Deploying an agent to a cha
 
 ## How a deployment works
 
-1. Open **Apps**, pick the app the agent belongs to, and on **Where people use it** select **Add a place** and pick a platform. An app is the one place an agent is put in front of people; the agent's own **Interfaces** tab lists where it is used and links there.
-2. Paste the platform credentials from the table below. They are encrypted at rest like every other credential.
+1. Open the agent, go to its **Channels** tab, select **Add channel** and pick a platform. The Channels tab is the one place an agent's channels are added and edited.
+2. Pick the credential that holds the platform keys from the table below, or select **Create one here** to add it on the spot. It is kept on Credentials, encrypted at rest like every other.
 3. Publish. The page shows your channel's inbound webhook URL with a copy button where the platform needs one pasted into its console; for Telegram and Twilio-backed channels the webhook is registered automatically where the platform supports it. Slack leads with **Add to Slack**: an install link any workspace can use.
-4. Send it a message from the platform. A bad token shows on the place's page as missing or refused, instead of on the first missed message.
+4. Send it a message from the platform. A bad token shows on the channel's page as missing or refused, instead of on the first missed message.
 
 Messages then round-trip: platform, to adapter (verify, normalize), to agent run, back to adapter (format for the platform), to reply.
 
@@ -35,7 +35,7 @@ A channel is therefore not usable until its verification secret is set, and its 
 
 Twilio signs the exact URL it called, so `webhook_url` has to match what is configured in the Twilio console. Automatic registration fills it in; if you registered the webhook by hand, enter it by hand too.
 
-![A channel's place on its app: the callback URL to paste into the platform, next to the settings it needs](/screenshots/interfaces-channel-setup.png)
+![A channel on its agent: the callback URL to paste into the platform, next to the settings it needs](/screenshots/interfaces-channel-setup.png)
 
 ## Supported channels
 
@@ -54,13 +54,13 @@ Twilio signs the exact URL it called, so `webhook_url` has to match what is conf
 | **IRC** | IRC-to-HTTP bridge webhook | Bridge send | Bridge webhook URL |
 | **Email** | Inbound MIME parsing | Resend API | Resend API key |
 | **Webhook** | Any HTTP POST, optional HMAC verification | POST to your callback URL | Callback URL, optional shared secret |
-| **Chat Widget** | Widget POST | SSE / polling delivery | Nothing, add the **On your website** place and paste its line |
+| **Chat Widget** | Widget POST | SSE / polling delivery | Nothing, add the **Website widget** channel and paste its line |
 
 Every inbound request is authenticated against the platform's mechanism before it reaches an agent: Slack and Webhook use HMAC signatures, WhatsApp validates the Twilio signature, Teams verifies the Bot Framework JWT, Google Chat checks its verification token. Requests that fail verification are rejected, never queued.
 
 ## Per-platform quick guides
 
-Each place's page on the app shows what that platform needs and where to paste almyty's URL; this section is the reference copy.
+Each channel's page on the agent shows what that platform needs and where to paste almyty's URL; this section is the reference copy.
 
 ### Slack
 
@@ -132,7 +132,7 @@ Each place's page on the app shows what that platform needs and where to paste a
 
 ### Chat Widget
 
-The widget is the **On your website** place on an app. Publish it, then copy the line its page shows into your site's HTML, just before the closing `body` tag:
+The widget is the **Website widget** channel on an agent. Publish it, then copy the line its page shows into your site's HTML, just before the closing `body` tag:
 
 ```html
 <script src="https://<api-host>/gateways/<gateway-id>/widget.js" async></script>
@@ -146,17 +146,17 @@ The chat widget puts an agent in the corner of a page you already have. If you w
 
 ## Customizing the chat widget
 
-The widget's look is the app's: its colour, name, greeting, theme and AI disclosure come from the app's settings, so it matches the web app. On the widget's page you choose where it sits and its launcher icon, with a live preview that runs the exact `widget.js` your site loads.
+The widget's look is the agent's: its colour, name, greeting, theme and AI disclosure come from the agent's branding (or the channel's own), so it matches the web chat. On the widget's page you choose where it sits and its launcher icon, with a live preview that runs the exact `widget.js` your site loads.
 
-![The widget's page on its app: the embed line, placement with a live preview, and allowed sites](/screenshots/widget-builder.png)
+![The widget's channel page: the embed line, placement with a live preview, and allowed sites](/screenshots/widget-builder.png)
 
 ## AI disclosure (EU AI Act Art. 50)
 
-Every channel has an **AI disclosure** setting. In the inline deployment form on the agent's **Interfaces** tab it is the "Disclose AI identity on first message" checkbox. When enabled, the first outbound message of each conversation is preceded by a disclosure line, by default:
+Every messaging channel has an **AI disclosure** switch on its page, on by default. While it is on, the first outbound message of each conversation is preceded by the disclosure line from the agent's branding (or the channel's own), by default:
 
 > You are chatting with an AI assistant.
 
-The text is overridable per channel. If you deploy agents to the public in the EU, turn this on; Article 50 of the AI Act requires that people be informed they are interacting with an AI system. See [Compliance](/compliance) for the full mapping.
+Change the line under **Branding and visitor rules**. Turning the switch off needs the white-label entitlement: Article 50 of the AI Act requires that people be informed they are interacting with an AI system. See [Compliance](/compliance) for the full mapping.
 
 The [hosted chat app](/hosted-chat) is the exception: it shows the disclosure by default, and removing it needs an entitlement and is recorded.
 

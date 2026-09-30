@@ -154,11 +154,16 @@ export function CustomDomainCard({ gatewayId }: { gatewayId: string }) {
             )}
 
             {showForm && (
-              <form
+              // A group, not a form: the card sits inside other forms (a
+              // channel's page), and a form may not contain a form.
+              <div
+                role="group"
+                aria-label="Custom domain"
                 className="space-y-1.5"
-                onSubmit={(e) => {
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' || !(e.target instanceof HTMLInputElement)) return
                   e.preventDefault()
-                  set.mutate()
+                  if (!set.isPending && draft.trim()) set.mutate()
                 }}
               >
                 <Label htmlFor={`custom-domain-${gatewayId}`}>{domain ? 'New domain' : 'Domain'}</Label>
@@ -174,7 +179,7 @@ export function CustomDomainCard({ gatewayId }: { gatewayId: string }) {
                     onChange={(e) => setDraft(e.target.value)}
                     placeholder="chat.example.com"
                   />
-                  <Button type="submit" disabled={set.isPending || !draft.trim()}>
+                  <Button type="button" onClick={() => set.mutate()} disabled={set.isPending || !draft.trim()}>
                     {set.isPending ? 'Saving...' : 'Save domain'}
                   </Button>
                   {editing && (
@@ -183,7 +188,7 @@ export function CustomDomainCard({ gatewayId }: { gatewayId: string }) {
                     </Button>
                   )}
                 </div>
-              </form>
+              </div>
             )}
 
             {error && (

@@ -29,7 +29,7 @@ import { isPrivateGateway } from './private-gateway';
 import { findServableGatewayAgent } from './gateway-servable';
 import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
 import { assertOAuthScope } from '../mcp/services/mcp-oauth-scope';
-import { AppPlace, AppPlacePolicyService, a2aCallerId } from './app-place-policy.service';
+import { ChannelPolicy, ChannelPolicyService, a2aCallerId } from './channel-policy.service';
 import { HostedChatService } from './channels/hosted-chat.service';
 import { trustedClientIp } from '../../common/security/client-ip';
 
@@ -111,10 +111,10 @@ export class UnifiedGatewayDelegation {
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
     // Optional for the same reason; resolves the gateway's connection.
     @Optional() private readonly channelCredentials?: ChannelCredentialService,
-    // The app an A2A place belongs to: its spend cap, per-run cost cap and
+    // The agent channel an A2A gateway is: its spend cap, per-run cost cap and
     // visitor memory rule. Optional for the same reason; Nest always
-    // injects it (app-place-policy.guard.spec.ts).
-    @Optional() private readonly places?: AppPlacePolicyService,
+    // injects it (channel-policy.guard.spec.ts).
+    @Optional() private readonly channelPolicy?: ChannelPolicyService,
   ) {}
 
   async handleGatewayRequest(
@@ -423,10 +423,10 @@ export class UnifiedGatewayDelegation {
     if (!agent) {
       throw new HttpException('Agent not found for this A2A gateway', HttpStatus.NOT_FOUND);
     }
-    // A message that starts or continues a task spends against the app:
+    // A message that starts or continues a task spends against the channel:
     // the caller's own share first (per credential, and per address), then
-    // the app's allowance across every place. Reads and cancels do not.
-    const place = A2A_RUN_METHODS.has(body?.method) ? await this.admitA2ACall(gateway, auth, req, res) : null;
+    // the spend allowance the channel draws on. Reads and cancels do not.
+    const policy = A2A_RUN_METHODS.has(body?.method) ? await this.admitA2ACall(gateway, auth, req, res) : null;
 
     const baseUrl =
       this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
@@ -434,22 +434,22 @@ export class UnifiedGatewayDelegation {
       agent,
       org: organization,
       baseUrl,
-      place,
+      policy,
     });
   }
 
   /**
-   * One A2A caller's share, and the app's allowance.
+   * One A2A caller's share, and the channel's spend allowance.
    *
    * A2A callers are machines holding a credential, so each credential (API
    * key, OAuth client, signed-in user) is a visitor with its own bucket,
-   * the app's per-visitor limit, as well as the per-address one. Before
-   * this an A2A place had only the surface ceiling: one caller could use
-   * the whole hour for every other caller. Then the app's spend cap, and
-   * the run options (per-run cost cap, app stamp, visitor memory rule)
+   * the per-visitor limit, as well as the per-address one. Before
+   * this an A2A channel had only the surface ceiling: one caller could use
+   * the whole hour for every other caller. Then the spend cap, and
+   * the run options (per-run cost cap, channel stamp, visitor memory rule)
    * the task's run starts with.
    */
-  private async admitA2ACall(gateway: Gateway, auth: any, req: Request, res: Response): Promise<AppPlace | null> {
+  private async admitA2ACall(gateway: Gateway, auth: any, req: Request, res: Response): Promise<ChannelPolicy | null> {
     const own = await this.gatewayRateLimit.checkVisitor(gateway, {
       endUserId: a2aCallerId(auth),
       clientHash: HostedChatService.hashClient(trustedClientIp(req as any)),
@@ -467,7 +467,7 @@ export class UnifiedGatewayDelegation {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-    return this.places ? this.places.admit(gateway) : null;
+    return this.channelPolicy ? this.channelPolicy.admit(gateway) : null;
   }
 
   private async delegateACP(

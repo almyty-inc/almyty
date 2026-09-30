@@ -45,7 +45,7 @@ const NOUN = `(?:${[...new Set(PLURALS)].join('|')})`
  * Keyed by file and the exact text matched.
  */
 const ALLOWED: Array<{ rel: string; text: string; why: string }> = [
-  { rel: 'components/agent-apps/signing-credential-form.tsx', text: '{DISTRIBUTION_LABELS[target]} builds', why: 'a target name ("Desktop builds"), not a count' },
+  { rel: 'components/channels/signing-credential-form.tsx', text: '{CHANNEL_LABELS[type]} builds', why: 'a target name ("Desktop builds"), not a count' },
   { rel: 'components/credentials/credential-detail.tsx', text: "use${uses === 1 ? 's' : ''}", why: 'the verb agreeing with a pluralized() count, not a noun' },
 ]
 

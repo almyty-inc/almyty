@@ -1,6 +1,7 @@
 import type { RoutingPolicy } from '../modules/model-catalog/routing/model-router';
 import type { AgentCollaboration } from '../modules/agents/collaboration-participants';
 import type { AgentModels } from '../modules/agents/autonomous-models';
+import type { ChannelBranding, VisitorRules } from './agent-channel.entity';
 export type {
   AgentCollaboration,
   CollaborationParticipant,
@@ -273,6 +274,24 @@ export class Agent {
    */
   @Column({ type: 'json', nullable: true })
   models: AgentModels | null;
+
+  /**
+   * The name, colours, logo and greeting people see on every channel of
+   * this agent (web chat, widget, desktop and terminal apps). A channel
+   * may override any field of it (AgentChannel.branding). Null means the
+   * defaults, with the agent's own name.
+   */
+  @Column({ type: 'json', nullable: true })
+  branding: ChannelBranding | null;
+
+  /**
+   * Who can use this agent's channels and what they may cost and keep:
+   * sign-in, rate limits, spend caps, data retention and visitor rights.
+   * A channel may override any of it (AgentChannel.visitorRules). Missing
+   * fields take the defaults in agent-channels/channel-rules.ts.
+   */
+  @Column({ type: 'json', nullable: true })
+  visitorRules: VisitorRules | null;
 
   @Column({ type: 'varchar', nullable: true })
   webhookUrl: string;

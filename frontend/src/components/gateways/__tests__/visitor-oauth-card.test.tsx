@@ -121,8 +121,8 @@ describe('VisitorOAuthCard', () => {
     expect(await screen.findByText(/not in use/)).toBeInTheDocument()
   })
 
-  it('is on the web app page, inline, with no dialog', () => {
-    const web = readFileSync(join(__dirname, '../../agent-apps/web-place.tsx'), 'utf8')
+  it('is on the web chat channel page, inline, with no dialog', () => {
+    const web = readFileSync(join(__dirname, '../../channels/hosted-channels.tsx'), 'utf8')
     expect(web).toMatch(/<VisitorOAuthCard gatewayId=\{gatewayId\}/)
     const card = readFileSync(join(__dirname, '../visitor-oauth-card.tsx'), 'utf8')
     expect(card).not.toMatch(/Dialog/)

@@ -17,11 +17,10 @@ import { ChannelEvent } from '../../entities/channel-event.entity';
 import { EndUser } from '../../entities/end-user.entity';
 import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
-import { AgentApp } from '../../entities/agent-app.entity';
-import { AppDistribution } from '../../entities/agent-app-distribution.entity';
-import { GatewayAppLinkService } from './gateway-app-link.service';
-import { AppPlacePolicyService } from './app-place-policy.service';
-import { GatewayAppLinkController } from './gateway-app-link.controller';
+import { AgentChannel } from '../../entities/agent-channel.entity';
+import { ChannelLinkService } from './channel-link.service';
+import { ChannelPolicyService } from './channel-policy.service';
+import { ChannelLinkController } from './channel-link.controller';
 import { GatewaysService } from './gateways.service';
 import { GatewayProtocolService } from './gateway-protocol.service';
 import { GatewayRateLimitService } from './gateway-rate-limit.service';
@@ -106,8 +105,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
       Conversation,
       Message,
       VisitorEmailCode,
-      AppDistribution,
-      AgentApp,
+      AgentChannel,
     ]),
     JwtModule,
     ToolsModule,
@@ -116,8 +114,8 @@ import { ChannelInstallationsController } from './channels/channel-installations
   ],
   providers: [
     HostedChatService,
-    GatewayAppLinkService,
-    AppPlacePolicyService,
+    ChannelLinkService,
+    ChannelPolicyService,
     VisitorEmailOtpService,
     CustomDomainService,
     { provide: CUSTOM_DOMAIN_STORE, useClass: PgCustomDomainStore },
@@ -161,7 +159,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
     // any non-UUID path segment and 400 with 'uuid is expected'.
     GatewayInfoController,
     GatewaysController,
-    GatewayAppLinkController,
+    ChannelLinkController,
     GatewayAuthController,
     GatewayToolsController,
     GatewaySkillsController,
@@ -184,8 +182,8 @@ import { ChannelInstallationsController } from './channels/channel-installations
     GatewayRateLimitService,
     GatewayAuthService, GatewayAuthValidators, GatewaysStatsHelper,
     GatewayToolService,
-    GatewayAppLinkService,
-    AppPlacePolicyService,
+    ChannelLinkService,
+    ChannelPolicyService,
     ChannelGatewayService,
     DiscordGatewayTransport,
     ChannelWebhookRegistrar,

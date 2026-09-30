@@ -37,10 +37,10 @@ const GatewaysPage = lazy(() => import('@/pages/gateways').then(m => ({ default:
 const GatewayDetailPage = lazy(() => import('@/pages/gateway-detail').then(m => ({ default: m.GatewayDetailPage })))
 const GatewayNewPage = lazy(() => import('@/pages/gateway-new').then(m => ({ default: m.GatewayNewPage })))
 const GatewayEditPage = lazy(() => import('@/pages/gateway-edit').then(m => ({ default: m.GatewayEditPage })))
-const AppNewPage = lazy(() => import('@/pages/app-new').then(m => ({ default: m.AppNewPage })))
-const AppDistributionNewPage = lazy(() => import('@/pages/app-distribution-new').then(m => ({ default: m.AppDistributionNewPage })))
-const AppDistributionPage = lazy(() => import('@/pages/app-distribution').then(m => ({ default: m.AppDistributionPage })))
-const AppSigningNewPage = lazy(() => import('@/pages/app-signing-new').then(m => ({ default: m.AppSigningNewPage })))
+const AgentChannelNewPage = lazy(() => import('@/pages/agent-channel-new').then(m => ({ default: m.AgentChannelNewPage })))
+const AgentChannelPage = lazy(() => import('@/pages/agent-channel').then(m => ({ default: m.AgentChannelPage })))
+const AgentChannelSigningNewPage = lazy(() => import('@/pages/agent-channel-signing-new').then(m => ({ default: m.AgentChannelSigningNewPage })))
+const AgentPublicSettingsPage = lazy(() => import('@/pages/agent-public-settings').then(m => ({ default: m.AgentPublicSettingsPage })))
 const ApisPage = lazy(() => import('@/pages/apis').then(m => ({ default: m.ApisPage })))
 const ApiDetailPage = lazy(() => import('@/pages/api-detail').then(m => ({ default: m.ApiDetailPage })))
 const ApiNewPage = lazy(() => import('@/pages/api-new').then(m => ({ default: m.ApiNewPage })))
@@ -110,8 +110,6 @@ function DashboardLayoutOutlet() {
 
 
 import { HostedChatPage } from '@/pages/hosted-chat'
-import { AppsPage } from '@/pages/apps'
-import { AppDetailPage } from '@/pages/app-detail'
 import { currentTenantSlug } from '@/lib/tenant-host'
 
 // The root route's element: app-wide bootstrap, then whichever route matched.
@@ -191,15 +189,14 @@ export function createAppRoutes() {
           <Route path="/tools/:id/publish" element={<ToolPublishPage />} />
           <Route path="/tool-hub" element={<Navigate to="/tools?tab=hub" replace />} />
           <Route path="/agents" element={<AgentsPage />} />
-          <Route path="/apps" element={<AppsPage />} />
-          <Route path="/apps/new" element={<AppNewPage />} />
-          <Route path="/apps/:slug" element={<AppDetailPage />} />
-          <Route path="/apps/:slug/distributions/new" element={<AppDistributionNewPage />} />
-          <Route path="/apps/:slug/distributions/:target" element={<AppDistributionPage />} />
-          <Route path="/apps/:slug/distributions/:target/signing/new" element={<AppSigningNewPage />} />
+          {/* Apps became channels on the agent; an old link lands on the agents. */}
           <Route path="/agents/new" element={<AgentBuilderPage />} />
           <Route path="/agents/import" element={<AgentImportPage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
+          <Route path="/agents/:id/channels/new" element={<AgentChannelNewPage />} />
+          <Route path="/agents/:id/channels/settings" element={<AgentPublicSettingsPage />} />
+          <Route path="/agents/:id/channels/:channelId" element={<AgentChannelPage />} />
+          <Route path="/agents/:id/channels/:channelId/signing/new" element={<AgentChannelSigningNewPage />} />
           <Route path="/agents/:id/edit" element={<AgentBuilderPage />} />
           <Route path="/runners" element={<RunnersPage />} />
           <Route path="/runners/new" element={<RunnerNewPage />} />

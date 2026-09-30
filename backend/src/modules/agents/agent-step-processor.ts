@@ -98,8 +98,13 @@ export const AGENT_STEP_COLUMNS = {
   updatedAt: true,
 } as const;
 
-/** Agent columns deliberately left out of AGENT_STEP_COLUMNS. */
-export const AGENT_STEP_COLUMNS_OMITTED = ['pipeline', 'metadata'] as const;
+/**
+ * Agent columns deliberately left out of AGENT_STEP_COLUMNS. Branding and
+ * visitor rules face the public on the agent's channels; the limits a
+ * visitor run is held to arrive on the run itself (maxCostCents, set by
+ * the channel policy), so no step reads them.
+ */
+export const AGENT_STEP_COLUMNS_OMITTED = ['pipeline', 'metadata', 'branding', 'visitorRules'] as const;
 
 /**
  * How long a resolved tool set stays usable across steps of a run.

@@ -38,14 +38,14 @@ describe('onboarding state from an API that sends less than the guide expects', 
 
   it('keeps a complete response intact', () => {
     const full = normalizeOnboardingState({
-      steps: { provider: true, api: true, tools: true, gateway: true, first_call: true, external_client: true, agent: true, agent_run: true, app: true, distribution: true, runner: true },
-      links: { gateway: { id: 'g', name: 'G', type: 'mcp', endpoint: '/x' }, agent: { id: 'a', name: 'A' }, app: { slug: 's', name: 'S' } },
+      steps: { provider: true, api: true, tools: true, gateway: true, first_call: true, external_client: true, agent: true, agent_run: true, channel: true, runner: true },
+      links: { gateway: { id: 'g', name: 'G', type: 'mcp', endpoint: '/x' }, agent: { id: 'a', name: 'A' } },
       dismissed: true,
       dismissedIntros: ['apis'],
       activatedRealAt: '2026-01-01T00:00:00.000Z',
     })
     expect(stepsDone(full)).toBe(ALL_STEPS.length)
-    expect(full.links.app?.slug).toBe('s')
+    expect(full.links.agent?.name).toBe('A')
     expect(full.dismissedIntros).toEqual(['apis'])
   })
 })

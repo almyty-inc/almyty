@@ -1,0 +1,67 @@
+# Channels
+
+A **channel** is how people, or other agents, reach one of your agents: a web chat on its own link, a chat widget on your own website, Slack, WhatsApp and the other messaging apps, an A2A endpoint other agents call, or a desktop or terminal app people download.
+
+Every agent has a **Channels** tab. It is the only place channels are added and edited. An agent can have as many channels as you like, several of one kind among them (a Slack for support and a Slack for sales), and each channel belongs to exactly one agent. Each has a name of its own, which starts as its kind and can be changed on its page.
+
+![An agent's Channels tab](/screenshots/apps-list.png)
+
+## The kinds of channel
+
+| Channel | What people get |
+|---|---|
+| **Web chat** | A chat page on its own link, hosted by almyty |
+| **Website widget** | A chat bubble on your own site, added with one line of script |
+| **Slack** | Answers direct messages and mentions in your workspace, with **Add to Slack** |
+| **WhatsApp** | Through Twilio, or directly through Meta's Cloud API |
+| **Microsoft Teams**, **Telegram**, **Discord**, **Google Chat** | Answers as a bot |
+| **Signal**, **Matrix**, **IRC** | Answers through a bridge you run |
+| **Email**, **SMS** | Answers mail to your receiving address, or texts to your Twilio number |
+| **Webhook** | Takes messages from, and sends replies to, an endpoint you own |
+| **Desktop app**, **Terminal app** | A signed download people install; see [Downloadable apps](/channels/builds) |
+| **Other agents (A2A)** | Other agents find it by its agent card and call it; see [A2A](/gateways/a2a) |
+
+## Adding a channel
+
+On the agent, open **Channels** and select **Add channel**, then pick the kind. The channel is added to the agent and its page opens. A desktop app opens the agent's web chat, so picking **Desktop app** on an agent with no web chat offers to add the web chat as well. Nothing answers until you **publish** it (or, for a desktop or terminal app, build it): adding a channel records where the agent will be, publishing is the decision to let people reach it.
+
+A channel's page has what that channel needs and nothing else:
+
+- Its **name**, and for a web chat its **address**.
+- **Keys** for a messaging channel: pick a credential you keep on Credentials, or select **Create one here** to add one without leaving the page. Only credentials for that platform are offered.
+- **AI disclosure**: a switch, on by default, that tells people they are talking to an AI, with the line from the branding.
+- The **Callback URL** to paste into the platform's console, where the platform needs one. Telegram and the Twilio channels register it for you when you publish.
+- **Publish** and **Unpublish**. Unpublishing stops the channel answering and keeps its settings and address, so publishing again needs no re-registration on the platform side.
+- **Delete** removes the channel and the gateway it answers on, and stops it answering.
+
+A channel of an agent private to its owner cannot be added or published: share the agent with the organization first. A workflow agent cannot be published on a channel either, because it answers a call rather than a person; switch it to autonomous.
+
+## Branding and visitor rules
+
+What people see, and who can use the agent's channels, is set once on the agent: on the Channels tab, open **Branding and visitor rules**.
+
+- **Look**: the name people see, brand colour, theme, greeting, suggested prompts, the AI disclosure line, and whether the almyty mark shows (removing it needs the white-label entitlement).
+- **Who can use it**: anyone with the link, email verification, sign-in with OAuth, or enterprise SSO (commercial edition).
+- Under **Advanced**, what it may cost and what it keeps: a spend limit per run, per day and per month, messages per visitor and per IP address an hour, how long visitor data is kept, and whether visitors may download or delete their own data.
+
+![Branding and visitor rules](/screenshots/apps-settings.png)
+
+Every channel uses these unless it sets its own. On a channel's page, turn on **Use this channel's own** under **Branding and visitor rules** and change what should differ: only the fields you change are kept for the channel, and everything else keeps following the agent.
+
+### Spend limits
+
+The per-run limit stops a single run that would cost more. The per-day and per-month limits cover everything visitors spend on the agent's channels together; a channel that sets its own daily or monthly limit spends from an allowance of its own instead. An agent open to anyone starts at 5 a day and 50 a month (UTC days and months). When a limit is reached, visitors are told it has reached its limit until it resets, and owners and admins are notified. See [Protect model spend](/hosted-chat#protect-model-spend).
+
+## What publishing refuses
+
+Publishing turns away what would produce a channel that is live and useless, or open when you meant it closed, and says every reason at once:
+
+- **Missing keys**: each platform declares exactly what it uses, so you are told which key is missing.
+- **No spend limit or message limits on a channel open to anyone**: anyone with the link can spend against your model keys.
+- **A workflow agent, or an agent private to its owner.**
+- **The website widget on a channel people must sign in to**: the widget has no sign-in, so it only goes on a channel anyone can use.
+- **A desktop app with no web chat to open**: a desktop app is a window onto the agent's web chat, so add a web chat channel first.
+
+## Where the gateways fit
+
+Publishing a channel that almyty serves stands up a gateway for it. That gateway is created only through the channel, never from **Create gateway**, and its page says which agent's channel it is and links back. Gateways that serve an agent without being a channel (ACP, an OpenAI-compatible endpoint) are listed on the Channels tab under **Also served by gateways**.

@@ -15,7 +15,7 @@ import { A2AMessageHandler } from './a2a-message.handler';
 import { A2ATaskHandler } from './a2a-task.handler';
 import { findGatewayRun } from '../gateways/gateway-servable';
 import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
-import type { AppPlace } from '../gateways/app-place-policy.service';
+import type { ChannelPolicy } from '../gateways/channel-policy.service';
 import { MetricType } from '../../entities/usage-metric.entity';
 import type {
   JsonRpcRequest,
@@ -94,12 +94,12 @@ export class A2AServerService {
       org?: any;
       baseUrl?: string;
       /**
-       * The app place this A2A gateway is: the options a task's run starts
+       * The channel this A2A gateway is: the options a task's run starts
        * with (per-run cost cap, app stamp, visitor memory rule). Resolved
        * by the caller, which has already applied the caller's own rate
        * limit and the app's spend cap.
        */
-      place?: AppPlace | null;
+      policy?: ChannelPolicy | null;
     },
   ): Promise<void> {
     // Malformed / empty body
@@ -149,7 +149,7 @@ export class A2AServerService {
             organizationId: gateway.organizationId,
             dimensions: { agentId: gateway.agentId },
           });
-          const task = await this.messageHandler.handleMessageSend(gateway, rpcReq.params, rpcReq.id, context?.place);
+          const task = await this.messageHandler.handleMessageSend(gateway, rpcReq.params, rpcReq.id, context?.policy);
           // v1.0 (PascalCase) wraps in { task }, v0.2.x returns task directly
           const result = method === 'SendMessage' ? { task } : task;
           res.json(this.jsonRpcSuccess(rpcReq.id, result));
@@ -163,7 +163,7 @@ export class A2AServerService {
             organizationId: gateway.organizationId,
             dimensions: { agentId: gateway.agentId },
           });
-          await this.messageHandler.handleMessageStream(gateway, rpcReq.params, rpcReq.id, req, res, context?.place);
+          await this.messageHandler.handleMessageStream(gateway, rpcReq.params, rpcReq.id, req, res, context?.policy);
           return;
         }
 

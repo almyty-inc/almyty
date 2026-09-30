@@ -305,7 +305,7 @@
       "path": "screenshots/apps-agents.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The Apps page and its Agents tab are gone: channels are added on the agent. Recapture as the agent Channels tab.",
       "sha256": "c6d2dc6577758abf0317e3a632f586a4972e213c8dee161795963c57bb773ee9"
     },
     {
@@ -314,7 +314,7 @@
       "path": "screenshots/apps-build-capabilities.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Builds moved to the desktop and terminal app channels on the agent. Recapture a Terminal app channel page.",
       "sha256": "a54a37231df9605022d3f408f64fecd6195ddb0077a69382cafe75a3524fb8fd"
     },
     {
@@ -323,7 +323,7 @@
       "path": "screenshots/apps-detail.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh, and the app page now shows what the app spent today and this month against its spend limits (or a notice that it reached one). Tracked for #675, not verified current.",
+      "reason": "The app detail page is gone: channels are added on the agent. Recapture as the agent Channels tab.",
       "sha256": "95b14e9928eddd271f9fa47d3960cee055507ddc689a440c36d66904b4bc88a2"
     },
     {
@@ -332,7 +332,7 @@
       "path": "screenshots/apps-empty.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The app detail page is gone. Recapture as the agent Channels tab with no channels yet.",
       "sha256": "d80ca650f5f082f9e2d803cbd375dd8087f35443921aa0771d648574ce6fbe7c"
     },
     {
@@ -341,7 +341,7 @@
       "path": "screenshots/apps-hosted-chat-privacy.png",
       "capturedAt": "2026-09-08T08:04:35.743Z",
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "Visitor rights now come from the agent branding and visitor rules. Recapture after the channels move.",
       "sha256": "90449095be6a2c379383d6d016278be9d5c7bcd7263df10857626682d6b1b577"
     },
     {
@@ -359,7 +359,7 @@
       "path": "screenshots/apps-hosted-chat.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The hosted chat now takes its branding from the agent (or its web chat channel). Recapture after the channels move.",
       "sha256": "2b26f59866e2c3dd9729a1714c362bc04e9b2c7db86bc29355ede88547364899"
     },
     {
@@ -368,7 +368,7 @@
       "path": "screenshots/apps-list.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The Apps page is gone: channels are added on the agent. Recapture as the agent Channels tab.",
       "sha256": "929359bfe6fd59140f7e18764d02813664cdb4c76c5879ccebcdb792cf9f3c54"
     },
     {
@@ -377,7 +377,7 @@
       "path": "screenshots/apps-settings.png",
       "capturedAt": "2026-09-08T07:59:28.902Z",
       "status": "needs-recapture",
-      "reason": "Settings > Advanced now has Spend limit per day and per month for the whole app (defaults 5 and 50), an App limit part in the Advanced summary line, and reworded visitor-data switches. Recapture on staging with Advanced open.",
+      "reason": "App settings moved to the agent: Branding and visitor rules (/agents/:id/channels/settings). Recapture there.",
       "sha256": "61aeb5b71e0b969ab6367e30ef369f0fb38cfa9424488dfaef0bcf7087ba74ba"
     },
     {
@@ -386,7 +386,7 @@
       "path": "screenshots/apps-slack-credentials.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The Slack place is now a Slack channel on the agent (/agents/:id/channels/:channelId), with keys entered or picked. Recapture there.",
       "sha256": "8ad236a0c90022ab382d59f5ff91fc04c5b4588c14192e59ca2d0e20c4a13d92"
     },
     {
@@ -395,7 +395,7 @@
       "path": "screenshots/apps-slack-live.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The Slack place is now a Slack channel on the agent. Recapture the published channel page.",
       "sha256": "8ad236a0c90022ab382d59f5ff91fc04c5b4588c14192e59ca2d0e20c4a13d92"
     },
     {
@@ -404,7 +404,7 @@
       "path": "screenshots/apps-web-published.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The web app place is now the Web chat channel on the agent. Recapture the published channel page.",
       "sha256": "73a8ceaf9161f967acb65a0739628d7aaa130eaa5f548b8193be984aa553b322"
     },
     {
@@ -623,7 +623,7 @@
       "path": "screenshots/interfaces-channel-config.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "reason": "The Interfaces tab is now the Channels tab; channel settings are on each channel page. Recapture there.",
       "sha256": "5acf3f1ffb3494a664e19f5589e626d7a1396ee1cd6e1fc4736f9f1603e4f73b"
     },
     {
@@ -632,7 +632,7 @@
       "path": "screenshots/interfaces-channel-setup.png",
       "capturedAt": null,
       "status": "needs-recapture",
-      "reason": "Shows the Channel Setup panel, which is gone: a channel is now set up as a place on an app (Apps > Where people use it > Add a place). Recapture from an app's channel place, e.g. /apps/<app>/distributions/whatsapp_cloud, showing its settings and callback URL.",
+      "reason": "The Interfaces tab is now the Channels tab; a channel is added with Add channel. Recapture there.",
       "sha256": "981ad7f99f7e76e0d34d788f046417d0caba96e2fc133b53c60b40a11ee657ab"
     },
     {

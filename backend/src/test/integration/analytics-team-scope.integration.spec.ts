@@ -13,8 +13,7 @@ import { Tool, ToolType } from '../../entities/tool.entity';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { Api } from '../../entities/api.entity';
-import { AgentApp } from '../../entities/agent-app.entity';
-import { AppDistribution } from '../../entities/agent-app-distribution.entity';
+import { AgentChannel } from '../../entities/agent-channel.entity';
 import { Runner } from '../../entities/runner.entity';
 import { AuditLog } from '../../entities/audit-log.entity';
 import { Message } from '../../entities/message.entity';
@@ -145,7 +144,7 @@ describeIfDb('analytics and onboarding stay inside the viewer\'s team scope (rea
     );
     onboarding = new OnboardingService(
       repo(LlmProvider), repo(Api), repo(Gateway), repo(Agent), repo(RequestLog), repo(User), repo(Tool),
-      repo(AgentApp), repo(AppDistribution), repo(Runner), policy,
+      repo(AgentChannel), repo(Runner), policy,
     );
   });
 

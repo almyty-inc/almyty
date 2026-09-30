@@ -147,7 +147,6 @@ test.describe('Create pages open from deep-link', () => {
     { label: 'Connect an API', path: '/apis?new=1', lands: /\/apis\/new$/, heading: 'Connect an API' },
     { label: 'Create tool', path: '/tools?new=1', lands: /\/tools\/new$/, heading: 'Create tool' },
     { label: 'Create gateway', path: '/gateways?new=1', lands: /\/gateways\/new$/, heading: 'Create gateway' },
-    { label: 'Create app', path: '/apps?new=1', lands: /\/apps\/new$/, heading: 'Create app' },
     { label: 'Add credential', path: '/credentials?new=1', lands: /\/credentials\/new$/, heading: 'Add credential' },
     { label: 'Create organization', path: '/organizations?new=1', lands: /\/organizations\/new$/, heading: 'Create organization' },
   ]

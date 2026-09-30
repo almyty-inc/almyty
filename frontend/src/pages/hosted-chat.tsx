@@ -599,11 +599,11 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
       setError(
         status === 429 && code === 'VISITOR_RATE_LIMITED'
           ? said || "You've sent a lot of messages in a short time. Please wait a moment."
-          : status === 429 && code === 'APP_SPEND_CAP_REACHED'
+          : status === 429 && code === 'CHANNEL_SPEND_CAP_REACHED'
             ? // The app has spent its allowance for the day (or month): the
               // server's own plain sentence, never "busy", which would send
               // the visitor to retry something that cannot succeed today.
-              said || 'This app has reached its limit for today.'
+              said || 'This chat has reached its limit for today.'
             : status === 429
               ? 'This assistant is busy right now. Please try again in a moment.'
               : getApiErrorMessage(err, 'Something went wrong. Please try again.'),

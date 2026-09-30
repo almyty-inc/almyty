@@ -1294,15 +1294,13 @@ export interface OnboardingState {
     external_client: boolean
     agent: boolean
     agent_run: boolean
-    app: boolean
-    distribution: boolean
+    channel: boolean
     runner: boolean
   }
   /** The org's own objects a step deep-links into, when they exist. */
   links: {
     gateway: { id: string; name: string; type: string; endpoint: string } | null
     agent: { id: string; name: string } | null
-    app: { slug: string; name: string } | null
   }
   dismissed: boolean
   /** Page intros this user closed. */
@@ -1334,14 +1332,12 @@ export function normalizeOnboardingState(raw: Partial<OnboardingState> | null | 
       external_client: step('external_client'),
       agent: step('agent'),
       agent_run: step('agent_run'),
-      app: step('app'),
-      distribution: step('distribution'),
+      channel: step('channel'),
       runner: step('runner'),
     },
     links: {
       gateway: links.gateway ?? null,
       agent: links.agent ?? null,
-      app: links.app ?? null,
     },
     dismissed: raw?.dismissed === true,
     dismissedIntros: Array.isArray(raw?.dismissedIntros) ? raw!.dismissedIntros! : [],

@@ -27,7 +27,7 @@ import { hostedChatConfigFrom, slugFromHost } from './hosted-chat.config';
 import { trustedClientIp } from '../../../common/security/client-ip';
 import { withholdsCandidateAnswers } from '../../agents/final-answer';
 import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
-import { AppPlacePolicyService, withPlace } from '../app-place-policy.service';
+import { ChannelPolicyService, withChannelPolicy } from '../channel-policy.service';
 
 /**
  * The public API behind {slug}.almyty.app.
@@ -49,11 +49,11 @@ export class HostedChatController {
     private readonly hostedChat: HostedChatService,
     private readonly gatewayRateLimit: GatewayRateLimitService,
     private readonly agentRuntimeService: AgentRuntimeService,
-    // The app this chat is a place of: its per-run cost cap, its spend cap
+    // The channel this chat is, resolved on its agent: its per-run cost cap, spend cap
     // and whether visitor conversations may reach shared memory. Optional
     // only so positional unit specs construct the controller; Nest always
-    // injects it (app-place-policy.guard.spec.ts).
-    @Optional() private readonly places?: AppPlacePolicyService,
+    // injects it (channel-policy.guard.spec.ts).
+    @Optional() private readonly channelPolicy?: ChannelPolicyService,
   ) {}
 
   /**
@@ -327,10 +327,10 @@ export class HostedChatController {
       );
     }
 
-    // The app's own allowance, across every place and every visitor. A
-    // visitor inside their share is still refused once the app has spent
-    // its day (or month), with a sentence rather than a number.
-    const place = this.places ? await this.places.admit(gateway) : null;
+    // The spend allowance this channel draws on, across every visitor. A
+    // visitor inside their share is still refused once that allowance is
+    // spent for the day (or month), with a sentence rather than a number.
+    const policy = this.channelPolicy ? await this.channelPolicy.admit(gateway) : null;
 
     const conversation = body?.conversationId
       ? await this.hostedChat.findConversation(endUser, body.conversationId)
@@ -346,9 +346,9 @@ export class HostedChatController {
       null,
       message,
       // Still traceable back to whoever actually sent it, in the column
-      // that means a visitor. The place adds the app's per-run cost cap and
-      // stamps the run with its app for the spend cap.
-      withPlace(place, {
+      // that means a visitor. The policy adds the per-run cost cap and
+      // stamps the run with its channel for the spend cap.
+      withChannelPolicy(policy, {
         conversationId: conversation.id,
         endUserId: endUser.id,
         metadata: {

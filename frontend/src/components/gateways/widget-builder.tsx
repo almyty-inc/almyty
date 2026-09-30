@@ -1,11 +1,12 @@
 /**
- * WidgetBuilder: the website widget place of an app. The embed snippet,
+ * WidgetBuilder: the website widget channel of an agent. The embed snippet,
  * where the widget sits on the page, and a live preview.
  *
  * The widget's look (colour, name, greeting, theme, the almyty mark and
- * the AI disclosure line) is the app's branding, read by the public
- * widget-config endpoint on every request (widgetConfigFor in the
- * backend), so it is edited once, in the app's settings, and not here.
+ * the AI disclosure line) is the agent's branding, or the channel's own,
+ * read by the public widget-config endpoint on every request
+ * (widgetConfigFor in the backend), so it is edited under branding and
+ * visitor rules, and not here.
  * What is the widget's own is where it sits and which launcher icon it
  * shows: `gateway.configuration.widget`, saved as a MERGE so everything
  * else on the gateway is left alone.
@@ -13,7 +14,7 @@
  * Live preview: an iframe (srcdoc) loads the REAL widget.js from the API
  * for this gateway, so the preview is exactly what the site embeds. The
  * only preview affordance is a fetch shim inside the iframe that answers
- * the widget's own /widget-config request with the app look plus the
+ * the widget's own /widget-config request with that look plus the
  * current (unsaved) placement.
  */
 import { useEffect, useMemo, useState } from 'react'
@@ -91,7 +92,7 @@ export interface WidgetLook {
   aiDisclosure: string
 }
 
-/** The look an app-owned widget answers with; mirrors widgetConfigFor in the backend. */
+/** The look a channel's widget answers with; mirrors widgetConfigFor in the backend. */
 export function widgetLookFromApp(app: WidgetOwnerApp): WidgetLook {
   const b = app.branding ?? {}
   const color = typeof b.primaryColor === 'string' && HEX_COLOR.test(b.primaryColor.trim()) ? b.primaryColor.trim().toLowerCase() : DEFAULT_COLOR
@@ -154,7 +155,7 @@ export interface WidgetBuilderProps {
     type: string
     configuration?: Record<string, any> | null
   }
-  /** The app the widget is a place of, whose look it shows. */
+  /** The channel's resolved branding (the agent's, or its own), whose look it shows. */
   app: WidgetOwnerApp
 }
 
@@ -170,7 +171,7 @@ export function WidgetBuilder({ gateway, app }: WidgetBuilderProps) {
 
   const saveMutation = useMutation({
     mutationFn: (placement: WidgetPlacement) => {
-      // Merge, never replace: the configuration also carries the app link
+      // Merge, never replace: the configuration also carries the channel link
       // and whatever else the gateway holds.
       const configuration = gateway.configuration ?? {}
       const widget = configuration.widget && typeof configuration.widget === 'object' ? configuration.widget : {}
@@ -227,7 +228,7 @@ export function WidgetBuilder({ gateway, app }: WidgetBuilderProps) {
 
       <FormSection
         title="How it looks"
-        description="The colour, name, greeting and theme come from the app's settings, so it looks the same everywhere."
+        description="The colour, name, greeting and theme come from the branding and visitor rules, so it looks the same everywhere."
       >
         <div className="grid gap-6 lg:grid-cols-2">
           <form className="space-y-4" onSubmit={form.handleSubmit((data) => saveMutation.mutate(data))}>

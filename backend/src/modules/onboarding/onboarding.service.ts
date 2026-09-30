@@ -9,8 +9,7 @@ import { User } from '../../entities/user.entity';
 import { RequestLog } from '../../entities/request-log.entity';
 import { LlmProvider, LlmProviderStatus } from '../../entities/llm-provider.entity';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
-import { AgentApp } from '../../entities/agent-app.entity';
-import { AppDistribution, DistributionStatus } from '../../entities/agent-app-distribution.entity';
+import { AgentChannel, ChannelStatus } from '../../entities/agent-channel.entity';
 import { Runner } from '../../entities/runner.entity';
 import {
   OnboardingLinks,
@@ -42,11 +41,11 @@ function visibleLog(alias: string): string {
 const ALMYTY_FRONTEND_UA = 'almyty-frontend';
 
 /**
- * A distribution counts as shipped once it is served (`live`) or its
- * artifact was produced (`built`). `draft`, `building` and `failed` do not:
+ * A channel counts as shipped once it is served (`live`) or its
+ * download was produced (`built`). `draft`, `building` and `failed` do not:
  * nobody can reach the agent through them yet.
  */
-const SHIPPED_DISTRIBUTION_STATUSES = [DistributionStatus.LIVE, DistributionStatus.BUILT];
+const SHIPPED_CHANNEL_STATUSES = [ChannelStatus.LIVE, ChannelStatus.BUILT];
 
 /**
  * Computes the platform guide's steps purely from entity state. Nothing
@@ -74,10 +73,8 @@ export class OnboardingService {
     private readonly userRepo: Repository<User>,
     @InjectRepository(Tool)
     private readonly toolRepo: Repository<Tool>,
-    @InjectRepository(AgentApp)
-    private readonly appRepo: Repository<AgentApp>,
-    @InjectRepository(AppDistribution)
-    private readonly distributionRepo: Repository<AppDistribution>,
+    @InjectRepository(AgentChannel)
+    private readonly channelRepo: Repository<AgentChannel>,
     @InjectRepository(Runner)
     private readonly runnerRepo: Repository<Runner>,
     private readonly accessPolicy: AccessPolicyService,
@@ -89,7 +86,7 @@ export class OnboardingService {
    * traffic through their private gateway or tool -- neither ticks a step
    * nor becomes the guide's link, for org admins too. A tick the caller
    * cannot follow to anything would tell them the private resource exists.
-   * Apps and distributions have no private tier and stay org-wide.
+   * Channels count org-wide: a shipped channel is in front of people whoever made it.
    */
   async getState(organizationId: string, userId: string): Promise<OnboardingState> {
     const viewer: Viewer = { id: userId };
@@ -102,8 +99,7 @@ export class OnboardingService {
       externalCallExists,
       firstAgent,
       hasAgentRun,
-      firstApp,
-      hasShippedDistribution,
+      hasShippedChannel,
       hasRunner,
       prefs,
     ] = await Promise.all([
@@ -115,8 +111,7 @@ export class OnboardingService {
       this.hasExternalClientCall(organizationId, viewer),
       this.firstAgent(organizationId, viewer),
       this.hasSuccessfulAgentRun(organizationId, viewer),
-      this.firstApp(organizationId),
-      this.hasShippedDistribution(organizationId),
+      this.hasShippedChannel(organizationId),
       this.hasConnectedRunner(organizationId, userId),
       this.preferencesFor(userId),
     ]);
@@ -130,8 +125,7 @@ export class OnboardingService {
       external_client: externalCallExists,
       agent: !!firstAgent,
       agent_run: hasAgentRun,
-      app: !!firstApp,
-      distribution: hasShippedDistribution,
+      channel: hasShippedChannel,
       runner: hasRunner,
     };
 
@@ -145,7 +139,6 @@ export class OnboardingService {
           }
         : null,
       agent: firstAgent ? { id: firstAgent.id, name: firstAgent.name } : null,
-      app: firstApp ? { slug: firstApp.slug, name: firstApp.name } : null,
     };
 
     // Activation is the earliest successful call once the org owns a gateway
@@ -260,17 +253,9 @@ export class OnboardingService {
     return count > 0;
   }
 
-  private async firstApp(organizationId: string): Promise<Pick<AgentApp, 'slug' | 'name'> | null> {
-    return this.appRepo.findOne({
-      where: { organizationId },
-      select: { slug: true, name: true },
-      order: { createdAt: 'ASC' },
-    });
-  }
-
-  private async hasShippedDistribution(organizationId: string): Promise<boolean> {
-    const count = await this.distributionRepo.count({
-      where: { organizationId, status: In(SHIPPED_DISTRIBUTION_STATUSES) },
+  private async hasShippedChannel(organizationId: string): Promise<boolean> {
+    const count = await this.channelRepo.count({
+      where: { organizationId, status: In(SHIPPED_CHANNEL_STATUSES) },
     });
     return count > 0;
   }
