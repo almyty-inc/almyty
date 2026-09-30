@@ -25,6 +25,30 @@ amounts and people involved.
 
 The assistant waits for the decision and only goes ahead once it is approved.
 
+## Ask before a large amount, whatever the assistant was told
+
+Instructions depend on the assistant following them. For money, set a rule instead: **Ask before “Create refund” when amount is over 500.** almyty then checks every call to that tool before it runs, so it holds even if the assistant forgets, and even when the tool is called from somewhere else. Rules like this are included in every plan.
+
+1. Go to **Settings → Advanced → Approvals**.
+2. Under **Ask before large amounts**, click **New rule**.
+3. Give it a name, such as *Refunds over 500*.
+4. Choose the **Tool**, then **The number** it should look at (only the tool's numbers are listed), then **over** or **at or over**, and the **Amount**. The amount is just a number, in whatever currency the tool uses.
+5. Choose whether it covers every call or only one team's assistants, and click **Create rule**.
+
+The page says the rule back in a sentence, so you can check it before you save.
+
+What happens next:
+
+- A call at or under the amount runs straight away. Nobody is asked.
+- A call over the amount waits on the **Approvals** page, showing the tool, what it was asked to do, and the rule. Once someone approves, exactly that call is made, once. If they reject it, it is not made.
+- An assistant that works on its own pauses while it waits, and carries on with the result.
+- A workflow agent stops at that step, and its run says a call is waiting for approval. The call is made when someone approves it.
+- An app or a connected tool client (through a gateway or MCP) gets an answer saying the call is waiting for approval, with an approval id. It can ask again later with that id to get the result, or the reason it was turned down.
+- A number written in words, such as "eight hundred", counts as over the amount.
+- Every call a rule holds, and every approved call that then runs, is written to the audit log.
+
+One approval from an owner or an admin (or, for a team's rule, the team's lead) decides a rule. Sign-off in several steps comes with approval policies on the Business plan.
+
 ## Who can approve
 
 It depends on who the assistant is shared with:
@@ -39,7 +63,7 @@ A request that nobody decides expires after 24 hours, and the work is cancelled 
 
 ## Approval rules for the whole organization
 
-One person approving is the default and is included in every plan. With **approval policies** (Business and Enterprise plans) you can set rules across every assistant: finance first and then an admin, rules that only apply above an amount, or two people who must both approve. See [approval policies](/enterprise/approval-policies).
+One person approving is the default and is included in every plan, and so are amount rules. With **approval policies** (Business and Enterprise plans) you can set rules across every assistant: finance first and then an admin, or two people who must both approve. See [approval policies](/enterprise/approval-policies).
 
 ## For developers
 
@@ -55,3 +79,25 @@ The runtime creates an `ApprovalRequest` row, sets the run to `waiting_approval`
 - **Expiry**: the default 24 hours can be set up to 7 days when a request is created through the API. A scheduled sweep flips expired requests to `expired`.
 - **Page refresh**: the Approvals page checks for new requests every 10 seconds.
 - **API**: list pending approvals, approve and reject over REST; responses only include approvals the caller can see. See the [API reference](/api-reference/authentication).
+
+### Amount rules
+
+An amount rule is an approval policy with a `trigger`, managed for every plan at `/approval-rules` (`GET`, `POST`, `GET /:id`, `PATCH /:id`, `DELETE /:id`, owners and admins):
+
+```json
+{
+  "name": "Refunds over 500",
+  "trigger": { "kind": "tool_amount", "toolId": "<tool id>", "argument": "amount", "op": "gt", "amount": 500 },
+  "teamId": null,
+  "enabled": true
+}
+```
+
+`argument` is a dot path into the tool's input (`refund.total`); `op` is `gt` (over) or `gte` (at or over). Without the `approval_policy` entitlement a rule is decided by one approval; with it, `steps` may be set.
+
+The rule is enforced in `ToolExecutorService` before the call is made, for every caller. What the caller gets depends on whether it can wait:
+
+- **Autonomous runs** raise the approval request themselves; the run goes to `waiting_approval` and, once approved, the exact call runs (the request carries a fingerprint of the parameters in `payload._gate`).
+- **Everything else** (workflow nodes, gateway, MCP and UTCP calls, the dashboard's test call) gets a result with `success: false`, `approvalStatus: "pending"`, `approvalId`, and an `error` that starts `Waiting for approval:`. The call waits as an approval request with no run (`runId` null, `toolId` and `fingerprint` set). On approval it runs once, and what it returned is stored on the request (`result`, `resultAt`). Call the same tool again with the same arguments plus `"_approvalId": "<id>"` to collect it: the stored result on success, `approvalStatus: "rejected"` with the reason if it was turned down, or the pending answer again while it waits. `_approvalId` is removed before the tool sees the arguments. A workflow node that is held fails with `errorCode: "AWAITING_APPROVAL"` and the approval id in its recorded input.
+
+Held and approved calls are audited with the action `approval_gate` (status `held` or `approved`).

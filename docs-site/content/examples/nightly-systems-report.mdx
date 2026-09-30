@@ -96,7 +96,7 @@ If a run fails, you get a notification in almyty, and the run shows what went wr
 
 - This walk-through is automated in `scripts/demo-seed/guides.mjs operations` on the local demo stack, which stands in for the status system and for Slack's incoming webhook.
 - The `post_to_slack` tool sends its parameters as the JSON body (`{"text": "..."}`) because it has no body template. For an email service, point a POST tool at its send endpoint, add its key under **Authentication**, and either name the parameters after its fields or write a **Body template** with `{paramName}` placeholders. See [HTTP tools](/tools/http-tools).
-- The heartbeat runs the agent with its prompt through the same runtime as a chat message, so it can use its tools and ask for approval. The **Schedule** card on the **Overview** tab is for [workflow agents](/agents/scheduling); for an autonomous agent like this one, use **Heartbeat**.
+- The heartbeat runs the agent with its prompt through the same runtime as a chat message, so it can use its tools and ask for approval. The **Schedule** card on the **Overview** tab works for this agent too, and can run it at a set time and post the report to a channel; see [Scheduling](/agents/scheduling).
 - The agent's **Webhook** sends almyty's own run summary as JSON to a URL you give it; Slack's incoming webhooks do not accept that format, which is why this guide uses a tool.
 
 ## Related

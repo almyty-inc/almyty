@@ -10,7 +10,7 @@ Approval rules need the Business plan. Without them, any owner or admin can appr
 - The Business plan, for rules with several steps or several approvers.
 
 ## How to build it
-
+1. **Tell the assistant when to ask.** In the assistant's instructions, and as a rule on its **Constraints** tab, say what needs a person first, for example "Ask for approval before any refund over $500". When it asks, its run pauses. The assistant decides to ask because you told it to, so keep the rule short and clear. For an amount, add an amount rule as well (**Settings → Advanced → Approvals → Ask before large amounts**, free on every plan): almyty then checks every refund call itself before it runs, whatever the assistant was told. See [ask before a large amount](/approvals#ask-before-a-large-amount-whatever-the-assistant-was-told).
 1. **Tell the assistant when to ask.** In the assistant's instructions, and as a rule on its **Constraints** tab, say what needs a person first, for example "Ask for approval before any refund over $500". When it asks, its run pauses. The assistant decides to ask because you told it to, so keep the rule short and clear.
 2. **Write the rule.** Open **Settings**, then **Approvals** under **Advanced**, and click **New policy**. Under **Match conditions**, click **Add condition** to say which requests it covers (for example, an amount over 500). Under **Approval steps**, click **Add step** for each sign-off, in order: who approves it, and how many people must. Click **Create policy**.
 3. **Approve or reject.** Paused requests appear on the **Approvals** page with the reason and the amount. Here the demo's support assistant stopped on an $820 refund for Brightway Logistics:

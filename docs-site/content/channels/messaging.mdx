@@ -25,6 +25,11 @@ Once published, the channel is live and shows an **Unpublish** button.
 
 Publishing again after a change simply updates the live channel. **Unpublish** stops the channel answering without deleting it, so taking an assistant off Slack for an afternoon does not mean setting up the Slack app again: publishing again keeps the same address and keys.
 
+## Send scheduled results to a channel
+
+A published messaging channel can also start a conversation. An agent's [schedule](/agents/scheduling) can send each result to it: a sales summary to a Slack channel every weekday at 8:00, a report to a Teams chat, an email to the team. On the schedule page, under **Send the result to**, choose the channel and where in it: a Slack channel the bot is in, a Teams channel or chat where the bot has been talked to, email addresses, or a phone number. The web chat, the widget and the apps only answer people who are there, so they are not offered.
+
+The message goes out like a reply: from the same bot, with the channel's AI disclosure line at the top, and counted against the channel's spending limit. A message the app refuses shows on the run and in your notifications.
 ## Web chat
 
 The **Web chat** is a chat page on its own address, with your assistant's name, greeting, colour and AI disclosure and none of the almyty dashboard around it. Its address is made from the assistant's name; change it under **Address** on the channel's page. The address has to be free across almyty, and the page tells you when another web chat already has it. After you publish, the link shows straight away. Your own domain and the websites allowed to embed the chat are on the same page. Visitors can attach images, PDFs and text files next to the message box, up to five per message.
