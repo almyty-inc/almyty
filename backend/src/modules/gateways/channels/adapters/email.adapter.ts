@@ -314,9 +314,11 @@ export class EmailAdapter extends BaseAdapter {
     if (!config.resend_api_key) {
       this.sendFailed('resend_api_key is not configured, so the reply could not be sent');
     }
-    // `to` is set by a message the agent starts (one or more addresses);
-    // an answer goes back to whoever wrote.
-    const to = threadContext?.to || threadContext?.from || threadContext?.userId;
+    // `recipients` is set by a message the agent starts (one or more
+    // addresses); an answer goes back to whoever wrote. Not `to`: an
+    // answer's context carries the inbound mail's metadata, whose `to` is
+    // our own address.
+    const to = threadContext?.recipients || threadContext?.from || threadContext?.userId;
     if (!to) {
       this.sendFailed('the inbound mail carried no address to reply to');
     }

@@ -99,7 +99,7 @@ export const POST_TARGETS: Partial<Record<GatewayType, PostTarget>> = {
       if (bad) throw new BadRequestException(`"${bad}" is not an email address.`);
       return [...new Set(list.map((a) => a.toLowerCase()))].join(', ');
     },
-    threadContext: (d) => ({ to: String(d.to).split(', ') }),
+    threadContext: (d) => ({ recipients: String(d.to).split(', ') }),
   },
   [GatewayType.TELEGRAM]: {
     noun: 'Telegram chat',
