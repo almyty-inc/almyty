@@ -1,8 +1,8 @@
 /**
  * AutonomousConfig: the configuration sections of an autonomous agent.
  *
- * In order: Personality & style, Instructions, Work mode (the mode first,
- * then the model slots it needs), the verifier panel when there is one,
+ * In order: Work mode (the mode first, then the model slots it needs),
+ * Personality & style, Instructions, the verifier panel when there is one,
  * Memory, Capabilities, Run limits and Heartbeat. All state is owned by
  * the parent (AgentBuilderPage) and threaded via props.
  */
@@ -63,6 +63,8 @@ export function AutonomousConfig({
 
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-4xl mx-auto w-full space-y-6">
+      <WorkModeSection models={models} onChange={onModelsChange} agentId={agentId} availableAgents={availableAgents} />
+
       <Card>
         <CardHeader><CardTitle className="text-base">Personality & style</CardTitle></CardHeader>
         <CardContent>
@@ -84,8 +86,6 @@ export function AutonomousConfig({
           <p className="text-xs text-muted-foreground mt-2">What the agent should do. Goals, tasks, and workflows.</p>
         </CardContent>
       </Card>
-
-      <WorkModeSection models={models} onChange={onModelsChange} agentId={agentId} availableAgents={availableAgents} />
 
       {/* The verifier panel is saved with the agent as it is; it is changed on the overview. */}
       {agentConfig.verify?.enabled && (
