@@ -3,6 +3,7 @@ import type { ApiKey } from '../../../entities/api-key.entity';
 import type { ChatRequest } from '../../llm-providers/llm-providers.service';
 import { AgentExecutionController } from '../agent-execution.controller';
 import { AgentOpenAIStreamHelper } from '../agent-openai-stream.helper';
+import { CompatAgentInvoker } from '../compat-agent-invoker.service';
 import { AgentValidationHelper } from '../agent-validation.helper';
 import { EXTRACT_CONTEXT_INSTRUCTION } from '../strategies/extract-context';
 import { compileStrategy } from '../strategies/strategy-compiler';
@@ -166,7 +167,7 @@ describe('a compiled strategy answers with the text a person expects', () => {
           },
         };
         const key = { id: 'key-1', organizationId: ORG, userId: USER } as ApiKey;
-        await new AgentOpenAIStreamHelper(h.engine).handleSync(agent, { message: QUESTION }, key, res);
+        await new AgentOpenAIStreamHelper(new CompatAgentInvoker(h.engine)).handleSync(agent, { message: QUESTION }, key, res);
         expect(body.choices?.[0]?.message?.content).toBe(s.expected);
       });
     });
