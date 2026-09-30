@@ -26,6 +26,8 @@ interface ApprovalRequest {
   visibility: 'org' | 'team' | 'private'
   runId: string
   agentId: string
+  /** The agent's name; null once the agent has been deleted. */
+  agentName?: string | null
   toolCallId: string | null
   reason: string
   payload: Record<string, any> | null
@@ -120,9 +122,13 @@ export function ApprovalsPage() {
                   <div className="flex-1 min-w-0">
                     <CardTitle className="text-base flex items-center gap-2">
                       <Bot className="h-4 w-4 text-muted-foreground" />
-                      <Link to={`/agents/${row.agentId}`} className="font-mono hover:underline truncate">
-                        agent {row.agentId.slice(0, 8)}
-                      </Link>
+                      {row.agentName ? (
+                        <Link to={`/agents/${row.agentId}`} className="hover:underline truncate">
+                          {row.agentName}
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground truncate">Deleted agent</span>
+                      )}
                       <Badge variant="outline" className="text-amber-600 border-amber-300 dark:border-amber-800 dark:text-amber-400">
                         <Clock className="h-3 w-3 mr-1" />
                         pending
