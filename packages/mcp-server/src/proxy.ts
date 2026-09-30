@@ -246,7 +246,8 @@ export class AlmytyProxy {
   async importSchema(apiId: string, data: object): Promise<any> { return this.rest('POST', `/apis/${apiId}/import-schema`, data); }
   async generateTools(apiId: string): Promise<any> { return this.rest('POST', `/apis/${apiId}/generate-tools`); }
   async listTools(): Promise<any> { return this.rest('GET', '/tools'); }
-  async listGateways(): Promise<any> { return this.rest('GET', '/gateways'); }
+  // Gateways are MCP, UTCP and Skills; an agent's channels are not listed.
+  async listGateways(): Promise<any> { return this.rest('GET', '/gateways?kind=tool'); }
   async createGateway(data: object): Promise<any> { return this.rest('POST', '/gateways', data); }
   async assignToolToGateway(gatewayId: string, toolId: string): Promise<any> { return this.rest('POST', `/gateways/${gatewayId}/tools`, { toolId }); }
   async listAgents(): Promise<any> { return this.rest('GET', '/agents'); }

@@ -85,8 +85,10 @@ describe('AlmytyClient response parsing', () => {
 
       await client.listGateways();
 
+      // Tool gateways only: an agent's channels (A2A, web chat, messaging)
+      // are not gateways and have no skills to install.
       const url = mockFetch.mock.calls[0][0];
-      expect(url).toBe('https://api.example.com/gateways');
+      expect(url).toBe('https://api.example.com/gateways?kind=tool');
       expect(url).not.toContain('/api/');
     });
   });

@@ -11,7 +11,7 @@ REST API reference for managing gateways, tool assignments, and authentication.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/gateways` | List all gateways |
+| `GET` | `/gateways` | List gateways. `?kind=tool` returns the MCP, UTCP and Skills gateways, which is what the Gateways page lists; `?kind=agent` returns the ones an agent's channels stood up |
 | `POST` | `/gateways` | Create a gateway |
 | `GET` | `/gateways/:id` | Get gateway by ID |
 | `PATCH` | `/gateways/:id` | Update a gateway |
