@@ -80,7 +80,7 @@ A gateway a channel stood up is found from `agent_channels.gatewayId` (`GET /gat
 
 ![The branded hosted chat surface](../docs-site/public/screenshots/hosted-chat.png)
 
-Unpublishing **deactivates** the gateway rather than deleting it. Republishing keeps the same endpoint and whatever keys were attached, so taking a channel down for an afternoon does not mean re-registering a Slack app afterwards. Deleting a channel deletes its gateway.
+Unpublishing **deactivates** the gateway rather than deleting it. Republishing keeps the same endpoint and whatever keys were attached, so taking a channel down for an afternoon does not mean re-registering a Slack app afterwards. Deleting a channel deletes its gateway: the platform webhook is taken down first, while the keys it needs can still be read, then the credential the gateway managed is released and the row deleted (`GatewaysService.tearDown`). Deleting an agent deletes every channel of it the same way, and any other agent gateway bound to it, before the agent row goes (`AgentChannelsService.removeAllOf`, called from `AgentsService.deleteAgent`); the web chat's address is free again at once. The stored files of its downloads go with it. `gateways.agentId` cascades on delete for any path that removes an agent without the service, and a gateway found with no agent anyway answers 404 "This chat no longer exists" (`Gateway.agentGone`).
 
 ## What stops a channel from shipping
 

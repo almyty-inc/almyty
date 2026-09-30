@@ -303,9 +303,11 @@ export class Gateway {
   @JoinColumn({ name: 'organizationId' })
   organization: Organization;
 
+  // An agent gateway goes with its agent (AgentGatewaysGoWithAgent
+  // migration). A tool gateway has no agent.
   @ManyToOne(() => Agent, {
     nullable: true,
-    onDelete: 'SET NULL',
+    onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'agentId' })
   agent: Agent;
@@ -389,6 +391,16 @@ export class Gateway {
   static kindForType(type: GatewayType): GatewayKind {
     const toolTypes: GatewayType[] = [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS];
     return toolTypes.includes(type) ? GatewayKind.TOOL : GatewayKind.AGENT;
+  }
+
+  /**
+   * An agent gateway (A2A, a channel) with no agent. Deleting an agent
+   * deletes its gateways and the foreign key cascades, so this is a row
+   * something wrote around both. It is served as not found, never run
+   * against no agent.
+   */
+  static agentGone(gateway: Pick<Gateway, 'type' | 'agentId'> | null | undefined): boolean {
+    return !!gateway && Gateway.kindForType(gateway.type) === GatewayKind.AGENT && !gateway.agentId;
   }
 
   @BeforeInsert()

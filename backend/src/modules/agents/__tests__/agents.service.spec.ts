@@ -10,6 +10,7 @@ import { Agent, AgentStatus, AgentPipeline } from '../../../entities/agent.entit
 import { AgentExecution } from '../../../entities/agent-execution.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { User } from '../../../entities/user.entity';
+import { AgentChannelsService } from '../../agent-channels/agent-channels.service';
 
 // ─── Helper factories ───────────────────────────────────────────────────────
 
@@ -100,7 +101,9 @@ describe('AgentsService', () => {
   let organizationRepo: jest.Mocked<any>;
   let userRepo: jest.Mocked<any>;
 
+  let channels: { removeAllOf: jest.Mock };
   beforeEach(async () => {
+    channels = { removeAllOf: jest.fn().mockResolvedValue({ channels: 0, gateways: 0 }) };
     agentRepo = {
       create: jest.fn(),
       save: jest.fn(),
@@ -163,6 +166,7 @@ describe('AgentsService', () => {
             assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined),
           },
         },
+        { provide: AgentChannelsService, useValue: channels },
       ],
     }).compile();
 
@@ -476,6 +480,35 @@ describe('AgentsService', () => {
 
       await expect(service.deleteAgent('missing', 'org-1'))
         .rejects.toThrow(NotFoundException);
+    });
+
+    // Its channels used to stay behind: their gateways kept the web chat
+    // address taken and answered a message with a 500.
+    it('deletes its channels and their gateways first, while they still point at it', async () => {
+      const agent = makeAgent();
+      agentRepo.findOne.mockResolvedValue(agent);
+      const order: string[] = [];
+      channels.removeAllOf.mockImplementation(async () => {
+        order.push('channels');
+        return { channels: 2, gateways: 2 };
+      });
+      agentRepo.remove.mockImplementation(async () => {
+        order.push('agent');
+        return agent;
+      });
+
+      await service.deleteAgent('agent-1', 'org-1', 'user-1');
+
+      expect(channels.removeAllOf).toHaveBeenCalledWith('org-1', 'agent-1', 'user-1');
+      expect(order).toEqual(['channels', 'agent']);
+    });
+
+    it('keeps the agent when its channels could not be deleted', async () => {
+      agentRepo.findOne.mockResolvedValue(makeAgent());
+      channels.removeAllOf.mockRejectedValue(new Error('storage down'));
+
+      await expect(service.deleteAgent('agent-1', 'org-1', 'user-1')).rejects.toThrow('storage down');
+      expect(agentRepo.remove).not.toHaveBeenCalled();
     });
   });
 
