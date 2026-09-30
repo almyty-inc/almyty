@@ -544,7 +544,8 @@
       "title": "Agents CLI 1.5.0 help",
       "path": "screenshots/cli/agents-help.png",
       "capturedAt": "2026-09-22T13:42:14.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The CLI suite is at 1.5.1, so the version in the help banner is stale; recapture from the published @almyty/agents@1.5.1.",
       "sha256": "ce9560c890c85cd02d2f2197c284b41d01d71dbc01aba4844921fb521e0e60e7",
       "source": {
         "kind": "published-cli",
@@ -564,7 +565,7 @@
       "path": "screenshots/cli/almyty-help.png",
       "capturedAt": "2026-09-22T13:42:14.000Z",
       "status": "needs-recapture",
-      "reason": "CLI help captures must come from version-pinned published packages rendered to an image (docs-site/SCREENSHOTS.md). Not recaptured in the #675 local pass: @almyty/cli help now lists `credentials` and `models`, and @almyty/credentials has to be published before `almyty --help` can be captured from npm.",
+      "reason": "CLI help captures must come from version-pinned published packages rendered to an image (docs-site/SCREENSHOTS.md). Not recaptured in the #675 local browser pass: capture from the 1.5.1 suite once @almyty/cli 1.5.1 is on npm (npm has 1.5.0 on 2026-09-30); its help lists `credentials` and `models`.",
       "sha256": "127476c28bf06cb8875274993aabc45a03f804e1e21bea8de6bcc3cf4963c393",
       "source": {
         "kind": "published-cli",
@@ -584,7 +585,7 @@
       "path": "screenshots/cli/auth-help.png",
       "capturedAt": "2026-09-22T13:42:14.000Z",
       "status": "needs-recapture",
-      "reason": "CLI help captures must come from version-pinned published packages rendered to an image (docs-site/SCREENSHOTS.md). Not recaptured in the #675 local pass: @almyty/cli help now lists `credentials` and `models`, and @almyty/credentials has to be published before `almyty --help` can be captured from npm.",
+      "reason": "CLI help captures must come from version-pinned published packages rendered to an image (docs-site/SCREENSHOTS.md). Not recaptured in the #675 local browser pass: capture from the 1.5.1 suite once @almyty/cli 1.5.1 is on npm (npm has 1.5.0 on 2026-09-30); its help lists `credentials` and `models`.",
       "sha256": "bb5f75fd765b191b74ec5178246ed59c2375cec367bca8541d38ee636f9df54d",
       "source": {
         "kind": "published-cli",
@@ -616,7 +617,7 @@
       ],
       "sourceDigest": "88395f17b7d2b46ab8ae4344a1dea58a9aa632b9ab7d7e4d77764a26d83426ba",
       "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved.",
-      "reason": "CLI help captures must come from version-pinned published packages rendered to an image (docs-site/SCREENSHOTS.md). Not recaptured in the #675 local pass: @almyty/cli help now lists `credentials` and `models`, and @almyty/credentials has to be published before `almyty --help` can be captured from npm."
+      "reason": "CLI help captures must come from version-pinned published packages rendered to an image (docs-site/SCREENSHOTS.md). Not recaptured in the #675 local browser pass: capture from the 1.5.1 suite once @almyty/cli 1.5.1 is on npm (npm has 1.5.0 on 2026-09-30); its help lists `credentials` and `models`."
     },
     {
       "id": "cli-mcp-server-help",
@@ -624,7 +625,7 @@
       "path": "screenshots/cli/mcp-server-help.png",
       "capturedAt": "2026-09-22T13:42:14.000Z",
       "status": "needs-recapture",
-      "reason": "CLI help captures must come from version-pinned published packages rendered to an image (docs-site/SCREENSHOTS.md). Not recaptured in the #675 local pass: @almyty/cli help now lists `credentials` and `models`, and @almyty/credentials has to be published before `almyty --help` can be captured from npm.",
+      "reason": "CLI help captures must come from version-pinned published packages rendered to an image (docs-site/SCREENSHOTS.md). Not recaptured in the #675 local browser pass: capture from the 1.5.1 suite once @almyty/cli 1.5.1 is on npm (npm has 1.5.0 on 2026-09-30); its help lists `credentials` and `models`.",
       "sha256": "ca20cb3aa051362aa5c2bdfc09da337171142ca458566e69d736430b6db59b3f",
       "source": {
         "kind": "published-cli",
@@ -644,7 +645,7 @@
       "path": "screenshots/cli/skills-help.png",
       "capturedAt": "2026-09-22T13:42:14.000Z",
       "status": "needs-recapture",
-      "reason": "CLI help captures must come from version-pinned published packages rendered to an image (docs-site/SCREENSHOTS.md). Not recaptured in the #675 local pass: @almyty/cli help now lists `credentials` and `models`, and @almyty/credentials has to be published before `almyty --help` can be captured from npm.",
+      "reason": "CLI help captures must come from version-pinned published packages rendered to an image (docs-site/SCREENSHOTS.md). Not recaptured in the #675 local browser pass: capture from the 1.5.1 suite once @almyty/cli 1.5.1 is on npm (npm has 1.5.0 on 2026-09-30); its help lists `credentials` and `models`.",
       "sha256": "b6859549f586c2f3312554002948e2da588722c6440a4eaf11ec186166205f72",
       "source": {
         "kind": "published-cli",

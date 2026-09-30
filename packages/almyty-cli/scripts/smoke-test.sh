@@ -4,8 +4,8 @@
 #
 # What it verifies:
 #
-#   1. auth-cli, agents-cli, chat-cli, skills-cli and almyty-cli build
-#      cleanly into dist/.
+#   1. auth-cli, agents-cli, chat-cli, skills-cli, credentials-cli and
+#      almyty-cli build cleanly into dist/.
 #   2. `almyty` with no arguments prints a short tour, not a wall.
 #   3. `almyty help` lists every routed command, the exit-code table and
 #      the completion subcommand; `almyty --version` agrees with
@@ -32,11 +32,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 PACKAGES_DIR="$REPO_ROOT/packages"
 
-# Five packages we expect to find. The umbrella depends on all of them,
-# plus @almyty/models, @almyty/credentials, @almyty/mcp-server,
-# @almyty/acp-server and @almyty/runner, which this script does not
-# build (their node_modules may be absent in a bare checkout).
-PACKAGES=(auth-cli agents-cli chat-cli skills-cli almyty-cli)
+# Six packages we expect to find. The umbrella depends on all of them,
+# plus @almyty/models, @almyty/mcp-server, @almyty/acp-server and
+# @almyty/runner, which this script does not build (their node_modules
+# may be absent in a bare checkout).
+PACKAGES=(auth-cli agents-cli chat-cli skills-cli credentials-cli almyty-cli)
 
 GREEN=$'\033[32m'
 RED=$'\033[31m'
@@ -90,7 +90,7 @@ ok "bare 'almyty' prints a short tour"
 log "running 'almyty help'…"
 HELP_OUT=$(node "$ALMYTY_BIN" help)
 echo "$HELP_OUT" | grep -q "almyty CLI" || fail "help output missing umbrella banner"
-for cmd in login logout whoami auth agents chat skills models connections runner mcp acp; do
+for cmd in login logout whoami auth agents chat skills models credentials runner mcp acp; do
   echo "$HELP_OUT" | grep -qE "^  $cmd +" || fail "help output missing '$cmd'"
 done
 echo "$HELP_OUT" | grep -q "Exit codes" || fail "help output missing the exit-code table"
@@ -163,8 +163,18 @@ run_subcommand() {
 
 run_subcommand "auth --help"    "@almyty/auth"    "almyty auth → @almyty/auth"
 run_subcommand "agents --help"  "@almyty/agents"  "almyty agents → @almyty/agents"
-run_subcommand "chat --help"    "@almyty/chat"    "almyty chat → @almyty/chat"
+run_subcommand "chat --help"    "almyty chat v"   "almyty chat → @almyty/chat"
 run_subcommand "skills --help"  "@almyty/skills"  "almyty skills → @almyty/skills"
+run_subcommand "credentials --help" "@almyty/credentials" "almyty credentials → @almyty/credentials"
+
+# The connections CLI became credentials; the old name must not route.
+log "running 'almyty connections' (expect exit 2)…"
+set +e
+NODE_PATH="$TMPDIR/node_modules" node "$ALMYTY_BIN" connections > /dev/null 2>&1
+connections_code=$?
+set -e
+[[ $connections_code -eq 2 ]] || fail "'almyty connections' exited $connections_code, expected 2"
+ok "'almyty connections' is not a command"
 
 # Top-level shortcut: `almyty login` should also delegate to @almyty/auth.
 run_subcommand "login --help"   "@almyty/auth"    "almyty login → @almyty/auth login"
@@ -195,7 +205,10 @@ set -e
 ok "unknown command exits 2"
 
 log "checking the suggestion for a near-miss…"
-NODE_PATH="$TMPDIR/node_modules" node "$ALMYTY_BIN" agent 2>&1 | grep -q "Did you mean" \
+# Captured first: the command exits 2, and under pipefail piping it
+# straight into grep fails the check even when the suggestion is there.
+near_miss_out=$(NODE_PATH="$TMPDIR/node_modules" node "$ALMYTY_BIN" agent 2>&1 || true)
+echo "$near_miss_out" | grep -q "Did you mean \`almyty agents\`" \
   || fail "'almyty agent' should suggest 'almyty agents'"
 ok "a near-miss command suggests the real one"
 

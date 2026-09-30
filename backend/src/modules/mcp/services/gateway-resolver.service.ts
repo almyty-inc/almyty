@@ -13,6 +13,50 @@ export interface ResolvedGateway {
   auth: AuthenticationResult;
 }
 
+/**
+ * Refusals that mean "the credential you sent is not good" rather than
+ * "you are known and not allowed". RFC 7235 answers those 401 so the
+ * client knows to get a new credential; MCP clients only start
+ * re-authorization on a 401, so answering a revoked OAuth token 403 left
+ * them stuck showing an error. Everything else -- IP allow-lists, a
+ * member of another org, a gateway with no or broken auth config --
+ * stays 403, as does insufficient_scope (mcp-oauth-scope.ts).
+ */
+const INVALID_CREDENTIAL_CODES: ReadonlySet<string> = new Set([
+  'API_KEY_INVALID',
+  'API_KEY_INVALID_FORMAT',
+  'API_KEY_EXPIRED',
+  'BEARER_TOKEN_INVALID',
+  'BEARER_TOKEN_EXPIRED',
+  'BASIC_AUTH_INVALID',
+  'BASIC_AUTH_FORMAT_ERROR',
+  'JWT_INVALID',
+  'OAUTH2_TOKEN_EXPIRED',
+  'OAUTH2_TOKEN_WRONG_GATEWAY',
+  'CUSTOM_AUTH_INVALID',
+]);
+
+/**
+ * The subset of those where a bearer token was presented and refused:
+ * the 401 then carries `error="invalid_token"` (RFC 6750 section 3.1). A
+ * revoked or unknown MCP OAuth token lands here as BEARER_TOKEN_INVALID,
+ * because the OAuth lookup skips revoked rows and falls through to the
+ * API-key bearer check.
+ */
+const INVALID_BEARER_TOKEN_CODES: ReadonlySet<string> = new Set([
+  'BEARER_TOKEN_INVALID',
+  'BEARER_TOKEN_EXPIRED',
+  'JWT_INVALID',
+  'OAUTH2_TOKEN_EXPIRED',
+  'OAUTH2_TOKEN_WRONG_GATEWAY',
+]);
+
+/** 401 for a missing credential or one that is not good; 403 otherwise. */
+export function isCredentialFailure(errorCode: string | undefined): boolean {
+  if (!errorCode) return false;
+  return errorCode.includes('MISSING') || INVALID_CREDENTIAL_CODES.has(errorCode);
+}
+
 @Injectable()
 export class GatewayResolverService {
   private readonly logger = new Logger(GatewayResolverService.name);
@@ -115,12 +159,21 @@ export class GatewayResolverService {
   /**
    * Build WWW-Authenticate header per MCP spec (RFC 9728).
    * Tells MCP clients where to discover OAuth authorization server.
+   *
+   * `bearerError` is the RFC 6750 error code added to every Bearer
+   * challenge when a bearer token was presented and refused. It is left
+   * off when no credential was sent at all, as section 3.1 requires.
    */
-  private buildWwwAuthenticateHeader(gateway: Gateway, orgSlug: string): string | null {
+  private buildWwwAuthenticateHeader(
+    gateway: Gateway,
+    orgSlug: string,
+    bearerError?: 'invalid_token',
+  ): string | null {
     const active = gateway.authConfigs?.filter((a) => a.isActive) || [];
     const types = new Set(active.map((a) => a.type));
     const baseUrl = process.env.BASE_URL || process.env.API_URL || 'http://localhost:4000';
     const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || '';
+    const errorParam = bearerError ? `, error="${bearerError}"` : '';
 
     // RFC 7235: a 401 may carry multiple challenges. Emit one per
     // active scheme so clients can pick what they support; previously
@@ -130,10 +183,10 @@ export class GatewayResolverService {
 
     if (types.has(GatewayAuthType.OAUTH2)) {
       const resourceMetadataUrl = `${baseUrl}/${orgSlug}/${gatewaySlug}/.well-known/oauth-protected-resource`;
-      challenges.push(`Bearer resource_metadata="${resourceMetadataUrl}"`);
+      challenges.push(`Bearer resource_metadata="${resourceMetadataUrl}"${errorParam}`);
     }
     if (types.has(GatewayAuthType.BEARER_TOKEN) || types.has(GatewayAuthType.JWT)) {
-      challenges.push(`Bearer realm="${gateway.name}"`);
+      challenges.push(`Bearer realm="${gateway.name}"${errorParam}`);
     }
     if (types.has(GatewayAuthType.API_KEY)) {
       const cfg = active.find((a) => a.type === GatewayAuthType.API_KEY)?.configuration;
@@ -262,10 +315,17 @@ export class GatewayResolverService {
       this.activeAuthConfigs(gateway),
     );
     if (!auth.isValid) {
-      const statusCode = auth.errorCode?.includes('MISSING') ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
+      const statusCode = isCredentialFailure(auth.errorCode) ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
 
-      // MCP spec: include WWW-Authenticate header with resource_metadata URL on 401
-      const wwwAuthenticate = this.buildWwwAuthenticateHeader(gateway, orgSlugOrId);
+      // MCP spec: include WWW-Authenticate header with resource_metadata URL
+      // on 401. A bearer token that was presented and refused also carries
+      // `error="invalid_token"` (RFC 6750 section 3.1), which is what tells an
+      // MCP client to throw the token away and authorize again.
+      const wwwAuthenticate = this.buildWwwAuthenticateHeader(
+        gateway,
+        orgSlugOrId,
+        INVALID_BEARER_TOKEN_CODES.has(auth.errorCode ?? '') ? 'invalid_token' : undefined,
+      );
 
       const reason = auth.error || 'Authentication failed';
       const errorCode = auth.errorCode || 'AUTH_FAILED';

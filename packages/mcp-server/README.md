@@ -65,7 +65,7 @@ assistant:
 
 `almyty_add_provider` takes a **credential id**, never an API key. A key
 passed as a tool argument would be written into the assistant's transcript and
-the host editor's logs, so the key is added as a credential instead:
+the host editor's logs, so the key goes through `@almyty/credentials` instead:
 
 ```bash
 npx @almyty/credentials add openai

@@ -1,6 +1,6 @@
 {
   "name": "@almyty/acp-server",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "publishConfig": {
     "access": "public"
   },
@@ -31,7 +31,7 @@
   "author": "almyty",
   "license": "Apache-2.0",
   "dependencies": {
-    "@almyty/client": "^1.2.0",
+    "@almyty/client": "^1.5.0",
     "eventsource-parser": "^3.0.0"
   },
   "devDependencies": {
