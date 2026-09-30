@@ -1,25 +1,26 @@
-# Ship EU AI Act-compliant agents
+# Get ready for the EU AI Act
 
-**Stack**: `Disclosure: Art. 50 AI disclosure on every channel` · `Docs: Annex IV export per agent` · `Trail: audit + approvals` · `Output: audit-ready deployment`
+If people in the EU talk to your assistants, the EU AI Act asks you to tell them they are talking to an AI, to keep people in charge of risky decisions, and to document how each assistant works. almyty covers the practical parts: an AI notice on every channel, a technical document per assistant you can download, and a record of every action.
 
-**Who it's for**: teams deploying agents to EU users who need to meet the AI Act, not just hope they do.
-**What it does**: keeps the AI disclosure on for every channel an agent speaks on, and exports the Annex IV technical documentation for each agent, so when a regulator or customer asks "is this AI, and how is it governed?", the answer is a button, not a scramble.
+The download follows the structure of the Act's Annex IV (its list of what technical documentation should cover). It is a starting point for your own documentation, not a legal assessment: whether you comply is still for you and your advisers to decide.
 
-## Build it
+## What you need
 
-1. **Keep AI disclosure on.** Every [channel](/channels) of an agent (web chat, website widget, Slack, email and the rest) has an **AI disclosure** switch, on by default, so users are told they're talking to an AI, consistently. The line comes from the agent's branding; turning the switch off needs the white-label entitlement.
-2. **Export Annex IV documentation.** On the agent detail page, use **Tech doc** to export the Annex IV technical documentation as Markdown: purpose, model(s), data, and governance for that agent.
-3. **Show the governance.** Attach the [verify](/agents/autonomous#verification), [approval](/examples/approval-policies), and [audit](/examples/audit-to-siem) controls the Act expects for higher-risk use, human oversight and record-keeping, demonstrable.
-4. **Map the rest.** The [Compliance](/compliance) page walks the Act article by article, plus GDPR and the other regimes, and what remains your responsibility.
-5. **Keep it current**: re-export the Tech Doc when an agent's model or scope changes, so the documentation matches what's deployed.
+- The assistants you already run.
+- Someone who owns compliance in your company, to review the result.
 
-## Make it yours
+## How to build it
 
-- Self-host for data residency alongside disclosure, see [Keep data in-region](/examples/air-gapped-self-host).
-- Stream the audit trail to your [SIEM](/examples/audit-to-siem) for the record-keeping obligation.
-- Gate high-risk actions behind [approval policies](/examples/approval-policies) for the human-oversight obligation.
+1. **Keep the AI notice on.** Every channel people talk to (web chat, website widget, Slack, email and the rest) has an **AI disclosure** switch, on by default. People are told they are talking to an AI, with the line set in the assistant's branding. Turning it off needs the Enterprise plan.
+2. **Download the technical document.** Open the assistant and click **Tech doc** at the top. You get a document covering its purpose, the models it uses, its tools, human oversight, data handling, logging and change history.
+3. **Show that people stay in charge.** Use [verification](/agents/autonomous#verification) (a second model checks answers), [approvals](/examples/approval-policies) for risky steps, and the [audit trail](/examples/audit-to-siem) as your record.
+4. **Check the rest.** The [Compliance](/compliance) page goes through the Act and other rules (such as the GDPR) and says what almyty covers and what stays your responsibility.
+5. **Keep it current.** Download the document again whenever an assistant's models or tools change.
 
-**Uses**: `Enterprise` · `Compliance` · `EU AI Act`
+## Ideas
+
+- Run almyty inside your own network if data has to stay in one region: see [Run everything inside your own network](/examples/air-gapped-self-host).
+- Send the audit trail to your security team's tools for record keeping.
 
 ## Related
 

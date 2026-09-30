@@ -1,28 +1,30 @@
-# Govern AI spend across teams
+# Put a ceiling on AI spending
 
-**Stack**: `Scope: org / team / agent budgets` · `Caps: soft (alert) + hard (block)` · `Enforced: at run start` · `Visibility: Cost tab` · `Output: no runaway bills`
+For whoever has to explain the AI bill. Set a spending budget for the whole organization or for one assistant, per day or per month, with an early warning before the limit. When the limit is reached you choose what happens: a warning only, or no new runs until the next day or month. A runaway assistant can't quietly spend the quarter's money.
 
-**Who it's for**: the person who has to explain the model bill, and wants a ceiling before it's a surprise.
-**What it does**: sets spend budgets per team or agent with a soft cap that alerts and a hard cap that blocks. The limit is checked when a run starts, so a looping agent or a bad prompt can't quietly burn the quarter's budget.
+For example: $300 a month for the support assistant, a warning email at 80%, and new runs blocked at $300.
 
-## Build it
+## What you need
 
-1. **Decide the scope.** Budgets attach at the org, team, or agent level, give each team a monthly ceiling, or cap an experimental agent tightly.
-2. **Set a soft cap**: an alert threshold. Crossing it notifies you but lets work continue.
-3. **Set a hard cap**: the enforced ceiling. When spend would exceed it, the next run is blocked rather than billed.
-4. **Watch the Cost tab**: spend per agent and team, so you see which agents actually drive the bill (a cross-vendor verify panel earns its cost on a contract reviewer, not a formatter).
+- Owner or admin access to your organization.
 
-   ![Analytics overview recording a successful demo tool execution](/screenshots/analytics-overview.png)
-5. **Combine with BYOK**: bring your own provider keys for the volume you'd rather meter directly, and let budgets bound the rest.
+## How to build it
 
-## Make it yours
+1. **See where the money goes first.** Open **Analytics**. The **Cost** tab shows spending over time and by assistant, so you know where to set the numbers.
 
-- Cap a customer-facing agent per tenant so one account can't exhaust shared budget.
-- Alert to Slack on the soft cap; page on the hard cap.
-- Pair with [analytics](/analytics) to attribute spend before you set the numbers.
+   ![Analytics overview for the demo organization](/screenshots/analytics-overview.png)
 
-**Uses**: `Enterprise` · `Cost governance` · `Budgets`
+2. **Create a budget.** On the **Budgets** tab, click **New budget**. Under **Applies to**, choose **The whole organization** or **A single agent**.
+3. **Set the limit.** Enter the **Limit (USD)** and the **Period**: **Per day** or **Per month**.
+4. **Choose what happens.** Under **When the limit is reached**, pick **Warn only** (runs carry on; owners and admins get an email, once per period) or **Block new runs** (scheduled runs, chat replies and API calls all stop until the period rolls over).
+5. **Get an early warning.** Set **Warn at (% of limit)**, for example 80. Nothing is blocked at that point; you just hear about it in time.
+
+## Ideas
+
+- Give an experimental assistant a small daily budget of its own.
+- For assistants open to the public, also set the per-visitor and per-day limits in its **Branding and visitor rules** (see [Channels](/channels)).
+- To split costs across teams, the Enterprise plan adds a **Chargeback** report under **Analytics**.
 
 ## Related
 
-- [Cost governance](/cost-governance) · [Analytics](/analytics) · [Connect a provider](/llm-providers) · [Organizations](/organizations)
+- [Cost governance](/cost-governance) · [Analytics](/analytics) · [Connect a provider](/llm-providers) · [Run limits](/run-limits)

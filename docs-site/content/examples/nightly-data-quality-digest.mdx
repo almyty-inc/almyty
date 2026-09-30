@@ -1,30 +1,31 @@
-# Post a nightly data-quality digest
+# A nightly check on your data
 
-**Stack**: `Trigger: schedule (interval)` · `Models: your choice` · `Tools: warehouse/query API` · `Mode: single agent + memory` · `Output: digest via webhook, posted to Slack`
+For data teams who hear about broken pipelines from annoyed colleagues. Every night the assistant checks that your key tables are up to date, that row counts haven't jumped or dropped, and that empty values haven't spiked. It groups what it finds into a short report, or says "all clear", before anyone opens a dashboard.
 
-**Who it's for**: data teams who find out about broken pipelines from angry stakeholders.
-**What it does**: every night it checks freshness, row-count deltas, and null-rate spikes across your key tables, groups the problems, and posts a short digest to Slack, or says "all clear", before anyone opens a dashboard.
+For a full walk-through with screenshots of a nightly report, see [Nightly systems report](/examples/nightly-systems-report).
 
-## Build it
+## What you need
 
-1. **Connect the warehouse.** *Connect an API* to a query endpoint over your warehouse (or a metrics API) for the checks you care about: pick its kind, give its spec link and click **Connect API**. A single query call can be an [HTTP tool](/tools/http-tools) instead.
-2. **Create the agent** with: *run the freshness and anomaly checks, group failures by table, and write a short digest; if nothing's wrong, say so.*
-3. **Turn on memory** so it can say "third night in a row for `orders_fct`" instead of reporting each night in isolation.
-4. **Put it on a schedule**: on the agent's *Schedule* panel, enable it and set the interval (nightly, or hourly for tighter loops). almyty triggers it with no external cron.
+- A way to run your checks over the web: a small query service in front of your data warehouse, or a metrics API.
+- Somewhere for the report to go: a Slack or email tool, or an address of yours that receives it.
 
-![The agent's schedule and webhook panels](/screenshots/schedule-config.png)
+## How to build it
 
-5. **Deliver the result**: register an outbound webhook so almyty POSTs the digest to your endpoint when the run finishes, and post it to Slack from there.
-6. **Review runs**: every night's run is in the audit trail with exactly what it queried.
+1. **Connect the checks.** Open **APIs**, click **Connect an API**, pick its kind, give its description link and click **Connect API**. If it is a single call, create an [HTTP tool](/tools/http-tools) under **Tools** instead.
+2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write: "Run the freshness and anomaly checks, group failures by table, and write a short report. If nothing is wrong, say so." Pick the tools under **Tools and APIs**.
+3. **Let it remember.** Turn on **Remember between conversations** with **This agent's own** memory, so it can say "third night in a row for the orders table" instead of reporting each night on its own.
+4. **Put it on a schedule.** On its **Overview** tab, in the **Schedule** card, turn on **Enable schedule**, set **Interval (minutes)** to 1440 (once a day) and click **Save schedule**. almyty starts each run itself.
 
-## Make it yours
+   ![The Schedule and Webhook cards](/screenshots/schedule-config.png)
 
-- Swap the checks for uptime probes, SLA-breach alerts, or a KPI summary.
-- Page someone via a PagerDuty tool when a check is critical, not just informational.
-- Feed thresholds from a config table so analysts tune it without touching the agent.
+5. **Deliver the report.** Either give it a Slack or email tool and tell it to send the report as its last step, or paste an address of yours into the **Webhook** card: almyty sends the finished run there, and your service passes it on.
+6. **Look back.** Every night's run is on the **Runs** tab, with exactly what it checked.
 
-**Uses**: `Data` · `Scheduled` · `Slack` · `Memory`
+## Ideas
+
+- Swap the checks for uptime checks, service-level alerts or a daily numbers summary.
+- Keep the thresholds in a table your analysts can change without touching the assistant.
 
 ## Related
 
-- [Autonomous agents](/agents/autonomous) · [Webhooks](/agents/webhooks) · [Memory](/memory)
+- [Scheduling](/agents/scheduling) · [Webhooks](/agents/webhooks) · [Memory](/memory)

@@ -1,44 +1,38 @@
-# Run a governed refund agent in production
+# A refund assistant with safeguards
 
-**Stack**: `Trigger: your billing app calls the agent API` · `Models: GPT-4o primary + cross-vendor verify` · `Tools: order-lookup, refund` · `Mode: constraints + verify + approval + audit` · `Output: refund issued or escalated, full trail`
+For teams that want an assistant to handle refunds but can't accept "the AI decided to". This example layers four safeguards on one assistant: firm rules it can't argue with, a second AI model that checks every answer, a person who approves large refunds, and a record of everything it did.
 
-**Who it's for**: teams that want an agent to handle refunds, but can't accept "the model decided to."
+In the demo, the Customer Support Orchestrator stopped on a real case: Brightway Logistics asked for an $820 refund on order NW-44120, which arrived defective. That is over the $500 limit, so the assistant asked for approval and waited.
 
-This is **real governance in action**. The demo's *Customer Support Orchestrator* handles refunds
-end to end, and one is paused for a human right now: *Brightway Logistics, order NW-44120 arrived
-defective, $820 refund requested*, over the $500 policy, so the run stopped and is waiting on an
-approver.
+![An $820 refund waiting for a person to approve it](/screenshots/approval-refund-820.png)
 
-![A real $820 refund escalation, paused for human approval](/screenshots/approval-refund-820.png)
+For a full walk-through with screenshots, see [Customer support assistant](/examples/customer-support-assistant).
 
-## Build it
+## What you need
 
-1. **Set constraints**: always-on rules the agent can't argue past. This agent's include
-   *"Never promise a refund over $500 without escalating to a human first"* and *"Do not invent
-   order numbers or account details that are not in the ticket."*
+- Your order system connected as an API, with "look up order" and "issue refund" operations.
+- Someone who can approve refunds (an owner or admin of your organization).
 
-   ![The agent's always-on constraints](/screenshots/support-agent-constraints.png)
+## How to build it
 
-2. **Verify before it ships**: a cross-vendor panel (GPT-4o + Gemini 1.5 Pro, `any_fail_blocks`)
-   re-checks the refund decision; on disagreement it revises. A wrong number caught here never
-   becomes a wrong refund.
+1. **Write the firm rules.** On the assistant's **Constraints** tab, add rules such as "Refunds over $500 need a person to approve them first" and "Look the order up before answering anything about it." Constraints go with every request, whatever the conversation says.
 
-   ![Primary model plus the cross-vendor verifier panel](/screenshots/support-agent-overview.png)
+   ![The support assistant's constraints](/screenshots/support-agent-constraints.png)
 
-3. **Gate the irreversible step**: the agent calls `request_approval` for refunds over the
-   threshold. The run pauses at `waiting approval` and a human Approves or Rejects (the $820
-   Brightway escalation above). Below the threshold, it proceeds on its own.
+2. **Have a second model check.** On its **Overview** tab, under **Models & verification**, click **Configure verification**, turn on **Enable verification** and add reviewers, ideally from a different AI company than the main model. Each reviewer tries to find what is wrong with the answer; with **All pass**, the answer is revised until every reviewer passes it, up to the number of **Max revise loops**. The demo uses an "Accuracy" reviewer that checks order facts against what the tools returned, and a "Policy" reviewer that checks the refund limit.
 
-4. **Keep the receipts**: every action and config change is in the [audit trail](/enterprise/audit-export)
-   with who/when/what, exportable for compliance.
+   ![The support assistant's models and reviewers](/screenshots/support-agent-overview.png)
 
-## Make it yours
+3. **Put a person on the large refunds.** Tell it in its **Instructions**, as well as in the constraint: "Ask for approval before any refund over $500." When it asks, the run pauses and the request appears on the **Approvals** page, where an owner or admin clicks **Approve** or **Reject**. Below the limit it goes ahead on its own.
+4. **Keep the record.** Every action and every change to the assistant is in the audit trail (**Analytics**, **Audit trail**), with who, when and what.
 
-- Turn who-approves-what into org policy with the [approval-policy engine](/enterprise/approval-policies).
-- Restrict approvers by team with [RBAC](/enterprise/advanced-rbac).
-- Self-host the whole thing for data residency, see [Air-gapped agents](/examples/air-gapped-self-host).
+The assistant asks for approval because its instructions tell it to. Keep the rule short and put it in both places.
 
-**Uses**: `Enterprise` · `Constraints` · `Verification` · `Approvals` · `Audit`
+## Ideas
+
+- Decide centrally who approves what with [approval rules](/examples/approval-policies) (Business plan).
+- Limit who may approve with [roles](/enterprise/advanced-rbac).
+- Run the whole thing inside your own network: see [Run everything inside your own network](/examples/air-gapped-self-host).
 
 ## Related
 

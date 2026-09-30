@@ -1,37 +1,42 @@
-# Orchestrate a multi-vendor coding fleet
+# Several coding assistants on one task
 
-**Stack**: `Trigger: chat / agent API` · `Models: per-CLI (Claude Code, Codex, aider)` · `Tools: runner process surface + coding CLIs` · `Mode: planner + parallel members` · `Output: edits in one workspace`
+For engineers who want more than one coding assistant on a job, each on the AI model it is best with. A planning assistant splits the task up and hands the pieces to coding tools installed on your machine (Claude Code, Codex, aider and others), all working on the same code.
 
-**Who it's for**: engineers who want more than one coding agent on a task, each on its strongest model.
-**What it does**: one planner agent breaks a task down and dispatches subtasks to several coding-agent CLIs running on your machine, each with its own model and isolated config, all editing the same repo, while you watch their status.
+This builds on [Let an assistant work on one of your machines](/examples/expose-any-machine): the coding tools run on your machine through a runner.
 
-Builds on [Give an agent a machine](/examples/expose-any-machine): driving coding CLIs is one capability the runner offers once a machine is exposed.
+## What you need
 
-## Build it
+- A machine with your code and the coding tools installed, with a runner started on it.
+- Keys for the AI providers those coding tools use, set up on that machine.
+- Someone comfortable with a terminal.
 
-1. **Start a runner** on the machine with your repo:
-   ```bash
-   npm i -g @almyty/runner @almyty/auth
-   almyty-auth login
-   almyty-runner start --name my-laptop
-   ```
-   It registers and reports the coding CLIs it finds on your PATH. Code and credentials stay on the box; only instructions cross the wire.
+## How to build it
 
-   ![A runner's detail, detected coding agents on the machine](/screenshots/runner-detail.png)
+1. **Start a runner** on the machine with your code (see below). Its page lists, under **Coding agents**, the coding tools it found.
 
-2. **Create a planner agent** whose instruction is to decompose the task and dispatch subtasks to the specialists.
-3. **Launch the CLIs as members**: each unattended, each with its own model, isolated config, and headless auth.
-4. **Let them work the same workspace**: the planner assigns files/subtasks; you watch each member's status (busy / idle / awaiting input).
-5. **Review the result**: the members edit one shared workspace; you review the diff as usual.
+   ![A runner's page, with the coding tools it found](/screenshots/runner-detail.png)
 
-## Make it yours
+2. **Create the planning assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. Under **Tools and APIs**, pick the runner's tools: the one that runs a command (its name ends in `shell.exec`) and the one that lists the coding tools on the machine.
+3. **Write the plan into its instructions.** For example: "Split the task into parts. For each part, run a coding tool in its non-interactive mode in the project folder (give its full path), one tool per part, then check the result." Name the command for each tool (see below).
+4. **Review the result.** Every coding tool works in the same project folder on your machine. Review the changes as you normally would.
 
-- Put a different model behind each CLI so the fleet is genuinely multi-vendor.
-- Pair with the [PR review bot](/examples/pr-review-bot) to check what the fleet produced.
-- The coding CLIs authenticate to their own providers with keys you supply, so those model calls leave from your machine.
+The plan lives in your instructions: almyty runs the commands on your machine and returns what they print; it doesn't decide the split for you. The coding tools talk to their AI providers directly from your machine.
 
-**Uses**: `DevOps` · `Runner` · `Coding agents`
+## For developers
+
+```bash
+npm i -g @almyty/runner @almyty/auth
+almyty-auth login
+almyty-runner start --name my-laptop
+```
+
+Each coding tool has its own non-interactive command, for example `claude -p "<task>"`, `codex exec "<task>"` or `aider --message "<task>"`. For long interactive sessions driven by a script instead of an assistant, the runner API has coding sessions (`POST /runners/:id/coding/sessions`, then its `input`, `stop` and `events` endpoints), which start a coding tool unattended with its own settings and report whether it is busy, idle or waiting for input. See [Runners](/runner).
+
+## Ideas
+
+- Put a different model behind each coding tool.
+- Have a [review assistant](/examples/pr-review-bot) check what they produced.
 
 ## Related
 
-- [Runners](/runner) · [Give an agent a machine](/examples/expose-any-machine) · [CLI: the runner](/cli)
+- [Runners](/runner) · [Let an assistant work on one of your machines](/examples/expose-any-machine) · [CLI: the runner](/cli/runner)
