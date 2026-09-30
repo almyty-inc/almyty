@@ -507,7 +507,7 @@ describe('each gateway serves one protocol', () => {
     it('refuses the execute address without this gateway\'s key', async () => {
       const action = `execute/${EACH_TYPE.http.id}`;
       expect((await send('each-type-utcp', { key: null, action })).status).toBe(401);
-      expect((await send('each-type-utcp', { key: KEYS.utcp, action })).status).toBe(403);
+      expect((await send('each-type-utcp', { key: KEYS.utcp, action })).status).toBe(401);
       expect(mockedAxios).not.toHaveBeenCalled();
     });
   });
@@ -526,15 +526,18 @@ describe('each gateway serves one protocol', () => {
       expect(mockedAxios).not.toHaveBeenCalled();
     });
 
+    // A key this gateway does not accept is a bad credential for it -- 401,
+    // so a client knows to present a different one -- the same answer as
+    // no key at all.
     it.each(requests)('refuses %s with another gateway\'s key', async (_label, slug, request) => {
       const out = await send(slug, { ...request, key: KEYS.eachMcp });
-      expect(out.status).toBe(403);
+      expect(out.status).toBe(401);
       expect(mockedAxios).not.toHaveBeenCalled();
     });
 
     it.each(requests)('refuses %s with a made-up key', async (_label, slug, request) => {
       const out = await send(slug, { ...request, key: 'not_a_real_key_0123456789abcdefghijk' });
-      expect(out.status).toBe(403);
+      expect(out.status).toBe(401);
     });
   });
 
