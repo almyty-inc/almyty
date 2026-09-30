@@ -1,117 +1,102 @@
 # Organizations
 
-Keep every team's work isolated and control who can touch what. Organizations are the top-level tenant boundary in almyty: every resource (APIs, tools, gateways, agents, credentials, and provider connections) belongs to exactly one organization. Users can belong to multiple organizations and switch between them, and roles decide what each member can do.
+An organization is your company's space in almyty: its assistants, connected systems, keys and people all live there, separate from every other organization. Inside it you invite colleagues, give each one a role, and group people into teams. For example, the support team can manage its own assistants while sales sees only theirs, and an intern can look around without changing anything.
 
 ![Members and teams](/screenshots/settings-teams.png)
 
-## Creating an organization
+## Your first organization
 
-When you sign up, your first organization is created automatically from the name you provide during registration.
+When you sign up, your first organization is created for you from the name you enter.
 
 ![Sign up](/screenshots/auth-register.png)
 
-To create additional organizations:
+To create another one:
 
-1. Open **Organizations** (`/organizations`).
-2. Click **Create organization** to open `/organizations/new`.
-3. Enter a name and optional description, then create it.
-4. You are set as the **owner** of the new organization. Its detail, members and settings live at `/organizations/:id`.
+1. Open **Organizations**.
+2. Click **Create organization**.
+3. Enter a name and, if you like, a description, then click **Create organization**.
+4. You are its **owner**. Its details, members and settings are on its page.
 
-## Switching organizations
+To switch between organizations, click the organization selector near the top of the sidebar and pick one. Every page then shows that organization's things.
 
-Click the organization selector near the top of the sidebar. A dropdown shows all organizations you belong to. Click one to switch; pages scope to that organization's data.
-
-## Managing members
+## Invite people
 
 Open **Settings → People and access → Members and teams**.
 
-### Inviting members
-
 1. Click **Invite member**.
 2. Enter their email address.
-3. Select a role (**Member** or **Admin**).
+3. Pick a role: **Member** or **Admin**.
 4. Click **Send invitation**.
 
-The invitee receives an email with a link to accept. If they do not have an account, the link takes them to the sign-up page with the invite pre-attached. Invitations not yet accepted are listed under **Pending invites**, where you can revoke one.
+They get an email with a link. If they have no account yet, the link takes them to sign up with the invitation already attached. Invitations not yet accepted are listed under **Pending invites**, where you can cancel one.
 
-### Changing roles
+**Change someone's role**: open the organization's page on **Organizations**, open the menu on the person's row and pick **Change role** (Viewer, Member, Admin or Owner). Only owners and admins can change roles.
 
-Open the organization's page (`/organizations/:id`), then on a member's row open the actions menu and pick **Change role** (Viewer, Member, Admin or Owner). Only owners and admins can modify roles.
-
-### Removing members
-
-Click the remove button on a member's row and confirm **Remove member**. Removing a member revokes their access to all resources in the organization immediately; anything they created stays, and their private resources move to you.
+**Remove someone**: click the remove button on their row and confirm **Remove member**. They lose access at once. What they created stays, and anything they kept private moves to you.
 
 ## Roles
 
-| Role | Description |
+| Role | What they can do |
 |------|-------------|
-| **owner** | Full access. Can delete the organization and transfer ownership. One per org. |
-| **admin** | Manage members, all resources, and settings. Cannot delete the org. |
-| **member** | Create and manage own resources. Invoke agents and execute tools. |
-| **viewer** | Read-only access to all resources. Cannot create, edit, or delete anything. |
-
-### Permission matrix
-
-Organization roles do not override another person's **Private** resources. The table below describes organization-visible resources; the visibility rules further restrict access.
+| **Owner** | Everything, including deleting the organization and handing over ownership. One per organization. |
+| **Admin** | Manage people, everything in the organization, and settings. Cannot delete the organization. |
+| **Member** | Create and manage their own things, run assistants and use tools. |
+| **Viewer** | Look at everything shared with the organization, but not create, change or delete anything. |
 
 | Action | Owner | Admin | Member | Viewer |
 |--------|-------|-------|--------|--------|
-| View org-wide resources | Yes | Yes | Yes | Yes |
-| Create resources | Yes | Yes | Yes | No |
-| Edit own resources | Yes | Yes | Yes | No |
-| Edit org-wide or team resources | Yes | Yes | No | No |
-| Manage members | Yes | Yes | No | No |
+| See what's shared with the organization | Yes | Yes | Yes | Yes |
+| Create things | Yes | Yes | Yes | No |
+| Change their own things | Yes | Yes | Yes | No |
+| Change things shared with the organization or a team | Yes | Yes | No | No |
+| Manage people | Yes | Yes | No | No |
 | Manage teams | Yes | Yes | No | No |
 | Change settings | Yes | Yes | No | No |
-| Delete organization | Yes | No | No | No |
+| Delete the organization | Yes | No | No | No |
+
+Roles never reach into someone else's **Private** things (see below).
 
 ## Teams
 
-Teams are sub-groups within an organization for finer-grained access control. Every organization gets a default **"Everyone"** team on creation; every member is automatically a member of it. Org owners are added as `team_admin` (lead); other roles are added as `team_member`.
+Teams are groups of people inside an organization, such as Support or Sales, so each team can have things only it sees. Every organization starts with an **Everyone** team that every member belongs to. It can be renamed but not deleted.
 
-Resources that expose a visibility selector (tools, agents, protocol gateways, runners, credentials, APIs and provider connections) have three visibility settings:
-
-- **Private** (`visibility='private'`): only the resource's owner can see or use it. This is enforced by the backend, including against other org owners/admins, not just hidden in the UI.
-- **Org-wide** (`visibility='org'`): visible to every member of the organization.
-- **Team** (`visibility='team'`, with a `teamId`): visible only to members of that team.
-
-Private tools, APIs and sub-agents cannot be attached to a wider-access parent to expose them indirectly. Use a parent private to the same owner, or explicitly share the dependency first. An agent private to its owner cannot have a published channel, because a channel's visitors do not have an almyty identity: share the agent with the organization first.
-
-When picking a team for a new resource, you can only park it in a team you are `team_admin` (lead) of. Org owners and admins can park resources in any team.
-
-### Creating a team
+To create a team:
 
 1. In **Settings → People and access → Members and teams**, find the **Teams** card.
 2. Click **Create team**.
-3. Enter a name and (optional) description.
-4. Add members from the organization.
+3. Enter a name and, if you like, a description.
+4. Add people from the organization, each as a **Member** or a **Lead**.
 
-The default "Everyone" team cannot be deleted (its delete button is disabled), but it can be renamed.
+A team **Lead** manages who is in the team, can rename it, manages the things shared with the team, and can approve requests from the team's assistants. A team **Member** can use what's shared with the team but not manage it.
 
-### Team roles
+## Who can see what
 
-| Role | Description |
-|------|-------------|
-| **team_admin** (`lead`) | Manages team membership, can rename the team, and is authorized to manage team-scoped resources (including approving HITL gates for that team). |
-| **team_member** (`member`) | Standard team member. Can read/use team-scoped resources but not manage them. |
+Assistants, tools, APIs, gateways, runners, credentials and AI provider connections each have a **Visibility** setting:
 
-### Authorization model
+- **Private**: only the person who made it can see or use it. This holds even for the organization's owners and admins.
+- **Org-wide**: everyone in the organization.
+- **Team**: only the members of one team.
 
-The full picture, for a member acting on a resource:
+A private tool, API or assistant cannot be attached to something shared more widely, which would expose it through the back door. Share it first, or keep both private to the same person. An assistant private to its owner cannot be published on a channel, because the people who reach it through a channel have no almyty account: share it with the organization first.
+
+You can only put something in a team you lead. Owners and admins can put things in any team.
+
+Putting something in the **Everyone** team is not quite the same as sharing it with the organization: today every member is in Everyone, but if you remove people from that team, they lose access.
+
+## For developers
+
+Visibility values are `visibility='private'`, `visibility='org'` and `visibility='team'` (with a `teamId`). Private is enforced by the backend, not only hidden in the UI. Visibility, not the absence of a `teamId`, decides access: private resources have no team, team resources require one, and a resource with no visibility value is treated as org-wide. Team roles are stored as `team_admin` (shown as **Lead**, TeamRole.LEAD) and `team_member` (shown as **Member**); org owners are added to Everyone as `team_admin`, other roles as `team_member`.
+
+Organizations live at `/organizations`, `/organizations/new` and `/organizations/:id`.
 
 | Caller role | Resource visibility | Read/Use | Manage |
 |---|---|---|---|
 | Resource owner | own `private` | Yes | Subject to the action's normal role checks |
 | Anyone else, including org owner / admin | another user's `private` | No | No |
 | Org owner / admin | `org` or `team` | Yes | Yes |
-| Org member (no team) | `org` | Yes | requires explicit org-level perm |
-| Org member, `team_admin` of resource's team | `team` | Yes | Yes |
-| Org member, `team_member` of resource's team | `team` | Yes | No |
-| Org member, not in resource's team | `team` | No | No |
+| Org member (no team) | `org` | Yes | requires explicit org-level permission |
+| Org member, `team_admin` of the resource's team | `team` | Yes | Yes |
+| Org member, `team_member` of the resource's team | `team` | Yes | No |
+| Org member, not in the resource's team | `team` | No | No |
 
-Visibility, not the absence of a `teamId`, determines access: Private resources have no team and remain private; Team resources require a team. A resource with no visibility value is treated as org-wide. The default "Everyone" team is *not* the same as org-wide: putting a resource in "Everyone" means every org member can see it (the same effect as org-wide while every member is in the team), but if you shrink the team's membership it becomes a real boundary.
-
-## API
-
-Organization, member, and team management is available over REST (only the owner can delete an organization, which permanently removes all resources). See the [API reference](/api-reference).
+Organization, member and team management is available over REST; only the owner can delete an organization, which permanently removes everything in it. See the [API reference](/api-reference).
