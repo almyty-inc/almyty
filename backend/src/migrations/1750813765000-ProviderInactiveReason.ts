@@ -9,8 +9,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * reason is kept beside it: `check_failed`, `switched_off` or
  * `endpoint_stopped`, null while the connection is active.
  */
-export class ProviderInactiveReason1750813763000 implements MigrationInterface {
-  name = 'ProviderInactiveReason1750813763000';
+export class ProviderInactiveReason1750813765000 implements MigrationInterface {
+  name = 'ProviderInactiveReason1750813765000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`ALTER TABLE "llm_providers" ADD COLUMN IF NOT EXISTS "inactiveReason" character varying(32)`);
