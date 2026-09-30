@@ -30,7 +30,7 @@ export interface PostTarget {
 }
 
 const E164 = /^\+[1-9]\d{6,14}$/;
-const EMAIL = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+const EMAIL = /^[^\s@,;<>]+@[^\s@,;<>.]+(?:\.[^\s@,;<>.]+)+$/;
 /** The most addresses one scheduled email goes to. */
 export const MAX_EMAIL_RECIPIENTS = 10;
 
@@ -208,7 +208,7 @@ export const POST_TARGETS: Partial<Record<GatewayType, PostTarget>> = {
     maxParts: 3,
     normalize: (to) => {
       const value = required(to, 'Room');
-      if (!/^!.+:.+$/.test(value)) throw new BadRequestException('Enter a Matrix room ID, like !abc123:example.org.');
+      if (!/^![^:]+:.+$/.test(value)) throw new BadRequestException('Enter a Matrix room ID, like !abc123:example.org.');
       return value;
     },
     threadContext: (d) => ({ threadId: d.to }),

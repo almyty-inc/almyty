@@ -57,7 +57,7 @@ export function numericValue(value: unknown): number | null {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   if (typeof value === 'string') {
     const cleaned = value.trim().replace(/^[^\d+-.]+/, '').replace(/,/g, '');
-    if (!cleaned || !/^[+-]?(\d+\.?\d*|\.\d+)$/.test(cleaned)) return null;
+    if (!cleaned || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(cleaned)) return null;
     return Number(cleaned);
   }
   return null;
