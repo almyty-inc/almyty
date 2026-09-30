@@ -541,23 +541,22 @@
     },
     {
       "id": "cli-agents-help",
-      "title": "Agents CLI 1.5.0 help",
+      "title": "Agents CLI 1.5.1 help",
       "path": "screenshots/cli/agents-help.png",
-      "capturedAt": "2026-09-22T13:42:14.000Z",
-      "status": "needs-recapture",
-      "reason": "The CLI suite is at 1.5.1, so the version in the help banner is stale; recapture from the published @almyty/agents@1.5.1.",
-      "sha256": "ce9560c890c85cd02d2f2197c284b41d01d71dbc01aba4844921fb521e0e60e7",
+      "capturedAt": "2026-09-30T10:52:31.000Z",
+      "status": "current",
+      "sha256": "1578889c2f3b9b1fcb73988bb6ae3469b4c333ad6d59cb7358d4f8a6c8282327",
       "source": {
         "kind": "published-cli",
-        "package": "@almyty/agents@1.5.0",
+        "package": "@almyty/agents@1.5.1",
         "command": "almyty-agents --help"
       },
       "sources": [
         "packages/agents-cli/src",
         "packages/agents-cli/package.json"
       ],
-      "sourceDigest": "50f9685b62d48b50bc93c91f62b6254d8b6d29cf8572a81c8b6fc1afdd990a0c",
-      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "110ae19f9051112ab52072ad0853eb6235e33f5584e1abd0fe133c1efcfb3ec3",
+      "notes": "Rendered from the published binary using freeze."
     },
     {
       "id": "cli-almyty-help",
