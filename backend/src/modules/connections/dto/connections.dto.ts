@@ -1,9 +1,11 @@
-import { ArrayMinSize, IsArray, IsIn, IsObject, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { ArrayMinSize, IsArray, IsIn, IsObject, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength } from 'class-validator';
 import { CONNECT_METHOD_TYPES, CONNECTION_OWNERS, CONNECTOR_KINDS, ConnectMethodType, ConnectionOwner, ConnectorKind } from '../connector.types';
 
 export class ConnectBodyDto {
   @IsOptional() @IsIn(CONNECT_METHOD_TYPES as readonly string[]) method?: ConnectMethodType;
   @IsOptional() @IsIn(CONNECTION_OWNERS as readonly string[]) owner?: ConnectionOwner;
+  /** The team a connection with owner 'team' is for. */
+  @IsOptional() @IsUUID() teamId?: string;
   @IsOptional() @IsIn(['browser', 'headless']) mode?: 'browser' | 'headless';
   @IsOptional() @IsObject() input?: Record<string, unknown>;
   @IsOptional() @IsString() @MinLength(1) @MaxLength(120) name?: string;

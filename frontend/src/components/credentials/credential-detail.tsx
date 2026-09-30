@@ -238,8 +238,8 @@ export function CredentialDetail({ connection, connector, onDeleted }: Credentia
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <WhoCanUse value={{ visibility: connectionWho(connection), teamId: null }} onChange={() => {}} options={[connectionWho(connection)]} />
-                {canManage && connection.owner === 'org' && (
+                <WhoCanUse value={{ visibility: connectionWho(connection), teamId: connection.teamId ?? null }} onChange={() => {}} options={[connectionWho(connection)]} />
+                {canManage && (connection.owner === 'org' || connection.owner === 'team') && (
                   <Link to={credentialAccessPath(connection.id)} className="text-sm text-primary hover:underline">
                     Change
                   </Link>

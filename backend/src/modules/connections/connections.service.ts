@@ -56,6 +56,8 @@ import {
 export interface ConnectBody {
   method?: ConnectMethodType;
   owner?: ConnectionOwner;
+  /** The team, when owner is 'team'. */
+  teamId?: string;
   mode?: 'browser' | 'headless';
   input?: Record<string, unknown>;
   name?: string;
@@ -159,24 +161,26 @@ export class ConnectionsService {
     const connector = await this.catalog.require(organizationId, connectorKey);
     const method = this.pickMethod(connector, body.method);
     const owner: ConnectionOwner = body.owner ?? 'org';
-    await this.assertCanCreate(principal, organizationId, owner);
+    const teamId = owner === 'team' ? body.teamId ?? null : null;
+    await this.assertCanCreate(principal, organizationId, owner, teamId);
     await this.governance?.beforeConnect(organizationId, connector.key, heldBy(owner));
     // Personal and private both belong to the caller; private also takes
-    // the row out of everyone else's reach (admins included).
-    const ownerUserId = owner === 'org' ? null : principal.id;
-    const visibility = owner === 'private' ? 'private' : 'org';
+    // the row out of everyone else's reach (admins included). A team row
+    // is the organization's, for that team alone.
+    const ownerUserId = owner === 'org' || owner === 'team' ? null : principal.id;
+    const visibility = owner === 'private' ? 'private' : owner === 'team' ? 'team' : 'org';
 
     if (REDIRECT_METHODS.includes(method.type)) {
       const plainInput = this.plainInput(method, body.input);
       return this.startRedirect({
-        connector, method, organizationId, userId: principal.id, ownerUserId, visibility,
+        connector, method, organizationId, userId: principal.id, ownerUserId, visibility, teamId,
         mode: body.mode ?? 'browser', input: plainInput, rotateConnectionId: null, requestBase,
       });
     }
 
     const input = this.checkedInput(method, body.input);
     const view = await this.finalize({
-      connector, method, organizationId, userId: principal.id, ownerUserId, visibility,
+      connector, method, organizationId, userId: principal.id, ownerUserId, visibility, teamId,
       config: input, name: body.name, action: AuditAction.CONNECTION_CONNECT,
     });
     return { pending: false, connection: view };
@@ -246,7 +250,7 @@ export class ConnectionsService {
     }
     return this.finalize({
       connector, method, organizationId: pending.organizationId, userId: pending.userId, ownerUserId: pending.ownerUserId,
-      config, existing, expiresAt, scopesGranted, visibility: pending.visibility,
+      config, existing, expiresAt, scopesGranted, visibility: pending.visibility, teamId: pending.teamId ?? null,
       action: pending.rotateConnectionId ? AuditAction.CONNECTION_ROTATE : AuditAction.CONNECTION_CONNECT,
     });
   }
@@ -507,6 +511,7 @@ export class ConnectionsService {
       name: row.name,
       owner: connectionOwnerOf(row),
       ownerUserId: row.ownerUserId ?? null,
+      teamId: row.visibility === 'team' ? row.teamId ?? null : null,
       method: (row.metadata?.connectMethod as ConnectMethodType | undefined) ?? null,
       accountLabel: row.accountLabel ?? null,
       health: { status: row.healthStatus ?? 'unknown', checkedAt: row.healthCheckedAt ?? null, error: row.healthError ?? null },
@@ -584,9 +589,13 @@ export class ConnectionsService {
     }
   }
 
-  private async assertCanCreate(principal: ConnectionPrincipal, organizationId: string, owner: ConnectionOwner): Promise<void> {
+  private async assertCanCreate(principal: ConnectionPrincipal, organizationId: string, owner: ConnectionOwner, teamId?: string | null): Promise<void> {
     if (owner === 'org') {
       this.assertMember(principal, organizationId, CONNECTIONS_MANAGE);
+      return;
+    }
+    if (owner === 'team') {
+      await this.assertCanScopeToTeam(principal, organizationId, teamId);
       return;
     }
     // Personal and private are both a member's own key: the same
@@ -595,6 +604,22 @@ export class ConnectionsService {
     if (!(await this.userScopedAllowed(organizationId))) {
       throw new ForbiddenException({ code: 'USER_CONNECTIONS_DISABLED', message: 'this organization does not allow user-scoped connections; ask an admin to enable allowUserScopedConnections or connect on behalf of the organization' });
     }
+  }
+
+  /**
+   * Who may make a connection for one team: the rule a provider
+   * connection's team scope has (AccessPolicyService.assertCanScopeToTeam).
+   * A member of that team, or whoever manages the organization's
+   * connections, for any active team of this organization. Anyone else
+   * gets the not-found a team that does not exist gets.
+   */
+  private async assertCanScopeToTeam(principal: ConnectionPrincipal, organizationId: string, teamId: string | null | undefined): Promise<void> {
+    if (!teamId) throw new BadRequestException({ code: 'CONNECTION_TEAM_REQUIRED', message: 'pick the team this connection is for' });
+    this.assertMember(principal, organizationId, CONNECTIONS_READ);
+    const who = await this.grantPrincipal(principal, organizationId);
+    if (who.teamIds.includes(teamId)) return;
+    if (principalHasPermission(principal, organizationId, CONNECTIONS_MANAGE) && (await this.grants?.teamInOrganization(teamId, organizationId))) return;
+    throw new NotFoundException({ code: 'TEAM_NOT_FOUND', message: 'team not found' });
   }
 
   private async assertCanManage(principal: ConnectionPrincipal, row: Credential): Promise<void> {
@@ -653,7 +678,8 @@ export class ConnectionsService {
   private async startRedirect(args: {
     connector: ConnectorDefinition; method: ConnectMethod; organizationId: string; userId: string; ownerUserId: string | null;
     mode: 'browser' | 'headless'; input: Record<string, unknown>; rotateConnectionId: string | null; requestBase?: string;
-    visibility?: 'org' | 'private';
+    visibility?: 'org' | 'team' | 'private';
+    teamId?: string | null;
   }): Promise<PendingRedirect> {
     const { connector, method } = args;
     const oauth = method.oauth;
@@ -694,6 +720,7 @@ export class ConnectionsService {
       userId: args.userId,
       ownerUserId: args.ownerUserId,
       visibility: args.visibility ?? 'org',
+      teamId: args.visibility === 'team' ? args.teamId ?? null : null,
       connectorKey: connector.key,
       methodType: method.type,
       codeVerifier: pkce?.codeVerifier ?? null,
@@ -743,8 +770,9 @@ export class ConnectionsService {
     connector: ConnectorDefinition; method: ConnectMethod; organizationId: string; userId: string; ownerUserId: string | null;
     config: Record<string, unknown>; existing?: Credential; name?: string; expiresAt?: Date | null; scopesGranted?: string[];
     action: AuditAction;
-    /** Only read on create: 'private' makes the new row its owner's alone. */
-    visibility?: 'org' | 'private';
+    /** Only read on create: 'private' makes the new row its owner's alone, 'team' its team's (teamId). */
+    visibility?: 'org' | 'team' | 'private';
+    teamId?: string | null;
   }): Promise<ConnectionView> {
     const { connector, method, organizationId } = args;
     const result = await this.validation.validate(connector, args.config as Record<string, any>, { organizationId });
@@ -768,14 +796,21 @@ export class ConnectionsService {
     row.name = args.name ?? row.name ?? `${connector.displayName}${label ? ` (${label})` : ''}`;
     if (!args.existing) row.description = `${connector.displayName} connection via ${method.type}`;
     // The tier is chosen once, at connect; a rotation keeps it. A private
-    // row always carries its owner (fail closed: no owner, no private row).
+    // row always carries its owner (fail closed: no owner, no private row),
+    // a team row its team and no owner (it is the organization's, for them).
     if (args.existing) {
       row.visibility = row.visibility ?? 'org';
     } else if (args.visibility === 'private') {
       if (!args.ownerUserId) throw new ForbiddenException({ code: 'CONNECTION_OWNER_REQUIRED', message: 'a private connection needs an owner' });
       row.visibility = 'private';
+      row.teamId = null;
+    } else if (args.visibility === 'team') {
+      if (!args.teamId || args.ownerUserId) throw new BadRequestException({ code: 'CONNECTION_TEAM_REQUIRED', message: 'a team connection needs its team' });
+      row.visibility = 'team';
+      row.teamId = args.teamId;
     } else {
       row.visibility = 'org';
+      row.teamId = null;
     }
     row.isActive = true;
     row.accountLabel = label;

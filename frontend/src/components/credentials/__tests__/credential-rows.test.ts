@@ -31,6 +31,18 @@ describe('credentialRows', () => {
     ])
   })
 
+  it('says who can use a credential in the three words a provider connection uses', () => {
+    const rows = credentialRows(
+      [
+        connection({ id: 'org', owner: 'org' }),
+        connection({ id: 'team', owner: 'team', teamId: 'team-1' }),
+        connection({ id: 'private', owner: 'private' }),
+      ],
+      [],
+    )
+    expect(Object.fromEntries(rows.map((r) => [r.id, r.who]))).toEqual({ org: 'Everyone', team: 'One team', private: 'Only you' })
+  })
+
   it('says "Saved" for a key nobody can check, as the credential page does', () => {
     const [row] = credentialRows([connection({ connectorKey: 'other' })], [], [{ key: 'other', kind: 'tool_source', displayName: 'Other service', connect: [], validation: { kind: 'format' } }])
     expect(row.check).toMatchObject({ state: 'ok', label: 'Saved' })

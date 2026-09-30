@@ -20,10 +20,12 @@ export function connectionCheck(connection: Pick<Connection, 'health'> | null | 
 
 /** Who can use it, as the shared "Who can use it" line reads it. */
 export function connectionWho(connection: Pick<Connection, 'owner'>): Visibility {
-  return connection.owner === 'org' ? 'org' : 'private'
+  if (connection.owner === 'org') return 'org'
+  if (connection.owner === 'team') return 'team'
+  return 'private'
 }
 
 /** The same, short, for a card. */
 export function connectionWhoShort(connection: Pick<Connection, 'owner'>): string {
-  return connection.owner === 'org' ? 'Everyone' : 'Only you'
+  return { org: 'Everyone', team: 'One team', private: 'Only you' }[connectionWho(connection)]
 }
