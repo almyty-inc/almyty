@@ -140,6 +140,8 @@ export async function runAgent(opts: {
   userMessage?: string | MessageContent[];
   /** The files resolver the model calls go through (message-attachments.resolver.ts). */
   attachmentResolver?: MessageAttachmentResolver;
+  /** The approvals service double (its create), for a case whose tool calls an approval rule holds. */
+  approvals?: { create: jest.Mock };
 }) {
   const bodies: Array<{ model: string; body: any }> = [];
   const queues: Streams = JSON.parse(JSON.stringify(opts.streams));
@@ -317,6 +319,8 @@ export async function runAgent(opts: {
     // double a memory case hands in, or nothing.
     memoryAccounts: opts.memoryAccounts,
     toolExecutorService,
+    // The approvals service, for a case whose tool calls an approval rule holds.
+    approvals: opts.approvals,
     llmProvidersService,
     processStep: (runId: string) => processor.processStep(runId),
     startRun: async (agentId: string, organizationId: string, _userId: string, input: string, options: any) => {
@@ -401,6 +405,8 @@ export async function runAgent(opts: {
     tokens,
     leftover: Object.fromEntries(Object.entries(queues).filter(([, q]) => q.length > 0)),
     runRepository,
+    /** Drive the run again, after the case decided what it was waiting for (an approval). */
+    drive: () => drive('run-1'),
   };
 }
 

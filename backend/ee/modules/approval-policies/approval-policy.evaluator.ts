@@ -64,9 +64,17 @@ export class ApprovalPolicyEvaluator {
    * attributing their approvals to a team they are not on.
    */
   resolvePolicy(policies: ApprovalPolicy[], ctx: ApprovalContext): ApprovalPolicy | null {
+    // A request an amount rule raised at the tool call is governed by
+    // that rule's policy, and by nothing else: it names it.
+    if (typeof ctx.policyId === 'string' && ctx.policyId) {
+      return policies.find((p) => p.id === ctx.policyId && p.enabled) ?? null;
+    }
     const requestTeamId = (ctx.teamId ?? null) as string | null;
     const matching = policies
       .filter((p) => p.enabled)
+      // A policy with an amount rule asks on its own at the tool call and
+      // governs only the requests it raised, never ones an agent raises.
+      .filter((p) => !p.trigger)
       .filter((p) => !p.teamId || p.teamId === requestTeamId)
       .filter((p) => this.matches(p.match ?? [], ctx));
     if (matching.length === 0) return null;

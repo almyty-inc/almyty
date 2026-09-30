@@ -10,7 +10,9 @@ import {
   ApprovalPolicy,
   ApprovalStep,
   ApprovalMatchCondition,
+  ApprovalToolAmountTrigger,
 } from '../../../src/entities/approval-policy.entity';
+import { Tool } from '../../../src/entities/tool.entity';
 import {
   ApprovalContext,
   ApprovalPolicyEvaluator,
@@ -27,7 +29,12 @@ export interface CreateApprovalPolicyInput {
   steps?: ApprovalStep[];
   priority?: number;
   enabled?: boolean;
+  /** An amount rule: the policy asks on its own when the tool is called over the amount. Null clears it. */
+  trigger?: ApprovalToolAmountTrigger | null;
 }
+
+/** A dot path into a tool's input: `amount`, `refund.total`. */
+const ARGUMENT_PATH = /^[A-Za-z_$][\w$-]*(\.[A-Za-z_$][\w$-]*)*$/;
 
 /**
  * EE (approval_policy): CRUD for multi-step / conditional / quorum
@@ -41,11 +48,14 @@ export class ApprovalPolicyService {
     @InjectRepository(ApprovalPolicy)
     private readonly policies: Repository<ApprovalPolicy>,
     private readonly evaluator: ApprovalPolicyEvaluator,
+    @InjectRepository(Tool)
+    private readonly tools: Repository<Tool>,
   ) {}
 
   async create(input: CreateApprovalPolicyInput): Promise<ApprovalPolicy> {
     if (!input.name?.trim()) throw new BadRequestException('policy name is required');
     this.validateSteps(input.steps ?? []);
+    const trigger = await this.checkTrigger(input.organizationId, input.trigger);
     const row = this.policies.create({
       organizationId: input.organizationId,
       name: input.name.trim(),
@@ -55,6 +65,7 @@ export class ApprovalPolicyService {
       steps: input.steps ?? [],
       priority: input.priority ?? 0,
       enabled: input.enabled ?? true,
+      trigger,
     });
     return this.policies.save(row);
   }
@@ -88,6 +99,7 @@ export class ApprovalPolicyService {
     if (patch.match !== undefined) row.match = patch.match;
     if (patch.priority !== undefined) row.priority = patch.priority;
     if (patch.enabled !== undefined) row.enabled = patch.enabled;
+    if (patch.trigger !== undefined) row.trigger = await this.checkTrigger(organizationId, patch.trigger);
     return this.policies.save(row);
   }
 
@@ -115,6 +127,29 @@ export class ApprovalPolicyService {
     return this.evaluator.progress(policy, approvals);
   }
 
+  /**
+   * An amount rule in its stored shape, or null. The tool has to be one
+   * of the organization's, and its name is taken from the tool row (it is
+   * what the rule's plain-language summary says).
+   */
+  private async checkTrigger(
+    organizationId: string,
+    trigger: ApprovalToolAmountTrigger | null | undefined,
+  ): Promise<ApprovalToolAmountTrigger | null> {
+    if (trigger == null) return null;
+    if (trigger.kind !== 'tool_amount') throw new BadRequestException('the rule must be a tool amount rule');
+    const tool =
+      typeof trigger.toolId === 'string' && trigger.toolId
+        ? await this.tools.findOne({ where: { id: trigger.toolId, organizationId }, select: { id: true, name: true } })
+        : null;
+    if (!tool) throw new BadRequestException('Choose one of your tools for the rule.');
+    const argument = typeof trigger.argument === 'string' ? trigger.argument.trim() : '';
+    if (!ARGUMENT_PATH.test(argument)) throw new BadRequestException('Choose the number the rule compares.');
+    if (trigger.op !== 'gt' && trigger.op !== 'gte') throw new BadRequestException('The comparison must be over, or at or over.');
+    const amount = Number(trigger.amount);
+    if (!Number.isFinite(amount) || amount < 0) throw new BadRequestException('The amount must be a number of 0 or more.');
+    return { kind: 'tool_amount', toolId: tool.id, toolName: tool.name, argument, op: trigger.op, amount };
+  }
   private validateSteps(steps: ApprovalStep[]): void {
     if (!Array.isArray(steps)) throw new BadRequestException('steps must be an array');
     for (const step of steps) {

@@ -97,8 +97,11 @@ export enum AuditAction {
   // else, and a deleted team's resources widened to the organization.
   OWNERSHIP_TRANSFER = 'ownership_transfer',
   VISIBILITY_CHANGE = 'visibility_change',
-}
 
+  // A tool call held for a person's approval by an approval policy's
+  // amount rule (ToolApprovalGate): asked, or refused where nobody can be asked.
+  APPROVAL_GATE = 'approval_gate',
+}
 
 export enum AuditResource {
   AGENT = 'agent',

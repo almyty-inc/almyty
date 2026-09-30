@@ -12,6 +12,7 @@
 import { GatewayToolSecurityPolicy } from '../../common/security/gateway-tool-policy';
 import type { ToolInvocationBudget } from './executors/tool-invocation-budget';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
+import type { ApprovalGateHit } from './tool-approval-gate.service';
 export { GatewayToolSecurityPolicy };
 
 export interface ToolExecutionOptions {
@@ -109,6 +110,18 @@ export interface ToolExecutionOptions {
    * means this is a root execution.
    */
   invocation?: ToolInvocationContext;
+  /**
+   * An approved request that covers this exact call (same tool, same
+   * parameters), raised when an approval policy's amount rule held it.
+   * The executor checks it against the rule before letting the call run.
+   */
+  approvedGate?: { approvalId: string };
+  /**
+   * The team of the agent making the call. A team's amount rule holds only
+   * that team's agents; absent (no agent behind the call), every rule on
+   * the tool applies.
+   */
+  agentTeamId?: string | null;
 }
 
 export interface ToolInvocationContext {
@@ -132,6 +145,12 @@ export interface ToolExecutionResult {
    * being able to tell them apart.
    */
   notFound?: boolean;
+  /**
+   * Set when an approval policy's amount rule held the call: it did not
+   * run. The autonomous runtime asks a person and calls again with
+   * `approvedGate`; every other caller reports the refusal.
+   */
+  approvalRequired?: ApprovalGateHit;
 }
 
 export interface GraphQLRequest {

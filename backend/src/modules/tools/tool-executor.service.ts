@@ -36,6 +36,7 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { sanitizeToolParameters } from '../../common/security/input-sanitizer';
+import { ToolApprovalGateService } from './tool-approval-gate.service';
 import { verifyToolIntegrity } from '../../common/security/tool-integrity';
 import { decideToolCaller } from '../../common/security/gateway-tool-permissions';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -123,6 +124,9 @@ export class ToolExecutorService {
     // @Optional() only so the positional spec harnesses keep their order;
     // without it such a call is told it needs a workspaceId.
     @Optional() private readonly runWorkspaces?: RunWorkspaceService,
+    // Approval policies' amount rules, checked before any call runs.
+    // Optional for the positional unit tests; Nest always provides it.
+    @Optional() private readonly approvalGate?: ToolApprovalGateService,
   ) {}
 
   // ─── Public entry point ────────────────────────────────────────
@@ -367,6 +371,45 @@ export class ToolExecutorService {
         // the rewritten parameters have to be what the tool, the cache key
         // and the execution record all see -- not just a local copy.
         if (hooked.data !== undefined) parameters = hooked.data;
+      }
+
+      // Approval policies' amount rules: "ask before issue_refund when
+      // amount is over 500". Checked on the parameters the tool would
+      // actually receive (after the gateway's mapping and any filter
+      // plugin), and before the cache, so a cached answer cannot stand in
+      // for a call nobody approved. A held call does not run; the caller
+      // gets the rule that held it. Only an approval raised for this very
+      // call -- same tool, same parameters -- lets it through.
+      if (this.approvalGate) {
+        const gateContext = {
+          organizationId: options.organizationId,
+          userId: options.userId ?? null,
+          agentId: options.agentId ?? getRequestContext()?.agentId ?? null,
+          runId: options.runId ?? getRequestContext()?.runId ?? null,
+          teamId: options.agentTeamId,
+        };
+        const hit = await this.approvalGate.check(tool, parameters, gateContext);
+        if (hit) {
+          const approved =
+            !!options.approvedGate?.approvalId &&
+            (await this.approvalGate.approved(options.approvedGate.approvalId, hit, options.organizationId));
+          if (!approved) {
+            if (!options.approvedGate) await this.approvalGate.record(hit, gateContext, 'held');
+            return {
+              success: false,
+              error:
+                `Needs approval: ${hit.summary}` +
+                (hit.value === null ? ` (${hit.argument} is not a number).` : ` (${hit.argument} is ${hit.value}).`) +
+                ' The call was not made.',
+              executionTime: Date.now() - startTime,
+              cached,
+              rateLimited,
+              retryCount,
+              approvalRequired: hit,
+            };
+          }
+          await this.approvalGate.record(hit, gateContext, 'approved');
+        }
       }
 
       // Tool integrity: refuse to execute if the stored definitionHash

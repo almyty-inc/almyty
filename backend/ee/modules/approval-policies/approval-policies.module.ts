@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { ApprovalPolicy } from '../../../src/entities/approval-policy.entity';
+import { Tool } from '../../../src/entities/tool.entity';
 import { APPROVAL_POLICY_HOOK } from '../../../src/common/ee-hooks/ee-hooks';
 
 import { ApprovalPolicyService } from './approval-policy.service';
@@ -20,7 +21,7 @@ import { ApprovalPoliciesController } from './approval-policies.controller';
  */
 @Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([ApprovalPolicy])],
+  imports: [TypeOrmModule.forFeature([ApprovalPolicy, Tool])],
   providers: [
     ApprovalPolicyService,
     ApprovalPolicyEvaluator,

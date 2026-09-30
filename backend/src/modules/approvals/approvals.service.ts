@@ -332,6 +332,9 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
         toolCallId: input.toolCallId ?? null,
         teamId,
         payload: input.payload ?? {},
+        // Raised by an approval policy's amount rule at the tool call: that
+        // policy governs it (ToolApprovalGateService).
+        policyId: (input.payload as any)?._gate?.policyId ?? null,
       });
     } catch (err: any) {
       this.logger.warn(`approval policy resolution failed: ${err?.message ?? err}`);
