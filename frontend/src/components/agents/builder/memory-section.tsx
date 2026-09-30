@@ -6,8 +6,8 @@
  *
  * The account is almyty's own memory, an outside memory account the
  * organization set up, or one of the agent's own: anyone who can edit the
- * agent can connect one right here, with the same connect flow the Memory
- * page uses.
+ * agent can pick or create one right here, with the same credential picker
+ * the Memory page uses.
  */
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -19,7 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { ConnectAccountButton } from '@/components/connections/connect-flow'
+import { CredentialPicker } from '@/components/credentials/credential-picker'
 import { memoryBackendName } from '@/components/memory/memory-words'
 import { memoriesApi } from '@/lib/api'
 import { memoryConnectionsQuery } from '@/components/memory/memory-connections'
@@ -244,11 +244,11 @@ function retentionHint(account: MemoryAccount | undefined, keepsForDays: boolean
 }
 
 /**
- * "Add a memory account" in place: pick the service, connect an account
- * with the same connect flow the Memory page uses, and it becomes this
- * agent's own account for that service. Anyone who can edit the agent may
- * do it; the new connection's own scope decides who can use it, and the
- * server refuses one the agent's scope does not cover.
+ * "Add a memory account" in place: pick the service, then pick or create
+ * an account with the same credential picker the Memory page uses, and it
+ * becomes this agent's own account for that service. Anyone who can edit
+ * the agent may do it; the new connection's own scope decides who can use
+ * it, and the server refuses one the agent's scope does not cover.
  */
 function AddMemoryAccount({ onAdded }: { onAdded: (service: string, connection: Connection) => void }) {
   const [open, setOpen] = useState(false)
@@ -274,18 +274,21 @@ function AddMemoryAccount({ onAdded }: { onAdded: (service: string, connection: 
           ))}
         </SelectContent>
       </Select>
-      <div className="flex flex-wrap items-center gap-2">
-        {service && (
-          <ConnectAccountButton
-            kind="memory"
-            onConnected={(connection) => {
-              onAdded(service, connection)
-              setOpen(false)
-            }}
-          />
-        )}
-        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
-      </div>
+      {service && (
+        <CredentialPicker
+          id="memory-new-account"
+          label={`${memoryBackendName(service)} account`}
+          value=""
+          kind="memory"
+          connectorKey={service}
+          onChange={(connection) => {
+            if (!connection) return
+            onAdded(service, connection)
+            setOpen(false)
+          }}
+        />
+      )}
+      <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
     </div>
   )
 }
