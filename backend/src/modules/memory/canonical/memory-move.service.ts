@@ -433,15 +433,20 @@ export class MemoryMoveService {
 
   /**
    * The agents the member can see that keep their memories in `account`,
-   * and whether they may switch each one: whoever may edit the agent may.
-   * A move of one agent's own memory concerns that agent only.
+   * and whether each may be switched by this move. Only an agent whose
+   * memories the move covers may be: for the organization's memories, an
+   * agent whose memory is shared; for one agent's own memory, that agent.
+   * Any other agent on the account keeps its memories there, so it is
+   * listed as not switched. Of the covered ones, the member switches only
+   * those they may edit. The server decides this again when it switches;
+   * the form's list is never trusted.
    *
    * An agent uses almyty's own memory when its memory is on and names no
    * other account; a connection when it names that connection, or names
    * its service with no connection of its own while the organization's
    * account for that service is this connection.
    */
-  async agentsUsing(organizationId: string, userId: string, account: MemoryAccountRef, scope?: ScopeRef): Promise<AgentUse[]> {
+  async agentsUsing(organizationId: string, userId: string, account: MemoryAccountRef, scope: ScopeRef): Promise<AgentUse[]> {
     if (!this.agents || !this.accessPolicy) return [];
     const policy = this.accessPolicy;
     const rows = await this.agents.find({
@@ -450,10 +455,13 @@ export class MemoryMoveService {
     });
     const visible = await policy.filterVisible({ id: userId }, organizationId, rows);
     const orgAccounts = await this.orgAccounts(organizationId);
-    const onlyAgent = scope?.scope_type === 'agent' ? scope.scope_id.split(':agent:')[1] : null;
-    const using = visible.filter((a) => (!onlyAgent || a.id === onlyAgent) && agentUses(a.memoryConfig, account, orgAccounts));
+    const using = visible.filter((a) => agentUses(a.memoryConfig, account, orgAccounts));
     const out: AgentUse[] = [];
     for (const a of using) {
+      if (!moveCovers(scope, a)) {
+        out.push({ id: a.id, name: a.name, canSwitch: false, reason: 'Its memories were not part of this move.' });
+        continue;
+      }
       try {
         await assertManageable(policy, userId, a, 'Agent', { ownerManages: true });
         out.push({ id: a.id, name: a.name, canSwitch: true });
@@ -624,6 +632,19 @@ function plainRunError(e: any, service: string): string {
     return `The ${serviceName(service)} account can no longer be used by you, or it was removed from Credentials.`;
   }
   return plainServiceError(service, e);
+}
+
+/**
+ * Whether a move of `scope` carries the memories an agent keeps: the
+ * organization's memories are those of agents whose memory is shared (the
+ * default); one agent's own memory is that agent's. A person's memories
+ * are never all of an agent's, so a move of them covers no agent.
+ */
+export function moveCovers(scope: ScopeRef, agent: Pick<Agent, 'id' | 'memoryConfig'>): boolean {
+  const whose = agent.memoryConfig?.whose ?? 'shared';
+  if (scope.scope_type === 'workspace') return whose === 'shared';
+  if (scope.scope_type === 'agent') return scope.scope_id.endsWith(`:agent:${agent.id}`);
+  return false;
 }
 
 /** Whether an agent keeps its memories in `account` (see MemoryMoveService.agentsUsing). */

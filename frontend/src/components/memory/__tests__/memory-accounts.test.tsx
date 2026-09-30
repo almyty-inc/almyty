@@ -247,6 +247,7 @@ describe('/memories/move', () => {
     vi.mocked(memoriesApi.moveAgents).mockResolvedValue([
       { id: 'ag-1', name: 'Support bot', canSwitch: true },
       { id: 'ag-2', name: 'Sales bot', canSwitch: false, reason: 'You cannot edit this agent.' },
+      { id: 'ag-3', name: 'Per person bot', canSwitch: false, reason: 'Its memories were not part of this move.' },
     ])
     vi.mocked(memoriesApi.startMove).mockResolvedValue({ id: 'mv-9' } as any)
     renderAtRoute(<MemoryMovePage />, { path: '/memories/move', url: '/memories/move?from=c1', paths: ['/memories/moves/:id'] })
@@ -256,6 +257,9 @@ describe('/memories/move', () => {
     expect(list).toHaveTextContent('Support bot')
     expect(list).toHaveTextContent('Sales bot')
     expect(list).toHaveTextContent('Not switched: You cannot edit this agent.')
+    // An agent whose memories this move does not carry is listed, never switched.
+    expect(list).toHaveTextContent('Per person bot')
+    expect(list).toHaveTextContent('Not switched: Its memories were not part of this move.')
     await pick(user, 'To', "almyty's own memory")
     const box = screen.getByRole('checkbox', { name: "Switch these agents to almyty's own memory too" })
     expect(box).toBeChecked()

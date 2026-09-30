@@ -356,21 +356,56 @@ describe('MemoryMoveService', () => {
         { id: 'a-other', name: 'Other account bot', organizationId: ORG, visibility: 'org', teamId: null, createdBy: 'someone', isTemporary: false, memoryConfig: { enabled: true, account: 'mem0', credentialId: 'cred-z' } },
         { id: 'a-off', name: 'No memory bot', organizationId: ORG, visibility: 'org', teamId: null, createdBy: 'someone', isTemporary: false, memoryConfig: { enabled: false } },
         { id: 'a-private', name: 'Someone private', organizationId: ORG, visibility: 'private', teamId: null, createdBy: 'someone', isTemporary: false, memoryConfig: { enabled: true, account: 'mem0', credentialId: 'cred-a' } },
+        // On the same account, but their memories are kept per person / per agent, not in the organization's.
+        { id: 'a-person', name: 'Per person bot', organizationId: ORG, visibility: 'org', teamId: null, createdBy: 'someone', isTemporary: false, memoryConfig: { enabled: true, account: 'mem0', credentialId: 'cred-a', whose: 'person' } },
+        { id: 'a-own-mem', name: 'Own memory bot', organizationId: ORG, visibility: 'org', teamId: null, createdBy: 'someone', isTemporary: false, memoryConfig: { enabled: true, account: 'mem0', credentialId: 'cred-a', whose: 'agent' } },
       ] as any);
     }
     const config = () => fakeRepository([{ scopeType: 'workspace', scopeId: ORG, overrides: { routing: { credentials: { mem0: 'cred-a' } } } }] as any);
     const policy = () => orgMembersPolicy(ORG, { [ADMIN]: OrganizationRole.ADMIN, [MEMBER]: OrganizationRole.MEMBER });
+    const NOT_MOVED = 'Its memories were not part of this move.';
 
-    it('lists the agents that keep their memories in an account, and which the member may switch', async () => {
+    it('lists the agents that keep their memories in an account, and which this move may switch', async () => {
       const { svc } = build({}, { agents: agentsFixture(), policy: policy(), config: config() });
       // Its own connection, or the organization's account for the service; never someone's private agent.
-      expect(await svc.agentsUsing(ORG, MEMBER, mem0Account('cred-a'))).toEqual([
+      // Only shared-memory agents are covered by a move of the organization's memories.
+      expect(await svc.agentsUsing(ORG, MEMBER, mem0Account('cred-a'), scope)).toEqual([
         { id: 'a-mem0-own', name: 'Own key bot', canSwitch: true },
         { id: 'a-mem0-org', name: 'Org key bot', canSwitch: false, reason: 'You cannot edit this agent.' },
+        { id: 'a-person', name: 'Per person bot', canSwitch: false, reason: NOT_MOVED },
+        { id: 'a-own-mem', name: 'Own memory bot', canSwitch: false, reason: NOT_MOVED },
       ]);
-      expect((await svc.agentsUsing(ORG, ADMIN, nativeAccount)).map((a) => a.id)).toEqual(['a-native']);
-      // One agent's memory concerns that agent only.
-      expect((await svc.agentsUsing(ORG, ADMIN, mem0Account('cred-a'), { scope_type: 'agent', scope_id: `${ORG}:agent:a-mem0-org` })).map((a) => a.id)).toEqual(['a-mem0-org']);
+      expect((await svc.agentsUsing(ORG, ADMIN, nativeAccount, scope)).map((a) => a.id)).toEqual(['a-native']);
+    });
+
+    it('a move of one agent\'s own memory covers that agent only', async () => {
+      const { svc } = build({}, { agents: agentsFixture(), policy: policy(), config: config() });
+      const uses = await svc.agentsUsing(ORG, ADMIN, mem0Account('cred-a'), { scope_type: 'agent', scope_id: `${ORG}:agent:a-own-mem` });
+      expect(uses.filter((u) => u.canSwitch).map((u) => u.id)).toEqual(['a-own-mem']);
+      expect(uses.filter((u) => !u.canSwitch).every((u) => u.reason === NOT_MOVED)).toBe(true);
+    });
+
+    it('a move of one person\'s memories switches no agent', async () => {
+      const { svc } = build({}, { agents: agentsFixture(), policy: policy(), config: config() });
+      const uses = await svc.agentsUsing(ORG, ADMIN, mem0Account('cred-a'), { scope_type: 'user', scope_id: `${ORG}:user:${ADMIN}` });
+      expect(uses.length).toBeGreaterThan(0);
+      expect(uses.some((u) => u.canSwitch)).toBe(false);
+    });
+
+    it('never switches an agent whose memories the move did not carry, whatever the form sent', async () => {
+      const mem0 = outside('mem0');
+      const agents = agentsFixture();
+      const { svc, moves } = build({ mem0, 'almyty-native': native() }, { agents, policy: policy(), config: config() });
+      const move = await svc.start(ORG, ADMIN, { source: mem0Account('cred-a'), target: nativeAccount, scope, switchAgents: true });
+      await svc.run(move.id, ADMIN);
+      expect(agents.row('a-person')!.memoryConfig).toMatchObject({ account: 'mem0', credentialId: 'cred-a' });
+      expect(agents.row('a-own-mem')!.memoryConfig).toMatchObject({ account: 'mem0', credentialId: 'cred-a' });
+      expect(moves.row(move.id)!.agentsNotSwitched).toEqual(
+        expect.arrayContaining([
+          { id: 'a-person', name: 'Per person bot', reason: NOT_MOVED },
+          { id: 'a-own-mem', name: 'Own memory bot', reason: NOT_MOVED },
+        ]),
+      );
     });
 
     it('once every memory has moved, points the agents at the target and audits each switch', async () => {
@@ -399,7 +434,11 @@ describe('MemoryMoveService', () => {
       const { svc, moves } = build({ mem0, 'almyty-native': native() }, { agents, policy: policy(), config: config() });
       const move = await svc.start(ORG, MEMBER, { source: mem0Account('cred-a'), target: nativeAccount, scope, switchAgents: true });
       await svc.run(move.id, MEMBER);
-      expect(moves.row(move.id)!.agentsNotSwitched).toEqual([{ id: 'a-mem0-org', name: 'Org key bot', reason: 'You cannot edit this agent.' }]);
+      expect(moves.row(move.id)!.agentsNotSwitched).toEqual([
+        { id: 'a-mem0-org', name: 'Org key bot', reason: 'You cannot edit this agent.' },
+        { id: 'a-person', name: 'Per person bot', reason: NOT_MOVED },
+        { id: 'a-own-mem', name: 'Own memory bot', reason: NOT_MOVED },
+      ]);
       expect(agents.row('a-mem0-org')!.memoryConfig).toMatchObject({ account: 'mem0' });
     });
 
