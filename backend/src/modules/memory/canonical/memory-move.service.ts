@@ -232,6 +232,11 @@ export class MemoryMoveService {
         await this.tally(move, [...warnings.values()]);
       }
       await this.tally(move, [...warnings.values()]);
+      // What the service said about a memory it would not take or give up, so the page can say why.
+      if (move.failed > 0) {
+        const last = await this.items.findOne({ where: { moveId: move.id, error: Not(IsNull()) }, order: { updatedAt: 'DESC' } });
+        move.lastError = last?.error ?? null;
+      }
       move.status = 'completed';
       move.finishedAt = new Date();
       await this.moves.save(move);

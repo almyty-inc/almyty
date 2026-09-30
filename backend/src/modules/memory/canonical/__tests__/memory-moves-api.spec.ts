@@ -24,7 +24,8 @@ describe('memory accounts and moves over the Memory API', () => {
     { id: 'a-private', organizationId: ORG, visibility: 'private', teamId: null, createdBy: 'owner', isTemporary: false },
   ] as any);
   const policy = orgMembersPolicy(ORG, { owner: OrganizationRole.ADMIN, other: OrganizationRole.ADMIN });
-  const req = (userId: string) => ({ user: { id: userId, sub: userId, currentOrganizationId: ORG } });
+  const MEMBERSHIPS = [{ organizationId: ORG, role: 'admin', status: 'active' }];
+  const req = (userId: string) => ({ user: { id: userId, sub: userId, currentOrganizationId: ORG, organizationMemberships: MEMBERSHIPS } });
 
   function build(moveRow: Record<string, any> = { id: 'mv-1', scopeType: 'workspace', scopeId: ORG }) {
     const accounts = {
@@ -48,7 +49,7 @@ describe('memory accounts and moves over the Memory API', () => {
     const { ctrl, moves, accounts } = build();
     const res = await ctrl.startMove({ source: 'almyty-native', target: 'cred-9', scope_type: 'workspace', scope_id: ORG }, req('owner'));
     expect(res.data).toEqual({ id: 'mv-1', status: 'queued' });
-    expect(accounts.describeAccount).toHaveBeenCalledWith(ORG, { id: 'owner' }, 'cred-9');
+    expect(accounts.describeAccount).toHaveBeenCalledWith(ORG, expect.objectContaining({ id: 'owner', organizationMemberships: MEMBERSHIPS }), 'cred-9');
     expect(moves.start).toHaveBeenCalledWith(ORG, 'owner', {
       source: { service: 'almyty-native', credentialId: null, name: 'almyty' },
       target: { service: 'mem0', credentialId: 'cred-9', name: 'Mem0' },
@@ -92,7 +93,8 @@ describe('memory accounts and moves over the Memory API', () => {
   it('lists accounts as the caller', async () => {
     const { ctrl, accounts } = build();
     await ctrl.accountsOverview(req('owner'));
-    expect(accounts.overview).toHaveBeenCalledWith(ORG, { id: 'owner' });
+    // The whole request user: the Connections service reads its memberships.
+    expect(accounts.overview).toHaveBeenCalledWith(ORG, expect.objectContaining({ id: 'owner', organizationMemberships: MEMBERSHIPS }));
   });
 
   it('declares the moves routes before GET :id', () => {

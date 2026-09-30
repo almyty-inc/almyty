@@ -283,7 +283,7 @@ export class MemoryAccountsService {
       {
         id: NATIVE_MEMORY_ACCOUNT,
         service: NATIVE_MEMORY_ACCOUNT,
-        serviceName: memoryAccountName(NATIVE_MEMORY_ACCOUNT),
+        serviceName: 'almyty',
         name: memoryAccountName(NATIVE_MEMORY_ACCOUNT),
         accountLabel: null,
         owner: 'org',

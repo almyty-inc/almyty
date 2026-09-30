@@ -498,7 +498,8 @@ export class CanonicalMemoryController {
   async accountsOverview(@Request() req: any) {
     const organizationId = this.orgId(req);
     if (!this.accounts) return { success: true, data: { accounts: [], services: [] } };
-    return { success: true, data: await this.accounts.overview(organizationId, { id: this.userId(req)! }) };
+    // The request user with its memberships: the Connections service decides from them what the caller may see.
+    return { success: true, data: await this.accounts.overview(organizationId, req.user) };
   }
 
   @Get('moves')
@@ -540,8 +541,9 @@ export class CanonicalMemoryController {
     const organizationId = this.orgId(req);
     const userId = this.userId(req)!;
     const scope = await this.scopeFor(req, body);
-    const source = await this.accounts.describeAccount(organizationId, { id: userId }, String(body?.source ?? ''));
-    const target = await this.accounts.describeAccount(organizationId, { id: userId }, String(body?.target ?? ''));
+    // The request user with its memberships: the Connections service decides from them what the caller may see.
+    const source = await this.accounts.describeAccount(organizationId, req.user, String(body?.source ?? ''));
+    const target = await this.accounts.describeAccount(organizationId, req.user, String(body?.target ?? ''));
     const input = { source, target, scope, mode: body?.mode };
     if (body?.dry_run) return { success: true, data: await this.moves.preview(organizationId, userId, input) };
     return { success: true, data: await this.moves.start(organizationId, userId, input) };

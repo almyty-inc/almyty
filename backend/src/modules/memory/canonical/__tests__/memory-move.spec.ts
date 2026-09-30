@@ -198,7 +198,8 @@ describe('MemoryMoveService', () => {
 
     const move = await svc.start(ORG, USER, { source: nativeAccount, target: mem0Account(), scope });
     const first = await svc.run(move.id, USER);
-    expect(first).toMatchObject({ status: 'completed', moved: 1, failed: 2 });
+    // The page says why, with what a service answered.
+    expect(first).toMatchObject({ status: 'completed', moved: 1, failed: 2, lastError: expect.stringMatching(/refused the write|database busy/) });
     expect(items.rows().map((r) => [r.sourceId, r.state]).sort()).toEqual([[uuid(0), 'moved'], [uuid(1), 'failed'], [uuid(2), 'copied']]);
     expect(dst.put.mock.calls.map((c) => c[0].content)).toEqual(['a', 'b', 'c']); // b was refused
 
