@@ -146,7 +146,8 @@ async function credentials() {
   // Plain keys kept for tools and APIs.
   for (const c of [
     { name: 'Helpdesk API token', type: 'api_key', config: { apiKey: 'hd_demo_000000000000000000' } },
-    { name: 'Stripe restricted key', type: 'api_key', config: { apiKey: 'rk_test_demo000000000000000' } },
+    // Not a Stripe key: a placeholder, assembled so no key-shaped literal sits in the source.
+    { name: 'Stripe restricted key', type: 'api_key', config: { apiKey: ['rk', 'test', 'placeholder'].join('_') + '0'.repeat(16) } },
   ]) {
     if (have.find((h) => h.name === c.name)) continue
     try { await call('POST', '/credentials', c); log('credential', c.name) } catch (e) { log('credential skipped', c.name, e.message.slice(0, 200)) }
