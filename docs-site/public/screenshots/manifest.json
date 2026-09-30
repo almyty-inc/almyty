@@ -7,7 +7,7 @@
       "title": "Autonomous agent: work mode",
       "path": "screenshots/agent-builder-autonomous.png",
       "capturedAt": "2026-09-30T11:21:19.402Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a5b29f733cc68a0cf976dece6af72df8c925a0960f9d42af77aabcfaf5b87d14",
       "source": {
         "kind": "browser",
@@ -22,14 +22,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0508a0cc0974e52dd0161a5ed3d21e209e385b1f83604213a3b6e605bb7575a4",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "agent-builder-node-palette",
       "title": "Steps palette",
       "path": "screenshots/agent-builder-node-palette.png",
       "capturedAt": "2026-09-30T11:21:28.067Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "095e80429efc9d9797af3873ca7c013af81770a36895a3ef2659ce9c4708c2f1",
       "source": {
         "kind": "browser",
@@ -44,14 +45,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0508a0cc0974e52dd0161a5ed3d21e209e385b1f83604213a3b6e605bb7575a4",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "agent-builder",
       "title": "Workflow builder",
       "path": "screenshots/agent-builder.png",
       "capturedAt": "2026-09-30T11:21:25.279Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "fed9e041c80e924c5c4efd2ff4a18c1d8e415536046f30e7a640cf8a914605be",
       "source": {
         "kind": "browser",
@@ -66,14 +68,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0508a0cc0974e52dd0161a5ed3d21e209e385b1f83604213a3b6e605bb7575a4",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "agent-channels",
       "title": "An agent's Channels tab",
       "path": "screenshots/agent-channels.png",
       "capturedAt": "2026-09-30T11:21:43.799Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "530432af9fd768d2511d8a3cbf1e3b5141aed845c64f8f50dbe8252765cc3650",
       "source": {
         "kind": "browser",
@@ -89,14 +92,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "7bff77dd7c4e6cbdbb6f0714c372a3f9095f9ecbfc253086852a8512cdce230a",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "agent-constraints",
       "title": "Agent constraints",
       "path": "screenshots/agent-constraints.png",
       "capturedAt": "2026-09-30T11:21:06.997Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
       "source": {
         "kind": "browser",
@@ -111,14 +115,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "agent-detail-overview",
       "title": "Autonomous agent overview",
       "path": "screenshots/agent-detail-overview.png",
       "capturedAt": "2026-09-30T11:21:01.095Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
       "source": {
         "kind": "browser",
@@ -133,14 +138,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "agent-skill-viewer",
       "title": "Agent skills",
       "path": "screenshots/agent-skill-viewer.png",
       "capturedAt": "2026-09-30T11:21:16.058Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "52408b10a2dad860b5f87e117d6c644b3adbfac144ba48999663133bdd1a4b39",
       "source": {
         "kind": "browser",
@@ -155,14 +161,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "agent-work-mode-panel",
       "title": "Panel work mode",
       "path": "screenshots/agent-work-mode-panel.png",
       "capturedAt": "2026-09-30T11:21:22.595Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "fcc4b552219e4517121702f10db9f5e57df35f9c9a3e7358284999a961182658",
       "source": {
         "kind": "browser",
@@ -177,14 +184,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0508a0cc0974e52dd0161a5ed3d21e209e385b1f83604213a3b6e605bb7575a4",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "agents-list",
       "title": "Agents list",
       "path": "screenshots/agents-list.png",
       "capturedAt": "2026-09-30T11:20:58.169Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6d7908e9e7d374cba03ef445f6ea71ce0e5b23e9da84168f9b57858f3362eb02",
       "source": {
         "kind": "browser",
@@ -199,7 +207,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "5b6dd9cf5ee91668cb26b29204ef4110391d8ed082e8b56fb10313d379436d74",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "analytics-agents",
@@ -434,7 +443,7 @@
       "title": "Branding and visitor rules",
       "path": "screenshots/channel-branding-rules.png",
       "capturedAt": "2026-09-30T11:21:46.410Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "cec458852ad6410147e4d7ae557a5e52a6d4ea3177fc2373ce83f0f7c7722b7d",
       "source": {
         "kind": "browser",
@@ -449,14 +458,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b840f0b9894cdbfea120e3c801f924e8f43bfae532ef043d0e58820e893b8e6d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "channel-slack-keys",
       "title": "Slack channel keys",
       "path": "screenshots/channel-slack-keys.png",
       "capturedAt": "2026-09-30T11:21:51.835Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8179f4f923c8fabb17aa2dbcb5337c2c16d4cc5d4a5ab4298a834098e8e32120",
       "source": {
         "kind": "browser",
@@ -471,14 +481,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2b93192132d11bb6c9a2a92bf85e1fcd191565e5000b8338ee9bdff3ba77bd46",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "channel-slack-live",
       "title": "Published Slack channel",
       "path": "screenshots/channel-slack-live.png",
       "capturedAt": "2026-09-30T11:21:54.858Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4f231180ed59e39ae44b61d26a4016b1924ffab0ab4e7f2d6fb5cc0ac2fb6ea5",
       "source": {
         "kind": "browser",
@@ -493,14 +504,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2b93192132d11bb6c9a2a92bf85e1fcd191565e5000b8338ee9bdff3ba77bd46",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "channel-terminal-build",
       "title": "Terminal app channel",
       "path": "screenshots/channel-terminal-build.png",
       "capturedAt": "2026-09-30T11:21:57.535Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "81db9c8408d17de95edf28458b79f099a72aa46ea3d4d25fef2d76adeebb4067",
       "source": {
         "kind": "browser",
@@ -515,14 +527,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2b93192132d11bb6c9a2a92bf85e1fcd191565e5000b8338ee9bdff3ba77bd46",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "channel-web-published",
       "title": "Published web chat channel",
       "path": "screenshots/channel-web-published.png",
       "capturedAt": "2026-09-30T11:21:49.062Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "ed18f83d07bef8b1484cf0040a39442cbd0298d8f6e0b15af696079653326c7a",
       "source": {
         "kind": "browser",
@@ -537,7 +550,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2b93192132d11bb6c9a2a92bf85e1fcd191565e5000b8338ee9bdff3ba77bd46",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "cli-agents-help",
@@ -680,7 +694,7 @@
       "title": "Credentials",
       "path": "screenshots/credentials-vault.png",
       "capturedAt": "2026-09-30T11:22:48.078Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "db83bc771d3747ea8fa3f8cb810b0916b87a6b198d5c421e19142c17dd440f9c",
       "source": {
         "kind": "browser",
@@ -696,7 +710,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b5625ebeb1640c49933f1d26fccf8b6dcb2f605a372039285a5d4969e7cafdff",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "gateway-detail-tools",
@@ -835,7 +850,7 @@
       "title": "Add channel",
       "path": "screenshots/interfaces-channel-config.png",
       "capturedAt": "2026-09-30T11:22:00.190Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "aa6a65aabbf701d494218a1311d013f4bc5cd7d662e8e8477d18684631b06957",
       "source": {
         "kind": "browser",
@@ -850,14 +865,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "07457778a4437e74c44b0bfecf54159d2d277740c840654b9ebe6c5b48fbf460",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "interfaces-channel-setup",
       "title": "Microsoft Teams channel",
       "path": "screenshots/interfaces-channel-setup.png",
       "capturedAt": "2026-09-30T11:22:02.885Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "020aeb706ef795680433abd8d741cfe429256ed427fd51ae0afebb54bf49699e",
       "source": {
         "kind": "browser",
@@ -872,7 +888,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2b93192132d11bb6c9a2a92bf85e1fcd191565e5000b8338ee9bdff3ba77bd46",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "memory-write",
@@ -1079,7 +1096,7 @@
       "title": "Schedule card",
       "path": "screenshots/schedule-config.png",
       "capturedAt": "2026-09-30T11:21:31.757Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "9c14c68b9405cebbf9e39a1ea41c666b9ef5359ea43147b2896d81cdd1df9da7",
       "source": {
         "kind": "browser",
@@ -1094,7 +1111,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "self-hosting-compose",
@@ -1110,7 +1128,7 @@
       "title": "Approval policies",
       "path": "screenshots/settings-approval-policies-enabled.png",
       "capturedAt": "2026-09-30T11:23:41.402Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "90c60057f93a91232887fa47f58c942cbdbce0224e121e08c1a5069aeba0a9fa",
       "source": {
         "kind": "browser",
@@ -1126,14 +1144,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a079093dd6d90d74769177182a8085f59c02dfbda1c201090bbb84b898a19063",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "settings-approval-policy-new",
       "title": "New approval policy",
       "path": "screenshots/settings-approval-policy-new.png",
       "capturedAt": "2026-09-30T11:23:44.041Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "682ff2c3645de5b00d7a45e3b603e689d43923223e1528c5ae0d31b8fdfbf6e1",
       "source": {
         "kind": "browser",
@@ -1148,14 +1167,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30316e6d2e5a1629d48ca6179dd414d0c269fd44c72749d88ea575a9555422c5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "settings-audit-streams-enabled",
       "title": "Audit streaming",
       "path": "screenshots/settings-audit-streams-enabled.png",
       "capturedAt": "2026-09-30T11:23:49.404Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "670977e04912a2c124e217193c4235692e73ca93605bf779b428ff73072d6e01",
       "source": {
         "kind": "browser",
@@ -1170,14 +1190,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "64a777d8d0697b2ccd031bbd7cdce8a24a61dd9ce41505980dd13d7dd5b3c62b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "settings-compliance-enabled",
       "title": "Compliance",
       "path": "screenshots/settings-compliance-enabled.png",
       "capturedAt": "2026-09-30T11:23:46.795Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "544094ac9f6e138e357a4a3cbcaf92246242f025c9debe8bbc9129fad3ce6572",
       "source": {
         "kind": "browser",
@@ -1192,14 +1213,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "64a777d8d0697b2ccd031bbd7cdce8a24a61dd9ce41505980dd13d7dd5b3c62b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "settings-encryption-locked",
       "title": "Encryption (Enterprise, locked)",
       "path": "screenshots/settings-encryption-locked.png",
       "capturedAt": "2026-09-30T11:23:51.887Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b0293d77eaaafcbc7ba350a5668765dd05ec38ad1b87f1c42c8557d97ed88b94",
       "source": {
         "kind": "browser",
@@ -1214,14 +1236,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "64a777d8d0697b2ccd031bbd7cdce8a24a61dd9ce41505980dd13d7dd5b3c62b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "settings-rbac-enabled",
       "title": "Roles",
       "path": "screenshots/settings-rbac-enabled.png",
       "capturedAt": "2026-09-30T11:23:29.454Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4c3ffa7f53dde124f45f6b8c041a449bd844efb3131fe073194354af459bb43a",
       "source": {
         "kind": "browser",
@@ -1236,14 +1259,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "64a777d8d0697b2ccd031bbd7cdce8a24a61dd9ce41505980dd13d7dd5b3c62b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "settings-rbac-new-policy",
       "title": "New access policy",
       "path": "screenshots/settings-rbac-new-policy.png",
       "capturedAt": "2026-09-30T11:23:35.963Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d5d84375cafb5b3b5e2211102d9ca4c74c10e1a01af807f3bb07d5323c221c45",
       "source": {
         "kind": "browser",
@@ -1258,14 +1282,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "64a777d8d0697b2ccd031bbd7cdce8a24a61dd9ce41505980dd13d7dd5b3c62b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "settings-rbac-new-role",
       "title": "New role",
       "path": "screenshots/settings-rbac-new-role.png",
       "capturedAt": "2026-09-30T11:23:32.685Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "068cbacf53e590e8f3011fabbbbf12c7ec38b292b93d2dab89598e231121cd6f",
       "source": {
         "kind": "browser",
@@ -1280,14 +1305,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "64a777d8d0697b2ccd031bbd7cdce8a24a61dd9ce41505980dd13d7dd5b3c62b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "settings-sso-enabled",
       "title": "Single sign-on",
       "path": "screenshots/settings-sso-enabled.png",
       "capturedAt": "2026-09-30T11:23:38.658Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "388787159f7cd8710646eaf32015aeac694819f816d37e509661562f1d2b268e",
       "source": {
         "kind": "browser",
@@ -1302,14 +1328,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "64a777d8d0697b2ccd031bbd7cdce8a24a61dd9ce41505980dd13d7dd5b3c62b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "settings-teams",
       "title": "Members and teams",
       "path": "screenshots/settings-teams.png",
       "capturedAt": "2026-09-30T11:23:26.852Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8c9454310a54eb05530c3cd97b4d9ff6d3f924e23086cda07ec4aa089f2dbe6e",
       "source": {
         "kind": "browser",
@@ -1325,14 +1352,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "e1a529f629e55616f1dc71b941b943d196f02ff0c400c6747392d6ac64ac1119",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "support-agent-constraints",
       "title": "Support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
       "capturedAt": "2026-09-30T11:21:09.854Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
       "source": {
         "kind": "browser",
@@ -1347,14 +1375,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "support-agent-overview",
       "title": "Support agent overview",
       "path": "screenshots/support-agent-overview.png",
       "capturedAt": "2026-09-30T11:21:03.938Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
       "source": {
         "kind": "browser",
@@ -1369,14 +1398,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "support-agent-runs",
       "title": "Support agent runs",
       "path": "screenshots/support-agent-runs.png",
       "capturedAt": "2026-09-30T11:21:13.051Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d34ff0022be953872a867ce29bc742adf0839cfcde88a100314c9beb260662d2",
       "source": {
         "kind": "browser",
@@ -1391,7 +1421,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "tool-detail",
@@ -1442,7 +1473,7 @@
       "title": "Change history",
       "path": "screenshots/versioning-history.png",
       "capturedAt": "2026-09-30T11:21:41.183Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "fe01b42fc4f0b21ea501e03dcd6d4138602a2871d666007ada240b7b6c8a5d2d",
       "source": {
         "kind": "browser",
@@ -1457,14 +1488,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "versioning",
       "title": "Pipeline versions",
       "path": "screenshots/versioning.png",
       "capturedAt": "2026-09-30T11:21:38.185Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e88096c26f00296d4c083af20ef68d5278b9e33b4a93d7aa32d583b20f174afd",
       "source": {
         "kind": "browser",
@@ -1479,14 +1511,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "webhook-config",
       "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
       "capturedAt": "2026-09-30T11:21:35.085Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "9c14c68b9405cebbf9e39a1ea41c666b9ef5359ea43147b2896d81cdd1df9da7",
       "source": {
         "kind": "browser",
@@ -1501,14 +1534,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
     {
       "id": "widget-builder",
       "title": "Website widget channel",
       "path": "screenshots/widget-builder.png",
       "capturedAt": "2026-09-30T11:22:05.966Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "49e2b35d84888450d3c2d8d841245a67f15849b4984bb9825cb362e4f7f02cc8",
       "source": {
         "kind": "browser",
@@ -1524,7 +1558,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "0189d07f70121eaeaac56ef611367d3f1748fb4f0aec88ded1ccc5eccb0f173a",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     }
   ]
 }
