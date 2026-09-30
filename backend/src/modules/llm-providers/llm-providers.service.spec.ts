@@ -1367,6 +1367,76 @@ describe('LlmProvidersService', () => {
       );
     });
 
+    describe('a connection that is off', () => {
+      const inactive = () => {
+        const provider = {
+          id: 'provider-1',
+          name: 'OpenAI',
+          type: LlmProviderType.OPENAI,
+          configuration: { apiKey: 'test-key', model: 'gpt-4o-mini' },
+          status: LlmProviderStatus.INACTIVE,
+          isHealthy: false,
+          lastError: 'Incorrect API key provided',
+          organizationId: 'org-1',
+          visibility: 'org',
+        };
+        Object.setPrototypeOf(provider, LlmProvider.prototype);
+        llmProviderRepository.findOne.mockResolvedValue(provider);
+        llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+        return provider;
+      };
+      const answers = () =>
+        jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue({
+          message: { role: MessageRole.ASSISTANT, content: 'Hi' },
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          model: 'gpt-4o-mini',
+          cost: 0,
+        });
+
+      it('comes back on when Check again passes for someone who may change it', async () => {
+        inactive();
+        answers();
+        const result = await service.performHealthCheck('provider-1', 'org-1', { reactivateFor: 'user-1' });
+        expect(result).toMatchObject({ isHealthy: true, reactivated: true });
+        expect(llmProviderRepository.update).toHaveBeenCalledWith(
+          { id: 'provider-1' },
+          expect.objectContaining({ isHealthy: true, lastError: null, status: LlmProviderStatus.ACTIVE }),
+        );
+      });
+
+      it('stays off when the check fails, and the failure is what the page shows', async () => {
+        inactive();
+        jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(Object.assign(new Error('Incorrect API key provided'), { status: 401 }));
+        const result = await service.performHealthCheck('provider-1', 'org-1', { reactivateFor: 'user-1' });
+        expect(result.isHealthy).toBe(false);
+        expect(result.reactivated).toBeUndefined();
+        for (const [, columns] of llmProviderRepository.update.mock.calls) expect(columns).not.toHaveProperty('status');
+        expect(llmProviderRepository.update).toHaveBeenCalledWith(
+          { id: 'provider-1', organizationId: 'org-1' },
+          expect.objectContaining({ isHealthy: false, lastError: expect.stringContaining('Incorrect API key') }),
+        );
+      });
+
+      it('stays off for a caller who may read it but not change it', async () => {
+        inactive();
+        answers();
+        accessPolicy.canAccess.mockImplementation(async (_u: any, _r: any, action: string) =>
+          action === 'manage' ? { allowed: false, reason: 'denied' } : { allowed: true, reason: 'ok' });
+        const result = await service.performHealthCheck('provider-1', 'org-1', { reactivateFor: 'user-2' });
+        expect(result.isHealthy).toBe(true);
+        expect(result.reactivated).toBeUndefined();
+        expect(llmProviderRepository.update).toHaveBeenCalledWith({ id: 'provider-1' }, expect.not.objectContaining({ status: expect.anything() }));
+      });
+
+      it('stays off through a check nobody asked for (the sweep, a save, the boot sync)', async () => {
+        inactive();
+        answers();
+        const result = await service.performHealthCheck('provider-1', 'org-1');
+        expect(result.reactivated).toBeUndefined();
+        expect(llmProviderRepository.update).toHaveBeenCalledWith({ id: 'provider-1' }, expect.not.objectContaining({ status: expect.anything() }));
+      });
+    });
+
     it('discovers a provider-native model when no default model is configured', async () => {
       const mockProvider = {
         id: 'provider-1',

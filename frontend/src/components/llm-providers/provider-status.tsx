@@ -19,6 +19,8 @@ const KEY_WORDS = /\b40[13]\b|unauthori[sz]ed|forbidden|authentication|invalid[_
 export function providerCheck(p: (ProviderHealthFields & { lastHealthCheckAt?: string | null; keyChecked?: boolean }) | null | undefined): ProviderCheck {
   if (!p) return { state: 'unchecked', label: 'Not checked yet' }
   if (p.keyChecked === true) return { state: 'ok', label: 'Key works' }
+  // Off: nothing it offers is used until a check passes (its page says why).
+  if (p.status === 'inactive') return { state: 'failed', label: 'Inactive', error: currentProviderFailure(p)?.message ?? (p.lastError || undefined) }
   const failure = currentProviderFailure(p)
   const checkFailed = !!p.lastHealthCheckAt && p.isHealthy === false
   if (failure || checkFailed || p.status === 'error') {
@@ -30,4 +32,21 @@ export function providerCheck(p: (ProviderHealthFields & { lastHealthCheckAt?: s
 
 export function ProviderStatus({ check, className }: { check: ProviderCheck; className?: string }) {
   return <StatusLabel check={check} className={className} testId="provider-status" />
+}
+
+/**
+ * Why a connection that is off is off, from its last check: the check's
+ * own words when it failed, or that it passed and the connection was
+ * turned off anyway (by hand, or its endpoint stopped), or that nothing
+ * checked it. Each ends with what turns it back on.
+ */
+export function inactiveReason(
+  p: { lastHealthCheckAt?: string | null; isHealthy?: boolean; lastError?: string | null },
+  formatWhen: (iso: string) => string = (iso) => new Date(iso).toLocaleString(),
+): string {
+  const fix = 'A passing check turns it back on.'
+  if (!p.lastHealthCheckAt) return `No check has run on it yet. ${fix}`
+  const when = formatWhen(p.lastHealthCheckAt)
+  if (p.isHealthy === false) return `The last check (${when}) failed: ${(p.lastError || 'the provider did not answer').replace(/\.\s*$/, '')}. Replace the key if it was refused. ${fix}`
+  return `The last check (${when}) passed, but the connection was turned off since. ${fix}`
 }

@@ -29,7 +29,7 @@ import { HostingPanel } from '@/components/models/hosting/hosting-panel'
 import { StartModelForm } from '@/components/models/hosting/start-model-form'
 import { useHostingActions } from '@/components/models/use-model-data'
 import { CredentialSlot, CredentialRefSummary, isMaskedKey } from '@/components/llm-providers/credential-slot'
-import { ProviderStatus, providerCheck } from '@/components/llm-providers/provider-status'
+import { ProviderStatus, inactiveReason, providerCheck } from '@/components/llm-providers/provider-status'
 import { HOSTING_ADAPTER_FOR_TYPE, keyUrlFor, providerTileLabel, takesBaseUrl } from '@/components/llm-providers/provider-catalog'
 import { providerLogos, providerUsageApiSupport, usageApiSupported } from '@/components/llm-providers/provider-type-config'
 import { BASE_URL_PRIVATE_HOST_HINT, buildProviderUpdateBody } from '@/components/llm-providers/schema'
@@ -42,10 +42,10 @@ import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { AdapterRefusal, CreateModelDeploymentBody, ModelAdapter, ModelDeployment } from '@/types/deployments'
 import type { ModelCard, UpdateModelBody } from '@/types/models'
-import { cn, pluralized } from '@/lib/utils'
+import { cn, formatDateTime, pluralized } from '@/lib/utils'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
-type CheckOutcome = { ok: true; models: number } | { ok: false; message: string }
+type CheckOutcome = { ok: true; models: number; reactivated?: boolean } | { ok: false; message: string }
 
 /**
  * One provider connection: its name (renameable), whether its key works,
@@ -124,7 +124,7 @@ export function ProviderPage() {
       if (!result?.isHealthy) return { ok: false, message: result?.error || 'The provider did not accept the key.' }
       await modelsApi.sync(id)
       const rows = await modelsApi.list({ providerId: id })
-      return { ok: true, models: Array.isArray(rows) ? rows.length : 0 }
+      return { ok: true, models: Array.isArray(rows) ? rows.length : 0, reactivated: result?.reactivated === true }
     },
     onSuccess: (next) => {
       setOutcome(next)
@@ -180,6 +180,8 @@ export function ProviderPage() {
   }
 
   const status = providerCheck(provider)
+  // Off until a check passes: the page says why and how to turn it back on.
+  const inactive = provider.status === 'inactive'
   const visibility: VisibilityValue = { visibility: (provider.visibility as Visibility) ?? 'org', teamId: provider.teamId ?? null }
   const listedIds = models.filter((m) => m.status !== 'inactive').map((m) => m.vendorModelId)
   const summary = accessSummary(modelAccessOf(provider), listedIds, (vid) => models.find((m) => m.vendorModelId === vid)?.name ?? vid)
@@ -217,15 +219,39 @@ export function ProviderPage() {
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+        {!inactive && (
+          <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+            <Button variant="outline" onClick={() => check.mutate()} disabled={check.isPending} className="gap-2">
+              <RefreshCw className={cn('h-4 w-4', check.isPending && 'animate-spin')} aria-hidden />
+              {check.isPending ? 'Checking...' : 'Check again'}
+            </Button>
+          </div>
+        )}
+      </header>
+
+      {inactive && (
+        <section
+          aria-labelledby="provider-inactive-title"
+          data-testid="provider-inactive"
+          className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"
+        >
+          <div className="space-y-1">
+            <h2 id="provider-inactive-title" className="text-sm font-semibold">
+              This connection is inactive
+            </h2>
+            <p className="break-words text-sm text-muted-foreground" data-testid="provider-inactive-reason">
+              {inactiveReason(provider, formatDateTime)} Until then its models are not offered anywhere.
+            </p>
+          </div>
+          <ReplaceKey provider={provider} idPrefix="inactive-replace-key" onSaved={() => check.mutate()} />
           <Button variant="outline" onClick={() => check.mutate()} disabled={check.isPending} className="gap-2">
             <RefreshCw className={cn('h-4 w-4', check.isPending && 'animate-spin')} aria-hidden />
             {check.isPending ? 'Checking...' : 'Check again'}
           </Button>
-        </div>
-      </header>
+        </section>
+      )}
 
-      {status.error && !outcome && (
+      {status.error && !outcome && !inactive && (
         <p className="break-words rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" data-testid="provider-last-error">
           {status.error}
         </p>
@@ -239,7 +265,7 @@ export function ProviderPage() {
             outcome.ok ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200' : 'border-destructive/30 bg-destructive/5 text-destructive',
           )}
         >
-          {outcome.ok ? `Key works. ${pluralized(outcome.models, 'model')}.` : outcome.message}
+          {outcome.ok ? `Key works.${outcome.reactivated ? ' The connection is active again.' : ''} ${pluralized(outcome.models, 'model')}.` : outcome.message}
         </p>
       )}
 
@@ -362,7 +388,7 @@ function EditableName({ name, saving, onSave }: { name: string; saving: boolean;
 }
 
 /** "Replace key": paste a new one, or switch to a connected account. Saving checks it again. */
-function ReplaceKey({ provider, onSaved }: { provider: any; onSaved: () => void }) {
+function ReplaceKey({ provider, onSaved, idPrefix = 'replace-key' }: { provider: any; onSaved: () => void; idPrefix?: string }) {
   const notifications = useNotifications()
   const [open, setOpen] = useState(false)
   const [key, setKey] = useState('')
@@ -399,8 +425,8 @@ function ReplaceKey({ provider, onSaved }: { provider: any; onSaved: () => void 
             }}
           >
             <div className="min-w-[16rem] flex-1">
-              <Label htmlFor="replace-key">New key</Label>
-              <SecretInput id="replace-key" className="mt-1" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Paste the new key" />
+              <Label htmlFor={idPrefix}>New key</Label>
+              <SecretInput id={idPrefix} className="mt-1" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Paste the new key" />
             </div>
             <Button type="submit" disabled={save.isPending || !key.trim()}>
               {save.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
@@ -419,7 +445,7 @@ function ReplaceKey({ provider, onSaved }: { provider: any; onSaved: () => void 
             )}
           </div>
           <CredentialPicker
-            id="replace-key-saved"
+            id={`${idPrefix}-saved`}
             label="Or use a saved key"
             value={provider.credentialRef?.id ?? ''}
             onChange={(credential) => {

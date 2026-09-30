@@ -795,8 +795,12 @@ export class LlmProvidersService {
      * kick-off still works.
      */
     organizationId: string,
-    /** syncModels: false when the caller lists the models itself next (the boot and on-load catalog sync). */
-    options: { syncModels?: boolean } = {},
+    /**
+     * syncModels: false when the caller lists the models itself next (the boot and on-load catalog sync).
+     * reactivateFor: the user who asked for this check; a connection that is off comes back on when it
+     * passes and they may change it. Only the Check again route passes it.
+     */
+    options: { syncModels?: boolean; reactivateFor?: string } = {},
   ): Promise<{
     isHealthy: boolean;
     responseTime?: number;
@@ -806,6 +810,8 @@ export class LlmProvidersService {
     keyRejected?: boolean;
     /** The model the check called (configured, or the vendor's current default). */
     probedModel?: string;
+    /** The connection was off and this passing check turned it back on. */
+    reactivated?: boolean;
   }> {
     let provider: LlmProvider | null = null;
     try {
@@ -845,13 +851,33 @@ export class LlmProvidersService {
       const response = await this.runner.callLlmProvider(provider, testRequest, session, []);
       const responseTime = Date.now() - startTime;
 
+      // A connection that is off comes back on when someone who may change
+      // it asks for this check and the key works: the check is what it was
+      // waiting for. Sweeps and internal checks leave the status alone
+      // (status is the operator's intent; see LlmProviderStatus.ERROR).
+      const reactivated =
+        provider.status === LlmProviderStatus.INACTIVE &&
+        !!options.reactivateFor &&
+        (await this.mayManage(provider, options.reactivateFor));
+
       // Update provider health status. Partial UPDATE so we don't
       // race with concurrent writers who might also be touching
       // totalRequests / lastError via the save() path.
       await this.llmProviderRepository.update(
         { id: provider.id },
-        { isHealthy: true, lastHealthCheckAt: new Date(), lastError: null },
+        {
+          isHealthy: true,
+          lastHealthCheckAt: new Date(),
+          lastError: null,
+          ...(reactivated ? { status: LlmProviderStatus.ACTIVE } : {}),
+        },
       );
+      if (reactivated) {
+        this.logger.log(`LLM provider ${provider.id} is active again: a check passed`);
+        this.auditLogService.logUpdate(provider.organizationId, options.reactivateFor!, AuditResource.LLM_PROVIDER, provider.id, provider.name, undefined, {
+          status: { from: LlmProviderStatus.INACTIVE, to: LlmProviderStatus.ACTIVE }, reason: 'a check passed',
+        });
+      }
 
       // The probe was a real call with a real model and this key: every
       // model the provider lists becomes usable (the readiness rule), the
@@ -867,6 +893,7 @@ export class LlmProvidersService {
         isHealthy: true,
         responseTime,
         probedModel: healthCheckModel,
+        ...(reactivated ? { reactivated: true } : {}),
         details: {
           model: response.model,
           tokenUsage: response.usage.totalTokens,
@@ -1104,6 +1131,16 @@ export class LlmProvidersService {
   // fire-and-forget and logs instead of throwing.
 
   /** The readiness rule's writer (see ModelCatalogService.applyProviderCheck). Awaited, never throws. */
+  /** Whether this user may change the provider (the rule updateProvider enforces), as a yes or no. */
+  private async mayManage(provider: LlmProvider, userId: string): Promise<boolean> {
+    try {
+      await assertManageable(this.accessPolicy, userId, provider, 'Provider');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async applyCatalogCheck(
     provider: { id: string; organizationId: string },
     outcome: { passed: boolean; keyRejected?: boolean; error?: string },

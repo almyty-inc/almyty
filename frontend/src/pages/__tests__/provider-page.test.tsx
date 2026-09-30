@@ -172,6 +172,53 @@ describe('ProviderPage', () => {
     await waitFor(() => expect(llmProvidersApi.update).toHaveBeenCalledWith('p1', { name: 'OpenAI prod' }))
   })
 
+  describe('a connection that is inactive', () => {
+    const INACTIVE = { ...OPENAI, status: 'inactive', keyChecked: false, isHealthy: false, lastSuccessAt: null, lastHealthCheckAt: NOW, lastError: '401 Incorrect API key provided.', lastErrorAt: NOW }
+
+    beforeEach(() => {
+      vi.mocked(llmProvidersApi.getById).mockResolvedValue(INACTIVE as any)
+    })
+
+    it('says it is inactive and why, from its last check', async () => {
+      at()
+      expect(await screen.findByTestId('provider-status')).toHaveTextContent('Inactive')
+      const box = screen.getByTestId('provider-inactive')
+      expect(within(box).getByRole('heading', { name: 'This connection is inactive' })).toBeInTheDocument()
+      expect(within(box).getByTestId('provider-inactive-reason')).toHaveTextContent(/The last check \(.+\) failed: 401 Incorrect API key provided\. Replace the key if it was refused\. A passing check turns it back on\./)
+      // The reason is said once, in the box, not again under it.
+      expect(screen.queryByTestId('provider-last-error')).not.toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: 'Check again' })).toHaveLength(1)
+    })
+
+    it('replaces the key right there, then checks again, and says it is active again', async () => {
+      vi.mocked(llmProvidersApi.update).mockResolvedValue({} as any)
+      vi.mocked(llmProvidersApi.test).mockResolvedValue({ isHealthy: true, reactivated: true } as any)
+      vi.mocked(modelsApi.sync).mockResolvedValue({ created: [], skipped: [] } as any)
+      at()
+      const box = await screen.findByTestId('provider-inactive')
+      fireEvent.click(within(box).getByRole('button', { name: 'Replace key' }))
+      fireEvent.change(within(box).getByLabelText('New key'), { target: { value: 'sk-new-1234567890' } })
+      fireEvent.click(within(box).getByRole('button', { name: 'Save and check' }))
+      await waitFor(() => expect(llmProvidersApi.update).toHaveBeenCalledWith('p1', { credentialId: null, configuration: { apiKey: 'sk-new-1234567890' } }))
+      await waitFor(() => expect(llmProvidersApi.test).toHaveBeenCalledWith('p1'))
+      expect(await screen.findByTestId('provider-check-result')).toHaveTextContent('Key works. The connection is active again. 2 models.')
+    })
+
+    it('checks again from the box; a failing check leaves it inactive with the answer', async () => {
+      vi.mocked(llmProvidersApi.test).mockResolvedValue({ isHealthy: false, error: 'OpenAI rejected this key.' } as any)
+      at()
+      fireEvent.click(within(await screen.findByTestId('provider-inactive')).getByRole('button', { name: 'Check again' }))
+      expect(await screen.findByTestId('provider-check-result')).toHaveTextContent('OpenAI rejected this key.')
+      expect(screen.getByTestId('provider-inactive')).toBeInTheDocument()
+    })
+
+    it('says so when it was turned off after a passing check, or never checked', async () => {
+      const { inactiveReason } = await import('@/components/llm-providers/provider-status')
+      expect(inactiveReason({ lastHealthCheckAt: NOW, isHealthy: true }, () => 'today')).toBe('The last check (today) passed, but the connection was turned off since. A passing check turns it back on.')
+      expect(inactiveReason({}, () => 'today')).toBe('No check has run on it yet. A passing check turns it back on.')
+    })
+  })
+
   describe('settings', () => {
     it('picks its default model among its own models only', async () => {
       at('settings')
