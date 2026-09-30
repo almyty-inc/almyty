@@ -325,6 +325,12 @@ describe('/memories/moves/:id', () => {
     expect(result).toHaveTextContent('Sales bot was not switched: You cannot edit this agent.')
   })
 
+  it('says the agents switch once every memory has moved, while memories are left behind', async () => {
+    vi.mocked(memoriesApi.getMove).mockResolvedValue({ ...MOVE, status: 'completed', moved: 0, failed: 3, switchAgents: true, agentsSwitched: null } as any)
+    renderAtRoute(<MemoryMoveDetailPage />, { path: '/memories/moves/:id', url: '/memories/moves/mv-1' })
+    expect(await screen.findByTestId('move-agents-pending')).toHaveTextContent("The agents that used almyty's own memory switch once every memory has moved.")
+  })
+
   it('shows the plain sentence the server gives, never a raw answer', async () => {
     vi.mocked(memoriesApi.getMove).mockResolvedValue({ ...MOVE, status: 'failed', lastError: 'Mem0 refused the key. Check it at app.mem0.ai.' } as any)
     renderAtRoute(<MemoryMoveDetailPage />, { path: '/memories/moves/:id', url: '/memories/moves/mv-1' })

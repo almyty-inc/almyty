@@ -191,7 +191,7 @@ export function MemoryMoveDetailPage() {
               </p>
             )}
           </FormSection>
-          {move.switchAgents && move.status !== 'completed' && (
+          {move.switchAgents && !move.agentsSwitched && (move.status !== 'completed' || move.failed > 0) && (
             <p className="text-sm text-muted-foreground" data-testid="move-agents-pending">
               The agents that used {moveAccountName(accounts, move.sourceService, move.sourceCredentialId)} switch once every memory has moved.
             </p>
