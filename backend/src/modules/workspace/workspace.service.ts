@@ -9,10 +9,11 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, EntityManager } from 'typeorm';
+import { Repository, LessThanOrEqual, EntityManager, In } from 'typeorm';
 
 import { Runner, RunnerIsolationTier } from '../../entities/runner.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
+import { Agent } from '../../entities/agent.entity';
 import { canAcceptWork } from '../runner/runner-state';
 import { RunnerService } from '../runner/runner.service';
 import {
@@ -25,7 +26,7 @@ import {
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import type { ExecutionPrincipal, GatewayPrincipal } from '../../common/authorization/execution-access.service';
 
-const DEFAULT_TTL_MS = 60 * 60 * 1000; // 1 hour
+export const DEFAULT_TTL_MS = 60 * 60 * 1000; // 1 hour
 const MAX_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Workspace ids are uuids; anything else is answered "no" before it reaches Postgres. */
@@ -236,11 +237,32 @@ export class WorkspaceService {
     });
   }
 
+  /**
+   * The caller's workspaces, newest first. One an agent run was given
+   * carries `agent: { id, name }` (name only, never the agent's config) so
+   * the runner's Workspaces tab can say which agent and run it is for.
+   */
   async listForOwner(ownerUserId: string, organizationId: string): Promise<Workspace[]> {
-    return this.workspaces.find({
+    const rows = await this.workspaces.find({
       where: { ownerUserId, organizationId },
       order: { createdAt: 'DESC' },
     });
+    return this.attachAgentNames(rows, organizationId);
+  }
+
+  async attachAgentNames(rows: Workspace[], organizationId: string): Promise<Workspace[]> {
+    const ids = [...new Set(rows.map((w) => w.agentId).filter((id): id is string => !!id))];
+    if (ids.length === 0) return rows;
+    const agents = await this.workspaces.manager.getRepository(Agent).find({
+      where: { id: In(ids), organizationId },
+      select: { id: true, name: true },
+    });
+    const byId = new Map(agents.map((a) => [a.id, a]));
+    for (const w of rows) {
+      const agent = w.agentId ? byId.get(w.agentId) : undefined;
+      if (agent) w.agent = { id: agent.id, name: agent.name } as Agent;
+    }
+    return rows;
   }
 
   /**

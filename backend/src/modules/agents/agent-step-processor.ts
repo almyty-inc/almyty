@@ -786,6 +786,10 @@ export class AgentStepProcessor {
               retries: resolvedLimits.toolErrorRetries,
               // The machine this agent's runner-backed tools must run on.
               runnerLabels: agent.agentConfig?.runnerLabels,
+              // The run and agent a runner workspace made for this call
+              // belongs to (RunWorkspaceService).
+              runId: run.id,
+              agentId: agent.id,
             };
 
             const toolResult: ToolExecutionResult = await this.s.toolExecutorService.executeTool(
