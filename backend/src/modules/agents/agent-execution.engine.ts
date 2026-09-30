@@ -10,6 +10,7 @@ import { AgentWebhookService } from './agent-webhook.service';
 import { AgentExecutionStateHelper } from './agent-execution-state.helper';
 import { ExecutionContext } from './agent-template-resolver';
 import { StreamEvent } from './stream-event.types';
+import { streamableAnswerNode } from './answer-node';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Organization } from '../../entities/organization.entity';
 import { resolveRunLimits } from './run-limits';
@@ -56,6 +57,14 @@ export interface ExecuteAgentOptions {
    * `userId`'s.
    */
   principal?: ExecutionPrincipal;
+  /**
+   * Emit the answer's tokens as `answer.chunk` events while the model writes
+   * them, when one llm_call's text is the whole answer (answer-node.ts).
+   * Other shapes emit nothing extra and answer when the run ends. Needs
+   * `onEvent`; a caller that sets this must still read the finished output,
+   * which is the answer either way.
+   */
+  streamAnswer?: boolean;
 }
 
 export interface EngineInternalOptions {
@@ -322,6 +331,11 @@ export class AgentExecutionEngine {
 
       // Validate pipeline size
       validatePipelineSize(pipeline);
+
+      // Decided on the pipeline that actually runs, a compiled strategy's
+      // included: its shape is what says whether one model call's text is
+      // the answer.
+      const answerNodeId = options.streamAnswer && onEvent ? streamableAnswerNode(pipeline) : null;
 
       // 2. Build graph
       const { adjacencyList, inDegree } = buildGraph(pipeline);
@@ -607,6 +621,20 @@ export class AgentExecutionEngine {
                     resolvedRoles,
                     // The machine this agent's runner-backed tools run on.
                     runnerLabels: agent.agentConfig?.runnerLabels,
+                    // The answering model call streams its text as it
+                    // arrives, when the caller asked and this is that node.
+                    ...(nodeId === answerNodeId
+                      ? {
+                          onAnswerChunk: (content: string) =>
+                            this.state.emitEvent(onEvent, {
+                              type: 'answer.chunk',
+                              nodeId,
+                              nodeType: node.type,
+                              data: { content },
+                              timestamp: Date.now(),
+                            }),
+                        }
+                      : {}),
                   },
                 ),
             );

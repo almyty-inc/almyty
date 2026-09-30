@@ -7,6 +7,7 @@ import { AgentSubAgentExecutors } from '../agent-subagent-executors.helper';
 import { AgentTemplateResolver } from '../agent-template-resolver';
 import { AgentSchedulerService } from '../agent-scheduler.service';
 import { AgentOpenAIStreamHelper } from '../agent-openai-stream.helper';
+import { CompatAgentInvoker } from '../compat-agent-invoker.service';
 import { resolveCompatAgent } from '../compat-auth.helper';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
 import { ToolHttpExecutor } from '../../tools/executors/tool-http.executor';
@@ -259,7 +260,7 @@ describe('team scope is an execution boundary (workflow paths)', () => {
     ])('serves a team agent to the key of %s, and runs it in that key\'s scope', async (_l, who) => {
       const resolved = await resolve('agent:team-agent', who);
       const res: any = { statusCode: 200, setHeader: jest.fn(), status(c: number) { this.statusCode = c; return this; }, json: jest.fn() };
-      await new AgentOpenAIStreamHelper(engine).handleSync(resolved, {}, key(who), res);
+      await new AgentOpenAIStreamHelper(new CompatAgentInvoker(engine)).handleSync(resolved, {}, key(who), res);
       expect(res.statusCode).toBe(200);
       expect(executions.rows()[0].status).toBe(AgentExecutionStatus.COMPLETED);
     });
