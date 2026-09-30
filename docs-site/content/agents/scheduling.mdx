@@ -8,24 +8,25 @@ recurring AI workflow.
 
 ## Create a schedule
 
-1. Open the agent's detail page
-2. Click the **Schedule** tab
-3. Set the **Interval** (minimum 5 minutes)
-4. Optionally provide **Static Input**, a fixed JSON payload sent on each run
-5. Click **Enable Schedule**
+1. Open the agent's **Overview** tab
+2. On the **Schedule** card, turn on **Enable schedule**
+3. Set the **Interval (minutes)** (at least 1 minute, at most a year)
+4. Optionally provide **Input JSON**, a fixed payload sent on each run
+5. Click **Save schedule**
 
-The next scheduled run time appears below the interval setting.
+Once it is enabled, the card says when the next run is due, counted from the
+last execution.
 
 ## Remove a schedule
 
-On the **Schedule** tab, click **Disable Schedule**. Disabling does not delete
-existing execution history.
+On the **Schedule** card, turn **Enable schedule** off. Disabling does not
+delete existing execution history.
 
 ## Configuration Reference
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `intervalMinutes` | number | Yes | How often to run (minimum: 5 minutes) |
+| `intervalMinutes` | number | Yes | How often to run (1 minute to 1 year) |
 | `input` | object | No | Static input to pass on each invocation |
 
 ## Common Intervals

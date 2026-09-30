@@ -1,6 +1,6 @@
 # Gateway Authentication
 
-Every gateway request is authenticated before any tool runs. almyty is default-deny: a gateway with no auth configured rejects all requests with 401. You add auth once, and it guards every transport (MCP, UTCP, A2A) on that gateway.
+Every gateway request is authenticated before any tool runs. almyty is default-deny: a gateway with no auth configured rejects all requests with 401. You add auth once, and it guards every transport on that gateway. The keys of an agent's **Other agents (A2A)** channel are gateway keys too, managed on the channel's page. A Skills gateway has no auth section: the Skills CLI signs in as you.
 
 ![Gateway detail page](/screenshots/gateway-detail.png)
 
@@ -8,7 +8,7 @@ Every gateway request is authenticated before any tool runs. almyty is default-d
 
 1. Open a gateway's detail page and find the **Authentication** section
 2. Click **Add auth method** to expand the inline form
-3. Select a type: API Key, Bearer Token, Basic Auth, JWT, OAuth 2.1, or None
+3. Select a type: API Key, Bearer Token, Basic Auth, OAuth 2.0 (the MCP OAuth 2.1 flow with PKCE, below), JWT, None (Public) or Custom
 4. Fill in the configuration and click **Add auth method**
 
 To issue API keys, click **Generate key** after adding an API Key method. Name the key in the inline form. The raw key is shown once at creation time, then stored only as a SHA-256 hash. The key API also supports optional expiry, scopes, and `lastUsedAt` tracking.
@@ -141,4 +141,4 @@ Or require specific headers:
 
 ## Multiple auth methods
 
-A gateway can carry several auth methods, each marked required or optional. Required methods are tried in order (first match wins), so you can combine them for a gradual migration, for example adding OAuth while keeping API keys active.
+A gateway can carry several auth methods, each marked required or optional. Required methods are tried in order (first match wins), so you can combine them, for example adding OAuth while keeping API keys active.

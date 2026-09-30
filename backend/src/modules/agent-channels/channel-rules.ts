@@ -85,6 +85,8 @@ export const CHANNEL_DEFAULT_NAMES: Readonly<Record<ChannelType, string>> = Obje
   [ChannelType.WHATSAPP]: 'WhatsApp (Twilio)',
   [ChannelType.WHATSAPP_CLOUD]: 'WhatsApp (Meta Cloud)',
   [ChannelType.SMS]: 'SMS',
+  [ChannelType.IMESSAGE_SENDBLUE]: 'iMessage (Sendblue)',
+  [ChannelType.IMESSAGE_LOOPMESSAGE]: 'iMessage (LoopMessage)',
   [ChannelType.MICROSOFT_TEAMS]: 'Microsoft Teams',
   [ChannelType.GOOGLE_CHAT]: 'Google Chat',
   [ChannelType.EMAIL]: 'Email',

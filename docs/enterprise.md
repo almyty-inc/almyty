@@ -39,7 +39,7 @@ token resolves to community, never to allowed.
 
 | Entitlement | What it does |
 |---|---|
-| `sso` | SAML and OIDC sign-in, plus SCIM provisioning from Okta or Entra. Configured per org under Settings → SSO. |
+| `sso` | SAML and OIDC sign-in, plus SCIM provisioning from Okta or Entra. Configured per org under Settings → People and access → Single sign-on. Also unlocks visitor sign-in (the `sso` auth mode) on an agent's channels. |
 | `advanced_rbac` | Custom roles and attribute-based rules beyond the built-in owner/admin/member tiers. |
 | `approval_policy` | Multi-step and quorum approval gates. Without it, a request is decided by a single approver. |
 | `compliance_pack` | Org-enforced plugin policy — PII filtering and the security scanner applied to every run rather than per agent. |
@@ -52,9 +52,9 @@ Everything in Business, plus:
 
 | Entitlement | What it does |
 |---|---|
-| `byo_kms` | Customer-managed encryption keys. Channel and credential secrets are wrapped with your own AWS KMS CMK instead of the platform key. Configured under Settings → Encryption. The route is `/kms`. |
+| `byo_kms` | Customer-managed encryption keys. Channel and credential secrets are wrapped with your own AWS KMS CMK instead of the platform key. Configured under Settings → Advanced → Encryption. The route is `/kms`. |
 | `chargeback` | Cost attribution per team and per agent, with a projection for the rest of the period, under Analytics → Chargeback. |
-| `white_label` | Removes the almyty mark from published surfaces, and permits removing the AI disclosure line. |
+| `white_label` | Removes the almyty mark from an agent's channels, and permits turning a channel's AI disclosure off. |
 
 ### A note on `white_label` and the AI disclosure
 
@@ -69,12 +69,16 @@ or in terms the visitor has already accepted. It does not remove the
 obligation, and clearing the line without another disclosure in place is
 a decision for your counsel, not a product setting.
 
-Mechanically: `aiDisclosure: null` means "use the default line" and is
-always allowed. An empty string is a deliberate removal and requires the
-entitlement. Both are enforced on the server when a hosted-chat surface
-is saved, and the entitlement is re-read when the public page is served —
-so a surface published under Enterprise and then downgraded gets the mark
-and the disclosure back rather than keeping them off indefinitely.
+Mechanically there are two ways to remove it. Every channel that talks to
+people has an **AI disclosure** switch (`configuration.aiDisclosure`, on
+unless it is turned off), and the agent's branding carries the line itself
+(`branding.aiDisclosure`: unset means "use the default line" and is always
+allowed; an empty string is a deliberate removal). Turning the switch off
+or emptying the line requires the entitlement. Both are enforced on the
+server when the channel is saved and when it is published, and the
+entitlement is re-read when a web chat page is served, so a web chat published under
+Enterprise and then downgraded gets the mark and the disclosure back rather
+than keeping them off indefinitely.
 
 ## What is deliberately not gated
 

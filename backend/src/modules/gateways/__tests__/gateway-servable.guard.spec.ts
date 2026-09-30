@@ -21,7 +21,7 @@ import { join, relative } from 'path';
  *  3. the executor re-checks every top-level gateway call against the same
  *     predicate and answers "not found" -- the backstop for a handler that
  *     forgets step 2.
- *  4. the agent gateways (A2A, ACP) look a caller-named run up only through
+ *  4. the agent gateways (A2A) look a caller-named run up only through
  *     findGatewayRun, scoped to the gateway's own agent.
  */
 const SRC = join(__dirname, '..', '..', '..');
@@ -138,7 +138,6 @@ describe('a gateway executes only what it publishes (source guard)', () => {
       ['src/modules/a2a/a2a-message.handler.ts'],
       ['src/modules/a2a/a2a-task.handler.ts'],
       ['src/modules/a2a/a2a-server.service.ts'],
-      ['src/modules/acp/acp-server.service.ts'],
     ])('%s', (file) => {
       const source = read(file);
       // Any direct run lookup is by a run this code already resolved (one it

@@ -198,9 +198,10 @@ describe('@almyty/models', () => {
       .toBe('status is inactive (not listed by provider)');
     expect(unselectableReason({ id: 'c1', status: 'active', validationStatus: 'passed' }))
       .toBe('nothing can call it: no provider row and no endpoint URL');
-    // A provider's model waits on the provider's key check; an endpoint on its own.
+    // A provider's model waits on the provider's key check, which is on the
+    // connection's page under Credentials; an endpoint is checked on its own.
     expect(unselectableReason({ id: 'c1', status: 'active', providerId: 'p1', validationStatus: 'never' }))
-      .toContain("waiting for its provider's key check");
+      .toBe("waiting for its provider's key check (check its connection under Credentials)");
     expect(unselectableReason({ id: 'c1', status: 'active', endpointRef: { url: 'https://x/v1' }, validationStatus: 'never' }))
       .toContain('almyty models validate c1');
     expect(unselectableReason({ id: 'c1', status: 'active', endpointRef: { url: 'https://x/v1' }, validationStatus: 'failed', lastValidationError: 'MODEL_NOT_FOUND' }))

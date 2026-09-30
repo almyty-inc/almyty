@@ -17,6 +17,8 @@ import { MicrosoftTeamsAdapter } from '../adapters/microsoft-teams.adapter';
 import { SignalAdapter } from '../adapters/signal.adapter';
 import { MatrixAdapter } from '../adapters/matrix.adapter';
 import { IrcAdapter } from '../adapters/irc.adapter';
+import { IMessageSendblueAdapter } from '../adapters/imessage-sendblue.adapter';
+import { IMessageLoopMessageAdapter } from '../adapters/imessage-loopmessage.adapter';
 import { installFetchMock } from '../adapters/__tests__/test-helpers';
 import {
   BY_ID,
@@ -105,7 +107,7 @@ describe('inbound channel pipeline under concurrency', () => {
       new MicrosoftTeamsAdapter(),
       new SignalAdapter(),
       new MatrixAdapter(),
-      new IrcAdapter(),
+      new IrcAdapter(), new IMessageSendblueAdapter(), new IMessageLoopMessageAdapter(),
       undefined,
       undefined,
       undefined,
@@ -665,6 +667,156 @@ describe('inbound channel pipeline under concurrency', () => {
       inbound.createdAt = new Date(Date.now() - 11 * 60 * 1000);
       await service.handleInboundMessage(loadedGateway(), payload, headers);
       expect(agentRuntimeService.startRun).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ── iMessage relays through the shared pipeline ───────────────────────
+  //
+  // Both relays post every event to the one webhook URL. A verified
+  // delivery that is not an inbound 1:1 text must be acknowledged and
+  // left alone; one that is must run once and be answered through the
+  // relay, with the AI disclosure line on the first reply.
+  describe('iMessage relays', () => {
+    const settle = async () => {
+      emitter.emit('event', { type: 'run.completed' });
+      for (let i = 0; i < 8; i++) await new Promise((resolve) => setImmediate(resolve));
+    };
+
+    const relayGateway = (type: GatewayType, configuration: Record<string, any>): Gateway => {
+      const gateway = loadedGateway(type);
+      gateway.configuration = { ...configuration, aiDisclosure: true };
+      return gateway;
+    };
+
+    const SENDBLUE = {
+      api_key_id: 'sb-key-id',
+      api_secret_key: 'sb-secret-key',
+      phone_number: '+15550009999',
+      signing_secret: 'sb-webhook-secret-0001',
+    };
+    const LOOP = { api_key: 'loop-api-key', sender_name: 'northwind', inbound_token: 'loop-webhook-auth-0001' };
+
+    const sendblueInbound = (overrides: Record<string, any> = {}) => ({
+      accountEmail: 'ops@northwind.example',
+      content: 'Is my order shipped?',
+      is_outbound: false,
+      status: 'RECEIVED',
+      message_handle: '99DCC379-DD76-4712-BA65-11EFB33B8CD6',
+      date_sent: '2026-09-30T10:00:00.000Z',
+      from_number: '+15551234567',
+      to_number: '+15550009999',
+      service: 'iMessage',
+      ...overrides,
+    });
+
+    const loopInbound = (overrides: Record<string, any> = {}) => ({
+      event: 'message_inbound',
+      contact: '+13231112233',
+      text: 'Is my order shipped?',
+      message_type: 'text',
+      message_id: '59c55Ce8-41d6-43Cc-9116-8cfb2e696D7b',
+      webhook_id: 'ab5Ae733-cCFc-4025-9987-7279b26bE71b',
+      api_version: '1.0',
+      ...overrides,
+    });
+
+    it('Sendblue: a verified inbound text runs once and is answered through Sendblue with the disclosure', async () => {
+      fetchMock.setNextResponse({ json: { status: 'QUEUED', message_handle: 'OUT-1', error_code: null } });
+      const service = buildService();
+      const payload = sendblueInbound();
+
+      await service.handleInboundMessage(
+        relayGateway(GatewayType.IMESSAGE_SENDBLUE, SENDBLUE),
+        payload,
+        { 'sb-signing-secret': SENDBLUE.signing_secret },
+      );
+      await settle();
+
+      expect(agentRuntimeService.startRun).toHaveBeenCalledTimes(1);
+      expect(agentRuntimeService.startRun.mock.calls[0][3]).toBe('Is my order shipped?');
+      const send = fetchMock.calls.find((c) => c.url === 'https://api.sendblue.co/api/send-message')!;
+      expect(send).toBeDefined();
+      expect(send.init.headers['sb-api-key-id']).toBe('sb-key-id');
+      expect(send.init.headers['sb-api-secret-key']).toBe('sb-secret-key');
+      const body = JSON.parse(send.init.body);
+      expect(body).toMatchObject({ number: '+15551234567', from_number: '+15550009999' });
+      expect(body.content).toBe(`${ChannelGatewayService.DEFAULT_AI_DISCLOSURE}\n\nagent says hi`);
+      expect(eventRepository.rows.find((r: any) => r.direction === 'inbound')).toMatchObject({
+        status: 'processed',
+        deliveryId: 'imessage_sendblue:99DCC379-DD76-4712-BA65-11EFB33B8CD6',
+      });
+    });
+
+    it('Sendblue: a forged delivery (wrong secret) starts nothing and sends nothing', async () => {
+      const service = buildService();
+      await service.handleInboundMessage(
+        relayGateway(GatewayType.IMESSAGE_SENDBLUE, SENDBLUE),
+        sendblueInbound(),
+        { 'sb-signing-secret': 'guessed' },
+      );
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+      expect(fetchMock.calls).toHaveLength(0);
+      expect(eventRepository.rows[0]).toMatchObject({ status: 'failed', errorMessage: 'signature verification failed' });
+    });
+
+    it('Sendblue: an outbound echo or a group message is acknowledged without a run or a row', async () => {
+      const service = buildService();
+      const gateway = relayGateway(GatewayType.IMESSAGE_SENDBLUE, SENDBLUE);
+      const headers = { 'sb-signing-secret': SENDBLUE.signing_secret };
+
+      await service.handleInboundMessage(gateway, sendblueInbound({ is_outbound: true, status: 'DELIVERED' }), headers);
+      await service.handleInboundMessage(gateway, sendblueInbound({ message_handle: 'G-1', group_id: 'group-1' }), headers);
+
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+      expect(eventRepository.rows).toHaveLength(0);
+      expect(fetchMock.calls).toHaveLength(0);
+    });
+
+    it('LoopMessage: a verified message_inbound runs once and is answered through LoopMessage', async () => {
+      fetchMock.setNextResponse({ json: { message_id: 'OUT-1', contact: '+13231112233', text: 'x' } });
+      const service = buildService();
+
+      await service.handleInboundMessage(
+        relayGateway(GatewayType.IMESSAGE_LOOPMESSAGE, LOOP),
+        loopInbound(),
+        { authorization: LOOP.inbound_token },
+      );
+      await settle();
+
+      expect(agentRuntimeService.startRun).toHaveBeenCalledTimes(1);
+      const send = fetchMock.calls.find((c) => c.url === 'https://a.loopmessage.com/api/v1/message/send/')!;
+      expect(send.init.headers['Authorization']).toBe('loop-api-key');
+      const body = JSON.parse(send.init.body);
+      expect(body).toEqual({
+        contact: '+13231112233',
+        sender: 'northwind',
+        text: `${ChannelGatewayService.DEFAULT_AI_DISCLOSURE}\n\nagent says hi`,
+      });
+      expect(eventRepository.rows.find((r: any) => r.direction === 'inbound')).toMatchObject({ status: 'processed' });
+    });
+
+    it('LoopMessage: status events and group messages are acknowledged without a run', async () => {
+      const service = buildService();
+      const gateway = relayGateway(GatewayType.IMESSAGE_LOOPMESSAGE, LOOP);
+      const headers = { authorization: LOOP.inbound_token };
+
+      await service.handleInboundMessage(gateway, loopInbound({ event: 'message_delivered' }), headers);
+      await service.handleInboundMessage(gateway, loopInbound({ message_id: 'G-1', group: { group_id: 'g1' } }), headers);
+
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+      expect(eventRepository.rows).toHaveLength(0);
+    });
+
+    it('LoopMessage: a redelivery of the same message does not start a second run', async () => {
+      const service = buildService();
+      const gateway = relayGateway(GatewayType.IMESSAGE_LOOPMESSAGE, LOOP);
+      const headers = { authorization: LOOP.inbound_token };
+
+      await service.handleInboundMessage(gateway, loopInbound(), headers);
+      // LoopMessage retries with the same message_id and a new webhook_id.
+      await service.handleInboundMessage(gateway, loopInbound({ webhook_id: 'retry-2' }), headers);
+
+      expect(agentRuntimeService.startRun).toHaveBeenCalledTimes(1);
     });
   });
 });

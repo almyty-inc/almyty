@@ -4,7 +4,7 @@ Memory gives an agent recall across runs, so it remembers what matters without y
 
 Memory is distinct from [constraints](/agents/autonomous#constraints): constraints are always-on prompt rules; memory is retrieved per turn by relevance.
 
-![Memory Browse view filtered to long-tier demo entries with tags and embedding status](/screenshots/memory.png)
+![The Memory page's Memories tab filtered to long-tier demo entries with tags and embedding status](/screenshots/memory.png)
 
 ## Tiers: short-term to long-term
 
@@ -69,7 +69,7 @@ Every memory belongs to a scope (`user`, `workspace`, `project`, `collab`, or `a
 
 An autonomous agent's **Memory** section decides what its runs read and write. Every setting is applied by the server on each run; none of it is only shown.
 
-**Memory account.** almyty's own memory, an outside account your organization set up on the Memory page, or an account of the agent's own: anyone who can edit the agent can connect one with **Add a memory account**, without changing the organization's memory settings. An organization account is used with the organization's credential for it; the agent's own account is used as the run, so its connection's scope applies (a private connection only for an agent private to the same owner, a team one only for that team's agents; the server refuses any other).
+**Memory account.** almyty's own memory, an outside account your organization set up on the Memory page's **Storage** tab, or an account of the agent's own: anyone who can edit the agent can connect one with **Add a memory account**, without changing the organization's memory settings. An organization account is used with the organization's credential for it; the agent's own account is used as the run, so its connection's scope applies (a private connection only for an agent private to the same owner, a team one only for that team's agents; the server refuses any other).
 
 **Whose memory.**
 
@@ -95,7 +95,7 @@ In every case the agent can also save a memory with its `store_memory` tool whil
 
 ![Writing a memory entry](/screenshots/memory-write.png)
 
-In the UI, open an agent's **Memory** tab and click **Add Memory**, or let the agent save them automatically during a run.
+In the UI, click **Add memory** on the Memory page, or on an agent's **Memory** tab to add one for that agent, or let the agent save them automatically during a run.
 
 From your AI assistant, the native MCP control plane exposes `memory_put`, `memory_search`, `memory_supersede`, and more, so you can read and write memory from Claude Code or Cursor. See [Control almyty via MCP](/control-via-mcp). Memory CRUD is also available over REST in the [API reference](/api-reference).
 

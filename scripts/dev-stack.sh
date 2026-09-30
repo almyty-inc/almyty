@@ -10,7 +10,8 @@
 # The API is started with OLLAMA_ALLOW_PRIVATE_URLS=true so an Ollama-typed
 # provider may point at a localhost fake server (the models E2E specs start
 # one), MODEL_RECONCILE_CRON at every minute so deployments settle quickly,
-# and the price feed off. Logs land in $LOG_DIR (default: /tmp/almyty-qa).
+# and the price feed off unless MODEL_PRICE_FEED_DISABLED=false. Logs land
+# in $LOG_DIR (default: /tmp/almyty-qa).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -27,7 +28,7 @@ PG_IMAGE="${PG_IMAGE:-pgvector/pgvector:pg16}"
 mkdir -p "$LOG_DIR"
 
 api_env() {
-  env PORT="$API_PORT" NODE_ENV=development \
+  env PORT="$API_PORT" NODE_ENV=development TZ="${TZ:-UTC}" \
     DATABASE_HOST=localhost DATABASE_PORT="$PG_PORT" DATABASE_USERNAME=postgres DATABASE_PASSWORD=postgres DATABASE_NAME=almyty_qa DB_SSL=false \
     REDIS_HOST=localhost REDIS_PORT="$REDIS_PORT" \
     JWT_SECRET="${JWT_SECRET:-qa-jwt-secret-0123456789abcdef0123456789}" \
@@ -35,7 +36,7 @@ api_env() {
     ENCRYPTION_KEY="${ENCRYPTION_KEY:-qa-encryption-key-32-bytes-minimum!!}" \
     FRONTEND_URL="http://localhost:$WEB_PORT" CORS_ORIGIN="http://localhost:$WEB_PORT" \
     BASE_URL="http://localhost:$API_PORT" API_BASE_URL="http://localhost:$API_PORT" \
-    OLLAMA_ALLOW_PRIVATE_URLS=true MODEL_RECONCILE_CRON='*/1 * * * *' MODEL_PRICE_FEED_DISABLED=true \
+    OLLAMA_ALLOW_PRIVATE_URLS=true MODEL_RECONCILE_CRON='*/1 * * * *' MODEL_PRICE_FEED_DISABLED="${MODEL_PRICE_FEED_DISABLED:-true}" \
     "$@"
 }
 
@@ -53,7 +54,15 @@ up() {
   # and removes a failure that looks like a code bug and is not.
   rm -f "$ROOT/backend"/*.tsbuildinfo
 
-  (cd "$ROOT/backend" && api_env nohup npm run start:dev >"$LOG_DIR/backend.log" 2>&1 & echo $! >"$LOG_DIR/backend.pid")
+  # BACKEND_EE=true runs the commercial build the way the image does
+  # (build:ee, then dist-ee/src/main), so the ee/ modules are served too;
+  # the default is the OSS watch build, which never loads ee/.
+  if [ "${BACKEND_EE:-false}" = "true" ]; then
+    (cd "$ROOT/backend" && npm run build:ee >"$LOG_DIR/backend-build.log" 2>&1)
+    (cd "$ROOT/backend" && api_env nohup node dist-ee/src/main >"$LOG_DIR/backend.log" 2>&1 & echo $! >"$LOG_DIR/backend.pid")
+  else
+    (cd "$ROOT/backend" && api_env nohup npm run start:dev >"$LOG_DIR/backend.log" 2>&1 & echo $! >"$LOG_DIR/backend.pid")
+  fi
   (cd "$ROOT/frontend" && PORT="$WEB_PORT" ALMYTY_API_TARGET="http://localhost:$API_PORT" nohup npm run dev >"$LOG_DIR/frontend.log" 2>&1 & echo $! >"$LOG_DIR/frontend.pid")
 
   echo "waiting for http://localhost:$API_PORT/health ..."

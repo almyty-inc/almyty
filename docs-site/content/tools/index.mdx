@@ -10,15 +10,16 @@ LLM prompt, or an npm SDK.
 
 ## Two ways to get tools
 
-**Import an API.** Open **APIs → Connect an API**, pick what kind it is, give its description (a link, a file or the text), and click **Connect API**. Or pick one of the **Ready-made provider APIs** (OpenAI, Mistral, Hugging Face Hub): almyty reads the description the provider publishes and calls it with the key you keep for that provider. almyty creates a
+**Import an API.** Open **APIs** and click **Connect an API**, then pick what kind it is first: **OpenAPI / Swagger**, **GraphQL**, **SOAP / WSDL**, **gRPC / proto**, **SDK / npm** or **Manual HTTP**. Each kind opens its own form: a description comes as a link, a file or the text, an SDK as its npm packages, and a Manual HTTP API as its address, with tools added by hand. Click **Connect API**. Or pick one of the **Ready-made provider APIs** (OpenAI, Mistral, Hugging Face Hub): almyty reads the description the provider publishes and calls it with the key you already keep for that provider on **Credentials**. almyty creates a
 tool for each operation, with parameters, types, and validation already filled in:
 
-| Schema | What becomes a tool |
-|--------|---------------------|
-| OpenAPI | Each path plus method |
+| Kind | What becomes a tool |
+|------|---------------------|
+| OpenAPI / Swagger | Each path plus method |
 | GraphQL | Each query and mutation |
-| SOAP | Each WSDL operation |
-| Protobuf | Each RPC method |
+| SOAP / WSDL | Each WSDL operation |
+| gRPC / proto | Each RPC method |
+| SDK / npm | Each exported function |
 
 **Create one by hand.** Click **Create tool** to open `/tools/new` and pick an execution method. Give
 it a name and description (the description is what agents see when deciding
@@ -39,7 +40,7 @@ configure the method.
 Open a tool to configure it and run it against real inputs in the tool tester
 before an agent ever touches it.
 
-![Generated weather tool with its parameter schema and Test Tool tab](/screenshots/tool-detail.png)
+![Generated weather tool with its parameter schema and Test tool tab](/screenshots/tool-detail.png)
 
 ## Put tools in front of an LLM
 

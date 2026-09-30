@@ -37,7 +37,8 @@ curl -X POST https://api.almyty.com/gateways \
     "name": "Production MCP",
     "type": "mcp",
     "endpoint": "/prod-tools",
-    "description": "Production tool gateway"
+    "description": "Production tool gateway",
+    "configuration": { "transport": "http" }
   }'
 ```
 
@@ -49,7 +50,7 @@ curl -X POST https://api.almyty.com/gateways \
 | `type` | string | Yes | `mcp`, `utcp` or `skills`: the one protocol the gateway serves. A web chat, website widget, messaging channel or A2A endpoint is a channel of an agent, and is refused here (`CHANNEL_GATEWAY_NEEDS_AGENT`) |
 | `endpoint` | string | Yes | URL path (unique within org) |
 | `description` | string | No | Description |
-| `configuration` | object | No | Type-specific config |
+| `configuration` | object | Yes | Type-specific config; `{}` takes the defaults. MCP: `{ "transport": "http" }` (`http`, `sse` or `websocket`) |
 
 ### Response
 
@@ -133,6 +134,7 @@ After creation, the gateway is accessible at:
 | Type | URL |
 |------|-----|
 | MCP | `https://api.almyty.com/{org-slug}{endpoint}` |
-| A2A | `https://api.almyty.com/{org-slug}{endpoint}` |
 | UTCP | `https://api.almyty.com/{org-slug}{endpoint}` |
 | Skills | Via `npx @almyty/skills install @{org-slug}{endpoint}` |
+
+An agent's A2A channel answers at the same shape of URL, on the gateway its channel publishes.

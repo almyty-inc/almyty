@@ -16,8 +16,8 @@ import { ModelRegistryService } from '../model-registry.service';
  *
  * The same field is already refused by the connection validator
  * (connection-validation.service.ts, s3Bucket), but that only runs on the
- * opt-in `POST /credentials/:id/test`, and nothing requires a connection
- * to have been tested before it is used.
+ * opt-in `POST /credentials/:id/validate`, and nothing requires a
+ * connection to have been validated before it is used.
  */
 function credentialWith(endpoint: string | undefined): Credential {
   const c = new Credential();

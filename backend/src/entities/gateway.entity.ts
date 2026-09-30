@@ -31,8 +31,6 @@ export enum GatewayType {
   SKILLS = 'skills',
   // Agent-kind types
   A2A = 'a2a',
-  ACP = 'acp',
-  OPENAI_CHAT = 'openai_chat',
   // Channel types (agent-kind)
   SLACK = 'slack',
   DISCORD = 'discord',
@@ -40,6 +38,10 @@ export enum GatewayType {
   WHATSAPP = 'whatsapp',
   WHATSAPP_CLOUD = 'whatsapp_cloud',
   SMS = 'sms',
+  // iMessage has no public API; it goes through a relay that owns the
+  // Apple-side number. One type per relay, picked when adding the channel.
+  IMESSAGE_SENDBLUE = 'imessage_sendblue',
+  IMESSAGE_LOOPMESSAGE = 'imessage_loopmessage',
   EMAIL = 'email',
   WEBHOOK = 'webhook',
   GOOGLE_CHAT = 'google_chat',
@@ -411,14 +413,10 @@ export class Gateway {
         return ['http', 'sse', 'websocket'].includes(protocol);
       case GatewayType.A2A:
         return ['http', 'jsonrpc'].includes(protocol);
-      case GatewayType.ACP:
-        return ['http', 'jsonrpc'].includes(protocol);
       case GatewayType.UTCP:
         return ['http', 'tcp'].includes(protocol);
       case GatewayType.SKILLS:
         return ['cli', 'file'].includes(protocol);
-      case GatewayType.OPENAI_CHAT:
-        return ['http'].includes(protocol);
       default:
         // Channel types all use http
         return protocol === 'http';
@@ -452,12 +450,6 @@ export class Gateway {
           // modules/a2a/types/a2a-spec.types.ts. An entity must not import a
           // module, so the value is duplicated rather than referenced.
           a2aVersion: this.configuration.a2aVersion || '1.0',
-        };
-
-      case GatewayType.ACP:
-        return {
-          ...baseConfig,
-          acpVersion: this.configuration.acpVersion || '1.0.0',
         };
 
       case GatewayType.UTCP:

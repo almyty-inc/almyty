@@ -113,8 +113,6 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
       gatewayResolver as any,
       {} as any, // a2a server
       {} as any, // a2a agent card
-      {} as any, // acp server
-      {} as any, // acp discovery
       { get: jest.fn().mockReturnValue(null) } as any, // config
       { check: jest.fn().mockResolvedValue({ limited: false }) } as any, // rate limit
       channelGatewayService as any,

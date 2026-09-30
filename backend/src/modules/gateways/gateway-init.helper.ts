@@ -51,9 +51,7 @@ export class GatewayInitHelper {
         break;
 
       case GatewayType.A2A:
-      case GatewayType.ACP:
-      case GatewayType.OPENAI_CHAT:
-        // Agent-kind protocol types — no special config required
+        // An agent's A2A channel -- no special config required
         break;
 
       case GatewayType.CHAT_WIDGET:

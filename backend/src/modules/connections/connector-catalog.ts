@@ -877,6 +877,69 @@ const CHANNEL_CONNECTORS: ConnectorDefinition[] = [
     docsUrl: 'https://developers.facebook.com/docs/whatsapp/cloud-api/reference/phone-numbers',
   },
   {
+    key: channelKey('imessage_sendblue'),
+    kind: 'channel',
+    displayName: 'iMessage (Sendblue)',
+    description: 'iMessage through a Sendblue line.',
+    // From the docs, 2026-09-30, not a live call (no account): the send is
+    // POST https://api.sendblue.co/api/send-message with `sb-api-key-id` and
+    // `sb-api-secret-key` headers; the receive webhook carries the secret set
+    // on it in `sb-signing-secret`. There is no single-header probe the
+    // validator can make, so the shape is checked.
+    connect: [{
+      type: 'api_key',
+      label: 'Sendblue API keys',
+      description: 'Sendblue dashboard: API keys for the two keys, Developer, Webhooks for the receive webhook and its secret.',
+      schema: {
+        type: 'object',
+        properties: {
+          api_key_id: { type: 'string', title: 'API key ID', description: 'Sent as sb-api-key-id.' },
+          api_secret_key: { type: 'string', title: 'API secret key', 'x-secret': true, description: 'Sent as sb-api-secret-key.' },
+          phone_number: { type: 'string', title: 'Sendblue number', pattern: '^\\+[1-9]\\d{6,14}$', description: 'The line replies go out from, in E.164 form.' },
+          signing_secret: { type: 'string', title: 'Webhook secret', 'x-secret': true, minLength: 16, description: 'The secret on your receive webhook. Sendblue sends it with every message so almyty can reject forgeries.' },
+        },
+        required: ['api_key_id', 'api_secret_key', 'phone_number', 'signing_secret'],
+      },
+      credentialType: CredentialType.API_KEY,
+      keyPageUrl: 'https://dashboard.sendblue.com/',
+    }],
+    capabilities: ['send', 'receive'],
+    validation: { kind: 'format', fields: { phone_number: '^\\+[1-9]\\d{6,14}$' }, accountLabelFrom: 'phone_number' },
+    keyPageUrl: 'https://dashboard.sendblue.com/',
+    docsUrl: 'https://docs.sendblue.com/api/resources/messages/methods/send/',
+  },
+  {
+    key: channelKey('imessage_loopmessage'),
+    kind: 'channel',
+    displayName: 'iMessage (LoopMessage)',
+    description: 'iMessage through a LoopMessage sender.',
+    // From the docs, 2026-09-30, not a live call (no account): the send is
+    // POST https://a.loopmessage.com/api/v1/message/send/ with the
+    // organization API key as the bare Authorization value; webhooks carry
+    // the Authorization value set for them in the dashboard. LoopMessage
+    // documents no read-only call, so the shape is checked.
+    connect: [{
+      type: 'api_key',
+      label: 'LoopMessage API key',
+      description: 'LoopMessage dashboard: the organization API key, and under Webhooks the authorization header value you choose.',
+      schema: {
+        type: 'object',
+        properties: {
+          api_key: { type: 'string', title: 'API key', 'x-secret': true, minLength: 8 },
+          sender_name: { type: 'string', title: 'Sender name', description: 'Optional; the sender replies go out from, when the organization has more than one.' },
+          inbound_token: { type: 'string', title: 'Webhook authorization value', 'x-secret': true, minLength: 16, description: 'The same value you type as the webhook authorization header in LoopMessage, so almyty can reject forgeries.' },
+        },
+        required: ['api_key', 'inbound_token'],
+      },
+      credentialType: CredentialType.API_KEY,
+      keyPageUrl: 'https://dashboard.loopmessage.com/',
+    }],
+    capabilities: ['send', 'receive'],
+    validation: { kind: 'format', accountLabelFrom: 'sender_name' },
+    keyPageUrl: 'https://dashboard.loopmessage.com/',
+    docsUrl: 'https://loopmessage.com/apidocs/send-message',
+  },
+  {
     key: channelKey('microsoft_teams'),
     kind: 'channel',
     displayName: 'Microsoft Teams',

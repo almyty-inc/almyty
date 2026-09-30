@@ -407,7 +407,9 @@ export class AgentChannelsService {
         return false;
       }
     };
-    return { hasEnterpriseAuth: await has('sso'), hasWhiteLabel: await has(EE_ENTITLEMENTS.WHITE_LABEL) };
+    // Visitor sign-in (the sso auth mode) is the SSO entitlement's; white
+    // label only removes the almyty mark and permits removing the disclosure.
+    return { hasEnterpriseAuth: await has(EE_ENTITLEMENTS.SSO), hasWhiteLabel: await has(EE_ENTITLEMENTS.WHITE_LABEL) };
   }
 
   /**

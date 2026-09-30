@@ -16,6 +16,8 @@ import { MicrosoftTeamsAdapter } from '../adapters/microsoft-teams.adapter';
 import { SignalAdapter } from '../adapters/signal.adapter';
 import { MatrixAdapter } from '../adapters/matrix.adapter';
 import { IrcAdapter } from '../adapters/irc.adapter';
+import { IMessageSendblueAdapter } from '../adapters/imessage-sendblue.adapter';
+import { IMessageLoopMessageAdapter } from '../adapters/imessage-loopmessage.adapter';
 import { CapturedFetch, installFetchMock } from '../adapters/__tests__/test-helpers';
 import {
   ClauseModel,
@@ -194,7 +196,7 @@ export async function roundTrip(options: RoundTripOptions): Promise<RoundTripRes
     new MicrosoftTeamsAdapter(),
     new SignalAdapter(),
     new MatrixAdapter(),
-    new IrcAdapter(),
+    new IrcAdapter(), new IMessageSendblueAdapter(), new IMessageLoopMessageAdapter(),
   );
 
   const gateway = new Gateway();

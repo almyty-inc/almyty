@@ -15,7 +15,7 @@ bedrock://...                        every 2 min                          status
 A cloud account is a provider like any other, so there is one place to begin: **Credentials → Connect a provider**.
 
 1. Connect the cloud account from its tile (Hugging Face, Modal, AWS, Google Vertex AI, Azure and the rest), with its key or a saved [credential](/credentials).
-2. On the provider's page, click **Start a model**.
+2. On the provider's page, open **Open models on this account** and click **Start a model**.
 3. Say which model: a Hugging Face repository such as `Qwen/Qwen3-14B`. A cloud that reads weights only from a bucket (AWS Bedrock import, Fireworks) asks for the bucket location instead. See [Model sources](#model-sources).
 4. Click **Start**.
 
@@ -25,18 +25,19 @@ The model is in the list at once, marked as starting. When the cloud reports it 
 
 ## On the provider's page
 
-The cloud account's page lists the models running there with, next to their usual facts:
+The cloud account's page, under **Open models on this account**, lists the models running there, each with:
 
 | | |
 |---|---|
-| **State** | Starting, Running, Scaled to zero, Resizing, Needs attention, Shutting down, Shut down or Failed, with the cloud's last message when there is one |
-| **Cost** | Spend so far and the current hourly rate |
+| **State** | Starting, Running, Stopped, Scaled to zero, Resizing, Needs attention, Missing from your cloud, Shutting down, Shut down or Failed, with the cloud's last message when there is one |
+| **Cost per hour** and **Spent so far** | The current hourly rate and spend so far |
 | **Budget** | The limit it is tied to and how much of it is used |
+| **Copies running**, **Region**, **Hardware**, **Source** | What runs, where, and from which weights |
+| **Made from** | Plain facts about the weights, for example "Based on Llama 3.1 70B, 4-bit" |
 | **Endpoint** | The URL the cloud serves it on |
-| **Lineage** | Plain facts about the weights, for example "Based on Llama 3.1 70B, 4-bit" |
-| **Controls** | Start, Stop, replicas, Shut down |
+| Controls | **Start**, **Stop**, **Copies** with **Apply**, **Shut down**; **Technical details** shows what was asked for next to what the cloud reports |
 
-Start, Stop and the replica count record what you want; almyty applies it at the cloud within two minutes. Stop scales to zero. Shut down removes the endpoint at the cloud. Weights are never touched.
+Start, Stop and the number of copies record what you want; almyty applies it at the cloud within two minutes. Stop (or 0 copies) scales to zero. Shut down removes the endpoint at the cloud. Weights are never touched. Each model also has its own page, `/models/hosting/:id`, reached from its row on the Models page.
 
 ## From the terminal
 

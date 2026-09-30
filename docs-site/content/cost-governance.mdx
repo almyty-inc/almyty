@@ -31,6 +31,8 @@ A spend budget is a period ceiling that applies **across runs**: "this org spend
 | `agentId` | optional | scope the budget to one agent; omit for org-wide |
 | `active` | boolean (default `true`) | inactive budgets are kept for history but never enforced |
 
+Budgets are listed, added and changed under **Analytics → Budgets** (a new one at `/analytics/budgets/new`), with each budget's period-to-date spend and the recent alerts.
+
 ### Enforcement
 
 Budgets are checked when a run starts, before anything is created, so a rejected run leaves no run row behind. For each active budget matching the org (and agent, if scoped), almyty sums the period-to-date spend of agent runs:
@@ -76,7 +78,7 @@ Both providers gate their usage APIs behind **admin-scoped keys**, separate from
 - **OpenAI**: an Admin key (`sk-admin-...`) with the `api.usage.read` scope. A normal `sk-...` key gets a 401.
 - **Anthropic**: an Admin API key (`sk-ant-admin...`) for the organization usage/cost report endpoints.
 
-Set it as `usageApiKey` in the provider's configuration (Models, provider, settings). It is encrypted at rest like the inference key and masked in API responses. If no `usageApiKey` is set, almyty falls back to the inference key, which will typically 401 on the usage endpoints; the error shows up in the sync result.
+Set it on the connection's page under **Settings → Advanced → Usage key** (pick an admin key from Credentials or paste one), or as `usageApiKey` in the provider's configuration over the API. It is stored as a credential like the inference key and masked in API responses. If no usage key is set, almyty falls back to the inference key, which will typically 401 on the usage endpoints; the error shows up in the sync result.
 
 ## API
 

@@ -25,6 +25,8 @@ export type ChannelType =
   | 'whatsapp'
   | 'whatsapp_cloud'
   | 'sms'
+  | 'imessage_sendblue'
+  | 'imessage_loopmessage'
   | 'microsoft_teams'
   | 'google_chat'
   | 'email'
@@ -41,6 +43,8 @@ export const MESSAGING_CHANNEL_TYPES: ChannelType[] = [
   'whatsapp',
   'whatsapp_cloud',
   'sms',
+  'imessage_sendblue',
+  'imessage_loopmessage',
   'microsoft_teams',
   'google_chat',
   'email',
@@ -63,6 +67,8 @@ export const ADDABLE_CHANNEL_TYPES: ChannelType[] = [
   'slack',
   'whatsapp',
   'whatsapp_cloud',
+  'imessage_sendblue',
+  'imessage_loopmessage',
   'microsoft_teams',
   'telegram',
   'discord',
@@ -201,6 +207,8 @@ export const CHANNEL_LABELS: Record<ChannelType, string> = {
   whatsapp: 'WhatsApp (Twilio)',
   whatsapp_cloud: 'WhatsApp (Meta Cloud)',
   sms: 'SMS',
+  imessage_sendblue: 'iMessage (Sendblue)',
+  imessage_loopmessage: 'iMessage (LoopMessage)',
   microsoft_teams: 'Microsoft Teams',
   google_chat: 'Google Chat',
   email: 'Email',
@@ -223,6 +231,8 @@ export const CHANNEL_HINTS: Record<ChannelType, string> = {
   whatsapp: 'Via Twilio',
   whatsapp_cloud: 'Via Meta Cloud',
   sms: 'Via Twilio',
+  imessage_sendblue: 'Via Sendblue',
+  imessage_loopmessage: 'Via LoopMessage',
   microsoft_teams: 'As a bot',
   google_chat: 'In your spaces',
   email: 'Via Resend',
@@ -245,6 +255,8 @@ export const CHANNEL_DESCRIPTIONS: Record<ChannelType, string> = {
   whatsapp: 'Answers messages to your Twilio WhatsApp sender.',
   whatsapp_cloud: 'Answers messages to your business number through Meta\u2019s Cloud API.',
   sms: 'Answers text messages to your Twilio number.',
+  imessage_sendblue: 'Answers iMessages to your Sendblue number, one to one.',
+  imessage_loopmessage: 'Answers iMessages to your LoopMessage sender, one to one.',
   microsoft_teams: 'Answers as a bot in Microsoft Teams.',
   google_chat: 'Answers as a Chat app in your Google Workspace spaces.',
   email: 'Answers email sent to your receiving address, through Resend.',
@@ -420,6 +432,14 @@ export const CHANNEL_INBOUND: Record<ChannelType, ChannelInbound> = {
   sms: {
     mode: 'auto',
     where: 'Set on your Twilio number for you when you publish. Shown here in case you need to check it.',
+  },
+  imessage_sendblue: {
+    mode: 'manual',
+    where: 'Sendblue dashboard → Developer → Webhooks: add this as the receive webhook, with the webhook secret above as its secret.',
+  },
+  imessage_loopmessage: {
+    mode: 'manual',
+    where: 'LoopMessage dashboard → Webhooks: paste this as the webhook URL, with the webhook authorization value above as its authorization header.',
   },
   whatsapp_cloud: {
     mode: 'manual',

@@ -1,14 +1,13 @@
 # Node Types
 
-Every step in a workflow agent is a node. There are 12 types, each doing one job,
-wired together by edges on the canvas. Drag them from the palette in the
-[builder](/agents/builder); this page is the reference for what each one needs
-and what it hands downstream.
+Every step in a workflow agent is a node. There are 13 types, each doing one job,
+wired together by edges on the canvas. Drag them from the palette, headed
+**Steps**, in the [builder](/agents/builder); this page is the reference for what
+each one needs and what it hands downstream.
 
-Ten of the twelve are in the palette. The other two — [Verify](#verify) and
-`extract_context` — are produced by the strategy compiler rather than dragged.
-Verify is documented at the bottom of this page; `extract_context` is covered
-with the strategies that use it in [Roles and strategies](/agents/execution).
+All thirteen are in the palette. [Verify](#verify) and
+[Extract context](#extract-context) are also produced by the strategy compiler;
+see [Roles and strategies](/agents/execution).
 
 ![Node palette in the agent builder](/screenshots/agent-builder-node-palette.png)
 
@@ -30,6 +29,8 @@ else, and nothing will read it.
 | **Merge** | `strategy`, `judgePrompt`, `consensusThreshold`, `judgeConfig`, `roleKey`, `model`, `routing` | `{{nodes.<id>.output}}` |
 | **Sub-Agent** | `agentId` or `target` (required), `inputMapping` | `{{nodes.<id>.output}}` |
 | **Verify** | `checkers` (required), `target`, `spec`, `policy` | `{{nodes.<id>.output}}`, a verdict object |
+| **Extract context** | `task`, `sources`, `instruction`, `roleKey`, `providerId`, `model`, `routing`, `temperature`, `maxTokens` | `{{nodes.<id>.output}}`, a brief object |
+| **Decision** | `question` (required), `thresholds`, `state`, `roleKey`, `providerId`, `model`, `routing`, `temperature`, `maxTokens` | (routes to the chosen answer's edge) |
 
 An LLM Call node needs a model from somewhere: a `providerId`, a `routing`
 policy, a `roleKey` the agent defines, or the organization's default routing
@@ -460,11 +461,10 @@ with structured JSON.
 
 ### Where it comes from
 
-This is the one node type with no palette entry. A `verify` node reaches a graph
-either from the strategy compiler — the `cascade` and `best_of_n` strategies both
-compile a `verify` step bound to the `verifier` role slot — or from a pipeline
-definition written directly against the API. Ejecting a strategy to an editable
-graph (Execution tab → Eject) leaves the compiled `verify` node in place.
+Drag it from the palette, or let the strategy compiler place it: the `cascade`
+and `best_of_n` strategies both compile a `verify` step bound to the `verifier`
+role slot. Ejecting a strategy to an editable graph (Execution tab, **Eject to
+an editable graph**) leaves the compiled `verify` node in place.
 
 ### It never throws on a failing verdict
 
@@ -513,3 +513,33 @@ JSON becomes verdict `error`, and the policy decides whether that blocks.
 
 Cost and tokens are summed across the panel and accounted to the node like any
 other call, so a check's price shows up in the run.
+
+## Extract context
+
+Compresses what the steps wired into it learned into a small structured brief, which later steps read instead of every transcript. It makes one model call, found the same way as an LLM Call node's (role, provider, routing policy, or the organization default), and its cost shows on the run like any other step. The `explore_extract_patch` strategy compiles one between the explorers and the principal role.
+
+In the side panel: **What the brief is for** (empty means the run's input), **What to boil down** (empty means the steps wired into it) and **Instruction** (empty means the built-in one).
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `task` | string | What the brief is for. Template-resolved. Defaults to the run input. |
+| `sources` | string | What to compress. Template-resolved. Defaults to the incoming node outputs. |
+| `instruction` | string | Replaces the built-in extraction instruction. |
+| `roleKey`, `providerId`, `model`, `routing`, `temperature`, `maxTokens` | | Which model answers, as for LLM Call. |
+
+A brief that does not parse fails the node rather than passing the raw transcripts on. With nothing to compress (no `sources` and no upstream output), the node fails before calling a model.
+
+## Decision
+
+Asks a model one question with a fixed set of answers and follows the edge of the answer it picks. The model gives every answer a weight; the weights are normalised into a distribution over the declared answers only, and the node leaves by the edge whose handle (or label) is the chosen answer.
+
+In the side panel: the **Question**, the **Answers** (each with an optional meaning, and exactly one marked as *cannot tell*), the **Kind of question** (**Pick one answer** or **Pick one level, in order**), **How sure it must be** per answer, and **Answers come back under** (the question id).
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `question` | object | Required. The prompt, the kind (`choice` or `score`), and the options, one of them the abstain option. A yes/no question is asked as a choice with yes, no and abstain. |
+| `thresholds` | object | Optional minimum probability per answer. A winning answer below its bar leaves by the abstain edge instead. |
+| `state` | string | What to decide over. Template-resolved. Defaults to the upstream outputs, else the run input. |
+| `roleKey`, `providerId`, `model`, `routing`, `temperature`, `maxTokens` | | Which model answers, as for LLM Call. |
+
+The output carries `selectedOption`, `argmax`, `abstained`, `probability`, `threshold` and the whole `distribution`. The numbers order the answers; they are not calibrated probabilities.

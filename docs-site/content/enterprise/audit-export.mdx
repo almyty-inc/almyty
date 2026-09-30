@@ -4,7 +4,7 @@ Requires the `audit_export` entitlement (Business or Enterprise on the hosted pl
 
 ## Export
 
-With the entitlement enabled, use **CSV** or **JSON** beside the filters in the **Audit Trail** tab under [Analytics](/analytics). The page-header **Export CSV** and **Export JSON** buttons export the request log, not the audit trail. Audit exports are filterable (date range, `resourceType`, `action`, `userId`) and capped at 50,000 rows. The file downloads as an attachment (`audit-export-YYYY-MM-DD.json|csv`) with an `X-Audit-Export-Count` header.
+With the entitlement enabled, use **CSV** or **JSON** beside the filters in the **Audit trail** tab under [Analytics](/analytics). The page-header **Export CSV** and **Export JSON** buttons export the request log, not the audit trail. Audit exports are filterable (date range, `resourceType`, `action`, `userId`) and capped at 50,000 rows. The file downloads as an attachment (`audit-export-YYYY-MM-DD.json|csv`) with an `X-Audit-Export-Count` header.
 
 CSV columns: `id, createdAt, organizationId, userId, userEmail, action, resourceType, resourceId, resourceName, status, ipAddress, details`. Admin/owner only. The export endpoint and its query parameters are in the [API reference](/api-reference).
 
