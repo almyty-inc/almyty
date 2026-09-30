@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 
 import { ChannelGatewayService } from '../channel-gateway.service';
 import { ChannelAttachmentReader } from '../channel-attachments.service';
+import { shortId } from '../channel-speaker';
 import { TextExtractorService } from '../../../files/text-extractor.service';
 import { Gateway, GatewayStatus, GatewayType } from '../../../../entities/gateway.entity';
 import { ChatWidgetAdapter } from '../adapters/chat-widget.adapter';
@@ -214,7 +215,10 @@ describe('iMessage groups and attachments through the channel pipeline', () => {
       expect(agentRuntimeService.startRun).toHaveBeenCalledTimes(1);
       const [, , userId, input, options] = agentRuntimeService.startRun.mock.calls[0];
       expect(userId).toBeNull();
-      expect(input).toBe('Can someone check order 1182?');
+      // In a group each message is read as its writer's. The relay gives a
+      // phone number and no name, so a short id stands in, never the number.
+      expect(input).toBe(`${shortId('+14155550101')}: Can someone check order 1182?`);
+      expect(input).not.toContain('4155550101');
       // The conversation is the group; the member who wrote is recorded.
       expect(options.metadata).toMatchObject({ threadId: 'b1e9f6d2-group-7731', channelUserId: '+14155550101' });
 
@@ -239,7 +243,9 @@ describe('iMessage groups and attachments through the channel pipeline', () => {
       );
 
       expect(agentRuntimeService.startRun).toHaveBeenCalledTimes(1);
-      expect(agentRuntimeService.sendInput).toHaveBeenCalledWith('run-1', 'org-1', 'It shipped yesterday.');
+      expect(agentRuntimeService.sendInput).toHaveBeenCalledWith('run-1', 'org-1', `${shortId('+14155550102')}: It shipped yesterday.`, undefined, []);
+      // Two members, two names: the agent can tell them apart.
+      expect(shortId('+14155550101')).not.toBe(shortId('+14155550102'));
       // The inbound event row keeps who said it.
       const inbound = eventRepository.rows.filter((r: any) => r.direction === 'inbound');
       expect(inbound.map((r: any) => r.payload?.from_number)).toEqual(['+14155550101', '+14155550102']);
@@ -311,7 +317,9 @@ describe('iMessage groups and attachments through the channel pipeline', () => {
 
   describe('inbound attachments', () => {
     it('Sendblue: the photo is fetched through the guarded client and described in the run input', async () => {
-      cdn = () => new Response(Buffer.alloc(4096, 7), { status: 200, headers: { 'content-type': 'image/jpeg' } });
+      // A real JPEG signature: the bytes, not the link or the header, say what the file is.
+      const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(4092, 7)]);
+      cdn = () => new Response(jpeg, { status: 200, headers: { 'content-type': 'image/jpeg' } });
       const service = buildService();
       await service.handleInboundMessage(
         sendblueGateway(),
@@ -324,7 +332,7 @@ describe('iMessage groups and attachments through the channel pipeline', () => {
 
       expect(cdnCalls).toEqual(['https://storage.googleapis.com/inbound-file-store/abc/IMG_0042.jpeg']);
       expect(agentRuntimeService.startRun.mock.calls[0][3]).toBe(
-        'Is this damaged?\n\n[Attachment: IMG_0042.jpeg (image/jpeg, 4 KB)]',
+        `${shortId('+14155550101')}: Is this damaged?\n\n[Attachment: IMG_0042.jpeg (image/jpeg, 4 KB)]`,
       );
     });
 
@@ -337,7 +345,7 @@ describe('iMessage groups and attachments through the channel pipeline', () => {
         { authorization: LOOP_TOKEN },
       );
       expect(agentRuntimeService.startRun.mock.calls[0][3]).toBe(
-        '[Attachment: order.txt (text/plain, 25 B)]\nOrder 1182: two blue mugs',
+        `${shortId('+13231114455')}: [Attachment: order.txt (text/plain, 25 B)]\nOrder 1182: two blue mugs`,
       );
     });
 
@@ -350,7 +358,7 @@ describe('iMessage groups and attachments through the channel pipeline', () => {
       );
       expect(cdnCalls).toEqual([]);
       expect(agentRuntimeService.startRun.mock.calls[0][3]).toBe(
-        'Is this the right mug?\n\n[Attachment: meta-data.png was not read: its address is not allowed]',
+        `${shortId('+13231114455')}: Is this the right mug?\n\n[Attachment: meta-data.png was not read: its address is not allowed]`,
       );
     });
 
@@ -366,7 +374,7 @@ describe('iMessage groups and attachments through the channel pipeline', () => {
         sendblueGroupMessage('+14155550101', 'H-1', { content: '', media_url: 'https://cdn.example/clip.mov' }),
         { 'sb-signing-secret': SENDBLUE_SECRET },
       );
-      expect(agentRuntimeService.startRun.mock.calls[0][3]).toBe('[Attachment: clip.mov was not read: it is larger than 10 MB]');
+      expect(agentRuntimeService.startRun.mock.calls[0][3]).toBe(`${shortId('+14155550101')}: [Attachment: clip.mov was not read: it is larger than 10 MB]`);
     });
 
     it('a limited sender costs no download', async () => {
@@ -380,7 +388,7 @@ describe('iMessage groups and attachments through the channel pipeline', () => {
       expect(cdnCalls).toEqual([]);
     });
 
-    it('other adapters keep their text-only input: a Signal attachment is not fetched', async () => {
+    it('Signal: an attachment is read by id from the configured bridge, through the egress guard', async () => {
       const service = buildService();
       const signal = gatewayOf(GatewayType.SIGNAL, { api_url: 'https://signal-bridge.example', phone_number: '+1', inbound_token: 'signal-token-000001' });
       await service.handleInboundMessage(
@@ -394,8 +402,9 @@ describe('iMessage groups and attachments through the channel pipeline', () => {
         },
         { authorization: 'Bearer signal-token-000001' },
       );
-      expect(cdnCalls).toEqual([]);
-      expect(agentRuntimeService.startRun.mock.calls[0][3]).toBe('see attached');
+      expect(cdnCalls).toEqual(['https://signal-bridge.example/v1/attachments/att1']);
+      // The bridge answered 404 here: the agent is told, and the message still goes through.
+      expect(agentRuntimeService.startRun.mock.calls[0][3]).toBe('see attached\n\n[Attachment: a.png was not read: it could not be fetched]');
     });
   });
 

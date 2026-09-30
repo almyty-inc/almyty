@@ -10,6 +10,7 @@ import { Message } from '../../entities/message.entity';
 import { BUILT_IN_TOOLS } from './agent-runtime.service';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
 import { buildCollaborationContext } from './collaboration-participants';
+import { messageContentForModel } from './attached-files';
 import { memorySettings, type AgentMemoryConfig } from './agent-memory-settings';
 
 /**
@@ -140,7 +141,9 @@ export class AgentRuntimeBuilders {
       });
       const conversationMessages = recent.reverse();
       for (const msg of conversationMessages) {
-        const msgObj: any = { role: msg.role, content: msg.content };
+        // A message that came with files carries them as references after
+        // its text; the model call resolves them (attached-files.ts).
+        const msgObj: any = { role: msg.role, content: messageContentForModel(msg) };
         if (msg.toolCalls) {
           msgObj.toolCalls = msg.toolCalls;
         }

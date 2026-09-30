@@ -37,6 +37,7 @@ import { InputSchemaViolation, schemaConstrainsAnything, schemaProblems } from '
 import { describeLimitTrip } from './run-limits';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import { bestOfNJudgePrompt, consensusJudgePrompt, parseBestOfNPick, parseConsensus } from './strategies/judging';
+import { inputAttachments } from './attached-files';
 import {
   looksLikeMethodCall,
   matchComparison,
@@ -517,7 +518,11 @@ export class AgentNodeExecutor {
     if (systemPrompt) {
       messages.push({ role: 'system' as any, content: systemPrompt });
     }
-    messages.push({ role: 'user' as any, content: userPrompt });
+    // Files the run was invoked with (input.attachments) go to every llm_call
+    // whose prompt reads the input, after its text; the model call resolves
+    // them for the model that answers (attached-files.ts).
+    const files = /\{\{\s*input\b/.test(String(promptTemplate)) ? inputAttachments(context.input) : [];
+    messages.push({ role: 'user' as any, content: files.length ? [{ type: 'text', text: userPrompt }, ...files] : userPrompt });
 
     return this.callModelForNode(node, config, messages, organizationId, userId, options);
   }

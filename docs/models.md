@@ -230,7 +230,7 @@ user declares what it supports and validation is a real call.
 `GET/POST /models`, `GET/PATCH/DELETE /models/:id`. A card carries:
 
 - `providerId` or `endpointRef.url`, plus `vendorModelId` (the id sent on the wire)
-- `capabilities` (tools, vision, reasoning, embedding, structuredOutput), `contextLength`
+- `capabilities` (tools, vision, pdfInput, reasoning, embedding, structuredOutput), `contextLength`
 - `privacyTier` (`local` < `private_cloud` < `public`), `region`
 - `pricing` + `pricingSource`, optional `pricingOverride` (wins when set)
 - `validationStatus`, `lastValidatedAt`, `lastValidationError`, `measuredLatencyMs`
@@ -250,7 +250,7 @@ Every register, validate, price change and route is an audit row (`model_registe
 
 ## Pricing
 
-Automatic. The daily job (`MODEL_PRICE_FEED_CRON`, default 04:00) loads the LiteLLM cost map and cross-checks OpenRouter; a disagreement above 25% is kept on the card in `metadata.pricingDisagreement`. Cards are priced at registration from the cached feed and refreshed by the job; a replica that boots with an empty or day-old cache refreshes at once, and a sync that creates cards the feed cannot price refreshes a stale feed and prices the org's cards in the background (`PriceFeedService.ensureFresh`). A card with no price reads "Price unknown", never $0; only an Ollama server you run is priced free (`native`), since Ollama Cloud bills by plan and is in neither feed. Context length comes from the feed with the price and is left blank when unknown. `pricingSource` says where a number came from: `feed:litellm`, `feed:openrouter`, `native` (provider-reported), `adapter` (a deployment's cost snapshot), `manual` (an override), or `unpriced`. The hand-maintained table in `llm-models.helper.ts` is an offline seed only.
+Automatic. The daily job (`MODEL_PRICE_FEED_CRON`, default 04:00) loads the LiteLLM cost map and cross-checks OpenRouter; a disagreement above 25% is kept on the card in `metadata.pricingDisagreement`. Cards are priced at registration from the cached feed and refreshed by the job; a replica that boots with an empty or day-old cache refreshes at once, and a sync that creates cards the feed cannot price refreshes a stale feed and prices the org's cards in the background (`PriceFeedService.ensureFresh`). A card with no price reads "Price unknown", never $0; only an Ollama server you run is priced free (`native`), since Ollama Cloud bills by plan and is in neither feed. Context length comes from the feed with the price and is left blank when unknown. So do the inputs a model takes besides text: `vision` from LiteLLM's `supports_vision` or an OpenRouter `image` input modality, `pdfInput` from `supports_pdf_input` or a `file` modality. The feed only ever sets these to true, and only on a card that has no value of its own, so an operator's setting stands; they decide whether a file someone sent reaches the model as an image or a document or as text (see `docs/channels.md`, files people send). `pricingSource` says where a number came from: `feed:litellm`, `feed:openrouter`, `native` (provider-reported), `adapter` (a deployment's cost snapshot), `manual` (an override), or `unpriced`. The hand-maintained table in `llm-models.helper.ts` is an offline seed only.
 
 ## Routing
 

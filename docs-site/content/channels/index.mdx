@@ -17,7 +17,7 @@ Every agent has a **Channels** tab. It is the only place channels are added and 
 | **Microsoft Teams**, **Telegram**, **Discord**, **Google Chat** | Answers as a bot |
 | **Signal**, **Matrix**, **IRC** | Answers through a bridge you run |
 | **Email**, **SMS** | Answers mail to your receiving address, or texts to your Twilio number |
-| **iMessage** | Answers one-to-one iMessages through a relay that owns the number: Sendblue or LoopMessage |
+| **iMessage** | Answers one-to-one and group iMessages through a relay that owns the number: Sendblue or LoopMessage |
 | **Webhook** | Takes messages from, and sends replies to, an endpoint you own |
 | **Desktop app**, **Terminal app** | A signed download people install; see [Downloadable apps](/channels/builds) |
 | **Other agents (A2A)** | Other agents find it by its agent card and call it; see [A2A](/gateways/a2a) |
@@ -52,6 +52,18 @@ Every channel uses these unless it sets its own. On a channel's page, turn on **
 ### Spend limits
 
 The per-run limit stops a single run that would cost more. The per-day and per-month limits cover everything visitors spend on the agent's channels together; a channel that sets its own daily or monthly limit spends from an allowance of its own instead. An agent open to anyone starts at 5 a day and 50 a month (UTC days and months). When a limit is reached, visitors are told it has reached its limit until it resets, and owners and admins are notified. See [Protect model spend](/hosted-chat#protect-model-spend).
+
+## Files, pictures and group chats
+
+**Files people send reach the agent.** A photo, a PDF or a text file sent on a channel is given to the agent: a model that can look at images or read PDFs gets the file itself, and one that cannot is told what was sent (and reads a text file's text). Whether a model takes images or PDFs comes from its card on **Models**, filled in automatically from the price feed; you can set it on the card. Each message is read for up to five files of up to 10 MB each. Video, audio and archives are named to the agent and not read.
+
+This works on Slack, Telegram, Discord, WhatsApp (both kinds), SMS, Microsoft Teams, Matrix, Signal, email, iMessage and the webhook, and in the web chat and the website widget, where visitors attach files next to the message box. Google Chat names the files but cannot read them, and IRC has none.
+
+Files are kept with the conversation they arrived in: the retention period removes them with it, and a visitor who deletes a conversation or their data deletes the files too. A file uploaded and never sent is removed after a day.
+
+**Group chats say who is talking.** Where a conversation has several people (a Slack channel, a Teams group chat, a Discord server, a Telegram or Signal group, a Google Chat space, an IRC channel, a Matrix room, an iMessage group) each message reaches the agent with its writer's name in front, like "Anna: can someone check order 1182?". It is the name the platform shows; where the platform gives none, or the name is an email address or a phone number, it is a short id such as `user-3fa21c` that stays the same for that person. Contact details are never put in front of a message.
+
+**Pictures and files in replies.** When the agent's answer includes an image or links to a file, channels that can send media send it as a picture or an attachment rather than a link: Slack, Telegram, Discord, WhatsApp, Microsoft Teams, Google Chat, Signal, email and iMessage. SMS, Matrix and IRC keep the link, and so do the web chat and the widget, which show an image the agent names as a link rather than loading it.
 
 ## What publishing refuses
 

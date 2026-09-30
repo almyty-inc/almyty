@@ -37,7 +37,10 @@ export type ModelValidationStatus = 'never' | 'passed' | 'failed';
 
 export interface ModelCapabilities {
   tools?: boolean;
+  /** Takes images as input. From the price feed (LiteLLM supports_vision, OpenRouter input modalities) or set on the card. */
   vision?: boolean;
+  /** Takes PDF documents as input. Same sources as vision (LiteLLM supports_pdf_input, OpenRouter's file modality). */
+  pdfInput?: boolean;
   reasoning?: boolean;
   embedding?: boolean;
   structuredOutput?: boolean;

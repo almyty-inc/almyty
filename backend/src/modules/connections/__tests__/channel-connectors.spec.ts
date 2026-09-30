@@ -149,8 +149,8 @@ describe('chat channel connectors: catalog shape', () => {
       },
     });
     // Slack takes its scopes comma separated on the authorize URL.
-    expect(slack.connect[0].oauth!.scopes).toEqual(['chat:write,app_mentions:read,im:history']);
-    expect(slack.scopesNeeded).toEqual(['chat:write', 'app_mentions:read', 'im:history']);
+    expect(slack.connect[0].oauth!.scopes).toEqual(['chat:write,app_mentions:read,im:history,files:read,users:read']);
+    expect(slack.scopesNeeded).toEqual(['chat:write', 'app_mentions:read', 'im:history', 'files:read', 'users:read']);
     expect(slack.connect[1].type).toBe('api_key');
     expect(schemaViolations({ bot_token: 'xoxb-real-token' }, slack.connect[1].schema)).toEqual([]);
     expect(schemaViolations({ bot_token: 'nope' }, slack.connect[1].schema)).toEqual(['bot_token has an unexpected format']);

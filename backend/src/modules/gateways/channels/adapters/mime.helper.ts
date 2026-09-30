@@ -3,8 +3,8 @@
  *
  * Deliberately hand-rolled instead of pulling in `mailparser`: the
  * adapter contract (`normalizeInbound`) is synchronous while mailparser
- * is async/stream-based, we only need headers + a plain-text body for
- * channel normalization (attachments are ignored), and mailparser drags
+ * is async/stream-based, we only need headers, a plain-text body and
+ * the attachments for channel normalization, and mailparser drags
  * in a large transitive dependency tree for that small slice.
  *
  * Supported:
@@ -17,8 +17,8 @@
  *   - HTML-to-text stripping when no text/plain part exists
  *   - attachment metadata (filename, content type, decoded byte size,
  *     content-id) collected from non-text leaves and any part carrying
- *     `Content-Disposition: attachment`; the bytes themselves are not
- *     retained (channel normalization only needs the metadata).
+ *     `Content-Disposition: attachment`, and the decoded bytes of the
+ *     first few (bounded), which the channel hands the agent.
  */
 
 import { stripTags } from '../../../../common/security/strip-tags';
@@ -35,6 +35,11 @@ export interface ParsedMimeAttachment {
   contentId?: string;
   /** Content-Disposition value: `attachment`, `inline`, or undefined. */
   disposition?: string;
+  /**
+   * The decoded bytes, for the first MAX_ATTACHMENTS_WITH_CONTENT parts of
+   * at most MAX_ATTACHMENT_CONTENT_BYTES; absent for the rest.
+   */
+  content?: Buffer;
 }
 
 export interface ParsedMimeMessage {
@@ -82,6 +87,10 @@ export function looksLikeMime(raw: string): boolean {
 export const MAX_MULTIPART_DEPTH = 10;
 export const MAX_PARTS_PER_LEVEL = 100;
 export const MAX_ATTACHMENTS = 100;
+/** Attachments whose bytes are kept (the first ones); later parts are metadata only. */
+export const MAX_ATTACHMENTS_WITH_CONTENT = 5;
+/** The largest attachment whose bytes are kept. */
+export const MAX_ATTACHMENT_CONTENT_BYTES = 10 * 1024 * 1024;
 
 /** Parse a raw RFC 5322 / MIME message into normalized fields. */
 export function parseMimeMessage(raw: string): ParsedMimeMessage {
@@ -387,17 +396,29 @@ function extractBody(
   // metadata. The decoded byte length gives an accurate size even when
   // the part arrived base64/quoted-printable encoded.
   if (attachments.length < MAX_ATTACHMENTS) {
+    const size = decodedByteLength(body, headers['content-transfer-encoding']);
+    // The bytes of the first few, bounded, so the agent can be given the
+    // file (channel-attachments.service.ts); the rest are metadata only.
+    const keep = attachments.length < MAX_ATTACHMENTS_WITH_CONTENT && size <= MAX_ATTACHMENT_CONTENT_BYTES;
     attachments.push({
       filename: disp.filename || ct.name,
       contentType: ct.mimeType || 'application/octet-stream',
-      size: decodedByteLength(body, headers['content-transfer-encoding']),
+      size,
       contentId: normalizeContentId(headers['content-id']),
       disposition: disp.disposition,
+      ...(keep ? { content: decodedBytes(body, headers['content-transfer-encoding']) } : {}),
     });
   }
   return {};
 }
 
+/** A part's decoded content as bytes. */
+function decodedBytes(body: string, transferEncoding: string | undefined): Buffer {
+  const enc = (transferEncoding || '').trim().toLowerCase();
+  if (enc === 'base64') return Buffer.from(body.replace(/\s+/g, ''), 'base64');
+  if (enc === 'quoted-printable') return decodeQuotedPrintable(body);
+  return Buffer.from(body, 'utf-8');
+}
 /** Byte length of a part's decoded content, without materializing text. */
 function decodedByteLength(body: string, transferEncoding: string | undefined): number {
   const enc = (transferEncoding || '').trim().toLowerCase();

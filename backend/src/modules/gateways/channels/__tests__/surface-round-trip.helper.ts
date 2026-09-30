@@ -57,7 +57,9 @@ const RUN_CLAUSES: ClauseModel = {
 export interface RoundTripResult {
   /** Every outbound HTTP call the reply produced. */
   calls: CapturedFetch[];
-  /** The first outbound call, which is the reply on all push surfaces. */
+  /** Calls made while the message came in, before the run finished: a sender's name looked up, a file fetched. */
+  inboundCalls: CapturedFetch[];
+  /** The first call the reply produced, which is the reply on all push surfaces. */
   reply: CapturedFetch;
   /** Rows the pipeline and the adapters inserted. */
   savedEvents: any[];
@@ -218,15 +220,19 @@ export async function roundTrip(options: RoundTripOptions): Promise<RoundTripRes
     );
 
     // The reply is sent from a run-completion listener, so emit and let
-    // the async handler settle before inspecting what went out.
+    // the async handler settle before inspecting what went out. Calls made
+    // before this (a sender's name, an attachment) belong to the inbound side.
+    const inboundCallCount = fetchMock.calls.length;
     emitter.emit('event', { type: 'run.completed' });
     for (let i = 0; i < 6; i++) {
       await new Promise((resolve) => setImmediate(resolve));
     }
 
+    const replyCalls = fetchMock.calls.slice(inboundCallCount);
     return {
-      calls: fetchMock.calls,
-      reply: fetchMock.calls[0],
+      calls: replyCalls,
+      inboundCalls: fetchMock.calls.slice(0, inboundCallCount),
+      reply: replyCalls[0],
       savedEvents,
       eventUpdates,
       inboundEvent: savedEvents.find((e) => e.direction === 'inbound'),

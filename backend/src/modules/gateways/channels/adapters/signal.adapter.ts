@@ -1,5 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import {
+  BaseAdapter,
+  NormalizedMessage,
+  AdapterResponse,
+  AttachmentFetchLimits,
+  FetchedAttachment,
+  InboundAttachment,
+  OutboundAttachment,
+} from './base.adapter';
+import { isImage, textWithMedia } from '../reply-media';
 import * as crypto from 'crypto';
 
 /**
@@ -38,19 +47,25 @@ export class SignalAdapter extends BaseAdapter {
     const envelope = rawPayload.envelope || rawPayload;
     // Note-to-self / linked-device messages arrive as syncMessage.sentMessage
     const dataMessage = envelope.dataMessage || envelope.syncMessage?.sentMessage || {};
-    const attachments = Array.isArray(dataMessage.attachments) && dataMessage.attachments.length
-      ? dataMessage.attachments.map((a: any) => ({
-          // The bridge exposes attachments by id under /v1/attachments/<id>
-          url: a.id || '',
-          type: a.contentType || 'application/octet-stream',
-          name: a.filename || a.id || 'attachment',
-        }))
+    const attachments: InboundAttachment[] | undefined = Array.isArray(dataMessage.attachments) && dataMessage.attachments.length
+      ? dataMessage.attachments
+          .filter((a: any) => a?.id)
+          .map((a: any) => ({
+            // The bridge serves an attachment by id under /v1/attachments/<id>.
+            ref: String(a.id),
+            type: a.contentType || 'application/octet-stream',
+            name: a.filename || a.id || 'attachment',
+            ...(typeof a.size === 'number' ? { size: a.size } : {}),
+          }))
       : undefined;
+    const senderId = envelope.sourceUuid || envelope.source || envelope.sourceNumber;
     return {
       text: dataMessage.message || dataMessage.body || '',
       userId: envelope.source || envelope.sourceNumber || envelope.sourceUuid || 'unknown',
       threadId: dataMessage.groupInfo?.groupId || envelope.source || envelope.sourceNumber || undefined,
-      attachments,
+      ...(attachments?.length ? { attachments } : {}),
+      ...(senderId ? { sender: { id: String(senderId), name: envelope.sourceName || undefined } } : {}),
+      group: !!dataMessage.groupInfo?.groupId,
       metadata: {
         timestamp: dataMessage.timestamp || envelope.timestamp,
         groupId: dataMessage.groupInfo?.groupId,
@@ -59,6 +74,17 @@ export class SignalAdapter extends BaseAdapter {
         source: 'signal',
       },
     };
+  }
+
+  /** An attachment by id from the configured bridge, through the egress guard. */
+  async fetchAttachment(
+    attachment: InboundAttachment,
+    config: Record<string, any>,
+    limits: AttachmentFetchLimits,
+  ): Promise<FetchedAttachment | null> {
+    if (!attachment.ref || !config.api_url || !/^[A-Za-z0-9._-]+$/.test(attachment.ref)) return null;
+    const base = String(config.api_url).replace(/(?<!\/)\/+$/, '');
+    return this.fetchBytes(`${base}/v1/attachments/${encodeURIComponent(attachment.ref)}`, limits);
   }
 
   /**
@@ -76,8 +102,39 @@ export class SignalAdapter extends BaseAdapter {
     return `signal:${sender}:${timestamp}`;
   }
 
+  /** Files one reply attaches; each is read and sent inline to the bridge. */
+  static readonly MAX_MEDIA = 3;
+  /** The largest file a reply attaches. */
+  static readonly MAX_MEDIA_BYTES = 5 * 1024 * 1024;
+
+  /**
+   * Images and PDFs the reply links to are attached to the Signal message.
+   * The bridge takes attachments as base64 rather than links, so each is
+   * read at send time through the egress guard; one that cannot be read
+   * goes as its link instead.
+   */
   formatOutbound(response: AdapterResponse): any {
-    return { message: response.text };
+    const media = (response.attachments ?? [])
+      .filter((a) => isImage(a) || a.type === 'application/pdf')
+      .slice(0, SignalAdapter.MAX_MEDIA);
+    const message = textWithMedia(response, media);
+    return media.length ? { message, media } : { message };
+  }
+
+  /** The bridge's base64 attachment strings for the reply's files, and the links of any not read. */
+  private async inlineMedia(media: OutboundAttachment[]): Promise<{ attachments: string[]; unread: string[] }> {
+    const attachments: string[] = [];
+    const unread: string[] = [];
+    for (const item of media) {
+      try {
+        const { bytes } = await this.fetchBytes(item.url, { maxBytes: SignalAdapter.MAX_MEDIA_BYTES, timeoutMs: 20_000 });
+        const filename = String(item.name || 'attachment').replace(/[;,\r\n]/g, '_');
+        attachments.push(`data:${item.type};filename=${filename};base64,${bytes.toString('base64')}`);
+      } catch {
+        unread.push(item.name && item.name !== item.url ? `${item.name}: ${item.url}` : item.url);
+      }
+    }
+    return { attachments, unread };
   }
 
   /**
@@ -110,6 +167,10 @@ export class SignalAdapter extends BaseAdapter {
       this.sendFailed('the inbound envelope carried no sender or group to reply to');
     }
 
+    const media = Array.isArray(formattedResponse.media) ? formattedResponse.media : [];
+    const inline = media.length ? await this.inlineMedia(media) : { attachments: [], unread: [] };
+    const message = [formattedResponse.message, ...inline.unread].filter(Boolean).join('\n');
+
     const sendUrl = `${apiUrl}/v2/send`;
     this.assertEgress(sendUrl);
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
@@ -117,9 +178,10 @@ export class SignalAdapter extends BaseAdapter {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: formattedResponse.message,
+        message,
         number: phoneNumber,
         recipients: [recipient],
+        ...(inline.attachments.length ? { base64_attachments: inline.attachments } : {}),
       }),
     }));
 

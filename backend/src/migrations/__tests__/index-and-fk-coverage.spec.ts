@@ -64,6 +64,14 @@ describe('indexes the queries need', () => {
       );
     });
 
+    it('indexes files.conversationId, which the retention sweep and visitor erasure remove attachments by', () => {
+      expect(allMigrations).toContain('IDX_files_conversationId');
+      expect(allMigrations).toMatch(/ON "files" \("conversationId"\)/);
+      expect(src('entities', 'file.entity.ts')).toContain("@Index('IDX_files_conversationId')");
+      // The row goes with its conversation on any path; the object is removed by the files module.
+      expect(allMigrations).toMatch(/FK_files_conversation[\s\S]{0,200}ON DELETE CASCADE/);
+      expect(src('modules', 'files', 'files.service.ts')).toContain('where: { conversationId: In(batch), organizationId }');
+    });
     it('indexes conversations.parentConversationId', () => {
       expect(allMigrations).toContain('IDX_conversations_parentConversationId');
       expect(allMigrations).toMatch(/ON "conversations" \("parentConversationId"\)/);

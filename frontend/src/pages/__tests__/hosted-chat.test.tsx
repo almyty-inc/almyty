@@ -328,7 +328,7 @@ describe('HostedChatPage', { retry: 2 }, () => {
     render(<HostedChatPage slug="acme" />)
     await sendMessage('hello')
 
-    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalledWith('acme', 'hello', undefined))
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalledWith('acme', 'hello', undefined, []))
 
     await emitAndSettle('token', { token: 'hi ' })
     await emitAndSettle('done', { reason: 'run.completed' })

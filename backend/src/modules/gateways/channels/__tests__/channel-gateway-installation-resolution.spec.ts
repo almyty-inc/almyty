@@ -20,6 +20,7 @@ import { IrcAdapter } from '../adapters/irc.adapter';
 import { IMessageSendblueAdapter } from '../adapters/imessage-sendblue.adapter';
 import { IMessageLoopMessageAdapter } from '../adapters/imessage-loopmessage.adapter';
 import { installFetchMock, parseSentJson } from '../adapters/__tests__/test-helpers';
+import { shortId } from '../channel-speaker';
 
 /**
  * Multi-workspace resolution in the inbound channel pipeline: when a
@@ -182,8 +183,10 @@ describe('ChannelGatewayService installation resolution', () => {
 
   /** Drive the run to completion and wait for the async reply dispatch. */
   const completeRunAndFlush = async () => {
+    // Calls already made (the writer's name, looked up on the way in) are not the reply.
+    const before = fetchMock.calls.length;
     emitter.emit('event', { type: 'run.completed' });
-    for (let i = 0; i < 10 && fetchMock.calls.length === 0; i++) {
+    for (let i = 0; i < 10 && fetchMock.calls.length === before; i++) {
       await new Promise((resolve) => setImmediate(resolve));
     }
   };
@@ -196,9 +199,12 @@ describe('ChannelGatewayService installation resolution', () => {
     await completeRunAndFlush();
 
     expect(installationService.resolveCredentials).toHaveBeenCalledWith('gw-1', 'T777');
-    expect(fetchMock.calls[0].url).toBe('https://slack.com/api/chat.postMessage');
+    const posted = fetchMock.calls.find((c) => c.url === 'https://slack.com/api/chat.postMessage')!;
+    expect(posted.init.headers.Authorization).toBe('Bearer xoxb-tenant-T777');
+    expect(parseSentJson(posted).text).toBe('agent says hi');
+    // The writer's name is asked of the same workspace, with its own token.
+    expect(fetchMock.calls[0].url).toBe('https://slack.com/api/users.info?user=U1');
     expect(fetchMock.calls[0].init.headers.Authorization).toBe('Bearer xoxb-tenant-T777');
-    expect(parseSentJson(fetchMock.calls[0]).text).toBe('agent says hi');
   });
 
   it('falls back to the gateway configuration when the team never installed', async () => {
@@ -290,7 +296,9 @@ describe('ChannelGatewayService installation resolution', () => {
 
       await deliver(buildService(false));
 
-      expect(agentRuntimeService.sendInput).toHaveBeenCalledWith('run-thread', 'org-1', 'hi there');
+      // A channel message is read as its writer's; Slack would not name U1
+      // here (users.info answered without a user), so a short id stands in.
+      expect(agentRuntimeService.sendInput).toHaveBeenCalledWith('run-thread', 'org-1', `${shortId('U1')}: hi there`, undefined, []);
       expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
     });
 
@@ -352,7 +360,7 @@ describe('ChannelGatewayService installation resolution', () => {
           threadId: '111.222',
         });
 
-        expect(agentRuntimeService.sendInput).toHaveBeenCalledWith('run-thread', 'org-1', 'hi there');
+        expect(agentRuntimeService.sendInput).toHaveBeenCalledWith('run-thread', 'org-1', 'hi there', undefined, undefined);
         expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
       });
 

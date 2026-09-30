@@ -141,22 +141,17 @@ real credentials/infrastructure — tracked in **#242** ("live e2e cred-gated").
     `group_id`, LoopMessage `group` in place of `contact`.
   - **Attachments** in: Sendblue's `media_url` (one CDN link) and
     LoopMessage's `attachments` (download URLs) become
-    `NormalizedMessage.attachments`, https only. The two adapters set
-    `fetchesInboundAttachments`, and the pipeline has
-    `ChannelAttachmentReader` (`channel-attachments.service.ts`) read each
-    file through `safeFetch` (egress guard on every hop, DNS pinned, 20 s
-    deadline, 10 MB cap on the decompressed body, at most five files per
-    message) after the sender and spend checks, and hand the agent a line
-    per file (name, type, size) plus the text of a text file. A run's input
-    is text (the runtime has no image part), so an image reaches the agent
-    as its description only. Nothing is stored. Other adapters keep their
-    text-only input (a Signal attachment points at the operator's bridge).
-  - **Attachments** out: when a run's output carries `attachments`
-    (`{url, type, name}`), `formatOutbound` gets them; Sendblue sends the
-    first as `media_url` with the text and each further one as a message of
-    its own (at most five), LoopMessage sends up to ten https URLs of at most
-    256 characters as `attachments`. Autonomous runs return text today, so
-    nothing produces such an output yet.
+    `NormalizedMessage.attachments`, https only, read by the base adapter's
+    `fetchAttachment` (a public link, no credentials) like every channel's
+    files: see `docs/channels.md`, files people send.
+  - **Group members** are named to the agent by a short id derived from
+    their number (`channel-speaker.ts`), since the relays give no name.
+  - **Attachments** out: the reply's image and file links, and any
+    `attachments` a run returns (`{url, type, name}`), reach
+    `formatOutbound`; Sendblue sends the first as `media_url` with the text
+    and each further one as a message of its own (at most five), LoopMessage
+    sends up to ten https URLs of at most 256 characters as `attachments`;
+    the links go out of the text.
   - **Webhook registration.** Sendblue documents an account webhooks API, so
     publishing registers the channel URL through `ChannelWebhookRegistrar`:
     list, delete a stale entry for the same URL (Sendblue appends), then add
@@ -194,10 +189,11 @@ real credentials/infrastructure — tracked in **#242** ("live e2e cred-gated").
   `raw`/`mime`/`email` field) or pre-parsed JSON. The MIME parser is in-tree
   (`adapters/mime.helper.ts`) and dependency-free — `mailparser` was
   deliberately not added because the adapter contract is synchronous and only
-  headers + a text body are needed. Attachment **metadata** (filename, content
-  type, decoded byte size, content-id, disposition) is surfaced on the
-  normalized message (`attachments`) and in `metadata.attachments`; the bytes
-  are not retained. Outbound remains Resend-specific. Inbound is svix-verified
+  headers, a text body and the attachments are needed. Attachment metadata
+  (filename, content type, decoded byte size, content-id, disposition) is in
+  `metadata.attachments`; the normalized `attachments` carry the decoded bytes
+  of the first five parts of up to 10 MB each, which the channel hands the
+  agent like any channel's files. Outbound remains Resend-specific. Inbound is svix-verified
   and fails closed without a secret; the dedicated
   `channel-email-inbound.controller.ts` path reads
   `RESEND_INBOUND_SIGNING_SECRET` from the environment instead.
@@ -270,8 +266,16 @@ All tests mock `globalThis.fetch` / repositories (see
   as the relay's media field.
 - `channels/__tests__/channel-attachments.service.spec.ts` — the attachment
   reader against a fake CDN: https only, private/metadata/loopback refused
-  before any request, redirects re-checked, declared and streamed size caps,
-  at most five files, names kept to one line.
+  before any request, declared and streamed size caps, the bytes deciding the
+  type, storage under the conversation, at most five files, names kept to
+  one line; web chat and widget uploads accepted and refused by type.
+- `adapters/__tests__/channel-files-and-names.spec.ts` — every adapter's
+  inbound files (which credential, to which host only), group detection and
+  sender names, and how each sends a reply's images and files.
+- `channels/__tests__/channel-files-pipeline.spec.ts` — a Slack channel
+  message with a file through the whole pipeline: the writer named, the file
+  read with the bot token, stored and filed under the run's conversation,
+  removed when the run is refused, and the reply's image sent as a block.
 - `channels/__tests__/channel-webhook-registrar.service.spec.ts` — Telegram,
   Twilio and Sendblue registration: Sendblue add with the secret and the
   line, replace on republish, delete on unpublish and on delete, the refusal

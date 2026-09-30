@@ -664,7 +664,8 @@
       "title": "Connect a provider",
       "path": "screenshots/credentials-connect-provider.png",
       "capturedAt": "2026-09-30T11:22:50.404Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The model capability schema the connect form shares gained PDF input; this view should look the same, but recapture it from the page to confirm.",
       "sha256": "17eff1ae55d6c6f71e81612ef2a7c1d7738ee6ac661224c74718d46e1931ebdb",
       "source": {
         "kind": "browser",
@@ -797,7 +798,8 @@
       "title": "Hosted chat: visitor data",
       "path": "screenshots/hosted-chat-privacy.png",
       "capturedAt": "2026-09-30T11:22:13.583Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The hosted chat composer gained an attach button and the attached-file list; this view shows the page around the privacy menu, so recapture it to confirm.",
       "sha256": "f5bc8e7fb487c0927c392aa05ee9ff42b8a0fca06b08396045d9858c6600f50d",
       "source": {
         "kind": "browser",
@@ -807,6 +809,7 @@
       "sources": [
         "frontend/src/pages/hosted-chat.tsx",
         "frontend/src/lib/hosted-chat.ts",
+        "frontend/src/components/hosted-chat",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
@@ -819,7 +822,8 @@
       "title": "Hosted web chat",
       "path": "screenshots/hosted-chat.png",
       "capturedAt": "2026-09-30T11:22:09.551Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The composer gained an attach button and the list of attached files above the message box; recapture the page with its new composer.",
       "sha256": "b86cf40e2d876293c9623d5e19dc03f545ee3e303d9ee4e15af9681995698c87",
       "source": {
         "kind": "browser",
@@ -829,6 +833,7 @@
       "sources": [
         "frontend/src/pages/hosted-chat.tsx",
         "frontend/src/lib/hosted-chat.ts",
+        "frontend/src/components/hosted-chat",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
@@ -933,7 +938,8 @@
       "title": "Model catalog",
       "path": "screenshots/models.png",
       "capturedAt": "2026-09-30T11:22:52.976Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The model card gained a PDF input capability (vision and PDF input decide whether a file someone sent reaches the model as a file); the capability list on this page may show it, so recapture it from the page.",
       "sha256": "69d454fd8eab70ef2b795281cba2d58bd6354b6132c8ba127c5edce184e6915e",
       "source": {
         "kind": "browser",

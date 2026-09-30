@@ -226,6 +226,31 @@ describe('HostedChatService', () => {
       expect(endUserRepository.delete).toHaveBeenCalledWith({ id: 'eu-1', gatewayId: 'gw-1' });
     });
 
+    it('erases the files the visitor sent with them: in their conversations, and uploaded but not sent', async () => {
+      const files = { removeForConversations: jest.fn(async () => 2), removeUnsentUploads: jest.fn(async () => 1) };
+      const withFiles = new HostedChatService(
+        gatewayRepository, endUserRepository, conversationRepository, messageRepository, runRepository,
+        auditLogService as any, undefined, undefined, files as any,
+      );
+      conversationRepository.find.mockResolvedValue([{ id: 'c1' }, { id: 'c2' }]);
+      runRepository.delete = jest.fn(async () => ({ affected: 0 }));
+      endUserRepository.delete = jest.fn(async () => ({ affected: 1 }));
+
+      await withFiles.deleteVisitor(gateway(), visitor);
+
+      expect(conversationRepository.find).toHaveBeenCalledWith({ where: { endUserId: 'eu-1' }, select: { id: true } });
+      expect(files.removeForConversations).toHaveBeenCalledWith('org-1', ['c1', 'c2']);
+      expect(files.removeUnsentUploads).toHaveBeenCalledWith('org-1', { gatewayId: 'gw-1', endUserId: 'eu-1' });
+      // Before the cascade takes the conversations that name them.
+      expect(files.removeForConversations.mock.invocationCallOrder[0]).toBeLessThan(endUserRepository.delete.mock.invocationCallOrder[0]);
+
+      conversationRepository.findOne.mockResolvedValue({ id: 'c1', organizationId: 'org-1', endUserId: 'eu-1' });
+      messageRepository.delete = jest.fn(async () => ({ affected: 1 }));
+      conversationRepository.delete = jest.fn(async () => ({ affected: 1 }));
+      await withFiles.deleteConversation(visitor, 'c1');
+      expect(files.removeForConversations).toHaveBeenLastCalledWith('org-1', ['c1']);
+    });
+
     it('exports the visitor record and every conversation with its messages', async () => {
       conversationRepository.find.mockResolvedValue([{ id: 'c1', title: 'Order', status: 'active', createdAt: new Date('2026-02-01') }]);
       // One query returns every conversation's messages, so each row has to

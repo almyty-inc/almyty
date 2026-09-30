@@ -13,6 +13,7 @@ import { Notification } from '../../entities/notification.entity';
 import { AgentChannel } from '../../entities/agent-channel.entity';
 import { ChannelEvent } from '../../entities/channel-event.entity';
 
+import { FilesModule } from '../files/files.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { RetentionService } from './retention.service';
 import { RetentionSweepService } from './retention-sweep.service';
@@ -41,6 +42,8 @@ import { RetentionController } from './retention.controller';
       ChannelEvent,
     ]),
     AuditLogModule,
+    // Files people sent in a swept conversation go with it (FilesService).
+    FilesModule,
   ],
   providers: [RetentionService, RetentionSweepService],
   controllers: [RetentionController],

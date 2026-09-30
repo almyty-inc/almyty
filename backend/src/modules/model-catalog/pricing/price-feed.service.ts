@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as Redis from 'ioredis';
 import { Repository } from 'typeorm';
 
-import { Model, ModelPricing } from '../../../entities/model.entity';
+import { Model, ModelCapabilities, ModelPricing } from '../../../entities/model.entity';
 import { LlmProviderType, isSelfHostedOllama } from '../../../entities/llm-provider.entity';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
@@ -40,12 +40,19 @@ const MICRO = 1_000_000;
 
 export type PriceFeedSource = 'feed:litellm' | 'feed:openrouter';
 
+/** The inputs besides text a feed says a model takes. */
+export interface FeedInputs {
+  image: boolean;
+  pdf: boolean;
+}
+
 export interface FeedPrice {
   inPerMTok: number;
   outPerMTok: number;
   currency: 'USD';
   source: PriceFeedSource;
   contextLength?: number;
+  inputs?: FeedInputs;
 }
 
 export interface PriceQuote {
@@ -55,12 +62,33 @@ export interface PriceQuote {
   /** 'native' is only ever returned for an Ollama server someone runs, which is free per token. */
   source: PriceFeedSource | 'native';
   contextLength?: number;
+  inputs?: FeedInputs;
   fetchedAt: Date;
   /** Set when OpenRouter prices the same model more than the threshold away. */
   disagreement?: {
     litellm: { inPerMTok: number; outPerMTok: number };
     openrouter: { inPerMTok: number; outPerMTok: number };
   };
+}
+
+/**
+ * A card's capabilities with what the feed knows about its inputs added:
+ * `vision` and `pdfInput` are set to true where the feed says the model
+ * takes images or PDFs and the card has no value of its own. Never false,
+ * and never over a value already on the card, so an operator's word stands
+ * and a feed that forgets a model takes nothing away. Null when nothing
+ * would change.
+ */
+export function withFeedInputs(
+  capabilities: ModelCapabilities | null | undefined,
+  inputs: FeedInputs | undefined,
+): ModelCapabilities | null {
+  if (!inputs) return null;
+  const current = capabilities ?? {};
+  const next: ModelCapabilities = { ...current };
+  if (inputs.image && current.vision === undefined) next.vision = true;
+  if (inputs.pdf && current.pdfInput === undefined) next.pdfInput = true;
+  return next.vision === current.vision && next.pdfInput === current.pdfInput ? null : next;
 }
 
 export interface PriceFeedRefreshResult {
@@ -407,6 +435,10 @@ export class PriceFeedService implements OnModuleInit {
         if (row.contextLength == null && quote.contextLength) {
           next.contextLength = quote.contextLength;
         }
+        // The inputs the feed says the model takes (image, PDF), onto keys
+        // the card does not set yet: an operator's explicit value stays.
+        const capabilities = withFeedInputs(row.capabilities, quote.inputs);
+        if (capabilities) next.capabilities = capabilities;
         orgCounts.priced += 1;
         totals.priced += 1;
         if (quote.disagreement) {
@@ -470,6 +502,7 @@ export class PriceFeedService implements OnModuleInit {
     if (row.pricingSource !== next.pricingSource) return true;
     if (!samePricing(row.pricing, next.pricing ?? null)) return true;
     if (next.contextLength !== undefined && row.contextLength !== next.contextLength) return true;
+    if (next.capabilities !== undefined && JSON.stringify(row.capabilities ?? {}) !== JSON.stringify(next.capabilities)) return true;
     if (JSON.stringify(row.metadata ?? null) !== JSON.stringify(next.metadata ?? null)) return true;
     const previous = row.pricingFetchedAt ? new Date(row.pricingFetchedAt).getTime() : null;
     if (next.pricingSource === 'unpriced') {
@@ -536,6 +569,10 @@ export class PriceFeedService implements OnModuleInit {
       const price: FeedPrice = { inPerMTok, outPerMTok, currency: 'USD', source: 'feed:litellm' };
       const contextLength = Number(raw.max_input_tokens);
       if (Number.isFinite(contextLength) && contextLength > 0) price.contextLength = contextLength;
+      // Which inputs besides text the model takes: LiteLLM's own flags.
+      if (raw.supports_vision === true || raw.supports_pdf_input === true) {
+        price.inputs = { image: raw.supports_vision === true, pdf: raw.supports_pdf_input === true };
+      }
       entries.push({ type, id: key, price });
     }
 
@@ -576,6 +613,9 @@ export class PriceFeedService implements OnModuleInit {
       const price: FeedPrice = { inPerMTok, outPerMTok, currency: 'USD', source: 'feed:openrouter' };
       const contextLength = Number(model.context_length);
       if (Number.isFinite(contextLength) && contextLength > 0) price.contextLength = contextLength;
+      // Which inputs besides text the model takes, where OpenRouter lists them.
+      const modalities: unknown = model.architecture?.input_modalities;
+      if (Array.isArray(modalities)) price.inputs = { image: modalities.includes('image'), pdf: modalities.includes('file') };
       count += 1;
 
       for (const [type, mapping] of Object.entries(PROVIDER_FEED_MAPPING)) {

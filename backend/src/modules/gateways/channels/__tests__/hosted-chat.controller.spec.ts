@@ -4,6 +4,11 @@ import { HostedChatController } from '../hosted-chat.controller';
 import { HostedChatService } from '../hosted-chat.service';
 import { Gateway, GatewayStatus, GatewayType } from '../../../../entities/gateway.entity';
 import type { EndUser } from '../../../../entities/end-user.entity';
+import { ChannelAttachmentReader } from '../channel-attachments.service';
+import { TextExtractorService } from '../../../files/text-extractor.service';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 /**
  * The HTTP layer of the public chat API.
@@ -629,6 +634,92 @@ describe('HostedChatController', () => {
       await expect(controller.messages('acme', 'nope', req(), res)).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('attachments', () => {
+    const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 1)]);
+    let files: any;
+    let reader: ChannelAttachmentReader;
+    let dir: string;
+
+    const upload = (bytes: Buffer, originalname: string, mimetype: string) => {
+      const path = join(dir, `upload-${Math.random().toString(16).slice(2)}`);
+      writeFileSync(path, bytes);
+      return { path, originalname, mimetype, size: bytes.length };
+    };
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'hosted-attach-'));
+      files = {
+        storeBytes: jest.fn(async (_org: string, bytes: Buffer, file: any, options: any) => ({
+          id: 'up-1',
+          name: file.name,
+          mimeType: file.mimeType,
+          size: bytes.length,
+          metadata: options.metadata,
+        })),
+        findUnsentUploads: jest.fn(async () => [{ id: 'up-1', name: 'box.png', mimeType: 'image/png', size: 72, extractedText: null }]),
+        attachToConversation: jest.fn(async () => undefined),
+      };
+      reader = new ChannelAttachmentReader(new TextExtractorService(), files);
+      controller = new HostedChatController(hostedChat, gatewayRateLimit, agentRuntimeService, undefined, reader, files);
+    });
+    afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+    it('stores an image the visitor uploads, filed under the surface and the visitor, within the limits', async () => {
+      const out = await controller.uploadAttachment('acme', upload(PNG, 'box.png', 'image/png'), req(), res);
+      expect(out).toEqual({ success: true, data: { id: 'up-1', name: 'box.png', mimeType: 'image/png', size: 72 } });
+      expect(files.storeBytes.mock.calls[0][3].metadata).toEqual({ source: 'web_chat_upload', gatewayId: 'gw-1', endUserId: 'eu-1' });
+      expect(gatewayRateLimit.check).toHaveBeenCalled();
+      expect(gatewayRateLimit.checkVisitor).toHaveBeenCalledWith(expect.objectContaining({ id: 'gw-1' }), expect.objectContaining({ endUserId: 'eu-1' }));
+    });
+
+    it('refuses what a model cannot take, and a visitor over their share, and stores nothing', async () => {
+      const html = await controller.uploadAttachment('acme', upload(Buffer.from('<script>x</script>'), 'x.html', 'text/html'), req(), res).catch((e) => e);
+      expect(html).toBeInstanceOf(BadRequestException);
+
+      gatewayRateLimit.checkVisitor.mockResolvedValue({ limited: true, code: 'VISITOR_RATE_LIMITED', message: 'slow down' });
+      const limited = await controller.uploadAttachment('acme', upload(PNG, 'box.png', 'image/png'), req(), res).catch((e) => e);
+      expect(limited.getStatus()).toBe(429);
+      expect(files.storeBytes).not.toHaveBeenCalled();
+    });
+
+    it('applies the auth gate to uploads', async () => {
+      hostedChat.requiresAuth.mockReturnValue(true);
+      hostedChat.isAuthorized.mockReturnValue(false);
+      const failure = await controller.uploadAttachment('acme', upload(PNG, 'box.png', 'image/png'), req(), res).catch((e) => e);
+      expect(failure.getStatus()).toBe(401);
+      expect(files.storeBytes).not.toHaveBeenCalled();
+    });
+
+    it('sends the uploads a message names by reference, and files them under its conversation', async () => {
+      await controller.postMessage('acme', { message: 'Is this damaged?', attachmentIds: ['up-1'] }, req(), res);
+      expect(files.findUnsentUploads).toHaveBeenCalledWith('org-1', ['up-1'], { gatewayId: 'gw-1', endUserId: 'eu-1' });
+      const [, , , input, options] = agentRuntimeService.startRun.mock.calls[0];
+      expect(input).toBe('Is this damaged?\n\n[Attachment: box.png (image/png, 72 B)]');
+      expect(options.attachments).toEqual([{ type: 'file', fileId: 'up-1', mimeType: 'image/png', name: 'box.png', size: 72 }]);
+      expect(files.attachToConversation).toHaveBeenCalledWith('org-1', ['up-1'], 'conv-1', 'run-1');
+    });
+
+    it('takes a message that is only a file, titled by the file', async () => {
+      await controller.postMessage('acme', { attachmentIds: ['up-1'] }, req(), res);
+      expect(hostedChat.startConversation).toHaveBeenCalledWith(expect.anything(), endUser, 'box.png');
+    });
+
+    it('refuses ids that are not this visitor\'s unsent uploads, before anything is created', async () => {
+      files.findUnsentUploads.mockResolvedValue(null);
+      const failure = await controller.postMessage('acme', { message: 'hi', attachmentIds: ['someone-elses'] }, req(), res).catch((e) => e);
+      expect(failure).toBeInstanceOf(BadRequestException);
+      expect(hostedChat.startConversation).not.toHaveBeenCalled();
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+    });
+
+    it('refuses more than five, or ids that are not strings', async () => {
+      await expect(controller.postMessage('acme', { message: 'hi', attachmentIds: ['1', '2', '3', '4', '5', '6'] }, req(), res)).rejects.toThrow(
+        'at most 5 attachments per message',
+      );
+      await expect(controller.postMessage('acme', { message: 'hi', attachmentIds: [{ id: 'x' }] }, req(), res)).rejects.toThrow(BadRequestException);
     });
   });
 });

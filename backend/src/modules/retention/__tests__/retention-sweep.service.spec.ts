@@ -352,6 +352,61 @@ describe('RetentionSweepService', () => {
       restoreEnv('NODE_ENV', prev);
     }
   });
+
+  describe('files people sent in the swept conversations', () => {
+    const files = () => ({
+      removeForConversations: jest.fn().mockResolvedValue(1),
+      removeUnsentAttachments: jest.fn().mockResolvedValue(3),
+    });
+    const withFiles = (f: ReturnType<typeof files>, channelRepo?: any) =>
+      new RetentionSweepService(
+        policyRepo, runRepo, conversationRepo, messageRepo, requestLogRepo, usageMetricRepo, auditLogRepo,
+        toolExecutionRepo, notificationRepo, auditLogService, undefined, channelRepo, undefined, f as any,
+      );
+
+    it('removes a swept conversation\'s files, stored objects included, before the conversation', async () => {
+      const f = files();
+      conversationRepo.find.mockResolvedValueOnce([{ id: 'c1' }, { id: 'c2' }]).mockResolvedValue([]);
+      conversationRepo.delete.mockResolvedValue({ affected: 2 });
+
+      await withFiles(f).sweepOrganization(policy({ conversationsDays: 30 }));
+
+      expect(f.removeForConversations).toHaveBeenCalledWith('org-1', ['c1', 'c2']);
+      expect(f.removeForConversations.mock.invocationCallOrder[0]).toBeLessThan(conversationRepo.delete.mock.invocationCallOrder[0]);
+    });
+
+    it('does the same for a channel\'s shorter retention', async () => {
+      const f = files();
+      const channelRepo = mockRepo();
+      channelRepo.find.mockResolvedValue([{ id: 'ch', gatewayId: 'gw-1', visitorRules: null, agent: { id: 'a', visitorRules: { privacy: { retentionDays: 7 } } } }]);
+      conversationRepo.find.mockResolvedValueOnce([{ id: 'v1' }]).mockResolvedValue([]);
+
+      await withFiles(f, channelRepo).sweepChannels('org-1', null);
+
+      expect(f.removeForConversations).toHaveBeenCalledWith('org-1', ['v1']);
+      expect(f.removeForConversations.mock.invocationCallOrder[0]).toBeLessThan(conversationRepo.delete.mock.invocationCallOrder[0]);
+    });
+
+    it('goes on sweeping when a file cannot be removed', async () => {
+      const f = files();
+      f.removeForConversations.mockRejectedValue(new Error('bucket down'));
+      conversationRepo.find.mockResolvedValueOnce([{ id: 'c1' }]).mockResolvedValue([]);
+      conversationRepo.delete.mockResolvedValue({ affected: 1 });
+
+      const counts = await withFiles(f).sweepOrganization(policy({ conversationsDays: 30 }));
+
+      expect(counts.conversations).toBe(1);
+    });
+
+    it('removes attachments that never reached a conversation, a day on', async () => {
+      const f = files();
+      const now = new Date('2026-09-30T12:00:00Z');
+      await expect(withFiles(f).sweepUnsentAttachments(now)).resolves.toBe(3);
+      expect(f.removeUnsentAttachments).toHaveBeenCalledWith(new Date('2026-09-29T12:00:00Z'));
+      // Built without the files module, it has nothing to do.
+      await expect(service.sweepUnsentAttachments(now)).resolves.toBe(0);
+    });
+  });
   describe('channel retention (sweepChannels)', () => {
     let channelRepo: any;
     let withChannels: RetentionSweepService;
