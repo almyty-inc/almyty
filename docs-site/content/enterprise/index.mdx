@@ -56,7 +56,7 @@ With the Enterprise plan, **Analytics → Chargeback** turns spending into an in
 }
 ```
 
-**License keys.** Set the license token with the `ALMYTY_LICENSE_KEY` environment variable on the backend. Tokens are Ed25519-signed and checked offline against a public key built in: no phone-home and no license server, so it works without internet access. An invalid or expired token falls back to the community edition (logged, never a crash). Your edition, entitlements and limits are shown under **Settings** and available from the licensing endpoint in the [API reference](/api-reference).
+**License keys.** Set the license token with the `ALMYTY_LICENSE_KEY` environment variable on the backend. Tokens are Ed25519-signed and checked offline against a public key built in: no phone-home and no license server, so it works without internet access. An invalid or expired token falls back to the community edition (logged, never a crash). Your edition, entitlements and limits are shown under **Settings** and available from the licensing endpoint in the [API reference](/api-reference/authentication).
 
 **Entitlements.** Each paid feature is a named entitlement: `sso`, `advanced_rbac`, `approval_policy`, `compliance_pack`, `audit_export` and `credentials_governance` (Business and Enterprise), and `byo_kms`, `chargeback` and `white_label` (Enterprise only).
 
@@ -64,4 +64,4 @@ With the Enterprise plan, **Analytics → Chargeback** turns spending into an in
 
 **Customer-managed keys (`byo_kms`).** almyty generates a 256-bit data encryption key, wraps it with your AWS KMS customer-managed key (KMS `Encrypt`) and stores only the wrapped blob; the plaintext key is never written down. almyty never stores your AWS access keys: credentials come from the SDK's default provider chain (environment, IRSA or instance profile). The API can read the status, attach a key, rotate, and turn the envelope path on or off; it never returns key material, only whether a key is provisioned, the key ARN and region, and key ids (fingerprints of blobs already stored). Each sealed value names the key that sealed it, so rotation mints a new data key and keeps the old wrapped one. The two ciphertext formats are told apart by prefix and can sit in the same column. Attaching a key when one is already attached is refused with 409, because replacing a key is a rotation.
 
-**Chargeback.** The report endpoint (period, granularity and forecast parameters) is in the [API reference](/api-reference). The forecast is a straight-line projection.
+**Chargeback.** The report endpoint (period, granularity and forecast parameters) is in the [API reference](/api-reference/authentication). The forecast is a straight-line projection.

@@ -63,4 +63,4 @@ A policy is a match condition, ordered steps and a priority:
 - **`priority`**: exactly one policy governs a request, the highest-priority enabled match.
 - **`teamId`**: optional, scopes the policy to one team's agents.
 
-A quorum is a single step: `{ "approverRole": "*", "minApprovals": 2 }`. Each pending request under a policy reports per-step state (required, collected, satisfied) and the current step. Policy management (list, read, enable or disable, delete) is admin or owner only; endpoints are in the [API reference](/api-reference).
+A quorum is a single step: `{ "approverRole": "*", "minApprovals": 2 }`. Each pending request under a policy reports per-step state (required, collected, satisfied) and the current step. Policy management (list, read, enable or disable, delete) is admin or owner only; endpoints are in the [API reference](/api-reference/authentication).

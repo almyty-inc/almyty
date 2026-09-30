@@ -30,7 +30,7 @@ From then on, every audit event is sent there as it happens. This demo has no ta
 
 ## For developers
 
-**Export.** Filters: date range, `resourceType`, `action`, `userId`. The file downloads as `audit-export-YYYY-MM-DD.json|csv` with an `X-Audit-Export-Count` header. CSV columns: `id, createdAt, organizationId, userId, userEmail, action, resourceType, resourceId, resourceName, status, ipAddress, details`. The endpoint and its query parameters are in the [API reference](/api-reference).
+**Export.** Filters: date range, `resourceType`, `action`, `userId`. The file downloads as `audit-export-YYYY-MM-DD.json|csv` with an `X-Audit-Export-Count` header. CSV columns: `id, createdAt, organizationId, userId, userEmail, action, resourceType, resourceId, resourceName, status, ipAddress, details`. The endpoint and its query parameters are in the [API reference](/api-reference/authentication).
 
 **Streams.** A stream is a target type, an endpoint, a token and an optional action filter:
 

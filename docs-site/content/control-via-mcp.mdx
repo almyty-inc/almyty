@@ -55,7 +55,7 @@ It sets the name and the limits a public channel needs, adds the Slack channel, 
 
 A few things are left out on purpose:
 
-- **Change an existing gateway.** Gateways can be created and wired up, but editing one that is already published is done in the dashboard or the [REST API](/api-reference), so a stray request cannot quietly rewrite a live address.
+- **Change an existing gateway.** Gateways can be created and wired up, but editing one that is already published is done in the dashboard or the [REST API](/api-reference/authentication), so a stray request cannot quietly rewrite a live address.
 - **Write tools by hand.** Tools come from importing an API description or installing a template.
 - **Switch an agent on directly.** A new agent always starts as a draft. Switching it on runs its checks first, and only a switched-on agent can be run.
 
@@ -107,4 +107,4 @@ What is left out: there is no `update_gateway` and no `create_tool` (`activate_t
 
 - [MCP gateway](/gateways/mcp): publish your own tools over MCP
 - [MCP server CLI](/cli/mcp-server): connect a client to a gateway
-- [API Reference](/api-reference): the full REST surface
+- [API Reference](/api-reference/authentication): the full REST surface

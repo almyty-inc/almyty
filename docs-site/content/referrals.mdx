@@ -36,7 +36,7 @@ Two things put a referral on hold: signing up with a throwaway email address, or
 - The `/r/<code>` endpoint is rate-limited to 20 requests an hour per IP. Appending `?format=json` returns `{"attributed": true|false}` instead of a redirect.
 - Rewards extend the organization's `planExpiresAt`. Days banked on the free plan are `accruedRewardDays`; the total is `totalRewardDays`.
 - Referral statuses: `pending`, then `qualified` (activation, +14 days), then `rewarded` (paid conversion, +30 days, final). Held referrals are `pending_review`, flagged `disposable_email` or `same_ip`.
-- The same data is under `/referrals` in the [API reference](/api-reference).
+- The same data is under `/referrals` in the [API reference](/api-reference/authentication).
 
 **Configuration (self-hosting).** Environment variables on the backend:
 

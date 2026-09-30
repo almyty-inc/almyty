@@ -90,7 +90,7 @@ Alerts are deduplicated per budget, per period, per level (`soft`/`hard`). Alert
 
 **Reconciliation.** One row per provider: `estimateCents`, `estimateTokens`, `actualCents`, `actualTokens`, `deltaCents` (actual minus estimate) and `deltaPct`. The `actual*` fields are `null` until a sync has run. A sync upserts one snapshot per provider per day, so re-syncing a window is safe. Unsupported provider types are reported by the capabilities endpoint with `supported: false` and a note; no network call is made for them. Admin keys: OpenAI needs an Admin key (`sk-admin-...`) with the `api.usage.read` scope (a normal `sk-...` key gets a 401); Anthropic needs an Admin API key (`sk-ant-admin...`). Over the API the key is `usageApiKey` in the provider's configuration; it is stored as a credential and masked in responses.
 
-**API.** Budgets, spend rollups, alerts and reconciliation live under `/budgets` and `/provider-usage`. Reads need `member` or above; changes need `admin` or `owner`; users in several organizations must send `X-Organization-Id`. See the [API reference](/api-reference).
+**API.** Budgets, spend rollups, alerts and reconciliation live under `/budgets` and `/provider-usage`. Reads need `member` or above; changes need `admin` or `owner`; users in several organizations must send `X-Organization-Id`. See the [API reference](/api-reference/authentication).
 
 ## Related
 

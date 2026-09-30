@@ -54,4 +54,4 @@ The runtime creates an `ApprovalRequest` row, sets the run to `waiting_approval`
 - **Authorization** is enforced on the server with `AccessPolicyService.canAccess(user, approvalRequest, 'manage')`. Org-wide agents (`visibility='org'`): org `owner` or `admin`. Team agents (`visibility='team'`): org `owner`/`admin` or the team's `team_admin` (TeamRole.LEAD). Private agents: the owner.
 - **Expiry**: the default 24 hours can be set up to 7 days when a request is created through the API. A scheduled sweep flips expired requests to `expired`.
 - **Page refresh**: the Approvals page checks for new requests every 10 seconds.
-- **API**: list pending approvals, approve and reject over REST; responses only include approvals the caller can see. See the [API reference](/api-reference).
+- **API**: list pending approvals, approve and reject over REST; responses only include approvals the caller can see. See the [API reference](/api-reference/authentication).
