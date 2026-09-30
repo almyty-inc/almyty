@@ -511,6 +511,28 @@ export class CanonicalMemoryController {
     return { success: true, data: await this.moves.list(organizationId, await this.visibleScopeIds(req)) };
   }
 
+  /**
+   * The agents that keep their memories in an account (for the move form's
+   * "switch these agents too"), limited to the agents the caller can see
+   * and, for one agent's memory, to that agent; each says whether the
+   * caller may switch it.
+   */
+  @Get('moves/agents')
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: 'The agents that use a memory account, and whether the caller may switch them' })
+  async moveAgents(
+    @Query('source') sourceId: string,
+    @Query('scope_type') scopeType: ScopeType,
+    @Query('scope_id') scopeId: string,
+    @Request() req: any,
+  ) {
+    if (!this.moves || !this.accounts) return { success: true, data: [] };
+    const organizationId = this.orgId(req);
+    const scope = await this.scopeFor(req, { scope_type: scopeType, scope_id: scopeId });
+    const source = await this.accounts.describeAccount(organizationId, req.user, String(sourceId ?? ''));
+    return { success: true, data: await this.moves.agentsUsing(organizationId, this.userId(req)!, source, scope) };
+  }
+
   @Get('moves/:id')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: "One move's progress and result" })
@@ -529,7 +551,7 @@ export class CanonicalMemoryController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Move memories from one memory account to another (copy, then delete from the source)' })
   async startMove(
-    @Body() body: { source: string; target: string; scope_type: ScopeType; scope_id?: string; mode?: Mode; dry_run?: boolean },
+    @Body() body: { source: string; target: string; scope_type: ScopeType; scope_id?: string; mode?: Mode; dry_run?: boolean; switch_agents?: boolean },
     @Request() req: any,
   ) {
     if (!this.moves || !this.accounts) {
@@ -544,7 +566,7 @@ export class CanonicalMemoryController {
     // The request user with its memberships: the Connections service decides from them what the caller may see.
     const source = await this.accounts.describeAccount(organizationId, req.user, String(body?.source ?? ''));
     const target = await this.accounts.describeAccount(organizationId, req.user, String(body?.target ?? ''));
-    const input = { source, target, scope, mode: body?.mode };
+    const input = { source, target, scope, mode: body?.mode, switchAgents: body?.switch_agents === true };
     if (body?.dry_run) return { success: true, data: await this.moves.preview(organizationId, userId, input) };
     return { success: true, data: await this.moves.start(organizationId, userId, input) };
   }

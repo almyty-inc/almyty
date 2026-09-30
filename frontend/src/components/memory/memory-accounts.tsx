@@ -16,7 +16,8 @@ import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/ui/data-table'
 import { PickedService, ServiceIcon, ServiceTileGrid } from '@/components/connect/service-tiles'
 import { ConnectServiceForm, connectorIcon, connectorTileGroups, useConnectors } from '@/components/connections/connect-flow'
-import { ConnectionHealthBadge } from '@/components/connections/health-badge'
+import { StatusLabel } from '@/components/connect/status-label'
+import { connectionCheck } from '@/components/connections/connection-status'
 import { CONNECTIONS_QUERY_KEY, CREDENTIALS_QUERY_KEY, credentialPath } from '@/components/credentials/paths'
 import { connectionsApi } from '@/lib/connections-api'
 import { memoriesApi, type MemoryAccountRow, type MemoryAccountsOverview, type MemoryMove } from '@/lib/api'
@@ -168,10 +169,12 @@ export function MemoryAccountsTable({ overview, loading }: { overview: MemoryAcc
             )
           }
           const h = r.account.health
+          // The Credentials table's own words and look ("Works", "Needs attention", "Not checked yet").
+          const connector = (connectors.data ?? []).find((c) => c.key === r.account.service)
           return (
             <div className="space-y-1">
-              <ConnectionHealthBadge health={h as any} />
-              {h.error && <p className="max-w-xs truncate text-xs text-destructive" title={h.error}>{h.error}</p>}
+              <StatusLabel check={connectionCheck({ health: h as any }, connector)} testId="credential-status" />
+              {h.error && <p className="max-w-sm text-xs text-muted-foreground" data-testid="memory-account-error">{h.error}</p>}
               {!h.error && h.checkedAt && r.account.id !== NATIVE_ACCOUNT_ID && (
                 <p className="text-xs text-muted-foreground">Checked {formatRelativeTime(h.checkedAt)}</p>
               )}

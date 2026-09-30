@@ -70,6 +70,18 @@ export class MemoryMove {
   @Column({ name: 'created_by', type: 'uuid', nullable: true })
   createdBy: string | null;
 
+  /** Once every memory has moved, point the agents that used the source at the target. */
+  @Column({ name: 'switch_agents', type: 'boolean', default: false })
+  switchAgents: boolean;
+
+  /** The agents pointed at the target when the move finished. */
+  @Column({ name: 'agents_switched', type: 'jsonb', nullable: true })
+  agentsSwitched: Array<{ id: string; name: string }> | null;
+
+  /** The agents that used the source and were left alone, with why. */
+  @Column({ name: 'agents_not_switched', type: 'jsonb', nullable: true })
+  agentsNotSwitched: Array<{ id: string; name: string; reason: string }> | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

@@ -14,6 +14,12 @@ import { MemoryItem, Mode, ScopeRef } from './canonical.types';
 import { MemoryExpiry } from './memory-expiry.entity';
 import { MemoryMove, MemoryMoveItem } from './memory-move.entity';
 import { computeTransferWarnings, MemoryRouter } from './memory-router.service';
+import { Agent } from '../../../entities/agent.entity';
+import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
+import { assertManageable } from '../../../common/authorization/read-rule';
+import { CanonicalMemoryWorkspaceConfig } from './canonical-memory-config.entity';
+import { memoryAccountName } from './memory-accounts.service';
+import { plainServiceError } from './plain-service-error';
 
 export const MOVE_QUEUE_NAME = 'canonical-memory-move';
 
@@ -37,6 +43,16 @@ export interface StartMove {
   target: MemoryAccountRef;
   scope: ScopeRef;
   mode?: Mode;
+  /** Once every memory has moved, point the agents that used the source at the target. */
+  switchAgents?: boolean;
+}
+
+/** An agent that keeps its memories in an account, and whether the member may switch it. */
+export interface AgentUse {
+  id: string;
+  name: string;
+  canSwitch: boolean;
+  reason?: string;
 }
 
 export interface MovePreview {
@@ -54,14 +70,17 @@ export interface MovePreview {
  *   row (unique per move and source id). A memory already copied is not
  *   copied again; a resume only deletes it from the source. A memory the
  *   copy failed for is tried again on resume.
- * - Re-embedded on the target: a memory lands on almyty's own store with
- *   no embedding and is embedded again there by the target's own model
- *   (an outside service embeds what it is given). Vectors from another
- *   provider are never carried over; they may not even be the same size.
+ * - Embeddings: a vector travels only when the target is almyty's own
+ *   store and embeds with the same model and dimension; otherwise the
+ *   target embeds the memory again (an outside service is never sent one).
  * - Retention travels with it: a memory with a time limit keeps its due
  *   date on the target (ttl_seconds in almyty's own store, a
  *   memory_expiries row outside).
- * - Audited: MEMORY_MOVE when a move starts and when a run finishes.
+ * - Agents follow, when asked: once every memory has moved, the agents
+ *   that used the source and that the member may edit point at the target.
+ * - Errors reach the page as one plain sentence (plainServiceError); the
+ *   service's own answer goes to the log and the audit row.
+ * - Audited: MEMORY_MOVE when a move starts, resumes, finishes and switches agents.
  *
  * The run itself is a job on MOVE_QUEUE_NAME, acting as the member who
  * started (or resumed) it: the accounts' connections are resolved as that
@@ -80,6 +99,10 @@ export class MemoryMoveService {
     private readonly auditLog: AuditLogService,
     @InjectQueue(MOVE_QUEUE_NAME) private readonly queue: Queue,
     @Optional() private readonly credentialRefs?: CredentialRefResolver,
+    // Which agents use an account, and who may switch them.
+    @Optional() @InjectRepository(Agent) private readonly agents?: Repository<Agent>,
+    @Optional() private readonly accessPolicy?: AccessPolicyService,
+    @Optional() @InjectRepository(CanonicalMemoryWorkspaceConfig) private readonly configRepo?: Repository<CanonicalMemoryWorkspaceConfig>,
   ) {}
 
   /** What a move would cover: how many memories, and what the target cannot keep. */
@@ -140,6 +163,9 @@ export class MemoryMoveService {
         lastError: null,
         warnings: [],
         createdBy: userId,
+        switchAgents: !!input.switchAgents,
+        agentsSwitched: null,
+        agentsNotSwitched: null,
         finishedAt: null,
       }),
     );
@@ -196,9 +222,15 @@ export class MemoryMoveService {
     const source = this.router.backend(move.sourceService)!;
     const target = this.router.backend(move.targetService)!;
     const scope: ScopeRef = { scope_type: move.scopeType, scope_id: move.scopeId };
+    // Which side a failure came from, so the page can name the service.
+    let stage: 'source' | 'target' = 'source';
+    let errorDetail: string | null = null;
     try {
       const sourceCreds = await this.credentials(move.organizationId, this.sourceOf(move), userId, move.id);
+      stage = 'target';
       const targetCreds = await this.credentials(move.organizationId, this.targetOf(move), userId, move.id);
+      const targetEmbedding = await this.targetEmbedding(target, scope);
+      stage = 'source';
       const handled = new Set<string>();
       const cursors = new Set<string>();
       const warnings = new Map<string, TransferWarning>();
@@ -228,27 +260,38 @@ export class MemoryMoveService {
         const keyOf = (f: { item: MemoryItem; sourceId: string | null }) => f.sourceId ?? `item:${f.item.id}`;
         const done = await this.items.find({ where: { moveId: move.id, sourceId: In(fresh.map(keyOf)) } });
         const byId = new Map(done.map((d) => [d.sourceId, d] as const));
-        for (const f of fresh) await this.moveOne(move, source, target, f.item, f.sourceId, byId.get(keyOf(f)), sourceCreds, targetCreds);
+        for (const f of fresh) await this.moveOne(move, source, target, f.item, f.sourceId, byId.get(keyOf(f)), sourceCreds, targetCreds, targetEmbedding);
         await this.tally(move, [...warnings.values()]);
       }
       await this.tally(move, [...warnings.values()]);
-      // What the service said about a memory it would not take or give up, so the page can say why.
+      // Why memories were left behind, in plain words; the service's own answer goes to the log and audit.
       if (move.failed > 0) {
         const last = await this.items.findOne({ where: { moveId: move.id, error: Not(IsNull()) }, order: { updatedAt: 'DESC' } });
-        move.lastError = last?.error ?? null;
+        const { side, raw } = splitItemError(last?.error ?? '');
+        errorDetail = raw || null;
+        move.lastError = side === 'unmovable'
+          ? `${serviceName(move.sourceService)} cannot delete these memories one at a time, so they were left where they are.`
+          : plainServiceError(side === 'source' ? move.sourceService : move.targetService, raw);
+        this.logger.warn(`memory move ${move.id}: ${move.failed} not moved: ${raw}`);
+      } else {
+        move.lastError = null;
       }
       move.status = 'completed';
       move.finishedAt = new Date();
       await this.moves.save(move);
     } catch (e: any) {
+      errorDetail = String(e?.message ?? e).slice(0, 1000);
       move.status = 'failed';
-      move.lastError = String(e?.message ?? e).slice(0, 1000);
+      move.lastError = plainRunError(e, stage === 'source' ? move.sourceService : move.targetService);
       move.finishedAt = new Date();
       await this.tally(move).catch(() => undefined);
       await this.moves.save(move);
-      this.logger.warn(`memory move ${move.id} stopped: ${move.lastError}`);
+      this.logger.warn(`memory move ${move.id} stopped: ${errorDetail}`);
     }
-    this.audit(move, userId, 'finished');
+    this.audit(move, userId, 'finished', errorDetail);
+    // Agents move with their memories only once every memory has moved:
+    // an agent switched earlier would lose the ones left behind.
+    if (move.status === 'completed' && move.failed === 0 && move.switchAgents) await this.switchAgents(move, userId);
     return move;
   }
 
@@ -263,19 +306,20 @@ export class MemoryMoveService {
     step: MemoryMoveItem | undefined,
     sourceCreds: BackendCredentials | undefined,
     targetCreds: BackendCredentials | undefined,
+    targetEmbedding: { model: string; dim: number } | null = null,
   ): Promise<void> {
     if (step?.state === 'moved') return;
     if (!sourceId) {
       // Nothing to delete it by: copying it would leave it in both accounts.
       if (step) return;
-      await this.items.save(this.items.create({ moveId: move.id, sourceId: `item:${item.id}`, targetId: null, state: 'failed', error: `${source.id} cannot delete this memory, so it cannot be moved` }));
+      await this.items.save(this.items.create({ moveId: move.id, sourceId: `item:${item.id}`, targetId: null, state: 'failed', error: 'unmovable:no id to delete it by' }));
       return;
     }
     const row = step ?? this.items.create({ moveId: move.id, sourceId, targetId: null, state: 'failed', error: null });
     try {
       if (row.state !== 'copied') {
         const expiry = await this.sourceExpiry(move, sourceId, item);
-        const copy = this.copyFor(move, item, target, expiry);
+        const copy = this.copyFor(move, item, target, expiry, targetEmbedding);
         const saved = await target.put(copy, targetCreds);
         const targetId = target.id === NATIVE ? saved.id : target.nativeId?.(saved) ?? null;
         row.targetId = targetId ?? saved.id;
@@ -305,17 +349,19 @@ export class MemoryMoveService {
       await this.items.save(row);
     } catch (e: any) {
       // A copy that landed stays `copied`: the resume only deletes it from the source.
-      row.error = String(e?.message ?? e).slice(0, 1000);
+      // Which side refused, then the service's own answer (never shown; the page gets plainServiceError).
+      row.error = `${row.state === 'copied' ? 'source' : 'target'}:${String(e?.message ?? e)}`.slice(0, 1000);
       await this.items.save(row);
     }
   }
 
   /**
    * The memory as the target gets it: same content, tags, provenance and
-   * dates, in the move's scope, with no embedding (the target makes its
-   * own) and its due date, if it has one, carried over.
+   * dates, in the move's scope, and its due date, if it has one, carried
+   * over. `targetEmbedding` is the model and dimension almyty's own store
+   * embeds with for this scope; null for an outside service.
    */
-  private copyFor(move: MemoryMove, item: MemoryItem, target: MemoryBackend, expiresAt: Date | null): MemoryItem {
+  private copyFor(move: MemoryMove, item: MemoryItem, target: MemoryBackend, expiresAt: Date | null, targetEmbedding: { model: string; dim: number } | null = null): MemoryItem {
     const createdAt = item.created_at ? new Date(item.created_at) : new Date();
     const ttl = expiresAt ? Math.max(1, Math.ceil((expiresAt.getTime() - createdAt.getTime()) / 1000)) : null;
     const draft = this.memory.draftItem({
@@ -339,15 +385,25 @@ export class MemoryMoveService {
       confidence: item.confidence,
       provenance: { ...item.provenance, source_backend: move.sourceService },
     });
+    // The vector travels only when the target would make the same one: its
+    // embedding model and dimension match the memory's. Otherwise the
+    // target embeds it again (almyty's own store queues it; an outside
+    // service embeds what it is given and never receives a vector).
+    const keepVector =
+      !!targetEmbedding &&
+      Array.isArray(item.embedding) &&
+      item.embedding.length > 0 &&
+      item.embedding_model === targetEmbedding.model &&
+      item.embedding_dim === targetEmbedding.dim &&
+      item.embedding.length === targetEmbedding.dim;
     return {
       ...draft,
       created_at: createdAt,
       valid_from: item.valid_from ?? draft.valid_from,
-      // Re-embedded on the target, never carried across.
-      embedding: null,
-      embedding_dim: null,
-      embedding_model: null,
-      embedding_status: target.id === NATIVE ? 'pending' : draft.embedding_status,
+      embedding: keepVector ? item.embedding : null,
+      embedding_dim: keepVector ? item.embedding_dim : null,
+      embedding_model: keepVector ? item.embedding_model : null,
+      embedding_status: keepVector ? 'ready' : target.id === NATIVE ? 'pending' : draft.embedding_status,
     };
   }
 
@@ -364,6 +420,106 @@ export class MemoryMoveService {
   private sourceIdOf(source: MemoryBackend, item: MemoryItem): string | null {
     if (source.id === NATIVE) return item.id;
     return source.nativeId?.(item) ?? null;
+  }
+
+  /** The embedding almyty's own store makes for this scope; null for an outside service. */
+  private async targetEmbedding(target: MemoryBackend, scope: ScopeRef): Promise<{ model: string; dim: number } | null> {
+    if (target.id !== NATIVE) return null;
+    const cfg = await this.memory.getOrCreateConfig(scope.scope_type, scope.scope_id);
+    return cfg?.embeddingModel && cfg?.embeddingDim ? { model: cfg.embeddingModel, dim: cfg.embeddingDim } : null;
+  }
+
+  // ── the agents that keep their memories in an account ─────────
+
+  /**
+   * The agents the member can see that keep their memories in `account`,
+   * and whether they may switch each one: whoever may edit the agent may.
+   * A move of one agent's own memory concerns that agent only.
+   *
+   * An agent uses almyty's own memory when its memory is on and names no
+   * other account; a connection when it names that connection, or names
+   * its service with no connection of its own while the organization's
+   * account for that service is this connection.
+   */
+  async agentsUsing(organizationId: string, userId: string, account: MemoryAccountRef, scope?: ScopeRef): Promise<AgentUse[]> {
+    if (!this.agents || !this.accessPolicy) return [];
+    const policy = this.accessPolicy;
+    const rows = await this.agents.find({
+      where: { organizationId, isTemporary: false },
+      select: { id: true, name: true, organizationId: true, visibility: true, teamId: true, createdBy: true, memoryConfig: true },
+    });
+    const visible = await policy.filterVisible({ id: userId }, organizationId, rows);
+    const orgAccounts = await this.orgAccounts(organizationId);
+    const onlyAgent = scope?.scope_type === 'agent' ? scope.scope_id.split(':agent:')[1] : null;
+    const using = visible.filter((a) => (!onlyAgent || a.id === onlyAgent) && agentUses(a.memoryConfig, account, orgAccounts));
+    const out: AgentUse[] = [];
+    for (const a of using) {
+      try {
+        await assertManageable(policy, userId, a, 'Agent', { ownerManages: true });
+        out.push({ id: a.id, name: a.name, canSwitch: true });
+      } catch {
+        out.push({ id: a.id, name: a.name, canSwitch: false, reason: 'You cannot edit this agent.' });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Point every agent the member may edit that used the source account at
+   * the target, once the move is done. Each switch is audited; an agent
+   * they may not edit is listed as not switched, with why.
+   */
+  private async switchAgents(move: MemoryMove, userId: string): Promise<void> {
+    if (!this.agents) return;
+    const scope: ScopeRef = { scope_type: move.scopeType, scope_id: move.scopeId };
+    const uses = await this.agentsUsing(move.organizationId, userId, this.sourceOf(move), scope);
+    const target = this.router.backend(move.targetService);
+    const targetCanExpire = !!target && (target.id === NATIVE || target.capabilities.has('ttl') || typeof target.nativeId === 'function');
+    const switched: Array<{ id: string; name: string }> = [];
+    const notSwitched: Array<{ id: string; name: string; reason: string }> = [];
+    for (const use of uses) {
+      if (!use.canSwitch) {
+        notSwitched.push({ id: use.id, name: use.name, reason: use.reason ?? 'You cannot edit this agent.' });
+        continue;
+      }
+      const agent = await this.agents.findOne({ where: { id: use.id, organizationId: move.organizationId } });
+      if (!agent) continue;
+      const before = { account: agent.memoryConfig?.account ?? NATIVE, credentialId: agent.memoryConfig?.credentialId ?? null };
+      const next = {
+        ...(agent.memoryConfig ?? {}),
+        account: move.targetService,
+        credentialId: move.targetService === NATIVE ? null : move.targetCredentialId,
+        // A time limit the new account cannot keep is not carried over, as on the agent's page.
+        ...(targetCanExpire ? {} : { retentionDays: null }),
+      };
+      await this.agents.update({ id: agent.id, organizationId: move.organizationId }, { memoryConfig: next });
+      switched.push({ id: agent.id, name: agent.name });
+      void this.auditLog.log({
+        organizationId: move.organizationId,
+        userId,
+        action: AuditAction.UPDATE,
+        resourceType: AuditResource.AGENT,
+        resourceId: agent.id,
+        details: {
+          change: 'memory_account',
+          reason: 'memory_move',
+          move_id: move.id,
+          from: before,
+          to: { account: next.account, credentialId: next.credentialId },
+        },
+      });
+    }
+    move.agentsSwitched = switched;
+    move.agentsNotSwitched = notSwitched;
+    await this.moves.save(move);
+    this.audit(move, userId, 'agents_switched', null, { agents_switched: switched.map((a) => a.id), agents_not_switched: notSwitched.map((a) => a.id) });
+  }
+
+  /** The organization's account for each service (its memory settings). */
+  private async orgAccounts(organizationId: string): Promise<Record<string, string>> {
+    if (!this.configRepo) return {};
+    const cfg = await this.configRepo.findOne({ where: { scopeType: 'workspace', scopeId: organizationId } });
+    return ((cfg?.overrides as any)?.routing?.credentials ?? {}) as Record<string, string>;
   }
 
   /** Counts from the item rows, so a resumed move adds up across its runs. */
@@ -391,7 +547,7 @@ export class MemoryMoveService {
     const same = input.source.service === input.target.service && (input.source.credentialId ?? null) === (input.target.credentialId ?? null);
     if (same) throw new BadRequestException({ code: 'SAME_ACCOUNT', message: 'Pick a different account to move to' });
     if (source.id !== NATIVE && typeof source.nativeId !== 'function') {
-      throw new BadRequestException({ code: 'SOURCE_CANNOT_DELETE', message: `Memories cannot be deleted one by one from ${source.id}, so they cannot be moved out of it` });
+      throw new BadRequestException({ code: 'SOURCE_CANNOT_DELETE', message: `${serviceName(source.id)} cannot delete memories one at a time, so almyty cannot move memories out of it. Its memories stay there.` });
     }
     if (!source.supported_modes.has(mode) || !target.supported_modes.has(mode)) {
       throw new BadRequestException({ code: 'MODE_UNSUPPORTED', message: mode === 'document' ? 'One of these accounts cannot keep documents' : 'One of these accounts cannot keep memories' });
@@ -424,7 +580,7 @@ export class MemoryMoveService {
     await this.queue.add('move', { moveId: move.id, userId }, { jobId: `memory-move:${move.id}:${Date.now()}`, attempts: 1, removeOnComplete: 50, removeOnFail: 50 });
   }
 
-  private audit(move: MemoryMove, userId: string, phase: 'started' | 'resumed' | 'finished'): void {
+  private audit(move: MemoryMove, userId: string, phase: 'started' | 'resumed' | 'finished' | 'agents_switched', errorDetail?: string | null, extra: Record<string, unknown> = {}): void {
     void this.auditLog.log({
       organizationId: move.organizationId,
       userId,
@@ -442,9 +598,46 @@ export class MemoryMoveService {
         moved: move.moved,
         failed: move.failed,
         ...(move.lastError ? { error: move.lastError } : {}),
+        // The service's own answer, for whoever investigates; never shown on a page.
+        ...(errorDetail ? { error_detail: errorDetail.slice(0, 500) } : {}),
+        ...extra,
       },
     });
   }
+}
+
+/** A service's name on a page. */
+function serviceName(service: string): string {
+  return service === NATIVE ? 'almyty' : memoryAccountName(service);
+}
+
+/** A step row's error: which side refused (`source:`, `target:`, `unmovable:`) and the service's own answer. */
+function splitItemError(error: string): { side: 'source' | 'target' | 'unmovable'; raw: string } {
+  const m = /^(source|target|unmovable):([\s\S]*)$/.exec(error);
+  return m ? { side: m[1] as 'source' | 'target' | 'unmovable', raw: m[2] } : { side: 'target', raw: error };
+}
+
+/** Why a whole run stopped, in plain words. An account the member may no longer use says so. */
+function plainRunError(e: any, service: string): string {
+  const status = typeof e?.getStatus === 'function' ? e.getStatus() : e?.status;
+  if (status === 403 || status === 404) {
+    return `The ${serviceName(service)} account can no longer be used by you, or it was removed from Credentials.`;
+  }
+  return plainServiceError(service, e);
+}
+
+/** Whether an agent keeps its memories in `account` (see MemoryMoveService.agentsUsing). */
+export function agentUses(
+  memoryConfig: Agent['memoryConfig'] | null | undefined,
+  account: MemoryAccountRef,
+  orgAccounts: Record<string, string>,
+): boolean {
+  if (!memoryConfig?.enabled) return false;
+  const service = memoryConfig.account || NATIVE;
+  const own = memoryConfig.credentialId || null;
+  if (account.service === NATIVE) return service === NATIVE;
+  if (service !== account.service || !account.credentialId) return false;
+  return own ? own === account.credentialId : orgAccounts[service] === account.credentialId;
 }
 
 function isUuid(id: unknown): id is string {

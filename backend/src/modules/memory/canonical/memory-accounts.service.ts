@@ -15,6 +15,7 @@ import { PutInput } from './dto/canonical-memory.dto';
 import { MemoryItem, RankedItem, ScopeRef, SearchQuery } from './canonical.types';
 import { BackendCredentials } from './backends/memory-backend.interface';
 import { pickKnownFields } from './backend-credentials.resolver';
+import { plainServiceError } from './plain-service-error';
 
 /** almyty's own store: always there, needs no account. */
 export const NATIVE_MEMORY_ACCOUNT = 'almyty-native';
@@ -290,7 +291,7 @@ export class MemoryAccountsService {
         health: {
           status: nativeHealth?.ok ? 'valid' : 'failed',
           checkedAt: new Date(),
-          error: nativeHealth?.ok ? null : String((nativeHealth?.details as any)?.error ?? 'almyty could not reach its own memory store'),
+          error: nativeHealth?.ok ? null : 'almyty could not reach its own memory store. Try again in a few minutes.',
         },
         isDefault: defaultService === NATIVE_MEMORY_ACCOUNT,
         canMoveFrom: true,
@@ -309,7 +310,8 @@ export class MemoryAccountsService {
         name: c.name,
         accountLabel: c.accountLabel ?? null,
         owner: c.owner,
-        health: { status: c.health?.status ?? 'unknown', checkedAt: c.health?.checkedAt ?? null, error: c.health?.error ?? null },
+        // In plain words: the service's raw answer stays on the credential, never on this page.
+        health: { status: c.health?.status ?? 'unknown', checkedAt: c.health?.checkedAt ?? null, error: c.health?.error ? plainServiceError(c.connectorKey, c.health.error) : null },
         isDefault: defaultService === c.connectorKey && orgCredentials[c.connectorKey] === c.id,
         canMoveFrom: typeof backend.nativeId === 'function',
         canMoveTo: true,

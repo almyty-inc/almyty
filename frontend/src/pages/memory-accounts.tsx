@@ -191,6 +191,29 @@ export function MemoryMoveDetailPage() {
               </p>
             )}
           </FormSection>
+          {move.switchAgents && move.status !== 'completed' && (
+            <p className="text-sm text-muted-foreground" data-testid="move-agents-pending">
+              The agents that used {moveAccountName(accounts, move.sourceService, move.sourceCredentialId)} switch once every memory has moved.
+            </p>
+          )}
+          {((move.agentsSwitched?.length ?? 0) > 0 || (move.agentsNotSwitched?.length ?? 0) > 0) && (
+            <FormSection title="Agents">
+              <ul className="space-y-1 text-sm" data-testid="move-agents-result">
+                {(move.agentsSwitched ?? []).map((a) => (
+                  <li key={a.id}>
+                    <Link to={`/agents/${a.id}`} className="font-medium text-primary hover:underline">{a.name}</Link>{' '}
+                    <span className="text-muted-foreground">now keeps its memories in {moveAccountName(accounts, move.targetService, move.targetCredentialId)}.</span>
+                  </li>
+                ))}
+                {(move.agentsNotSwitched ?? []).map((a) => (
+                  <li key={a.id}>
+                    <span className="font-medium">{a.name}</span>{' '}
+                    <span className="text-muted-foreground">was not switched: {a.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </FormSection>
+          )}
           {move.warnings.length > 0 && (
             <FormSection title="What the other account does not keep">
               <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">

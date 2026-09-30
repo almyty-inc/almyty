@@ -47,7 +47,7 @@ describe('MemoryAccountsService.overview', () => {
     const { svc, list } = build(
       [
         connection({ id: 'c1', name: 'Mem0 production', connectorKey: 'mem0', health: { status: 'valid', checkedAt: new Date(1), error: null } }),
-        connection({ id: 'c2', name: 'Mem0 staging', connectorKey: 'mem0', health: { status: 'failed', checkedAt: new Date(2), error: 'Invalid API key' } }),
+        connection({ id: 'c2', name: 'Mem0 staging', connectorKey: 'mem0', health: { status: 'failed', checkedAt: new Date(2), error: 'provider rejected the credential (401: {"detail":"Invalid API key. You can find your API key on https://app.mem0.ai/dashboard/api-keys."})' } }),
         // Not memory connections, or a memory service almyty has no adapter for: left out.
         connection({ id: 'c3', name: 'OpenAI', connectorKey: 'openai', kind: 'inference' }),
         connection({ id: 'c4', name: 'Home server', connectorKey: 'memory-custom' }),
@@ -62,7 +62,8 @@ describe('MemoryAccountsService.overview', () => {
       ['c1', 'mem0', 'Mem0 production', 'valid', true],
       ['c2', 'mem0', 'Mem0 staging', 'failed', false],
     ]);
-    expect(out.accounts[2].health.error).toBe('Invalid API key');
+    // A plain sentence, never the service's raw answer.
+    expect(out.accounts[2].health.error).toBe('Mem0 refused the key. Check it at app.mem0.ai.');
   });
 
   it('says a service has no account instead of calling it unreachable', async () => {

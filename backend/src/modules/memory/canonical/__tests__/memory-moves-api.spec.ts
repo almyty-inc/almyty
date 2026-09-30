@@ -40,6 +40,7 @@ describe('memory accounts and moves over the Memory API', () => {
       resume: jest.fn(async () => ({ id: 'mv-1', status: 'queued' })),
       get: jest.fn(async () => moveRow),
       list: jest.fn(async () => []),
+      agentsUsing: jest.fn(async () => []),
     };
     const ctrl: any = new CanonicalMemoryController({} as any, {} as any, {} as any, {} as any, {} as any, accounts as any, policy as any, agents as any, moves as any);
     return { ctrl, accounts, moves };
@@ -55,7 +56,21 @@ describe('memory accounts and moves over the Memory API', () => {
       target: { service: 'mem0', credentialId: 'cred-9', name: 'Mem0' },
       scope: { scope_type: 'workspace', scope_id: ORG },
       mode: undefined,
+      switchAgents: false,
     });
+  });
+
+  it('asks for the agents to follow when the form says so', async () => {
+    const { ctrl, moves } = build();
+    await ctrl.startMove({ source: 'almyty-native', target: 'cred-9', scope_type: 'workspace', scope_id: ORG, switch_agents: true }, req('owner'));
+    expect(moves.start).toHaveBeenCalledWith(ORG, 'owner', expect.objectContaining({ switchAgents: true }));
+  });
+
+  it('lists the agents that use the source account, as the caller', async () => {
+    const { ctrl, moves } = build();
+    await ctrl.moveAgents('cred-9', 'workspace', ORG, req('owner'));
+    expect(moves.agentsUsing).toHaveBeenCalledWith(ORG, 'owner', { service: 'mem0', credentialId: 'cred-9', name: 'Mem0' }, { scope_type: 'workspace', scope_id: ORG });
+    await expect(ctrl.moveAgents('cred-9', 'agent', `${ORG}:agent:a-private`, req('other'))).rejects.toMatchObject({ status: 404 });
   });
 
   it('a dry run previews instead of starting', async () => {
@@ -99,9 +114,11 @@ describe('memory accounts and moves over the Memory API', () => {
 
   it('declares the moves routes before GET :id', () => {
     const names = Object.getOwnPropertyNames(CanonicalMemoryController.prototype);
-    for (const route of ['accountsOverview', 'listMoves', 'getMove', 'startMove', 'resumeMove']) {
+    for (const route of ['accountsOverview', 'listMoves', 'moveAgents', 'getMove', 'startMove', 'resumeMove']) {
       expect(names.indexOf(route)).toBeGreaterThan(-1);
       expect(names.indexOf(route)).toBeLessThan(names.indexOf('get'));
     }
+    // GET moves/agents would otherwise be read as the move with id "agents".
+    expect(names.indexOf('moveAgents')).toBeLessThan(names.indexOf('getMove'));
   });
 });

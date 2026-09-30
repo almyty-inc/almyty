@@ -1092,11 +1092,14 @@ export const memoriesApi = {
   listMoves: () => apiGet<MemoryMove[]>('/memory/canonical/moves'),
   getMove: (id: string) => apiGet<MemoryMove>(`/memory/canonical/moves/${encodeURIComponent(id)}`),
   /** `source` and `target` are account ids: almyty-native, or a memory connection's id. */
-  startMove: (body: { source: string; target: string; scope_type: MemoryScopeType; scope_id: string; mode?: MemoryMode }) =>
+  startMove: (body: { source: string; target: string; scope_type: MemoryScopeType; scope_id: string; mode?: MemoryMode; switch_agents?: boolean }) =>
     apiPost<MemoryMove>('/memory/canonical/moves', body),
   previewMove: (body: { source: string; target: string; scope_type: MemoryScopeType; scope_id: string; mode?: MemoryMode }) =>
     apiPost<MemoryMovePreview>('/memory/canonical/moves', { ...body, dry_run: true }),
   resumeMove: (id: string) => apiPost<MemoryMove>(`/memory/canonical/moves/${encodeURIComponent(id)}/resume`),
+  /** The agents that keep their memories in an account, and whether the caller may switch each. */
+  moveAgents: (params: { source: string; scope_type: MemoryScopeType; scope_id: string }) =>
+    apiGet<MemoryAgentUse[]>(`/memory/canonical/moves/agents?${new URLSearchParams(params).toString()}`),
 }
 
 /** One memory account as the Memory page lists it. */
@@ -1140,6 +1143,18 @@ export interface MemoryMove {
   createdAt: string
   updatedAt: string
   finishedAt: string | null
+  switchAgents?: boolean
+  /** The agents pointed at the target when the move finished. */
+  agentsSwitched?: Array<{ id: string; name: string }> | null
+  /** The agents that used the source and were left alone, with why. */
+  agentsNotSwitched?: Array<{ id: string; name: string; reason: string }> | null
+}
+
+export interface MemoryAgentUse {
+  id: string
+  name: string
+  canSwitch: boolean
+  reason?: string
 }
 
 export interface MemoryMovePreview {

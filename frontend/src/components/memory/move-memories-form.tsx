@@ -16,7 +16,9 @@ import { Plus } from 'lucide-react'
 import { Field, FormPage, FormSection } from '@/components/layout/form-page'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
-import { agentsApi, memoriesApi, type MemoryAccountRow, type MemoryMovePreview } from '@/lib/api'
+import { agentsApi, memoriesApi, type MemoryAccountRow, type MemoryAgentUse, type MemoryMovePreview } from '@/lib/api'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { pluralized } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
@@ -78,13 +80,27 @@ export function MoveMemoriesForm() {
   const agents: Array<{ id: string; name: string }> = Array.isArray(agentsQ.data) ? agentsQ.data : ((agentsQ.data as any)?.data ?? [])
 
   const sources = accounts.filter((a) => a.canMoveFrom)
+  const unmovable = accounts.filter((a) => !a.canMoveFrom)
   const targets = accounts.filter((a) => a.canMoveTo && a.id !== from)
+  const targetAccount = accounts.find((a) => a.id === to)
+  const targetName = targetAccount ? accountLabel(targetAccount) : null
+  const scopeId = whose === 'agent' ? `${orgId}:agent:${agentId}` : orgId
+
+  // The agents that keep their memories where these come from: offered to follow them.
+  const [switchAgents, setSwitchAgents] = useState(true)
+  const agentUsesQ = useQuery({
+    queryKey: ['memories', 'moves', 'agents', from, whose, scopeId],
+    queryFn: () => memoriesApi.moveAgents({ source: from, scope_type: whose, scope_id: scopeId! }),
+    enabled: !!orgId && !!from && (whose !== 'agent' || !!agentId),
+  })
+  const agentUses: MemoryAgentUse[] = Array.isArray(agentUsesQ.data) ? agentUsesQ.data : []
+  const switchable = agentUses.filter((a) => a.canSwitch)
 
   const body = () => ({
     source: from,
     target: to,
     scope_type: whose,
-    scope_id: whose === 'agent' ? `${orgId}:agent:${agentId}` : orgId!,
+    scope_id: scopeId!,
     mode: kind,
   })
 
@@ -104,7 +120,7 @@ export function MoveMemoriesForm() {
   })
 
   const startMut = useMutation({
-    mutationFn: () => memoriesApi.startMove(body()),
+    mutationFn: () => memoriesApi.startMove({ ...body(), switch_agents: switchAgents && switchable.length > 0 }),
     onSuccess: (move) => {
       qc.invalidateQueries({ queryKey: MEMORY_MOVES_QUERY_KEY })
       guard.leave(memoryMovePath(move.id))
@@ -173,6 +189,11 @@ export function MoveMemoriesForm() {
             </SelectContent>
           </Select>
         </Field>
+        {unmovable.length > 0 && (
+          <p className="text-xs text-muted-foreground" data-testid="move-unmovable">
+            {unmovable.map((a) => a.serviceName).filter((n, i, all) => all.indexOf(n) === i).join(', ')} cannot delete memories one at a time, so almyty cannot move memories out of it. Its accounts are not listed here.
+          </p>
+        )}
 
         <Field id="move-whose" label="Whose memories">
           <Select value={whose} onValueChange={(v) => change(() => setWhose(v as Whose))}>
@@ -243,6 +264,31 @@ export function MoveMemoriesForm() {
           )}
         </div>
       </FormSection>
+
+      {agentUses.length > 0 && (
+        <FormSection title="Agents that use this account" description="Their memories are in the account you are moving from.">
+          <div className="flex items-start gap-2">
+            <Checkbox
+              id="move-switch-agents"
+              checked={switchAgents}
+              onCheckedChange={(v) => setSwitchAgents(v === true)}
+              disabled={switchable.length === 0}
+            />
+            <Label htmlFor="move-switch-agents" className="font-normal leading-snug">
+              Switch these agents to {targetName ?? 'the new account'} too
+            </Label>
+          </div>
+          <p className="text-xs text-muted-foreground">They switch once every memory has moved, so none of them loses a memory on the way.</p>
+          <ul className="space-y-1 text-sm" data-testid="move-agents">
+            {agentUses.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-medium">{a.name}</span>
+                {!a.canSwitch && <span className="text-xs text-muted-foreground">Not switched: {a.reason ?? 'You cannot edit this agent.'}</span>}
+              </li>
+            ))}
+          </ul>
+        </FormSection>
+      )}
 
       {preview && (
         <FormSection title="What would move" description="Nothing was moved.">

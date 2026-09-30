@@ -32,6 +32,7 @@ vi.mock('@/lib/api', () => ({
     startMove: vi.fn(),
     previewMove: vi.fn(),
     resumeMove: vi.fn(),
+    moveAgents: vi.fn(async () => []),
     getConfig: vi.fn(async () => null),
   },
   agentsApi: { getAll: vi.fn(async () => [{ id: 'ag-1', name: 'Support bot' }]) },
@@ -88,7 +89,7 @@ const OVERVIEW = {
   accounts: [
     account({ id: 'almyty-native', service: 'almyty-native', serviceName: 'almyty', name: "almyty's own memory", isDefault: true }),
     account({ id: 'c1', service: 'mem0', serviceName: 'Mem0', name: 'Mem0 production' }),
-    account({ id: 'c2', service: 'mem0', serviceName: 'Mem0', name: 'Mem0 staging', health: { status: 'failed', checkedAt: '2026-09-30T10:00:00Z', error: 'Invalid API key' } }),
+    account({ id: 'c2', service: 'mem0', serviceName: 'Mem0', name: 'Mem0 staging', health: { status: 'failed', checkedAt: '2026-09-30T10:00:00Z', error: 'Mem0 refused the key. Check it at app.mem0.ai.' } }),
   ],
   services: [
     { id: 'mem0', name: 'Mem0', accounts: 2 },
@@ -111,8 +112,12 @@ describe('the Accounts tab', () => {
 
     expect(await screen.findByText('Mem0 production')).toBeInTheDocument()
     expect(screen.getByText('Mem0 staging')).toBeInTheDocument()
-    expect(screen.getByText('Invalid API key')).toBeInTheDocument()
-    expect(screen.getAllByTestId('connection-health').map((b) => b.getAttribute('data-status'))).toEqual(['valid', 'valid', 'failed'])
+    // Plain words from the server, never the service's raw answer.
+    expect(screen.getByTestId('memory-account-error')).toHaveTextContent('Mem0 refused the key. Check it at app.mem0.ai.')
+    // The Credentials table's own labels and component.
+    const statuses = screen.getAllByTestId('credential-status')
+    expect(statuses.map((b) => b.getAttribute('data-state'))).toEqual(['ok', 'ok', 'failed'])
+    expect(statuses.map((b) => b.textContent)).toEqual(['Works', 'Works', 'Needs attention'])
     expect(screen.getByTestId('memory-service-not-set-up')).toHaveTextContent('Not set up')
     const zepRow = screen.getByTestId('memory-service-not-set-up').closest('tr')!
     expect(within(zepRow).getByRole('link', { name: /Add account/ })).toHaveAttribute('href', '/memories/accounts/new?service=zep')
@@ -172,7 +177,7 @@ describe('/memories/move', () => {
     await pick(user, 'To', "almyty's own memory")
     await user.click(screen.getByRole('button', { name: 'Move memories' }))
 
-    await waitFor(() => expect(memoriesApi.startMove).toHaveBeenCalledWith({ source: 'c1', target: 'almyty-native', scope_type: 'workspace', scope_id: 'org-1', mode: 'memory' }))
+    await waitFor(() => expect(memoriesApi.startMove).toHaveBeenCalledWith({ source: 'c1', target: 'almyty-native', scope_type: 'workspace', scope_id: 'org-1', mode: 'memory', switch_agents: false }))
     expect(await screen.findByText('at /memories/moves/mv-1')).toBeInTheDocument()
   })
 
@@ -233,6 +238,41 @@ describe('/memories/move', () => {
     const options = (await screen.findAllByRole('option')).map((o) => o.textContent)
     expect(options).toContain('Mem0 production')
     expect(options).not.toContain('Vertex (Vertex AI Memory Bank)')
+    // And says why, in plain words.
+    expect(screen.getByTestId('move-unmovable')).toHaveTextContent('Vertex AI Memory Bank cannot delete memories one at a time, so almyty cannot move memories out of it.')
+  })
+
+  it('offers to switch the agents that use the source account, on by default', async () => {
+    const user = userEvent.setup()
+    vi.mocked(memoriesApi.moveAgents).mockResolvedValue([
+      { id: 'ag-1', name: 'Support bot', canSwitch: true },
+      { id: 'ag-2', name: 'Sales bot', canSwitch: false, reason: 'You cannot edit this agent.' },
+    ])
+    vi.mocked(memoriesApi.startMove).mockResolvedValue({ id: 'mv-9' } as any)
+    renderAtRoute(<MemoryMovePage />, { path: '/memories/move', url: '/memories/move?from=c1', paths: ['/memories/moves/:id'] })
+
+    const list = await screen.findByTestId('move-agents')
+    expect(memoriesApi.moveAgents).toHaveBeenCalledWith({ source: 'c1', scope_type: 'workspace', scope_id: 'org-1' })
+    expect(list).toHaveTextContent('Support bot')
+    expect(list).toHaveTextContent('Sales bot')
+    expect(list).toHaveTextContent('Not switched: You cannot edit this agent.')
+    await pick(user, 'To', "almyty's own memory")
+    const box = screen.getByRole('checkbox', { name: "Switch these agents to almyty's own memory too" })
+    expect(box).toBeChecked()
+    await user.click(screen.getByRole('button', { name: 'Move memories' }))
+    await waitFor(() => expect(memoriesApi.startMove).toHaveBeenCalledWith(expect.objectContaining({ switch_agents: true })))
+  })
+
+  it('leaves the agents alone when the box is cleared', async () => {
+    const user = userEvent.setup()
+    vi.mocked(memoriesApi.moveAgents).mockResolvedValue([{ id: 'ag-1', name: 'Support bot', canSwitch: true }])
+    vi.mocked(memoriesApi.startMove).mockResolvedValue({ id: 'mv-9' } as any)
+    renderAtRoute(<MemoryMovePage />, { path: '/memories/move', url: '/memories/move?from=c1', paths: ['/memories/moves/:id'] })
+    await screen.findByTestId('move-agents')
+    await pick(user, 'To', "almyty's own memory")
+    await user.click(screen.getByRole('checkbox', { name: /Switch these agents/ }))
+    await user.click(screen.getByRole('button', { name: 'Move memories' }))
+    await waitFor(() => expect(memoriesApi.startMove).toHaveBeenCalledWith(expect.objectContaining({ switch_agents: false })))
   })
 })
 
@@ -271,5 +311,23 @@ describe('/memories/moves/:id', () => {
     renderAtRoute(<MemoryMoveDetailPage />, { path: '/memories/moves/:id', url: '/memories/moves/mv-1' })
     expect(await screen.findByTestId('move-failed')).toHaveTextContent('2 memories could not be moved')
     expect(screen.getByRole('button', { name: 'Try the rest again' })).toBeInTheDocument()
+  })
+
+  it('says which agents now use the new account, and which were not switched and why', async () => {
+    vi.mocked(memoriesApi.getMove).mockResolvedValue({
+      ...MOVE, status: 'completed', moved: 100, switchAgents: true,
+      agentsSwitched: [{ id: 'ag-1', name: 'Support bot' }],
+      agentsNotSwitched: [{ id: 'ag-2', name: 'Sales bot', reason: 'You cannot edit this agent.' }],
+    } as any)
+    renderAtRoute(<MemoryMoveDetailPage />, { path: '/memories/moves/:id', url: '/memories/moves/mv-1' })
+    const result = await screen.findByTestId('move-agents-result')
+    expect(result).toHaveTextContent('Support bot now keeps its memories in Mem0 production.')
+    expect(result).toHaveTextContent('Sales bot was not switched: You cannot edit this agent.')
+  })
+
+  it('shows the plain sentence the server gives, never a raw answer', async () => {
+    vi.mocked(memoriesApi.getMove).mockResolvedValue({ ...MOVE, status: 'failed', lastError: 'Mem0 refused the key. Check it at app.mem0.ai.' } as any)
+    renderAtRoute(<MemoryMoveDetailPage />, { path: '/memories/moves/:id', url: '/memories/moves/mv-1' })
+    expect(await screen.findByTestId('move-error')).toHaveTextContent('Mem0 refused the key. Check it at app.mem0.ai.')
   })
 })

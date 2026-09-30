@@ -3,6 +3,8 @@ import { MemoryMove, MemoryMoveItem } from '../memory-move.entity';
 import { MemoryExpiry } from '../memory-expiry.entity';
 import { AuditAction } from '../../../../entities/audit-log.entity';
 import { fakeRepository } from '../../../../test/fake-repository';
+import { orgMembersPolicy } from '../../../../test/execution-access.fixture';
+import { OrganizationRole } from '../../../../entities/user-organization.entity';
 
 /**
  * Moving memories between memory accounts: copy to the target, then
@@ -91,7 +93,7 @@ describe('MemoryMoveService', () => {
     };
   }
 
-  function build(backends: Record<string, any>) {
+  function build(backends: Record<string, any>, extra: { agents?: any; policy?: any; config?: any; embedding?: { model: string; dim: number } } = {}) {
     const moves = fakeRepository<MemoryMove>({ make: () => new MemoryMove(), idPrefix: 'move' });
     const items = fakeRepository<MemoryMoveItem>({ make: () => new MemoryMoveItem(), idPrefix: 'step' });
     const expiries = fakeRepository<MemoryExpiry>({ make: () => new MemoryExpiry(), idPrefix: 'exp' });
@@ -111,12 +113,14 @@ describe('MemoryMoveService', () => {
         embedding: null, embedding_dim: null, embedding_model: null, embedding_status: 'pending',
         created_at: new Date(),
       })),
+      // almyty's own store embeds this scope with this model and size.
+      getOrCreateConfig: jest.fn(async () => ({ embeddingModel: extra.embedding?.model ?? 'text-embedding-3-small', embeddingDim: extra.embedding?.dim ?? 1536 })),
     };
     const audit = { log: jest.fn(async (_entry: any) => null) };
     const queue = { add: jest.fn(async () => ({})) };
     const resolve = jest.fn(async (_org: string, credentialId: string, _opts: any) => ({ config: { apiKey: `key-of-${credentialId}` } }));
-    const svc = new MemoryMoveService(moves as any, items as any, expiries as any, router as any, memory as any, audit as any, queue as any, { resolve } as any);
-    return { svc, moves, items, expiries, audit, queue, resolve };
+    const svc = new MemoryMoveService(moves as any, items as any, expiries as any, router as any, memory as any, audit as any, queue as any, { resolve } as any, extra.agents as any, extra.policy as any, extra.config as any);
+    return { svc, moves, items, expiries, audit, queue, resolve, memory };
   }
 
   const nativeAccount = { service: 'almyty-native', credentialId: null };
@@ -199,7 +203,10 @@ describe('MemoryMoveService', () => {
     const move = await svc.start(ORG, USER, { source: nativeAccount, target: mem0Account(), scope });
     const first = await svc.run(move.id, USER);
     // The page says why, with what a service answered.
-    expect(first).toMatchObject({ status: 'completed', moved: 1, failed: 2, lastError: expect.stringMatching(/refused the write|database busy/) });
+    // The page says why in plain words, never the service's raw answer.
+    expect(first).toMatchObject({ status: 'completed', moved: 1, failed: 2 });
+    expect(first.lastError).toMatch(/^(Mem0 did not accept the request|almyty could not be reached)/);
+    expect(first.lastError).not.toMatch(/refused the write|database busy/);
     expect(items.rows().map((r) => [r.sourceId, r.state]).sort()).toEqual([[uuid(0), 'moved'], [uuid(1), 'failed'], [uuid(2), 'copied']]);
     expect(dst.put.mock.calls.map((c) => c[0].content)).toEqual(['a', 'b', 'c']); // b was refused
 
@@ -223,7 +230,9 @@ describe('MemoryMoveService', () => {
     const { svc } = build({ 'almyty-native': src, mem0: outside('mem0') });
     const move = await svc.start(ORG, USER, { source: nativeAccount, target: mem0Account(), scope });
 
-    expect(await svc.run(move.id, USER)).toMatchObject({ status: 'failed', lastError: 'connection refused', moved: 0 });
+    // One plain sentence on the page; the service's own words only in the audit row.
+    const stopped = await svc.run(move.id, USER);
+    expect(stopped).toMatchObject({ status: 'failed', lastError: 'almyty could not be reached. Try again in a few minutes.', moved: 0 });
 
     await svc.resume(ORG, USER, move.id);
     expect(await svc.run(move.id, USER)).toMatchObject({ status: 'completed', moved: 1, lastError: null });
@@ -288,5 +297,136 @@ describe('MemoryMoveService', () => {
     moves.seed({ organizationId: 'org-2', scopeType: 'workspace', scopeId: 'org-2', createdAt: new Date(4) } as any);
     const listed = await svc.list(ORG, [`${ORG}:agent:seen`]);
     expect(listed.map((m) => m.scopeId)).toEqual([`${ORG}:agent:seen`, ORG]);
+  });
+
+  describe('what a move says when a service refuses', () => {
+    it('says "Mem0 refused the key" in plain words, and keeps the raw answer for the audit row only', async () => {
+      const src = native();
+      src.store.set(uuid(1), memoryItem(uuid(1), 'x'));
+      const mem0 = outside('mem0');
+      mem0.put.mockRejectedValue(new Error('{"detail":"Invalid API key. You can find your API key on https://app.mem0.ai/dashboard/api-keys."}'));
+      const { svc, audit } = build({ 'almyty-native': src, mem0 });
+      const move = await svc.start(ORG, USER, { source: nativeAccount, target: mem0Account(), scope });
+      const done = await svc.run(move.id, USER);
+      expect(done.lastError).toBe('Mem0 refused the key. Check it at app.mem0.ai.');
+      const finished = audit.log.mock.calls.map((c: any[]) => c[0]).find((e: any) => e.details.phase === 'finished');
+      expect(finished.details.error).toBe('Mem0 refused the key. Check it at app.mem0.ai.');
+      expect(finished.details.error_detail).toContain('Invalid API key');
+    });
+
+    it('explains in plain words why Vertex AI Memory Bank cannot be moved out of', async () => {
+      const vertex = { id: 'vertex-memory-bank', capabilities: new Set(), supported_modes: new Set(['memory']) };
+      const { svc } = build({ 'almyty-native': native(), 'vertex-memory-bank': vertex });
+      await expect(svc.start(ORG, USER, { source: { service: 'vertex-memory-bank', credentialId: 'v' }, target: nativeAccount, scope })).rejects.toMatchObject({
+        response: { message: 'Vertex AI Memory Bank cannot delete memories one at a time, so almyty cannot move memories out of it. Its memories stay there.' },
+      });
+    });
+  });
+
+  describe('embeddings', () => {
+    it('carries the vector when almyty embeds with the same model and dimension', async () => {
+      const mem0 = outside('mem0');
+      mem0.account().set('m-1', memoryItem(uuid(1), 'x', { metadata: { mem0_id: 'm-1' }, embedding: [0.5, 0.25], embedding_model: 'mini', embedding_dim: 2 }));
+      const dst = native();
+      const { svc } = build({ mem0, 'almyty-native': dst }, { embedding: { model: 'mini', dim: 2 } });
+      const move = await svc.start(ORG, USER, { source: mem0Account(), target: nativeAccount, scope });
+      await svc.run(move.id, USER);
+      expect([...dst.store.values()][0]).toMatchObject({ embedding: [0.5, 0.25], embedding_model: 'mini', embedding_dim: 2, embedding_status: 'ready' });
+    });
+
+    it('embeds again when the model or the dimension differs', async () => {
+      const mem0 = outside('mem0');
+      mem0.account().set('m-1', memoryItem(uuid(1), 'x', { metadata: { mem0_id: 'm-1' }, embedding: [0.5, 0.25], embedding_model: 'mini', embedding_dim: 2 }));
+      const dst = native();
+      const { svc } = build({ mem0, 'almyty-native': dst }, { embedding: { model: 'mini', dim: 3 } });
+      const move = await svc.start(ORG, USER, { source: mem0Account(), target: nativeAccount, scope });
+      await svc.run(move.id, USER);
+      expect([...dst.store.values()][0]).toMatchObject({ embedding: null, embedding_status: 'pending' });
+    });
+  });
+
+  describe('switching the agents that used the source', () => {
+    const ADMIN = 'u-admin';
+    const MEMBER = 'u-member';
+    function agentsFixture() {
+      return fakeRepository([
+        { id: 'a-native', name: 'Native bot', organizationId: ORG, visibility: 'org', teamId: null, createdBy: 'someone', isTemporary: false, memoryConfig: { enabled: true, retentionDays: 30 } },
+        { id: 'a-mem0-own', name: 'Own key bot', organizationId: ORG, visibility: 'org', teamId: null, createdBy: MEMBER, isTemporary: false, memoryConfig: { enabled: true, account: 'mem0', credentialId: 'cred-a' } },
+        { id: 'a-mem0-org', name: 'Org key bot', organizationId: ORG, visibility: 'org', teamId: null, createdBy: 'someone', isTemporary: false, memoryConfig: { enabled: true, account: 'mem0' } },
+        { id: 'a-other', name: 'Other account bot', organizationId: ORG, visibility: 'org', teamId: null, createdBy: 'someone', isTemporary: false, memoryConfig: { enabled: true, account: 'mem0', credentialId: 'cred-z' } },
+        { id: 'a-off', name: 'No memory bot', organizationId: ORG, visibility: 'org', teamId: null, createdBy: 'someone', isTemporary: false, memoryConfig: { enabled: false } },
+        { id: 'a-private', name: 'Someone private', organizationId: ORG, visibility: 'private', teamId: null, createdBy: 'someone', isTemporary: false, memoryConfig: { enabled: true, account: 'mem0', credentialId: 'cred-a' } },
+      ] as any);
+    }
+    const config = () => fakeRepository([{ scopeType: 'workspace', scopeId: ORG, overrides: { routing: { credentials: { mem0: 'cred-a' } } } }] as any);
+    const policy = () => orgMembersPolicy(ORG, { [ADMIN]: OrganizationRole.ADMIN, [MEMBER]: OrganizationRole.MEMBER });
+
+    it('lists the agents that keep their memories in an account, and which the member may switch', async () => {
+      const { svc } = build({}, { agents: agentsFixture(), policy: policy(), config: config() });
+      // Its own connection, or the organization's account for the service; never someone's private agent.
+      expect(await svc.agentsUsing(ORG, MEMBER, mem0Account('cred-a'))).toEqual([
+        { id: 'a-mem0-own', name: 'Own key bot', canSwitch: true },
+        { id: 'a-mem0-org', name: 'Org key bot', canSwitch: false, reason: 'You cannot edit this agent.' },
+      ]);
+      expect((await svc.agentsUsing(ORG, ADMIN, nativeAccount)).map((a) => a.id)).toEqual(['a-native']);
+      // One agent's memory concerns that agent only.
+      expect((await svc.agentsUsing(ORG, ADMIN, mem0Account('cred-a'), { scope_type: 'agent', scope_id: `${ORG}:agent:a-mem0-org` })).map((a) => a.id)).toEqual(['a-mem0-org']);
+    });
+
+    it('once every memory has moved, points the agents at the target and audits each switch', async () => {
+      const mem0 = outside('mem0');
+      mem0.account('cred-a').set('m-1', memoryItem(uuid(1), 'x', { metadata: { mem0_id: 'm-1' } }));
+      const agents = agentsFixture();
+      const { svc, audit, moves } = build({ mem0, 'almyty-native': native() }, { agents, policy: policy(), config: config() });
+      const move = await svc.start(ORG, ADMIN, { source: mem0Account('cred-a'), target: nativeAccount, scope, switchAgents: true });
+      const done = await svc.run(move.id, ADMIN);
+
+      expect(done.status).toBe('completed');
+      expect(agents.row('a-mem0-own')!.memoryConfig).toMatchObject({ enabled: true, account: 'almyty-native', credentialId: null });
+      expect(agents.row('a-mem0-org')!.memoryConfig).toMatchObject({ account: 'almyty-native', credentialId: null });
+      // Agents on another account, and ones the admin cannot see, are left alone.
+      expect(agents.row('a-other')!.memoryConfig).toMatchObject({ account: 'mem0', credentialId: 'cred-z' });
+      expect(agents.row('a-private')!.memoryConfig).toMatchObject({ account: 'mem0', credentialId: 'cred-a' });
+      expect(moves.row(move.id)!.agentsSwitched).toEqual([{ id: 'a-mem0-own', name: 'Own key bot' }, { id: 'a-mem0-org', name: 'Org key bot' }]);
+      const switches = audit.log.mock.calls.map((c: any[]) => c[0]).filter((e: any) => e.details.change === 'memory_account');
+      expect(switches.map((e: any) => e.resourceId)).toEqual(['a-mem0-own', 'a-mem0-org']);
+      expect(switches[0].details).toMatchObject({ from: { account: 'mem0', credentialId: 'cred-a' }, to: { account: 'almyty-native', credentialId: null }, move_id: move.id });
+    });
+
+    it('lists the agents a member may not edit as not switched, with why', async () => {
+      const mem0 = outside('mem0');
+      const agents = agentsFixture();
+      const { svc, moves } = build({ mem0, 'almyty-native': native() }, { agents, policy: policy(), config: config() });
+      const move = await svc.start(ORG, MEMBER, { source: mem0Account('cred-a'), target: nativeAccount, scope, switchAgents: true });
+      await svc.run(move.id, MEMBER);
+      expect(moves.row(move.id)!.agentsNotSwitched).toEqual([{ id: 'a-mem0-org', name: 'Org key bot', reason: 'You cannot edit this agent.' }]);
+      expect(agents.row('a-mem0-org')!.memoryConfig).toMatchObject({ account: 'mem0' });
+    });
+
+    it('does not switch agents while memories are left behind, or when not asked', async () => {
+      const mem0 = outside('mem0');
+      mem0.account('cred-a').set('m-1', memoryItem(uuid(1), 'x', { metadata: { mem0_id: 'm-1' } }));
+      const dst = native();
+      dst.put.mockRejectedValueOnce(new Error('database busy'));
+      const agents = agentsFixture();
+      const { svc } = build({ mem0, 'almyty-native': dst }, { agents, policy: policy(), config: config() });
+      const move = await svc.start(ORG, ADMIN, { source: mem0Account('cred-a'), target: nativeAccount, scope, switchAgents: true });
+      expect((await svc.run(move.id, ADMIN)).failed).toBe(1);
+      expect(agents.row('a-mem0-own')!.memoryConfig).toMatchObject({ account: 'mem0' });
+
+      const quiet = build({ mem0: outside('mem0'), 'almyty-native': native() }, { agents, policy: policy(), config: config() });
+      const other = await quiet.svc.start(ORG, ADMIN, { source: mem0Account('cred-a'), target: nativeAccount, scope });
+      await quiet.svc.run(other.id, ADMIN);
+      expect(agents.row('a-mem0-own')!.memoryConfig).toMatchObject({ account: 'mem0' });
+    });
+
+    it('drops a time limit the new account cannot keep', async () => {
+      const agents = agentsFixture();
+      const vertex = { ...outside('vertex-memory-bank'), nativeId: undefined };
+      const { svc } = build({ 'almyty-native': native(), 'vertex-memory-bank': vertex }, { agents, policy: policy(), config: config() });
+      const move = await svc.start(ORG, ADMIN, { source: nativeAccount, target: { service: 'vertex-memory-bank', credentialId: 'v' }, scope, switchAgents: true });
+      await svc.run(move.id, ADMIN);
+      expect(agents.row('a-native')!.memoryConfig).toMatchObject({ account: 'vertex-memory-bank', credentialId: 'v', retentionDays: null });
+    });
   });
 });
