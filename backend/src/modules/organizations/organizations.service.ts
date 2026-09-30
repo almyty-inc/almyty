@@ -34,6 +34,7 @@ import { ResourceHandoverHelper } from './resource-handover.helper';
 import type { WipedConnection } from '../connections/member-connection-offboarding';
 
 import { ORGANIZATION_ROLE_RANK } from './organization-role-rank';
+import { countsTowardGatewayQuota } from '../gateways/gateway-quota';
 
 /** Fields on a User row that must never reach another user. */
 export const USER_SECRET_FIELDS = [
@@ -877,7 +878,8 @@ export class OrganizationsService {
       membersCount,
       teamsCount,
       apisCount: organization.apis?.length || 0,
-      gatewaysCount: organization.gateways?.length || 0,
+      // The plan's gateways: MCP, UTCP and Skills. Channels are not counted.
+      gatewaysCount: (organization.gateways ?? []).filter((g) => !g.isSystem && countsTowardGatewayQuota(g.type)).length,
       plan: organization.plan,
     };
   }

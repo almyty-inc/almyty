@@ -1370,8 +1370,15 @@ describe('OrganizationsService', () => {
         id: 'org-1',
         name: 'Test Org',
         plan: 'pro',
+        // One MCP gateway counts; channels (web chat, Slack, A2A) and the system gateway do not.
+        gateways: [
+          { id: 'gw-1', type: 'mcp', isSystem: false },
+          { id: 'gw-2', type: 'hosted_chat', isSystem: false },
+          { id: 'gw-3', type: 'slack', isSystem: false },
+          { id: 'gw-4', type: 'a2a', isSystem: false },
+          { id: 'gw-sys', type: 'mcp', isSystem: true },
+        ],
         apis: [{ id: 'api-1' }, { id: 'api-2' }],
-        gateways: [{ id: 'gw-1' }],
       };
 
       organizationRepository.findOne.mockResolvedValue(mockOrg as any);

@@ -36,7 +36,7 @@ import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
 import { EmailProvisioningService } from './channels/email-provisioning.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
-import { withGatewayQuota } from './gateway-quota';
+import { countsTowardGatewayQuota, withGatewayQuota } from './gateway-quota';
 import { CHANNEL_GATEWAY_NEEDS_AGENT, isChannelGatewayType } from './channel-surface';
 
 /**
@@ -665,7 +665,8 @@ export class GatewaysService {
       let savedGateway = await withGatewayQuota(
         this.gatewayRepository.manager,
         organizationId,
-        1,
+        // A channel's gateway is not counted toward the plan's gateways.
+        countsTowardGatewayQuota(gateway.type) ? 1 : 0,
         (tx) => tx.getRepository(Gateway).save(gateway),
       );
       try {
