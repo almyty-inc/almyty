@@ -294,7 +294,7 @@ export function StoredCredentialDetail({ credential, onDeleted }: { credential: 
                   </Link>
                 )}
               </p>
-              <WhoCanUseLine summary={row.who === 'Only you' ? 'only you' : row.who === 'One team' ? 'one team' : 'everyone in your organization'} />
+              <WhoCanUseLine summary={row.who} />
             </CardContent>
           </Card>
           <DeleteSection name={credential.name} uses={row.uses.length} pending={remove.isPending} onDelete={() => remove.mutate()} />

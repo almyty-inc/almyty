@@ -242,10 +242,10 @@ describe('ProviderPage', () => {
       vi.mocked(llmProvidersApi.update).mockResolvedValue({} as any)
       at('settings')
       const line = await screen.findByTestId('who-can-use')
-      expect(line).toHaveTextContent('Who can use it: everyone in your organization')
-      expect(screen.queryByRole('radio', { name: /Private/ })).not.toBeInTheDocument()
+      expect(line).toHaveTextContent('Who can use it: Everyone')
+      expect(screen.queryByRole('radio', { name: /^Only you/ })).not.toBeInTheDocument()
       fireEvent.click(within(line).getByRole('button', { name: 'Change' }))
-      fireEvent.click(screen.getByRole('radio', { name: /Private/ }))
+      fireEvent.click(screen.getByRole('radio', { name: /^Only you/ }))
       await waitFor(() => expect(llmProvidersApi.update).toHaveBeenCalledWith('p1', { visibility: 'private', teamId: null }))
     })
 

@@ -73,7 +73,7 @@ describe('ConnectProviderPage', () => {
     for (const label of [/model id/i, /^Model$/, /privacy/i, /^Region/, /context/i, /capabilit/i, /provider name/i, /provider type/i]) {
       expect(within(form).queryByLabelText(label)).not.toBeInTheDocument()
     }
-    expect(within(form).getByTestId('who-can-use')).toHaveTextContent('Who can use it: everyone in your organization')
+    expect(within(form).getByTestId('who-can-use')).toHaveTextContent('Who can use it: Everyone')
     expect(within(form).getByRole('link', { name: /Get a key/ })).toHaveAttribute('href', 'https://platform.openai.com/api-keys')
     expect(within(form).getByRole('button', { name: 'Use a saved key instead' })).toBeInTheDocument()
   })

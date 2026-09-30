@@ -247,7 +247,7 @@ describe('/credentials/new', () => {
     expect(form.querySelectorAll('input')).toHaveLength(1)
     expect(within(form).queryByLabelText(/^Type/)).not.toBeInTheDocument()
     expect(within(form).queryByLabelText(/^Name/)).not.toBeInTheDocument()
-    expect(within(form).getByTestId('who-can-use')).toHaveTextContent('everyone in your organization')
+    expect(within(form).getByTestId('who-can-use')).toHaveTextContent('Everyone')
 
     fireEvent.change(within(form).getByLabelText('Token'), { target: { value: 'ghp_123' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
@@ -345,7 +345,7 @@ describe('/credentials/:id', () => {
     expect(screen.getByText('octocat')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /Used by/ })).toBeInTheDocument()
-    expect(screen.getByTestId('who-can-use')).toHaveTextContent('everyone in your organization')
+    expect(screen.getByTestId('who-can-use')).toHaveTextContent('Everyone')
     expect(screen.getByRole('link', { name: 'Change' })).toHaveAttribute('href', '/credentials/advanced?credential=conn-1')
   })
 
@@ -381,7 +381,7 @@ describe('/credentials/:id', () => {
   it('offers no change of who can use a private credential', async () => {
     at('conn-2')
     expect(await screen.findByRole('heading', { name: 'Acme CRM' })).toBeInTheDocument()
-    expect(screen.getByTestId('who-can-use')).toHaveTextContent('only you')
+    expect(screen.getByTestId('who-can-use')).toHaveTextContent('Only you')
     expect(screen.queryByRole('link', { name: 'Change' })).not.toBeInTheDocument()
   })
 

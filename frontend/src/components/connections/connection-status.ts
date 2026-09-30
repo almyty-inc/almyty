@@ -1,4 +1,5 @@
 import type { ServiceCheck } from '@/components/connect/status-label'
+import { WHO_CAN_USE_LABELS } from '@/components/connect/who-can-use'
 import type { Visibility } from '@/components/ui/visibility-field'
 import type { Connection, Connector } from '@/types/connections'
 
@@ -27,5 +28,5 @@ export function connectionWho(connection: Pick<Connection, 'owner'>): Visibility
 
 /** The same, short, for a card. */
 export function connectionWhoShort(connection: Pick<Connection, 'owner'>): string {
-  return { org: 'Everyone', team: 'One team', private: 'Only you' }[connectionWho(connection)]
+  return WHO_CAN_USE_LABELS[connectionWho(connection)]
 }
