@@ -1,16 +1,18 @@
 # Roles and strategies
 
-If activating an agent failed with **Not ready: ... Configure the strategy and roles on the Execution tab**, this page is the fix. Everything it names lives on one tab: open the agent and pick **Execution**, the third tab after Overview and Runs. The not-ready banner has a **Configure execution** button that goes straight there.
+A workflow agent separates *what* it does from *which AI model* does it, so you can change models without redrawing anything. You set this on the agent's **Execution** tab: a **role** is a job in the agent (for example "writes the first draft" or "checks the answer"), and each role is filled by a model. A **strategy** is the pattern the work follows, such as "a cheap model drafts, a checker reviews, the main model steps in only if the check fails".
+
+Come here when activating a workflow agent fails with **Not ready: ... Configure the strategy and roles on the Execution tab**. Open the agent and pick **Execution**, the third tab after Overview and Runs; the not-ready banner's **Configure execution** button goes straight there. (Autonomous agents pick their models on their edit page instead; see [work mode](/agents/autonomous#work-mode-how-it-works-and-which-models-do-it).)
 
 The tab holds three cards:
 
 - **Roles**: which model fills each job in this agent.
-- **Strategy**: the shape of the work. A strategy never names a model; roles do that.
-- **Orchestrator**: optional, lets a small model pick the strategy per request.
+- **Strategy**: the pattern of the work. A strategy never names a model; roles do that.
+- **Orchestrator**: optional, lets a small model pick the strategy for each request.
 
 ## What the error means
 
-A role is a named job in the agent, like `principal` or `verifier`, and a binding says which model fills it. A strategy is a shape of work that declares the slots it needs, and it fills them from your roles by matching the role's key to the slot name. Activation refuses when a slot has no role, or a role has no model it can actually call.
+Each role has a key, like `principal` (the main model) or `verifier` (the checker). A strategy lists the slots it needs and fills them from your roles by matching each role's key to the slot name. Activation refuses when a slot has no role, or a role has no model it can actually call.
 
 | What you saw | What to do |
 |---|---|
