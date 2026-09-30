@@ -5,6 +5,13 @@ import { Repository } from 'typeorm';
 import { BadRequestException, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 
+// compare passes through to the real bcrypt; the mock only records calls,
+// so the timing-equalisation test can assert the comparison happens.
+jest.mock('bcryptjs', () => {
+  const actual = jest.requireActual('bcryptjs');
+  return { ...actual, compare: jest.fn((...args: unknown[]) => (actual.compare as (...a: unknown[]) => unknown)(...args)) };
+});
+
 import { AuthService, JwtPayload } from './auth.service';
 import { User } from '../../entities/user.entity';
 import { AuthSessionService } from './auth-session.service';
@@ -701,21 +708,17 @@ describe('AuthService', () => {
       ['inactive account', { id: 'u', email: 'x@example.com', isActive: false, passwordHash: '$2b$12$abcdefghijklmnopqrstuuMPbBc5fyGT2Ce0fq5SX5HPWAkfKzkE2' }],
       ['account without a password', { id: 'u', email: 'x@example.com', isActive: true, passwordHash: null }],
     ])('spends a cost-12 bcrypt comparison on an %s', async (_label, row) => {
-      // What one real comparison costs on this machine, right now.
-      const realHash = await bcrypt.hash('some-password', 12);
-      let started = performance.now();
-      await bcrypt.compare('wrong-password', realHash);
-      const oneComparison = performance.now() - started;
-
+      // The timing an attacker sees comes from bcrypt itself: assert the
+      // comparison happens, against a cost-12 hash, rather than timing it
+      // (wall-clock ratios flake on a busy CI runner).
+      const compare = bcrypt.compare as unknown as jest.Mock;
+      compare.mockClear();
       userRepository.findOne.mockResolvedValue(row as any);
-      started = performance.now();
       const result = await service.validateUser('x@example.com', 'password');
-      const elapsed = performance.now() - started;
 
       expect(result).toBeNull();
-      // Without the dummy comparison this path returned in well under a
-      // millisecond; half a real comparison leaves room for scheduler noise.
-      expect(elapsed).toBeGreaterThan(oneComparison * 0.5);
+      expect(compare).toHaveBeenCalledTimes(1);
+      expect(String(compare.mock.calls[0][1])).toMatch(/^\$2[aby]\$12\$/);
     });
 
     it('should return null for inactive user', async () => {

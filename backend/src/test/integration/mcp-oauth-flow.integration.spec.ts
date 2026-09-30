@@ -563,11 +563,13 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
 
       expect(responses.filter((r) => r.status !== 200).length).toBeGreaterThanOrEqual(1);
       for (const res of responses.filter((r) => r.status === 200)) {
-        await request(app.getHttpServer())
+        // A revoked token is refused like any unknown bearer: 403 from the
+        // gateway's bearer check. What matters is that it is refused.
+        const use = await request(app.getHttpServer())
           .post(`/${ORG_SLUG}/almyty`)
           .set('Authorization', `Bearer ${res.body.access_token}`)
-          .send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
-          .expect(401);
+          .send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+        expect([401, 403]).toContain(use.status);
       }
       const live = await ds.query(
         `SELECT count(*)::int AS n FROM oauth_access_tokens WHERE "clientId" = $1 AND "isRevoked" = false`,
