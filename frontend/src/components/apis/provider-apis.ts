@@ -31,7 +31,7 @@ export const PROVIDER_APIS: ProviderApi[] = [
   {
     key: 'openai',
     label: 'OpenAI',
-    hint: 'Chat, embeddings, images, files and more',
+    hint: 'Chat, images and files',
     specUrl: 'https://raw.githubusercontent.com/openai/openai-openapi/a1514fbafe294e45d9200b32f1df7511f95492f7/openapi.json',
     apiName: 'OpenAI API',
     connectorKeys: ['openai'],
@@ -39,7 +39,7 @@ export const PROVIDER_APIS: ProviderApi[] = [
   {
     key: 'mistral',
     label: 'Mistral',
-    hint: 'Chat, embeddings, agents and files',
+    hint: 'Chat, agents and files',
     specUrl: 'https://raw.githubusercontent.com/mistralai/platform-docs-public/ecac75b617af32e87a6d59c5d9e39e7029fc35db/openapi.yaml',
     apiName: 'Mistral API',
     connectorKeys: ['mistral'],
@@ -47,7 +47,7 @@ export const PROVIDER_APIS: ProviderApi[] = [
   {
     key: 'huggingface',
     label: 'Hugging Face Hub',
-    hint: 'Models, datasets, Spaces and repos',
+    hint: 'Models, datasets and Spaces',
     specUrl: 'https://huggingface.co/.well-known/openapi.json',
     apiName: 'Hugging Face Hub API',
     connectorKeys: ['huggingface', 'registry-huggingface'],

@@ -213,9 +213,9 @@ export const CHANNEL_LABELS: Record<ChannelType, string> = {
 /** One line under each tile when adding a channel. */
 export const CHANNEL_HINTS: Record<ChannelType, string> = {
   web: 'A link people open',
-  widget: 'A snippet for your website',
+  widget: 'Code for your site',
   a2a: 'Over A2A',
-  tui: 'A command to download',
+  tui: 'Runs in a terminal',
   desktop: 'An app to download',
   slack: 'In your workspace',
   discord: 'As a bot',

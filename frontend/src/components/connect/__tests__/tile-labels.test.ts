@@ -4,6 +4,7 @@ import { splitTileName } from '@/components/connect/service-tiles'
 import { channelTileLabel } from '@/pages/agent-channel-new'
 import { ADDABLE_CHANNEL_TYPES, CHANNEL_HINTS } from '@/lib/agent-channels'
 import { PROVIDER_TILE_ORDER, providerTileLabel } from '@/components/llm-providers/provider-catalog'
+import { PROVIDER_APIS } from '@/components/apis/provider-apis'
 
 /**
  * A tile's label is cut to one line. In the four-column "Add channel"
@@ -35,6 +36,19 @@ describe('tile labels', () => {
     for (const type of PROVIDER_TILE_ORDER) {
       const { label } = splitTileName(providerTileLabel(type))
       expect(label.length, `${type}: "${label}"`).toBeLessThanOrEqual(22)
+    }
+  })
+
+  it('keep the add-channel hints to one line, with no ellipsis', () => {
+    // "To your own endpoint" is the longest that fits a tile at 1440px.
+    for (const type of ADDABLE_CHANNEL_TYPES) {
+      expect(CHANNEL_HINTS[type].length, `${type}: "${CHANNEL_HINTS[type]}"`).toBeLessThanOrEqual(20)
+    }
+  })
+
+  it('keep the ready-made provider API hints to one line', () => {
+    for (const api of PROVIDER_APIS) {
+      expect(api.hint.length, `${api.key}: "${api.hint}"`).toBeLessThanOrEqual(28)
     }
   })
 })
