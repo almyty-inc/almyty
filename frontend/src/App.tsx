@@ -64,7 +64,9 @@ const AnalyticsPage = lazy(() => import('@/pages/analytics').then(m => ({ defaul
 const CredentialsPage = lazy(() => import('@/pages/credentials').then(m => ({ default: m.CredentialsPage })))
 const AddCredentialPage = lazy(() => import('@/pages/credential-new').then(m => ({ default: m.AddCredentialPage })))
 const MemoryNewPage = lazy(() => import('@/pages/memory-new').then(m => ({ default: m.MemoryNewPage })))
-const MemoryTransferPage = lazy(() => import('@/pages/memory-new').then(m => ({ default: m.MemoryTransferPage })))
+const MemoryMovePage = lazy(() => import('@/pages/memory-accounts').then(m => ({ default: m.MemoryMovePage })))
+const MemoryMoveDetailPage = lazy(() => import('@/pages/memory-accounts').then(m => ({ default: m.MemoryMoveDetailPage })))
+const MemoryAccountNewPage = lazy(() => import('@/pages/memory-accounts').then(m => ({ default: m.MemoryAccountNewPage })))
 const AnalyticsBudgetPage = lazy(() => import('@/pages/analytics-budget').then(m => ({ default: m.AnalyticsBudgetPage })))
 const ApprovalPolicyPage = lazy(() => import('@/pages/approval-policy').then(m => ({ default: m.ApprovalPolicyPage })))
 const CredentialDetailRoutePage = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.CredentialDetailRoutePage })))
@@ -214,7 +216,9 @@ export function createAppRoutes() {
           <Route path="/analytics/*" element={<AnalyticsPage />} />
           <Route path="/memories" element={<MemoriesPage />} />
           <Route path="/memories/new" element={<MemoryNewPage />} />
-          <Route path="/memories/transfer" element={<MemoryTransferPage />} />
+          <Route path="/memories/move" element={<MemoryMovePage />} />
+          <Route path="/memories/moves/:id" element={<MemoryMoveDetailPage />} />
+          <Route path="/memories/accounts/new" element={<MemoryAccountNewPage />} />
           <Route path="/settings/approvals/policies/new" element={<ApprovalPolicyPage />} />
           <Route path="/settings/approvals/policies/:policyId" element={<ApprovalPolicyPage />} />
           <Route path="/settings/*" element={<SettingsPage />} />
