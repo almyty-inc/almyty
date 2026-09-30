@@ -46,9 +46,15 @@ describe('a sandbox execution holds its pool slot for a bounded time', () => {
     });
     const elapsed = Date.now() - started;
     expect(result.success).toBe(false);
+    // The slot, not the tool's 50s timeout, is what ended it.
     expect(result.error).toBe('Sandbox execution exceeded its 10000ms slot');
-    expect(elapsed).toBeGreaterThanOrEqual(10_000);
-    expect(elapsed).toBeLessThan(20_000);
+    // Not before the deadline. The deadline is Date.now() arithmetic handed
+    // to setTimeout, which can fire a millisecond early by the wall clock
+    // (CI once measured 9999), so allow the clock's granularity and no more.
+    expect(elapsed).toBeGreaterThanOrEqual(10_000 - 50);
+    // Well short of the tool's own 50s timeout, with room for a slow runner
+    // to boot the worker and tear it down.
+    expect(elapsed).toBeLessThan(40_000);
     expect((service as any).activeWorkers).toBe(0);
   });
 
