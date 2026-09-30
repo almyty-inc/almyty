@@ -91,7 +91,7 @@ draining -> offline          drain grace expires
 - **Selection** is `RunnerService.resolveByLabels(required, caller, organizationId, { preferRunnerId })`. Candidates are the organization's runners in a `canAcceptWork` state whose labels include every requirement (keys and values trimmed, compared case-insensitively; extra labels are fine). Each candidate is then put through `resolveForDispatch` with the same caller, so label routing adds no access rule of its own: private is the owner's, team is the team's (and org admins', as everywhere), a runner of a deactivated member takes nobody's work, a dispatch with no known caller reaches org-wide runners only, a gateway run is judged by the gateway's scope. A candidate also needs a live session. Order: the preferred runner, then ONLINE before BUSY, then the latest heartbeat.
 - **No match** is a 404 with one sentence, `No machine with gpu=yes is online`, the same whether no runner carries the labels or the ones that do are someone else's, so the answer does not say which machines exist. Over the runner bridge it is `runner_not_found` with that message.
 - **Agents**: `agentConfig.runnerLabels` (typed as `gpu=yes, os=mac` on the autonomous agent form under Capabilities > Machine, stored as an object by `normaliseRunnerLabels`). The engine hands it to every tool call (`ToolExecutionOptions.runnerLabels`, from `agent-step-processor.ts` and, for pipelines, `NodeExecutionOptions.runnerLabels`), and `RunnerCallService.dispatch` routes a runner-backed tool's call with it, preferring the tool's own runner.
-- **Workspaces**: `POST /workspaces` takes `labels` (text or object). Without `runnerId` the workspace goes on the runner `resolveByLabels` picks for the caller, which can be another member's org or team runner; with `runnerId` that runner must carry the labels (400 otherwise). Work in a workspace always goes to the workspace's runner; a dispatch that also names labels is refused when that runner lacks one.
+- **Workspaces**: a workspace an agent run is given goes on the runner its call goes to, so the agent's labels pick it (see "Workspaces for agent runs"). `POST /workspaces` takes `labels` (text or object). Without `runnerId` the workspace goes on the runner `resolveByLabels` picks for the caller, which can be another member's org or team runner; with `runnerId` that runner must carry the labels (400 otherwise). Work in a workspace always goes to the workspace's runner; a dispatch that also names labels is refused when that runner lacks one.
 - `backend/src/__tests__/no-control-is-stored-and-ignored.guard.spec.ts` checks that the reader exists end to end, and `test/integration/runner-label-routing.integration.spec.ts` proves it against Postgres.
 
 ### Single-runner-per-account in v1.0
@@ -199,9 +199,9 @@ The walkthrough lives at [docs/runner-demo.md](runner-demo.md): start a runner w
 Four pages, all conforming to the existing UI patterns in the repo (React Router v6, TanStack Query inline in pages, shadcn/ui components, custom `<table>`s with the same header/Card/empty-state shape `agents.tsx` uses):
 
 - `/runners` — list page with state badge (a runner whose daemon never connected reads "never connected"), visibility badge, OS/arch, last heartbeat, capacity, labels, and a Delete action behind a one-line confirmation. Lists every runner the caller may see: their own (private ones included), org-wide ones, and team ones for their teams. Polls every 15s (half the runner heartbeat interval). Empty state links to the start-a-runner page.
-- `/runners/:id` — detail page with runtime info, labels, capabilities (binary detection results) and a Workspaces tab: every workspace on the runner in a table with status filter, cwd search and time left. The owner changes visibility in place on this page. Delete renders when the runner is `offline` or has never connected and requires confirmation.
+- `/runners/:id` — detail page with runtime info, labels, capabilities (binary detection results) and a Workspaces tab: the caller's workspaces on the runner in a table with cwd search, the agent and run each was made for, status, isolation, time left and a Release action (with a confirmation) on active rows. No create button: agent runs get workspaces automatically (see "Workspaces for agent runs"). The owner changes visibility in place on this page. Delete renders when the runner is `offline` or has never connected and requires confirmation.
 - `/runners/new` — the setup page. Step 1: name, labels, visibility (Private by default, Team, Org-wide). "Generate command" creates the runner record (`POST /runners`, pending: never connected) holding all of that, so step 2's commands need only the name: `npm i -g @almyty/runner @almyty/auth`, `almyty-auth login`, `almyty-runner start --name X --org <org-id>`. From step 2 the user can go Back (the pending record is updated in place with `PATCH /runners/:id`, rename allowed only while pending) or Cancel (the pending record is deleted). Step 3 polls the record and opens the runner on its first heartbeat. An abandoned setup stays visible on `/runners` as "never connected" and can be deleted there.
-- `/runners/:runnerId/workspaces/:id` — one workspace: metadata, close reason (only for terminated workspaces), Release action (only for active).
+- `/runners/:runnerId/workspaces/:id` — one workspace: metadata (including the agent and run it was made for), close reason (only for terminated workspaces), Release action (only for active).
 
 Shared mappings live in `frontend/src/pages/runners-shared.ts`: runner state -> badge variant (online=success, busy=secondary, stale/draining=warning, offline=destructive), workspace status -> badge variant (active=success, released=secondary, expired=outline, stranded=destructive), and the polling cadence constant.
 
@@ -235,6 +235,54 @@ runner tool".
   `requiresWorkspace` flag (true for the workspace-scoped surfaces, false for
   the informational ones), owner-scoped. `unpublish()` removes them when the
   runner goes away.
+
+## Workspaces for agent runs
+
+Agents get workspaces automatically. When an agent run calls a runner-backed
+tool whose `requiresWorkspace` is true and names no `workspaceId`, the platform
+gives the run one on the runner the call is going to. Nothing in the UI, the
+agent config or the MCP tools creates a workspace by hand; `POST /workspaces`
+remains for scripts.
+
+- **Where**: `ToolExecutorService.executeRunnerCall` asks
+  `RunWorkspaceService.acquire` (`backend/src/modules/runner/run-workspace.service.ts`)
+  when the call belongs to a run: `ToolExecutionOptions.runId`/`agentId` from
+  the autonomous step processor, or the correlation scope's `runId`/`agentId`,
+  which `AgentExecutionEngine` sets for a workflow run. A call outside a run
+  still fails with "requires a workspaceId".
+- **Which runner**: the same one the call goes to, resolved by the same rules
+  as `RunnerCallService.dispatch` (the agent's `runnerLabels` through
+  `resolveByLabels`, preferring the tool's runner; otherwise
+  `resolveForDispatch`). It must be in a `canAcceptWork` state.
+- **The folder**: the backend dispatches `workspace.prepare` with a name,
+  `<agent-slug>-<first 8 of the run id>`. The runner makes it (idempotently)
+  under `almyty-workspaces/` in its first `allowedCwdRoots` entry, or under
+  `~/.almyty/workspaces/`, holds it to the same cwd policy as every command,
+  and answers the absolute path. Only then is the row written, with that path
+  as `cwd`. A runner that does not know the method is told to update.
+- **The row**: an ordinary workspace, owned by the run's user (or the owner of
+  the private/team gateway the run came through; an org-wide gateway's run is
+  refused, since `findForDispatch` covers no workspace for it), with `name`,
+  `agentId` (nulled when the agent is deleted) and `runId`, the default one-hour
+  TTL and the runner's isolation. Release, TTL expiry, stranding and the
+  heartbeat reclaim apply unchanged.
+- **Reuse**: one workspace per (run, runner). Later calls of the same run find
+  the active row by `runId` and `runnerId`; concurrent calls on one pod share
+  one in-flight acquisition, and a partial unique index
+  (`UQ_workspaces_active_run_runner`, active rows only) makes a second pod
+  take the first pod's row. A run whose workspace was released or expired gets
+  a new one on its next call, in the same folder. An expired row the sweep has
+  not reached yet is expired on the spot. A different run, or a later run of the
+  same agent, gets its own.
+- **Capacity**: the runner holds at most `config.maxConcurrent` active
+  workspaces; past that the call fails with `runner_at_capacity`.
+- **Failure** is the tool call's error (`<code>: <sentence>`), which the agent
+  sees like any other tool error: `runner_at_capacity`, `workspace_unavailable`
+  (the runner could not make the folder, or is too old to), `workspace_required`
+  (no one to own it), `runner_offline`, `runner_not_found`.
+
+The runner's Workspaces tab lists each workspace with the agent and run it was
+made for (`GET /workspaces` attaches `agent: { id, name }`) and a Release action.
 
 ## Isolation: host is what runs
 
