@@ -17,7 +17,7 @@ import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRun } from '../../../entities/agent-run.entity';
 import { ChannelEvent, ChannelEventStatus } from '../../../entities/channel-event.entity';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
-import { BaseAdapter, NormalizedMessage } from './adapters/base.adapter';
+import { AdapterResponse, BaseAdapter, NormalizedMessage } from './adapters/base.adapter';
 import { ChatWidgetAdapter } from './adapters/chat-widget.adapter';
 import { SlackAdapter } from './adapters/slack.adapter';
 import { DiscordAdapter } from './adapters/discord.adapter';
@@ -44,6 +44,7 @@ import { Message } from '../../../entities/message.entity';
 import { Conversation } from '../../../entities/conversation.entity';
 import { HostedChatService } from './hosted-chat.service';
 import { SPEND_CAP_MESSAGES, ChannelPolicy, ChannelPolicyService, withChannelPolicy } from '../channel-policy.service';
+import { ChannelAttachmentReader } from './channel-attachments.service';
 
 /**
  * A handle on a `channel_events` row, so a later step can finish it.
@@ -112,6 +113,10 @@ export class ChannelGatewayService {
     // shared memory. Optional for the same positional-construction reason;
     // Nest always injects it (channel-policy.guard.spec.ts).
     @Optional() private readonly channelPolicy?: ChannelPolicyService,
+    // Reads the files a relay hands over as links (the iMessage relays) so
+    // the agent sees them. Optional for the same positional-construction
+    // reason; without it a file is named in the input but not read.
+    @Optional() private readonly attachmentReader?: ChannelAttachmentReader,
   ) {
 
     this.adapters = new Map<string, BaseAdapter>([
@@ -232,9 +237,9 @@ export class ChannelGatewayService {
     }
 
     // A verified delivery that is not a message to answer: a relay's
-    // echo of our own reply, a delivery status, a group message. Nothing
-    // is recorded: these arrive for every reply sent, and an event row
-    // per status callback would bury the conversations in the log.
+    // echo of our own reply, a delivery status, a reaction. Nothing is
+    // recorded: these arrive for every reply sent, and an event row per
+    // status callback would bury the conversations in the log.
     if (!adapter.carriesMessage(body)) return;
     // Normalize inbound message
     const normalized: NormalizedMessage = adapter.normalizeInbound(body);
@@ -319,6 +324,10 @@ export class ChannelGatewayService {
       return;
     }
 
+    // What the agent reads: the text, and the files the relay handed over
+    // as links, fetched through the egress guard and described. Only after
+    // the sender and spend checks, so a limited sender costs no download.
+    const input = await this.inboundInput(adapter, normalized);
     // Find existing run for this thread on this gateway, or start a new
     // one. Scoped to the gateway, not just the agent: one agent sits
     // behind several surfaces, and the public widget lets its caller
@@ -343,7 +352,7 @@ export class ChannelGatewayService {
     }
 
     if (run) {
-      await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, normalized.text);
+      await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, input);
       // The cross-link the claim row was always meant to carry: without
       // it an operator holding "the bot never answered me at 14:05" has
       // an inbound row and no way to reach the run that answered it.
@@ -367,7 +376,7 @@ export class ChannelGatewayService {
         // The sender is recorded in metadata, where the rest of the
         // channel's facts already live.
         null,
-        normalized.text,
+        input,
         // The policy adds the per-run cost cap, the channel id for the spend
         // cap, the visitor mark for shared memory, and files the
         // conversation under this gateway for retention.
@@ -417,6 +426,34 @@ export class ChannelGatewayService {
     await this.incrementRequestCount(gateway.id);
   }
 
+  /**
+   * The message as the agent reads it. Most adapters hand over text only;
+   * one that says its attachments are fetchable links has each read and
+   * described (channel-attachments.service.ts). The others keep what they
+   * always had: the text alone.
+   */
+  private async inboundInput(adapter: BaseAdapter, normalized: NormalizedMessage): Promise<string> {
+    if (!adapter.fetchesInboundAttachments || !normalized.attachments?.length) return normalized.text;
+    if (!this.attachmentReader) {
+      const named = normalized.attachments.map((a) => `[Attachment: ${a.name} (${a.type}) was not read]`);
+      return [normalized.text.trim(), ...named].filter(Boolean).join('\n\n');
+    }
+    return this.attachmentReader.inputWith(normalized.text, normalized.attachments);
+  }
+
+  /**
+   * Files a finished run handed back, in the adapter shape. A run's output
+   * is text today; an output object that carries `attachments` (url, type,
+   * name) has them sent by the adapters that send media.
+   */
+  static replyAttachments(output: unknown): AdapterResponse['attachments'] {
+    const list = (output as { attachments?: unknown } | null)?.attachments;
+    if (typeof output !== 'object' || !Array.isArray(list)) return undefined;
+    const files = list.filter(
+      (a: any): a is { url: string; type: string; name: string } => a && typeof a.url === 'string' && a.url.length > 0,
+    ).map((a) => ({ url: a.url, type: typeof a.type === 'string' ? a.type : 'application/octet-stream', name: typeof a.name === 'string' ? a.name : 'attachment' }));
+    return files.length ? files : undefined;
+  }
   /**
    * Atomic request-count bump. Touches only the three counter columns,
    * so nothing a concurrent writer put in `status` or `configuration`
@@ -584,7 +621,12 @@ export class ChannelGatewayService {
           // outbound message of a conversation when the gateway opts in.
           const responseText = await this.applyAiDisclosure(gateway, finalRun, rawText);
 
-          const formatted = adapter.formatOutbound({ text: responseText });
+          // Files the run handed back travel with the text, on the adapters
+          // that send media (the iMessage relays); the rest send the text.
+          const formatted = adapter.formatOutbound({
+            text: responseText,
+            attachments: ChannelGatewayService.replyAttachments(finalRun.output),
+          });
           try {
             await adapter.sendResponse(
               sendConfig ?? (await this.channelConfig(gateway, 'channel_outbound')),

@@ -100,8 +100,8 @@ real credentials/infrastructure — tracked in **#242** ("live e2e cred-gated").
 | 12 | WhatsApp Cloud | `whatsapp_cloud` | Real — `entry[].changes[].value.messages[]`, `text.body`, sender E.164 as thread key, contact profile name | Real — `POST graph.facebook.com/v20.0/{phone_number_id}/messages`, Bearer `access_token`, `{ messaging_product: "whatsapp", to, text }` | `X-Hub-Signature-256` HMAC-SHA256 over the raw body w/ `app_secret`, timing-safe, **fail-closed** when `app_secret` is unset. The `hub.challenge` GET handshake is answered by `handleVerification()` via the unified delegation layer | **Fully-implemented** | cred-gated (#242) | `access_token`, `phone_number_id`, `verify_token`, `app_secret` |
 | 13 | SMS | `sms` | Real — Twilio form fields (`Body`, `From`, `To`, `MessageSid`), bare E.164 as thread key | Real — `POST` Twilio Messages.json, Basic auth, form-encoded, replies truncated at 1600 chars (Twilio's concatenated-body limit) with a warning | `X-Twilio-Signature` via the shared `twilio-signature.helper.ts` (same algorithm and skip semantics as WhatsApp) | **Fully-implemented** | cred-gated (#242) | `twilio_account_sid`, `twilio_auth_token`, `phone_number`, `webhook_url` (for signature check) |
 | 14 | Chat Widget | `chat_widget`, `hosted_chat` | Real — `message`/`text`, `sessionId`→threadId, public `POST /gateways/:id/widget/messages` | Real — replies persisted as `channel_events` rows (`payload.kind='widget_message'`), fetched via public `GET /gateways/:id/widget/messages?threadId=` (polling) or run SSE | n/a (active-gateway check + unguessable thread UUIDs + per-gateway rate limit) | **Fully-implemented** | none needed | none (in-app; no external creds) |
-| 15 | iMessage (Sendblue) | `imessage_sendblue` | Real — receive-webhook JSON (`content`, `from_number`, `to_number`, `message_handle`); sender E.164 as thread key; outbound echoes (`is_outbound`), status callbacks and group messages (`group_id`) are acknowledged without a run (`carriesMessage`) | Real — `POST api.sendblue.co/api/send-message`, `sb-api-key-id` + `sb-api-secret-key` headers, `{ number, from_number, content }`, truncated at 18,996 chars; a 2xx with `status: ERROR` or an `error_key` is a refusal | Sendblue does not sign: it echoes the webhook's configured secret in `sb-signing-secret`, compared timing-safe against `signing_secret`, **fail-closed** when unset | **Fully-implemented** | cred-gated (#242) | `api_key_id`, `api_secret_key`, `phone_number`, `signing_secret` |
-| 16 | iMessage (LoopMessage) | `imessage_loopmessage` | Real — webhook JSON (`event`, `contact`, `text`, `message_id`); only `event: message_inbound` without `group` runs, every other event is acknowledged without a run; `contact` (E.164 or Apple ID) as thread key | Real — `POST a.loopmessage.com/api/v1/message/send/`, bare API key as `Authorization`, `{ contact, text, sender? }`, truncated at 9,999 chars; `success: false` is a refusal at any status | LoopMessage does not sign: it sends the `Authorization` value set for webhooks in its dashboard, compared timing-safe against `inbound_token` (bare or `Bearer`), **fail-closed** when unset | **Fully-implemented** | cred-gated (#242) | `api_key`, `inbound_token`, `sender_name` (optional) |
+| 15 | iMessage (Sendblue) | `imessage_sendblue` | Real — receive-webhook JSON (`content`, `from_number`, `to_number`, `message_handle`, `media_url`, `group_id`); the group (`group_id`) or else the sender E.164 as thread key, the sender as `userId`; `media_url` as an attachment, read by the pipeline through `safeFetch`; outbound echoes (`is_outbound`) and status callbacks are acknowledged without a run (`carriesMessage`) | Real — `POST api.sendblue.co/api/send-message` `{ number, from_number, content, media_url? }`, or in a group `/api/send-group-message` `{ group_id, ... }`; `sb-api-key-id` + `sb-api-secret-key` headers; truncated at 18,996 chars; further files as messages of their own; a 2xx with `status: ERROR` or an `error_key` is a refusal. Receive webhook registered on publish and removed on unpublish/delete (`/api/account/webhooks`) | Sendblue does not sign: it echoes the webhook's configured secret in `sb-signing-secret`, compared timing-safe against `signing_secret`, **fail-closed** when unset | **Fully-implemented** | cred-gated (#242) | `api_key_id`, `api_secret_key`, `phone_number`, `signing_secret` |
+| 16 | iMessage (LoopMessage) | `imessage_loopmessage` | Real — webhook JSON (`event`, `contact`, `text`, `message_id`, `group`, `attachments`); only `event: message_inbound` with text or files runs, every other event is acknowledged without a run; `group.id` or else `contact` (E.164 or Apple ID) as thread key, `contact` as `userId`; attachment URLs read by the pipeline through `safeFetch` | Real — `POST a.loopmessage.com/api/v1/message/send/`, bare API key as `Authorization`, `{ contact | group, text, sender, attachments? }`, truncated at 9,999 chars; `success: false` is a refusal at any status. Webhook set by hand in the dashboard (no API) | LoopMessage does not sign: it sends the `Authorization` value set for webhooks in its dashboard, compared timing-safe against `inbound_token` (bare or `Bearer`), **fail-closed** when unset | **Fully-implemented** | cred-gated (#242) | `api_key`, `inbound_token`; `sender_name` on the channel (required) |
 
 ### Notes
 
@@ -130,11 +130,59 @@ real credentials/infrastructure — tracked in **#242** ("live e2e cred-gated").
   adapters fail closed without it (`shared-secret.helper.ts`). Both relays
   post every event to the one webhook URL, so both adapters override
   `carriesMessage` and the pipeline acknowledges an outbound echo, a status
-  callback or a group message without starting a run or writing an event
-  row. Text, one to one, only: attachments and group chats are not handled.
+  callback or a reaction without starting a run or writing an event row.
+  - **Group chats** are answered in the group. The group id (Sendblue
+    `group_id`, LoopMessage `group.id`) is the thread key, so the whole group
+    is one conversation and one run, the way Slack, Teams, Discord, Telegram
+    and Signal key a channel or chat; the member who wrote is `userId`, which
+    is what the per-sender visitor limit counts (never the group), and is
+    recorded as the run's `channelUserId` and on each inbound event row. The
+    reply goes to the group: Sendblue `POST /api/send-group-message` with
+    `group_id`, LoopMessage `group` in place of `contact`.
+  - **Attachments** in: Sendblue's `media_url` (one CDN link) and
+    LoopMessage's `attachments` (download URLs) become
+    `NormalizedMessage.attachments`, https only. The two adapters set
+    `fetchesInboundAttachments`, and the pipeline has
+    `ChannelAttachmentReader` (`channel-attachments.service.ts`) read each
+    file through `safeFetch` (egress guard on every hop, DNS pinned, 20 s
+    deadline, 10 MB cap on the decompressed body, at most five files per
+    message) after the sender and spend checks, and hand the agent a line
+    per file (name, type, size) plus the text of a text file. A run's input
+    is text (the runtime has no image part), so an image reaches the agent
+    as its description only. Nothing is stored. Other adapters keep their
+    text-only input (a Signal attachment points at the operator's bridge).
+  - **Attachments** out: when a run's output carries `attachments`
+    (`{url, type, name}`), `formatOutbound` gets them; Sendblue sends the
+    first as `media_url` with the text and each further one as a message of
+    its own (at most five), LoopMessage sends up to ten https URLs of at most
+    256 characters as `attachments`. Autonomous runs return text today, so
+    nothing produces such an output yet.
+  - **Webhook registration.** Sendblue documents an account webhooks API, so
+    publishing registers the channel URL through `ChannelWebhookRegistrar`:
+    list, delete a stale entry for the same URL (Sendblue appends), then add
+    `{url, secret: signing_secret, sendblue_numbers: [phone_number]}` as a
+    `receive` webhook; unpublish and delete remove it. The outcome is on
+    `gateway.metadata.webhookRegistration` and the channel page shows it,
+    the refusal included. LoopMessage documents no webhook API, so its page
+    keeps the paste-the-URL instructions and says so.
+  - **Sender name.** LoopMessage sends every reply from a sender name, which
+    is a required field on the channel (not the connection: one key can
+    carry several senders). Publishing refuses a channel without one
+    (`SENDER_NAME_REQUIRED`), and the adapter refuses to send without one.
+  - **Sendblue host.** The API reference gives `https://api.sendblue.co` for
+    every call, including webhooks; the webhooks guide shows
+    `api.sendblue.com`. The adapter and the registrar use `.co`. The
+    `sb-signing-secret` header name comes from Sendblue's Chat SDK adapter
+    guide; the webhooks guide says only that the secret is sent in a header.
   Sources: Sendblue
   <https://docs.sendblue.com/api/resources/messages/methods/send/>,
+  <https://docs.sendblue.com/api/resources/groups/methods/send_message/>,
+  <https://docs.sendblue.com/getting-started/receiving-messages/>,
+  <https://docs.sendblue.com/getting-started/groups/>,
   <https://docs.sendblue.com/getting-started/webhooks/>,
+  <https://docs.sendblue.com/api/resources/webhooks/methods/create/>,
+  <https://docs.sendblue.com/api/resources/webhooks/methods/list/>,
+  <https://docs.sendblue.com/api/resources/webhooks/methods/delete/>,
   <https://docs.sendblue.com/guides/chat-sdk-adapter/> (`sb-signing-secret`);
   LoopMessage <https://loopmessage.com/apidocs/send-message>,
   <https://loopmessage.com/apidocs/conversation-api-webhooks>,
@@ -213,6 +261,21 @@ All tests mock `globalThis.fetch` / repositories (see
   relays' documentation, since no live account exists.
 - `gateways/__tests__/unified-gateway-delegation-imessage.spec.ts` — both
   relays through the unified endpoint: accepted with the secret, 401 without.
+- `channels/__tests__/imessage-groups-attachments.spec.ts` — both relays
+  through the whole inbound pipeline: a group message runs keyed on the group
+  and is answered in the group, a second member continues the same run, the
+  visitor limit is asked per sender and a limited member does not silence the
+  group, inbound files are fetched through the guarded client (internal
+  addresses never dialled, the size cap refused), and a run's files go out
+  as the relay's media field.
+- `channels/__tests__/channel-attachments.service.spec.ts` — the attachment
+  reader against a fake CDN: https only, private/metadata/loopback refused
+  before any request, redirects re-checked, declared and streamed size caps,
+  at most five files, names kept to one line.
+- `channels/__tests__/channel-webhook-registrar.service.spec.ts` — Telegram,
+  Twilio and Sendblue registration: Sendblue add with the secret and the
+  line, replace on republish, delete on unpublish and on delete, the refusal
+  recorded for the channel page and no secret in any log or row.
 - `adapters/__tests__/svix-signature.helper.spec.ts` — the shared svix check the
   email adapter verifies inbound with.
 - `channels/__tests__/channel-gateway.service.spec.ts` — adapter-registry
@@ -241,8 +304,8 @@ network-touching adapter still needs a live round-trip with real credentials:
 | WhatsApp | Twilio account SID + auth token + a WhatsApp-enabled sender number |
 | WhatsApp Cloud | Meta app: system-user `access_token`, `phone_number_id`, `verify_token` for the handshake, `app_secret` for inbound signatures, and a publicly reachable webhook URL |
 | SMS | Twilio account SID + auth token + an SMS-capable sender number, and `webhook_url` matching the console exactly |
-| iMessage (Sendblue) | Sendblue account: API key ID + secret key, a Sendblue line, and a receive webhook with a secret pointed at the channel's callback URL |
-| iMessage (LoopMessage) | LoopMessage organization API key, an active sender name, and the webhook URL + authorization header value set in its dashboard |
+| iMessage (Sendblue) | Sendblue account: API key ID + secret key, a Sendblue line, and a webhook secret; publishing registers the receive webhook with it (a public `PUBLIC_API_URL` is needed for that) |
+| iMessage (LoopMessage) | LoopMessage organization API key, an active sender name (entered on the channel), and the webhook URL + authorization header value set in its dashboard |
 | Email | Resend API key + a verified sending domain + an inbound-email webhook source + the `whsec_…` inbound signing secret |
 | Webhook | A reachable `callback_url` receiver (+ shared `secret`) |
 | Google Chat | Space incoming-webhook URL (+ verification token) |
