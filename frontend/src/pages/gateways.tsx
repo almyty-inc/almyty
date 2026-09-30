@@ -64,8 +64,8 @@ export function GatewaysPage() {
 
   const gateways = gatewaysData?.items ?? []
 
-  // Gateways is the protocol page: MCP, A2A, ACP, UTCP, Skills and the
-  // OpenAI-compatible endpoint. Messaging platforms are reached through
+  // Gateways is the protocol page: MCP, UTCP and Skills, plus the A2A
+  // endpoint an agent's A2A channel stands up. Messaging platforms are reached through
   // Apps instead, because there they are a distribution of a product
   // rather than a standalone endpoint. Showing them in both places let
   // someone create a Slack gateway here and a Slack distribution there
@@ -314,8 +314,6 @@ export function GatewaysPage() {
                   <SelectItem value="utcp">UTCP</SelectItem>
                   <SelectItem value="skills">Skills</SelectItem>
                   <SelectItem value="a2a">A2A</SelectItem>
-                  <SelectItem value="acp">ACP</SelectItem>
-                  <SelectItem value="openai_chat">OpenAI chat</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>

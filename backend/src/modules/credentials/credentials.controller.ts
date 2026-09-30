@@ -236,20 +236,6 @@ export class CredentialsController {
     return { success: true, data, message: data.pending ? 'Replace pending' : 'Key replaced' };
   }
 
-  @Post('credentials/:id/test')
-
-  @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Test a credential connection' })
-  @ApiResponse({ status: 200, description: 'Credential test completed' })
-  async test(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    // Verify the credential exists in the caller's org before reporting.
-    // Without this the endpoint would return success for any UUID,
-    // acting as a membership oracle for other orgs' credential ids.
-    const organizationId = this.requireOrg(req);
-    await this.credentialsService.findById(id, organizationId, { id: req.user.id });
-    return { success: true, data: { valid: true }, message: 'Credential test passed' };
-  }
-
   @Get('credentials/:id/usage')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get usage info for a credential' })

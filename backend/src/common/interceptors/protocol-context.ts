@@ -16,7 +16,7 @@ import { updateRequestContext } from '../request-context';
 export interface ProtocolContext {
   gatewayId?: string | null;
   organizationId?: string | null;
-  /** Protocol identifier: 'mcp' | 'utcp' | 'a2a' | 'acp' | 'skills' | ... */
+  /** Protocol identifier: 'mcp' | 'utcp' | 'a2a' | 'skills' | ... */
   protocol?: string | null;
 }
 

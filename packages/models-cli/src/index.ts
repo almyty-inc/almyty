@@ -369,9 +369,10 @@ export function unselectableReason(c: any): string {
   if (c.validationStatus !== 'passed') {
     const err = c.lastValidationError ? `: ${c.lastValidationError}` : '';
     if (c.validationStatus === 'failed') return `the provider says this model is not available${err}`;
-    // A provider's models are usable once the provider's key check passes;
-    // an endpoint with no provider row is checked on its own.
-    if (c.providerId) return `waiting for its provider's key check${err} (check the provider on the Models page)`;
+    // A provider's models are usable once the provider's key check passes,
+    // which is on the connection's page under Credentials; an endpoint with
+    // no provider row is checked on its own.
+    if (c.providerId) return `waiting for its provider's key check${err} (check its connection under Credentials)`;
     return `not checked yet${err} — run: almyty models validate ${c.id}`;
   }
   return 'the catalog does not consider it selectable';

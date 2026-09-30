@@ -102,18 +102,13 @@ describe('ChannelsTab', () => {
     )
   })
 
-  it('lists other gateways that serve the agent, but not the ones its channels stood up', async () => {
+  it('lists channels only: every gateway that serves an agent is one of its channels', async () => {
     vi.mocked(agentChannelsApi.list).mockResolvedValue([])
-    vi.mocked(gatewaysApi.getAll).mockResolvedValue({
-      gateways: [
-        { id: 'gw-acp', name: 'Support over ACP', type: 'acp' },
-        { id: 'gw-web', name: 'Support (web)', type: 'hosted_chat', configuration: { channelId: 'c-web' } },
-      ],
-    } as any)
     render(<ChannelsTab agentId="agent-1" />)
 
-    expect(await screen.findByRole('link', { name: /Support over ACP/ })).toHaveAttribute('href', '/gateways/gw-acp')
-    expect(screen.queryByText('Support (web)')).toBeNull()
+    expect(await screen.findByText('No channels yet')).toBeInTheDocument()
+    expect(screen.queryByText(/Also served by gateways/)).toBeNull()
+    expect(gatewaysApi.getAll).not.toHaveBeenCalled()
   })
 
   it('never says "app", "place" or "distribution" to the user', () => {

@@ -81,8 +81,6 @@ describe('UnifiedGatewayDelegation — iMessage relays', () => {
       gatewayResolver as any,
       {} as any,
       {} as any,
-      {} as any,
-      {} as any,
       { get: jest.fn().mockReturnValue(null) } as any,
       { check: jest.fn().mockResolvedValue({ limited: false }) } as any,
       channelGatewayService as any,

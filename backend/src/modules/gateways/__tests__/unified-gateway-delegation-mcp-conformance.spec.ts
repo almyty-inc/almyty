@@ -75,8 +75,6 @@ describe('UnifiedGatewayDelegation — MCP wire conformance', () => {
       { resolveAndAuthenticate: jest.fn().mockResolvedValue({ auth: { userId: 'u-1' } }) } as any,
       {} as any, // a2a server
       {} as any, // a2a agent card
-      {} as any, // acp server
-      {} as any, // acp discovery
       { get: jest.fn().mockReturnValue(null) } as any, // config
       { check: jest.fn().mockResolvedValue({ limited: false }) } as any, // rate limit
       { getAdapter: jest.fn(), handleInboundMessage: jest.fn() } as any, // channels

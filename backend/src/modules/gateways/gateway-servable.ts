@@ -81,8 +81,8 @@ export async function findServableGatewayTool(
   return row ?? null;
 }
 /**
- * What an agent gateway (A2A, ACP) serves: its one agent. A run a client
- * names -- by task id, session id or context/conversation id -- is this
+ * What an agent gateway (A2A) serves: its one agent. A run a client
+ * names -- by task id or context/conversation id -- is this
  * gateway's only when it is a run of that agent in the gateway's
  * organization. Anything else (another agent's run, however the client
  * learned its id) is not found: reading it would disclose another agent's
@@ -111,7 +111,7 @@ export async function findGatewayRun(
 }
 
 /**
- * The agent an agent gateway (A2A, ACP, the root agent card) serves, or
+ * The agent an agent gateway (A2A, the root agent card) serves, or
  * null. The gateway names its agent by id; that agent is served only when
  * it belongs to the gateway's organization, is active (a draft, inactive
  * or errored agent is not published: its card would advertise an agent no

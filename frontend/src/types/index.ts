@@ -192,10 +192,8 @@ export enum GatewayKind {
 export enum GatewayType {
   MCP = 'mcp',
   A2A = 'a2a',
-  ACP = 'acp',
   UTCP = 'utcp',
   SKILLS = 'skills',
-  OPENAI_CHAT = 'openai_chat',
   SLACK = 'slack',
   DISCORD = 'discord',
   TELEGRAM = 'telegram',

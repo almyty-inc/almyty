@@ -291,7 +291,7 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
     const orgRepo: any = { findOne: jest.fn() };
     const gatewayRepo: any = {
       findOne: jest.fn().mockResolvedValue(null),
-      // bumpGatewayCounters chain (UTCP/A2A/ACP request counters)
+      // bumpGatewayCounters chain (UTCP/A2A request counters)
       createQueryBuilder: jest.fn(() => ({
         update: () => ({
           set: () => ({
@@ -337,8 +337,6 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
     const a2aAgentCardStub: any = { buildAgentCard: jest.fn() };
 
     const almytyMcpStub: any = { handleJsonRpc: jest.fn() };
-    const acpServerStub: any = { handleJsonRpc: jest.fn() };
-    const acpDiscoveryStub: any = { buildDiscovery: jest.fn() };
 
     const mcpOAuthStub: any = { validateAccessToken: jest.fn() };
 
@@ -371,8 +369,6 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
       gatewayResolverStub,
       a2aServerStub,
       a2aAgentCardStub,
-      acpServerStub,
-      acpDiscoveryStub,
       { get: jest.fn().mockReturnValue(null) } as any,
       { check: jest.fn().mockResolvedValue({ limited: false }) } as any,
       { getAdapter: jest.fn(), handleInboundMessage: jest.fn() } as any,
