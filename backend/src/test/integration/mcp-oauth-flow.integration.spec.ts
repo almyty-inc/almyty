@@ -18,6 +18,7 @@ import { McpOAuthService } from '../../modules/mcp/services/mcp-oauth.service';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { listenOnLoopback } from '../http';
+import { GlobalExceptionFilter } from '../../common/filters/global-exception.filter';
 import cookieParser from 'cookie-parser';
 import { DataSource } from 'typeorm';
 
@@ -78,6 +79,9 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     app = module.createNestApplication();
     app.use(cookieParser());
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    // As main.ts does: the filter is what turns an exception's
+    // wwwAuthenticate into the WWW-Authenticate header a client acts on.
+    app.useGlobalFilters(new GlobalExceptionFilter());
     await listenOnLoopback(app);
 
     ds = module.get(DataSource);
@@ -498,7 +502,10 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
       const res = await call(token, {
         jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_apis', arguments: {} },
       }).expect(403);
-      expect(res.body).toMatchObject({ error: 'insufficient_scope', scope: 'mcp:tools' });
+      // RFC 6750 section 3.1: 403, with the scope that would do named in the
+      // challenge and in the body.
+      expect(res.headers['www-authenticate']).toBe('Bearer error="insufficient_scope", scope="mcp:tools"');
+      expect(res.body.error).toMatchObject({ errorCode: 'OAUTH2_INSUFFICIENT_SCOPE', scope: 'mcp:tools' });
 
       await call(token, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }).expect(403);
       await call(token, { jsonrpc: '2.0', id: 1, method: 'prompts/list', params: {} }).expect(403);
@@ -563,19 +570,89 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
 
       expect(responses.filter((r) => r.status !== 200).length).toBeGreaterThanOrEqual(1);
       for (const res of responses.filter((r) => r.status === 200)) {
-        // A revoked token is refused like any unknown bearer: 403 from the
-        // gateway's bearer check. What matters is that it is refused.
+        // A revoked token is a bad credential, not a refusal of a known
+        // caller: 401 with error="invalid_token" (RFC 6750 section 3.1).
         const use = await request(app.getHttpServer())
           .post(`/${ORG_SLUG}/almyty`)
           .set('Authorization', `Bearer ${res.body.access_token}`)
           .send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
-        expect([401, 403]).toContain(use.status);
+        expect(use.status).toBe(401);
+        expect(use.headers['www-authenticate']).toContain('error="invalid_token"');
       }
       const live = await ds.query(
         `SELECT count(*)::int AS n FROM oauth_access_tokens WHERE "clientId" = $1 AND "isRevoked" = false`,
         [reg.body.client_id],
       );
       expect(live[0].n).toBe(0);
+    });
+  });
+
+  // MCP clients start re-authorization only on a 401. A revoked or unknown
+  // token answered 403 left a client showing an error instead of logging
+  // in again.
+  describe('a revoked or unknown access token at the gateway', () => {
+    const listTools = (token?: string) => {
+      const req = request(app.getHttpServer()).post(`/${ORG_SLUG}/almyty`);
+      if (token) req.set('Authorization', `Bearer ${token}`);
+      return req.send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+    };
+    const resourceMetadata = () =>
+      `resource_metadata="${process.env.BASE_URL || process.env.API_URL || 'http://localhost:4000'}` +
+      `/${ORG_SLUG}/almyty/.well-known/oauth-protected-resource"`;
+
+    it('answers a token revoked at /revoke 401 with error="invalid_token"', async () => {
+      const reg = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/register`)
+        .send({ client_name: 'revoked', redirect_uris: ['http://localhost:12345/callback'], token_endpoint_auth_method: 'none' })
+        .expect(201);
+      const verifier = crypto.randomBytes(32).toString('base64url');
+      const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+      const code = await app.get(McpOAuthService).createAuthorizationCode(reg.body.client_id, user.id, gateway.id, org.id, {
+        redirectUri: 'http://localhost:12345/callback',
+        codeChallenge: challenge,
+        codeChallengeMethod: 'S256',
+        scope: 'mcp:tools',
+      });
+      const tokenRes = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/token`)
+        .send({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'http://localhost:12345/callback',
+          client_id: reg.body.client_id,
+          code_verifier: verifier,
+        })
+        .expect(200);
+      const token = tokenRes.body.access_token;
+
+      // The control: the token works before it is revoked.
+      await listTools(token).expect(200);
+
+      await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/revoke`)
+        .send({ token, client_id: reg.body.client_id })
+        .expect(200);
+
+      const res = await listTools(token);
+      expect(res.status).toBe(401);
+      const challengeHeader = res.headers['www-authenticate'];
+      expect(challengeHeader).toContain('Bearer ');
+      expect(challengeHeader).toContain(resourceMetadata());
+      expect(challengeHeader).toContain('error="invalid_token"');
+    });
+
+    it('answers a token the server never issued 401 with error="invalid_token"', async () => {
+      const res = await listTools(crypto.randomBytes(32).toString('base64url'));
+      expect(res.status).toBe(401);
+      expect(res.headers['www-authenticate']).toContain(resourceMetadata());
+      expect(res.headers['www-authenticate']).toContain('error="invalid_token"');
+    });
+
+    it('answers no token at all 401 with the challenge and no error code', async () => {
+      const res = await listTools();
+      expect(res.status).toBe(401);
+      expect(res.headers['www-authenticate']).toContain(resourceMetadata());
+      expect(res.headers['www-authenticate']).not.toContain('error=');
     });
   });
 
