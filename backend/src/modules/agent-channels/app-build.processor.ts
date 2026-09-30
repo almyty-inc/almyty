@@ -1,5 +1,5 @@
 import { InjectQueue, Process, Processor } from '@nestjs/bull';
-import { Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Logger, OnApplicationBootstrap, Optional } from '@nestjs/common';
 import type { Job, Queue } from 'bull';
 import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
@@ -22,7 +22,9 @@ import { artifactExtension, type MacPackaging } from './build-targets';
 import { BuildStatus } from '../../entities/app-build.entity';
 import { hostedChatUrl } from '../gateways/channels/hosted-chat.config';
 import { effectiveBranding } from './channel-rules';
-import { writeIcon } from './build-icon';
+import { writeBrandingIcon } from './build-icon';
+import { FilesService } from '../files/files.service';
+import { AgentChannelsService } from './agent-channels.service';
 import { resolveClientEntry } from './build-client-entry';
 import { buildVersionError, bundleIdError, defaultBundleId } from './channel-rules';
 
@@ -84,6 +86,10 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
     private readonly builds: AppBuildsService,
     private readonly signer: BuildSignerService,
     @InjectQueue(APP_BUILD_QUEUE) private readonly queue: Queue,
+    // Where an app icon uploaded on the branding page is kept.
+    @Optional() private readonly files?: FilesService,
+    // Clears app icons uploaded on a branding page and never saved.
+    @Optional() private readonly channels?: AgentChannelsService,
   ) {}
 
   /**
@@ -135,6 +141,10 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
 
     const removed = await this.builds.sweepExpiredArtifacts();
     if (removed > 0) this.logger.log(`Cleared ${removed} expired build artifacts`);
+
+    // App icons chosen on a branding page a day ago and never saved.
+    const icons = (await this.channels?.sweepUnsavedIcons()) ?? 0;
+    if (icons > 0) this.logger.log(`Cleared ${icons} unsaved app icons`);
   }
 
   @Process()
@@ -352,7 +362,11 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
     // Without this every customer's app wears the Electron logo, which
     // undoes most of what a branded build is for. Never fatal: a
     // default icon beats no artifact.
-    const icon = await writeIcon(branding.iconUrl, projectDir);
+    const icon = await writeBrandingIcon(
+      branding,
+      projectDir,
+      this.files ? async (fileId) => (await this.files!.download(fileId, channel.organizationId)).buffer : null,
+    );
 
     const args = electronBuilderArgs({
       platformId: build.platform,

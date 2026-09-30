@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
-import { EntityManager } from 'typeorm';
+import { EntityManager, In } from 'typeorm';
 
-import { Gateway } from '../../entities/gateway.entity';
+import { Gateway, GatewayType } from '../../entities/gateway.entity';
 import { Organization } from '../../entities/organization.entity';
 import { inQuotaTransaction, lockQuota } from '../../common/quota/org-quota-lock';
 
@@ -40,8 +40,19 @@ async function maxGatewaysFor(manager: EntityManager, organizationId: string): P
   return organization?.settings?.maxGateways;
 }
 
+/**
+ * The gateways a plan's `maxGateways` counts: the ones made on Gateways
+ * (MCP, UTCP and Skills). A web chat, widget, messaging channel or A2A
+ * endpoint is an agent's channel and is not counted, or gated, here.
+ */
+export const QUOTA_GATEWAY_TYPES: readonly GatewayType[] = [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS];
+
+export function countsTowardGatewayQuota(type: GatewayType | string | null | undefined): boolean {
+  return QUOTA_GATEWAY_TYPES.includes(type as GatewayType);
+}
+
 function countGateways(manager: EntityManager, organizationId: string): Promise<number> {
-  return manager.getRepository(Gateway).count({ where: { organizationId, isSystem: false } });
+  return manager.getRepository(Gateway).count({ where: { organizationId, isSystem: false, type: In([...QUOTA_GATEWAY_TYPES]) } });
 }
 
 /**

@@ -51,7 +51,7 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn() as any
 })
 
-const privateOption = () => screen.getByRole('radio', { name: /Private/ })
+const privateOption = () => screen.getByRole('radio', { name: /^Only you/ })
 
 describe('create gateway page', () => {
   it('is a page, not a dialog, and sends visibility private with no team', async () => {
@@ -117,7 +117,7 @@ describe('gateway edit form', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('visibility')
 
-    await user.click(screen.getByRole('radio', { name: /Org-wide/ }))
+    await user.click(screen.getByRole('radio', { name: /^Everyone/ }))
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2))
     expect(onSubmit.mock.calls[1][0]).toMatchObject({ visibility: 'org', teamId: null })

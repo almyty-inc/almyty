@@ -27,7 +27,7 @@ import { findEffectiveMembership } from '../../common/authorization/membership';
 import { ConnectionsService } from '../connections/connections.service';
 import { ConnectorCatalogService } from '../connections/connector-catalog.service';
 import { CONNECTIONS_MANAGE, CONNECTIONS_READ } from '../connections/connections.permissions';
-import { CompleteConnectDto, ConnectBodyDto, CreateConnectorDto, ListConnectorsQueryDto, RotateBodyDto } from '../connections/dto/connections.dto';
+import { CompleteConnectDto, ConnectBodyDto, CreateConnectorDto, ListConnectorsQueryDto, RotateBodyDto, SharingBodyDto } from '../connections/dto/connections.dto';
 import { ConnectorDefinition } from '../connections/connector.types';
 
 const connectionValidation = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
@@ -234,6 +234,19 @@ export class CredentialsController {
     const organizationId = this.requireOrg(req);
     const data = await this.connectionsService().rotate(req.user, organizationId, id, body, requestBase(req));
     return { success: true, data, message: data.pending ? 'Replace pending' : 'Key replaced' };
+  }
+
+  @Patch('credentials/:id/sharing')
+  @Roles('member', 'admin', 'owner')
+  @RequirePermissions(CONNECTIONS_READ)
+  @ApiOperation({ summary: 'Change who can use a credential: everyone (org), one team (team + teamId) or only you (private)' })
+  @UsePipes(connectionValidation)
+  async setSharing(@Request() req: any, @Param('id', ParseUUIDPipe) id: string, @Body() body: SharingBodyDto) {
+    const organizationId = this.requireOrg(req);
+    const data = await this.connectionsService().setSharing(req.user, organizationId, id, body, (next) =>
+      this.credentialsService.assertConsumersCovered(next),
+    );
+    return { success: true, data, message: 'Who can use it changed' };
   }
 
   @Get('credentials/:id/usage')

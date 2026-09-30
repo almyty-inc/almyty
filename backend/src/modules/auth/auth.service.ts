@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { InjectQueue } from '@nestjs/bull';
@@ -32,6 +32,20 @@ import { effectiveMemberships, isEffectiveMembership } from '../../common/author
 import { AuthSession } from '../../entities/auth-session.entity';
 import { AuthSessionService } from './auth-session.service';
 import { EMAIL_VERIFY_TOKEN_AUDIENCE, REFRESH_TOKEN_AUDIENCE, isAccessTokenPayload } from './token-kinds';
+
+/**
+ * A personal API key: one a user mints for themselves (Settings > API
+ * keys, the CLI login) that acts as that user. Not bound to a gateway or
+ * an agent, and not an organization access key (`almyty_sk_`, made on
+ * an agent's or gateway's page and listed there).
+ */
+const PERSONAL_KEY_WHERE = { gatewayId: IsNull(), agentId: IsNull() };
+export function isPersonalApiKey(key: Pick<ApiKey, 'gatewayId' | 'agentId' | 'keyPrefix'>): boolean {
+  return !key.gatewayId && !key.agentId && !String(key.keyPrefix ?? '').startsWith('almyty_sk_');
+}
+
+/** How much of a personal key is kept in the clear: `almyty_` and five characters after it, enough to tell keys apart. */
+export const PERSONAL_KEY_PREFIX_LENGTH = 12;
 
 /**
  * A bcrypt hash (cost 12, same as every stored hash) of a random password
@@ -608,7 +622,7 @@ export class AuthService {
 
     const keyValue = this.generateApiKeyValue();
     const keyHash = this.hashApiKey(keyValue);
-    const keyPrefix = keyValue.substring(0, 8);
+    const keyPrefix = keyValue.substring(0, PERSONAL_KEY_PREFIX_LENGTH);
 
     const apiKey = this.apiKeyRepository.create({
       name: createApiKeyDto.name,
@@ -629,11 +643,13 @@ export class AuthService {
   }
 
   async revokeApiKey(keyId: string, userId: string): Promise<void> {
+    // Only a personal key: a gateway or agent key is revoked where it
+    // was made, by whoever manages that gateway or agent.
     const apiKey = await this.apiKeyRepository.findOne({
-      where: { id: keyId, userId },
+      where: { id: keyId, userId, ...PERSONAL_KEY_WHERE },
     });
 
-    if (!apiKey) {
+    if (!apiKey || !isPersonalApiKey(apiKey)) {
       throw new BadRequestException('API key not found');
     }
 
@@ -641,11 +657,18 @@ export class AuthService {
     await this.apiKeyRepository.save(apiKey);
   }
 
+  /**
+   * The caller's own platform keys (Settings > API keys, and the CLI's
+   * login key) that are not revoked. Keys bound to a gateway or an
+   * agent, and the organization's access keys, are listed where they
+   * were made, not here; a revoked key is gone for good.
+   */
   async getUserApiKeys(userId: string): Promise<ApiKey[]> {
-    return this.apiKeyRepository.find({
-      where: { userId },
+    const keys = await this.apiKeyRepository.find({
+      where: { userId, isActive: true, ...PERSONAL_KEY_WHERE },
       order: { createdAt: 'DESC' },
     });
+    return keys.filter(isPersonalApiKey);
   }
 
   private generateApiKeyValue(): string {

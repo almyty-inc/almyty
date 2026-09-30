@@ -770,18 +770,36 @@ describe('AgentNodeExecutor', () => {
     // length and shape are not the author's. The regexes that read it took
     // ten seconds on 100 KB of spaces for a comparison and did not finish
     // for a method call.
+    //
+    // Linear is asserted as growth, not as a wall-clock budget a slow CI
+    // runner blows: four times the input may take at most eight times as long
+    // (linear is about 4x, quadratic about 16x), taking the median of three
+    // runs of each size. The absolute bound only catches the pathological
+    // case the ratio would take minutes to show.
+    const conditionTime = async (text: string): Promise<number> => {
+      const runs: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        const started = performance.now();
+        await executor
+          .execute(node('condition', { expression: '{{input.text}}' }), buildContext({ input: { text } }), 'org-1')
+          .catch(() => undefined);
+        runs.push(performance.now() - started);
+      }
+      return runs.sort((a, b) => a - b)[1];
+    };
+
     it.each([
-      ['a method call with a spaced argument', `a.includes(${' '.repeat(100_000)}x`],
-      ['a spaced receiver', `!${' '.repeat(100_000)}x)`],
-      ['a line of spaces', `${' '.repeat(100_000)}\n`],
-      ['spaces before an operator', `a${' '.repeat(100_000)}=`],
-      ['repeated calls', '.a('.repeat(33_000)],
-    ])('reads upstream output with %s in linear time', async (_label, text) => {
-      const started = Date.now();
-      await executor
-        .execute(node('condition', { expression: '{{input.text}}' }), buildContext({ input: { text } }), 'org-1')
-        .catch(() => undefined);
-      expect(Date.now() - started).toBeLessThan(250);
+      ['a method call with a spaced argument', (n: number) => `a.includes(${' '.repeat(n)}x`],
+      ['a spaced receiver', (n: number) => `!${' '.repeat(n)}x)`],
+      ['a line of spaces', (n: number) => `${' '.repeat(n)}\n`],
+      ['spaces before an operator', (n: number) => `a${' '.repeat(n)}=`],
+      ['repeated calls', (n: number) => '.a('.repeat(Math.floor(n / 3))],
+    ])('reads upstream output with %s in linear time', async (_label, make) => {
+      const small = await conditionTime(make(25_000));
+      const large = await conditionTime(make(100_000));
+      expect(large).toBeLessThan(5_000);
+      // Below a couple of milliseconds the clock is noise, not growth.
+      expect(large / Math.max(small, 2)).toBeLessThan(8);
     });
   });
 

@@ -76,7 +76,7 @@ describe('the create-tool page', () => {
     renderWithProviders(<ToolNewPage />)
 
     await fillBasics(user)
-    await user.click(screen.getByRole('radio', { name: /Private/ }))
+    await user.click(screen.getByRole('radio', { name: /^Only you/ }))
     expect(screen.getByText(/Only you can see and use this tool/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Create tool' }))
 

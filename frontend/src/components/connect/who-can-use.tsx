@@ -3,10 +3,14 @@ import { useState } from 'react'
 import { VisibilityField, type Visibility, type VisibilityValue } from '@/components/ui/visibility-field'
 import { useOrganizationStore } from '@/store/organization'
 
-const SUMMARY: Record<Visibility, string> = {
-  org: 'everyone in your organization',
-  team: 'one team',
-  private: 'only you',
+/**
+ * Who can use something, in the one wording sharing has everywhere: the
+ * picker's choices, the one line, the Credentials table.
+ */
+export const WHO_CAN_USE_LABELS: Record<Visibility, string> = {
+  org: 'Everyone',
+  team: 'One team',
+  private: 'Only you',
 }
 
 export interface WhoCanUseProps {
@@ -21,7 +25,7 @@ export interface WhoCanUseProps {
 
 /**
  * "Who can use it", as one line until someone wants to change it. The
- * choice itself is the shared visibility picker (Private, Team, Org-wide).
+ * choice itself is the shared visibility picker (Only you, One team, Everyone).
  * Connecting a provider and connecting a service both ask it this way.
  */
 export function WhoCanUse({ value, onChange, disabled, noun = 'it', options }: WhoCanUseProps) {
@@ -29,7 +33,7 @@ export function WhoCanUse({ value, onChange, disabled, noun = 'it', options }: W
   const [open, setOpen] = useState(false)
   const changeable = !options || options.length > 1
   if (!open) {
-    return <WhoCanUseLine summary={SUMMARY[value.visibility]} onChange={changeable ? () => setOpen(true) : undefined} disabled={disabled} />
+    return <WhoCanUseLine summary={WHO_CAN_USE_LABELS[value.visibility]} onChange={changeable ? () => setOpen(true) : undefined} disabled={disabled} />
   }
   return (
     <div data-testid="who-can-use-picker">

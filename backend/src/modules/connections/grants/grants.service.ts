@@ -167,6 +167,11 @@ export class GrantsService {
     return rows.map((row) => row.teamId).filter((teamId) => inOrg.has(teamId));
   }
 
+  /** Is `teamId` an active team of this organization? */
+  async teamInOrganization(teamId: string, organizationId: string): Promise<boolean> {
+    return !!(await this.teams.findOne({ where: { id: teamId, organizationId, isActive: true } }));
+  }
+
   // ------------------------------------------------------------------
   // The resolve seam
   // ------------------------------------------------------------------

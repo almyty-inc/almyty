@@ -1,5 +1,5 @@
 /**
- * Settings is five sections, not thirteen tabs, and no page got lost.
+ * Settings is six sections, not thirteen tabs, and no page got lost.
  *
  * Every page keeps the URL it always had (the plan badge links to
  * /settings/billing, the audit tab too), a section URL opens its first
@@ -38,6 +38,7 @@ vi.mock('@/components/settings/kms-settings', () => ({ KmsSettings: stub('encryp
 vi.mock('@/components/settings/referrals-tab', () => ({ ReferralsTab: stub('referrals') }))
 vi.mock('@/components/settings/notification-preferences', () => ({ NotificationPreferences: stub('notifications') }))
 vi.mock('@/components/BillingTab', () => ({ BillingTab: stub('billing') }))
+vi.mock('@/components/settings/api-keys-settings', () => ({ ApiKeysSettings: stub('api-keys') }))
 vi.mock('@/components/plan-indicator', () => ({ PlanBadge: () => null, PlanLine: () => null }))
 vi.mock('@/lib/api', () => ({
   authApi: { getProfile: vi.fn().mockResolvedValue({}) },
@@ -58,12 +59,19 @@ describe('settings sections', () => {
     nav.navigate.mockReset()
   })
 
-  it('are a handful of sections holding every page Settings ever had', () => {
-    expect(SETTINGS_SECTIONS.length).toBeLessThanOrEqual(5)
-    expect([...SETTINGS_TABS].sort()).toEqual([...LEGACY_TABS].sort())
+  it('are a handful of sections holding every page Settings ever had, plus your API keys', () => {
+    expect(SETTINGS_SECTIONS.length).toBeLessThanOrEqual(6)
+    expect([...SETTINGS_TABS].sort()).toEqual([...LEGACY_TABS, 'api-keys'].sort())
     expect(SETTINGS_SECTIONS.map((s) => s.label)).toEqual([
-      'Organization', 'Your account', 'People and access', 'Billing', 'Advanced',
+      'Organization', 'Your account', 'API keys', 'People and access', 'Billing', 'Advanced',
     ])
+  })
+
+  it('open your API keys at /settings/api-keys', () => {
+    nav.pathname = '/settings/api-keys'
+    render(<SettingsPage />)
+    expect(screen.getByRole('tab', { name: /API keys/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('page-api-keys')).toBeInTheDocument()
   })
 
   it('keep every old page URL pointing at its page', () => {
@@ -85,7 +93,7 @@ describe('settings sections', () => {
     nav.pathname = '/settings/encryption'
     render(<SettingsPage />)
     expect(screen.getByRole('tab', { name: /Advanced/ })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getAllByRole('tab')).toHaveLength(5)
+    expect(screen.getAllByRole('tab')).toHaveLength(6)
     const pages = screen.getByRole('navigation', { name: 'Advanced pages' })
     expect(within(pages).getAllByRole('link').map((a) => a.textContent)).toEqual([
       'Approvals', 'Compliance', 'Audit streaming', 'Encryption',

@@ -122,6 +122,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   Object.assign(role, { role: 'admin', canManage: true })
   vi.mocked(organizationsApi.getById).mockResolvedValue({ id: 'test-org-id', plan: 'free', settings: {} })
+  vi.mocked(organizationsApi.getTeams).mockResolvedValue([])
   vi.mocked(connectorsApi.list).mockResolvedValue([openai, vllm, slack])
   openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
 })
@@ -141,7 +142,7 @@ describe('ConnectFlow', () => {
     // One field, a link to where the key is made, and who can use it.
     expect(screen.getByLabelText('API key')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Get a key/ })).toHaveAttribute('href', 'https://platform.openai.com/api-keys')
-    expect(screen.getByTestId('who-can-use')).toHaveTextContent('Who can use it: everyone in your organization')
+    expect(screen.getByTestId('who-can-use')).toHaveTextContent('Who can use it: Everyone')
     // The service's own instructions wait under Advanced.
     expect(screen.queryByTestId('connect-instructions')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
@@ -292,11 +293,11 @@ describe('who can use it', () => {
     vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connection({ owner: 'private' }) })
     render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
     const line = await screen.findByTestId('who-can-use')
-    expect(line).toHaveTextContent('everyone in your organization')
+    expect(line).toHaveTextContent('Everyone')
     fireEvent.click(within(line).getByRole('button', { name: 'Change' }))
-    // Organization or only you; a team is not something a connection is shared with here.
-    expect(screen.queryByRole('radio', { name: /Team/ })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('radio', { name: /Private/ }))
+    // Organization or only you: this organization has no teams, so there is no team to pick.
+    expect(screen.queryByRole('radio', { name: /^One team/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('radio', { name: /^Only you/ }))
 
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-test-123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -315,7 +316,7 @@ describe('who can use it', () => {
     Object.assign(role, { role: 'member', canManage: false })
     vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connection({ owner: 'private' }) })
     render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
-    await waitFor(() => expect(screen.getByTestId('who-can-use')).toHaveTextContent('only you'))
+    await waitFor(() => expect(screen.getByTestId('who-can-use')).toHaveTextContent('Only you'))
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-test-123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('openai', expect.objectContaining({ owner: 'private' })))
@@ -327,6 +328,35 @@ describe('who can use it', () => {
     render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
     expect(await screen.findByTestId('connect-admins-only')).toHaveTextContent('Only admins can add credentials')
     expect(screen.queryByLabelText('API key')).not.toBeInTheDocument()
+  })
+
+  it('offers one team too, like a provider connection, and sends the team picked', async () => {
+    vi.mocked(organizationsApi.getTeams).mockResolvedValue([{ id: 'team-1', name: 'Support', isDefault: false }, { id: 'team-2', name: 'Sales', isDefault: false }])
+    vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connection({ owner: 'team', teamId: 'team-1' }) })
+    render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
+    const line = await screen.findByTestId('who-can-use')
+    fireEvent.click(within(line).getByRole('button', { name: 'Change' }))
+    await waitFor(() => expect(screen.getByRole('radio', { name: /^One team/ })).toBeEnabled())
+    // The three choices a provider connection has.
+    for (const name of [/^Only you/, /^One team/, /^Everyone/]) expect(screen.getByRole('radio', { name })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('radio', { name: /^One team/ }))
+
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-test-123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('openai', expect.objectContaining({ owner: 'team', teamId: 'team-1' })))
+  })
+
+  it('a member without personal keys can still add one for a team', async () => {
+    Object.assign(role, { role: 'member', canManage: false })
+    vi.mocked(organizationsApi.getById).mockResolvedValue({ id: 'test-org-id', plan: 'pro', settings: { allowUserScopedConnections: false } })
+    vi.mocked(organizationsApi.getTeams).mockResolvedValue([{ id: 'team-1', name: 'Support', isDefault: false }])
+    vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connection({ owner: 'team', teamId: 'team-1' }) })
+    render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
+    await waitFor(() => expect(screen.getByTestId('who-can-use')).toHaveTextContent('One team'))
+    expect(screen.queryByTestId('connect-admins-only')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-test-123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('openai', expect.objectContaining({ owner: 'team', teamId: 'team-1' })))
   })
 })
 
