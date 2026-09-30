@@ -70,6 +70,13 @@ export class WorkspaceTickProcessor implements OnModuleInit {
     });
 
     const expired = await this.workspaces.sweepExpired(now);
+    // A run that ended somewhere that did not release its workspaces
+    // itself (the reaper, a collaboration step) has them released here.
+    try {
+      await this.workspaces.releaseForEndedRuns(now);
+    } catch (err: any) {
+      this.logger.warn(`releasing workspaces of ended runs failed: ${err?.message ?? err}`);
+    }
     if (tick.transitioned > 0 || expired.length > 0) {
       this.logger.log(
         `tick: runners checked=${tick.checked} transitioned=${tick.transitioned} ` +

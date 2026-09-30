@@ -17,6 +17,7 @@ import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
 import { ApprovalRequest } from '../../entities/approval-request.entity';
 import { AgentFile } from '../../entities/file.entity';
+import { Workspace } from '../../entities/workspace.entity';
 
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
@@ -90,6 +91,7 @@ import { BudgetsModule } from '../budgets/budgets.module';
       Message,
       ApprovalRequest,
       AgentFile,
+      Workspace,
     ]),
     BullModule.registerQueue({ name: 'agent-scheduler' }),
     BullModule.registerQueue({ name: 'agent-runtime' }),
