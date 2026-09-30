@@ -1,6 +1,8 @@
-# Self-Hosting
+# Self-hosting
 
-almyty can be self-hosted with the Docker Compose file in this repository for a single-server install, or with the Kustomize base in `k8s/base` as the starting point for a cluster. Read the [ENCRYPTION_KEY](#encryption_key-has-a-dev-fallback-that-will-bite-you) and [Outbound email](#outbound-email) sections before you put real data in it.
+Self-hosting means running almyty on your own servers instead of using the hosted service at app.almyty.com. Teams choose it when data must stay inside their own network, for example a bank that may not send customer records to an outside service. It needs someone comfortable running servers: this page is for that person. If you use the hosted service, you can skip it.
+
+almyty runs as containers (self-contained packages of a program and everything it needs). Use the Docker Compose file in this repository for a single-server install, or the Kustomize base in `k8s/base` as the starting point for a Kubernetes cluster. Read the [ENCRYPTION_KEY](#encryption_key-has-a-dev-fallback-that-will-bite-you) and [Outbound email](#outbound-email) sections before you put real data in it.
 
 ## Docker Hub
 
@@ -345,7 +347,7 @@ Because the limit is per client, size `RATE_LIMIT_MAX` for one busy source rathe
 
 ## Compliance and data residency
 
-Self-hosting keeps every byte (conversations, memory, credentials, logs) in infrastructure you control, which is the simplest answer to GDPR data-residency questions. Secrets are AES-256-GCM encrypted with your `ENCRYPTION_KEY`; rotate it like any other production secret and never commit it. Remember that BYOK means conversation content flows to your model providers under **your** API keys, so your data-processing agreements with those providers are part of your deployment's compliance story.
+Self-hosting keeps every byte (conversations, memory, credentials, logs) in infrastructure you control, which is the simplest answer to GDPR data-residency questions. Secrets are AES-256-GCM encrypted with your `ENCRYPTION_KEY`; rotate it like any other production secret and never commit it. Remember that BYOK (bring your own key: almyty calls model providers with the keys you connect) means conversation content flows to your model providers under **your** API keys, so your data-processing agreements with those providers are part of your deployment's compliance story.
 
 The [Compliance](/compliance) page maps platform features to the EU AI Act (transparency disclosure, human oversight, record-keeping, technical documentation export) and the other regimes that typically apply. The repository's `SECURITY.md` documents the vulnerability-disclosure process and how to generate an SBOM for your release.
 
