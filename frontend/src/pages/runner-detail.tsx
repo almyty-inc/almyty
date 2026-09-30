@@ -192,20 +192,23 @@ export function RunnerDetailPage() {
         {/* An offline runner, or one whose daemon never connected, can go. */}
         {(runner.state === 'offline' || isPendingRunner(runner)) && (
           <Button
-            variant="destructive"
+            type="button"
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:text-destructive"
             disabled={unregisterMutation.isPending}
             onClick={async () => {
               const ok = await confirm({
                 title: <>Delete runner {runner.name}?</>,
-                confirmLabel: 'Delete runner',
+                confirmLabel: 'Delete',
                 cancelLabel: 'Keep it',
                 destructive: true,
               })
               if (ok) unregisterMutation.mutate()
             }}
           >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete runner
+            <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />
+            Delete
           </Button>
         )}
       </div>
