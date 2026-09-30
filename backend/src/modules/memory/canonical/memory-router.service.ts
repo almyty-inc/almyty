@@ -375,7 +375,7 @@ export class MemoryRouter implements OnModuleInit {
  * Surfaces those counts so operators can decide whether the cost
  * of a one-way migration is acceptable.
  */
-function computeTransferWarnings(
+export function computeTransferWarnings(
   source: MemoryBackend,
   target: MemoryBackend,
   items: MemoryItem[],

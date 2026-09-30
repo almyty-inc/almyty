@@ -50,10 +50,16 @@ describe('canonical memory role gate', () => {
     'syncScope',
     'transfer',
     'remove',
+    // Copies memories to another account and deletes them from this one.
+    'startMove',
+    'resumeMove',
   ] as const;
 
   const memberPlus = [
     'listBackends',
+    'accountsOverview',
+    'listMoves',
+    'getMove',
     'healthAll',
     'getConfig',
     'listSoftcapWarnings',

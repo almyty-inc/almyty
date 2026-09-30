@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Optional,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   Request,
@@ -37,6 +38,8 @@ import { MemoryRouter } from './memory-router.service';
 import { DocumentChunkerService } from './document-chunker.service';
 import { ConsolidationService } from './consolidation.service';
 import { MemorySyncService } from './memory-sync.service';
+import { MemoryMoveService } from './memory-move.service';
+import { MemoryMove } from './memory-move.entity';
 
 /**
  * Canonical memory HTTP API. Mounts under `/memory/canonical` so it
@@ -247,6 +250,8 @@ export class CanonicalMemoryController {
     // Who may see an agent's own memory: whoever may see the agent.
     @Optional() private readonly accessPolicy?: AccessPolicyService,
     @Optional() @InjectRepository(Agent) private readonly agents?: Repository<Agent>,
+    // Moving memories between memory accounts.
+    @Optional() private readonly moves?: MemoryMoveService,
   ) {}
 
   // ── backends list / health ────────────────────────────────────────
@@ -483,6 +488,92 @@ export class CanonicalMemoryController {
     } catch (err) {
       throw memoryErrorToHttp(err);
     }
+  }
+
+  // ── memory accounts, and moving memories between them ─────────────
+
+  @Get('accounts/overview')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: "Every memory account the caller can see (almyty's own and each memory connection), with its health, and every memory service with its number of accounts" })
+  async accountsOverview(@Request() req: any) {
+    const organizationId = this.orgId(req);
+    if (!this.accounts) return { success: true, data: { accounts: [], services: [] } };
+    return { success: true, data: await this.accounts.overview(organizationId, { id: this.userId(req)! }) };
+  }
+
+  @Get('moves')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Recent moves of memories between accounts, newest first' })
+  async listMoves(@Request() req: any) {
+    const organizationId = this.orgId(req);
+    if (!this.moves) return { success: true, data: [] };
+    return { success: true, data: await this.moves.list(organizationId, await this.visibleScopeIds(req)) };
+  }
+
+  @Get('moves/:id')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: "One move's progress and result" })
+  async getMove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    return { success: true, data: await this.visibleMove(req, id) };
+  }
+
+  /**
+   * Move memories from one account to another: `source` and `target` are
+   * account ids (almyty-native, or a memory connection's id), the scope
+   * says whose memories. `dry_run` counts them and says what the target
+   * cannot keep, without moving anything.
+   */
+  @Post('moves')
+  @Roles('admin', 'owner')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Move memories from one memory account to another (copy, then delete from the source)' })
+  async startMove(
+    @Body() body: { source: string; target: string; scope_type: ScopeType; scope_id?: string; mode?: Mode; dry_run?: boolean },
+    @Request() req: any,
+  ) {
+    if (!this.moves || !this.accounts) {
+      throw new HttpException({ success: false, error: 'UNAVAILABLE', message: 'Moving memories is not available here' }, HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    if (body?.mode !== undefined && body.mode !== 'memory' && body.mode !== 'document') {
+      throw new HttpException({ success: false, error: 'BAD_REQUEST', message: 'mode is memory or document' }, HttpStatus.BAD_REQUEST);
+    }
+    const organizationId = this.orgId(req);
+    const userId = this.userId(req)!;
+    const scope = await this.scopeFor(req, body);
+    const source = await this.accounts.describeAccount(organizationId, { id: userId }, String(body?.source ?? ''));
+    const target = await this.accounts.describeAccount(organizationId, { id: userId }, String(body?.target ?? ''));
+    const input = { source, target, scope, mode: body?.mode };
+    if (body?.dry_run) return { success: true, data: await this.moves.preview(organizationId, userId, input) };
+    return { success: true, data: await this.moves.start(organizationId, userId, input) };
+  }
+
+  @Post('moves/:id/resume')
+  @Roles('admin', 'owner')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resume a move that stopped part way, or try its failed memories again' })
+  async resumeMove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    const move = await this.visibleMove(req, id);
+    return { success: true, data: await this.moves!.resume(this.orgId(req), this.userId(req)!, move.id) };
+  }
+
+  /** A move of the caller's organization whose scope they may see; anything else is not found. */
+  private visibleMove(req: any, id: string): Promise<MemoryMove> {
+    if (!this.moves) return Promise.reject(new HttpException({ success: false, error: 'NOT_FOUND', message: 'That move was not found' }, HttpStatus.NOT_FOUND));
+    const moves = this.moves;
+    return moves.get(this.orgId(req), id).then(async (move) => {
+      const personal = move.scopeType === 'agent' || move.scopeType === 'user';
+      if (personal && !(await this.visibleScopeIds(req)).includes(move.scopeId)) {
+        throw new HttpException({ success: false, error: 'NOT_FOUND', message: 'That move was not found' }, HttpStatus.NOT_FOUND);
+      }
+      return move;
+    });
+  }
+
+  /** The caller's own user scope and every agent scope they may see. */
+  private visibleScopeIds(req: any): Promise<string[]> {
+    const userId = this.userId(req);
+    const own = userId ? [userScopeId(this.orgId(req), userId)] : [];
+    return this.readableAgentScopeIds(req).then((agents) => [...own, ...agents]);
   }
 
   // ── put ───────────────────────────────────────────────────────────

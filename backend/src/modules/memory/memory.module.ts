@@ -51,6 +51,9 @@ import { BackendCredentialsResolver } from './canonical/backend-credentials.reso
 import { DocumentChunkerService } from './canonical/document-chunker.service';
 import { MemoryExpiry } from './canonical/memory-expiry.entity';
 import { MemoryAccountsService } from './canonical/memory-accounts.service';
+import { MemoryMove, MemoryMoveItem } from './canonical/memory-move.entity';
+import { MemoryMoveService, MOVE_QUEUE_NAME } from './canonical/memory-move.service';
+import { MemoryMoveProcessor } from './canonical/memory-move.processor';
 
 /**
  * Memory module.
@@ -72,6 +75,8 @@ import { MemoryAccountsService } from './canonical/memory-accounts.service';
       CanonicalMemoryWorkspaceConfig,
       CanonicalMemorySoftcapWarning,
       MemoryExpiry,
+      MemoryMove,
+      MemoryMoveItem,
       Agent,
       Organization,
       LlmProvider,
@@ -83,6 +88,7 @@ import { MemoryAccountsService } from './canonical/memory-accounts.service';
       { name: TTL_SWEEPER_QUEUE_NAME },
       { name: CONSOLIDATION_QUEUE_NAME },
       { name: SYNC_QUEUE_NAME },
+      { name: MOVE_QUEUE_NAME },
     ),
     forwardRef(() => LlmProvidersModule),
     forwardRef(() => CredentialsModule),
@@ -110,6 +116,8 @@ import { MemoryAccountsService } from './canonical/memory-accounts.service';
     BackendCredentialsResolver,
     DocumentChunkerService,
     MemoryAccountsService,
+    MemoryMoveService,
+    MemoryMoveProcessor,
   ],
   controllers: [CanonicalMemoryController],
   exports: [CanonicalMemoryService, EmbeddingService, MemoryRouter, DocumentChunkerService, MemoryAccountsService],

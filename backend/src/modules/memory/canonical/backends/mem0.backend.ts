@@ -214,7 +214,8 @@ export class Mem0Backend implements MemoryBackend {
       embedding: null, embedding_dim: null, embedding_model: meta.embedding_model ?? null,
       embedding_status: 'skipped', embedding_error: null,
       tags: Array.isArray(meta.tags) ? meta.tags : [],
-      metadata: meta,
+      // The id Mem0 deletes it by, on a listed memory too (nativeId).
+      metadata: { ...(m?.id ? { mem0_id: m.id } : {}), ...meta },
       file_refs: Array.isArray(meta.file_refs) ? meta.file_refs : [],
       tier: meta.tier ?? 'project',
       valid_from: createdAt ? new Date(createdAt) : now,
