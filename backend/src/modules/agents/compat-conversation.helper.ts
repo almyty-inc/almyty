@@ -285,3 +285,46 @@ export function unsupportedOpenAIField(body: any): UnsupportedField | null {
 
   return null;
 }
+
+/**
+ * The Anthropic Messages request fields this endpoint cannot honour, refused
+ * by name for the same reason as unsupportedOpenAIField: accepted and
+ * dropped, each would hand the caller a different answer than it asked for
+ * with nothing to debug. The translator carried `top_p` and `stop_sequences`
+ * out of the request and nothing read them; `top_k` and `thinking` it
+ * dropped on the spot.
+ *
+ * `max_tokens`, `temperature` and `system` are honoured. `metadata`,
+ * `tool_choice: {type: "none"}` and `thinking: {type: "disabled"}` change
+ * nothing and are accepted. The Anthropic SDK sends no sampling defaults of
+ * its own, so any `top_p` or `top_k` present was asked for.
+ */
+export function unsupportedAnthropicField(body: any): UnsupportedField | null {
+  if (!body || typeof body !== 'object') return null;
+
+  if (Array.isArray(body.tools) && body.tools.length > 0) {
+    return { param: 'tools', message: `This endpoint does not take client-declared tools. ${AGENT_RUNS_ITS_OWN_TOOLS}` };
+  }
+  if (body.tool_choice !== undefined && body.tool_choice !== null && body.tool_choice?.type !== 'none') {
+    return { param: 'tool_choice', message: `This endpoint does not take a client tool_choice. ${AGENT_RUNS_ITS_OWN_TOOLS}` };
+  }
+  if (body.top_p !== undefined && body.top_p !== null) {
+    return {
+      param: 'top_p',
+      message: 'top_p is not supported. The agent execution path takes temperature and max_tokens per request, but not top_p.',
+    };
+  }
+  if (body.top_k !== undefined && body.top_k !== null) {
+    return { param: 'top_k', message: 'top_k is not supported by this endpoint.' };
+  }
+  if (Array.isArray(body.stop_sequences) && body.stop_sequences.length > 0) {
+    return { param: 'stop_sequences', message: 'stop_sequences are not supported by this endpoint. The agent returns its run output whole.' };
+  }
+  if (body.thinking !== undefined && body.thinking !== null && body.thinking?.type !== 'disabled') {
+    return {
+      param: 'thinking',
+      message: 'Extended thinking is not configurable per request. Which model runs each step, and how, is decided by the agent.',
+    };
+  }
+  return null;
+}

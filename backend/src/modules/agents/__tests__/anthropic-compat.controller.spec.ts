@@ -10,6 +10,7 @@ import * as crypto from 'crypto';
 import { ApiKey } from '../../../entities/api-key.entity';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
+import { CompatAgentInvoker } from '../compat-agent-invoker.service';
 import { AgentAnthropicCompatController } from '../agent-anthropic-compat.controller';
 
 /**
@@ -50,12 +51,16 @@ describe('POST /v1/messages', () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [AgentAnthropicCompatController],
       providers: [
+        CompatAgentInvoker,
         { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         { provide: AgentsService, useValue: agents },
         { provide: AgentExecutionEngine, useValue: engine },
         {
           provide: getRepositoryToken(ApiKey),
-          useValue: { findOne: jest.fn(async ({ where }: any) => (where.keyHash === keyHash ? apiKeyRow : null)) },
+          useValue: {
+            findOne: jest.fn(async ({ where }: any) => (where.keyHash === keyHash ? apiKeyRow : null)),
+            update: jest.fn(async () => ({ affected: 1 })),
+          },
         },
       ],
     }).compile();
@@ -155,12 +160,15 @@ describe('POST /v1/messages', () => {
     expect(res.usage.output_tokens).not.toBe(12);
   });
 
-  it('refuses a streaming request plainly instead of answering the wrong shape', async () => {
+  it('answers a streaming request with the Anthropic event stream, not one JSON object', async () => {
     // A client that asked for SSE and receives one JSON object fails to
-    // parse with nothing to go on. Naming the limitation is debuggable.
-    const { body: res } = await post(body({ stream: true })).expect(400);
-    expect(res.error.message).toMatch(/streaming is not supported/i);
-    expect(engine.execute).not.toHaveBeenCalled();
+    // parse with nothing to go on; anthropic-sdk-compat.spec.ts drives the
+    // stream through the SDK itself.
+    const res = await post(body({ stream: true })).expect(200);
+    expect(res.headers['content-type']).toMatch(/^text\/event-stream/);
+    expect(res.text).toContain('event: message_start');
+    expect(res.text).toContain('"text":"hello back"');
+    expect(res.text).toContain('event: message_stop');
   });
 
   it('refuses client-declared tools, because an agent runs its own', async () => {

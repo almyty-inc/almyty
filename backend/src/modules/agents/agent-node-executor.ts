@@ -121,6 +121,12 @@ export interface NodeExecutionOptions {
    * always name the concrete model behind each role.
    */
   resolvedRoles?: Array<{ key: string; modelId: string; via: 'pinned' | 'resolved'; rationale?: string }>;
+  /**
+   * Set by the engine on the one llm_call whose text is the run's answer,
+   * when the caller streams (ExecuteAgentOptions.streamAnswer). The model
+   * call then streams and hands each piece of text here as it arrives.
+   */
+  onAnswerChunk?: (content: string) => void;
 }
 /** How long an organization's default routing policy is reused before it is read again. */
 const DEFAULT_ROUTING_TTL_MS = 30_000;
@@ -590,12 +596,21 @@ export class AgentNodeExecutor {
       // As the run's principal, inherited: a gateway run reaches the
       // providers, keys and tools of its gateway's team, whoever the run
       // row names.
-      response = await this.llmProvidersService.chat(
-        roleProviderId ?? providerId,
-        chatRequest,
-        organizationId,
-        caller,
-      );
+      //
+      // The run's answering call streams instead when its caller asked
+      // (answer-node.ts): same provider, same principal, the text handed
+      // over as it arrives. Only without tools and without a routing
+      // policy -- an organization default counts, and is only known here --
+      // since chatStream runs no tool loop and cannot fall over to the next
+      // routed candidate once tokens are out.
+      const onAnswerChunk = options?.onAnswerChunk;
+      const streams =
+        node.type === 'llm_call' && !!onAnswerChunk && !routing && !(Array.isArray(config.toolIds) && config.toolIds.length > 0);
+      response = streams
+        ? await this.llmProvidersService.chatStream(roleProviderId ?? providerId, chatRequest, organizationId, caller, (chunk) => {
+            if (chunk.content) onAnswerChunk!(chunk.content);
+          })
+        : await this.llmProvidersService.chat(roleProviderId ?? providerId, chatRequest, organizationId, caller);
     } catch (err: any) {
       // A provider error body can echo the request back, Authorization
       // header included, so it never reaches a log line or a persisted

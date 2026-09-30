@@ -1,203 +1,44 @@
 import 'reflect-metadata';
-import * as crypto from 'crypto';
 import { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import OpenAI from 'openai';
 
 import { AgentOpenAICompatController } from '../agent-openai-compat.controller';
-import { AgentOpenAIStreamHelper } from '../agent-openai-stream.helper';
-import { AgentExecutionEngine } from '../agent-execution.engine';
-import { AgentNodeExecutor } from '../agent-node-executor';
-import { AgentTemplateResolver } from '../agent-template-resolver';
-import { AgentsService } from '../agents.service';
-import { AgentRuntimeService } from '../agent-runtime.service';
 import { COMPAT_RATE_LIMIT_RPM } from '../compat-rate-limit.helper';
-import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
-import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
-import { Agent, AgentStatus } from '../../../entities/agent.entity';
-import { AgentExecution } from '../../../entities/agent-execution.entity';
+import { Agent } from '../../../entities/agent.entity';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { ApiKey } from '../../../entities/api-key.entity';
 import { BudgetExceededException } from '../../budgets/budget-exceeded.exception';
-import { CAST, castFixture, MembershipFixture } from '../../../test/execution-access.fixture';
+import { CAST } from '../../../test/execution-access.fixture';
 import { fakeRepository } from '../../../test/fake-repository';
-import { listenOnLoopback } from '../../../test/http';
+import {
+  compatToken as token,
+  FakeLlm,
+  FakeRuntime,
+  ID,
+  keyRow,
+  startCompatApp,
+} from '../../../test/compat-sdk.fixture';
 
 /**
  * The OpenAI-compatible surface, driven by the official `openai` SDK.
  *
- * Everything below the HTTP socket is real except the model and the tables:
- * the controller, the stream helper, the pipeline engine and its node
- * executor, the key policy and the execution gate. The model is a fake
- * LlmProvidersService that answers `saw: <what the prompt said>`, so every
- * assertion reads back what the agent was actually handed.
+ * Everything below the HTTP socket is real except the model and the tables
+ * (test/compat-sdk.fixture.ts): the controller, the shared invocation path,
+ * the pipeline engine and its node executor, the key policy and the
+ * execution gate. The model is a fake that answers `saw: <what the prompt
+ * said>`, so every assertion reads back what the agent was actually handed.
  *
  * The earlier compat specs call controller methods with hand-built req/res
  * doubles, which is how the stream could repeat the answer once per node
  * and still pass: nothing parsed it the way a client does.
  */
 
-const token = (name: string) => `almyty_sdk_${name}_key`;
-const hash = (t: string) => crypto.createHash('sha256').update(t).digest('hex');
-
-const ID = {
-  echo: '0d000000-0000-4000-8000-000000000001',
-  team: '0d000000-0000-4000-8000-000000000002',
-  private: '0d000000-0000-4000-8000-000000000003',
-  draft: '0d000000-0000-4000-8000-000000000004',
-  otherOrg: '0d000000-0000-4000-8000-000000000005',
-  auto: '0d000000-0000-4000-8000-000000000006',
-  twoStep: '0d000000-0000-4000-8000-000000000007',
-} as const;
-
-const pos = { x: 0, y: 0 };
-const llmPipeline = () => ({
-  nodes: [
-    { id: 'in', type: 'input', label: 'in', position: pos, data: {} },
-    { id: 'llm', type: 'llm_call', label: 'llm', position: pos, data: { providerId: 'p1', userPromptTemplate: '{{input.message}}' } },
-    { id: 'out', type: 'output', label: 'out', position: pos, data: { mapping: '{{nodes.llm.output}}' } },
-  ],
-  edges: [
-    { id: 'e1', source: 'in', target: 'llm' },
-    { id: 'e2', source: 'llm', target: 'out' },
-  ],
-});
-/** A draft step and a final step: only the final one is the answer. */
-const twoStepPipeline = () => ({
-  nodes: [
-    { id: 'in', type: 'input', label: 'in', position: pos, data: {} },
-    { id: 'draft', type: 'llm_call', label: 'draft', position: pos, data: { providerId: 'p1', userPromptTemplate: 'draft {{input.message}}' } },
-    { id: 'final', type: 'llm_call', label: 'final', position: pos, data: { providerId: 'p1', userPromptTemplate: 'polish {{nodes.draft.output}}' } },
-    { id: 'out', type: 'output', label: 'out', position: pos, data: { mapping: '{{nodes.final.output}}' } },
-  ],
-  edges: [
-    { id: 'e1', source: 'in', target: 'draft' },
-    { id: 'e2', source: 'draft', target: 'final' },
-    { id: 'e3', source: 'final', target: 'out' },
-  ],
-});
-
-const agentRow = (id: string, name: string, extra: Partial<Agent> = {}) =>
-  Object.assign(new Agent(), {
-    id,
-    name,
-    organizationId: CAST.org,
-    status: AgentStatus.ACTIVE,
-    mode: 'workflow',
-    visibility: 'org',
-    teamId: null,
-    createdBy: CAST.member,
-    settings: {},
-    isTemporary: false,
-    createdAt: new Date('2026-09-01T00:00:00Z'),
-    pipeline: llmPipeline(),
-    ...extra,
-  });
-
-const AGENTS = () => [
-  agentRow(ID.echo, 'Echo Agent'),
-  agentRow(ID.team, 'Team Agent', { visibility: 'team', teamId: CAST.team }),
-  agentRow(ID.private, 'Private Agent', { visibility: 'private', createdBy: CAST.owner }),
-  agentRow(ID.draft, 'Draft Agent', { status: AgentStatus.DRAFT }),
-  agentRow(ID.otherOrg, 'Elsewhere Agent', { organizationId: CAST.otherOrg }),
-  agentRow(ID.auto, 'Auto Agent', { mode: 'autonomous', pipeline: undefined as any }),
-  agentRow(ID.twoStep, 'Two Step Agent', { pipeline: twoStepPipeline() }),
-];
-
-const member = (userId: string, organizationId: string = CAST.org) => ({
-  id: userId,
-  isActive: true,
-  organizationMemberships: [{ organizationId, isActive: true, inviteAccepted: true, inviteToken: null }],
-});
-const keyRow = (name: string, userId: string, extra: Partial<ApiKey> = {}) => ({
-  id: `key-${name}`,
-  name,
-  keyHash: hash(token(name)),
-  keyPrefix: 'almyty_s',
-  userId,
-  user: member(userId),
-  organizationId: CAST.org,
-  gatewayId: null,
-  agentId: null,
-  isActive: true,
-  expiresAt: null,
-  lastUsedAt: null,
-  scopes: null,
-  ...extra,
-});
-const KEYS = () => [
-  keyRow('member', CAST.member),
-  keyRow('nonmember', CAST.nonMember),
-  keyRow('owner', CAST.owner),
-  keyRow('onlyecho', CAST.nonMember, { agentId: ID.echo }),
-  keyRow('gateway', CAST.member, { gatewayId: 'gw-1' }),
-  keyRow('scoped', CAST.member, { scopes: ['read'] }),
-  keyRow('elsewhere', 'someone-else', { organizationId: CAST.otherOrg, user: member('someone-else', CAST.otherOrg) as any }),
-];
-
-/** The model: echoes its prompt, reports a real split, records the request. */
-function fakeLlm() {
-  const calls: Array<{ providerId: string; request: any }> = [];
-  return {
-    calls,
-    chat: jest.fn(async (providerId: string, request: any) => {
-      calls.push({ providerId, request });
-      const user = [...request.messages].reverse().find((m: any) => m.role === 'user');
-      return {
-        message: { role: 'assistant', content: `saw: ${user?.content ?? ''}` },
-        usage: { inputTokens: 11, outputTokens: 7, totalTokens: 18 },
-        cost: 0,
-      };
-    }),
-  };
-}
-
-/**
- * The autonomous runtime, as far as the compat route can see it: a run row
- * that the "worker" moves on a tick later. `nextRun` decides what that is.
- */
-function fakeRuntime(runs: ReturnType<typeof fakeRepository<AgentRun>>) {
-  const started: Array<{ agentId: string; input: any; options: any }> = [];
-  let nextRun: (run: AgentRun) => Partial<AgentRun> = (run) => ({
-    status: AgentRunStatus.COMPLETED,
-    output: `autonomous saw: ${run.input}`,
-    totalTokens: 42,
-  });
-  return {
-    started,
-    finishWith(fn: (run: AgentRun) => Partial<AgentRun>) {
-      nextRun = fn;
-    },
-    startRun: jest.fn(async (agentId: string, organizationId: string, userId: string | null, input: any, options: any) => {
-      started.push({ agentId, input, options });
-      const run = await runs.save(Object.assign(new AgentRun(), {
-        agentId, organizationId, userId, input, status: AgentRunStatus.RUNNING, metadata: {}, totalTokens: 0,
-      }));
-      setTimeout(() => {
-        const current = runs.row(run.id)!;
-        if (current.status !== AgentRunStatus.RUNNING) return;
-        void runs.save(Object.assign(current, nextRun(current)));
-      }, 30);
-      return run;
-    }),
-    getRun: jest.fn(async (runId: string) => runs.row(runId)),
-    cancelRun: jest.fn(async (runId: string) => {
-      const run = runs.row(runId)!;
-      run.status = AgentRunStatus.CANCELLED;
-      await runs.save(run);
-      return run;
-    }),
-  };
-}
-
 describe('the official openai SDK against /v1', () => {
   let app: INestApplication;
   let baseURL: string;
-  let llm: ReturnType<typeof fakeLlm>;
-  let runtime: ReturnType<typeof fakeRuntime>;
+  let llm: FakeLlm;
+  let runtime: FakeRuntime;
   let runs: ReturnType<typeof fakeRepository<AgentRun>>;
-  let m: MembershipFixture;
   let apiKeys: ReturnType<typeof fakeRepository<ApiKey>>;
   let agentsService: any;
   let budgets: { enforceForRun: jest.Mock };
@@ -226,68 +67,9 @@ describe('the official openai SDK against /v1', () => {
   };
 
   beforeEach(async () => {
-    m = castFixture();
-    llm = fakeLlm();
-    const agents = fakeRepository<Agent>({ seed: AGENTS(), make: () => new Agent() });
-    const executions = fakeRepository<AgentExecution>({ make: () => new AgentExecution(), idPrefix: 'exec' });
-    apiKeys = fakeRepository<ApiKey>({ seed: KEYS() as any, make: () => new ApiKey() });
-    runs = fakeRepository<AgentRun>({ make: () => new AgentRun(), idPrefix: 'run' });
-    runtime = fakeRuntime(runs);
-    budgets = { enforceForRun: jest.fn().mockResolvedValue(undefined) };
-
-    const state = {
-      emitEvent: (onEvent: any, event: any) => onEvent?.(event),
-      bumpAgentStats: jest.fn().mockResolvedValue(undefined),
-      withTimeout: (promise: Promise<unknown>) => promise,
-    };
-    const engine = new AgentExecutionEngine(
-      agents as any,
-      executions as any,
-      null as any,
-      { sendExecutionWebhook: jest.fn().mockResolvedValue(undefined) } as any,
-      state as any,
-      undefined, undefined, undefined, undefined,
-      budgets as any,
-      undefined,
-      m.executionAccess,
-    );
-    const nodes = new AgentNodeExecutor(
-      new AgentTemplateResolver(), llm as unknown as LlmProvidersService, {} as any, agents as any, engine,
-      {} as any, {} as any, {} as any, {} as any,
-    );
-    (engine as any).nodeExecutor = nodes;
-
-    // The real read rules (getAgent, findAllActive) over the fake table;
-    // only the by-name query builder is re-stated, with the same predicate.
-    agentsService = Object.create(AgentsService.prototype);
-    Object.assign(agentsService, { agentRepository: agents, accessPolicy: m.accessPolicy });
-    agentsService.findByName = async (name: string, organizationId: string, callerId?: string | null) => {
-      const rows = await agents.find({ where: { organizationId } });
-      const mine = (a: Agent) => a.visibility !== 'private' || a.createdBy === (callerId ?? null);
-      const lower = name.toLowerCase();
-      return (
-        rows.find((a) => a.name === name && mine(a)) ??
-        rows.find((a) => a.name.toLowerCase() === lower && mine(a)) ??
-        rows.find((a) => a.name.toLowerCase() === lower.replace(/-/g, ' ') && mine(a)) ??
-        null
-      );
-    };
-
-    const moduleRef = await Test.createTestingModule({
-      controllers: [AgentOpenAICompatController],
-      providers: [
-        AgentOpenAIStreamHelper,
-        { provide: AgentExecutionEngine, useValue: engine },
-        { provide: AgentsService, useValue: agentsService },
-        { provide: AgentRuntimeService, useValue: runtime },
-        { provide: ExecutionAccessService, useValue: m.executionAccess },
-        { provide: getRepositoryToken(ApiKey), useValue: apiKeys },
-      ],
-    }).compile();
-    app = moduleRef.createNestApplication({ logger: false });
-    await listenOnLoopback(app);
-    const { port } = app.getHttpServer().address();
-    baseURL = `http://127.0.0.1:${port}/v1`;
+    const started = await startCompatApp([AgentOpenAICompatController]);
+    ({ app, llm, runtime, runs, apiKeys, agentsService, budgets } = started);
+    baseURL = `${started.origin}/v1`;
   });
 
   afterEach(async () => {
@@ -434,8 +216,68 @@ describe('the official openai SDK against /v1', () => {
 
     it('surfaces a failed run as an error the SDK raises, not as a short answer', async () => {
       llm.chat.mockRejectedValueOnce(new Error('upstream exploded'));
+      llm.chatStream.mockRejectedValueOnce(new Error('upstream exploded'));
       const err = await failure(collect());
       expect(err.message).toMatch(/Pipeline failed|LLM call failed|did not complete/);
+    });
+
+    it('surfaces a spend budget refusal in the stream as insufficient_quota', async () => {
+      budgets.enforceForRun.mockRejectedValueOnce(
+        new BudgetExceededException({
+          budgetId: 'b1', organizationId: CAST.org, agentId: null, spentCents: 1000, limitCents: 1000, periodType: 'month',
+        }),
+      );
+      const err = await failure(collect());
+      expect(err).toMatchObject({ type: 'insufficient_quota', code: 'insufficient_quota' });
+      expect(err.message).toContain('Spend budget exceeded');
+    });
+
+    /** Deltas as they arrive, and whether the model had finished when the first one did. */
+    const watch = async (model: string, content = 'tell me a story', held = true) => {
+      const hold = held ? llm.holdAfterFirstToken() : { release: () => undefined };
+      const stream = await client().chat.completions.create({
+        model,
+        messages: [{ role: 'user', content }],
+        stream: true,
+      });
+      const deltas: string[] = [];
+      let finishedAtFirstDelta: boolean | null = null;
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content;
+        if (!delta) continue;
+        if (finishedAtFirstDelta === null) {
+          finishedAtFirstDelta = llm.state.finished;
+          hold.release();
+        }
+        deltas.push(delta);
+      }
+      hold.release();
+      return { deltas, finishedAtFirstDelta };
+    };
+
+    it('streams the answering model call token by token, the first words arriving before the run finished', async () => {
+      const { deltas, finishedAtFirstDelta } = await watch(`agent:${ID.echo}`);
+      expect(finishedAtFirstDelta).toBe(false);
+      expect(deltas.length).toBeGreaterThan(1);
+      expect(deltas.join('')).toBe('saw: tell me a story');
+    });
+
+    it('streams only the final step of a two-step pipeline, never the draft', async () => {
+      const { deltas, finishedAtFirstDelta } = await watch(`agent:${ID.twoStep}`, 'x');
+      expect(finishedAtFirstDelta).toBe(false);
+      expect(deltas.join('')).toBe('saw: polish saw: draft x');
+      expect(llm.calls.map((c) => c.streamed)).toEqual([false, true]);
+    });
+
+    it('sends the whole answer at the end when the output node reshapes the model text', async () => {
+      const { deltas } = await watch(`agent:${ID.mapped}`, 'tell me a story', false);
+      expect(deltas.join('')).toBe('Answer: saw: tell me a story');
+      expect(llm.calls.every((c) => !c.streamed)).toBe(true);
+    });
+
+    it('does not stream the model call of a non-streaming request', async () => {
+      await ask('hi');
+      expect(llm.calls.every((c) => !c.streamed)).toBe(true);
     });
   });
 
@@ -444,9 +286,11 @@ describe('the official openai SDK against /v1', () => {
 
     it('lists the active agents the key may run, and nothing else', async () => {
       expect(await listed('member')).toEqual(
-        [`agent:${ID.echo}`, `agent:${ID.team}`, `agent:${ID.auto}`, `agent:${ID.twoStep}`].sort(),
+        [`agent:${ID.echo}`, `agent:${ID.team}`, `agent:${ID.auto}`, `agent:${ID.twoStep}`, `agent:${ID.mapped}`].sort(),
       );
-      expect(await listed('nonmember')).toEqual([`agent:${ID.echo}`, `agent:${ID.auto}`, `agent:${ID.twoStep}`].sort());
+      expect(await listed('nonmember')).toEqual(
+        [`agent:${ID.echo}`, `agent:${ID.auto}`, `agent:${ID.twoStep}`, `agent:${ID.mapped}`].sort(),
+      );
       expect(await listed('owner')).toContain(`agent:${ID.private}`);
       expect(await listed('onlyecho')).toEqual([`agent:${ID.echo}`]);
       expect(await listed('elsewhere')).toEqual([]);
@@ -514,7 +358,7 @@ describe('the official openai SDK against /v1', () => {
       // is org agents only.
       expect(
         (await agentsService.findAllActive(CAST.org, null)).map((a: Agent) => a.id).sort(),
-      ).toEqual([ID.echo, ID.auto, ID.twoStep].sort());
+      ).toEqual([ID.echo, ID.auto, ID.twoStep, ID.mapped].sort());
       await apiKeys.save(Object.assign(new ApiKey(), keyRow('userless', null as any, { user: null as any })));
       expect(await run('userless', ID.echo)).toMatchObject({ status: 401, type: 'authentication_error' });
     });
@@ -638,6 +482,35 @@ describe('the official openai SDK against /v1', () => {
       expect(err).toMatchObject({ status: 409, code: 'agent_needs_input' });
       expect(runtime.cancelRun).toHaveBeenCalledTimes(1);
       expect(runs.rows()[0].status).toBe(AgentRunStatus.CANCELLED);
+    });
+
+    it('streams the answer step token by token while the run works, and never the working step', async () => {
+      const hold = runtime.streamAnswer();
+      const stream = await client().chat.completions.create({
+        model: `agent:${ID.auto}`,
+        messages: [{ role: 'user', content: 'plan a trip' }],
+        stream: true,
+      });
+      const deltas: string[] = [];
+      let finishedAtFirstDelta: boolean | null = null;
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content;
+        if (!content) continue;
+        if (finishedAtFirstDelta === null) {
+          finishedAtFirstDelta = runtime.state.finished;
+          hold.release();
+        }
+        deltas.push(content);
+      }
+      expect(finishedAtFirstDelta).toBe(false);
+      expect(deltas.length).toBeGreaterThan(1);
+      expect(deltas.join('')).toBe('autonomous saw: plan a trip');
+      expect(runtime.started[0].options.metadata).toMatchObject({ composeFinalAnswer: true });
+    });
+
+    it('does not ask a non-streaming run for the extra answer call', async () => {
+      await ask('plan a trip', { model: `agent:${ID.auto}` });
+      expect(runtime.started[0].options.metadata?.composeFinalAnswer).toBeUndefined();
     });
   });
 });

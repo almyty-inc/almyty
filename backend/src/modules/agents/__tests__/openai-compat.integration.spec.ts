@@ -6,6 +6,7 @@ import { NotFoundException } from '@nestjs/common';
 import { AgentOpenAICompatController } from '../agent-openai-compat.controller';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
+import { CompatAgentInvoker } from '../compat-agent-invoker.service';
 import { AgentOpenAIStreamHelper } from '../agent-openai-stream.helper';
 import { ApiKey } from '../../../entities/api-key.entity';
 import { AgentExecutionStatus } from '../../../entities/agent-execution.entity';
@@ -102,6 +103,7 @@ describe('OpenAI Compatibility', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AgentOpenAICompatController],
       providers: [
+        CompatAgentInvoker,
         { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         {
           provide: AgentsService,

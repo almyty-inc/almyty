@@ -10,6 +10,7 @@ export default {
   'models-api': 'Models API',
   'connections-api': 'Connections API',
   'openai-compatible': 'OpenAI-Compatible API',
+  'anthropic-compatible': 'Anthropic-Compatible API',
   'rate-limits': 'Rate Limits',
   'error-codes': 'Error Codes',
 }
