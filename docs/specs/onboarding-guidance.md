@@ -62,9 +62,9 @@ complete out of order and the UI just checks them off.
 |---|---|---|---|
 | 1 | `provider` | ≥1 LLM provider with health != failed | /models → add-provider dialog open |
 | 2 | `api` | ≥1 API imported (sample counts, flagged) | /apis → import dialog open |
-| 3 | `gateway` | ≥1 gateway with ≥1 tool assigned | /gateways → create flow |
+| 3 | `gateway` | ≥1 gateway with ≥1 tool assigned | /gateways/new → Create gateway |
 | 4 | `first_call` | ≥1 successful gateway request OR agent run | /agents → Try It focused |
-| 5 | `external_client` (optional, shown after 4) | ≥1 gateway request whose client is not the almyty frontend (MCP handshake, OpenAI-compat call, curl) | gateway detail → Channel Setup panel |
+| 5 | `external_client` (optional, shown after 4) | ≥1 gateway request whose client is not the almyty frontend (MCP handshake, OpenAI-compat call, curl) | the gateway page → its address and client snippets |
 
 ## Backend (one endpoint + one seeding action)
 
@@ -120,15 +120,15 @@ write copy, green-lynx owns these strings.
 | /models | Connect an LLM provider to power agents and tool generation. Keys stay encrypted at rest. | Add provider | — |
 | /apis | Import an OpenAPI, GraphQL, SOAP, or Protobuf schema — every operation becomes a typed tool. | Import API | Load the Petstore sample |
 | /tools | Tools are generated from your APIs. Import an API and its operations appear here. | Import API | Load the Petstore sample |
-| /gateways | A gateway serves a set of tools over MCP, A2A, UTCP, and Agent Skills — one endpoint, every protocol. | Create gateway | — |
+| /gateways | A gateway serves the tools you pick over one protocol (MCP, UTCP or Skills), so Claude Code, Cursor or another agent can use them. | Create gateway | — |
 | /agents | Agents call models and tools to do a job — with cross-vendor verification if you want a second opinion. | Create agent | Load the Petstore sample |
 | /runners | A runner connects one of your machines and publishes its capabilities as tools. Code and credentials stay local. | Set up runner (docs) | — |
 | /memory | Memory gives agents recall across runs — per-agent or shared, with bi-temporal history. | Docs: memory | — |
 
 ### C. The payoff moment
 
-After step 3 completes (first gateway with tools), the gateway detail page already shows
-Channel Setup / integration snippets — extend it with a one-time highlight of the
+After step 3 completes (first tool gateway), the gateway page already shows the
+address and its client snippets. Extend it with a one-time highlight of the
 `claude mcp add <name> -- npx -y @almyty/mcp-server <org>/<gateway>` snippet and the copy:
 "Point any MCP client at this and your tools are live. This is the moment almyty exists for."
 When `external_client` flips true, the card celebrates once (subtle, no confetti physics —

@@ -22,6 +22,7 @@ import type { LucideIcon } from 'lucide-react'
 import { Bot, Cpu, Globe, Package } from 'lucide-react'
 
 import type { OnboardingState } from '@/lib/api'
+import { connectProviderPath } from '@/components/llm-providers/paths'
 
 export type StepKey = keyof OnboardingState['steps']
 
@@ -87,11 +88,11 @@ export const JOURNEYS: Journey[] = [
       },
       {
         key: 'gateway',
-        title: 'Share your tools',
+        title: 'Create a gateway',
         description: () =>
-          'Pick tools and get one address that works in any MCP, UTCP or Skills client. Done once it shares at least one tool.',
-        cta: 'Share tools',
-        target: () => ({ to: '/gateways/new', place: 'Gateways › Share tools' }),
+          'Pick a protocol (MCP, UTCP or Skills) and the tools it serves, and get an address your AI client can use. Done once it serves at least one tool.',
+        cta: 'Create gateway',
+        target: () => ({ to: '/gateways/new', place: 'Gateways › Create gateway' }),
       },
       {
         key: 'external_client',
@@ -125,8 +126,8 @@ export const JOURNEYS: Journey[] = [
           'Paste a key for OpenAI, Anthropic, Gemini, Mistral or another provider, or point almyty at a local Ollama. Done once one is connected and its last check did not fail.',
         cta: 'Connect a provider',
         target: () => ({
-          to: '/models/connect?returnTo=%2Fguide',
-          place: 'Models › Connect a provider',
+          to: connectProviderPath(null, '/guide'),
+          place: 'Credentials › Connect a provider',
         }),
       },
       {
@@ -171,27 +172,19 @@ export const JOURNEYS: Journey[] = [
     id: 'ship',
     title: 'Put it where people are',
     summary:
-      'Package an agent as an app and ship it: a hosted web chat, a messaging channel, a terminal command or a desktop app.',
+      'Add a channel to an agent: a web chat link, a website widget, Slack, WhatsApp and other messaging apps, or a desktop or terminal app.',
     icon: Package,
     steps: [
       {
-        key: 'app',
-        title: 'Create an app',
-        description: () =>
-          'An app puts one or more agents under your name and sets who may use it.',
-        cta: 'Create an app',
-        target: () => ({ to: '/apps/new', place: 'Apps › Create app' }),
-      },
-      {
-        key: 'distribution',
-        title: 'Ship it somewhere',
+        key: 'channel',
+        title: 'Add a channel',
         description: (s) =>
-          `Add a distribution${s.links.app ? ` to ${s.links.app.name}` : ''}: a web chat on its own address, Slack, WhatsApp, Teams and other channels, a terminal command or a desktop app. Done when one is live or built.`,
-        cta: 'Add a distribution',
+          `Add a channel to ${s.links.agent ? s.links.agent.name : 'an agent'}: a web chat link, a website widget, Slack, WhatsApp, Teams and other messaging apps, a terminal app or a desktop app. Done when one is live or built.`,
+        cta: 'Add channel',
         target: (s) =>
-          s.links.app
-            ? { to: `/apps/${s.links.app.slug}/distributions/new`, place: `Apps › ${s.links.app.name} › Add a distribution` }
-            : { to: '/apps', place: 'Apps' },
+          s.links.agent
+            ? { to: `/agents/${s.links.agent.id}/channels/new`, place: `Agents › ${s.links.agent.name} › Channels › Add channel` }
+            : { to: '/agents', place: 'Agents' },
       },
     ],
   },
@@ -217,10 +210,10 @@ export const JOURNEYS: Journey[] = [
 /** The rest of the platform, for when you need it. Links, not steps. */
 export const SUPPORTING: GuideLink[] = [
   {
-    title: 'Connections',
-    description: 'The keys and accounts almyty uses for you, stored encrypted.',
-    to: '/connections',
-    place: 'Connections',
+    title: 'Credentials',
+    description: 'The keys, tokens and accounts almyty uses for you, stored encrypted.',
+    to: '/credentials',
+    place: 'Credentials',
   },
   {
     title: 'Models',

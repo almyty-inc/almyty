@@ -11,7 +11,7 @@ import {
   callVertex,
   callCustomProvider,
 } from './providers';
-import { LlmProvider, LlmProviderType, LlmProviderConfig } from '../../entities/llm-provider.entity';
+import { LlmProvider, LlmProviderType, LlmProviderConfig, OLLAMA_DEFAULT_URL, isOllamaCloudUrl } from '../../entities/llm-provider.entity';
 import { Conversation } from '../../entities/conversation.entity';
 import { Tool } from '../../entities/tool.entity';
 import { ToolCall } from '../../entities/message.entity';
@@ -38,6 +38,7 @@ import {
 } from '../../common/security/url-validator';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
+import { assertModelAllowed } from './allowed-models';
 import { preferredBinding, providerProfile } from './provider-profile';
 import { type ActingAs, type ExecutionPrincipal, asPrincipal, userPrincipal } from '../../common/authorization/execution-access.service';
 
@@ -208,6 +209,8 @@ export class LlmChatRunnerHelper {
     if (!request.model) {
       request = { ...request, model: await this.defaultModels.resolve(provider) };
     }
+    // A model the connection's owner unticked is never sent through it.
+    assertModelAllowed(provider, request.model);
     const maxRetries = 2;
     const backoffDelays = [1000, 3000]; // 1s, 3s exponential backoff
     let lastError: any;
@@ -337,6 +340,12 @@ export class LlmChatRunnerHelper {
       case LlmProviderType.VERTEX_AI:
         return callVertex(provider, request, session, tools, startTime, costFn);
       case LlmProviderType.CUSTOM:
+        // Your own server speaking the OpenAI format gets the full chat
+        // completions client: tools offered, tool calls read back. The
+        // custom client below sends text only, for the other formats.
+        if ((provider.configuration?.custom?.requestFormat || 'openai') === 'openai') {
+          return callOpenAI(provider, request, session, tools, startTime, costFn);
+        }
         return callCustomProvider(provider, request, session, tools, startTime);
       default:
         throw new BadRequestException(`Unsupported LLM provider type: ${provider.type}`);
@@ -559,7 +568,12 @@ export class LlmChatRunnerHelper {
         // time, so a blocked URL fails fast here rather than on the
         // first chat call. callLlmProviderHttp re-runs the same gate on
         // every outbound request (defense in depth).
-        const effectiveUrl = config.apiUrl || 'http://localhost:11434';
+        const effectiveUrl = config.apiUrl || OLLAMA_DEFAULT_URL;
+        // Ollama Cloud is Ollama's own hosted API: it answers only with a
+        // key, so a missing one is said here rather than as a 401 later.
+        if (isOllamaCloudUrl(effectiveUrl) && !config.apiKey) {
+          throw new BadRequestException('Ollama Cloud needs an API key. Create one at https://ollama.com/settings/keys');
+        }
         const validation = ollamaPrivateUrlsAllowed()
           ? validateUrlAllowingPrivate(effectiveUrl)
           : validateUrl(effectiveUrl);

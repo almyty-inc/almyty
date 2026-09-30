@@ -11,7 +11,7 @@ export function ParallelNode({ selected }: NodeProps) {
         <span className="text-xs font-semibold text-orange-700 dark:text-orange-300">Parallel</span>
       </div>
       <div className="p-3">
-        <div className="text-sm font-medium truncate">Fan Out</div>
+        <div className="text-sm font-medium truncate">Run branches at once</div>
         <div className="text-xs text-muted-foreground truncate mt-0.5">
           Execute branches in parallel
         </div>

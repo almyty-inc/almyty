@@ -51,7 +51,7 @@ export function validateUrl(urlString: string): UrlValidationResult {
   // as `[::ffff:a9fe:a9fe]`), so nothing below may match on spelling.
   const hostname = stripBrackets(parsed.hostname.toLowerCase());
   // The root-label form `localhost.` is the same host as `localhost`.
-  const bareName = hostname.replace(/\.+$/, '');
+  const bareName = hostname.replace(/(?<!\.)\.+$/, '');
 
   if (isBlockedHostname(hostname)) {
     return { valid: false, error: `Blocked hostname: ${hostname}` };

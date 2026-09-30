@@ -22,15 +22,17 @@ function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry)
     if (statSync(full).isDirectory()) walk(full, out)
-    else if (entry.endsWith('.tsx')) out.push(full)
+    else if (entry.endsWith('.tsx') || entry.endsWith('.ts')) out.push(full)
   }
   return out
 }
 
 const isTest = (f: string) => /(__tests__|\.test\.|\.spec\.)/.test(f)
-const sources = walk(SRC)
-  .filter((f) => !isTest(f))
+const all = walk(SRC)
+  .filter((f) => !isTest(f) && !f.includes('/test/'))
   .map((f) => ({ rel: relative(SRC, f), src: readFileSync(f, 'utf8') }))
+const sources = all.filter(({ rel }) => rel.endsWith('.tsx'))
+const tsSources = all.filter(({ rel }) => !rel.endsWith('.tsx'))
 
 const pages = sources.filter(({ rel }) => rel.startsWith('pages/'))
 
@@ -141,7 +143,127 @@ describe('labels are sentence case', () => {
     }
     expect(offenders).toEqual([])
   })
+
+  it('holds for field labels, headings, table headers and select options', () => {
+    // "First Name" over one field and "Model name" over the next read as
+    // two products. The same rule as buttons: first word, acronyms and
+    // proper nouns only.
+    const FIELD_TAGS = ['Label', 'label', 'SelectItem', 'option', 'TableHead', 'th', 'h1', 'h2', 'h3', 'h4']
+    const offenders: string[] = []
+    for (const { rel, src } of sources) {
+      for (const el of jsxLabels(src, FIELD_TAGS)) {
+        for (const label of el.variants) {
+          if (titleCaseWords(label).length) offenders.push(`${rel}:${el.line} <${el.tag}> "${label}"`)
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('holds for label, title and header props written as literals', () => {
+    // .ts files too: label maps, guide steps and page intros are copy.
+    expect(literalPropOffenders([...sources, ...tsSources])).toEqual([])
+  })
+
+  it('holds for plain text styled as a heading', () => {
+    expect(styledHeadingOffenders(sources)).toEqual([])
+  })
+
+  it('holds for toast titles', () => {
+    expect(toastTitleOffenders([...sources, ...tsSources])).toEqual([])
+  })
+
+  it('each check catches the pattern it is for', () => {
+    // Red checks: the shapes that slipped past before these were widened.
+    const fake = (src: string) => [{ rel: 'fake.tsx', src }]
+    expect(styledHeadingOffenders(fake('<div className="text-sm font-medium">Team Members</div>'))).toHaveLength(1)
+    expect(styledHeadingOffenders(fake('<p className="font-semibold">Danger Zone</p>'))).toHaveLength(1)
+    expect(styledHeadingOffenders(fake('<h5>Recent Runs</h5>'))).toHaveLength(1)
+    expect(styledHeadingOffenders(fake('<summary>Advanced Options</summary>'))).toHaveLength(1)
+    expect(styledHeadingOffenders(fake('<div className="text-sm font-medium">Team members</div>'))).toEqual([])
+    expect(styledHeadingOffenders(fake('<div className="font-medium"><span>A</span> Big Wrapper</div>'))).toEqual([])
+    expect(styledHeadingOffenders(fake('<span className="text-sm text-muted-foreground">Total Runs</span>'))).toHaveLength(1)
+    expect(styledHeadingOffenders(fake('<div className="flex gap-2"><Plus className="h-4 w-4" /> Add Member</div>'))).toHaveLength(1)
+    expect(styledHeadingOffenders(fake('<p>Open a provider. Check It again.</p>'))).toEqual([])
+    expect(literalPropOffenders(fake('<FormPage submitLabel="Save Changes" />'))).toHaveLength(1)
+    expect(literalPropOffenders(fake("<Field label={'Display Name'} />"))).toHaveLength(1)
+    expect(literalPropOffenders(fake("<X title={busy ? 'Saving' : 'Save Changes'} />"))).toHaveLength(1)
+    expect(literalPropOffenders(fake('<Button aria-label="Copy Link" />'))).toHaveLength(1)
+    expect(literalPropOffenders(fake('<FormPage submitLabel="Save changes" />'))).toEqual([])
+    expect(toastTitleOffenders(fake("success('Tools Generated', `${n} made`)"))).toHaveLength(1)
+    expect(toastTitleOffenders(fake("notifications.error('Could not save', msg)"))).toEqual([])
+  })
 })
+
+/**
+ * Props that carry a visible or spoken label: label, title, header,
+ * heading, any *Label (submitLabel, searchLabel...), aria-label and
+ * empty-state text, written as a literal, a braced literal or a ternary
+ * of literals.
+ */
+function literalPropOffenders(files: Array<{ rel: string; src: string }>): string[] {
+  const NAME = String.raw`(?:[a-z][A-Za-z]*Label|label|title|header|heading|emptyText|emptyTitle|aria-label)`
+  const plain = new RegExp(String.raw`\b(${NAME})(?:=\{?|:\s*)(['"])([^'"\n]+)\2`, 'g')
+  const ternary = new RegExp(String.raw`\b(${NAME})=\{[^{}\n]*\?\s*(['"])([^'"\n]*)\2\s*:\s*(['"])([^'"\n]*)\4\s*\}`, 'g')
+  const offenders: string[] = []
+  for (const { rel, src } of files) {
+    for (const m of src.matchAll(plain)) {
+      if (titleCaseWords(m[3]).length) offenders.push(`${rel}:${lineAt(src, m.index!)} ${m[1]}: "${m[3]}"`)
+    }
+    for (const m of src.matchAll(ternary)) {
+      for (const label of [m[3], m[5]]) {
+        if (titleCaseWords(label).length) offenders.push(`${rel}:${lineAt(src, m.index!)} ${m[1]}: "${label}"`)
+      }
+    }
+  }
+  return offenders
+}
+
+/**
+ * Headings that are not heading elements: a div, p or span made bold
+ * ("Team Members" on the team card), plus h5/h6, legend, dt, summary and
+ * the menu and sheet titles. Only text-only elements count, so a bold
+ * wrapper around other elements is not read as one long label.
+ */
+function styledHeadingOffenders(files: Array<{ rel: string; src: string }>): string[] {
+  const HEADING_TAGS = ['h5', 'h6', 'legend', 'dt', 'summary', 'SheetTitle', 'DrawerTitle', 'DropdownMenuLabel', 'SelectLabel', 'AccordionTrigger', 'CommandItem']
+  const TEXT_TAGS = ['div', 'p', 'span', 'strong', 'dd', 'td', 'TableCell', 'Link', 'a']
+  const offenders: string[] = []
+  for (const { rel, src } of files) {
+    for (const el of jsxLabels(src, [...HEADING_TAGS, ...TEXT_TAGS])) {
+      if (!HEADING_TAGS.includes(el.tag)) {
+        // Only a short, text-only element reads as a label; a wrapper
+        // round other elements, or a sentence of body copy, does not.
+        if (el.nested) continue
+      }
+      for (const label of el.variants) {
+        const words = label.split(' ').length
+        if (words > 10 || (!HEADING_TAGS.includes(el.tag) && (words > 6 || /[.:!?]/.test(label)))) continue
+        // "This browser · active now": each side of a separator is its own label.
+        for (const part of label.split(/\s[•·|—–]\s/)) {
+          if (titleCaseWords(part).length) offenders.push(`${rel}:${el.line} <${el.tag}> "${label}"`)
+        }
+      }
+    }
+  }
+  return offenders
+}
+
+/** success('Tools generated', ...): the first argument of a toast is its title. */
+function toastTitleOffenders(files: Array<{ rel: string; src: string }>): string[] {
+  const toast = /(?<!console\.)\b(success|error|warning|info)\(\s*(['"])([^'"\n]+)\2\s*[,)]/g
+  const offenders: string[] = []
+  for (const { rel, src } of files) {
+    for (const m of src.matchAll(toast)) {
+      if (titleCaseWords(m[3]).length) offenders.push(`${rel}:${lineAt(src, m.index!)} ${m[1]}: "${m[3]}"`)
+    }
+  }
+  return offenders
+}
+
+function lineAt(src: string, index: number): number {
+  return src.slice(0, index).split('\n').length
+}
 
 describe('the brand gradient', () => {
   it('is on at most one button per page', () => {

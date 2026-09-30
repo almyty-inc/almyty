@@ -19,6 +19,8 @@ import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { memoriesApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
+import { memoryBackendName } from '@/components/memory/memory-words'
+import { pluralized } from '@/lib/utils'
 
 type TransferResult = {
   succeeded?: number
@@ -55,7 +57,7 @@ export function TransferMemoryForm() {
       const r: TransferResult = res?.data ?? res ?? {}
       notify.success(
         transfer.dry_run ? 'Dry run complete' : 'Transfer complete',
-        `${r.succeeded ?? 0} of ${r.total_source ?? 0} items, ${r.warnings?.length ?? 0} warnings`,
+        `${r.succeeded ?? 0} of ${pluralized(r.total_source, 'item')}, ${pluralized(r.warnings?.length, 'warning')}`,
       )
       if (transfer.dry_run) {
         setDryRunResult(r)
@@ -87,8 +89,8 @@ export function TransferMemoryForm() {
 
   return (
     <FormPage
-      title="Transfer memory between backends"
-      description="Streams items from the source backend into the target. Capabilities the target lacks (bi_temporal, ttl, soft_delete, document mode) show up as warnings."
+      title="Move memories to another service"
+      description="Copies every memory from one storage service to another. Try it first to see what the new service cannot keep, such as history or expiry dates."
       back={{ to: '/memories', label: 'Memory' }}
       guard={guard}
       onSubmit={submit}
@@ -99,19 +101,19 @@ export function TransferMemoryForm() {
     >
       <FormSection>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field id="transfer-source" label="Source">
+          <Field id="transfer-source" label="From">
             <Select value={transfer.source} onValueChange={(v) => set({ source: v })}>
               <SelectTrigger id="transfer-source"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {backends.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                {backends.map((b) => <SelectItem key={b} value={b}>{memoryBackendName(b)}</SelectItem>)}
               </SelectContent>
             </Select>
           </Field>
-          <Field id="transfer-target" label="Target" error={error}>
+          <Field id="transfer-target" label="To" error={error}>
             <Select value={transfer.target} onValueChange={(v) => set({ target: v })}>
               <SelectTrigger id="transfer-target"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {backends.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                {backends.map((b) => <SelectItem key={b} value={b}>{memoryBackendName(b)}</SelectItem>)}
               </SelectContent>
             </Select>
           </Field>
@@ -122,13 +124,13 @@ export function TransferMemoryForm() {
             checked={transfer.dry_run}
             onCheckedChange={(v) => set({ dry_run: v === true })}
           />
-          <Label htmlFor="transfer-dry-run" className="font-normal">Dry run (preview warnings, no writes)</Label>
+          <Label htmlFor="transfer-dry-run" className="font-normal">Dry run (show what would happen, move nothing)</Label>
         </div>
       </FormSection>
       {dryRunResult && (
         <FormSection title="Dry run result" description="Nothing was written. Untick dry run to transfer for real.">
           <p className="text-sm" data-testid="transfer-dry-run-result">
-            {dryRunResult.succeeded ?? 0} of {dryRunResult.total_source ?? 0} items would transfer.
+            {dryRunResult.succeeded ?? 0} of {pluralized(dryRunResult.total_source, 'item')} would transfer.
           </p>
           {(dryRunResult.warnings?.length ?? 0) > 0 ? (
             <ul className="list-disc space-y-1 pl-5 text-sm text-amber-700 dark:text-amber-400">

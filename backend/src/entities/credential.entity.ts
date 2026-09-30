@@ -121,10 +121,10 @@ export class Credential {
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   expiresAt: Date;
 
-  @Column({ nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   lastUsedAt: Date;
 
   @Column({ type: 'json', nullable: true })
@@ -152,7 +152,7 @@ export class Credential {
   @Column({ type: 'varchar', length: 16, default: 'unknown' })
   healthStatus: 'valid' | 'failed' | 'expired' | 'revoked' | 'quota' | 'unknown';
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   healthCheckedAt: Date | null;
 
   @Column({ type: 'text', nullable: true })
@@ -161,10 +161,10 @@ export class Credential {
   @Column({ type: 'json', nullable: true })
   scopesGranted: string[] | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 
   @ManyToOne(() => Api, api => api.credentials, {

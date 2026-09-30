@@ -15,6 +15,8 @@ import { VerifierPanelHeading, VerifierPanelList, useProviderNames } from '@/com
 import { PURPOSE_LABELS, STRATEGY_LABELS, modelsFromAgent } from '@/components/agents/builder/agent-models'
 import type { Agent } from '@/types'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
+import { pluralized } from '@/lib/utils'
+import { SAVE_LABELS, saveOf } from '@/components/agents/builder/memory-section'
 
 export function AgentConfigPanel({ agent }: { agent: Agent }) {
   const [editingVerify, setEditingVerify] = useState(false)
@@ -56,7 +58,7 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
           </div>
         </div>
         {vendors.size > 1 && (
-          <CardDescription className="text-xs">Uses models from {vendors.size} providers.</CardDescription>
+          <CardDescription className="text-xs">Uses models from {pluralized(vendors.size, 'provider')}.</CardDescription>
         )}
       </CardHeader>
       <CardContent className="space-y-4">
@@ -96,7 +98,7 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
               {verify.maxReviseLoops != null && (
                 <Badge variant="outline" className="text-[10px] gap-1">
                   <Repeat className="h-3 w-3" />
-                  {verify.maxReviseLoops} revisions
+                  {pluralized(verify.maxReviseLoops, 'revision')}
                 </Badge>
               )}
             </VerifierPanelHeading>
@@ -104,7 +106,7 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
             {verify.triggers && verify.triggers.length > 0 && (
               <div className="text-[10px] text-muted-foreground mt-1.5">
                 Triggers: {verify.triggers.join(', ')}
-                {verify.everyNSteps ? ` (every ${verify.everyNSteps} steps)` : ''}
+                {verify.everyNSteps ? ` (every ${pluralized(verify.everyNSteps, 'step')})` : ''}
               </div>
             )}
           </div>
@@ -122,7 +124,7 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
             {memory?.enabled && (
               <Badge variant="outline" className="text-[10px] gap-1">
                 <Brain className="h-3 w-3" />
-                Memory{memory.autoSave ? ' · auto-save' : ''}
+                Memory · {SAVE_LABELS[saveOf(memory)].toLowerCase()}
               </Badge>
             )}
           </div>

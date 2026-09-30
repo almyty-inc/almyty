@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { createSign } from 'crypto';
 
+import { assertGcpLocation } from '../../../common/security/vendor-region';
+
 import {
   ActualState,
   AdapterCapabilities,
@@ -66,7 +68,7 @@ const CONTAINER_PORT = 8080;
 
 const ACCEPTED_SOURCES = 'a Model Garden model (vertex://publishers/{publisher}/models/{model}@{version}), a Hugging Face repository (hf://) that Model Garden deploys for you, or your own weights in Cloud Storage (gs://)';
 
-const b64url = (s: string | Buffer) => Buffer.from(s).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+const b64url = (s: string | Buffer) => Buffer.from(s).toString('base64').replace(/(?<!=)=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
 
 export class VertexAdapter implements ModelProviderAdapter {
   readonly key = 'vertex';
@@ -167,7 +169,9 @@ export class VertexAdapter implements ModelProviderAdapter {
   }
 
   static base(location: string): string {
-    return `https://${location}-aiplatform.googleapis.com/v1`;
+    // `location` is providerConfig or the requested region: checked, so it
+    // can only ever name a region and never pick the host.
+    return `https://${assertGcpLocation(location)}-aiplatform.googleapis.com/v1`;
   }
 
   private async call(method: string, location: string, path: string, credentials: AdapterCredentials, data?: any, params?: Record<string, string>): Promise<any> {
@@ -197,7 +201,7 @@ export class VertexAdapter implements ModelProviderAdapter {
   /** The dedicated DNS is documented with its scheme already on it, so strip one if it is there. */
   static host(location: string, dedicatedDns?: string): string {
     if (!dedicatedDns) return VertexAdapter.base(location);
-    return `https://${dedicatedDns.replace(/^https?:\/\//, '').replace(/\/+$/, '')}/v1`;
+    return `https://${dedicatedDns.replace(/^https?:\/\//, '').replace(/(?<!\/)\/+$/, '')}/v1`;
   }
 
   /** The OpenAI-compatible base: chat goes to `<openAiBase>/chat/completions`. */

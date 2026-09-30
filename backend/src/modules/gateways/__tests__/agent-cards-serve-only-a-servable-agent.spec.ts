@@ -99,7 +99,7 @@ describe('agent cards are served only for an active agent the gateway may serve'
       {} as any,
       new AcpDiscoveryService(),
       config,
-      { check: async () => ({ limited: false }) } as any,
+      { check: async () => ({ limited: false }), checkVisitor: async () => ({ limited: false }) } as any,
       {} as any,
     );
   });
@@ -231,7 +231,7 @@ describe('agent cards are served only for an active agent the gateway may serve'
         answer(acpCalls) as any,
         new AcpDiscoveryService(),
         config,
-        { check: async () => ({ limited: false }) } as any,
+        { check: async () => ({ limited: false }), checkVisitor: async () => ({ limited: false }) } as any,
         {} as any,
       );
     });

@@ -8,7 +8,7 @@ import { connectionPoliciesApi, connectionsExpiryApi, connectionsReviewApi, conn
 const entitlementState = { granted: false, loading: false }
 vi.mock('../../../hooks/use-entitlement', async () => {
   const actual = await vi.importActual<any>('../../../hooks/use-entitlement')
-  const list = () => (entitlementState.granted ? ['connections_governance'] : [])
+  const list = () => (entitlementState.granted ? ['credentials_governance'] : [])
   return {
     ...actual,
     useEntitlement: (feature?: string) => {
@@ -60,7 +60,7 @@ describe('ConnectionsGovernanceSection', () => {
     render(<ConnectionsGovernanceSection />)
     expect(screen.getByRole('region', { name: 'Governance' })).toBeInTheDocument()
     const locked = screen.getByTestId('governance-locked')
-    expect(locked).toHaveTextContent('Connections governance')
+    expect(locked).toHaveTextContent('Credentials governance')
     expect(locked).toHaveTextContent(/Upgrade to unlock it for your organization/)
     expect(screen.getByRole('link', { name: /upgrade|view plans/i })).toHaveAttribute('href', '/settings/billing')
     expect(screen.queryByTestId('governance-unlocked')).not.toBeInTheDocument()

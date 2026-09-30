@@ -191,6 +191,24 @@ export function keyCheckPassed(provider: Pick<LlmProvider, 'status' | 'isHealthy
 const OLLAMA_CLOUD_HOST = /(^|\.)ollama\.com$/i;
 
 /**
+ * Where an Ollama connection with no URL points: Ollama Cloud, which is
+ * what the Ollama tile offers first. A server you run is always given by
+ * its URL. Rows saved when the default was a local install were given that
+ * URL by the migration that changed the default.
+ */
+export const OLLAMA_DEFAULT_URL = 'https://ollama.com';
+
+/** Whether `url` is Ollama Cloud (ollama.com), Ollama's own hosted API. */
+export function isOllamaCloudUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  try {
+    return OLLAMA_CLOUD_HOST.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * An Ollama provider pointed at a server someone runs (their machine,
  * their cluster), as opposed to Ollama Cloud (ollama.com). Only the
  * former is free per token; Ollama Cloud bills by plan, so the price of
@@ -200,7 +218,7 @@ const OLLAMA_CLOUD_HOST = /(^|\.)ollama\.com$/i;
  */
 export function isSelfHostedOllama(provider: Pick<LlmProvider, 'type' | 'configuration'>): boolean {
   if (provider.type !== LlmProviderType.OLLAMA) return false;
-  const url = provider.configuration?.apiUrl || 'http://localhost:11434';
+  const url = provider.configuration?.apiUrl || OLLAMA_DEFAULT_URL;
   try {
     return !OLLAMA_CLOUD_HOST.test(new URL(url).hostname);
   } catch {
@@ -330,6 +348,26 @@ export class LlmProvider {
   @Column({ type: 'timestamp with time zone', nullable: true })
   modelsSyncedAt: Date | null;
 
+  /**
+   * Which models this connection may be used for. Read through
+   * llm-providers/allowed-models.ts, never directly.
+   *
+   * On (the default): every model the key reaches is allowed, including
+   * ones the vendor lists later, except those in `hiddenModels`.
+   * Off: only the models in `allowedModels`; a model the vendor adds later
+   * stays off until it is ticked, so a key can be pinned to one model.
+   * Both lists are kept, so switching back and forth loses nothing.
+   */
+  @Column({ type: 'boolean', default: true })
+  allowNewModels: boolean;
+
+  /** Vendor model ids unticked while `allowNewModels` is on. */
+  @Column({ type: 'jsonb', nullable: true })
+  hiddenModels: string[] | null;
+
+  /** Vendor model ids ticked while `allowNewModels` is off. */
+  @Column({ type: 'jsonb', nullable: true })
+  allowedModels: string[] | null;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -635,11 +673,11 @@ export class LlmProvider {
           || 'https://router.huggingface.co/v1';
       case LlmProviderType.OLLAMA: {
         // OpenAI-compatible surface lives under /v1 on the Ollama server
-        // root; `apiUrl` is the root (default: a local install). On
-        // hosted almyty the URL must be publicly reachable — private and
-        // loopback ranges are refused by the SSRF gate unless the
-        // self-hosting escape hatch OLLAMA_ALLOW_PRIVATE_URLS=true is set.
-        const ollamaBase = (this.configuration.apiUrl || 'http://localhost:11434').replace(/\/+$/, '');
+        // root; `apiUrl` is the root (default: Ollama Cloud). A server you
+        // run on a private or loopback address is refused by the SSRF
+        // gate unless the self-hosting escape hatch
+        // OLLAMA_ALLOW_PRIVATE_URLS=true is set.
+        const ollamaBase = (this.configuration.apiUrl || OLLAMA_DEFAULT_URL).replace(/(?<!\/)\/+$/, '');
         return ollamaBase.toLowerCase().endsWith('/v1') ? ollamaBase : `${ollamaBase}/v1`;
       }
       case LlmProviderType.CUSTOM:
@@ -668,7 +706,7 @@ export class LlmProvider {
    * failure surfaces as NO_MODEL_CONFIGURED rather than a guessed model id.
    */
   getModelsUrl(): string {
-    const base = this.getApiUrl().replace(/\/+$/, '');
+    const base = this.getApiUrl().replace(/(?<!\/)\/+$/, '');
     if (!this.configuration?.apiUrl) {
       if (this.type === LlmProviderType.DEEPINFRA) return 'https://api.deepinfra.com/v1/models';
       if (this.type === LlmProviderType.COHERE) return 'https://api.cohere.com/v1/models';
@@ -681,9 +719,9 @@ export class LlmProvider {
    * GET /api/tags (models) and POST /api/embed (embeddings).
    */
   getOllamaBaseUrl(): string {
-    const base = (this.configuration?.apiUrl || 'http://localhost:11434').replace(/\/+$/, '');
+    const base = (this.configuration?.apiUrl || OLLAMA_DEFAULT_URL).replace(/(?<!\/)\/+$/, '');
     return base.toLowerCase().endsWith('/v1')
-      ? base.slice(0, -3).replace(/\/+$/, '')
+      ? base.slice(0, -3).replace(/(?<!\/)\/+$/, '')
       : base;
   }
 
@@ -850,10 +888,9 @@ export class LlmProvider {
         break;
 
       case LlmProviderType.OLLAMA:
-        // Ollama itself is unauthenticated — no API key is required.
-        // A key is optional and only sent (as a Bearer token) when
-        // configured, for deployments that front Ollama with an
-        // authenticating reverse proxy.
+        // Ollama Cloud takes its key as a Bearer token. A server you run
+        // is unauthenticated unless it sits behind an authenticating
+        // proxy, and then the key goes the same way.
         if (apiKey) {
           headers['Authorization'] = `Bearer ${apiKey}`;
         }

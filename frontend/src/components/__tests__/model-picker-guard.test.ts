@@ -102,12 +102,13 @@ describe('model selection goes through ModelPicker', () => {
 
   it('every provider-and-model screen renders the shared picker', () => {
     const sites = [
-      'components/agents/builder/models-section.tsx',
+      // Every work mode slot of an autonomous agent picks through here.
+      'components/agents/builder/slot-model-chooser.tsx',
       'components/agents/node-config-panel.tsx',
       'components/agents/detail/verify-config-editor.tsx',
       'components/tools/tool-form.tsx',
       'pages/chat.tsx',
-      // A provider's default model, on /models/providers/:id.
+      // A provider's default model, on /credentials/providers/:id.
       'pages/provider.tsx',
     ]
     for (const rel of sites) {

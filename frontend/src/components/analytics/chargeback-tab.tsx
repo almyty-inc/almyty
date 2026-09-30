@@ -12,6 +12,7 @@ import { UpgradePrompt } from '@/components/plan-indicator'
 import { useTeamLookup } from '@/components/ui/team-filter'
 import { useOrganizationStore } from '@/store/organization'
 import { agentsQuery } from '@/lib/list-queries'
+import { pluralized } from '@/lib/utils'
 
 /**
  * Who spent what: cost per team and per agent, plus a projection.
@@ -134,7 +135,7 @@ function ChargebackReportView({
           <div key={row.label} className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card p-3">
             <div className="min-w-0">
               <div className="truncate text-sm font-medium text-foreground">{row.label}</div>
-              <div className="text-xs text-muted-foreground">{row.runCount} run{row.runCount === 1 ? '' : 's'}</div>
+              <div className="text-xs text-muted-foreground">{pluralized(row.runCount, 'run')}</div>
             </div>
             <div className="shrink-0 text-right">
               <div className="text-sm font-semibold text-foreground">{money(row.spentCents)}</div>
@@ -158,8 +159,7 @@ function ChargebackReportView({
               </span>
             ) : (
               <span data-testid="forecast">
-                Projected {money(data.forecast.projectedCents)} over the next {data.forecast.periodsAhead}{' '}
-                {data.forecast.periodsAhead === 1 ? 'period' : 'periods'}, from a straight-line fit over the buckets so far —
+                Projected {money(data.forecast.projectedCents)} over the next {pluralized(data.forecast.periodsAhead, 'period')}, from a straight-line fit over the buckets so far —
                 a trend, not a commitment.
               </span>
             )}

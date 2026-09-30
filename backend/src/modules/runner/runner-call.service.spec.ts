@@ -71,6 +71,18 @@ class FakeRunnerService {
     }
     return this.runner;
   }
+  /** What resolveByLabels answers: the runner it picks, or null for no match. */
+  labelPick: Runner | null = null;
+  labelCalls: Array<{ required: Record<string, string>; caller: unknown; organizationId: string; preferRunnerId?: string }> = [];
+  async resolveByLabels(required: Record<string, string>, caller: unknown, organizationId: string, options: { preferRunnerId?: string } = {}): Promise<Runner> {
+    this.labelCalls.push({ required, caller, organizationId, preferRunnerId: options.preferRunnerId });
+    if (!this.labelPick) {
+      const err: any = new Error('No machine with ' + Object.entries(required).map(([k, v]) => k + '=' + v).join(', ') + ' is online');
+      err.status = 404;
+      throw err;
+    }
+    return this.labelPick;
+  }
   async getActiveSession(_id: string): Promise<RunnerSession | null> {
     return this.session;
   }
@@ -106,8 +118,11 @@ class FakeWorkspaceService {
     if (this.failure) throw this.failure;
     return (this.active[runnerId] ?? []).map((id) => ({ id }));
   }
-  async findForDispatch(id: string, runnerId: string, callerUserId?: string | null): Promise<{ id: string } | null> {
-    return this.owned.find((w) => w.id === id && w.runnerId === runnerId && w.ownerUserId === callerUserId) ?? null;
+  /** Who each dispatch's workspace check was asked for. */
+  dispatchCallers: unknown[] = [];
+  async findForDispatch(id: string, runnerId: string, caller?: unknown): Promise<{ id: string } | null> {
+    this.dispatchCallers.push(caller);
+    return this.owned.find((w) => w.id === id && w.runnerId === runnerId && w.ownerUserId === caller) ?? null;
   }
 }
 
@@ -162,6 +177,17 @@ describe('RunnerCallService', () => {
     });
     await p;
   });
+  it("a run's principal, not its user id, is what the workspace check judges", async () => {
+    const { svc, transport, workspaces } = makeService();
+    const gateway = { kind: 'gateway' as const, gatewayId: 'gw-1', organizationId: 'org-1', visibility: 'team' as const, teamId: 'team-1', ownerUserId: null };
+    const p = svc.dispatch('runner-1', 'shell.exec', { command: 'ls' }, 'ws-team', { timeoutMs: 200, callerUserId: null, principal: gateway });
+    p.catch(() => {});
+    await flush();
+    expect(workspaces.dispatchCallers).toEqual([gateway]);
+    expect(transport.pushed).toHaveLength(0);
+    await expect(p).rejects.toMatchObject({ code: RUNNER_CALL_ERRORS.WORKSPACE_NOT_FOUND });
+  });
+
 
 
   it('rejects with TIMEOUT when no response arrives in time', async () => {
@@ -492,5 +518,69 @@ describe('RunnerCallService', () => {
     await pushed;
     await call.catch(() => undefined);
     expect(runners.resolveCallers).toEqual(['owner-1']);
+  });
+
+  // ── label requirements ──────────────────────────────────────────────
+
+  describe('with label requirements', () => {
+    it('sends the work to the runner resolveByLabels picks, preferring the one the tool names', async () => {
+      const { svc, runners, transport } = makeService();
+      const gpuBox = { ...runners.runner, id: 'runner-gpu', name: 'gpu-box', labels: { gpu: 'yes' } } as any;
+      runners.labelPick = gpuBox;
+      runners.session = { ...runners.session!, runnerId: 'runner-gpu', streamableSessionId: 'sh_gpu' } as any;
+      const p = svc.dispatch('runner-1', 'shell.exec', { command: 'nvidia-smi' }, undefined, {
+        timeoutMs: 50, callerUserId: 'owner-1', organizationId: 'org-1', labels: { gpu: 'yes' },
+      });
+      p.catch(() => {});
+      await transport.waitForPush();
+      expect(runners.labelCalls).toEqual([
+        { required: { gpu: 'yes' }, caller: 'owner-1', organizationId: 'org-1', preferRunnerId: 'runner-1' },
+      ]);
+      expect(runners.resolveCallers).toEqual([]);
+      expect(transport.pushed[0].sessionId).toBe('sh_gpu');
+      await p.catch(() => undefined);
+    });
+
+    it('says which labels found no machine, as RUNNER_NOT_FOUND', async () => {
+      const { svc, runners, transport } = makeService();
+      runners.labelPick = null;
+      await expect(svc.dispatch('runner-1', 'shell.exec', {}, undefined, {
+        callerUserId: 'owner-1', organizationId: 'org-1', labels: { os: 'mac', gpu: 'yes' },
+      })).rejects.toMatchObject({
+        code: RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND,
+        message: 'No machine with os=mac, gpu=yes is online',
+      });
+      expect(transport.pushed).toHaveLength(0);
+    });
+
+    it('with no requirements, goes to the named runner as before', async () => {
+      const { svc, runners, transport } = makeService();
+      const p = svc.dispatch('runner-1', 'runner.info', {}, undefined, { timeoutMs: 30, callerUserId: 'owner-1', organizationId: 'org-1', labels: {} });
+      await p.catch(() => undefined);
+      expect(runners.labelCalls).toEqual([]);
+      expect(runners.resolveCallers).toEqual(['owner-1']);
+      expect(transport.pushed).toHaveLength(1);
+    });
+
+    it('work in a workspace stays on the workspace\'s runner, and is refused when that runner lacks a label', async () => {
+      const { svc, runners, transport, workspaces } = makeService();
+      workspaces.owned.push({ id: 'ws-1', runnerId: 'runner-1', ownerUserId: 'owner-1' });
+      runners.runner = { ...runners.runner, labels: { os: 'mac' } } as any;
+      await expect(svc.dispatch('runner-1', 'shell.exec', {}, 'ws-1', {
+        callerUserId: 'owner-1', organizationId: 'org-1', labels: { gpu: 'yes' },
+      })).rejects.toMatchObject({
+        code: RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND,
+        message: 'The workspace is on laptop, which does not have gpu=yes',
+      });
+      expect(runners.labelCalls).toEqual([]);
+      expect(transport.pushed).toHaveLength(0);
+
+      runners.runner = { ...runners.runner, labels: { os: 'mac', gpu: 'yes' } } as any;
+      const p = svc.dispatch('runner-1', 'shell.exec', {}, 'ws-1', {
+        timeoutMs: 30, callerUserId: 'owner-1', organizationId: 'org-1', labels: { gpu: 'yes' },
+      });
+      await p.catch(() => undefined);
+      expect(transport.pushed).toHaveLength(1);
+    });
   });
 });

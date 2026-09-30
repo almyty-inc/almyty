@@ -21,7 +21,12 @@ export interface DetectedAuth {
   oauth2?: DetectedOAuth2
 }
 
+/** The kinds of description "Connect an API" reads, picked before giving one. */
+export type DescriptionApiType = 'openapi' | 'graphql' | 'soap' | 'grpc'
+
 export interface ConnectApiInput {
+  /** The kind picked; the server refuses a description of another kind. */
+  type?: DescriptionApiType
   url?: string
   content?: string
   name?: string

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 
 import { LlmProvider, LlmProviderType } from '../../entities/llm-provider.entity';
 import { LlmModelsHelper } from './llm-models.helper';
+import { allowedModelList, hiddenModelList } from './allowed-models';
 
 /**
  * Picks the model to use when neither the request nor the provider
@@ -129,7 +130,20 @@ export class DefaultModelResolver {
    */
   async resolve(provider: LlmProvider): Promise<string> {
     const configured = provider.configuration?.model?.trim();
-    if (configured) return configured;
+    // A connection that does not take new models answers from the ones
+    // ticked on it: the configured default when it is one of them, else
+    // the best of them by the same family preference. The vendor's list is
+    // not asked; what the owner ticked is the whole choice.
+    const allowed = allowedModelList(provider);
+    if (allowed) {
+      if (configured && allowed.includes(configured)) return configured;
+      const picked = pickPreferredModel(provider.type, allowed) ?? allowed[0];
+      if (!picked) throw new NoModelAvailableError(provider, 'the connection allows no models');
+      return picked;
+    }
+    // Otherwise every model is allowed except the unticked ones.
+    const hidden = hiddenModelList(provider);
+    if (configured && !hidden.includes(configured)) return configured;
 
     // Azure OpenAI names a DEPLOYMENT in the `model` field, not a catalog
     // model id, and `GET /openai/v1/models` lists the catalog rather than
@@ -138,13 +152,13 @@ export class DefaultModelResolver {
     // deployment name is the default instead.
     if (provider.type === LlmProviderType.AZURE_OPENAI) {
       const deployment = provider.configuration?.azure?.deploymentName?.trim();
-      if (deployment) return deployment;
+      if (deployment && !hidden.includes(deployment)) return deployment;
     }
 
     const key = provider.id ?? `${provider.type}:${provider.getApiUrl?.() ?? ''}`;
     const startedAt = Date.now();
     const hit = this.cache.get(key);
-    if (hit && hit.expiresAt > startedAt) return hit.model;
+    if (hit && hit.expiresAt > startedAt && !hidden.includes(hit.model)) return hit.model;
 
     // A listing failure (no /models on this base, network, auth) is the
     // same "nothing to choose from" as an empty list: report it under
@@ -156,7 +170,7 @@ export class DefaultModelResolver {
       const reason = error instanceof Error ? error.message : String(error);
       throw new NoModelAvailableError(provider, `the vendor could not list its models (${reason})`, error);
     }
-    const ids = models.map((m) => m.id).filter((id): id is string => typeof id === 'string' && id.length > 0);
+    const ids = models.map((m) => m.id).filter((id): id is string => typeof id === 'string' && id.length > 0 && !hidden.includes(id));
     if (ids.length === 0) {
       throw new NoModelAvailableError(provider, 'the vendor returned no models to choose from');
     }

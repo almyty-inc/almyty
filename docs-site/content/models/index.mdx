@@ -1,68 +1,95 @@
 # Models
 
-An autonomous agent takes many steps, and not every step deserves the same model. A planning step wants the strongest reasoning model; a summary step wants the cheapest; anything that touches customer data may only leave the building on a private endpoint. almyty keeps one list of every model your organization can call, with its price, context length and capabilities, and lets each step pick a model or let almyty choose the cheapest one that fits.
+An autonomous agent takes many steps, and not every step deserves the same model. A planning step wants the strongest reasoning model; a summary step wants the cheapest; anything that touches customer data may only leave the building on a private endpoint. almyty keeps one catalog of every model your organization can call, with its price, context length and whether it can be used right now, and lets each step pick a model or let almyty choose the cheapest one that fits.
 
-There is one thing to set up: a **provider**. Connect a provider once and every model it serves appears in that list by itself. There is nothing to add per model.
+There is one thing to set up: a **provider connection**. A connection is a named key for one provider (or the address of a server you run), such as "OpenAI" or "HF - Llama 70B only". Connect one and every model its key reaches appears in the catalog by itself. You can have several connections of the same provider, each with its own key and its own models.
 
 ```
 Connect a provider  -->  key checked  -->  its models appear  -->  pick one, or Automatic
-(OpenAI, Anthropic,      (one real call)    (price, context,         (in any agent, node
- your own server,                            availability)            or role)
- a cloud account...)
+(name it, paste       (one real call)    (all ticked; untick     (in any agent, step
+ the key)                                 any you do not want)     or role)
 ```
 
 ## Connect a provider
 
-1. Open **Models** in the sidebar and click **Connect a provider**.
-2. Find your provider in the grid: first-party vendors (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Cohere and more), hosted inference (Groq, Together, OpenRouter, Fireworks, Cerebras and more), clouds (Azure, AWS Bedrock, Vertex AI, Hugging Face, Modal and more), **Your own server** for anything OpenAI-compatible, and **Ollama**.
-3. Paste the API key, or connect an account instead. Your own server and Ollama ask for the base URL and an optional key. A few providers ask for the one or two things they cannot work without: the region for AWS Bedrock, the resource and deployment for Azure, the project for Vertex AI.
-4. **Who can use it** is everyone in your organization unless you change it to just you or a team.
-5. Click **Connect**.
+1. Open **Credentials** in the sidebar and click **Connect a provider** in the **Model providers** group (`/credentials/providers/new`; the **Models** page has the same button). Every model chooser also has **Add a connection**, which opens the same steps right under the field.
+2. Pick your provider from the tiles: first-party vendors (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Cohere and more), hosted inference (Groq, Together, OpenRouter, Fireworks, Cerebras and more), clouds (Azure, AWS Bedrock, Vertex AI, Hugging Face, Modal and more), **Your own server** for anything OpenAI-compatible, and **Ollama**.
+3. **Name** the connection. It starts as the provider's name; call it what it is for ("HF - Llama 70B only", "OpenAI - research team"). The name is what every model chooser shows, and you can rename it later.
+4. Paste the API key, or click **Use a saved key instead** and pick one already in Credentials. A few providers ask for the one or two things they cannot work without: the region for AWS Bedrock, the resource and deployment for Azure, the project for Vertex AI. Your own server asks for its URL and an optional key. Ollama asks for an **Ollama Cloud** key by default, or the URL of an Ollama you run (see [Ollama](/llm-providers#ollama)).
+5. **Who can use it** is everyone in your organization unless you change it to just you or a team.
+6. Click **Connect**.
 
-almyty checks the key right away with one real call and shows the models it found. If the check fails you are told why in one line, for example "OpenAI rejected this key.", with a link to the page where the provider issues keys; nothing is saved until the key works.
+almyty checks the key right away with one real call. If the check fails you are told why in one line, for example "OpenAI rejected this key.", with a link to the page where the provider issues keys; nothing is saved until the key works.
 
-The provider is named after itself (rename it on its page later). There is no model id, privacy, region or context length to fill in: models come from the provider's own list, prices from the automatic price feed, and context length and capabilities from the same data. Anything you want to override lives under **Advanced** on the provider's page.
+When the key works you see every model it reaches, all ticked. Untick any you do not want this connection used for, then click **Done**. There is no model id, privacy, region or context length to fill in: models come from the provider's own list, prices from the automatic price feed, and context length and capabilities from the same data.
+
+## Which models a connection offers
+
+Every model the key reaches is offered by default. Untick a model on the connection's page and it leaves every model chooser, the router never picks it, and a call that names it through this connection is refused (`MODEL_NOT_ALLOWED`) before anything is sent. The same model on another connection is not affected.
+
+**Allow new models automatically** decides what a model the provider adds later does:
+
+- **On** (the default): it is ticked and offered right away. Only the models you unticked stay hidden.
+- **Off**: only the models you ticked are offered. A new model shows up unticked, marked **Not allowed on** the connection, and is still announced (see below) so you can tick it.
+
+Turn it off and untick all but one model to pin a key to that model: a Hugging Face key that serves Llama 3.3 70B and nothing else. When a step names the connection without a model, it uses the connection's default model if that is ticked, else the best ticked one. A connection may have no model ticked at all: it is paused, and offers nothing until you tick one.
+
+A model an agent uses cannot be unticked. Saving says which agents use it ("\"gpt-4o\" is used by Support triage. Pick another model for those agents first, then turn it off.", code `MODEL_IN_USE`); give those agents another model, then untick it.
 
 ## The Models page
 
-**Connected** shows one card per provider: its name, whether its key works, and how many models it serves. Click one to open the provider's page.
+The Models page is the catalog: one table of every model every connection reaches, with its connection, its price per million tokens in and out, its context length and its status. Filter by connection or status (**Available**, **Not available**, **Not allowed**, **New this week**) and search by name or id. Each row links to its connection; setting connections up happens on their own pages, not here.
 
-**All models** lists every model from every connected provider, grouped by provider and searchable, with:
+A model's status says whether it can be used now and, when not, why in two words: **No longer offered** (the provider stopped listing it), **Provider check failed** (the connection's key did not pass its last check), **Not available** (the provider said the model is gone) or **Not allowed on** the connection (unticked there). A model its connection started listing within the last week is marked **New**, ticked or not.
 
-- the price per million tokens in and out, and the context length
-- whether it is available right now; if not, why: the provider no longer offers it, the provider said it is not available, or the provider's key check failed
+With no connection yet, the page offers to connect a provider.
 
-With no provider connected, the page goes straight to connecting one.
+## A connection's page
 
-## A provider's page
+Click a connection (in the **Model providers** group on Credentials, from a row on the Models page, or `/credentials/providers/:id`). The header shows its name (click the pencil to rename it), the provider, whether its key works and which of its models it offers, with **Check again** for a new key check and a fresh read of its model list.
 
-The provider's page shows whether its key works (with **Check again**), its models, the default model, who can use it, and **Replace key**. Everything else sits under **Advanced**: per-model overrides of price, context length, privacy tier, region and capabilities, an admin key for usage reconciliation, and default generation parameters. Removing a provider asks once and retires its models, which stay in past runs.
+- **Models**: every model the key reaches, with price, context and status, a checkbox each and the **Allow new models automatically** switch. Save to apply.
+- **Settings**: its key (**Replace key**), who can use it, its default model, and **Advanced**: per-model overrides of price, context length, privacy tier, region and capabilities, an admin key for usage reconciliation, and default generation parameters. **Remove connection** asks once, and the question names the agents that use its models (the ones you can see by name, the rest as a count). After removal their owners get the usual "no longer available" notices; its models stay in past runs.
+- **Open models on this account**, on a cloud account connection (Hugging Face, Modal, AWS, Vertex AI, Azure and the like): see [Your cloud account](/models/your-cloud).
 
-A cloud account provider (Hugging Face, Modal, AWS, Vertex AI, Azure and the like) also has **Start a model**: see [Your cloud account](/models/your-cloud).
+The connection's key is listed on Credentials under the connection's name, and renaming either renames both. It is also offered in every key picker, since the same key serves a provider's other APIs (images, speech, embeddings).
 
 ## Choosing a model
 
-Everywhere a model is chosen (an agent, a workflow step, a role, a provider's default) there is one search box that lists every available model, grouped by provider. Type part of a name to narrow it. **Automatic** at the top lets almyty pick per call: the cheapest model that fits the step, or the fastest, within the limits you set (see [Routing](/models/routing)). **Connect a provider** at the bottom opens the connect page in a new tab; the list refreshes when you come back.
+Everywhere a model is chosen (an agent's roles, a workflow step, a provider's default) there is one search box listing every model your connections offer, grouped by connection, each with its price per million tokens in and out. A model that cannot be used says why. Type part of a name to narrow it. **Automatic** at the top lets almyty pick per call: the cheapest model that fits the step, or the fastest, within the limits you set (see [Routing](/models/routing)).
+
+At the bottom, **Add a connection** opens the connect steps right under the field, without leaving the page or losing what you typed; its models are in the list when you are done. **Manage provider keys** goes to Credentials.
 
 ## When a model is usable
 
 A model is usable (the list offers it, the router may pick it) when:
 
-1. it can be called: its provider is connected, or it has an endpoint URL;
-2. it is active; and
-3. it is checked: its provider's key check has passed.
+1. it can be called: its connection exists, or it has an endpoint URL;
+2. it is active;
+3. it is checked: its connection's key check has passed; and
+4. its connection offers it (it is ticked).
 
-The key check is one real call with the provider's key. When it passes, every model that provider lists becomes usable at once; there is no step per model. It runs when you connect the provider, when you change it, and when you click **Check again**.
+The key check is one real call with the connection's key. When it passes, every model that connection lists becomes usable at once; there is no step per model. It runs when you connect, when you change the connection, and when you click **Check again**.
 
 Models stay current by themselves:
 
-- **New models appear.** The provider's list is read again when you connect it, when you change it, on every passing key check, and every six hours. A provider that has never been synced has its key checked and its list read when the API starts, and when the Models page or a model picker finds nothing usable to show.
+- **New models appear.** The provider's list is read again when you connect, when you change the connection, on every passing key check, and every six hours. A connection that has never been synced has its key checked and its list read when the API starts, and when the Models page or a model chooser finds nothing usable to show.
 - **Retired models leave.** A model the provider stops listing is marked "no longer offered" (`status: inactive`, `metadata.retiredReason: "not listed by provider"`). It is never deleted, because past runs point at it, and it comes back if the provider lists it again.
 - **A model that stops answering leaves.** When a real call gets "model not found" from the provider, that model is marked unavailable at once, so nothing picks it again. Scheduled agents that used it pause and say which model to replace.
-- **A key the provider refuses takes its models out** until the key is replaced and a check passes. An outage does not: the router just skips the provider while it is down.
+- **A key the provider refuses takes its models out** until the key is replaced and a check passes. An outage does not: the router just skips the connection while it is down.
 - **A model on your cloud account** becomes usable by itself when it is running: almyty makes one short call through it as soon as the cloud reports it ready.
 
-Nothing here is a hardcoded list. What almyty supports is whatever your connected providers serve.
+Nothing here is a hardcoded list. What almyty supports is whatever your connections serve.
+
+## When models appear or go away
+
+almyty tells people when a connection gains models or loses usable ones:
+
+- **Who**: the connection's owner and the organization's owners and admins (only the owner, for a connection private to them), plus the owner of every agent that uses a model that went away. Each person gets one message per change, and an agent is named only to its owner.
+- **In the app**, always: a notification under the bell, and a banner on each affected agent ("gpt-4o is no longer available from OpenAI", with **Pick another model**). The banner goes away by itself once the model is back or the agent uses another one.
+- **By email**: at once for a model an agent uses that went away; everything else (new models, and models no agent uses that went away) in one email a day, at 08:00 in each person's time zone (set under **Settings → Your account → Profile**; UTC until set). Each person turns either email off under **Settings → Your account → Notifications** ("New models", "Model no longer available").
+- **Not twice in a day**: a model that goes away is announced at most once a day per connection, so a provider that drops a model and lists it again does not flood anyone. A new model is announced once per connection, and the first import of a new connection is not news. With **Allow new models automatically** off, a model the provider adds is still announced, marked "not allowed on" the connection, with a link to tick it there.
+- **A removed connection**: removing a connection announces each of its models an agent used as no longer available, the same way.
 
 ## What a model records
 
@@ -71,24 +98,26 @@ This is the machine-readable record the router reads, returned by the [Models AP
 | Field | Meaning |
 |---|---|
 | `name` | The label shown in lists |
-| `providerId` or `endpointRef.url` | How the model is called: its provider, or the endpoint of a model on your cloud |
+| `providerId` or `endpointRef.url` | How the model is called: its connection, or the endpoint of a model on your cloud |
 | `vendorModelId` | The id sent on the wire, for example `claude-sonnet-5` |
 | `capabilities` | `tools`, `vision`, `reasoning`, `embedding`, `structuredOutput` as booleans |
 | `contextLength` | Tokens of context |
-| `privacyTier` | `local`, `private_cloud` or `public` (default `public`; `local` for Ollama) |
+| `privacyTier` | `local`, `private_cloud` or `public` (default `public`; `local` for an Ollama you run) |
 | `region` | Where the model runs, used by region allowlists |
 | `pricing`, `pricingSource`, `pricingOverride` | Dollars per million tokens in and out, where the number came from, and an override that wins while set |
 | `measuredLatencyMs` | `p50` and `p95` learned from real traffic |
 | `status` | `active`, `inactive`, `error` or `deploying` (a model on your cloud that is still starting) |
-| `validationStatus`, `lastValidatedAt`, `lastValidationError` | Whether the model is checked: `passed` once its provider's key check passed, `never` while it waits for one, `failed` when the provider said the model is not available |
+| `validationStatus`, `lastValidatedAt`, `lastValidationError` | Whether the model is checked: `passed` once its connection's key check passed, `never` while it waits for one, `failed` when the provider said the model is not available |
+| `allowed` | Whether its connection offers it (computed) |
 | `selectable` | Whether it is usable right now (computed) |
+| `isNew` | Its connection started listing it within the last week (computed) |
 | `base`, `modelVersionId` | For a model on your cloud: what it is based on, and its pinned source |
 
-Every model belongs to one organization. Members can read models; connecting providers and editing models need the admin or owner role. A model served by another member's private provider is not shown to you.
+Every model belongs to one organization. Members can read models; connecting providers and editing models need the admin or owner role. A model served by another member's private connection is not shown to you.
 
 ## Privacy tiers
 
-Tiers are ordered `local < private_cloud < public`. A routing policy names the most public tier a request may use, so a policy with `privacyTier: private_cloud` can pick a local model or a private-cloud model, never a public vendor. A vendor's models default to `public`, Ollama's to `local`, and a model on your cloud account to `private_cloud`. Change a model's tier under **Advanced** on its provider's page (`local` for a box in your office, for example).
+Tiers are ordered `local < private_cloud < public`. A routing policy names the most public tier a request may use, so a policy with `privacyTier: private_cloud` can pick a local model or a private-cloud model, never a public vendor. A vendor's models default to `public`, an Ollama you run to `local` (Ollama Cloud is `public`), and a model on your cloud account to `private_cloud`. Change a model's tier under **Advanced** on its connection's page (`local` for a box in your office, for example).
 
 ## Pricing
 
@@ -105,7 +134,7 @@ Prices are automatic. A daily job (`MODEL_PRICE_FEED_CRON`, default 04:00) loads
 | `manual` | An override you set |
 | `unpriced` | No source had a price |
 
-An override (`pricingOverride`) wins over the feed until you clear it. A model with no price from any source is **unpriced**: the model says so, every run that used it says so, and the cost is never silently zero. Hosts that serve other authors' open models (Novita, DeepInfra and the like) are never billed at the original author's list price; without a feed quote such a model is unpriced. Your own server has no feed price either: give its models an override under **Advanced** if you want Automatic to weigh them, or leave them unpriced and the router places them last.
+An override (`pricingOverride`) wins over the feed until you clear it. A model with no price from any source is **unpriced**: it reads "Price unknown", every run that used it says so, and the cost is never silently zero. Hosts that serve other authors' open models (Novita, DeepInfra and the like) are never billed at the original author's list price; without a feed quote such a model is unpriced. Your own server has no feed price either: give its models an override under **Advanced** if you want Automatic to weigh them, or leave them unpriced and the router places them last. An Ollama you run is free; Ollama Cloud bills by plan, so its models read "Price unknown".
 
 The router's `cheapest` objective ranks by a blended price, three quarters input and one quarter output per million tokens. Cost per run still uses the exact in and out prices; see [Cost governance](/cost-governance).
 
@@ -117,29 +146,32 @@ The router's `cheapest` objective ranks by a blended price, three quarters input
 
 ```bash
 $ npx @almyty/models list --selectable        # what can be picked right now, and why the rest cannot
-$ npx @almyty/models sync 7c1e...             # read one provider's list again
+$ npx @almyty/models sync 7c1e...             # read one connection's list again
 ```
 
-Connecting a provider over the API is one call, `POST /llm-providers/connect`; see the [Providers API](/api-reference/llm-providers-api#connect-a-provider). Every command is in [CLI](/models/cli).
+Connecting a provider over the API is one call, `POST /llm-providers/connect`; which models a connection offers is `allowNewModels`, `hiddenModels` and `allowedModels` on the same call or on `PATCH /llm-providers/:id`. See the [Providers API](/api-reference/llm-providers-api#connect-a-provider). Every command is in [CLI](/models/cli).
 
 ## Configuration
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time sync of providers that have never been synced, and the periodic sweep |
-| `MODEL_CATALOG_SYNC_CRON` | `17 */6 * * *` | How often every provider's list is read again; `off` disables |
+| `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time sync of connections that have never been synced, and the periodic sweep |
+| `MODEL_CATALOG_SYNC_CRON` | `17 */6 * * *` | How often every connection's list is read again; `off` disables |
+| `MODEL_CHANGE_DIGEST_CRON` | `0 * * * *` | How often the daily email of new and gone models is considered; each person gets it once a day at 08:00 in their own time zone. `off` disables it (in-app notices and the immediate email stay) |
 | `MODEL_PRICE_FEED_CRON` | `0 4 * * *` | Price feed refresh; `off` disables |
 | `MODEL_RECONCILE_CRON` | `*/2 * * * *` | How often models on your cloud accounts are checked and brought to the state you asked for; `off` disables |
 | `MODEL_ROUTER_VERIFY_ESCALATION` | unset | `true` lets a verifier rejection advance the route plan; see [Routing](/models/routing#verify-escalation) |
 | `MODEL_STUB_ADAPTER` | unset | `true` registers the in-memory `stub` cloud in production too |
 | `LLM_ALLOW_PRIVATE_URLS` | unset | `true` lets your own server sit on a private or loopback address (a vLLM box on the LAN) on a self-hosted API |
+| `OLLAMA_ALLOW_PRIVATE_URLS` | unset | The same for an Ollama you run |
 | `MODEL_REGISTRY_S3_*` | falls back to `STORAGE_S3_*` | Single-tenant seed of the one organization's bucket connection on first boot; ignored with more than one organization |
 | `CONFORMANCE_LIVE` | unset | The `providerType` whose conformance suite runs against the real cloud |
 
 ## Related
 
 - [Providers](/models/providers): every provider, what it needs, and your own server
+- [Connect a provider](/llm-providers): the connect steps, a connection's page and Ollama
 - [Routing](/models/routing): Automatic, and how a model is chosen per step
 - [Your cloud account](/models/your-cloud): start an open model on your own cloud
-- [Connections](/connections): where provider keys and cloud accounts live
+- [Credentials](/credentials): where provider keys, their connections and cloud accounts live
 - [Autonomous agents](/agents/autonomous): the agents that do the routing

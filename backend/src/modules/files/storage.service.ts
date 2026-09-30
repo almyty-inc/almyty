@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Readable } from 'stream';
+import { attachmentDisposition } from './media-type';
 
 export interface StorageProvider {
   /**
@@ -12,6 +13,8 @@ export interface StorageProvider {
    */
   readonly canPresign: boolean;
   upload(key: string, data: Buffer, contentType: string): Promise<string>;
+  /** The same for a file already on disk, streamed rather than read whole. */
+  uploadFile(key: string, filePath: string, contentType: string): Promise<string>;
   download(key: string): Promise<Buffer>;
   /**
    * The same bytes as a stream.
@@ -26,7 +29,8 @@ export interface StorageProvider {
    */
   downloadStream(key: string): Promise<Readable>;
   delete(key: string): Promise<void>;
-  getSignedUrl(key: string, expiresInSeconds?: number): Promise<string>;
+  /** A time-limited link that downloads the object (never renders it), saved as `downloadName`. */
+  getSignedUrl(key: string, expiresInSeconds?: number, downloadName?: string): Promise<string>;
 }
 
 /**
@@ -105,6 +109,13 @@ class LocalStorageProvider implements StorageProvider {
     return `${this.baseUrl}/files/${key}`;
   }
 
+  async uploadFile(key: string, filePath: string, _contentType: string): Promise<string> {
+    const target = this.resolveSafe(key);
+    await fs.promises.mkdir(path.dirname(target), { recursive: true });
+    await fs.promises.copyFile(filePath, target);
+    return `${this.baseUrl}/files/${key}`;
+  }
+
   async download(key: string): Promise<Buffer> {
     const filePath = this.resolveSafe(key);
     return fs.readFileSync(filePath);
@@ -127,7 +138,7 @@ class LocalStorageProvider implements StorageProvider {
    * a file record's id rather than a storage key. It never resolved.
    * Callers check `canPresign` and serve the bytes themselves.
    */
-  async getSignedUrl(key: string, _expiresInSeconds?: number): Promise<string> {
+  async getSignedUrl(key: string, _expiresInSeconds?: number, _downloadName?: string): Promise<string> {
     assertSafeStorageKey(key);
     throw new BadRequestException(
       'This deployment stores files locally, which cannot produce a direct link.',
@@ -181,6 +192,25 @@ class S3StorageProvider implements StorageProvider {
       Key: key,
       Body: data,
       ContentType: contentType,
+      // So a CDN link to the object downloads it rather than rendering it.
+      ContentDisposition: 'attachment',
+      ACL: 'private',
+    }));
+    return this.cdnUrl ? `${this.cdnUrl}/${key}` : key;
+  }
+
+  async uploadFile(key: string, filePath: string, contentType: string): Promise<string> {
+    assertSafeStorageKey(key);
+    const { PutObjectCommand } = require('@aws-sdk/client-s3');
+    const { size } = await fs.promises.stat(filePath);
+    await this.s3Client.send(new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: fs.createReadStream(filePath),
+      ContentLength: size,
+      ContentType: contentType,
+      // So a CDN link to the object downloads it rather than rendering it.
+      ContentDisposition: 'attachment',
       ACL: 'private',
     }));
     return this.cdnUrl ? `${this.cdnUrl}/${key}` : key;
@@ -221,12 +251,23 @@ class S3StorageProvider implements StorageProvider {
     }));
   }
 
-  async getSignedUrl(key: string, expiresInSeconds = 3600): Promise<string> {
+  /**
+   * A presigned GET that always downloads. The object's stored type is
+   * whatever the uploader claimed, and a link that let the bucket serve it
+   * inline would render an HTML or SVG upload in the browser; the response
+   * overrides force `attachment` and `application/octet-stream`.
+   */
+  async getSignedUrl(key: string, expiresInSeconds = 3600, downloadName?: string): Promise<string> {
     assertSafeStorageKey(key);
     try {
       const { GetObjectCommand } = require('@aws-sdk/client-s3');
       const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-      const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
+      const command = new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        ResponseContentDisposition: attachmentDisposition(downloadName || path.posix.basename(key)),
+        ResponseContentType: 'application/octet-stream',
+      });
       return getSignedUrl(this.s3Client, command, { expiresIn: expiresInSeconds });
     } catch {
       // Fallback if presigner not installed
@@ -278,6 +319,11 @@ export class StorageService {
     return this.provider.upload(key, data, contentType);
   }
 
+  /** Store a file already on disk (an upload multer spooled), streamed rather than read whole. */
+  async uploadFile(key: string, filePath: string, contentType: string): Promise<string> {
+    return this.provider.uploadFile(key, filePath, contentType);
+  }
+
   async downloadStream(key: string): Promise<Readable> {
     return this.provider.downloadStream(key);
   }
@@ -290,8 +336,8 @@ export class StorageService {
     return this.provider.delete(key);
   }
 
-  async getSignedUrl(key: string, expiresInSeconds?: number): Promise<string> {
-    return this.provider.getSignedUrl(key, expiresInSeconds);
+  async getSignedUrl(key: string, expiresInSeconds?: number, downloadName?: string): Promise<string> {
+    return this.provider.getSignedUrl(key, expiresInSeconds, downloadName);
   }
 
   /** Whether getSignedUrl can produce a link, rather than throwing. */

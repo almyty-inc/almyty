@@ -3,7 +3,7 @@ import { Check, Workflow } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
-import { cn } from '@/lib/utils'
+import { cn, pluralized } from '@/lib/utils'
 
 /**
  * Choosing an execution shape.
@@ -19,6 +19,12 @@ export interface StrategyView {
   displayName: string
   description: string
   roleSlots: string[]
+  /**
+   * Slots the shape uses when a role fills them and does without otherwise
+   * (the panel's judge: a judge role, else the principal, else the
+   * organization's default routing).
+   */
+  optionalRoleSlots?: string[]
   steps: number
   costBand: 'low' | 'medium' | 'high'
   latencyBand: 'low' | 'medium' | 'high'
@@ -150,7 +156,18 @@ export function StrategyPicker({
                   {slot}
                 </span>
               ))}
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{s.steps} steps</span>
+              {(s.optionalRoleSlots ?? []).map((slot) => (
+                // Optional: the shape runs without it (another role or the
+                // organization default stands in), so it is never amber.
+                <span
+                  key={slot}
+                  data-testid={`optional-slot-${slot}`}
+                  className="rounded border border-dashed border-border px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                >
+                  {slot} (optional)
+                </span>
+              ))}
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{pluralized(s.steps, 'step')}</span>
             </div>
 
             {unfillable.length > 0 && (

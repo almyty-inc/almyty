@@ -9,6 +9,7 @@ import { join } from 'path';
 import { HostedChatSsoController, SAML_HANDOFF_TTL_MS, SAML_SIGN_IN_TTL_MS } from '../hosted-chat-sso.controller';
 import { SsoService } from '../sso.service';
 import { SamlReplayCache } from '../saml-replay-cache';
+import { SamlSignInStore } from '../saml-sign-in.store';
 import { OrgLicenseResolver } from '../../../../src/modules/licensing/org-license.resolver';
 import { HostedChatService } from '../../../../src/modules/gateways/channels/hosted-chat.service';
 import { Gateway, GatewayStatus, GatewayType } from '../../../../src/entities/gateway.entity';
@@ -113,6 +114,7 @@ async function harness(opts: { protocol?: 'saml' | 'oidc' } = {}) {
       { provide: SsoService, useValue: sso },
       { provide: OrgLicenseResolver, useValue: orgLicense },
       { provide: getRedisConnectionToken(), useValue: redis },
+      SamlSignInStore,
     ],
   }).compile();
   const app: INestApplication = moduleRef.createNestApplication();
@@ -303,19 +305,24 @@ describe('hosted chat SAML is wired', () => {
     expect(src).toContain("@Get(':slug/auth/sso/saml/complete')");
   });
 
-  it('binds only on completion, as sso, and takes relay and hand-off with GETDEL', () => {
+  it('binds only on completion, as sso, and takes relay and hand-off from the shared store', () => {
     expect(src).toMatch(/async samlComplete[\s\S]*?\.bindAuthenticatedVisitor\(gateway, endUser, \{\s*provider: 'sso'/);
     const acs = src.slice(src.indexOf('async samlAcs'), src.indexOf('async samlComplete'));
     expect(acs).not.toMatch(/bindAuthenticatedVisitor/);
-    expect((src.match(/this\.redis\.getdel\(/g) ?? []).length).toBe(2);
-    expect(src).not.toMatch(/this\.redis\.get\(/);
+    expect(acs).toMatch(/this\.signIns\.takePending/);
+    expect(src.slice(src.indexOf('async samlComplete'))).toMatch(/this\.signIns\.takeHandoff/);
+    const store = readFileSync(join(__dirname, '..', 'saml-sign-in.store.ts'), 'utf8');
+    expect((store.match(/this\.redis\.getdel\(/g) ?? []).length).toBe(2);
+    expect(store).not.toMatch(/this\.redis\.get\(/);
   });
 
   it('the visitor path claims assertions in the replay cache', () => {
     const svc = readFileSync(join(__dirname, '..', 'sso.service.ts'), 'utf8');
-    const method = svc.slice(svc.indexOf('async resolveHostedChatSamlVisitor'), svc.indexOf('// ── OIDC'));
-    expect(method).toMatch(/this\.samlReplay\.consume\(facts\)/);
-    expect(method).toMatch(/validateInResponseTo: ValidateInResponseTo\.always/);
+    const validator = svc.slice(svc.indexOf('private async validateSolicitedSamlResponse('), svc.indexOf('async resolveSamlLogin('));
+    expect(validator).toMatch(/this\.samlReplay\.consume\(facts\)/);
+    expect(validator).toMatch(/validateInResponseTo: ValidateInResponseTo\.always/);
+    const visitor = svc.slice(svc.indexOf('async resolveHostedChatSamlVisitor'), svc.indexOf('// ── OIDC'));
+    expect(visitor).toMatch(/this\.validateSolicitedSamlResponse\(/);
   });
 
   it('SsoModule registers the controller', () => {

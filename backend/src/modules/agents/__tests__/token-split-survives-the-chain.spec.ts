@@ -72,18 +72,25 @@ describe('the token split survives the whole chain', () => {
     expect(src).toContain('agent_executions');
   });
 
+  it('the shared compat invoker carries the recorded split out of the run', () => {
+    const src = read('compat-agent-invoker.service.ts');
+    expect(src).toContain('inputTokens: execution.inputTokens || 0');
+    expect(src).toContain('outputTokens: execution.outputTokens || 0');
+    // The fabricated split that started this.
+    expect(src).not.toMatch(/0\.6|0\.4|\*\s*0\.6/);
+  });
+
   it('the OpenAI route reports the recorded split, not zeros and not a ratio', () => {
     const src = read('agent-openai-stream.helper.ts');
-    expect(src).toContain('prompt_tokens: execution?.inputTokens || 0');
-    expect(src).toContain('completion_tokens: execution?.outputTokens || 0');
-    // The fabricated split that started this.
+    expect(src).toContain('prompt_tokens: outcome.usage?.inputTokens ?? 0');
+    expect(src).toContain('completion_tokens: outcome.usage?.outputTokens ?? 0');
     expect(src).not.toMatch(/0\.6|0\.4|\*\s*0\.6/);
   });
 
   it('the Anthropic route reports input_tokens rather than hardcoding it away', () => {
     const src = read('agent-anthropic-compat.controller.ts');
-    expect(src).toContain('inputTokens: execution.inputTokens ?? 0');
-    expect(src).toContain('outputTokens: execution.outputTokens ?? 0');
+    expect(src).toContain('inputTokens: outcome.usage?.inputTokens ?? 0');
+    expect(src).toContain('outputTokens: outcome.usage?.outputTokens ?? 0');
   });
 });
 

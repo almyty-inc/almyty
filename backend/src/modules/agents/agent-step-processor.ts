@@ -14,11 +14,13 @@ import { AgentConstraintsService } from '../agent-constraints/agent-constraints.
 import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 import { decideEscalation, nextRoutingPolicy, planPosition } from '../model-catalog/routing/verify-escalation';
-import { shouldAutoSaveMemory } from './memory-autosave.policy';
+import { AgentMemoryKeeper } from './agent-memory.keeper';
+import { agentApiIds, callsAgents, mayCallAgent } from './agent-capabilities';
+import { ToolStatus } from '../../entities/tool.entity';
 import { emitStreamChunk } from './llm-stream-events';
 import { answerCallMessages, composesFinalAnswer } from './final-answer';
 import { AgentRoleCall, ModelRoleCall, Team, TeamRole, stampOf, teamOf, teammateToolName } from './autonomous-team';
-import { AutonomousStrategyRunner, answeredBy, chargeRole } from './autonomous-strategy.runner';
+import { AutonomousStrategyRunner, answeredBy, chargeRole, checkedBy } from './autonomous-strategy.runner';
 import type { ResolvedRunLimits } from './run-limits';
 
 
@@ -98,8 +100,13 @@ export const AGENT_STEP_COLUMNS = {
   updatedAt: true,
 } as const;
 
-/** Agent columns deliberately left out of AGENT_STEP_COLUMNS. */
-export const AGENT_STEP_COLUMNS_OMITTED = ['pipeline', 'metadata'] as const;
+/**
+ * Agent columns deliberately left out of AGENT_STEP_COLUMNS. Branding and
+ * visitor rules face the public on the agent's channels; the limits a
+ * visitor run is held to arrive on the run itself (maxCostCents, set by
+ * the channel policy), so no step reads them.
+ */
+export const AGENT_STEP_COLUMNS_OMITTED = ['pipeline', 'metadata', 'branding', 'visitorRules'] as const;
 
 /**
  * How long a resolved tool set stays usable across steps of a run.
@@ -272,7 +279,9 @@ export class AgentStepProcessor {
         return await this.explorePhase(run, agent, team, runner, resolvedLimits, expectedStep, stepStart);
       }
 
-      // Recall memories if memory is enabled
+      // Recall memories if memory is enabled: from the scope and the account
+      // the agent's Memory section names (AgentMemoryKeeper).
+      const memory = new AgentMemoryKeeper(this.s, runner);
       let memoryContext = '';
       if (agent.memoryConfig?.enabled) {
         try {
@@ -281,21 +290,11 @@ export class AgentStepProcessor {
             : [];
           const lastUserMessage = recentMessages[0];
           if (lastUserMessage) {
-            // Canonical search: workspace-scoped, hybrid (vector + FTS).
-            // Tier filter is omitted on read so the agent sees memories
-            // it stored in any tier (short/project/long/shared).
-            const ranked = await this.s.memoryService.search({
-              scope: { scope_type: 'workspace', scope_id: run.organizationId },
-              query: typeof lastUserMessage.content === 'string'
-                ? lastUserMessage.content
-                : JSON.stringify(lastUserMessage.content),
-              mode: 'memory',
-              top_k: 5,
-            });
-            if (ranked.length > 0) {
-              memoryContext = '\n\n## Relevant Memories\n' +
-                ranked.map(r => `- [${r.item.tier ?? 'memory'}] ${r.item.content}`).join('\n');
-            }
+            memoryContext = await memory.recallContext(
+              agent,
+              run,
+              typeof lastUserMessage.content === 'string' ? lastUserMessage.content : JSON.stringify(lastUserMessage.content),
+            );
           }
         } catch (err) {
           this.s.logger.warn(`Failed to recall memories for run ${runId}: ${err.message}`);
@@ -341,10 +340,12 @@ export class AgentStepProcessor {
       // Build tool definitions for the LLM (user tools + built-in tools)
       const llmTools = this.s.builders.buildToolDefinitions(tools, agent);
 
-      // Resolve sub-agent tools (only if canCallAgents is enabled)
+      // Resolve sub-agent tools: exactly the agents its Capabilities section
+      // lets it call (agent-capabilities.ts), and of those only the ones
+      // this run could start.
       let subAgentDefs: Array<{ name: string; description: string; parameters: Record<string, any> }> = [];
       const subAgentMap = new Map<string, string>();
-      if (agent.agentConfig?.canCallAgents) {
+      if (callsAgents(agent)) {
         const otherAgents = await this.s.agentRepository.find({
           where: { organizationId: run.organizationId, status: 'active' as any, isTemporary: false },
           select: { id: true, name: true, description: true, organizationId: true, visibility: true, teamId: true, createdBy: true },
@@ -356,7 +357,7 @@ export class AgentStepProcessor {
         // again, so a name it was never offered still refuses).
         const callable = await this.s.executionAccess.filterExecutable(
           principal,
-          otherAgents.filter(a => canReference({ visibility: agent.visibility, ownerId: agent.createdBy }, a)),
+          otherAgents.filter(a => mayCallAgent(agent, a.id) && canReference({ visibility: agent.visibility, ownerId: agent.createdBy }, a)),
         );
         subAgentDefs = callable
           .filter(a => a.id !== agent.id)
@@ -567,7 +568,15 @@ export class AgentStepProcessor {
           // Check for built-in tools first
           this.s.emitEvent(runId, 'tool.started', { step: run.currentStep, toolCallId: toolCall.id, tool: toolCall.name });
 
-          const builtInResult = await this.s.builtInTools.executeBuiltInTool(toolCall.name, toolCall.parameters || {}, run, agent);
+          // Memory tools go through the agent's memory settings (whose
+          // memory, which account, the never-save rules); offered, and so
+          // answered, only when its memory is on.
+          const memoryTool = !!agent.memoryConfig?.enabled && (toolCall.name === 'store_memory' || toolCall.name === 'recall_memory');
+          const builtInResult: { result?: any; error?: string; status?: 'sleeping' | 'waiting_input' } | null = memoryTool
+            ? toolCall.name === 'store_memory'
+              ? await memory.store(agent, run, team, toolCall.parameters || {})
+              : await memory.recall(agent, run, toolCall.parameters || {})
+            : await this.s.builtInTools.executeBuiltInTool(toolCall.name, toolCall.parameters || {}, run, agent);
           if (builtInResult) {
             // Built-in tool was handled
             toolCall.result = builtInResult.result;
@@ -775,6 +784,8 @@ export class AgentStepProcessor {
               // when it sets one, so a genuinely flaky integration can
               // still override.
               retries: resolvedLimits.toolErrorRetries,
+              // The machine this agent's runner-backed tools must run on.
+              runnerLabels: agent.agentConfig?.runnerLabels,
             };
 
             const toolResult: ToolExecutionResult = await this.s.toolExecutorService.executeTool(
@@ -869,11 +880,6 @@ export class AgentStepProcessor {
         await this.maybeMidLoopVerify(run, agent, responseMessage, runId);
         if (!(await this.commitStep(run, expectedStep))) return 'done';
 
-        // Auto-save memory if enabled
-        if (shouldAutoSaveMemory(agent, run)) {
-          await this.s.misc.autoSaveMemory(run, agent);
-        }
-
         this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, total: run.maxSteps });
         return 'continue';
 
@@ -917,7 +923,7 @@ export class AgentStepProcessor {
               type: 'verify',
               role: stampOf(team.checker!),
               input: { mode: 'cascade', policy: check.policy, checkers: check.checkers.length },
-              output: { verdict: 'fail', escalateTo: team.main.key, failures: check.failures },
+              output: { verdict: 'fail', escalateTo: team.main.key, failures: check.failures, ...checkedBy(check) },
               cost: check.cost,
               duration: checkDuration,
               timestamp: new Date().toISOString(),
@@ -939,7 +945,7 @@ export class AgentStepProcessor {
             type: 'verify',
             role: stampOf(team.checker!),
             input: { mode: 'cascade', policy: check.policy, checkers: check.checkers.length },
-            output: { verdict: 'pass', failures: [] },
+            output: { verdict: 'pass', failures: [], ...checkedBy(check) },
             cost: check.cost,
             duration: checkDuration,
             timestamp: new Date().toISOString(),
@@ -961,7 +967,8 @@ export class AgentStepProcessor {
             run,
             main: team.main,
             panelists: team.panelists,
-            judge: team.checker ?? team.main,
+            // The judge role writes the agreed answer; without one, the main role does.
+            judge: team.judge ?? team.main,
             loopRequest: chatRequest,
             first: finalContent,
             limits: resolvedLimits,
@@ -1006,7 +1013,7 @@ export class AgentStepProcessor {
               type: 'verify',
               role: stampOf(team.checker!),
               input: { mode: 'patch', policy: check.policy, checkers: check.checkers.length },
-              output: { verdict: 'fail', revision: revisions + 1, failures: check.failures },
+              output: { verdict: 'fail', revision: revisions + 1, failures: check.failures, ...checkedBy(check) },
               cost: check.cost,
               duration: checkDuration,
               timestamp: new Date().toISOString(),
@@ -1022,7 +1029,7 @@ export class AgentStepProcessor {
             type: 'verify',
             role: stampOf(team.checker!),
             input: { mode: 'patch', policy: check.policy, checkers: check.checkers.length },
-            output: { verdict: check.verdict, exhausted: !check.passed, failures: check.failures },
+            output: { verdict: check.verdict, exhausted: !check.passed, failures: check.failures, ...checkedBy(check) },
             cost: check.cost,
             duration: checkDuration,
             timestamp: new Date().toISOString(),
@@ -1178,12 +1185,19 @@ export class AgentStepProcessor {
         // Update agent stats atomically (see bumpAgentStats rationale).
         await this.s.misc.bumpAgentStats(agent.id, true, run.executionTime, run.totalCost);
 
-        // Auto-save memory if enabled
-        if (shouldAutoSaveMemory(agent, run)) {
-          await this.s.misc.autoSaveMemory(run, agent);
-        }
-
         this.s.emitEvent(runId, 'run.completed', { output: run.output });
+
+        // What the run leaves in memory (facts, or the exchange), after the
+        // answer is out so nobody waits on it. Its calls are the run's cost
+        // like any other, so the run row takes them and the memory_save step.
+        const stepsBefore = run.steps.length;
+        await memory.afterRun(agent, run, team);
+        if (run.steps.length !== stepsBefore) {
+          await this.s.runRepository.update(
+            { id: run.id },
+            { steps: run.steps, totalCost: run.totalCost, totalTokens: run.totalTokens, metadata: run.metadata } as any,
+          );
+        }
         return 'done';
       }
     } catch (error) {
@@ -1307,11 +1321,21 @@ export class AgentStepProcessor {
     }
   }
 
-  /** The `IN (toolIds)` query, run once per (org, toolIds) per TTL window. */
+  /**
+   * The tools this agent may use: the single tools it was given, and every
+   * active tool of each API it was given (agentConfig.apiIds), including
+   * tools added to the API after the agent was saved. The run's scope is
+   * applied to the result by the caller (filterExecutable).
+   */
   private async loadTools(agent: Agent) {
-    return this.s.toolRepository.find({
-      where: { id: In(agent.toolIds), organizationId: agent.organizationId },
-    });
+    const apiIds = agentApiIds(agent);
+    const where: any[] = [];
+    if (agent.toolIds?.length) where.push({ id: In(agent.toolIds), organizationId: agent.organizationId });
+    if (apiIds.length) where.push({ apiId: In(apiIds), organizationId: agent.organizationId, status: ToolStatus.ACTIVE });
+    if (!where.length) return [];
+    const rows = await this.s.toolRepository.find({ where });
+    const seen = new Set<string>();
+    return rows.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
   }
 
   /**
@@ -1322,8 +1346,9 @@ export class AgentStepProcessor {
    * before executing anything — so a stale entry cannot change what runs.
    */
   private async resolveTools(agent: Agent) {
-    if (!agent.toolIds?.length) return [];
-    const key = `${agent.organizationId}:${[...agent.toolIds].sort().join(',')}`;
+    const apiIds = agentApiIds(agent);
+    if (!agent.toolIds?.length && !apiIds.length) return [];
+    const key = `${agent.organizationId}:${[...(agent.toolIds ?? [])].sort().join(',')}|${[...apiIds].sort().join(',')}`;
     const now = Date.now();
     const hit = this.toolCache.get(key);
     if (hit && now - hit.at < TOOL_CACHE_TTL_MS) {

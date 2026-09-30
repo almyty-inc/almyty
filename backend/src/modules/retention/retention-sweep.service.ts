@@ -6,7 +6,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, LessThan, Repository, FindOptionsWhere } from 'typeorm';
+import { In, IsNull, LessThan, Not, Repository, FindOptionsWhere } from 'typeorm';
 import { RetentionPolicy } from '../../entities/retention-policy.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { Conversation } from '../../entities/conversation.entity';
@@ -16,12 +16,13 @@ import { UsageMetric } from '../../entities/usage-metric.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 import { Notification } from '../../entities/notification.entity';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
-import { AgentApp, appPrivacyFrom } from '../../entities/agent-app.entity';
-import { AppDistribution } from '../../entities/agent-app-distribution.entity';
+import { AgentChannel } from '../../entities/agent-channel.entity';
+import { effectiveVisitorRules } from '../agent-channels/channel-rules';
 
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ChannelEvent } from '../../entities/channel-event.entity';
 
 const SWEEP_INTERVAL_MS =
   Number(process.env.RETENTION_SWEEP_INTERVAL_MS) || 60 * 60_000; // hourly
@@ -118,12 +119,13 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     @Optional()
     private readonly notifications?: NotificationsService,
     @Optional()
-    @InjectRepository(AgentApp)
-    private readonly appRepository?: Repository<AgentApp>,
+    @InjectRepository(AgentChannel)
+    private readonly channelRepository?: Repository<AgentChannel>,
+    // Stored widget replies and channel deliveries, swept with a channel's
+    // conversations. Registered in RetentionModule's forFeature.
     @Optional()
-    @InjectRepository(AppDistribution)
-    private readonly distributionRepository?: Repository<AppDistribution>,
-
+    @InjectRepository(ChannelEvent)
+    private readonly channelEventRepository?: Repository<ChannelEvent>,
   ) {}
 
   onModuleInit(): void {
@@ -234,13 +236,13 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
       counts.messages = swept.messages;
     }
 
-    // Products may keep their visitors' conversations for less time than
-    // the organization does. Never more: an app setting shortens the
-    // policy, it cannot extend it.
-    const perApp = await this.sweepApps(policy.organizationId, policy.conversationsDays ?? null);
-    counts.conversations += perApp.conversations;
-    counts.messages += perApp.messages;
-    counts.agentRuns += perApp.runs;
+    // An agent's channels may keep their visitors' conversations for less
+    // time than the organization does. Never more: the setting shortens
+    // the policy, it cannot extend it.
+    const perChannel = await this.sweepChannels(policy.organizationId, policy.conversationsDays ?? null);
+    counts.conversations += perChannel.conversations;
+    counts.messages += perChannel.messages;
+    counts.agentRuns += perChannel.runs;
 
 
     if (policy.requestLogsDays != null) {
@@ -351,27 +353,37 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
    * survive their conversation.
    */
   /**
-   * Per-app retention for hosted-chat and widget visitors.
+   * Channel retention for visitors on an agent's channels (web chat,
+   * widget, messaging platforms, A2A): each channel files its
+   * conversations under its gateway (ChannelPolicyService run options).
+   * The days come from the agent's visitor rules, or the channel's own
+   * when it overrides them.
    *
-   * Scoped through the app's published gateways, the way request logs
+   * Scoped through the channels' published gateways, the way request logs
    * are. Runs have no gateway column, so they go through the
    * conversations being removed; agent_runs.conversationId is SET NULL,
    * so they are deleted first or they would outlive their transcript.
    */
-  async sweepApps(
+  async sweepChannels(
     organizationId: string,
     orgConversationDays: number | null,
-  ): Promise<{ conversations: number; messages: number; runs: number }> {
-    const out = { conversations: 0, messages: 0, runs: 0 };
-    if (!this.appRepository || !this.distributionRepository) return out;
-    const apps = await this.appRepository.find({ where: { organizationId } });
-    for (const app of apps) {
-      const appDays = appPrivacyFrom(app.privacy).retentionDays;
-      if (appDays == null) continue;
-      const effectiveDays = orgConversationDays == null ? appDays : Math.min(appDays, orgConversationDays);
-      const distributions = await this.distributionRepository.find({ where: { appId: app.id }, select: { gatewayId: true } });
-      const gatewayIds = distributions.map((d) => d.gatewayId).filter((id): id is string => !!id);
-      if (gatewayIds.length === 0) continue;
+  ): Promise<{ conversations: number; messages: number; runs: number; channelEvents: number }> {
+    const out = { conversations: 0, messages: 0, runs: 0, channelEvents: 0 };
+    if (!this.channelRepository) return out;
+    const channels = await this.channelRepository.find({
+      where: { organizationId, gatewayId: Not(IsNull()) },
+      relations: { agent: true },
+    });
+    // Gateways grouped by the days their channel keeps visitor data.
+    const byDays = new Map<number, string[]>();
+    for (const channel of channels) {
+      if (!channel.agent || !channel.gatewayId) continue;
+      const days = effectiveVisitorRules(channel.agent, channel).privacy.retentionDays;
+      if (days == null) continue;
+      const effectiveDays = orgConversationDays == null ? days : Math.min(days, orgConversationDays);
+      byDays.set(effectiveDays, [...(byDays.get(effectiveDays) ?? []), channel.gatewayId]);
+    }
+    for (const [effectiveDays, gatewayIds] of byDays) {
       const cutoff = this.cutoff(effectiveDays);
       for (let batch = 0; batch < MAX_BATCHES_PER_CLASS; batch++) {
         const rows = await this.conversationRepository.find({
@@ -388,6 +400,16 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
         const conversations = await this.conversationRepository.delete({ id: In(ids) });
         out.conversations += conversations.affected ?? ids.length;
         if (rows.length < SWEEP_BATCH) break;
+      }
+      // Stored widget replies and channel deliveries carry visitor words
+      // too, and nothing else ever removed them.
+      if (this.channelEventRepository) {
+        const events = await this.channelEventRepository.delete({
+          organizationId,
+          gatewayId: In(gatewayIds),
+          createdAt: LessThan(cutoff),
+        });
+        out.channelEvents += events.affected ?? 0;
       }
     }
     return out;

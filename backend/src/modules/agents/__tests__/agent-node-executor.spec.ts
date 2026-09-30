@@ -765,6 +765,24 @@ describe('AgentNodeExecutor', () => {
       );
       expect((result.output as any).result).toBe(true);
     });
+
+    // The expression is read after upstream output is filled in, so its
+    // length and shape are not the author's. The regexes that read it took
+    // ten seconds on 100 KB of spaces for a comparison and did not finish
+    // for a method call.
+    it.each([
+      ['a method call with a spaced argument', `a.includes(${' '.repeat(100_000)}x`],
+      ['a spaced receiver', `!${' '.repeat(100_000)}x)`],
+      ['a line of spaces', `${' '.repeat(100_000)}\n`],
+      ['spaces before an operator', `a${' '.repeat(100_000)}=`],
+      ['repeated calls', '.a('.repeat(33_000)],
+    ])('reads upstream output with %s in linear time', async (_label, text) => {
+      const started = Date.now();
+      await executor
+        .execute(node('condition', { expression: '{{input.text}}' }), buildContext({ input: { text } }), 'org-1')
+        .catch(() => undefined);
+      expect(Date.now() - started).toBeLessThan(250);
+    });
   });
 
   // ==========================================================================

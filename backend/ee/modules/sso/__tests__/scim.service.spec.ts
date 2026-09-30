@@ -42,6 +42,8 @@ function makeService() {
     configService,
     undefined,
     offboarding as any,
+    // Addresses on a domain the org has verified (see provisioning-needs-a-verified-domain.spec.ts).
+    { coversEmail: async () => true } as any,
   );
   return { service, userRepo, membershipRepo, teamRepo, userTeamRepo, offboarding };
 }

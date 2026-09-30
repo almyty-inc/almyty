@@ -15,6 +15,7 @@ import { IsObject, IsOptional } from 'class-validator';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { NotificationsService } from './notifications.service';
+import { ssoSessionOrganization } from '../auth/sso-session';
 import { ChannelPrefs } from './notification-types';
 
 class UpdatePreferencesDto {
@@ -53,6 +54,8 @@ export class NotificationsController {
       unreadOnly: unreadOnly === 'true' || unreadOnly === '1',
       page: page ? parseInt(page, 10) || 1 : undefined,
       limit: limit ? parseInt(limit, 10) || undefined : undefined,
+      // An SSO session sees its own organization's notifications only.
+      organizationId: ssoSessionOrganization(req.user),
     });
     return { success: true, data };
   }
@@ -74,14 +77,14 @@ export class NotificationsController {
   @Post('read-all')
   @ApiOperation({ summary: 'Mark all notifications as read' })
   async readAll(@Request() req: any) {
-    await this.notifications.markAllRead(req.user.id);
+    await this.notifications.markAllRead(req.user.id, ssoSessionOrganization(req.user));
     return { success: true };
   }
 
   @Post(':id/read')
   @ApiOperation({ summary: 'Mark one notification as read' })
   async read(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
-    await this.notifications.markRead(req.user.id, id);
+    await this.notifications.markRead(req.user.id, id, ssoSessionOrganization(req.user));
     return { success: true };
   }
 }

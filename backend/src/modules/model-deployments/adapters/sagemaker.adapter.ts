@@ -11,6 +11,7 @@ import {
   UnsupportedOperationError,
 } from './adapter.interface';
 import { AwsHttp, classifyAwsError, signAwsRequest } from '../aws-request';
+import { assertAwsRegion } from '../../../common/security/vendor-region';
 
 /**
  * Amazon SageMaker AI real-time inference, in the customer's own AWS
@@ -136,7 +137,8 @@ export class SageMakerAdapter implements ModelProviderAdapter {
     const data = JSON.stringify(body);
     const signed = signAwsRequest({
       method: 'POST',
-      url: `https://api.sagemaker.${region}.amazonaws.com/`,
+      // The region is providerConfig and is spliced into the host: checked.
+      url: `https://api.sagemaker.${assertAwsRegion(region)}.amazonaws.com/`,
       service: 'sagemaker',
       region,
       headers: { 'content-type': 'application/x-amz-json-1.1', 'x-amz-target': `SageMaker.${operation}` },
@@ -157,12 +159,12 @@ export class SageMakerAdapter implements ModelProviderAdapter {
   }
 
   static invokeUrl(region: string, endpointName: string): string {
-    return `https://runtime.sagemaker.${region}.amazonaws.com/endpoints/${encodeURIComponent(endpointName)}/invocations`;
+    return `https://runtime.sagemaker.${assertAwsRegion(region)}.amazonaws.com/endpoints/${encodeURIComponent(endpointName)}/invocations`;
   }
 
   /** An uncompressed S3 prefix source must end with a slash. */
   static s3Prefix(registryUri: string): string {
-    return `${registryUri.replace(/@[^@/]+$/, '').replace(/\/+$/, '')}/`;
+    return `${registryUri.replace(/@[^@/]+$/, '').replace(/(?<!\/)\/+$/, '')}/`;
   }
 
   /** The model package ARN behind a sagemaker://model-package/ version. */

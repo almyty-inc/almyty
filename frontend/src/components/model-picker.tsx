@@ -1,12 +1,15 @@
 /**
  * ModelPicker: the one way a model is chosen, everywhere.
  *
- * One searchable list of every model your connected providers offer,
- * grouped by provider. There is no "pick a provider first" step: picking a
- * model picks its provider. On top, when the screen allows it, "Automatic"
- * (the cheapest model that fits, chosen per call) and "Provider default";
- * at the bottom a link to connect another provider, in a new tab so the
- * work here survives, with the list refetched on return.
+ * One searchable list of every model your provider connections offer,
+ * grouped by connection, each with its price per million tokens and, when
+ * it cannot be used now, why. There is no "pick a provider first" step:
+ * picking a model picks its connection. On top, when the screen allows it,
+ * "Automatic" (the cheapest model that fits, chosen per call) and
+ * "Provider default". A model its connection turned off is not offered.
+ * At the bottom, "Add a connection" opens the whole add-a-connection flow
+ * right here, under the field (no dialog, no new tab), and its models are
+ * in the list when it is done; "Manage connections" goes to Models.
  *
  * Free text stays possible where it has to: a model id a provider serves
  * but does not list (your own server) is offered as "Use model id ..."
@@ -17,15 +20,21 @@
  * input appears anywhere else in the app.
  */
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Check, ChevronDown, ChevronRight, ExternalLink, Loader2, Search, Sparkles } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Check, ChevronDown, ChevronRight, Loader2, Plus, Search, Sparkles, X } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { RoutingPolicyField } from '@/components/models/routing-policy-editor'
+import { availability, effectivePrice, formatPrice, isFree } from '@/components/models/model-row'
+import { ProviderConnectionCreate } from '@/components/llm-providers/provider-connection-create'
+import { connectProviderPath } from '@/components/llm-providers/paths'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
 import { modelsApi } from '@/lib/models-api'
+import { MODEL_RANK, modelSearchScorer, rankBy, textMatchesSearch } from '@/lib/model-search'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { cn } from '@/lib/utils'
+import { cn, pluralized } from '@/lib/utils'
 import type { ModelCard, RoutingPolicy } from '@/types/models'
 
 export interface ModelSelection {
@@ -71,6 +80,12 @@ export interface ModelPickerProps {
   providerLabel?: string
   modelLabel?: string
   className?: string
+  /**
+   * Offer "Add a connection" in the list (default true; never on a
+   * connection's own page). A connection added here is picked up by the
+   * list at once.
+   */
+  allowCreate?: boolean
 }
 
 /** The model list every picker and the Models page share. */
@@ -117,7 +132,7 @@ type Item =
   | { key: string; kind: 'auto'; label: string }
   | { key: string; kind: 'clear'; label: string }
   | { key: string; kind: 'default'; label: string; provider: ProviderOption }
-  | { key: string; kind: 'model'; label: string; sub: string; provider: ProviderOption; model: string; unavailable?: boolean; saved?: boolean }
+  | { key: string; kind: 'model'; label: string; sub: string; provider: ProviderOption; model: string; unavailable?: boolean; saved?: boolean; card?: ModelCard }
   | { key: string; kind: 'free'; label: string; provider: ProviderOption; model: string }
 
 interface Group {
@@ -140,6 +155,17 @@ function cardLabel(c: ModelCard): string {
   return c.name && c.name !== c.vendorModelId ? c.name : c.vendorModelId
 }
 
+/** A model's price in a list row: "$2.50 / $10.00" per million tokens in and out, "Free", or "Price unknown". */
+function ModelPriceTag({ card, className }: { card: ModelCard; className?: string }) {
+  const price = effectivePrice(card)
+  const label = formatPrice(price).replace(' in / ', ' / ').replace(' out', '')
+  return (
+    <span className={cn('shrink-0 tabular-nums text-muted-foreground', className)} title={price && !isFree(price) ? `${formatPrice(price)} per 1M tokens` : undefined} data-testid="model-option-price">
+      {label}
+    </span>
+  )
+}
+
 export function ModelPicker({
   value,
   onChange,
@@ -153,7 +179,11 @@ export function ModelPicker({
   providerLocked = false,
   modelLabel = 'Model',
   className,
+  allowCreate = true,
 }: ModelPickerProps) {
+  const queryClient = useQueryClient()
+  const [adding, setAdding] = useState(false)
+  const canCreate = allowCreate && !providerLocked
   const routed = allowRouting && !!value.routing
   const providersQuery = useProviderList()
   const allProviders = asProviderList(providersQuery.data)
@@ -187,8 +217,8 @@ export function ModelPicker({
   const savedCard = savedModel ? cards.find((c) => c.providerId === value.providerId && c.vendorModelId === savedModel) : undefined
 
   const groups: Group[] = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    const matches = (...texts: Array<string | null | undefined>) => !q || texts.some((t) => (t || '').toLowerCase().includes(q))
+    const q = search.trim()
+    const matches = (...texts: Array<string | null | undefined>) => !q || textMatchesSearch(q, ...texts)
     const out: Group[] = []
 
     const top: Item[] = []
@@ -196,34 +226,49 @@ export function ModelPicker({
     if (providerOptionalLabel && matches(providerOptionalLabel)) top.push({ key: 'clear', kind: 'clear', label: providerOptionalLabel })
     if (top.length > 0) out.push({ key: 'top', items: top })
 
-    let modelHits = 0
+    // Every model the list could show, so whether a provider name counts
+    // (only when no model id or name matches) is decided once, for all.
+    const own = new Map<string, ModelCard[]>()
+    const candidates: Array<{ provider: ProviderOption; item: Extract<Item, { kind: 'model' }> }> = []
     for (const p of providers) {
-      const items: Item[] = []
-      if (modelOptional && matches('Provider default', p.name)) items.push({ key: `${p.id}::default`, kind: 'default', label: 'Provider default', provider: p })
-      const own = cards
+      const mine = cards
         .filter((c) => c.providerId === p.id)
         .filter((c) => (c.selectable && c.status !== 'inactive') || (c.providerId === value.providerId && c.vendorModelId === savedModel))
         .sort((a, b) => cardLabel(a).localeCompare(cardLabel(b)))
-      for (const c of own) {
-        if (!matches(c.name, c.vendorModelId, p.name)) continue
+      own.set(p.id, mine)
+      for (const c of mine) {
         const unavailable = !c.selectable || c.status === 'inactive'
-        items.push({ key: `${p.id}::${c.vendorModelId}`, kind: 'model', label: cardLabel(c), sub: c.vendorModelId, provider: p, model: c.vendorModelId, unavailable })
-        modelHits += 1
+        candidates.push({ provider: p, item: { key: `${p.id}::${c.vendorModelId}`, kind: 'model', label: cardLabel(c), sub: c.vendorModelId, provider: p, model: c.vendorModelId, unavailable, card: c } })
       }
       // A saved id this provider no longer lists still reads as chosen.
-      if (p.id === value.providerId && savedModel && !savedCard && matches(savedModel, p.name)) {
-        items.push({ key: `${p.id}::${savedModel}`, kind: 'model', label: savedModel, sub: 'Saved, not in the list', provider: p, model: savedModel, saved: true, unavailable: true })
-        modelHits += 1
+      if (p.id === value.providerId && savedModel && !savedCard) {
+        candidates.push({ provider: p, item: { key: `${p.id}::${savedModel}`, kind: 'model', label: savedModel, sub: 'Saved, not in the list', provider: p, model: savedModel, saved: true, unavailable: true } })
       }
+    }
+    const score = modelSearchScorer(candidates, q, ({ provider, item }) => ({ id: item.model, name: item.label, providerName: provider.name, providerType: provider.type }))
+    const byProviderName = !!q && candidates.every((c) => (score(c) ?? MODEL_RANK.provider) === MODEL_RANK.provider)
+
+    let modelHits = 0
+    for (const p of providers) {
+      const items: Item[] = []
+      if (modelOptional && (matches('Provider default') || (byProviderName && matches(p.name, p.type)))) {
+        items.push({ key: `${p.id}::default`, kind: 'default', label: 'Provider default', provider: p })
+      }
+      const hits = rankBy(
+        candidates.filter((c) => c.provider.id === p.id),
+        score,
+      ).map((c) => c.item)
+      items.push(...hits)
+      modelHits += hits.length
       // Listed but none usable is not the same as nothing listed: say which.
       const listed = cards.filter((c) => c.providerId === p.id && c.status !== 'inactive').length
       const note =
-        own.length === 0 && !q
+        (own.get(p.id) ?? []).length === 0 && !q
           ? listed > 0
-            ? `${listed} model${listed === 1 ? '' : 's'} listed, none usable yet. Check the provider again on its page.`
+            ? `${pluralized(listed, 'model')} listed, none usable yet. Check the connection again on its page.`
             : FREE_TEXT_PROVIDER_TYPES.has(p.type)
               ? 'Type the model id your server runs.'
-              : 'No models yet. Check the provider again on its page.'
+              : 'No models yet. Check the connection again on its page.'
           : undefined
       if (items.length > 0 || note) out.push({ key: p.id, heading: p.name, items, note })
     }
@@ -329,16 +374,37 @@ export function ModelPicker({
   const loading = providersQuery.isLoading || cardsQuery.isLoading
   const noProviders = !providersQuery.isLoading && providers.length === 0 && !providerLocked
 
-  const connectLink = (
-    <a
-      href="/models/connect"
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"
-    >
-      Connect a provider
-      <ExternalLink className="h-3 w-3" aria-hidden />
-    </a>
+  const startAdding = () => {
+    setOpen(false)
+    setAdding(true)
+  }
+  const addButton = (
+    <button type="button" onClick={startAdding} className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline" data-testid={`${idPrefix}-add-connection`}>
+      <Plus className="h-3 w-3" aria-hidden />
+      Add a connection
+    </button>
+  )
+  const addPanel = adding && (
+    <div className="space-y-3 rounded-md border bg-card p-3" data-testid={`${idPrefix}-add-panel`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className={cn('font-medium', text)}>Add a connection</span>
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" aria-label="Close" onClick={() => setAdding(false)}>
+          <X className="h-4 w-4" aria-hidden />
+        </Button>
+      </div>
+      <ProviderConnectionCreate
+        idPrefix={`${idPrefix}-add`}
+        onCancel={() => setAdding(false)}
+        onDone={() => {
+          setAdding(false)
+          queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
+          queryClient.invalidateQueries({ queryKey: PICKER_MODELS_KEY })
+          // Straight back to the list, where the new connection's models now are.
+          setOpen(true)
+          window.setTimeout(() => searchRef.current?.focus(), 0)
+        }}
+      />
+    </div>
   )
 
   return (
@@ -348,12 +414,13 @@ export function ModelPicker({
       </Label>
       {noProviders ? (
         // A required field with nothing in it is a dead end. Say what is
-        // missing and where to fix it; a new tab keeps this screen's work,
-        // and the list refetches when the tab regains focus.
-        <div data-testid="no-providers" className={cn('rounded-md border border-dashed border-border px-3 py-2 text-muted-foreground', hint)}>
-          No providers connected yet. {connectLink}
-          <span className="mt-0.5 block">It opens in a new tab and its models appear here when you come back.</span>
-        </div>
+        // missing and fix it here: the add flow opens under the field, and
+        // the work on this screen stays as it is.
+        !adding && (
+          <div data-testid="no-providers" className={cn('rounded-md border border-dashed border-border px-3 py-2 text-muted-foreground', hint)}>
+            No provider connections yet. {canCreate ? addButton : <Link to={connectProviderPath()} className="text-primary hover:underline">Connect a provider</Link>}
+          </div>
+        )
       ) : (
         <>
           <button
@@ -424,18 +491,24 @@ export function ModelPicker({
                           role="option"
                           aria-selected={selected}
                           data-active={idx === active || undefined}
+                          data-model={item.kind === 'model' ? item.model : undefined}
                           onMouseEnter={() => setActive(idx)}
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => choose(item)}
                           className={cn('flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5', text, idx === active && 'bg-accent text-accent-foreground')}
                         >
                           <Check className={cn('h-3.5 w-3.5 shrink-0', selected ? 'opacity-100' : 'opacity-0')} aria-hidden />
-                          <span className="min-w-0 flex-1 truncate">
+                          <span className="min-w-0 flex-1 truncate" data-testid="model-option-label">
                             {item.label}
                             {item.kind === 'model' && item.sub !== item.label && <span className="ml-1.5 font-mono text-muted-foreground">{item.sub}</span>}
                             {item.kind === 'free' && <span className="ml-1.5 text-muted-foreground">with {item.provider.name}</span>}
                           </span>
-                          {item.kind === 'model' && item.unavailable && !item.saved && <span className={cn('shrink-0 text-amber-700 dark:text-amber-400', hint)}>Not available</span>}
+                          {item.kind === 'model' && item.card && <ModelPriceTag card={item.card} className={hint} />}
+                          {item.kind === 'model' && item.unavailable && !item.saved && (
+                            <span className={cn('shrink-0 text-amber-700 dark:text-amber-400', hint)} data-testid="model-option-status">
+                              {item.card ? availability(item.card).label : 'Not available'}
+                            </span>
+                          )}
                         </div>
                       )
                     })}
@@ -443,15 +516,23 @@ export function ModelPicker({
                   </div>
                 ))}
               </div>
-              {!providerLocked && <div className={cn('border-t px-3 py-2', hint)}>{connectLink}</div>}
+              {!providerLocked && (
+                <div className={cn('flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2', hint)}>
+                  {canCreate ? addButton : <span />}
+                  <Link to="/credentials" className="text-muted-foreground hover:text-foreground hover:underline">
+                    Manage provider keys
+                  </Link>
+                </div>
+              )}
             </div>
           )}
         </>
       )}
+      {addPanel}
 
       {savedUnavailable && (
         <p className={cn('text-amber-700 dark:text-amber-400', hint)} data-testid={`${idPrefix}-model-unavailable`}>
-          This model is not available right now. Pick another, or check its provider again.
+          This model is not available right now. Pick another, or check its connection again.
         </p>
       )}
 

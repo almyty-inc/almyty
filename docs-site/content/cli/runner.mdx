@@ -32,7 +32,7 @@ almyty-runner stop              # send SIGTERM to the local daemon
 |------|------|
 | `--name <name>` | Runner name, `[a-zA-Z0-9_-]`, up to 64 chars, unique in the organization. A label, not a credential |
 | `--org <org-id>` | Organization to register in, if you belong to several. Refused for an org you are not in |
-| `--label key=value` | Add a descriptive label. Repeat for several. Labels do not affect dispatch |
+| `--label key=value` | Add a label saying what the machine has. Repeat for several. Work that asks for a label (an agent's **Machine labels**) runs only on runners that have it |
 | `--config <path>` | JSON config file, overrides global and project config |
 | `--url <backend-url>` | Override the backend URL, e.g. `https://api.almyty.com` |
 

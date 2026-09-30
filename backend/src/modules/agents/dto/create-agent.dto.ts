@@ -4,9 +4,9 @@ import { Transform } from 'class-transformer';
 import { AgentStatus } from '../../../entities/agent.entity';
 import type { AgentCollaboration } from '../collaboration-participants';
 import type { AgentModels } from '../autonomous-models';
+import type { AgentMemoryConfig } from '../agent-memory-settings';
 
-const stripHtml = ({ value }: { value: unknown }) =>
-  typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
+import { stripHtmlTransform as stripHtml } from '../../../common/security/strip-tags';
 
 export class CreateAgentDto {
   @Transform(stripHtml)
@@ -82,17 +82,22 @@ export class CreateAgentDto {
 
   @IsOptional()
   @IsObject()
-  memoryConfig?: {
-    enabled?: boolean;
-    autoSave?: boolean;
-    scopes?: string[];
-  };
+  // Shape checked in AgentsService (memoryConfigProblems), which names each problem.
+  memoryConfig?: AgentMemoryConfig;
 
   @IsOptional()
   @IsObject()
   agentConfig?: {
     canCallAgents?: boolean;
+    /** The other agents it may call (agent-capabilities.ts). */
+    callableAgentIds?: string[];
+    /** APIs it may use: every active tool of each, including later ones. */
+    apiIds?: string[];
     canCreateAgents?: boolean;
+    maxTemporaryAgents?: number;
+    maxTemporaryAgentsAlive?: number;
+    /** Machine label requirements, as `gpu=yes, os=mac` or an object; see Agent.agentConfig. */
+    runnerLabels?: Record<string, string> | string;
   };
 
   // Shape checked in AgentsService (collaborationProblems) so a bad

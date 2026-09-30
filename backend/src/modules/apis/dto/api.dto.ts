@@ -3,8 +3,7 @@ import { RESOURCE_VISIBILITIES, ResourceVisibility } from '../../../common/autho
 import { Type, Transform } from 'class-transformer';
 import { ApiType } from '../../../entities/api.entity';
 
-const stripHtml = ({ value }: { value: unknown }) =>
-  typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
+import { stripHtmlTransform as stripHtml } from '../../../common/security/strip-tags';
 
 export class AuthenticationConfigDto {
   @IsEnum(['none', 'api_key', 'bearer', 'basic', 'oauth2'])
@@ -259,6 +258,12 @@ const emptyToUndefined = ({ value }: { value: unknown }) =>
  * arrive as strings, hence the transforms.
  */
 export class ConnectApiDto {
+  /** The kind picked on "Connect an API"; a description of another kind is refused. */
+  @Transform(emptyToUndefined)
+  @IsOptional()
+  @IsEnum(['openapi', 'graphql', 'soap', 'grpc'])
+  type?: 'openapi' | 'graphql' | 'soap' | 'grpc';
+
   @Transform(emptyToUndefined)
   @IsOptional()
   @Matches(/^https?:\/\/.+/i, { message: 'A link starts with http:// or https://.' })

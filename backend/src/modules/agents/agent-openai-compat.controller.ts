@@ -11,6 +11,8 @@ import {
   NotFoundException,
   BadRequestException,
   Optional,
+  HttpCode,
+  Param,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -29,11 +31,13 @@ import {
 } from './compat-rate-limit.helper';
 import {
   renderConversation,
+  requestedMaxTokens,
   unsupportedOpenAIField,
   withSamplingOverrides,
 } from './compat-conversation.helper';
-import { agentsForKey, authenticateCompatKey, resolveCompatAgent } from './compat-auth.helper';
+import { agentsForKey, authenticateCompatKey, resolveCompatAgent, touchCompatKeyLastUsed } from './compat-auth.helper';
 import { ExecutionAccessService } from '../../common/authorization/execution-access.service';
+import { BudgetExceededException } from '../budgets/budget-exceeded.exception';
 
 /** Maximum request body size in bytes (1 MB). */
 const MAX_BODY_SIZE_BYTES = 1 * 1024 * 1024;
@@ -43,13 +47,6 @@ const MAX_MESSAGES = 100;
 
 /** Maximum content length per message (100 KB). */
 const MAX_MESSAGE_CONTENT_LENGTH = 100 * 1024;
-
-/**
- * Throttle window for `lastUsedAt` writes, in milliseconds. Without this we issue
- * one UPDATE per chat-completion request, which is wasteful and races with any
- * concurrent mutation of the api-key row (revocation, scope change).
- */
-const LAST_USED_THROTTLE_MS = 60_000;
 
 @Controller('v1')
 @ApiTags('OpenAI Compatible')
@@ -77,6 +74,9 @@ export class AgentOpenAICompatController {
   }
 
   @Post('chat/completions')
+  // Nest answers a POST with 201 by default, and the stream is written
+  // through @Res(), so without this a completion came back "201 Created".
+  @HttpCode(200)
   @ApiOperation({ summary: 'Create chat completion (OpenAI-compatible)' })
   @ApiBearerAuth()
   @ApiBody({ description: 'OpenAI-compatible chat completion request with model, messages, and optional stream flag' })
@@ -107,7 +107,7 @@ export class AgentOpenAICompatController {
       const rateLimitInfo = await this.trackRequestCount(apiKey.id);
       this.setRateLimitHeaders(res, rateLimitInfo);
 
-      if (rateLimitInfo.remaining <= 0) {
+      if (rateLimitInfo.limited) {
         this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 429);
         return this.sendOpenAIError(res, 429, 'Rate limit exceeded. Please retry after a moment.', 'rate_limit_error', 'rate_limit_exceeded');
       }
@@ -150,11 +150,10 @@ export class AgentOpenAICompatController {
       //     is persisted; see withSamplingOverrides.
       const agent = withSamplingOverrides(resolved, {
         temperature: typeof body.temperature === 'number' ? body.temperature : undefined,
-        maxTokens: typeof body.max_tokens === 'number' ? body.max_tokens : undefined,
+        maxTokens: requestedMaxTokens(body),
       });
 
-      // 5. Touch lastUsedAt (throttled, partial UPDATE — see notes on
-      //    LAST_USED_THROTTLE_MS for the race we're avoiding)
+      // 5. Touch lastUsedAt (throttled, partial UPDATE; see touchCompatKeyLastUsed)
       await this.touchApiKeyLastUsed(apiKey);
 
       // 6. Execute (streaming or sync)
@@ -185,6 +184,13 @@ export class AgentOpenAICompatController {
         this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 400);
         return this.sendOpenAIError(res, 400, error.message, 'invalid_request_error', 'bad_request');
       }
+      // A spend budget set to reject. OpenAI answers an exhausted quota with
+      // 429 insufficient_quota, which is what clients already branch on;
+      // this was a 500 "Internal server error" that said nothing.
+      if (error instanceof BudgetExceededException) {
+        this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 429, 'budget');
+        return this.sendOpenAIError(res, 429, error.message, 'insufficient_quota', 'insufficient_quota');
+      }
       this.logger.error(`[CHAT_COMPLETIONS] Unexpected error: ${error.message}`, error.stack);
       this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 500);
       return this.sendOpenAIError(res, 500, 'Internal server error', 'api_error', 'internal_error');
@@ -208,20 +214,7 @@ export class AgentOpenAICompatController {
 
       const agents = agentsForKey(await this.agentsService.findAllActive(apiKey.organizationId, apiKey.userId), apiKey);
 
-      const response = {
-        object: 'list',
-        data: agents.map(a => ({
-          id: `agent:${a.id}`,
-          object: 'model',
-          created: Math.floor(new Date(a.createdAt).getTime() / 1000),
-          owned_by: 'almyty',
-          permission: [],
-          root: `agent:${a.id}`,
-          parent: null,
-        })),
-      };
-
-      return res.json(response);
+      return res.json({ object: 'list', data: agents.map((a) => this.toModel(a)) });
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         return this.sendOpenAIError(res, 401, error.message, 'authentication_error', 'invalid_api_key');
@@ -229,6 +222,57 @@ export class AgentOpenAICompatController {
       this.logger.error(`[LIST_MODELS] Unexpected error: ${error.message}`, error.stack);
       return this.sendOpenAIError(res, 500, 'Internal server error', 'api_error', 'internal_error');
     }
+  }
+
+  /**
+   * One model, as `client.models.retrieve(id)` asks for it. LangChain and
+   * several agent frameworks call this to validate a model name before the
+   * first completion; without the route they got a bare 404 for a model
+   * the list had just returned.
+   *
+   * The same resolution as a completion, so it answers for exactly the
+   * models a completion would run: anything else, a draft agent included,
+   * is the not-found an unknown model gets.
+   */
+  @Get('models/:model')
+  @ApiOperation({ summary: 'Retrieve one model/agent (OpenAI-compatible)' })
+  @ApiBearerAuth()
+  @ApiResponse({ status: 200, description: 'The agent as an OpenAI-compatible model' })
+  @ApiResponse({ status: 401, description: 'Invalid or missing API key' })
+  @ApiResponse({ status: 404, description: 'No such model for this key' })
+  async retrieveModel(
+    @Param('model') model: string,
+    @Headers('authorization') auth: string,
+    @Res() res: Response,
+  ) {
+    try {
+      const apiKey = await this.authenticateApiKey(auth);
+      await this.touchApiKeyLastUsed(apiKey);
+      if (!this.executionAccess) throw new Error('Agent execution access check is not configured');
+      const agent = await resolveCompatAgent(this.agentsService, model, apiKey, this.executionAccess);
+      return res.json(this.toModel(agent));
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        return this.sendOpenAIError(res, 401, error.message, 'authentication_error', 'invalid_api_key');
+      }
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        return this.sendOpenAIError(res, 404, `The model '${model}' does not exist or you do not have access to it.`, 'invalid_request_error', 'model_not_found');
+      }
+      this.logger.error(`[RETRIEVE_MODEL] Unexpected error: ${error.message}`, error.stack);
+      return this.sendOpenAIError(res, 500, 'Internal server error', 'api_error', 'internal_error');
+    }
+  }
+
+  private toModel(agent: { id: string; createdAt: Date | string }) {
+    return {
+      id: `agent:${agent.id}`,
+      object: 'model',
+      created: Math.floor(new Date(agent.createdAt).getTime() / 1000),
+      owned_by: 'almyty',
+      permission: [],
+      root: `agent:${agent.id}`,
+      parent: null,
+    };
   }
 
   // ─── Request Validation ─────────────────────────────────────────────
@@ -317,20 +361,9 @@ export class AgentOpenAICompatController {
 
   // ─── API key bookkeeping ─────────────────────────────────────────────
 
-  /**
-   * Touch the api-key's `lastUsedAt`. Throttled to avoid one UPDATE per
-   * request, and uses a partial UPDATE rather than `save(entity)` so we
-   * don't race with concurrent writes (revocation, scope change, etc.) by
-   * round-tripping the whole entity through a stale in-memory copy.
-   */
-  private async touchApiKeyLastUsed(apiKey: ApiKey): Promise<void> {
-    const now = Date.now();
-    const last = apiKey.lastUsedAt ? apiKey.lastUsedAt.getTime() : 0;
-    if (now - last < LAST_USED_THROTTLE_MS) return;
-
-    const nowDate = new Date(now);
-    await this.apiKeyRepository.update({ id: apiKey.id }, { lastUsedAt: nowDate });
-    apiKey.lastUsedAt = nowDate;
+  /** Throttled, partial UPDATE; shared with /v1/messages (compat-auth.helper). */
+  private touchApiKeyLastUsed(apiKey: ApiKey): Promise<void> {
+    return touchCompatKeyLastUsed(this.apiKeyRepository, apiKey);
   }
 
   // ─── Authentication ──────────────────────────────────────────────────
@@ -366,7 +399,7 @@ export class AgentOpenAICompatController {
       messages,
       model: body.model,
       temperature: body.temperature,
-      max_tokens: body.max_tokens,
+      max_tokens: requestedMaxTokens(body),
     };
   }
 

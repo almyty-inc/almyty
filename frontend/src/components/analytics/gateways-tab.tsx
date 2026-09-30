@@ -54,7 +54,7 @@ export function GatewaysTab() {
                 <th className={`${TH} text-right`}>Requests</th>
                 <th className={`${TH} text-right`}>Success</th>
                 <th className={`${TH} text-right`}>Errors</th>
-                <th className={`${TH} text-right`}>Success Rate</th>
+                <th className={`${TH} text-right`}>Success rate</th>
               </tr>
             </thead>
             <tbody>

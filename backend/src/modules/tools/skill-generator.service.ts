@@ -154,7 +154,7 @@ export class SkillGeneratorService {
    * fall back to slugified name if endpoint is missing.
    */
   private gatewayEndpointSlug(gateway: Gateway): string {
-    const ep = (gateway.endpoint || '').replace(/^\/+|\/+$/g, '').trim();
+    const ep = (gateway.endpoint || '').replace(/^\/+|(?<!\/)\/+$/g, '').trim();
     if (ep) return this.renderer.slugify(ep);
     return this.renderer.slugify(gateway.name || 'gateway');
   }
@@ -210,7 +210,7 @@ export class SkillGeneratorService {
       // it (last `room` chars) so any unique hash suffix survives.
       trimmed = trimmed.slice(-room);
     }
-    return `${gatewaySlug}-${trimmed.replace(/^-+|-+$/g, '')}`;
+    return `${gatewaySlug}-${trimmed.replace(/^-+|(?<!-)-+$/g, '')}`;
   }
 
   /**

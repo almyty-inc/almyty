@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { analyticsApi, auditExportApi, auditLogsApi } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { cn, formatDateTime } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { EntitlementGate } from '@/components/entitlement-gate'
@@ -161,22 +161,22 @@ export function AuditTab() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatCard
               icon={ScrollText}
-              label="Actions Today"
+              label="Actions today"
               value={auditFigure(auditSummary, 'today', auditSummary.totals?.today)}
             />
             <StatCard
               icon={Activity}
-              label="Actions This Week"
+              label="Actions this week"
               value={auditFigure(auditSummary, 'thisWeek', auditSummary.totals?.thisWeek)}
             />
             <StatCard
               icon={Activity}
-              label="Actions This Month"
+              label="Actions this month"
               value={auditFigure(auditSummary, 'thisMonth', auditSummary.totals?.thisMonth)}
             />
             <StatCard
               icon={Users}
-              label="Active Users"
+              label="Active users"
               value={auditFigure(auditSummary, 'topUsers', auditSummary.topUsers?.length)}
             />
           </div>
@@ -246,7 +246,7 @@ export function AuditTab() {
           >
             <option value="">All</option>
             <option value="agent">Agent</option>
-            <option value="agent_run">Agent Run</option>
+            <option value="agent_run">Agent run</option>
             <option value="tool">Tool</option>
             <option value="gateway">Gateway</option>
             <option value="api">API</option>
@@ -280,10 +280,10 @@ export function AuditTab() {
             <option value="invoke">Invoke</option>
             <option value="activate">Activate</option>
             <option value="deactivate">Deactivate</option>
-            <option value="tool_execute">Tool Execute</option>
-            <option value="run_start">Run Start</option>
-            <option value="run_complete">Run Complete</option>
-            <option value="run_fail">Run Fail</option>
+            <option value="tool_execute">Tool execute</option>
+            <option value="run_start">Run start</option>
+            <option value="run_complete">Run complete</option>
+            <option value="run_fail">Run fail</option>
             <option value="login">Login</option>
             <option value="ownership_transfer">Ownership transfer</option>
             <option value="visibility_change">Visibility change</option>
@@ -349,7 +349,7 @@ export function AuditTab() {
                 {auditLogs.data.map((entry: AuditLogEntry) => (
                   <tr key={entry.id} className="border-b last:border-0 hover:bg-muted/30 text-xs">
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                      {new Date(entry.createdAt).toLocaleString()}
+                      {formatDateTime(entry.createdAt)}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground truncate max-w-[150px]">
                       {entry.userEmail || entry.userId?.slice(0, 8) || '--'}

@@ -11,6 +11,12 @@ import { RunnerService } from './runner.service';
 import { WorkspaceService } from '../workspace/workspace.service';
 import { RunnerState } from '../../entities/runner.entity';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
+import {
+  type LabelRequirements,
+  describeLabelRequirements,
+  hasLabelRequirements,
+  labelsMatch,
+} from './runner-labels';
 
 export interface RunnerRequestPayload {
   method: string;
@@ -62,11 +68,21 @@ export interface DispatchOptions {
   callerUserId?: string | null;
   /**
    * The principal of the run this dispatch belongs to. When set it decides
-   * instead of callerUserId, so a gateway run is judged by its gateway's
-   * scope (see resolveForDispatch). The workspace check still reads
-   * callerUserId: a workspace belongs to a person.
+   * instead of callerUserId -- for the runner (resolveForDispatch) and for
+   * the workspace (WorkspaceService.findForDispatch) -- so a gateway run is
+   * judged by its gateway's scope, not refused for having no user.
    */
   principal?: ExecutionPrincipal;
+  /**
+   * Label requirements the work asks of its machine (gpu=yes). When set,
+   * the work goes to an online runner the caller may use whose labels
+   * include every one (RunnerService.resolveByLabels), keeping to the
+   * named runner when it qualifies. Work in a workspace stays on the
+   * workspace's runner and is refused if that runner lacks a label.
+   */
+  labels?: LabelRequirements;
+  /** The organization to look for a matching runner in; needed with labels. */
+  organizationId?: string;
 }
 
 interface PendingCall {
@@ -174,12 +190,29 @@ export class RunnerCallService implements OnModuleDestroy {
     workspaceId?: string,
     options: DispatchOptions = {},
   ): Promise<RunnerResponsePayload> {
-    const runner = await this.runners.resolveForDispatch(runnerId, options.principal ?? options.callerUserId).catch((err) => {
+    const caller = options.principal ?? options.callerUserId;
+    // Label requirements choose the machine, unless the work is in a
+    // workspace: a workspace lives on one runner, so the work goes there
+    // and the labels are a check on that runner instead of a search.
+    const routeByLabels = hasLabelRequirements(options.labels) && workspaceId === undefined;
+    if (routeByLabels && !options.organizationId) {
+      throw new RunnerCallError(RUNNER_CALL_ERRORS.RUNNER_UNAVAILABLE, 'label routing needs the organization to look in');
+    }
+    const resolved = routeByLabels
+      ? this.runners.resolveByLabels(options.labels!, caller, options.organizationId!, { preferRunnerId: runnerId })
+      : this.runners.resolveForDispatch(runnerId, caller);
+    const runner = await resolved.catch((err) => {
       if (err?.status === 404) {
         throw new RunnerCallError(RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND, err.message);
       }
       throw new RunnerCallError(RUNNER_CALL_ERRORS.RUNNER_UNAVAILABLE, err?.message ?? String(err));
     });
+    if (hasLabelRequirements(options.labels) && !labelsMatch(runner.labels, options.labels)) {
+      throw new RunnerCallError(
+        RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND,
+        `The workspace is on ${runner.name}, which does not have ${describeLabelRequirements(options.labels)}`,
+      );
+    }
 
     // A named workspace must be a live one of the caller's on this runner.
     // The id used to ride into the envelope unchecked -- the daemon only
@@ -187,7 +220,7 @@ export class RunnerCallService implements OnModuleDestroy {
     // workspace kept taking work and any id at all was accepted.
     let workspace: { id: string; cwd: string } | null = null;
     if (workspaceId !== undefined) {
-      workspace = await this.workspaces.findForDispatch(workspaceId, runner.id, options.callerUserId);
+      workspace = await this.workspaces.findForDispatch(workspaceId, runner.id, options.principal ?? options.callerUserId);
       if (!workspace) {
         throw new RunnerCallError(
           RUNNER_CALL_ERRORS.WORKSPACE_NOT_FOUND,

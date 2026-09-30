@@ -14,6 +14,7 @@ import { renderWithProviders } from '@/test/setup'
 import { ModelPicker, keyRejected, type ModelSelection } from '../model-picker'
 import { llmProvidersApi } from '@/lib/api'
 import { modelsApi } from '@/lib/models-api'
+import { SEARCH_CASES, SEARCH_CATALOG, SEARCH_PROVIDER_ANTHROPIC, SEARCH_PROVIDER_OPENAI } from '@/lib/__tests__/model-search.cases'
 
 vi.mock('@/lib/api', () => ({
   llmProvidersApi: { getAll: vi.fn() },
@@ -21,6 +22,17 @@ vi.mock('@/lib/api', () => ({
 vi.mock('@/lib/models-api', () => ({ modelsApi: { list: vi.fn() } }))
 vi.mock('@/components/models/routing-policy-editor', () => ({
   RoutingPolicyField: () => React.createElement('div', { 'data-testid': 'routing-policy-field' }),
+}))
+// The add-a-connection flow has its own tests; here it only has to open in
+// place and hand back a connection.
+vi.mock('@/components/llm-providers/provider-connection-create', () => ({
+  ProviderConnectionCreate: (props: any) =>
+    React.createElement(
+      'div',
+      { 'data-testid': 'connection-create' },
+      React.createElement('button', { type: 'button', onClick: () => props.onDone({ id: 'prov-new', name: 'HF - Llama 70B only', type: 'huggingface' }) }, 'Finish adding'),
+      React.createElement('button', { type: 'button', onClick: props.onCancel }, 'Stop adding'),
+    ),
 }))
 
 const OPENAI = { id: 'prov-openai', name: 'OpenAI', type: 'openai', status: 'active' }
@@ -51,7 +63,9 @@ async function open() {
   return screen.getByRole('listbox')
 }
 
-const optionNames = (list: HTMLElement) => within(list).getAllByRole('option').map((o) => o.textContent)
+/** What an option says about the model, without its price and status. */
+const optionNames = (list: HTMLElement) => within(list).getAllByRole('option').map((o) => (o.querySelector('[data-testid=model-option-label]') ?? o).textContent)
+const optionFor = (list: HTMLElement, model: string) => list.querySelector(`[role=option][data-model="${model}"]`) as HTMLElement
 
 describe('ModelPicker', () => {
   beforeEach(() => {
@@ -129,20 +143,52 @@ describe('ModelPicker', () => {
     expect(within(list).queryByRole('option', { name: /Automatic/ })).not.toBeInTheDocument()
   })
 
-  it('links to connecting a provider in a new tab', async () => {
+  it('shows each model\'s price per million tokens in and out, and says so when nobody knows it', async () => {
+    vi.mocked(modelsApi.list).mockResolvedValue([
+      card(OPENAI.id, 'gpt-4o', { pricing: { inPerMTok: 2.5, outPerMTok: 10 } }),
+      card(OPENAI.id, 'o3'),
+      card(LOCAL.id, 'qwen3:8b', { pricing: { inPerMTok: 0, outPerMTok: 0 } }),
+    ])
     renderPicker({})
-    await open()
-    const link = screen.getByRole('link', { name: /Connect a provider/ })
-    expect(link).toHaveAttribute('href', '/models/connect')
-    expect(link).toHaveAttribute('target', '_blank')
+    const list = await open()
+    expect(within(optionFor(list, 'gpt-4o')).getByTestId('model-option-price')).toHaveTextContent('$2.50 / $10.00')
+    expect(within(optionFor(list, 'o3')).getByTestId('model-option-price')).toHaveTextContent('Price unknown')
+    expect(within(optionFor(list, 'qwen3:8b')).getByTestId('model-option-price')).toHaveTextContent('Free')
   })
 
-  it('locked to a provider, lists only its models', async () => {
+  it('does not offer a model its connection turned off', async () => {
+    vi.mocked(modelsApi.list).mockResolvedValue([card(OPENAI.id, 'gpt-4o'), card(OPENAI.id, 'o3', { allowed: false, selectable: false })])
+    renderPicker({})
+    const list = await open()
+    expect(optionNames(list)).toEqual(expect.not.arrayContaining(['o3']))
+    expect(optionNames(list)).toContain('gpt-4o')
+  })
+
+  it('adds a connection right here, under the field, and lists its models when done', async () => {
+    renderPicker({})
+    await open()
+    expect(screen.getByRole('link', { name: 'Manage provider keys' })).toHaveAttribute('href', '/credentials')
+    fireEvent.click(screen.getByRole('button', { name: /Add a connection/ }))
+    // No dialog and no new tab: the flow is part of the page.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    const panel = screen.getByTestId('t-add-panel')
+    expect(within(panel).getByTestId('connection-create')).toBeInTheDocument()
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    const calls = vi.mocked(modelsApi.list).mock.calls.length
+    fireEvent.click(within(panel).getByRole('button', { name: 'Finish adding' }))
+    expect(screen.queryByTestId('t-add-panel')).not.toBeInTheDocument()
+    // Back in the list, which is fetched again for the new connection's models.
+    expect(await screen.findByRole('listbox')).toBeInTheDocument()
+    await vi.waitFor(() => expect(vi.mocked(modelsApi.list).mock.calls.length).toBeGreaterThan(calls))
+  })
+
+  it('locked to a provider, lists only its models and offers no new connection', async () => {
     const { onChange } = renderPicker({ providerId: OPENAI.id, model: 'gpt-4o' }, { providerLocked: true })
     const list = await open()
     expect(within(list).queryByRole('group', { name: 'Anthropic' })).not.toBeInTheDocument()
     expect(optionNames(list)).toEqual(['gpt-4o', 'o3'])
-    fireEvent.click(within(list).getByRole('option', { name: 'o3' }))
+    expect(screen.queryByRole('button', { name: /Add a connection/ })).not.toBeInTheDocument()
+    fireEvent.click(optionFor(list, 'o3'))
     expect(onChange).toHaveBeenCalledWith({ providerId: OPENAI.id, model: 'o3' }, expect.objectContaining({ id: OPENAI.id }))
   })
 
@@ -158,7 +204,7 @@ describe('ModelPicker', () => {
     const list = await open()
     const saved = within(list).getByRole('option', { name: /gpt-3.5-turbo/ })
     expect(saved).toHaveAttribute('aria-selected', 'true')
-    expect(saved).toHaveTextContent('Not available')
+    expect(within(saved).getByTestId('model-option-status')).toHaveTextContent('No longer offered')
   })
 
   it('keeps a saved id the provider does not list, instead of reading as unset', async () => {
@@ -196,7 +242,7 @@ describe('ModelPicker', () => {
     renderPicker({})
     const list = await open()
     const group = within(list).getByRole('group', { name: 'Mistral' })
-    expect(within(group).getByText('2 models listed, none usable yet. Check the provider again on its page.')).toBeInTheDocument()
+    expect(within(group).getByText('2 models listed, none usable yet. Check the connection again on its page.')).toBeInTheDocument()
     expect(within(group).queryByText(/No models yet/)).not.toBeInTheDocument()
   })
 
@@ -215,10 +261,10 @@ describe('ModelPicker', () => {
     renderPicker({ providerId: OPENAI.id, model: 'gpt-4o' })
     expect(screen.queryByTestId('t-model-unavailable')).not.toBeInTheDocument()
     const list = await open()
-    const offered = within(list).getAllByRole('option').map((o) => o.textContent).sort()
+    const offered = optionNames(list).sort()
     expect(offered).toEqual(cards.filter((c) => c.selectable).map((c) => c.vendorModelId).sort())
-    expect(within(list).getByRole('option', { name: 'gpt-4o' })).toHaveAttribute('aria-selected', 'true')
-    expect(within(list).queryByText('Not available')).not.toBeInTheDocument()
+    expect(optionFor(list, 'gpt-4o')).toHaveAttribute('aria-selected', 'true')
+    expect(within(list).queryByTestId('model-option-status')).not.toBeInTheDocument()
   })
 
   it('offers "Provider default" per provider when the model is optional', async () => {
@@ -245,19 +291,69 @@ describe('ModelPicker', () => {
     expect(within(list).getByRole('group', { name: 'OpenAI' })).toBeInTheDocument()
   })
 
-  it('keeps a working shortcut to connect a provider when there are none', async () => {
+  it('with no connection yet, adds one right where the model is asked for', async () => {
     vi.mocked(llmProvidersApi.getAll).mockResolvedValue([] as any)
     renderPicker({})
     const empty = await screen.findByTestId('no-providers')
-    const link = within(empty).getByRole('link', { name: /Connect a provider/ })
-    expect(link).toHaveAttribute('href', '/models/connect')
-    expect(link).toHaveAttribute('target', '_blank')
+    expect(empty).toHaveTextContent('No provider connections yet.')
+    fireEvent.click(within(empty).getByRole('button', { name: /Add a connection/ }))
+    expect(screen.getByTestId('t-add-panel')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop adding' }))
+    expect(screen.queryByTestId('t-add-panel')).not.toBeInTheDocument()
+    expect(screen.getByTestId('no-providers')).toBeInTheDocument()
   })
 
   it('shows loading while the list is on its way', async () => {
     vi.mocked(modelsApi.list).mockReturnValue(new Promise(() => {}))
     renderPicker({})
     expect(await screen.findByTestId('t-model-loading')).toHaveTextContent('Loading models')
+  })
+})
+
+describe('ModelPicker search relevance', () => {
+  const PROVIDERS = [
+    { id: 'prov-openai', ...SEARCH_PROVIDER_OPENAI, status: 'active' },
+    { id: 'prov-anthropic', ...SEARCH_PROVIDER_ANTHROPIC, status: 'active' },
+  ]
+  const providerId = (name?: string | null) => PROVIDERS.find((p) => p.name === name)!.id
+  const SEARCH_CARDS = SEARCH_CATALOG.map((m) => card(providerId(m.providerName), m.id, m.name ? { name: m.name } : {}))
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(llmProvidersApi.getAll).mockResolvedValue(PROVIDERS as any)
+    vi.mocked(modelsApi.list).mockResolvedValue(SEARCH_CARDS)
+  })
+
+  const listedIds = (list: HTMLElement) =>
+    within(list)
+      .queryAllByRole('option')
+      .map((o) => o.getAttribute('data-model'))
+      .filter((id): id is string => !!id)
+
+  it.each(SEARCH_CASES)('"$query" lists $expected ($why)', async ({ query, expected }) => {
+    renderPicker({})
+    const list = await open()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: query } })
+    // The picker sorts each provider's models by label before ranking, so compare the set here.
+    expect(listedIds(list).sort()).toEqual([...expected].sort())
+  })
+
+  it('lists only the gpt-4o models for "gpt-4o", exact id first, under a provider named after it', async () => {
+    renderPicker({})
+    const list = await open()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'gpt-4o' } })
+    expect(listedIds(list)).toEqual(['gpt-4o', 'gpt-4o-2024-08-06', 'gpt-4o-mini', 'chatgpt-4o-latest'])
+    expect(within(list).queryByRole('option', { name: /gpt-3\.5-turbo|dall-e-3/ })).not.toBeInTheDocument()
+  })
+
+  it('offers "Provider default" for a provider only when its name is what matched', async () => {
+    renderPicker({}, { modelOptional: true })
+    const list = await open()
+    const search = screen.getByRole('searchbox', { name: 'Search models' })
+    fireEvent.change(search, { target: { value: 'gpt-4o' } })
+    expect(within(list).queryByRole('option', { name: /Provider default/ })).not.toBeInTheDocument()
+    fireEvent.change(search, { target: { value: 'openai' } })
+    expect(within(list).getAllByRole('option', { name: /Provider default/ })).toHaveLength(1)
   })
 })
 

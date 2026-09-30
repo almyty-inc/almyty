@@ -46,6 +46,7 @@ npm run test:e2e -- --grep "CRITICAL"       # Critical bug tests
 | `auth-registration.spec.ts` | 12 | Registration, field validation, duplicate handling |
 | `auth-session.spec.ts` | 8 | Logout, token clearing, protected routes |
 | `complete-workflow.spec.ts` | 1 | Full pipeline: API -> Schema -> Tools -> Gateway -> Execute |
+| `core-journey.spec.ts` | 1 | Sign up -> model -> API -> shared tools (MCP, UTCP, Skills) -> autonomous agent -> web app a visitor chats with -> Connections, against a local fake; `npm run test:e2e:journey`, runs in CI |
 | `dashboard.spec.ts` | 15 | Stats cards, quick actions, navigation |
 | `gateway-management.spec.ts` | 9 | Gateway CRUD, type validation |
 | `gateways-crud-scoping.spec.ts` | 15 | Create gateways (MCP/A2A/UTCP), tool scoping |

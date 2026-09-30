@@ -16,7 +16,7 @@ export function ExtractContextNode({ data, selected }: NodeProps) {
       <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-sky-500 !border-sky-600" />
       <div className="px-3 py-2 bg-gradient-to-r from-sky-50 to-sky-100 dark:from-sky-950 dark:to-sky-900 rounded-t-[10px] border-b flex items-center gap-2">
         <FileSearch className="h-3.5 w-3.5 text-sky-700 dark:text-sky-300" />
-        <span className="text-xs font-semibold text-sky-700 dark:text-sky-300">Extract Context</span>
+        <span className="text-xs font-semibold text-sky-700 dark:text-sky-300">Extract context</span>
       </div>
       <div className="p-3">
         <div className="text-sm font-medium truncate">

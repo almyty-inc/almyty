@@ -28,13 +28,13 @@ import { PAGE_INTROS } from '../page-intros'
 
 const KEYS = [
   'provider', 'api', 'tools', 'gateway', 'first_call', 'external_client',
-  'agent', 'agent_run', 'app', 'distribution', 'runner',
+  'agent', 'agent_run', 'channel', 'runner',
 ] as const
 
 function state(done: Partial<Record<(typeof KEYS)[number], boolean>> = {}, over: Partial<OnboardingState> = {}): OnboardingState {
   return {
     steps: Object.fromEntries(KEYS.map((k) => [k, !!done[k]])) as OnboardingState['steps'],
-    links: { gateway: null, agent: null, app: null },
+    links: { gateway: null, agent: null },
     dismissed: false,
     dismissedIntros: [],
     activatedRealAt: null,
@@ -48,7 +48,6 @@ const HALF = state(
     links: {
       gateway: { id: 'gw-1', name: 'Weather API', type: 'mcp', endpoint: '/weather-api' },
       agent: null,
-      app: null,
     },
   },
 )
@@ -65,7 +64,7 @@ describe('GuidePage', () => {
     for (const title of ['Give an AI your API', 'Build an agent', 'Put it where people are', 'Run it on your machines']) {
       expect(screen.getByRole('heading', { name: title })).toBeInTheDocument()
     }
-    expect(screen.getByText(/0 of 10 steps done/)).toBeInTheDocument()
+    expect(screen.getByText(/0 of 9 steps done/)).toBeInTheDocument()
     const next = screen.getByTestId('next-step')
     expect(within(next).getByText('Import an API', { selector: 'p' })).toBeInTheDocument()
     expect(within(next).getByTestId('next-step-link')).toHaveAttribute('href', '/apis/new')
@@ -131,7 +130,7 @@ describe('GuideCard (dashboard)', () => {
   it('is a compact entry point: next step, progress by job, link to the guide', () => {
     const onDismiss = vi.fn()
     render(<GuideCard state={HALF} onDismiss={onDismiss} />)
-    expect(screen.getByText(/4 of 10 steps done/)).toBeInTheDocument()
+    expect(screen.getByText(/4 of 9 steps done/)).toBeInTheDocument()
     expect(screen.getByTestId('guide-card-open')).toHaveAttribute('href', '/guide')
     const next = screen.getByTestId('next-step')
     expect(within(next).getByTestId('next-step-link')).toHaveAttribute('href', '/gateways/gw-1?tab=integrations')
@@ -149,7 +148,7 @@ describe('GuidePill (sidebar)', () => {
   it('always links to the guide and shows progress until everything is done', async () => {
     api.get.mockResolvedValue(HALF)
     render(<GuidePill />)
-    const link = await screen.findByRole('link', { name: 'Guide, 4 of 10 steps done' })
+    const link = await screen.findByRole('link', { name: 'Guide, 4 of 9 steps done' })
     expect(link).toHaveAttribute('href', '/guide')
   })
 

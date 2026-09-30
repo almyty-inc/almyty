@@ -122,6 +122,13 @@ export class McpSourcesService {
         context: { purpose: 'mcp_call', resourceType: 'mcp_source' },
       });
     }
+    // An MCP source is org-wide: its tools are the organization's, and every
+    // call through them resolves this connection. A team or private one would
+    // fail for everyone it does not cover, so it is refused now, with who.
+    if (input.credentialId) {
+      const row = await this.credentialRefs.load(organizationId, input.credentialId);
+      await this.credentialRefs.assertAttachable(row, { organizationId, visibility: 'org', noun: 'MCP source' }, { actorId: userId ?? null });
+    }
     const authType = await this.resolveAuthType(organizationId, input);
     const source = this.sourceRepository.create({
       name,
@@ -500,7 +507,7 @@ export class McpSourcesService {
    * capped at 128 chars.
    */
   private toolName(source: McpSource, remoteName: string): string {
-    const slug = (s: string) => s.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+    const slug = (s: string) => s.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|(?<!_)_+$/g, '');
     const name = `${slug(source.name)}_${slug(remoteName)}`;
     return name.slice(0, 128);
   }

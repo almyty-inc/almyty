@@ -1,6 +1,6 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { Model } from '../../../entities/model.entity';
 import { ModelDeployment } from '../../../entities/model-deployment.entity';
@@ -13,6 +13,13 @@ import { getRequestContext } from '../../../common/request-context';
 import { providerUsableByUser } from '../../llm-providers/private-provider';
 import { type ActingAs, asPrincipal } from '../../../common/authorization/execution-access.service';
 import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
+import { assertModelAllowed, providerAllowsModel } from '../../llm-providers/allowed-models';
+import { GONE_REASONS, MODEL_CHANGE_LISTENER, type ModelChangeListener } from '../notices/model-change';
+
+/** Why a plan leaves out a model: its connection's owner unticked it. */
+function notAllowedReason(connectionName: string): string {
+  return `not allowed on the connection "${connectionName}"`;
+}
 
 /** Weight of a new sample in the p50 average. */
 const LATENCY_P50_ALPHA = 0.2;
@@ -94,17 +101,29 @@ export class ModelRouterService {
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly credentialRefs?: CredentialRefResolver,
     @Optional() private readonly accessPolicy?: AccessPolicyService,
+    // Who hears when a model goes away (notices/).
+    @Optional() @Inject(MODEL_CHANGE_LISTENER) private readonly changes?: ModelChangeListener,
   ) {}
 
   async plan(organizationId: string, policy: RoutingPolicy = {}, principal?: ActingAs): Promise<RoutePlan> {
     const cards = await this.models.find({ where: { organizationId }, order: { createdAt: 'ASC' } });
-    const { candidates, rejected } = selectCandidates(cards, policy);
+    // A model its connection hides is out before anything is ranked, so a
+    // pin or a fallback entry naming that model id finds the copy another
+    // connection allows instead of stopping at the hidden one.
+    const hidden = await this.hiddenByConnection(organizationId, cards);
+    const { candidates, rejected } = selectCandidates(cards.filter((c) => !hidden.has(c.id)), policy);
+    for (const [modelId, reason] of hidden) rejected.push({ modelId, reason });
     const resolved: ResolvedCandidate[] = [];
     for (const c of candidates) {
       const card = cards.find((k) => k.id === c.modelId)!;
       const provider = await this.providerFor(card, principal);
       if (!provider) {
         rejected.push({ modelId: card.id, reason: 'no callable provider' });
+        continue;
+      }
+      // The row as it is now; the list above was read a moment earlier.
+      if (!providerAllowsModel(provider, card.vendorModelId)) {
+        rejected.push({ modelId: card.id, reason: notAllowedReason(provider.name) });
         continue;
       }
       if (!provider.isHealthy || provider.status !== LlmProviderStatus.ACTIVE) {
@@ -165,7 +184,27 @@ export class ModelRouterService {
     if (!card) throw new Error(`Model ${modelId} is not in this organization's catalog`);
     const provider = await this.providerFor(card, principal);
     if (!provider) throw new Error(`Model ${card.name} has no callable provider`);
+    // A role pinned to a model its connection hides is refused, not rerouted.
+    assertModelAllowed(provider, card.vendorModelId);
     return { card, provider };
+  }
+
+  /**
+   * Cards whose connection hides them, with the reason a plan gives. Each
+   * card also gets `allowed` stamped, so `isSelectable()` agrees.
+   */
+  private async hiddenByConnection(organizationId: string, cards: Model[]): Promise<Map<string, string>> {
+    const ids = [...new Set(cards.map((c) => c.providerId).filter((id): id is string => !!id))];
+    const out = new Map<string, string>();
+    if (ids.length === 0) return out;
+    const rows = await this.providers.find({ where: { organizationId, id: In(ids) }, select: { id: true, name: true, allowNewModels: true, hiddenModels: true, allowedModels: true }, loadEagerRelations: false });
+    const byId = new Map(rows.map((p) => [p.id, p]));
+    for (const card of cards) {
+      const provider = card.providerId ? byId.get(card.providerId) : undefined;
+      card.allowed = providerAllowsModel(provider, card.vendorModelId);
+      if (!card.allowed && provider) out.set(card.id, notAllowedReason(provider.name));
+    }
+    return out;
   }
 
   /**
@@ -312,9 +351,16 @@ export class ModelRouterService {
     try {
       const card = await this.models.findOne({ where: { organizationId, providerId, vendorModelId } });
       if (!card || card.validationStatus === 'failed') return;
+      const wasUsable = card.status === 'active' && card.validationStatus === 'passed';
       const lastValidationError = error.slice(0, 1000);
       const status = card.status === 'active' ? 'error' : card.status;
       await this.models.update({ id: card.id }, { validationStatus: 'failed', lastValidatedAt: new Date(), lastValidationError, status });
+      if (wasUsable && this.changes) {
+        const provider = await this.providers.findOne({ where: { id: providerId, organizationId } });
+        if (provider && providerAllowsModel(provider, vendorModelId)) {
+          await this.changes.modelsChanged({ organizationId, providerId, appeared: [], gone: [{ card, reason: GONE_REASONS.modelNotFound }] });
+        }
+      }
       if (this.auditLog) {
         void this.auditLog
           .log({

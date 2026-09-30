@@ -80,8 +80,12 @@ export interface ModelCard {
   metadata: Record<string, any> | null
   createdAt: string
   updatedAt: string
-  /** status active + a dispatch path + a passing validation run. */
+  /** status active + a dispatch path + a passing validation run + not turned off on its connection. */
   selectable: boolean
+  /** False when its connection's owner turned the model off (unticked it). */
+  allowed?: boolean
+  /** Its connection started listing it within the last week. */
+  isNew?: boolean
   /** The override when set, else the feed price. */
   effectivePricing: ModelPricing | null
 }
@@ -91,21 +95,6 @@ export interface ListModelsQuery {
   status?: ModelStatus
   privacyTier?: ModelPrivacyTier
   providerId?: string
-}
-
-export interface RegisterModelBody {
-  name: string
-  vendorModelId: string
-  providerId?: string
-  endpointRef?: Record<string, any>
-  modelVersionId?: string
-  capabilities?: ModelCapabilities
-  contextLength?: number
-  privacyTier?: ModelPrivacyTier
-  region?: string
-  pricingOverride?: ModelPricing
-  base?: string
-  metadata?: Record<string, any>
 }
 
 export interface UpdateModelBody {
@@ -118,13 +107,6 @@ export interface UpdateModelBody {
   /** null clears the override so the feed price applies again. */
   pricingOverride?: ModelPricing | null
   modelVersionId?: string | null
-}
-
-export interface ValidateModelResult {
-  passed: boolean
-  latencyMs: number
-  error?: string
-  model: ModelCard
 }
 
 export interface SyncModelsResult {

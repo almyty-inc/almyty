@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpException,
   HttpStatus,
+  Optional,
   Param,
   Post,
   Query,
@@ -23,7 +24,12 @@ import {
   SupersedeMemoryDto,
 } from './canonical-memory.dto';
 import { MemoryError, Mode, Provenance, ScopeType, SCOPE_TYPE_VALUES } from './canonical.types';
-import { userScopeId } from './canonical-memory.helpers';
+import { agentScopeId, isAgentScopeOf, userScopeId } from './canonical-memory.helpers';
+import { MemoryAccountsService } from './memory-accounts.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Agent } from '../../../entities/agent.entity';
+import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -38,6 +44,9 @@ import { MemorySyncService } from './memory-sync.service';
  * window — once consumers move over the legacy controller comes out
  * (planned in the same release branch).
  */
+/** A scope as a request names it. */
+type ScopeInput = { scope_type?: ScopeType; scope_id?: string } | undefined;
+
 @Controller('memory/canonical')
 @ApiTags('Memory (Canonical v1)')
 @ApiBearerAuth()
@@ -84,7 +93,10 @@ export class CanonicalMemoryController {
     // user scope id (what this API hands back on a user memory).
     const userId = this.userId(req);
     const own = userId ? [organizationId, userScopeId(organizationId, userId)] : [organizationId];
-    if (scope?.scope_id && !own.includes(scope.scope_id)) {
+    // An agent's own memory (`<org>:agent:<agentId>`) is the organization's
+    // like its workspace memory is: any agent scope inside the caller's org.
+    const agentScope = scope?.scope_type === 'agent' && !!scope.scope_id && isAgentScopeOf(organizationId, scope.scope_id);
+    if (scope?.scope_id && !own.includes(scope.scope_id) && !agentScope) {
       throw new HttpException(
         {
           success: false,
@@ -148,7 +160,62 @@ export class CanonicalMemoryController {
       }
       return { scope_type: scopeType, scope_id: userScopeId(this.orgId(req), userId) };
     }
+    // One agent's own memory: the id names the agent, inside this org
+    // (assertScope refused any other org's above).
+    if (scopeType === 'agent') {
+      if (!scope?.scope_id || !isAgentScopeOf(this.orgId(req), scope.scope_id)) {
+        throw new HttpException(
+          { success: false, error: 'BAD_REQUEST', message: 'An agent scope id is <organization id>:agent:<agent id>' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      return { scope_type: scopeType, scope_id: scope.scope_id };
+    }
     return { scope_type: scopeType, scope_id: this.orgId(req) };
+  }
+
+  /**
+   * ownScope, and for an agent's own memory (scope `agent`) the check that
+   * the caller may see that agent: a private agent's memory is its owner's
+   * to see, a team agent's its team's, an org agent's the organization's.
+   * Anyone else is told the scope does not exist.
+   */
+  // Not declared `async`: every-scope-is-the-callers.spec.ts reads async
+  // methods that take a scope as request handlers.
+  private scopeFor(req: any, scope: ScopeInput): Promise<{ scope_type: ScopeType; scope_id: string }> {
+    let own: { scope_type: ScopeType; scope_id: string };
+    try {
+      own = this.ownScope(req, scope);
+    } catch (err) {
+      return Promise.reject(err);
+    }
+    if (own.scope_type !== 'agent') return Promise.resolve(own);
+    return this.readableAgentScopeIds(req).then((visible) => {
+      if (!visible.includes(own.scope_id)) {
+        throw new HttpException(
+          { success: false, error: 'NOT_FOUND', message: "That agent's memory was not found" },
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      return own;
+    });
+  }
+
+  /** The agent scopes (`<org>:agent:<id>`) of every agent the caller may see. */
+  // Not declared `async` either, for the same guard.
+  private readableAgentScopeIds(req: any): Promise<string[]> {
+    const organizationId = this.orgId(req);
+    const userId = this.userId(req);
+    const policy = this.accessPolicy;
+    // Without the policy or a signed-in user nobody's agent is visible: fail closed.
+    if (!policy || !this.agents || !userId) return Promise.resolve([]);
+    return this.agents
+      .find({
+        where: { organizationId, isTemporary: false },
+        select: { id: true, organizationId: true, visibility: true, teamId: true, createdBy: true },
+      })
+      .then((rows) => policy.filterVisible({ id: userId }, organizationId, rows))
+      .then((visible) => visible.map((a) => agentScopeId(organizationId, a.id)));
   }
 
   /** The signed-in user's id, or undefined. */
@@ -176,6 +243,10 @@ export class CanonicalMemoryController {
     private readonly chunker: DocumentChunkerService,
     private readonly consolidation: ConsolidationService,
     private readonly memorySync: MemorySyncService,
+    @Optional() private readonly accounts?: MemoryAccountsService,
+    // Who may see an agent's own memory: whoever may see the agent.
+    @Optional() private readonly accessPolicy?: AccessPolicyService,
+    @Optional() @InjectRepository(Agent) private readonly agents?: Repository<Agent>,
   ) {}
 
   // ── backends list / health ────────────────────────────────────────
@@ -194,6 +265,16 @@ export class CanonicalMemoryController {
     return { success: true, data: await this.router.healthAll() };
   }
 
+  // ── memory accounts an agent can keep its memories in ─────────────
+
+  @Get('accounts')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: "almyty's own memory and every outside memory account the organization has set up" })
+  async listAccounts(@Request() req: any) {
+    const organizationId = this.orgId(req);
+    return { success: true, data: this.accounts ? await this.accounts.accounts(organizationId) : [] };
+  }
+
   // ── workspace config (per-scope routing + softcap) ────────────────
 
   @Get('config')
@@ -210,7 +291,7 @@ export class CanonicalMemoryController {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const scope = this.ownScope(req, { scope_type: scopeType, scope_id: scopeId });
+    const scope = await this.scopeFor(req, { scope_type: scopeType, scope_id: scopeId });
     const cfg = await this.service.getOrCreateConfig(scope.scope_type, scope.scope_id);
     return { success: true, data: cfg };
   }
@@ -239,7 +320,7 @@ export class CanonicalMemoryController {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const scope = this.ownScope(req, body);
+    const scope = await this.scopeFor(req, body);
     const updated = await this.service.updateConfig(
       scope.scope_type,
       scope.scope_id,
@@ -272,7 +353,7 @@ export class CanonicalMemoryController {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const scope = this.ownScope(req, { scope_type: scopeType, scope_id: scopeId });
+    const scope = await this.scopeFor(req, { scope_type: scopeType, scope_id: scopeId });
     const limit = Math.min(Math.max(Number(limitRaw) || 50, 1), 500);
     const rows = await this.service.listSoftcapWarnings(scope.scope_type, scope.scope_id, limit);
     return { success: true, data: rows };
@@ -297,7 +378,7 @@ export class CanonicalMemoryController {
       );
     }
     const result = await this.consolidation.run(
-      this.ownScope(req, body),
+      await this.scopeFor(req, body),
       { force: !!body.force },
     );
     return { success: true, data: result };
@@ -322,7 +403,7 @@ export class CanonicalMemoryController {
       );
     }
     const result = await this.memorySync.sync(
-      this.ownScope(req, body),
+      await this.scopeFor(req, body),
       { force: !!body.force },
     );
     return { success: true, data: result };
@@ -347,7 +428,7 @@ export class CanonicalMemoryController {
   ) {
     try {
       const report = await this.router.transfer(
-        this.ownScope(req, body),
+        await this.scopeFor(req, body),
         body.source,
         body.target,
         { mode: body.mode, dry_run: body.dry_run },
@@ -386,7 +467,7 @@ export class CanonicalMemoryController {
     }
     try {
       const result = await this.chunker.importSource({
-        scope: this.ownScope(req, body),
+        scope: await this.scopeFor(req, body),
         source_uri: body.source_uri,
         content: body.content,
         content_format: body.content_format,
@@ -419,7 +500,7 @@ export class CanonicalMemoryController {
       const item = await this.service.put(
         {
           mode: body.mode,
-          scope: this.ownScope(req, body.scope),
+          scope: await this.scopeFor(req, body.scope),
           content: body.content,
           content_format: body.content_format,
           tags: body.tags,
@@ -454,7 +535,7 @@ export class CanonicalMemoryController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get a memory item by id' })
   async get(@Param('id') id: string, @Request() req: any) {
-    const item = await this.service.get(id, this.orgId(req), this.userId(req));
+    const item = await this.service.get(id, this.orgId(req), this.userId(req), await this.readableAgentScopeIds(req));
     if (!item) {
       throw new HttpException(
         { success: false, error: 'NOT_FOUND', message: `memory ${id} not found` },
@@ -474,7 +555,13 @@ export class CanonicalMemoryController {
     @Query('mode') mode: 'soft' | 'hard' | undefined,
     @Request() req: any,
   ) {
-    const ok = await this.service.delete(id, this.orgId(req), mode ?? 'soft', { user_id: req.user?.sub ?? req.user?.id });
+    const ok = await this.service.delete(
+      id,
+      this.orgId(req),
+      mode ?? 'soft',
+      { user_id: req.user?.sub ?? req.user?.id },
+      await this.readableAgentScopeIds(req),
+    );
     if (!ok) {
       throw new HttpException(
         { success: false, error: 'NOT_FOUND', message: `memory ${id} not found` },
@@ -495,7 +582,7 @@ export class CanonicalMemoryController {
     @Request() req: any,
   ) {
     const page = await this.service.list({
-      scope: this.ownScope(req, body.scope),
+      scope: await this.scopeFor(req, body.scope),
       mode: body.mode,
       tier: body.tier,
       tags: body.tags,
@@ -518,7 +605,7 @@ export class CanonicalMemoryController {
     @Request() req: any,
   ) {
     const results = await this.service.search({
-      scope: this.ownScope(req, body.scope),
+      scope: await this.scopeFor(req, body.scope),
       query: body.query,
       mode: body.mode,
       tier: body.tier,
@@ -561,7 +648,7 @@ export class CanonicalMemoryController {
         this.orgId(req),
         {
           mode: body.new_item.mode,
-          scope: this.ownScope(req, body.new_item.scope),
+          scope: await this.scopeFor(req, body.new_item.scope),
           content: body.new_item.content,
           content_format: body.new_item.content_format,
           tags: body.new_item.tags,
@@ -573,6 +660,7 @@ export class CanonicalMemoryController {
           provenance: this.callerProvenance(['supersede']),
         },
         { user_id: req.user?.sub ?? req.user?.id },
+        await this.readableAgentScopeIds(req),
       );
       return { success: true, data: result };
     } catch (err) {

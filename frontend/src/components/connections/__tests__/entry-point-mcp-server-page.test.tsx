@@ -1,7 +1,9 @@
 /**
- * One consumer end to end: the Add MCP server page's "Connect an account"
- * action opens the connect flow inline, and the connection it returns lands
- * in the page's own payload as credentialId while the pasted token is dropped.
+ * One consumer end to end: the Add MCP server page's token is the shared
+ * pick-or-create credential control. "Create one here" opens the add flow
+ * inline, the credential it makes lands on Credentials and comes back
+ * picked, and the page sends it as credentialId; no token is pasted onto
+ * the server row.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
@@ -33,91 +35,67 @@ vi.mock('../../../store/organization', () => ({
   useOrganizationStore: () => ({ currentOrganization: { id: 'test-org-id', name: 'Test Org' } }),
 }))
 
-const mcpConnector: Connector = {
-  key: 'mcp-custom',
-  kind: 'mcp',
-  displayName: 'MCP server',
-  connect: [
-    {
-      type: 'api_key',
-      label: 'Server URL and token',
-      schema: {
-        type: 'object',
-        properties: {
-          serverUrl: { type: 'string', title: 'Server URL' },
-          apiKey: { type: 'string', title: 'Bearer token', 'x-secret': true },
-        },
-        required: ['serverUrl'],
-      },
-    },
-  ],
+const other: Connector = {
+  key: 'other',
+  kind: 'tool_source',
+  displayName: 'Other service',
+  validation: { kind: 'format' },
+  connect: [{ type: 'api_key', label: 'Key', schema: { type: 'object', properties: { apiKey: { type: 'string', title: 'Key', 'x-secret': true } }, required: ['apiKey'] } }],
 }
 
-const connected: Connection = {
-  id: 'conn-mcp-1',
-  name: 'MCP server',
-  connectorKey: 'mcp-custom',
-  kind: 'mcp',
+const made: Connection = {
+  id: 'cred-weather',
+  name: 'weather token',
+  connectorKey: 'other',
+  connectorDisplayName: 'Other service',
+  kind: 'tool_source',
   owner: 'org',
-  accountLabel: 'https://mcp.example.com/mcp',
   health: { status: 'valid' },
   createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
 }
 
-describe('Add MCP server page connect entry point', () => {
+describe('Add MCP server: the token is a credential', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(connectorsApi.list).mockResolvedValue([mcpConnector])
-    vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connected })
+    vi.mocked(connectorsApi.list).mockResolvedValue([other])
+    vi.mocked(connectionsApi.list).mockResolvedValue([])
+    vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: made })
     vi.mocked(mcpSourcesApi.create).mockResolvedValue({ source: { id: 'src-1' }, sync: { total: 2 }, syncError: null })
   })
 
-  it('keeps the raw token flow and offers the connect action beside it', () => {
-    render(<McpServerForm organizationId="org-1" />)
-    expect(screen.getByLabelText(/auth token/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Connect an account' })).toBeInTheDocument()
-    expect(screen.queryByTestId('connected-chip')).not.toBeInTheDocument()
-  })
-
-  it('opens the connect flow inline, filtered to MCP connectors, and selects the returned connection on the page', async () => {
+  it('creates the token here, inline, without submitting the page, and sends it as credentialId', async () => {
     render(<McpServerForm organizationId="org-1" />)
 
     fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'weather' } })
     fireEvent.change(screen.getByLabelText(/server url/i), { target: { value: 'https://mcp.example.com/mcp' } })
-    fireEvent.change(screen.getByLabelText(/auth token/i), { target: { value: 'tok-typed' } })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Connect an account' }))
-    expect(await screen.findByText('Connect MCP server')).toBeInTheDocument()
-    await waitFor(() => expect(connectorsApi.list).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: 'Create one here' }))
+    const sheet = within(await screen.findByTestId('connect-flow'))
+    expect(await sheet.findByText('Add a key')).toBeInTheDocument()
+    expect(sheet.getByLabelText('Name')).toHaveValue('weather token')
+    fireEvent.change(sheet.getByLabelText('Key'), { target: { value: 'tok-secret' } })
+    fireEvent.click(sheet.getByRole('button', { name: 'Save' }))
 
-    const sheet = within(screen.getByTestId('connect-flow'))
-    fireEvent.change(await sheet.findByLabelText('Server URL'), { target: { value: 'https://mcp.example.com/mcp' } })
-    fireEvent.change(sheet.getByLabelText('Bearer token'), { target: { value: 'tok-secret' } })
-    fireEvent.click(sheet.getByRole('button', { name: 'Connect' }))
-
-    await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('mcp-custom', { method: 'api_key', owner: 'org', input: { serverUrl: 'https://mcp.example.com/mcp', apiKey: 'tok-secret' } }))
-    // Connecting inside the inline flow does not submit the page's own form.
+    await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('other', { method: 'api_key', owner: 'org', name: 'weather token', input: { apiKey: 'tok-secret' } }))
+    // Saving inside the inline flow does not submit the page's own form.
     expect(mcpSourcesApi.create).not.toHaveBeenCalled()
-    const chip = await screen.findByTestId('connected-chip')
-    expect(chip).toHaveTextContent('MCP server')
-    // The typed token was replaced by the connection.
-    expect(screen.getByLabelText(/auth token/i)).toHaveValue('')
+    expect(await screen.findByTestId('credential-picker-open')).toHaveTextContent('Open weather token')
 
     fireEvent.click(screen.getByRole('button', { name: /add server/i }))
-    await waitFor(() => expect(mcpSourcesApi.create).toHaveBeenCalledWith('org-1', { name: 'weather', url: 'https://mcp.example.com/mcp', credentialId: 'conn-mcp-1' }))
+    await waitFor(() => expect(mcpSourcesApi.create).toHaveBeenCalledWith('org-1', { name: 'weather', url: 'https://mcp.example.com/mcp', credentialId: 'cred-weather' }))
   })
 
-  it('lets the user drop the connection and go back to a token', async () => {
+  it('folds the create panel away on Cancel and sends no token', async () => {
     render(<McpServerForm organizationId="org-1" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Connect an account' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create one here' }))
     const sheet = within(await screen.findByTestId('connect-flow'))
-    fireEvent.change(await sheet.findByLabelText('Server URL'), { target: { value: 'https://mcp.example.com/mcp' } })
-    fireEvent.click(sheet.getByRole('button', { name: 'Connect' }))
-    await screen.findByTestId('connected-chip')
+    await sheet.findByText('Add a key')
+    fireEvent.click(sheet.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByTestId('connect-flow')).not.toBeInTheDocument())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Remove MCP server' }))
-    expect(screen.queryByTestId('connected-chip')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Connect an account' })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'weather' } })
+    fireEvent.change(screen.getByLabelText(/server url/i), { target: { value: 'https://mcp.example.com/mcp' } })
+    fireEvent.click(screen.getByRole('button', { name: /add server/i }))
+    await waitFor(() => expect(mcpSourcesApi.create).toHaveBeenCalledWith('org-1', { name: 'weather', url: 'https://mcp.example.com/mcp' }))
   })
 })

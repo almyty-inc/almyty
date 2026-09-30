@@ -71,7 +71,7 @@ export class CustomEndpointAdapter implements ModelProviderAdapter {
 
   /** The endpoint is ready when /models answers and, if a model id is set, lists it. */
   async readEndpoint(ref: EndpointRef, credentials: AdapterCredentials): Promise<ActualState> {
-    const url = String(ref.url ?? '').replace(/\/+$/, '');
+    const url = String(ref.url ?? '').replace(/(?<!\/)\/+$/, '');
     if (!url) return { state: 'failed', message: 'no url' };
     // Same gate as the provider save path. `ref.url` comes from
     // providerConfig, which POST /model-deployments takes from the body

@@ -82,7 +82,12 @@ describe('SSO OIDC — real authorization-code flow vs oauth2-mock-server', () =
   // Claims the mock IdP will stamp into the next issued id_token.
   let nextClaims: Record<string, unknown> = {};
 
+  const priorOptIn = process.env.SSO_ALLOW_PRIVATE_URLS;
+
   beforeAll(async () => {
+    // The mock IdP is on loopback, which the egress gate refuses unless
+    // the install opts in, as a self-host with an IdP on its LAN would.
+    process.env.SSO_ALLOW_PRIVATE_URLS = 'true';
     server = new OAuth2Server();
     await server.issuer.keys.generate('RS256');
     await server.start(0, 'localhost');
@@ -96,6 +101,8 @@ describe('SSO OIDC — real authorization-code flow vs oauth2-mock-server', () =
   });
 
   afterAll(async () => {
+    if (priorOptIn === undefined) delete process.env.SSO_ALLOW_PRIVATE_URLS;
+    else process.env.SSO_ALLOW_PRIVATE_URLS = priorOptIn;
     if (server) await server.stop();
   });
 
@@ -111,6 +118,8 @@ describe('SSO OIDC — real authorization-code flow vs oauth2-mock-server', () =
       new SamlReplayCache(new FakeRedis()),
       undefined,
       store,
+      // The IdP's addresses are on a domain the org has verified.
+      { coversEmail: async () => true } as any,
     );
   });
 
@@ -153,6 +162,17 @@ describe('SSO OIDC — real authorization-code flow vs oauth2-mock-server', () =
     expect(parsed.searchParams.get('code_challenge')).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(parsed.searchParams.get('nonce')).toBeTruthy();
     expect(state).toHaveLength(32);
+  });
+
+  it('refuses a loopback issuer unless the install opted in to private IdP URLs', async () => {
+    // The issuer is an org admin's setting and the login URL is public:
+    // without the opt-in, discovery must not reach a private address.
+    delete process.env.SSO_ALLOW_PRIVATE_URLS;
+    try {
+      await expect(sso.getOidcLoginUrl(ORG_ID)).rejects.toThrow();
+    } finally {
+      process.env.SSO_ALLOW_PRIVATE_URLS = 'true';
+    }
   });
 
   it('JIT-provisions a brand-new user + membership from a real id_token', async () => {

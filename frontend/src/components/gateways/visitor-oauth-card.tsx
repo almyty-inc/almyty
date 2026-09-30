@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy } from 'lucide-react'
 
+import { FormSection } from '@/components/layout/form-page'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -17,7 +17,7 @@ import { useCopy } from '@/lib/clipboard'
 /**
  * The identity provider a hosted chat app signs visitors in with when its
  * access is set to OAuth: Google, GitHub, Microsoft, or any OpenID Connect
- * provider. Configured inline on the gateway page. The client secret is
+ * provider. Set on the web chat page and saved with it. The client secret is
  * write-only here: it is stored in the credential store and never shown
  * again, only whether one is set.
  */
@@ -65,7 +65,7 @@ const PRESET_TILES: Array<{ preset: VisitorOAuthPreset; label: string; mark: str
 
 const isOther = (preset: VisitorOAuthPreset) => preset === 'oidc' || preset === 'oauth2'
 
-interface Draft {
+export interface VisitorOAuthDraft {
   preset: VisitorOAuthPreset
   clientId: string
   clientSecret: string
@@ -78,9 +78,13 @@ interface Draft {
   jwksUri: string
   scopes: string
   allowedEmailDomains: string
+  /** An OpenID Connect provider whose endpoints are entered by hand. */
+  manual: boolean
 }
 
-function draftFrom(p: VisitorOAuthProvider | null): Draft {
+export const visitorOAuthKey = (gatewayId: string) => ['gateway-visitor-oauth', gatewayId]
+
+export function draftFrom(p: VisitorOAuthProvider | null): VisitorOAuthDraft {
   return {
     preset: p?.preset ?? 'google',
     clientId: p?.clientId ?? '',
@@ -94,11 +98,13 @@ function draftFrom(p: VisitorOAuthProvider | null): Draft {
     jwksUri: p && !p.discoveryUrl ? p.jwksUri ?? '' : '',
     scopes: p?.scopes.join(' ') ?? '',
     allowedEmailDomains: p?.allowedEmailDomains.join(', ') ?? '',
+    manual: !!p && p.preset === 'oidc' && !p.discoveryUrl,
   }
 }
 
 /** Only the fields the chosen provider takes; an empty secret keeps the stored one. */
-function bodyFrom(d: Draft): Record<string, unknown> {
+export function visitorOAuthBody(draft: VisitorOAuthDraft): Record<string, unknown> {
+  const d = draft.manual ? { ...draft, discoveryUrl: '' } : draft
   const body: Record<string, unknown> = {
     preset: d.preset,
     clientId: d.clientId.trim(),
@@ -120,64 +126,63 @@ function bodyFrom(d: Draft): Record<string, unknown> {
   return body
 }
 
-export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; authMode?: string }) {
+/** What is still missing before the provider can be saved, in words; null when nothing is. */
+export function visitorOAuthProblem(draft: VisitorOAuthDraft, provider: VisitorOAuthProvider | null): string | null {
+  if (!draft.clientId.trim()) return 'Enter the client ID from the provider.'
+  if (!provider?.hasClientSecret && !draft.clientSecret) return 'Enter the client secret from the provider.'
+  return null
+}
+
+export interface VisitorOAuthCardProps {
+  gatewayId: string
+  authMode?: string
+  /** The provider as edited on the page, or null while it is not being changed. Saved with the page. */
+  draft: VisitorOAuthDraft | null
+  onDraftChange: (draft: VisitorOAuthDraft | null) => void
+  error?: string
+}
+
+export function VisitorOAuthCard({ gatewayId, authMode, draft, onDraftChange, error }: VisitorOAuthCardProps) {
   const queryClient = useQueryClient()
   const copy = useCopy()
-  const key = ['gateway-visitor-oauth', gatewayId]
+  const key = visitorOAuthKey(gatewayId)
   const { data, isLoading } = useQuery<VisitorOAuthState>({
     queryKey: key,
     queryFn: () => gatewaysApi.getVisitorOAuth(gatewayId),
   })
   const provider = data?.provider ?? null
-  const [draft, setDraft] = useState<Draft>(() => draftFrom(null))
-  const [editing, setEditing] = useState(false)
+  const editing = draft !== null
+  const value = draft ?? draftFrom(provider)
+  const manual = value.manual
   const [confirmRemove, setConfirmRemove] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [manual, setManual] = useState(false)
+  const [removeError, setRemoveError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!editing) {
-      setDraft(draftFrom(provider))
-      setManual(!!provider && provider.preset === 'oidc' && !provider.discoveryUrl)
-    }
-  }, [provider, editing])
+  const set = (patch: Partial<VisitorOAuthDraft>) => onDraftChange({ ...value, ...patch })
+  const setManual = (on: boolean) => set({ manual: on })
 
-  const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }))
-  const onFail = (err: unknown) => setError(getApiErrorMessage(err, 'Please try again.'))
-
-  const save = useMutation({
-    mutationFn: () => gatewaysApi.setVisitorOAuth(gatewayId, bodyFrom(manual ? { ...draft, discoveryUrl: '' } : draft)),
-    onSuccess: (next: VisitorOAuthState) => {
-      queryClient.setQueryData(key, next)
-      setEditing(false)
-      setError(null)
-    },
-    onError: onFail,
-  })
   const remove = useMutation({
     mutationFn: () => gatewaysApi.removeVisitorOAuth(gatewayId),
     onSuccess: () => {
       queryClient.setQueryData(key, { provider: null, redirectUris: data?.redirectUris ?? [] })
       setConfirmRemove(false)
-      setError(null)
+      setRemoveError(null)
+      onDraftChange(null)
     },
-    onError: onFail,
+    onError: (err: unknown) => setRemoveError(getApiErrorMessage(err, 'Please try again.')),
   })
 
   const showForm = !provider || editing
   const id = (field: string) => `visitor-oauth-${field}-${gatewayId}`
   const needsSecret = !provider?.hasClientSecret
+  const shown = error ?? removeError
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Visitor sign-in provider</CardTitle>
-        <CardDescription>
-          When access is set to OAuth, visitors sign in with this provider before they can chat.
-          {authMode && authMode !== 'oauth' && ' Access is not set to OAuth right now, so this is not in use.'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <FormSection
+      title="Visitor sign-in provider"
+      description={`When access is set to OAuth, visitors sign in with this provider before they can chat.${
+        authMode && authMode !== 'oauth' ? ' Access is not set to OAuth right now, so this is not in use.' : ''
+      }`}
+    >
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
         ) : (
@@ -225,7 +230,7 @@ export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; a
                   </dd>
                 </dl>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" onClick={() => setEditing(true)}>
+                  <Button type="button" variant="outline" onClick={() => onDraftChange(draftFrom(provider))}>
                     Edit provider
                   </Button>
                   {confirmRemove ? (
@@ -248,13 +253,7 @@ export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; a
             )}
 
             {showForm && (
-              <form
-                className="space-y-3"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  save.mutate()
-                }}
-              >
+              <div role="group" aria-label="Sign-in provider" className="space-y-3">
                 {/* The well-known providers first, as tiles; everything
                     else is "Other", the only one that asks for a URL. */}
                 <ChoiceTiles label="Provider">
@@ -264,38 +263,38 @@ export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; a
                       testId={`visitor-oauth-preset-${tile.preset}`}
                       icon={<span className="text-xs font-semibold text-primary">{tile.mark}</span>}
                       label={tile.label}
-                      selected={tile.preset === 'oidc' ? isOther(draft.preset) : draft.preset === tile.preset}
-                      onClick={() => set({ preset: tile.preset === 'oidc' && isOther(draft.preset) ? draft.preset : tile.preset })}
+                      selected={tile.preset === 'oidc' ? isOther(value.preset) : value.preset === tile.preset}
+                      onClick={() => set({ preset: tile.preset === 'oidc' && isOther(value.preset) ? value.preset : tile.preset })}
                     />
                   ))}
                 </ChoiceTiles>
 
-                {draft.preset === 'microsoft' && (
+                {value.preset === 'microsoft' && (
                   <div className="space-y-1.5">
                     <Label htmlFor={id('tenant')}>Tenant ID or primary domain</Label>
-                    <Input id={id('tenant')} value={draft.tenant} onChange={(e) => set({ tenant: e.target.value })} placeholder="contoso.onmicrosoft.com" />
+                    <Input id={id('tenant')} value={value.tenant} onChange={(e) => set({ tenant: e.target.value })} placeholder="contoso.onmicrosoft.com" />
                     <p className="text-xs text-muted-foreground">One tenant. The shared common and organizations endpoints are not supported.</p>
                   </div>
                 )}
 
-                {draft.preset === 'oidc' && !manual && (
+                {value.preset === 'oidc' && !manual && (
                   <div className="space-y-1.5">
                     <Label htmlFor={id('discovery')}>Issuer or discovery URL</Label>
-                    <Input id={id('discovery')} value={draft.discoveryUrl} onChange={(e) => set({ discoveryUrl: e.target.value })} placeholder="https://login.example.com" />
+                    <Input id={id('discovery')} value={value.discoveryUrl} onChange={(e) => set({ discoveryUrl: e.target.value })} placeholder="https://login.example.com" />
                   </div>
                 )}
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor={id('client-id')}>Client ID</Label>
-                    <Input id={id('client-id')} value={draft.clientId} onChange={(e) => set({ clientId: e.target.value })} autoComplete="off" />
+                    <Input id={id('client-id')} value={value.clientId} onChange={(e) => set({ clientId: e.target.value })} autoComplete="off" />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor={id('client-secret')}>Client secret</Label>
                     <Input
                       id={id('client-secret')}
                       type="password"
-                      value={draft.clientSecret}
+                      value={value.clientSecret}
                       onChange={(e) => set({ clientSecret: e.target.value })}
                       autoComplete="new-password"
                       placeholder={needsSecret ? '' : 'Stored. Leave blank to keep it.'}
@@ -307,7 +306,7 @@ export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; a
                   <Label htmlFor={id('domains')}>Allowed email domains</Label>
                   <Input
                     id={id('domains')}
-                    value={draft.allowedEmailDomains}
+                    value={value.allowedEmailDomains}
                     onChange={(e) => set({ allowedEmailDomains: e.target.value })}
                     placeholder="example.com, example.org"
                   />
@@ -317,15 +316,15 @@ export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; a
                   </p>
                 </div>
 
-                <Disclosure title="Advanced" summary={draft.scopes.trim() ? `Scopes: ${draft.scopes.trim()}` : 'Provider default scopes'}>
-                  {isOther(draft.preset) && (
+                <Disclosure title="Advanced" summary={value.scopes.trim() ? `Scopes: ${value.scopes.trim()}` : 'Provider default scopes'}>
+                  {isOther(value.preset) && (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-4">
                         <Label htmlFor={id('manual')}>Enter the endpoints by hand</Label>
                         <Switch
                           id={id('manual')}
-                          checked={manual || draft.preset === 'oauth2'}
-                          disabled={draft.preset === 'oauth2'}
+                          checked={manual || value.preset === 'oauth2'}
+                          disabled={value.preset === 'oauth2'}
                           onCheckedChange={setManual}
                         />
                       </div>
@@ -333,34 +332,34 @@ export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; a
                         <Label htmlFor={id('plain')}>Plain OAuth 2.0, without OpenID Connect</Label>
                         <Switch
                           id={id('plain')}
-                          checked={draft.preset === 'oauth2'}
+                          checked={value.preset === 'oauth2'}
                           onCheckedChange={(plain) => set({ preset: plain ? 'oauth2' : 'oidc' })}
                         />
                       </div>
-                      {(manual || draft.preset === 'oauth2') && (
+                      {(manual || value.preset === 'oauth2') && (
                         <div className="grid gap-3 sm:grid-cols-2">
-                          {draft.preset === 'oidc' && (
+                          {value.preset === 'oidc' && (
                             <div className="space-y-1.5">
                               <Label htmlFor={id('issuer')}>Issuer</Label>
-                              <Input id={id('issuer')} value={draft.issuer} onChange={(e) => set({ issuer: e.target.value })} placeholder="https://login.example.com" />
+                              <Input id={id('issuer')} value={value.issuer} onChange={(e) => set({ issuer: e.target.value })} placeholder="https://login.example.com" />
                             </div>
                           )}
                           <div className="space-y-1.5">
                             <Label htmlFor={id('authorize')}>Authorization endpoint</Label>
-                            <Input id={id('authorize')} value={draft.authorizationEndpoint} onChange={(e) => set({ authorizationEndpoint: e.target.value })} />
+                            <Input id={id('authorize')} value={value.authorizationEndpoint} onChange={(e) => set({ authorizationEndpoint: e.target.value })} />
                           </div>
                           <div className="space-y-1.5">
                             <Label htmlFor={id('token')}>Token endpoint</Label>
-                            <Input id={id('token')} value={draft.tokenEndpoint} onChange={(e) => set({ tokenEndpoint: e.target.value })} />
+                            <Input id={id('token')} value={value.tokenEndpoint} onChange={(e) => set({ tokenEndpoint: e.target.value })} />
                           </div>
                           <div className="space-y-1.5">
                             <Label htmlFor={id('userinfo')}>User info endpoint</Label>
-                            <Input id={id('userinfo')} value={draft.userinfoEndpoint} onChange={(e) => set({ userinfoEndpoint: e.target.value })} />
+                            <Input id={id('userinfo')} value={value.userinfoEndpoint} onChange={(e) => set({ userinfoEndpoint: e.target.value })} />
                           </div>
-                          {draft.preset === 'oidc' && (
+                          {value.preset === 'oidc' && (
                             <div className="space-y-1.5">
                               <Label htmlFor={id('jwks')}>JWKS URI</Label>
-                              <Input id={id('jwks')} value={draft.jwksUri} onChange={(e) => set({ jwksUri: e.target.value })} />
+                              <Input id={id('jwks')} value={value.jwksUri} onChange={(e) => set({ jwksUri: e.target.value })} />
                             </div>
                           )}
                         </div>
@@ -369,31 +368,27 @@ export function VisitorOAuthCard({ gatewayId, authMode }: { gatewayId: string; a
                   )}
                   <div className="space-y-1.5">
                     <Label htmlFor={id('scopes')}>Scopes</Label>
-                    <Input id={id('scopes')} value={draft.scopes} onChange={(e) => set({ scopes: e.target.value })} placeholder="Provider default" />
+                    <Input id={id('scopes')} value={value.scopes} onChange={(e) => set({ scopes: e.target.value })} placeholder="Provider default" />
                   </div>
                 </Disclosure>
 
-                <div className="flex gap-2">
-                  <Button type="submit" disabled={save.isPending || !draft.clientId.trim() || (needsSecret && !draft.clientSecret)}>
-                    {save.isPending ? 'Saving...' : 'Save provider'}
-                  </Button>
-                  {editing && (
-                    <Button type="button" variant="ghost" onClick={() => { setEditing(false); setError(null) }}>
-                      Cancel
+                {editing && provider && (
+                  <div>
+                    <Button type="button" variant="ghost" onClick={() => onDraftChange(null)}>
+                      Keep the saved provider
                     </Button>
-                  )}
-                </div>
-              </form>
+                  </div>
+                )}
+              </div>
             )}
 
-            {error && (
+            {shown && (
               <p role="alert" className="text-sm text-destructive">
-                {error}
+                {shown}
               </p>
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+    </FormSection>
   )
 }

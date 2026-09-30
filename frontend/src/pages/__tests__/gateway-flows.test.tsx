@@ -37,7 +37,6 @@ vi.mock('@/lib/api', async () => {
       generateApiKey: vi.fn(),
       revokeApiKey: vi.fn(),
       getEvents: vi.fn(),
-      testChannelConnection: vi.fn(),
       activate: vi.fn(),
       deactivate: vi.fn(),
     },
@@ -130,51 +129,57 @@ const SHARED = {
   id: 'gw-9',
   name: 'Petstore',
   description: '',
-  type: 'tools',
+  type: 'mcp',
   status: 'active',
   endpoint: '/petstore',
   configuration: {},
 }
 
-describe('/gateways/new: share tools', () => {
+describe('/gateways/new: create gateway', () => {
   beforeEach(() => {
     vi.mocked(toolsApi.getAll).mockResolvedValue({ tools: SHAREABLE } as any)
     vi.mocked(gatewaysApi.getById).mockImplementation(async (id: string) => (id === 'gw-9' ? SHARED : GATEWAY) as any)
   })
 
-  it('is where an old ?new=1 link lands, and asks for tools, not a protocol or an agent', async () => {
+  it('is where an old ?new=1 link lands, and asks for the protocol as tiles, then the tools; no agent or channel', async () => {
     renderAt('/gateways?new=1')
     await waitFor(() => expect(where()).toBe('/gateways/new'))
-    expect(screen.getByRole('heading', { level: 1, name: 'Share tools' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Create gateway' })).toBeInTheDocument()
     await screen.findByTestId('share-api-api-1')
-    expect(screen.queryByLabelText(/^Protocol/)).toBeNull()
+    const tiles = within(screen.getByRole('list', { name: 'Protocol' })).getAllByRole('button').map((b) => b.textContent)
+    expect(tiles).toEqual(['MCPClaude Code, Cursor', 'UTCPAny UTCP client', 'SkillsSKILL.md for agents'])
+    // Nothing picked for you: the protocol is an explicit choice.
+    for (const p of ['mcp', 'utcp', 'skills']) expect(screen.getByTestId(`gateway-protocol-${p}`)).toHaveAttribute('aria-pressed', 'false')
     expect(screen.queryByRole('radio', { name: /^Agent/ })).toBeNull()
     expect(screen.queryByText(/A2A|Slack|Telegram/)).toBeNull()
   })
 
-  it('shares a whole API: its active tools, named after it, then shows the key and the snippets', async () => {
+  it('serves a whole API over MCP: its active tools, named after it, then shows the key and the MCP setups', async () => {
     const user = userEvent.setup()
     vi.mocked(gatewaysApi.create).mockResolvedValue({
       id: 'gw-9',
       initialApiKey: 'ak_secret_once',
       sharedTools: { associated: 2, skipped: [] },
     } as any)
+    vi.mocked(gatewaysApi.getById).mockResolvedValue({ ...SHARED, type: 'mcp' } as any)
     renderAt('/gateways/new')
 
+    await user.click(await screen.findByTestId('gateway-protocol-mcp'))
+    expect(screen.getByTestId('gateway-protocol-mcp')).toHaveAttribute('aria-pressed', 'true')
     await user.click(await screen.findByTestId('share-api-api-1'))
-    // The draft is part of the API but can't be shared; the name follows the API.
+    // The draft is part of the API but can't be served; the name follows the API.
     expect(screen.getByLabelText(/^Name/)).toHaveValue('Petstore')
     expect(screen.getByText(/Address: .*\/acme\/petstore$/)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Share 2 tools' }))
+    await user.click(screen.getByRole('button', { name: 'Create gateway' }))
 
     await waitFor(() =>
       expect(gatewaysApi.create).toHaveBeenCalledWith({
         name: 'Petstore',
-        type: 'tools',
+        type: 'mcp',
         kind: 'tool',
         endpoint: '/petstore',
         description: undefined,
-        configuration: {},
+        configuration: { transport: 'http' },
         visibility: 'org',
         teamId: null,
         toolIds: ['t1', 't2'],
@@ -187,10 +192,39 @@ describe('/gateways/new: share tools', () => {
     expect(claudeCode).toHaveTextContent('claude mcp add petstore --transport http')
     expect(claudeCode).toHaveTextContent('/acme/petstore --header "x-api-key: ak_secret_once"')
     expect(screen.queryByTestId('key-placeholder-note')).toBeNull()
-    expect(screen.getByRole('tab', { name: 'Cursor' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Claude Desktop' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'UTCP' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Skills' })).toBeInTheDocument()
+    const setups = within(screen.getByTestId('connect-snippets'))
+    expect(setups.getByRole('tab', { name: 'Cursor' })).toBeInTheDocument()
+    expect(setups.getByRole('tab', { name: 'Claude Desktop' })).toBeInTheDocument()
+    // Only what speaks MCP: this gateway serves no UTCP manual and no skills.
+    expect(setups.queryByRole('tab', { name: 'UTCP' })).toBeNull()
+    expect(setups.queryByRole('tab', { name: 'Skills' })).toBeNull()
+  })
+
+  it('creates a UTCP gateway, opened on the protocol from a link', async () => {
+    const user = userEvent.setup()
+    vi.mocked(gatewaysApi.create).mockResolvedValue({ id: 'gw-9' } as any)
+    renderAt('/gateways/new?protocol=utcp')
+    expect(await screen.findByTestId('gateway-protocol-utcp')).toHaveAttribute('aria-pressed', 'true')
+    await user.click(await screen.findByLabelText(/weatherNow/))
+    await user.click(screen.getByRole('button', { name: 'Create gateway' }))
+    await waitFor(() => expect(gatewaysApi.create).toHaveBeenCalledWith(expect.objectContaining({ type: 'utcp', configuration: { protocol: 'http' }, toolIds: ['t4'] })))
+  })
+
+  it('creates a Skills gateway, which has no access key, and shows the install command', async () => {
+    const user = userEvent.setup()
+    vi.mocked(gatewaysApi.create).mockResolvedValue({ id: 'gw-9' } as any)
+    vi.mocked(gatewaysApi.getById).mockResolvedValue({ ...SHARED, type: 'skills' } as any)
+    renderAt('/gateways/new')
+    await user.click(await screen.findByTestId('gateway-protocol-skills'))
+    await user.click(screen.getByRole('button', { name: /^Advanced/ }))
+    expect(screen.getByText(/a Skills gateway has no access key/)).toBeInTheDocument()
+    await user.click(await screen.findByLabelText(/weatherNow/))
+    await user.click(screen.getByRole('button', { name: 'Create gateway' }))
+    await waitFor(() => expect(gatewaysApi.create).toHaveBeenCalledWith(expect.objectContaining({ type: 'skills', configuration: { format: 'skill-md' } })))
+    await waitFor(() => expect(where()).toBe('/gateways/gw-9'))
+    const skills = await screen.findByTestId('snippet-skills')
+    expect(skills).toHaveTextContent('npx @almyty/skills install @acme/petstore')
+    expect(screen.queryByTestId('key-placeholder-note')).toBeNull()
   })
 
   it('says which picked tools were not shared, and why', async () => {
@@ -201,18 +235,19 @@ describe('/gateways/new: share tools', () => {
       sharedTools: { associated: 1, skipped: [{ toolId: 't4', reason: 'Tool is paused.' }] },
     } as any)
     renderAt('/gateways/new')
+    await user.click(await screen.findByTestId('gateway-protocol-mcp'))
     await user.click(await screen.findByLabelText(/weatherNow/))
     // A single tool of an API is found by searching for it.
     await user.type(screen.getByRole('textbox', { name: 'Search APIs and tools' }), 'list')
     await user.click(screen.getByLabelText(/listPets/))
-    await user.click(screen.getByRole('button', { name: 'Share 2 tools' }))
+    await user.click(screen.getByRole('button', { name: 'Create gateway' }))
 
     const skipped = await screen.findByTestId('shared-tools-skipped')
-    expect(skipped).toHaveTextContent("1 tool wasn't shared")
+    expect(skipped).toHaveTextContent("1 tool wasn't added")
     expect(skipped).toHaveTextContent('Tool is paused.')
   })
 
-  it('names a single-tool share after the tool, in words', async () => {
+  it('names a single-tool gateway after the tool, in words', async () => {
     const user = userEvent.setup()
     renderAt('/gateways/new')
     await user.click(await screen.findByLabelText(/weatherNow/))
@@ -252,16 +287,16 @@ describe('/gateways/new: share tools', () => {
     expect(row).not.toHaveTextContent('Swagger Petstore - OpenAPI 3.0')
 
     await user.click(placeOrder)
-    expect(screen.getByRole('button', { name: 'Share 1 tool' })).toBeInTheDocument()
     expect(screen.getByTestId('share-api-api-p')).toHaveTextContent('1 of 2 picked')
   })
 
-  it('makes a share private when it holds a private tool', async () => {
+  it('makes a gateway private when it holds a private tool', async () => {
     const user = userEvent.setup()
     vi.mocked(gatewaysApi.create).mockResolvedValue({ id: 'gw-9' } as any)
     renderAt('/gateways/new')
+    await user.click(await screen.findByTestId('gateway-protocol-mcp'))
     await user.click(await screen.findByLabelText(/myNotes/))
-    await user.click(screen.getByRole('button', { name: 'Share 1 tool' }))
+    await user.click(screen.getByRole('button', { name: 'Create gateway' }))
     await waitFor(() =>
       expect(gatewaysApi.create).toHaveBeenCalledWith(expect.objectContaining({ visibility: 'private', toolIds: ['t5'] })),
     )
@@ -269,16 +304,16 @@ describe('/gateways/new: share tools', () => {
 
   it('opens with an API already picked from its page', async () => {
     renderAt('/gateways/new?api=api-1')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Share 2 tools' })).toBeInTheDocument())
-    expect(screen.getByTestId('share-api-api-1')).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => expect(screen.getByTestId('share-api-api-1')).toHaveAttribute('aria-pressed', 'true'))
   })
 
-  it('refuses to share nothing', async () => {
+  it('refuses a gateway with no protocol or no tools', async () => {
     const user = userEvent.setup()
     renderAt('/gateways/new')
     await screen.findByTestId('share-api-api-1')
-    await user.click(screen.getByRole('button', { name: 'Share tools' }))
-    expect(await screen.findByText('Pick at least one tool, or an API.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Create gateway' }))
+    expect(await screen.findByText('Pick a protocol.')).toBeInTheDocument()
+    expect(screen.getByText('Pick at least one tool, or an API.')).toBeInTheDocument()
     expect(gatewaysApi.create).not.toHaveBeenCalled()
   })
 
@@ -295,27 +330,22 @@ describe('/gateways/new: share tools', () => {
   })
 })
 
-describe('a shared-tools gateway page', () => {
+describe('a tool gateway, one protocol', () => {
   beforeEach(() => {
     vi.mocked(gatewaysApi.getById).mockResolvedValue(SHARED as any)
   })
 
-  it('leads with the address and snippets; keys, usage and events wait under Advanced', async () => {
-    const user = userEvent.setup()
+  it('leads with the address and the setups of its one protocol', async () => {
     renderAt('/gateways/gw-9')
-    expect(await screen.findByTestId('connect-snippets')).toBeInTheDocument()
+    const setups = await screen.findByTestId('connect-snippets')
     // No key in hand any more: a placeholder, and where a new one comes from.
     expect(screen.getByTestId('snippet-claude-code')).toHaveTextContent('<your-access-key>')
     expect(screen.getByTestId('key-placeholder-note')).toBeInTheDocument()
-    expect(screen.queryByText('Authentication')).toBeNull()
-    expect(screen.queryByRole('tab', { name: 'Integrations' })).toBeNull()
-    // Just the list of what is shared: no scoping presets to learn.
-    expect(screen.getByRole('heading', { name: /Shared tools/ })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Read only' })).toBeNull()
-
-    await user.click(screen.getByRole('button', { name: /^Advanced/ }))
-    expect(await screen.findByText('Authentication')).toBeInTheDocument()
-    expect(screen.getByText('Performance metrics')).toBeInTheDocument()
+    expect(within(setups).queryByRole('tab', { name: 'UTCP' })).toBeNull()
+    expect(within(setups).queryByRole('tab', { name: 'Skills' })).toBeNull()
+    // Keys, scoping, usage and events are on the page, as on every gateway.
+    expect(await screen.findByRole('tab', { name: 'Integrations' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^Tool scoping/ })).toBeInTheDocument()
   })
 
   it('pauses and resumes with one switch', async () => {

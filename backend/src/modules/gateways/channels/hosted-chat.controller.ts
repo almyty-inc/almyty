@@ -11,6 +11,7 @@ import {
   Query,
   Req,
   Res,
+  Optional,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -25,7 +26,9 @@ import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { hostedChatConfigFrom, slugFromHost } from './hosted-chat.config';
 import { trustedClientIp } from '../../../common/security/client-ip';
 import { withholdsCandidateAnswers } from '../../agents/final-answer';
+import { answerStreamFilter } from '../../agents/answer-stream.filter';
 import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
+import { ChannelPolicyService, withChannelPolicy } from '../channel-policy.service';
 
 /**
  * The public API behind {slug}.almyty.app.
@@ -47,6 +50,11 @@ export class HostedChatController {
     private readonly hostedChat: HostedChatService,
     private readonly gatewayRateLimit: GatewayRateLimitService,
     private readonly agentRuntimeService: AgentRuntimeService,
+    // The channel this chat is, resolved on its agent: its per-run cost cap, spend cap
+    // and whether visitor conversations may reach shared memory. Optional
+    // only so positional unit specs construct the controller; Nest always
+    // injects it (channel-policy.guard.spec.ts).
+    @Optional() private readonly channelPolicy?: ChannelPolicyService,
   ) {}
 
   /**
@@ -320,6 +328,11 @@ export class HostedChatController {
       );
     }
 
+    // The spend allowance this channel draws on, across every visitor. A
+    // visitor inside their share is still refused once that allowance is
+    // spent for the day (or month), with a sentence rather than a number.
+    const policy = this.channelPolicy ? await this.channelPolicy.admit(gateway) : null;
+
     const conversation = body?.conversationId
       ? await this.hostedChat.findConversation(endUser, body.conversationId)
       : await this.hostedChat.startConversation(gateway, endUser, message);
@@ -334,8 +347,9 @@ export class HostedChatController {
       null,
       message,
       // Still traceable back to whoever actually sent it, in the column
-      // that means a visitor.
-      {
+      // that means a visitor. The policy adds the per-run cost cap and
+      // stamps the run with its channel for the spend cap.
+      withChannelPolicy(policy, {
         conversationId: conversation.id,
         endUserId: endUser.id,
         metadata: {
@@ -350,8 +364,7 @@ export class HostedChatController {
         // Runs in the gateway's scope: the surface serves its agent only
         // while the gateway's own visibility covers it, on every message.
         principal: gatewayPrincipal(gateway),
-      },
-
+      }),
     );
 
     return {
@@ -413,129 +426,26 @@ export class HostedChatController {
       }
     };
 
-    // A visitor sees the answer, never the working. Every step of an
-    // autonomous run streams its model output as `llm.chunk`, and a step
-    // that goes on to call tools streams its narration too: what it is
-    // about to look up, what the last tool returned, instructions echoed
-    // from the system prompt.
-    //
-    // Runs started here compose their answer (agents/final-answer.ts):
-    // every call that offers tools is announced as working (`llm.started`
-    // with `answer: false`) and nothing of it is sent, and the answer is
-    // written by a call that offers none (`answer: true`), which streams
-    // token by token as it arrives. Should that call fail, its
-    // `llm.response` carries the draft, which then goes out whole.
-    //
-    // A step not announced either way is held until the provider's stream
-    // has said, with certainty, what the step is (`llm.step_kind`, see
-    // StreamChunk.stepKind):
-    //
-    //   text -> the held chunks go out, and the rest stream live
-    //   tool -> the held chunks are dropped, and nothing more is sent
-    //
-    // A step whose provider never says (Gemini, custom endpoints, any
-    // type on the non-streaming fallback) streams nothing, and its answer
-    // goes out as one token event when its `llm.response` lands with no
-    // tool calls. That is also where anything the stream did not carry
-    // is made up. The response is the last word: if it contradicts what
-    // was streamed, the page is told to `reset` the reply. With a verify
-    // panel on the final output, or a multi-model strategy that checks or
-    // judges candidate answers, nothing is sent before the answer is
-    // chosen; the page reconciles from the transcript on `done`.
-    type StepStream = { kind: 'text' | 'tool' | null; held: string[]; sent: string; working?: boolean };
-    const steps = new Map<number, StepStream>();
-    const stepOf = (data: any): number | null => (typeof data?.step === 'number' ? data.step : null);
-    const stateOf = (step: number): StepStream => {
-      let state = steps.get(step);
-      if (!state) {
-        state = { kind: null, held: [], sent: '' };
-        steps.set(step, state);
-      }
-      return state;
-    };
-    const sendToken = (state: StepStream | null, content: string) => {
-      res.write(`event: token\ndata: ${JSON.stringify({ content })}\n\n`);
-      if (state) state.sent += content;
-    };
-    const retract = (state: StepStream | undefined) => {
-      if (!state?.sent) return;
-      res.write(`event: reset\ndata: {}\n\n`);
-      state.sent = '';
-    };
-
+    // A visitor sees the answer, never the working: the run's events are
+    // reduced to the answer as it is written (agents/answer-stream.filter.ts,
+    // shared with the /v1 compat APIs). A token that turns out not to be the
+    // answer is retracted with `reset`; with a verify panel or a strategy
+    // that judges candidates nothing is sent before the answer is chosen, and
+    // the page reconciles from the transcript on `done`.
+    const filter = answerStreamFilter(
+      {
+        token: (content) => res.write(`event: token\ndata: ${JSON.stringify({ content })}\n\n`),
+        reset: () => res.write(`event: reset\ndata: {}\n\n`),
+        done: (reason) => {
+          res.write(`event: done\ndata: ${JSON.stringify({ reason })}\n\n`);
+          close();
+        },
+      },
+      { withholdCandidates: withholdCandidateChunks },
+    );
     const onEvent = (event: any) => {
       if (closed) return;
-      const type = event?.type;
-      const data = event?.data;
-      if (['run.completed', 'run.failed', 'run.cancelled'].includes(type)) {
-        res.write(`event: done\ndata: ${JSON.stringify({ reason: type })}\n\n`);
-        close();
-        return;
-      }
-      if (withholdCandidateChunks) return;
-      const step = stepOf(data);
-
-      if (type === 'llm.started') {
-        // A fresh attempt at this step. Whatever an earlier attempt held
-        // or showed is not this attempt's answer.
-        if (step === null) return;
-        retract(steps.get(step));
-        steps.delete(step);
-        // Announced: a working call is never shown, and the answer call
-        // offers no tools, so it cannot turn out to be anything but text.
-        if (data?.answer === false) steps.set(step, { kind: 'tool', held: [], sent: '', working: true });
-        else if (data?.answer === true) steps.set(step, { kind: 'text', held: [], sent: '' });
-        return;
-      }
-
-      if (type === 'llm.chunk') {
-        const content = data?.content;
-        if (step === null || typeof content !== 'string' || !content) return;
-        const state = stateOf(step);
-        if (state.kind === 'tool') return;
-        if (state.kind === 'text') sendToken(state, content);
-        else state.held.push(content);
-        return;
-      }
-
-      if (type === 'llm.step_kind') {
-        if (step === null) return;
-        const state = stateOf(step);
-        if (state.kind) return; // the first verdict is the one the provider was certain of
-        if (data?.kind === 'tool') {
-          state.kind = 'tool';
-          state.held = [];
-          retract(state);
-        } else if (data?.kind === 'text') {
-          state.kind = 'text';
-          for (const content of state.held) sendToken(state, content);
-          state.held = [];
-        }
-        return;
-      }
-
-      if (type === 'llm.response') {
-        const state = step === null ? undefined : steps.get(step);
-        if (step !== null) steps.delete(step);
-        // A working step's reply is never the visitor's, unless the runtime
-        // says it now is: the answer call failed and its draft stands in.
-        if (state?.working && data?.answer !== true) return;
-        const calledTools = Array.isArray(data?.toolCalls) && data.toolCalls.length > 0;
-        if (calledTools) {
-          retract(state);
-          return;
-        }
-        const content = data?.content;
-        if (typeof content !== 'string' || !content) return;
-        const sent = state?.sent ?? '';
-        if (content.startsWith(sent)) {
-          const rest = content.slice(sent.length);
-          if (rest) sendToken(null, rest);
-        } else {
-          retract(state);
-          sendToken(null, content);
-        }
-      }
+      filter(event);
     };
 
     // Proxies drop idle connections; a comment frame keeps it warm

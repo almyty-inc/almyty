@@ -143,7 +143,7 @@ function methodViolations(method: ConnectMethod, where: string): string[] {
 /**
  * Structural check for a connector definition: built-in catalog entries
  * are tested against it, org-defined connectors are rejected on POST
- * /connectors when it reports anything.
+ * /credentials/services when it reports anything.
  */
 export function validateConnectorDefinition(def: unknown): string[] {
   const errors: string[] = [];

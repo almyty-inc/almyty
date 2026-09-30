@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import * as crypto from 'crypto';
 
 import { OAuthClient } from '../../../entities/oauth-client.entity';
@@ -175,18 +175,37 @@ export class McpOAuthService {
       validateRedirectUri(uri);
     }
 
-    // Per-gateway quota — refuse if the gateway has already hit
-    // the soft cap on registered clients. Protects against a
-    // single misbehaving or adversarial integrator from
-    // exhausting shared storage on behalf of every other
-    // integrator on the same gateway.
+    // Per-gateway quota, so a loop of registrations cannot grow the
+    // table without bound.
+    //
+    // Registration is anonymous, so a plain refusal at the cap handed the
+    // gateway to whoever filled it first: 500 throwaway registrations and
+    // no real client could ever register again. A client nobody has ever
+    // authorized (no authorization code was issued to it) holds no grant
+    // and serves no one, so at the cap the oldest such clients make room.
+    // Only a gateway whose every slot belongs to an authorized client
+    // refuses.
     const existingCount = await this.oauthClientRepository.count({
       where: { gatewayId, isActive: true },
     });
     if (existingCount >= MAX_CLIENTS_PER_GATEWAY) {
-      throw new BadRequestException(
-        `Gateway has reached the maximum of ${MAX_CLIENTS_PER_GATEWAY} registered OAuth clients`,
-      );
+      const surplus = existingCount - MAX_CLIENTS_PER_GATEWAY + 1;
+      const unused = await this.oauthClientRepository
+        .createQueryBuilder('client')
+        .select(['client.id'])
+        .where('client.gatewayId = :gatewayId AND client.isActive = true', { gatewayId })
+        .andWhere(
+          'NOT EXISTS (SELECT 1 FROM oauth_authorization_codes code WHERE code."clientId" = client."clientId")',
+        )
+        .orderBy('client.createdAt', 'ASC')
+        .limit(surplus)
+        .getMany();
+      if (unused.length < surplus) {
+        throw new BadRequestException(
+          `Gateway has reached the maximum of ${MAX_CLIENTS_PER_GATEWAY} registered OAuth clients`,
+        );
+      }
+      await this.oauthClientRepository.update({ id: In(unused.map((client) => client.id)) }, { isActive: false });
     }
 
     // Validate grant types

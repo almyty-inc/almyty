@@ -57,6 +57,18 @@ function controllerPrefixes() {
 
   for (const file of [...walk(backendSrc), ...(fs.existsSync(backendEe) ? walk(backendEe) : [])]) {
     const source = fs.readFileSync(file, 'utf8');
+    // A bare @Controller() has no prefix of its own: each route's first
+    // segment is one. The credentials controller serves /access-keys this
+    // way, and the check never saw it, so the agent's Channels tab asked
+    // vite for /access-keys and got index.html.
+    if (/@Controller\(\s*\)/.test(source)) {
+      const routes = /@(?:Get|Post|Put|Patch|Delete|All)\(\s*['"]([^'"]+)['"]/g;
+      let route;
+      while ((route = routes.exec(source)) !== null) {
+        const first = route[1].replace(/^\//, '').split('/')[0];
+        if (first && !/^[:*]/.test(first)) prefixes.add(first);
+      }
+    }
     // Both @Controller('x') and @Controller({ path: 'x' }).
     const pattern = /@Controller\(\s*(?:\{[^}]*?path:\s*)?['"]([^'"]*)['"]/g;
     let match;

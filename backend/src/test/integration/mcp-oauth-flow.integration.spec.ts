@@ -18,6 +18,7 @@ import { McpOAuthService } from '../../modules/mcp/services/mcp-oauth.service';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { listenOnLoopback } from '../http';
+import { GlobalExceptionFilter } from '../../common/filters/global-exception.filter';
 import cookieParser from 'cookie-parser';
 import { DataSource } from 'typeorm';
 
@@ -27,6 +28,7 @@ import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
 import { Gateway, GatewayType, GatewayKind, GatewayStatus } from '../../entities/gateway.entity';
 import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity';
+import { OAuthClient } from '../../entities/oauth-client.entity';
 import { AuthService } from '../../modules/auth/auth.service';
 import { useIsolatedSchema, ensureSchema } from './isolated-schema.helper';
 
@@ -77,6 +79,9 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     app = module.createNestApplication();
     app.use(cookieParser());
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    // As main.ts does: the filter is what turns an exception's
+    // wwwAuthenticate into the WWW-Authenticate header a client acts on.
+    app.useGlobalFilters(new GlobalExceptionFilter());
     await listenOnLoopback(app);
 
     ds = module.get(DataSource);
@@ -450,6 +455,251 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
         .expect(200);
 
       expect(res.body.error.code).toBe(-32601);
+    });
+  });
+
+  // The consent screen shows the user the scope the token will hold; the
+  // gateway has to hold the token to it. A token granted mcp:resources
+  // used to call every tool.
+  describe('OAuth scope at the gateway', () => {
+    async function tokenWithScope(scope: string): Promise<string> {
+      const reg = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/register`)
+        .send({
+          client_name: `scope-${scope}`,
+          redirect_uris: ['http://localhost:12345/callback'],
+          token_endpoint_auth_method: 'none',
+        })
+        .expect(201);
+      const verifier = crypto.randomBytes(32).toString('base64url');
+      const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+      const code = await app.get(McpOAuthService).createAuthorizationCode(reg.body.client_id, user.id, gateway.id, org.id, {
+        redirectUri: 'http://localhost:12345/callback',
+        codeChallenge: challenge,
+        codeChallengeMethod: 'S256',
+        scope,
+      });
+      const res = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/token`)
+        .send({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'http://localhost:12345/callback',
+          client_id: reg.body.client_id,
+          code_verifier: verifier,
+        })
+        .expect(200);
+      expect(res.body.scope).toBe(scope);
+      return res.body.access_token;
+    }
+
+    const call = (token: string, body: object) =>
+      request(app.getHttpServer()).post(`/${ORG_SLUG}/almyty`).set('Authorization', `Bearer ${token}`).send(body);
+
+    it('refuses tools to a token granted resources only, and says which scope it lacks', async () => {
+      const token = await tokenWithScope('mcp:resources');
+
+      const res = await call(token, {
+        jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_apis', arguments: {} },
+      }).expect(403);
+      // RFC 6750 section 3.1: 403, with the scope that would do named in the
+      // challenge and in the body.
+      expect(res.headers['www-authenticate']).toBe('Bearer error="insufficient_scope", scope="mcp:tools"');
+      expect(res.body.error).toMatchObject({ errorCode: 'OAUTH2_INSUFFICIENT_SCOPE', scope: 'mcp:tools' });
+
+      await call(token, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }).expect(403);
+      await call(token, { jsonrpc: '2.0', id: 1, method: 'prompts/list', params: {} }).expect(403);
+    });
+
+    it('lets that token do what it was granted, and hold the session', async () => {
+      const token = await tokenWithScope('mcp:resources');
+
+      await call(token, { jsonrpc: '2.0', id: 1, method: 'resources/list', params: {} }).expect(200);
+      await call(token, {
+        jsonrpc: '2.0', id: 1, method: 'initialize',
+        params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 't', version: '1' } },
+      }).expect(200);
+    });
+
+    it('does not let a batch smuggle a tool call past the check', async () => {
+      const token = await tokenWithScope('mcp:resources');
+
+      await call(token, [
+        { jsonrpc: '2.0', id: 1, method: 'resources/list', params: {} },
+        { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_apis', arguments: {} } },
+      ]).expect(403);
+    });
+
+    it('lets a tools token call tools', async () => {
+      const token = await tokenWithScope('mcp:tools');
+
+      const res = await call(token, {
+        jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_apis', arguments: {} },
+      }).expect(200);
+      expect(res.body.result.isError).toBeUndefined();
+    });
+  });
+
+  // OAuth 2.1 section 4.1.3: a code redeemed twice is treated as stolen,
+  // and what it was exchanged for is revoked. Several redemptions sent at
+  // once must not leave one of them holding a live token.
+  describe('one authorization code redeemed concurrently', () => {
+    it('leaves no working token behind', async () => {
+      const reg = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/register`)
+        .send({ client_name: 'code-race', redirect_uris: ['http://localhost:12345/callback'], token_endpoint_auth_method: 'none' })
+        .expect(201);
+      const verifier = crypto.randomBytes(32).toString('base64url');
+      const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+      const code = await app.get(McpOAuthService).createAuthorizationCode(reg.body.client_id, user.id, gateway.id, org.id, {
+        redirectUri: 'http://localhost:12345/callback',
+        codeChallenge: challenge,
+        codeChallengeMethod: 'S256',
+        scope: 'mcp:tools',
+      });
+      const redeem = () =>
+        request(app.getHttpServer()).post(`/${ORG_SLUG}/almyty/token`).send({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'http://localhost:12345/callback',
+          client_id: reg.body.client_id,
+          code_verifier: verifier,
+        });
+
+      const responses = await Promise.all([redeem(), redeem(), redeem(), redeem()]);
+
+      expect(responses.filter((r) => r.status !== 200).length).toBeGreaterThanOrEqual(1);
+      for (const res of responses.filter((r) => r.status === 200)) {
+        // A revoked token is a bad credential, not a refusal of a known
+        // caller: 401 with error="invalid_token" (RFC 6750 section 3.1).
+        const use = await request(app.getHttpServer())
+          .post(`/${ORG_SLUG}/almyty`)
+          .set('Authorization', `Bearer ${res.body.access_token}`)
+          .send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+        expect(use.status).toBe(401);
+        expect(use.headers['www-authenticate']).toContain('error="invalid_token"');
+      }
+      const live = await ds.query(
+        `SELECT count(*)::int AS n FROM oauth_access_tokens WHERE "clientId" = $1 AND "isRevoked" = false`,
+        [reg.body.client_id],
+      );
+      expect(live[0].n).toBe(0);
+    });
+  });
+
+  // MCP clients start re-authorization only on a 401. A revoked or unknown
+  // token answered 403 left a client showing an error instead of logging
+  // in again.
+  describe('a revoked or unknown access token at the gateway', () => {
+    const listTools = (token?: string) => {
+      const req = request(app.getHttpServer()).post(`/${ORG_SLUG}/almyty`);
+      if (token) req.set('Authorization', `Bearer ${token}`);
+      return req.send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+    };
+    const resourceMetadata = () =>
+      `resource_metadata="${process.env.BASE_URL || process.env.API_URL || 'http://localhost:4000'}` +
+      `/${ORG_SLUG}/almyty/.well-known/oauth-protected-resource"`;
+
+    it('answers a token revoked at /revoke 401 with error="invalid_token"', async () => {
+      const reg = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/register`)
+        .send({ client_name: 'revoked', redirect_uris: ['http://localhost:12345/callback'], token_endpoint_auth_method: 'none' })
+        .expect(201);
+      const verifier = crypto.randomBytes(32).toString('base64url');
+      const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+      const code = await app.get(McpOAuthService).createAuthorizationCode(reg.body.client_id, user.id, gateway.id, org.id, {
+        redirectUri: 'http://localhost:12345/callback',
+        codeChallenge: challenge,
+        codeChallengeMethod: 'S256',
+        scope: 'mcp:tools',
+      });
+      const tokenRes = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/token`)
+        .send({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: 'http://localhost:12345/callback',
+          client_id: reg.body.client_id,
+          code_verifier: verifier,
+        })
+        .expect(200);
+      const token = tokenRes.body.access_token;
+
+      // The control: the token works before it is revoked.
+      await listTools(token).expect(200);
+
+      await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/revoke`)
+        .send({ token, client_id: reg.body.client_id })
+        .expect(200);
+
+      const res = await listTools(token);
+      expect(res.status).toBe(401);
+      const challengeHeader = res.headers['www-authenticate'];
+      expect(challengeHeader).toContain('Bearer ');
+      expect(challengeHeader).toContain(resourceMetadata());
+      expect(challengeHeader).toContain('error="invalid_token"');
+    });
+
+    it('answers a token the server never issued 401 with error="invalid_token"', async () => {
+      const res = await listTools(crypto.randomBytes(32).toString('base64url'));
+      expect(res.status).toBe(401);
+      expect(res.headers['www-authenticate']).toContain(resourceMetadata());
+      expect(res.headers['www-authenticate']).toContain('error="invalid_token"');
+    });
+
+    it('answers no token at all 401 with the challenge and no error code', async () => {
+      const res = await listTools();
+      expect(res.status).toBe(401);
+      expect(res.headers['www-authenticate']).toContain(resourceMetadata());
+      expect(res.headers['www-authenticate']).not.toContain('error=');
+    });
+  });
+
+  // Registration is anonymous. Filling a gateway's 500 client slots with
+  // throwaway registrations used to lock every real client out of it for
+  // good; unused registrations now make room, authorized ones never do.
+  describe('dynamic registration at the per-gateway cap', () => {
+    it('makes room by retiring the oldest never-authorized clients, never an authorized one', async () => {
+      const clients = ds.getRepository(OAuthClient);
+      const active = await clients.count({ where: { gatewayId: gateway.id, isActive: true } });
+      const filler = Array.from({ length: 500 - active }, (_, i) =>
+        clients.create({
+          clientId: `filler-${SUFFIX}-${i}`,
+          clientName: 'filler',
+          redirectUris: ['https://filler.example/cb'],
+          grantTypes: ['authorization_code'],
+          responseTypes: ['code'],
+          scope: 'mcp:tools',
+          tokenEndpointAuthMethod: 'none',
+          gatewayId: gateway.id,
+          organizationId: org.id,
+          isActive: true,
+        }),
+      );
+      await clients.save(filler, { chunk: 100 });
+      expect(await clients.count({ where: { gatewayId: gateway.id, isActive: true } })).toBe(500);
+
+      const authorized: Array<{ clientId: string }> = await ds.query(
+        'SELECT DISTINCT "clientId" FROM oauth_authorization_codes WHERE "gatewayId" = $1',
+        [gateway.id],
+      );
+      expect(authorized.length).toBeGreaterThan(0);
+
+      const res = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/register`)
+        .send({
+          client_name: 'real-client',
+          redirect_uris: ['http://localhost:12345/callback'],
+          token_endpoint_auth_method: 'none',
+        })
+        .expect(201);
+
+      expect(await clients.count({ where: { gatewayId: gateway.id, isActive: true } })).toBe(500);
+      expect((await clients.findOneByOrFail({ clientId: res.body.client_id })).isActive).toBe(true);
+      for (const { clientId } of authorized) {
+        expect((await clients.findOneByOrFail({ clientId })).isActive).toBe(true);
+      }
     });
   });
 });

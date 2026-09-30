@@ -140,7 +140,7 @@ export function AgentsPage() {
       return await agentsApi.delete(agentId)
     },
     onSuccess: async (_result, agentId) => {
-      success('Agent Deleted', 'Agent has been deleted successfully.')
+      success('Agent deleted', 'Agent has been deleted successfully.')
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
       // The detail page's caches for this agent would otherwise be
       // served to whoever navigated to it next. agent-detail.tsx does
@@ -159,7 +159,7 @@ export function AgentsPage() {
   const activateMutation = useMutation({
     mutationFn: (id: string) => agentsApi.activate(id),
     onSuccess: async (_result, id) => {
-      success('Agent Activated', 'Agent is now active.')
+      success('Agent activated', 'Agent is now active.')
       await invalidateAgent(id)
     },
     onError: (err: any) => {
@@ -171,7 +171,7 @@ export function AgentsPage() {
   const deactivateMutation = useMutation({
     mutationFn: (id: string) => agentsApi.deactivate(id),
     onSuccess: async (_result, id) => {
-      success('Agent Deactivated', 'Agent is now inactive.')
+      success('Agent deactivated', 'Agent is now inactive.')
       await invalidateAgent(id)
     },
     onError: (err: any) => {
@@ -183,7 +183,7 @@ export function AgentsPage() {
   const duplicateMutation = useMutation({
     mutationFn: (id: string) => agentsApi.duplicate(id),
     onSuccess: async (_result, id) => {
-      success('Agent Duplicated', 'A copy of the agent has been created.')
+      success('Agent duplicated', 'A copy of the agent has been created.')
       await invalidateAgent(id)
     },
     onError: (err: any) => {
@@ -261,7 +261,7 @@ export function AgentsPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-amber-500" />
-                  <h2 className="text-sm font-semibold">Start from a Template</h2>
+                  <h2 className="text-sm font-semibold">Start from a template</h2>
                 </div>
                 <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => setShowTemplates(false)}>
                   Hide
@@ -320,7 +320,7 @@ export function AgentsPage() {
                     onChange={(e) => setStatusFilter(e.target.value)}
                     className="h-9 rounded-md border border-input bg-background px-3 text-sm w-32"
                   >
-                    <option value="all">All Status</option>
+                    <option value="all">All status</option>
                     <option value="draft">Draft</option>
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>

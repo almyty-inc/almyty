@@ -99,7 +99,7 @@ export function RegisterPage() {
       <h1 className="text-2xl font-heading font-bold mb-6">Sign up</h1>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div>
-          <Label htmlFor="firstName">First Name</Label>
+          <Label htmlFor="firstName">First name</Label>
           <div className="mt-1">
             <Input
               id="firstName"
@@ -116,7 +116,7 @@ export function RegisterPage() {
         </div>
 
         <div>
-          <Label htmlFor="lastName">Last Name</Label>
+          <Label htmlFor="lastName">Last name</Label>
           <div className="mt-1">
             <Input
               id="lastName"
@@ -150,7 +150,7 @@ export function RegisterPage() {
         </div>
 
         <div>
-          <Label htmlFor="organizationName">Organization Name</Label>
+          <Label htmlFor="organizationName">Organization name</Label>
           <div className="mt-1">
             <Input
               id="organizationName"
@@ -194,7 +194,7 @@ export function RegisterPage() {
         </div>
 
         <div>
-          <Label htmlFor="confirmPassword">Confirm Password</Label>
+          <Label htmlFor="confirmPassword">Confirm password</Label>
           <div className="mt-1 relative">
             <Input
               id="confirmPassword"

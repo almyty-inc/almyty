@@ -53,12 +53,13 @@ import { QueryError } from '@/components/ui/query-error'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
-import { formatDateTime, formatRelativeTime } from '@/lib/utils'
+import { formatDateTime, formatRelativeTime, pluralized } from '@/lib/utils'
 import { execStatusVariant, diffObjects, formatDiffValue } from './constants'
 import { IntegrationSnippets } from './integration-snippets'
 import { AgentConfigPanel } from './agent-config-panel'
 import { ExecutionRouting } from './routing-attribution'
 import { modelsApi } from '@/lib/models-api'
+import { invokeAndSettle, runOutcome } from '@/lib/agent-run'
 import type { Agent, AgentExecution, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
 
 interface OverviewTabProps {
@@ -147,7 +148,7 @@ export function OverviewTab({
   const handleRollback = async (versionIndex: number) => {
     try {
       await agentsApi.rollback(agent.id, versionIndex)
-      success('Rolled Back', 'Agent has been rolled back to the selected version.')
+      success('Rolled back', 'Agent has been rolled back to the selected version.')
       queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
       queryClient.invalidateQueries({ queryKey: ['agent-versions', agent.id] })
       // The Change History panel reads this key, not ['agent-versions'].
@@ -163,10 +164,12 @@ export function OverviewTab({
     setTestLoading(true)
     setTestOutput(null)
     setTestError(null)
-    agentsApi.invoke(agent.id, { message: testInput })
-      .then((res: any) => {
-        const output = res?.output || JSON.stringify(res)
-        setTestOutput(typeof output === 'string' ? output : JSON.stringify(output, null, 2))
+    // An autonomous run is answered while it is still going; wait for it.
+    invokeAndSettle(agent.id, { message: testInput })
+      .then((run: any) => {
+        const outcome = runOutcome(run)
+        if (outcome.error) setTestError(outcome.error)
+        else setTestOutput(outcome.output ?? '')
         setTestInput('')
       })
       .catch((err: unknown) => {
@@ -354,7 +357,7 @@ export function OverviewTab({
                         }
                         await agentsApi.schedule(agent.id, scheduleInterval, parsedInput)
                         queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
-                        success('Scheduled', `Agent will run every ${scheduleInterval} minute(s).`)
+                        success('Scheduled', `Agent will run every ${pluralized(Number(scheduleInterval), 'minute')}.`)
                       } catch (err: any) {
                         errorNotif('Failed', getApiErrorMessage(err, 'Failed to schedule'))
                       } finally {
@@ -367,7 +370,7 @@ export function OverviewTab({
                   </Button>
                   {agent.settings?.schedule?.enabled && (
                     <p className="text-xs text-muted-foreground">
-                      Next run in ~{agent.settings.schedule.intervalMinutes} minute(s) from last execution
+                      Next run in ~{pluralized(agent.settings.schedule.intervalMinutes, 'minute')} from last execution
                     </p>
                   )}
                 </>

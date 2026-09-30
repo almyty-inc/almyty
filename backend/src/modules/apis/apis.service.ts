@@ -18,14 +18,17 @@ import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
 import { withApiQuota } from './api-quota';
 import { AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
-import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
+import { egressAxiosConfig } from '../../common/security/pinned-redirects';
+import { outboundFailureDetail } from '../../common/security/safe-fetch';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
 import { nameTaken, resolveVisibilityWrite } from '../../common/authorization/private-visibility';
 import { assertManageable, assertReadable } from '../../common/authorization/read-rule';
-import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
+import { assertNoSharedDependents, narrowsScope } from '../../common/authorization/private-dependents';
 import { Credential } from '../../entities/credential.entity';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { connectionAuthConfig, hasInlineApiSecret, inlineApiAuthView, splitInlineApiAuth } from '../credentials/inline-api-auth.helper';
+import { generatedToolScope } from '../tools/generated-tool-scope';
+import { assertRegistryHoldsNoSecret } from '../tools/tool-auth-config';
 
 import { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions } from './dto/apis.dto';
 export type { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions };
@@ -123,6 +126,43 @@ export class ApisService {
   }
 
   /**
+   * Every credential an API's calls resolve -- the connection or
+   * credential its authentication names, and rows bound to it
+   * (`credentials.apiId`) -- must be usable by everyone the API's scope
+   * covers. A team connection on an org-wide API was accepted and then
+   * failed, as "credential not found", for every caller outside the team;
+   * now the save is refused with a 400 that says who
+   * (CredentialRefResolver.assertAttachable). `actorId` is checked against
+   * the ids the authentication names in this write only.
+   */
+  private async assertAuthAttachable(api: Api, actorId: string | null | undefined, authChanged: boolean): Promise<void> {
+    // Always injected in the app; some hand-built specs leave it out.
+    if (!this.credentialRefs) return;
+    const target = {
+      organizationId: api.organizationId,
+      visibility: api.visibility,
+      teamId: api.teamId,
+      ownerUserId: api.ownerUserId,
+      noun: 'API',
+    };
+    const managedBy = api.id ? { kind: 'api' as const, id: api.id } : undefined;
+    const named = new Set<string>();
+    for (const id of [api.authentication?.config?.connectionId, api.authentication?.config?.credentialId]) {
+      if (typeof id === 'string' && id) named.add(id);
+    }
+    for (const id of named) {
+      const row = await this.credentialRefs.load(api.organizationId, id);
+      await this.credentialRefs.assertAttachable(row, target, { actorId: authChanged ? actorId : null, managedBy });
+    }
+    if (!api.id) return;
+    const bound = await this.credentialRefs.boundToApi(api.organizationId, api.id);
+    for (const row of bound) {
+      if (named.has(row.id)) continue;
+      await this.credentialRefs.assertAttachable(row, target, { managedBy });
+    }
+  }
+
+  /**
    * Visibility, team and owner for a new API. The creator owns it, so
    * 'private' is private to them; a team scope is checked against the
    * creator's memberships.
@@ -186,6 +226,8 @@ export class ApisService {
       status: ApiStatus.DRAFT,
     });
 
+    // A connection it names must cover its scope (assertAuthAttachable).
+    await this.assertAuthAttachable(api, userId, true);
     // Enforced with the insert, under the organization API-quota lock.
     let saved = await withApiQuota(this.apiRepository.manager, createApiData.organizationId, 1, (tx) =>
       tx.getRepository(Api).save(api),
@@ -353,6 +395,7 @@ export class ApisService {
       ownerUserId: userId ?? null,
     });
 
+    await this.assertAuthAttachable(api, userId, true);
     // Enforced with the insert, under the organization API-quota lock.
     let saved = await withApiQuota(this.apiRepository.manager, organizationId, 1, (tx) => tx.getRepository(Api).save(api));
     if (hasInlineApiSecret(data.authentication)) {
@@ -385,6 +428,7 @@ export class ApisService {
     if (!data.dependencies || Object.keys(data.dependencies).length === 0) {
       throw new BadRequestException('At least one npm package is required');
     }
+    assertRegistryHoldsNoSecret(data.npmRegistry);
 
     const api = this.apiRepository.create({
       name: data.name,
@@ -457,21 +501,29 @@ export class ApisService {
         })
       : null;
     const becomesPrivate = scope?.visibility === 'private' && api.visibility !== 'private';
-    // Going private takes the API's generated tools private too (below),
-    // which would detach them from the shared agents and gateways that use
-    // them. Refuse and say which, as making one of those tools private does.
-    if (becomesPrivate && userId && scope?.ownerId) {
-      const goingPrivate: Array<{ id: string }> = await this.dataSource.query(
+    // Narrowing the API -- to private, to a team, or to another team --
+    // takes its generated tools with it (below), and going private also the
+    // owner's own tools on it. That would detach them from the agents and
+    // gateways outside the new scope that use them, which then fail at run
+    // time. Refuse and say which, as narrowing one of those tools does.
+    if (scope && userId && narrowsScope(api, scope) && (!becomesPrivate || scope.ownerId)) {
+      const moving: Array<{ id: string }> = await this.dataSource.query(
         `SELECT id FROM tools
           WHERE "organizationId" = $1 AND status <> 'deleted'
             AND ("apiId" = $2 OR "operationId" IN (SELECT id FROM operations WHERE "apiId" = $2))
-            AND (generated = true OR "createdBy" IS NULL OR "createdBy" = $3::varchar)`,
-        [organizationId, api.id, scope.ownerId],
+            AND (generated = true
+                 OR ($4::boolean AND ("createdBy" IS NULL OR "createdBy" = $3::varchar)))`,
+        [organizationId, api.id, scope.ownerId ?? null, becomesPrivate],
       );
       await assertNoSharedDependents(
         this.dataSource.manager,
         this.accessPolicy,
-        { noun: 'API', organizationId, targets: goingPrivate.map((t) => ({ kind: 'tool' as const, id: t.id })) },
+        {
+          noun: 'API',
+          organizationId,
+          targets: moving.map((t) => ({ kind: 'tool' as const, id: t.id })),
+          into: { visibility: scope.visibility, teamId: scope.teamId },
+        },
         userId,
       );
     }
@@ -483,22 +535,30 @@ export class ApisService {
       api.teamId = scope.teamId;
       api.ownerUserId = scope.ownerId;
     }
+    // The credentials it calls with must cover its (new) scope.
+    if (scope || rest.authentication !== undefined) {
+      await this.assertAuthAttachable(api, userId, rest.authentication !== undefined);
+    }
     // An inline secret in the new authentication moves to the store.
     await this.moveInlineAuth(api);
     const saved = await this.apiRepository.save(api);
 
-    // The tools generated from an API are its public face; a private API
-    // with org-wide tools would still be usable by everyone. Take the
-    // generated ones (and the owner's own) private with it. Tools other
-    // members built on top of it keep their owner and stop resolving the
-    // API at run time.
-    if (becomesPrivate && saved.ownerUserId) {
+    // The tools generated from an API are its public face and carry its
+    // scope (generatedToolScope): a team API with org-wide tools was listed
+    // to the whole organization, a private one with org-wide tools usable
+    // by everyone. Whenever the scope changes, the generated tools follow
+    // it -- narrower or wider. Going private also takes the owner's own
+    // tools on it (and ownerless ones) private; tools other members built
+    // on top of it keep their owner and stop resolving the API at run time.
+    if (scope) {
+      const toolScope = generatedToolScope(saved);
       await this.dataSource.query(
-        `UPDATE tools SET visibility = 'private', "teamId" = NULL, "createdBy" = $3::varchar
+        `UPDATE tools SET visibility = $3, "teamId" = $4::uuid, "createdBy" = COALESCE($5::varchar, "createdBy")
           WHERE "organizationId" = $1
             AND ("apiId" = $2 OR "operationId" IN (SELECT id FROM operations WHERE "apiId" = $2))
-            AND (generated = true OR "createdBy" IS NULL OR "createdBy" = $3::varchar)`,
-        [organizationId, saved.id, saved.ownerUserId],
+            AND (generated = true
+                 OR ($3 = 'private' AND $6::boolean AND ("createdBy" IS NULL OR "createdBy" = $5::varchar)))`,
+        [organizationId, saved.id, toolScope.visibility, toolScope.teamId, toolScope.createdBy ?? null, becomesPrivate],
       );
     }
 
@@ -671,15 +731,8 @@ export class ApisService {
       const startTime = Date.now();
 
       const config: any = {
-        timeout: api.timeoutMs || 30000,
         validateStatus: () => true, // Accept any status code
-        maxContentLength: 256 * 1024,
         maxBodyLength: 256 * 1024,
-        maxRedirects: 0,
-        // The string check above does not see what the name resolves to;
-        // the pinned agents refuse a private address at connect time.
-        httpAgent: ssrfSafeHttpAgent,
-        httpsAgent: ssrfSafeHttpsAgent,
       };
 
       // Add authentication if configured. The secret comes from the
@@ -697,7 +750,13 @@ export class ApisService {
         config.headers = { ...config.headers, ...api.headers };
       }
 
-      const response = await axios.get(api.baseUrl, config);
+      // The string check above does not see what the name resolves to, so
+      // the connection is pinned; redirects are refused, the body capped,
+      // and the deadline is for the whole exchange. Spread last.
+      const response = await axios.get(api.baseUrl, {
+        ...config,
+        ...egressAxiosConfig({ timeoutMs: api.timeoutMs || 30000, maxBytes: 256 * 1024 }),
+      });
       const responseTime = Date.now() - startTime;
 
       return {
@@ -706,9 +765,10 @@ export class ApisService {
         responseTime,
       };
     } catch (error) {
+      // Never the errno: "ECONNREFUSED" vs a timeout says which ports answer.
       return {
         success: false,
-        error: error.message,
+        error: outboundFailureDetail(error),
       };
     }
   }

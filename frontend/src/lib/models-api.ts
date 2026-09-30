@@ -1,11 +1,9 @@
-import { apiGet, apiPost, apiPatch, apiDel } from './api'
+import { apiGet, apiPost, apiPatch } from './api'
 import type {
   ListModelsQuery,
   ModelCard,
-  RegisterModelBody,
   SyncModelsResult,
   UpdateModelBody,
-  ValidateModelResult,
 } from '@/types/models'
 
 /**
@@ -16,10 +14,6 @@ export const modelsApi = {
   list: (query?: ListModelsQuery) =>
     apiGet<ModelCard[]>('/models', query && Object.keys(query).length ? { params: query } : undefined),
 
-  get: (id: string) => apiGet<ModelCard>(`/models/${id}`),
-
-  register: (body: RegisterModelBody) => apiPost<ModelCard>('/models', body),
-
   /** One provider when given; every configured provider when omitted. */
   sync: (providerId?: string) =>
     providerId
@@ -28,10 +22,21 @@ export const modelsApi = {
 
   update: (id: string, body: UpdateModelBody) => apiPatch<ModelCard>(`/models/${id}`, body),
 
-  remove: (id: string) => apiDel<void>(`/models/${id}`),
+  /** The models an agent names that cannot be used now, and why (the banner on the agent). */
+  agentIssues: (agentId: string) => apiGet<AgentModelIssue[]>(`/models/agents/${agentId}/issues`),
+}
 
-  /** Runs one real call through the card. `passed` is the verdict; a failed run is not an HTTP error. */
-  validate: (id: string) => apiPost<ValidateModelResult>(`/models/${id}/validate`),
+/** One model an agent names that is not usable now. */
+export interface AgentModelIssue {
+  model: string
+  modelName: string
+  providerId: string
+  /** Null when you may not see the connection. */
+  connectionName: string | null
+  reason: string
+  /** Where in the agent it is named: "model", "step Summarise", "role Checker". */
+  where: string[]
+  since: string | null
 }
 
 /** Formats a per-million-token price pair for a table cell. */

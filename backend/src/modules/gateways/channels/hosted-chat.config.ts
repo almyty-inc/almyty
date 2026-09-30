@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { appPrivacyFrom, type AppPrivacySettings } from '../../../entities/agent-app.entity';
+import { visitorPrivacyFrom, type VisitorPrivacy } from '../../../entities/agent-channel.entity';
 
 /**
  * Hosted chat: a tenant's own branded chat app on {slug}.<base domain>.
@@ -186,7 +186,7 @@ export function hostedChatConfigFrom(
 
 /**
  * The fields of the hostedChat block that are branding. They belong to
- * the app that owns the surface and are never read off the gateway.
+ * the agent (and its channel) and are never read off the gateway.
  */
 export const HOSTED_CHAT_BRANDING_KEYS = Object.freeze([
   'appName',
@@ -199,7 +199,7 @@ export const HOSTED_CHAT_BRANDING_KEYS = Object.freeze([
   'whiteLabel',
 ] as const);
 
-/** What a hosted chat needs to know about the app that owns it. */
+/** What a hosted chat needs to know about the channel that owns it: resolved branding and rules. */
 export interface HostedChatOwner {
   name: string;
   branding?: Partial<{
@@ -213,17 +213,17 @@ export interface HostedChatOwner {
     whiteLabel: boolean;
   }> | null;
   authMode?: string | null;
-  privacy?: AppPrivacySettings | null;
+  privacy?: VisitorPrivacy | null;
 }
 
 /**
  * The hostedChat block a surface answers with.
  *
  * The gateway keeps only its address (the slug). Branding, who may use
- * it and what visitors may do with their data come from the app, read
- * every time, so a change on the app shows on the page without
- * republishing and there is no second copy to drift. A surface no app
- * owns keeps its address and its sign-in rule but gets the default
+ * it and what visitors may do with their data come from the agent and the
+ * channel's overrides, read every time, so a change shows on the page
+ * without republishing and there is no second copy to drift. A surface no
+ * channel owns keeps its address and its sign-in rule but gets the default
  * look: branding has one home, and it is not the gateway.
  */
 export function hostedChatBlockFor(
@@ -238,7 +238,7 @@ export function hostedChatBlockFor(
   if (!owner) return kept;
 
   const branding = owner.branding ?? {};
-  const privacy = appPrivacyFrom(owner.privacy);
+  const privacy = visitorPrivacyFrom(owner.privacy);
   return {
     ...kept,
     appName: branding.appName || owner.name,

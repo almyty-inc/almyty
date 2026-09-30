@@ -96,7 +96,7 @@ export function buildHarness(
     {} as any,
     { findOne: jest.fn().mockResolvedValue(user) } as any,
     {} as any,
-    new ToolHttpExecutor({ applyApiAuth: jest.fn(), applyInlineToolAuth: jest.fn() } as any),
+    new ToolHttpExecutor({ applyApiAuth: jest.fn(), applyInlineToolAuth: jest.fn(), applyToolAuth: jest.fn() } as any),
     {} as any,
     scriptExecutor,
     {} as any,

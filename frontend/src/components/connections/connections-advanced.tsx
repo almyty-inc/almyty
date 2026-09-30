@@ -1,8 +1,8 @@
 /**
- * Connections > Advanced, for admins: exactly who may use each connection
+ * Credentials > Advanced, for admins: exactly who may use each credential
  * (grants), whether members may keep keys of their own, custom services,
  * and the organization's rules (policies, review, expiry). Nothing here is
- * needed to connect a service.
+ * needed to add a credential.
  */
 import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -20,9 +20,9 @@ import { allowUserScopedConnections, connectionSettingsApi, errorMessage, isCust
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { useConnectors } from './connect-flow'
-import { useConnections } from './connection-detail'
+import { useConnections } from '@/components/credentials/credential-detail'
+import { CREDENTIALS_PATH, addCredentialPath } from '@/components/credentials/paths'
 import { GrantsEditor } from './grants-editor'
-import { CONNECTIONS_PATH, connectServicePath } from './paths'
 
 export function ConnectionsAdvanced() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -31,12 +31,12 @@ export function ConnectionsAdvanced() {
   // A private connection is its owner's alone and cannot be shared.
   const shareable = useMemo(() => (connectionsQuery.data ?? []).filter((c) => c.owner !== 'private'), [connectionsQuery.data])
   const custom = useMemo(() => (connectorsQuery.data ?? []).filter(isCustomConnector), [connectorsQuery.data])
-  const selected = searchParams.get('connection') ?? ''
+  const selected = searchParams.get('credential') ?? ''
   const selectedConnection = shareable.find((c) => c.id === selected) ?? null
 
   const select = (id: string) => {
     const params = new URLSearchParams(searchParams)
-    params.set('connection', id)
+    params.set('credential', id)
     setSearchParams(params, { replace: true })
   }
 
@@ -44,15 +44,15 @@ export function ConnectionsAdvanced() {
     <div className="space-y-6" data-testid="connections-advanced">
       <Card id="access">
         <CardHeader>
-          <CardTitle className="text-base">Who can use each connection</CardTitle>
-          <CardDescription>A new connection is open to everyone in the organization. Narrow it to people, teams, roles or agents here.</CardDescription>
+          <CardTitle className="text-base">Who can use each credential</CardTitle>
+          <CardDescription>A new credential is open to everyone in the organization. Narrow it to people, teams, roles or agents here.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="max-w-sm space-y-1.5">
-            <Label htmlFor="advanced-connection">Connection</Label>
+            <Label htmlFor="advanced-connection">Credential</Label>
             <Select value={selectedConnection ? selected : ''} onValueChange={select}>
               <SelectTrigger id="advanced-connection">
-                <SelectValue placeholder={shareable.length === 0 ? 'Nothing shared yet' : 'Pick a connection'} />
+                <SelectValue placeholder={shareable.length === 0 ? 'Nothing shared yet' : 'Pick a credential'} />
               </SelectTrigger>
               <SelectContent>
                 {shareable.map((c) => (
@@ -77,7 +77,7 @@ export function ConnectionsAdvanced() {
               <CardDescription>Services the list does not have: any OpenAI-compatible endpoint, MCP server, memory service or bucket.</CardDescription>
             </div>
             <Button variant="outline" size="sm" asChild className="gap-1.5">
-              <Link to={`${CONNECTIONS_PATH}/custom/new`}>
+              <Link to={`${CREDENTIALS_PATH}/custom/new`}>
                 <Plus className="h-4 w-4" aria-hidden />
                 Add a custom service
               </Link>
@@ -92,8 +92,8 @@ export function ConnectionsAdvanced() {
               {custom.map((c) => (
                 <li key={c.key} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
                   <span className="truncate font-medium">{c.displayName}</span>
-                  <Link to={connectServicePath(c.key)} className="text-primary hover:underline">
-                    Connect
+                  <Link to={addCredentialPath(c.key)} className="text-primary hover:underline">
+                    Add credential
                   </Link>
                 </li>
               ))}
@@ -121,7 +121,7 @@ function PersonalKeys() {
     mutationFn: (allow: boolean) => connectionSettingsApi.setAllowUserScopedConnections(orgId!, allow),
     onSuccess: (_result, allow) => {
       queryClient.invalidateQueries({ queryKey: ['organization-details', orgId] })
-      notifications.success(allow ? 'Personal keys allowed' : 'Personal keys off', allow ? 'Members can connect keys only they can use.' : 'Only organization connections can be made.')
+      notifications.success(allow ? 'Personal keys allowed' : 'Personal keys off', allow ? 'Members can add keys only they can use.' : 'Only organization credentials can be added.')
     },
     onError: (error: unknown) => notifications.error('Could not save', errorMessage(error, 'The setting was not changed.')),
   })
@@ -129,13 +129,13 @@ function PersonalKeys() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Personal keys</CardTitle>
-        <CardDescription>Let members connect keys only they can use, next to the organization&apos;s shared ones.</CardDescription>
+        <CardDescription>Let members add keys only they can use, next to the organization&apos;s shared ones.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="flex items-center gap-3">
           <Switch id="allow-user-scoped" checked={allowed} onCheckedChange={(v) => toggle.mutate(v)} disabled={!orgId || toggle.isPending || orgQuery.isLoading} aria-label="Allow personal keys" />
           <Label htmlFor="allow-user-scoped" className="font-normal">
-            {allowed ? 'Members may connect their own keys' : 'Only organization connections'}
+            {allowed ? 'Members may add their own keys' : 'Only organization credentials'}
           </Label>
         </div>
       </CardContent>

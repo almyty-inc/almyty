@@ -162,7 +162,7 @@ describe('LLM call node: model selection', () => {
       { queryClient },
     )
     const list = await openPicker()
-    await userEvent.click(within(list).getByRole('option', { name: 'gpt-5' }))
+    await userEvent.click(within(list).getByRole('option', { name: /^gpt-5(?!-)/ }))
     expect(onUpdateNode).toHaveBeenCalledWith('llm_1', expect.objectContaining({ systemPrompt: 'hi', providerId: 'p1', model: 'gpt-5' }))
     expect(onUpdateNode.mock.calls[0][1]).not.toHaveProperty('routing')
   })

@@ -5,6 +5,7 @@ import { IsNull, Repository } from 'typeorm';
 import { Agent, AgentPipeline } from '../../../entities/agent.entity';
 import { AgentRole } from '../../../entities/agent-role.entity';
 import { Strategy } from '../../../entities/strategy.entity';
+import { Organization } from '../../../entities/organization.entity';
 import { STRATEGY_SEEDS } from './strategy-seeds';
 import { compileStrategy, StrategyCompileError } from './strategy-compiler';
 import { OrchestratorService } from './orchestrator.service';
@@ -21,6 +22,10 @@ import type { ExecutionPrincipal } from '../../../common/authorization/execution
  * Compiled nodes name a ROLE, never a model, so which model answers is
  * still L4's decision at execution time. See docs/design/layers.md, L5.
  */
+/** What an optional slot is for, in the words of a refusal: "Panel needs a judge <job>". */
+const SLOT_JOBS: Record<string, string> = {
+  judge: 'to write one answer from what the panelists said',
+};
 export interface CompiledStrategy {
   pipeline: AgentPipeline;
   strategyKey: string;
@@ -40,6 +45,9 @@ export class StrategyPipelineResolver {
     // @Optional() so an install without L6 still runs the agent's own
     // chosen shape, which is the common case.
     @Optional() private readonly orchestrator?: OrchestratorService,
+    // Read for one thing: whether the organization has a default routing
+    // policy, which fills an optional slot no role does.
+    @Optional() @InjectRepository(Organization) private readonly organizations?: Repository<Organization>,
   ) {}
 
   /**
@@ -104,7 +112,43 @@ export class StrategyPipelineResolver {
     return compileStrategy(shape, Object.fromEntries(roles.map((r) => [r.key, r.key])));
   }
 
-  private async find(key: string, organizationId: string): Promise<Pick<Strategy, 'key' | 'roleSlots' | 'shape'> | null> {
+  /**
+   * Why `strategyKey` would fail on this agent for want of a model to fill
+   * an optional slot, or null when every one is filled.
+   *
+   * An optional slot (a step with fallbackSlots: the panel's judge) is
+   * filled by its own role, else a stand-in role, else the organization's
+   * default routing policy. With none of the three the compiled node names
+   * nothing, and the run fails at that step -- for the panel, the last
+   * one, after every panelist has been paid for. Asked when the strategy
+   * is chosen, so the refusal comes then instead.
+   */
+  async unfilledOptionalSlot(agent: Pick<Agent, 'id' | 'organizationId'>, strategyKey: string): Promise<string | null> {
+    const strategy = await this.find(strategyKey, agent.organizationId);
+    const optional = (strategy?.shape?.steps ?? []).filter((s) => s.roleSlot && s.fallbackSlots);
+    if (!strategy || !optional.length) return null;
+
+    const roles = new Set(
+      (await this.roles.find({ where: { organizationId: agent.organizationId, agentId: agent.id } })).map((r) => r.key),
+    );
+    const unfilled = optional.find((s) => ![s.roleSlot as string, ...(s.fallbackSlots ?? [])].some((k) => roles.has(k)));
+    if (!unfilled) return null;
+
+    const org = await this.organizations?.findOne({ where: { id: agent.organizationId }, select: { id: true, settings: true } });
+    if (org?.settings?.defaultRouting) return null;
+
+    const slot = unfilled.roleSlot as string;
+    const name = strategy.displayName ?? strategy.key;
+    const job = SLOT_JOBS[slot] ?? `for its "${unfilled.id}" step`;
+    const standIns = unfilled.fallbackSlots ?? [];
+    return (
+      `${name} needs a ${slot} ${job}. Add a ${slot} role` +
+      (standIns.length ? ` (a ${standIns.join(' or ')} role also works)` : '') +
+      ', or set a default routing policy for your organization.'
+    );
+  }
+
+  private async find(key: string, organizationId: string): Promise<Pick<Strategy, 'key' | 'displayName' | 'roleSlots' | 'shape'> | null> {
     // An organization's own row wins over the built-in of the same key,
     // which is how you customise one.
     const rows = await this.strategies.find({ where: [{ key, organizationId }, { key, organizationId: IsNull() }] });

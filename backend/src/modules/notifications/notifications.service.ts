@@ -137,7 +137,7 @@ export class NotificationsService {
       for (const userId of targetIds) {
         try {
           const pref = prefByUser.get(userId);
-          const inApp = pref ? pref.inApp : defaults.inApp;
+          const inApp = defaults.inAppLocked === true || (pref ? pref.inApp : defaults.inApp);
           const emailOn = pref ? pref.email : defaults.email;
           const mandatoryEmail = MANDATORY_EMAIL_TYPES.has(input.type);
 
@@ -305,14 +305,21 @@ export class NotificationsService {
 
   // ── In-app listing / read state ──────────────────────────────────
 
+  /**
+   * `organizationId` narrows the list to one organization: an SSO session
+   * reaches the organization whose IdP asserted it and nothing else, and a
+   * person's notifications from their other organizations (invite links
+   * among them) are not that organization's to read. See sso-session.ts.
+   */
   async list(
     userId: string,
-    opts: { unreadOnly?: boolean; page?: number; limit?: number } = {},
+    opts: { unreadOnly?: boolean; page?: number; limit?: number; organizationId?: string } = {},
   ): Promise<NotificationListResult> {
     const limit = Math.min(Math.max(1, opts.limit ?? DEFAULT_PAGE_LIMIT), MAX_PAGE_LIMIT);
     const page = Math.max(1, opts.page ?? 1);
 
-    const where = opts.unreadOnly ? { userId, readAt: IsNull() } : { userId };
+    const scope = opts.organizationId ? { userId, organizationId: opts.organizationId } : { userId };
+    const where = opts.unreadOnly ? { ...scope, readAt: IsNull() } : scope;
     const [rows, total] = await this.notifications.findAndCount({
       where,
       order: { createdAt: 'DESC' },
@@ -320,7 +327,7 @@ export class NotificationsService {
       take: limit,
     });
     const unreadCount = await this.notifications.count({
-      where: { userId, readAt: IsNull() },
+      where: { ...scope, readAt: IsNull() },
     });
 
     return {
@@ -338,9 +345,9 @@ export class NotificationsService {
     };
   }
 
-  async markRead(userId: string, notificationId: string): Promise<void> {
+  async markRead(userId: string, notificationId: string, organizationId?: string): Promise<void> {
     const res = await this.notifications.update(
-      { id: notificationId, userId },
+      { id: notificationId, userId, ...(organizationId ? { organizationId } : {}) },
       { readAt: new Date() },
     );
     if (!res.affected) {
@@ -348,8 +355,11 @@ export class NotificationsService {
     }
   }
 
-  async markAllRead(userId: string): Promise<void> {
-    await this.notifications.update({ userId, readAt: IsNull() }, { readAt: new Date() });
+  async markAllRead(userId: string, organizationId?: string): Promise<void> {
+    await this.notifications.update(
+      { userId, readAt: IsNull(), ...(organizationId ? { organizationId } : {}) },
+      { readAt: new Date() },
+    );
   }
 
   // ── Preferences ──────────────────────────────────────────────────
@@ -363,6 +373,7 @@ export class NotificationsService {
       const row = byType.get(type);
       const d = NOTIFICATION_DEFAULTS[type];
       matrix[type] = row ? { inApp: row.inApp, email: row.email } : { ...d };
+      if (d.inAppLocked) matrix[type] = { ...matrix[type], inApp: true, inAppLocked: true };
     }
     return { matrix, defaults: { ...NOTIFICATION_DEFAULTS } };
   }

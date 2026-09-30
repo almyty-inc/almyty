@@ -67,6 +67,20 @@ export {
   SOAPRequest,
 };
 
+/** Back off for `ms`, or less if `signal` aborts first. */
+function sleepUnlessAborted(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) return sleep(ms);
+  if (signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      signal.removeEventListener('abort', done);
+      resolve();
+    };
+    signal.addEventListener('abort', done, { once: true });
+    sleep(ms).then(done, done);
+  });
+}
+
 @Injectable()
 export class ToolExecutorService {
   private readonly logger = new Logger(ToolExecutorService.name);
@@ -165,11 +179,10 @@ export class ToolExecutorService {
       try {
         await this.executionAccess.assertCanExecute(options.principal!, tool, 'Tool');
         // The API behind the tool is part of what runs: its base URL and the
-        // credentials bound to it. A tool generated from a team or private
-        // API is created org-wide unless the API is private, so the tool's
-        // own scope alone would hand the team's API to the whole org. The
-        // principal must be able to use the API too; refused as a missing
-        // tool, like the tool itself.
+        // credentials bound to it. A generated tool carries its API's scope
+        // (generatedToolScope), but a hand-made tool on a team or private
+        // API does not, so the principal must be able to use the API too;
+        // refused as a missing tool, like the tool itself.
         const api = tool.api ?? tool.operation?.api;
         if (api && (api.visibility ?? 'org') !== 'org') {
           await this.executionAccess.assertCanExecute(options.principal!, api, 'Tool');
@@ -486,12 +499,20 @@ export class ToolExecutorService {
           lastError = error;
           retryCount++;
 
+          // A cancelled or timed-out caller is not retried. The abort
+          // surfaces here as a failed attempt, and the loop used to back off
+          // and try again -- 2s, 4s, 8s with the default three retries --
+          // against a signal that was already aborted, holding the cancelled
+          // run's layer open for up to fourteen seconds.
+          if (options.signal?.aborted) break;
+
           if (retryCount <= maxRetries) {
             const delay = Math.pow(2, retryCount) * 1000;
-            await sleep(delay);
             this.logger.warn(
               `Tool execution failed, retrying in ${delay}ms (attempt ${retryCount}/${maxRetries}): ${error.message}`,
             );
+            await sleepUnlessAborted(delay, options.signal);
+            if (options.signal?.aborted) break;
           }
         }
       }
@@ -690,7 +711,16 @@ export class ToolExecutorService {
         // The caller rides along so the runner's own visibility is checked
         // at dispatch too, not only the tool row's -- as the run's principal,
         // so a gateway run is judged by its gateway's scope.
-        { signal: options.signal, timeoutMs: tool.configuration?.timeout, callerUserId: options.userId ?? null, principal: options.principal },
+        {
+          signal: options.signal,
+          timeoutMs: tool.configuration?.timeout,
+          callerUserId: options.userId ?? null,
+          principal: options.principal,
+          // The agent's machine requirements (gpu=yes): the call goes to an
+          // online runner with those labels, this tool's own when it has them.
+          labels: options.runnerLabels,
+          organizationId: options.organizationId,
+        },
       );
       if (!response.ok) {
         return {

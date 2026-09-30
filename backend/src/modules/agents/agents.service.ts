@@ -2,7 +2,7 @@ import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentReadinessService } from './agent-readiness.service';
 import { AgentTemplate, getAgentTemplates } from './agent-templates';
 import { EstimatedCost, estimateAgentCost } from './agent-cost-estimator';
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { validateUrl } from '../../common/security/url-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -15,13 +15,20 @@ import { User } from '../../entities/user.entity';
 import { AgentAuditService } from './agent-audit.service';
 import { AgentCollaboration, collaborationProblems } from './collaboration-participants';
 import { AgentModels, agentModelsProblems, syncMainRole } from './autonomous-models';
+import { parseLabelRequirements } from '../runner/runner-labels';
+import { AgentMemoryConfig, memoryConfigProblems, memorySettings, retentionSeconds, NATIVE_MEMORY_ACCOUNT } from './agent-memory-settings';
+import { capabilityProblems, normaliseCapabilities } from './agent-capabilities';
+import { MemoryAccountsService } from '../memory/canonical/memory-accounts.service';
+import { Api } from '../../entities/api.entity';
+import { CredentialType } from '../../entities/credential.entity';
+import { CredentialRefResolver, SystemActor } from '../credentials/credential-ref.resolver';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
 import {
   assertAttachable,
   resolveVisibilityWrite,
 } from '../../common/authorization/private-visibility';
 import { assertManageable, canRead } from '../../common/authorization/read-rule';
-import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
+import { assertNoSharedDependents, narrowsScope } from '../../common/authorization/private-dependents';
 import { collectAgentReferences, collectProviderReferences } from './agent-references';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { usableProviders } from '../llm-providers/private-provider';
@@ -53,8 +60,8 @@ export interface CreateAgentInput {
   heartbeat?: { enabled: boolean; intervalMinutes: number; prompt: string };
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
-  memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
-  agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean };
+  memoryConfig?: AgentMemoryConfig;
+  agentConfig?: AgentConfigInput;
   collaboration?: AgentCollaboration | null;
   models?: AgentModels | null;
   variables?: Record<string, any>;
@@ -77,8 +84,8 @@ export interface UpdateAgentInput {
   heartbeat?: { enabled: boolean; intervalMinutes: number; prompt: string };
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
-  memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
-  agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean };
+  memoryConfig?: AgentMemoryConfig;
+  agentConfig?: AgentConfigInput;
   collaboration?: AgentCollaboration | null;
   models?: AgentModels | null;
   variables?: Record<string, any>;
@@ -89,6 +96,11 @@ export interface UpdateAgentInput {
   visibility?: ResourceVisibility;
   teamId?: string | null;
 }
+
+/** The agentConfig a save may send: runner labels as typed text or as an object. */
+export type AgentConfigInput = Omit<NonNullable<Agent['agentConfig']>, 'runnerLabels'> & {
+  runnerLabels?: Record<string, string> | string;
+};
 
 export { AgentTemplate } from './agent-templates';
 
@@ -188,7 +200,82 @@ export class AgentsService {
     private readonly validation: AgentValidationHelper,
     private readonly accessPolicy: AccessPolicyService,
     private readonly readiness: AgentReadinessService,
+    // The organization's memory accounts, to check the one an agent names
+    // and to apply its retention to what it already saved.
+    @Optional() private readonly memoryAccounts?: MemoryAccountsService,
+    @Optional() private readonly credentialRefs?: CredentialRefResolver,
   ) {}
+
+  /** See the call sites: an agent's own memory account must be one the agent may use. */
+  private async assertMemoryConnection(
+    memoryConfig: AgentMemoryConfig | null | undefined,
+    target: SystemActor,
+    actorId: string | null | undefined,
+  ): Promise<void> {
+    const credentialId = memoryConfig?.credentialId;
+    if (!credentialId) return;
+    if (!this.credentialRefs) throw new BadRequestException("Invalid settings: the agent's memory account cannot be checked here");
+    const row = await this.credentialRefs.load(target.organizationId, credentialId).catch(() => null);
+    if (!row) throw new BadRequestException('Invalid settings: The memory account connection was not found');
+    if (row.type !== CredentialType.MEMORY_BACKEND) {
+      throw new BadRequestException('Invalid settings: That connection is not a memory account');
+    }
+    await this.credentialRefs.assertAttachable(row, { ...target, noun: 'agent' }, { actorId: actorId ?? null });
+  }
+
+  /**
+   * Refuse a Memory or Capabilities section the runtime could not honour:
+   * a value out of range, a memory account the organization has not set up
+   * (or a time limit on one that cannot delete a memory), an agent to call
+   * or an API to use that is not in this organization. Tidies the lists
+   * and keeps canCallAgents equal to the list on the way.
+   */
+  private async assertMemoryAndCapabilities(
+    memoryConfig: unknown,
+    agentConfig: AgentConfigInput | null | undefined,
+    organizationId: string,
+    selfId?: string,
+  ): Promise<void> {
+    const problems: string[] = [];
+    const mc = memoryConfig as AgentMemoryConfig | null | undefined;
+    const outside = !!mc && typeof mc === 'object' && typeof mc.account === 'string' && mc.account !== '' && mc.account !== NATIVE_MEMORY_ACCOUNT;
+    let accounts = outside && this.memoryAccounts ? await this.memoryAccounts.accounts(organizationId) : undefined;
+    // An account of the agent's own (a connection added from its page) is
+    // for any memory service, whether or not the organization has one.
+    if (accounts && mc?.credentialId && !accounts.some((a) => a.id === mc.account)) {
+      const own = this.memoryAccounts!.describe(mc.account as string);
+      if (own) accounts = [...accounts, own];
+    }
+    problems.push(...memoryConfigProblems(memoryConfig, accounts));
+
+    normaliseCapabilities(agentConfig as any);
+    const capability = capabilityProblems(agentConfig);
+    problems.push(...capability);
+    if (!capability.length && agentConfig) {
+      const callable = (agentConfig.callableAgentIds ?? []).filter((id) => id !== selfId);
+      if (agentConfig.callableAgentIds?.includes(selfId ?? '')) problems.push('An agent cannot call itself');
+      if (callable.length) {
+        const found = await this.agentRepository.find({
+          where: { id: In(callable), organizationId, isTemporary: false },
+          select: { id: true },
+        });
+        const have = new Set(found.map((a) => a.id));
+        const missing = callable.filter((id) => !have.has(id));
+        if (missing.length) problems.push(`These agents are not in this organization: ${missing.join(', ')}`);
+      }
+      const apiIds = agentConfig.apiIds ?? [];
+      if (apiIds.length) {
+        const found = await this.agentRepository.manager.getRepository(Api).find({
+          where: { id: In(apiIds), organizationId },
+          select: { id: true },
+        });
+        const have = new Set(found.map((a) => a.id));
+        const missing = apiIds.filter((id) => !have.has(id));
+        if (missing.length) problems.push(`These APIs are not in this organization: ${missing.join(', ')}`);
+      }
+    }
+    if (problems.length) throw new BadRequestException(`Invalid settings: ${problems.join('; ')}`);
+  }
 
   /**
    * Refuse a collaboration the engine cannot run: an unknown strategy, a
@@ -303,6 +390,7 @@ export class AgentsService {
       pipeline?: AgentPipeline | null;
       collaboration?: Agent['collaboration'] | null;
       models?: AgentModels | null;
+      agentConfig?: Agent['agentConfig'] | null;
     },
     organizationId: string,
   ): Promise<void> {
@@ -370,8 +458,10 @@ export class AgentsService {
 
       this.assertWebhookUrl(createDto.webhookUrl);
       this.assertCollaboration(createDto.collaboration);
+      normaliseRunnerLabels(createDto.agentConfig);
       this.assertModels(createDto.models);
       await this.assertToolsInOrg(createDto.toolIds, organizationId);
+      await this.assertMemoryAndCapabilities(createDto.memoryConfig, createDto.agentConfig, organizationId);
 
       // Verify organization
       const organization = await this.organizationRepository.findOne({
@@ -400,7 +490,11 @@ export class AgentsService {
         callerId: userId,
         noun: 'agent',
       });
-
+      await this.assertMemoryConnection(
+        createDto.memoryConfig,
+        { organizationId, visibility: scope.visibility, teamId: scope.teamId, ownerUserId: userId },
+        userId,
+      );
       // Validate pipeline (only for workflow mode)
       const mode = createDto.mode || 'workflow';
       if (mode === 'workflow' && createDto.pipeline) {
@@ -422,6 +516,7 @@ export class AgentsService {
           pipeline: createDto.pipeline,
           collaboration: createDto.collaboration as Agent['collaboration'],
           models: next.models,
+          agentConfig: createDto.agentConfig as Agent['agentConfig'],
         },
         organizationId,
       );
@@ -453,7 +548,8 @@ export class AgentsService {
         modelConfig: next.modelConfig,
         models: next.models,
         memoryConfig: createDto.memoryConfig || null,
-        agentConfig: createDto.agentConfig || null,
+        // runnerLabels is an object by now (normaliseRunnerLabels, above).
+        agentConfig: (createDto.agentConfig as Agent['agentConfig']) || null,
         collaboration: createDto.collaboration || null,
         variables: createDto.variables || {},
         settings: createDto.settings || {},
@@ -652,8 +748,16 @@ export class AgentsService {
 
     this.assertWebhookUrl(updateDto.webhookUrl);
     this.assertCollaboration(updateDto.collaboration);
+    normaliseRunnerLabels(updateDto.agentConfig);
     this.assertModels(updateDto.models);
     await this.assertToolsInOrg(updateDto.toolIds, agent.organizationId);
+    await this.assertMemoryAndCapabilities(
+      updateDto.memoryConfig !== undefined ? updateDto.memoryConfig : undefined,
+      updateDto.agentConfig,
+      agent.organizationId,
+      agent.id,
+    );
+    const retentionBefore = retentionSeconds(memorySettings(agent.memoryConfig as AgentMemoryConfig));
 
     // An autonomous agent's main role and its modelConfig say the same
     // thing, whichever of the two this update writes (syncMainRole).
@@ -685,7 +789,8 @@ export class AgentsService {
       updateDto.toolIds !== undefined ||
       updateDto.pipeline !== undefined ||
       updateDto.collaboration !== undefined ||
-      updateDto.models !== undefined;
+      updateDto.models !== undefined ||
+      updateDto.agentConfig !== undefined;
     if (scopeChanging || referencesChanging) {
       await this.assertPrivateReferencesAllowed(
         {
@@ -696,17 +801,41 @@ export class AgentsService {
           pipeline: updateDto.pipeline ?? agent.pipeline,
           collaboration: (updateDto.collaboration as Agent['collaboration']) ?? agent.collaboration,
           models: next.models,
+          agentConfig: updateDto.agentConfig !== undefined ? (updateDto.agentConfig as Agent['agentConfig']) : agent.agentConfig,
         },
         organizationId,
       );
     }
-    // Going private would detach this agent from the shared agents that
-    // call it as a sub-agent or collaborator. Refuse and say which.
-    if (scope?.visibility === 'private' && agent.visibility !== 'private' && userId) {
+    // An account of the agent's own must be one the agent may use: its
+    // connection's scope covers the agent's (a private connection only for
+    // an agent private to the same owner, a team one for that team's), and
+    // whoever attaches it must be able to use it themselves.
+    if (scopeChanging || updateDto.memoryConfig !== undefined) {
+      const mc = updateDto.memoryConfig !== undefined ? updateDto.memoryConfig : agent.memoryConfig;
+      await this.assertMemoryConnection(
+        mc,
+        {
+          organizationId,
+          visibility: scope?.visibility ?? agent.visibility,
+          teamId: scope ? scope.teamId : agent.teamId,
+          ownerUserId: scope?.ownerId ?? agent.createdBy,
+        },
+        mc?.credentialId && mc.credentialId !== agent.memoryConfig?.credentialId ? userId : null,
+      );
+    }
+    // Narrowing it (to private, to a team, or to another team) would detach
+    // this agent from the agents outside the new scope that call it as a
+    // sub-agent, collaborator or role. Refuse and say which.
+    if (scope && userId && narrowsScope(agent, scope)) {
       await assertNoSharedDependents(
         this.agentRepository.manager,
         this.accessPolicy,
-        { noun: 'agent', organizationId, targets: [{ kind: 'agent', id: agent.id }] },
+        {
+          noun: 'agent',
+          organizationId,
+          targets: [{ kind: 'agent', id: agent.id }],
+          into: { visibility: scope.visibility, teamId: scope.teamId },
+        },
         userId,
       );
     }
@@ -734,6 +863,13 @@ export class AgentsService {
     }
     if (updateDto.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);
     const saved = await this.agentRepository.save(agent);
+
+    // A changed retention applies to what the agent already saved, in
+    // almyty's own store and in outside accounts alike.
+    const retentionAfter = retentionSeconds(memorySettings(saved.memoryConfig as AgentMemoryConfig));
+    if (retentionAfter !== retentionBefore && this.memoryAccounts) {
+      await this.memoryAccounts.setAgentRetention(organizationId, saved.id, retentionAfter);
+    }
 
     this.logger.log(`[UPDATE_AGENT] Agent updated: id=${saved.id}`);
 
@@ -997,4 +1133,16 @@ export class AgentsService {
    * - Parallel nodes should have 2+ outgoing edges
    * - Sub-agent references must exist and not reference self
    */
+}
+
+/**
+ * The machine an agent's runner-backed tools run on: label requirements
+ * (`gpu=yes`) typed as text or sent as an object, stored as an object.
+ * Empty clears them. A malformed entry is a 400 naming it.
+ */
+export function normaliseRunnerLabels(agentConfig: { runnerLabels?: Record<string, string> | string } | null | undefined): void {
+  if (!agentConfig || agentConfig.runnerLabels === undefined) return;
+  const labels = parseLabelRequirements(agentConfig.runnerLabels);
+  if (Object.keys(labels).length > 0) agentConfig.runnerLabels = labels;
+  else delete agentConfig.runnerLabels;
 }

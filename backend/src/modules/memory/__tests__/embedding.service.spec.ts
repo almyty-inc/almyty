@@ -258,9 +258,9 @@ describe('EmbeddingService', () => {
       expect((options as any).headers['Authorization']).toBe('Bearer proxy-token');
     });
 
-    it('refuses the default localhost URL without the escape hatch and falls back to hash', async () => {
+    it('refuses a localhost URL without the escape hatch and falls back to hash', async () => {
       delete process.env[ENV_KEY];
-      repoFind.mockResolvedValue([ollamaProvider()]);
+      repoFind.mockResolvedValue([ollamaProvider({ apiUrl: 'http://localhost:11434' })]);
 
       const result = await service.generateEmbedding('private probe', 'org-ollama-private');
 
@@ -270,7 +270,7 @@ describe('EmbeddingService', () => {
 
     it('reaches a localhost ollama when OLLAMA_ALLOW_PRIVATE_URLS=true', async () => {
       process.env[ENV_KEY] = 'true';
-      repoFind.mockResolvedValue([ollamaProvider()]);
+      repoFind.mockResolvedValue([ollamaProvider({ apiUrl: 'http://localhost:11434' })]);
       mockedAxios.post.mockResolvedValue(ollamaEmbedResponse(768));
 
       const result = await service.generateEmbedding('local text', 'org-ollama-env');

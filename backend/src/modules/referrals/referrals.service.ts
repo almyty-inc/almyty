@@ -114,7 +114,7 @@ export class ReferralsService {
   }
 
   buildShareLink(code: string): string {
-    const base = (process.env.FRONTEND_URL || 'http://localhost:3002').replace(/\/+$/, '');
+    const base = (process.env.FRONTEND_URL || 'http://localhost:3002').replace(/(?<!\/)\/+$/, '');
     return `${base}/r/${code}`;
   }
 

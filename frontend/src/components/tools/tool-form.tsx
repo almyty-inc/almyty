@@ -32,7 +32,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
-import { CredentialPicker } from '@/components/credential-picker'
+import { OTHER_SERVICE_KEY } from '@/components/connections/connect-flow'
+import { CredentialPicker } from '@/components/credentials/credential-picker'
 import { SdkToolForm } from '@/components/tools/sdk-tool-form'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { ModelPicker } from '@/components/model-picker'
@@ -128,14 +129,8 @@ export function ToolForm() {
   const [graphqlConfig, setGraphqlConfig] = useState({ endpoint: '', query: '', variables: '' })
   const [soapConfig, setSoapConfig] = useState({ wsdlUrl: '', operation: '' })
   const [grpcConfig, setGrpcConfig] = useState({ serviceUrl: '', method: '', protoFile: '' })
-  const [authConfig, setAuthConfig] = useState<{
-    type: string
-    apiKey: string
-    bearerToken: string
-    username: string
-    password: string
-    credentialId?: string
-  }>({ type: 'none', apiKey: '', bearerToken: '', username: '', password: '' })
+  // How the tool signs its calls; the secret is always a credential it points at.
+  const [authConfig, setAuthConfig] = useState<{ type: string; credentialId?: string }>({ type: 'none' })
 
   // HTTP structured config
   const [selectedApiId, setSelectedApiId] = useState<string>('')
@@ -296,15 +291,15 @@ return new Promise((resolve, reject) => {
       }
 
       // The backend stores auth nested (`{ type, config }`), while the
-      // form holds it flat, hence the reshape.
+      // form holds it flat, hence the reshape. A key, token or username and
+      // password is a credential the tool points at (picked or created in
+      // the form, so it lives on the Credentials page); none is typed here.
       const inlineAuth =
-        authConfig.type === 'bearer' && authConfig.bearerToken
-          ? { type: 'bearer', config: { token: authConfig.bearerToken } }
-          : authConfig.type === 'apiKey' && authConfig.apiKey
-            ? { type: 'apiKey', config: { key: authConfig.apiKey, headerName: 'X-API-Key' } }
-            : authConfig.type === 'basic' && authConfig.username
-              ? { type: 'basic', config: { username: authConfig.username, password: authConfig.password } }
-              : null
+        authConfig.type === 'none' || !authConfig.credentialId
+          ? null
+          : authConfig.type === 'apiKey'
+            ? { type: 'apiKey', config: { credentialId: authConfig.credentialId, headerName: 'X-API-Key' } }
+            : { type: authConfig.type, config: { credentialId: authConfig.credentialId } }
 
       const payload: any = {
         ...data,
@@ -850,7 +845,7 @@ return new Promise((resolve, reject) => {
       {executionMethod !== 'custom' && executionMethod !== 'llm' && executionMethod !== 'sdk' && (
         <FormSection title="Authentication">
           <Field id="tool-authentication" label="Authentication">
-            <Select value={authConfig.type} onValueChange={(value) => setAuthConfig({ ...authConfig, type: value })}>
+            <Select value={authConfig.type} onValueChange={(value) => setAuthConfig({ type: value })}>
               <SelectTrigger id="tool-authentication">
                 <SelectValue />
               </SelectTrigger>
@@ -863,38 +858,17 @@ return new Promise((resolve, reject) => {
             </Select>
           </Field>
 
-          {authConfig.type === 'apiKey' && (
+          {authConfig.type !== 'none' && (
             <CredentialPicker
-              label="API key"
+              key={authConfig.type}
+              id="tool-auth-credential"
+              label={authConfig.type === 'apiKey' ? 'API key' : authConfig.type === 'bearer' ? 'Bearer token' : 'Username and password'}
               value={authConfig.credentialId || ''}
-              onSelect={(id) => setAuthConfig({ ...authConfig, credentialId: id })}
-              onNewKey={(key) => setAuthConfig({ ...authConfig, apiKey: key })}
-              newKeyValue={authConfig.apiKey || ''}
-              filterType="api_key"
+              onChange={(credential) => setAuthConfig({ ...authConfig, credentialId: credential?.id })}
+              connectorKey={authConfig.type === 'basic' ? 'basic-auth' : OTHER_SERVICE_KEY}
+              defaultName={createForm.watch('name') ? `${createForm.watch('name')} key` : undefined}
+              hint={authConfig.type === 'apiKey' ? 'Sent in the X-API-Key header.' : authConfig.type === 'bearer' ? 'Sent as a bearer token.' : 'Sent as basic auth.'}
             />
-          )}
-
-          {authConfig.type === 'bearer' && (
-            <CredentialPicker
-              label="Bearer token"
-              value={authConfig.credentialId || ''}
-              onSelect={(id) => setAuthConfig({ ...authConfig, credentialId: id })}
-              onNewKey={(key) => setAuthConfig({ ...authConfig, bearerToken: key })}
-              newKeyValue={authConfig.bearerToken || ''}
-              placeholder="eyJhbGc..."
-              filterType="bearer_token"
-            />
-          )}
-
-          {authConfig.type === 'basic' && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field id="auth-username" label="Username">
-                <SecretInput masked={false} value={authConfig.username} onChange={(e) => setAuthConfig({ ...authConfig, username: e.target.value })} placeholder="username" />
-              </Field>
-              <Field id="auth-password" label="Password">
-                <SecretInput value={authConfig.password} onChange={(e) => setAuthConfig({ ...authConfig, password: e.target.value })} placeholder="password" />
-              </Field>
-            </div>
           )}
         </FormSection>
       )}

@@ -20,13 +20,15 @@ import type {
 } from '@/types/connections'
 
 /**
- * Connectors: the catalog of what can be connected. Custom connectors are
- * created here too (OpenAI-compatible, MCP, S3 registries).
+ * Services: the catalog of what a credential can be added for. Custom ones
+ * are created here too (OpenAI-compatible, MCP, S3 registries). Everything
+ * here lives under /credentials; the older /connectors and /connections
+ * routes still answer the same.
  */
 export const connectorsApi = {
-  list: (kind?: ConnectorKind) => apiGet<Connector[]>('/connectors', kind ? { params: { kind } } : undefined),
+  list: (kind?: ConnectorKind) => apiGet<Connector[]>('/credentials/services', kind ? { params: { kind } } : undefined),
 
-  create: (body: CreateConnectorBody) => apiPost<Connector>('/connectors', body),
+  create: (body: CreateConnectorBody) => apiPost<Connector>('/credentials/services', body),
 }
 
 /** The server may answer a bare view or `{ connection }`; both are read. */
@@ -36,13 +38,17 @@ function unwrapConnection(result: unknown): Connection {
 }
 
 /**
- * Connections: accounts the org or a user connected. Every helper unwraps
- * the `{ success, data }` envelope. Secret values never come back.
+ * Credentials added for a service (a "connection" in the code): a key or
+ * account with the service it belongs to and whether it works. Every
+ * helper unwraps the `{ success, data }` envelope. Secret values never
+ * come back.
  */
 export const connectionsApi = {
-  list: () => apiGet<Connection[]>('/connections'),
-
-  get: (id: string) => apiGet<Connection>(`/connections/${id}`),
+  /** GET /credentials, keeping the rows that belong to a service (they carry `health`). */
+  list: () =>
+    apiGet<Array<Connection | { health?: undefined }>>('/credentials').then((rows) =>
+      (Array.isArray(rows) ? rows : []).filter((row): row is Connection => Boolean(row && (row as Connection).health)),
+    ),
 
   /**
    * api_key / service_account / cloud_iam: validated live, resolves with
@@ -51,24 +57,24 @@ export const connectionsApi = {
    * `{ pending: true, authorizeUrl, state, completeWith }`.
    */
   connect: (connectorKey: string, body: ConnectBody) =>
-    apiPost<ConnectResult>(`/connections/connect/${encodeURIComponent(connectorKey)}`, body),
+    apiPost<ConnectResult>(`/credentials/connect/${encodeURIComponent(connectorKey)}`, body),
 
   /** Headless OAuth: the user pastes the code the provider showed. */
   complete: (connectorKey: string, body: CompleteConnectBody) =>
-    apiPost<unknown>(`/connections/connect/${encodeURIComponent(connectorKey)}/complete`, body).then(unwrapConnection),
+    apiPost<unknown>(`/credentials/connect/${encodeURIComponent(connectorKey)}/complete`, body).then(unwrapConnection),
 
-  validate: (id: string) => apiPost<unknown>(`/connections/${id}/validate`).then(unwrapConnection),
+  validate: (id: string) => apiPost<unknown>(`/credentials/${id}/validate`).then(unwrapConnection),
 
   /** Same shapes as `connect`; without input on a form method the server hands the form back. */
-  rotate: (id: string, body: RotateBody = {}) => apiPost<ConnectResult>(`/connections/${id}/rotate`, body),
+  rotate: (id: string, body: RotateBody = {}) => apiPost<ConnectResult>(`/credentials/${id}/rotate`, body),
 
-  remove: (id: string) => apiDel<DisconnectResult>(`/connections/${id}`),
+  remove: (id: string) => apiDel<DisconnectResult>(`/credentials/${id}`),
 
-  listGrants: (id: string) => apiGet<ConnectionGrant[]>(`/connections/${id}/grants`),
+  listGrants: (id: string) => apiGet<ConnectionGrant[]>(`/credentials/${id}/grants`),
 
-  addGrant: (id: string, body: CreateGrantBody) => apiPost<ConnectionGrant>(`/connections/${id}/grants`, body),
+  addGrant: (id: string, body: CreateGrantBody) => apiPost<ConnectionGrant>(`/credentials/${id}/grants`, body),
 
-  removeGrant: (id: string, grantId: string) => apiDel<void>(`/connections/${id}/grants/${grantId}`),
+  removeGrant: (id: string, grantId: string) => apiDel<void>(`/credentials/${id}/grants/${grantId}`),
 }
 
 /**

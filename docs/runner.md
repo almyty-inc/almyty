@@ -86,6 +86,16 @@ draining -> offline          drain grace expires
 
 `canAcceptWork(state)` returns true for ONLINE and BUSY only; routing checks this before dispatching.
 
+### Labels route work
+
+`Runner.labels` are the owner's tags (`os=mac`, `gpu=yes`, set with `--label` or on the setup page). Work that names label requirements goes only to a runner that carries all of them:
+
+- **Selection** is `RunnerService.resolveByLabels(required, caller, organizationId, { preferRunnerId })`. Candidates are the organization's runners in a `canAcceptWork` state whose labels include every requirement (keys and values trimmed, compared case-insensitively; extra labels are fine). Each candidate is then put through `resolveForDispatch` with the same caller, so label routing adds no access rule of its own: private is the owner's, team is the team's (and org admins', as everywhere), a runner of a deactivated member takes nobody's work, a dispatch with no known caller reaches org-wide runners only, a gateway run is judged by the gateway's scope. A candidate also needs a live session. Order: the preferred runner, then ONLINE before BUSY, then the latest heartbeat.
+- **No match** is a 404 with one sentence, `No machine with gpu=yes is online`, the same whether no runner carries the labels or the ones that do are someone else's, so the answer does not say which machines exist. Over the runner bridge it is `runner_not_found` with that message.
+- **Agents**: `agentConfig.runnerLabels` (typed as `gpu=yes, os=mac` on the autonomous agent form under Capabilities > Machine, stored as an object by `normaliseRunnerLabels`). The engine hands it to every tool call (`ToolExecutionOptions.runnerLabels`, from `agent-step-processor.ts` and, for pipelines, `NodeExecutionOptions.runnerLabels`), and `RunnerCallService.dispatch` routes a runner-backed tool's call with it, preferring the tool's own runner.
+- **Workspaces**: `POST /workspaces` takes `labels` (text or object). Without `runnerId` the workspace goes on the runner `resolveByLabels` picks for the caller, which can be another member's org or team runner; with `runnerId` that runner must carry the labels (400 otherwise). Work in a workspace always goes to the workspace's runner; a dispatch that also names labels is refused when that runner lacks one.
+- `backend/src/__tests__/no-control-is-stored-and-ignored.guard.spec.ts` checks that the reader exists end to end, and `test/integration/runner-label-routing.integration.spec.ts` proves it against Postgres.
+
 ### Single-runner-per-account in v1.0
 
 The data model carries no such restriction; the limit lives in the registration policy in `RunnerService.register` (and `create`, for the setup page's record). When the v1.x scheduler arrives, the limit lifts without a migration.
@@ -176,6 +186,7 @@ New package; ships as `@almyty/runner` with a `bin: almyty-runner`.
 - **Auth via `@almyty/client`**: same shared resolver every other almyty CLI uses. ALMYTY_TOKEN env first, then `~/.almyty/credentials.json` written by `almyty-auth login`. No parallel structures.
 - **Config in JSON**: `~/.almyty/config.json` (global), `./.almyty/config.json` (project), env (`ALMYTY_*`, including `ALMYTY_ORG_ID`), CLI flags (`--name`, `--org`, `--label`, `--config`, `--url`). Layered lowest precedence first; backend overrides apply at registration and only constrain.
 - **Detected vs configured**: `runtimeInfo` (os, arch, hostname, cpu, memory, runner version, binaries) detected at startup, never settable. `RunnerConfig` (name, labels, isolation, paths, network/install policy, concurrency cap) user-set.
+- **Name default**: started without `--name`, `ALMYTY_RUNNER_NAME` or `config.name`, the daemon names itself after the machine's hostname, cut to a valid name (`Franes-MacBook-Pro.local` becomes `franes-macbook-pro`). The setup page fills in a guess of its own (first name plus the kind of computer, `frane-mac`), since a browser cannot read the hostname.
 - **PTY by default**: `node-pty` lazy-loaded on first PTY spawn so non-PTY tests don't pay the native dep cost. Pipe mode via `pty: false`.
 - **Resource scoping**: every `process_id` namespaced by `workspaceId`. Cross-workspace access throws `PROCESS_CROSS_WORKSPACE`; this is the runner's load-bearing security boundary.
 - **No per-tool wrappers**: the runner exposes generic process primitives only. There is no `claude_code.run`, no `git.commit`, no `npm.install`. Tool-specific intelligence lives in agent prompts and orchestration policy.
@@ -187,13 +198,12 @@ New package; ships as `@almyty/runner` with a `bin: almyty-runner`.
 The walkthrough lives at [docs/runner-demo.md](runner-demo.md): start a runner with `almyty runner start`, watch capabilities auto-publish in `/tools`, execute `runner.info` and `shell.exec` from the UI, see output stream back. Every step exercises the routing path end-to-end (cluster 5.5).
 ## Cluster 5: Runner + Workspace UI (`frontend/src/pages`)
 
-Five pages, all conforming to the existing UI patterns in the repo (React Router v6, TanStack Query inline in pages, shadcn/ui components, custom `<table>`s with the same header/Card/empty-state shape `agents.tsx` uses):
+Four pages, all conforming to the existing UI patterns in the repo (React Router v6, TanStack Query inline in pages, shadcn/ui components, custom `<table>`s with the same header/Card/empty-state shape `agents.tsx` uses):
 
 - `/runners` — list page with state badge (a runner whose daemon never connected reads "never connected"), visibility badge, OS/arch, last heartbeat, capacity, labels, and a Delete action behind a one-line confirmation. Lists every runner the caller may see: their own (private ones included), org-wide ones, and team ones for their teams. Polls every 15s (half the runner heartbeat interval). Empty state links to the start-a-runner page.
-- `/runners/:id` — detail page with runtime info, labels, capabilities (binary detection results), active workspaces, recent (terminated) workspaces. The owner changes visibility in place on this page. Delete renders when the runner is `offline` or has never connected and requires confirmation.
+- `/runners/:id` — detail page with runtime info, labels, capabilities (binary detection results) and a Workspaces tab: every workspace on the runner in a table with status filter, cwd search and time left. The owner changes visibility in place on this page. Delete renders when the runner is `offline` or has never connected and requires confirmation.
 - `/runners/new` — the setup page. Step 1: name, labels, visibility (Private by default, Team, Org-wide). "Generate command" creates the runner record (`POST /runners`, pending: never connected) holding all of that, so step 2's commands need only the name: `npm i -g @almyty/runner @almyty/auth`, `almyty-auth login`, `almyty-runner start --name X --org <org-id>`. From step 2 the user can go Back (the pending record is updated in place with `PATCH /runners/:id`, rename allowed only while pending) or Cancel (the pending record is deleted). Step 3 polls the record and opens the runner on its first heartbeat. An abandoned setup stays visible on `/runners` as "never connected" and can be deleted there.
-- `/workspaces` — list page with status filter (active by default), per-runner filter, cwd substring search.
-- `/workspaces/:id` — detail page with metadata, close reason (only for terminated workspaces), Release action (only for active).
+- `/runners/:runnerId/workspaces/:id` — one workspace: metadata, close reason (only for terminated workspaces), Release action (only for active).
 
 Shared mappings live in `frontend/src/pages/runners-shared.ts`: runner state -> badge variant (online=success, busy=secondary, stale/draining=warning, offline=destructive), workspace status -> badge variant (active=success, released=secondary, expired=outline, stranded=destructive), and the polling cadence constant.
 
@@ -254,7 +264,7 @@ commands you send it.
 
 - **Container isolation enforcement**: see above — the tier is stored and
   refused, not enforced.
-- **Multi-runner scheduling**: the data model supports it; the picker in `WorkspaceService.pickRunner` returns the user's single runner today, and throws `multiple runners present but no scheduler in v1.0` if there is more than one and no explicit `runnerId`. Scheduler logic is v1.x.
+- **Multi-runner scheduling**: label routing (above) picks among the runners a caller may use, which already spans several members' machines. One member still registers one runner per organization, and without labels or a `runnerId` `WorkspaceService.pickRunner` returns the caller's single runner and throws `multiple runners present but no scheduler in v1.0` if there is more than one. Load-aware scheduling is v1.x.
 - **Real-time runner state in the UI**: the polling-vs-subscription question described under the UI cluster above.
 
 ## Anti-goals reaffirmed

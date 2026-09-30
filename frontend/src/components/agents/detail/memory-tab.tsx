@@ -34,7 +34,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
-import { memoriesApi } from '@/lib/api'
+import { memoriesApi, type MemoryScopeType } from '@/lib/api'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { useNotifications } from '@/store/app'
@@ -44,6 +44,8 @@ import { getApiErrorMessage } from '@/lib/api-error'
 
 interface MemoryTabProps {
   agentId: string
+  /** The memory the agent's runs use (agentMemoryScope); the organization's shared memory when absent. */
+  scope?: { scope_type: MemoryScopeType; scope_id: string }
   memories: Memory[]
   /**
    * The memories query lives on the agent detail page, so the failure has to
@@ -54,7 +56,7 @@ interface MemoryTabProps {
   onRetry?: () => void
 }
 
-export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps) {
+export function MemoryTab({ agentId, scope, memories, error, onRetry }: MemoryTabProps) {
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
 
@@ -86,7 +88,7 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
     mutationFn: async () => {
       return memoriesApi.put({
         mode: 'memory',
-        scope: { scope_type: 'workspace', scope_id: orgId! },
+        scope: scope ?? { scope_type: 'workspace', scope_id: orgId! },
         content: newMemoryContent,
         tier: tierForLegacyType(newMemoryType),
         tags: newMemoryTags.split(',').map(t => t.trim()).filter(Boolean),
@@ -101,7 +103,7 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
       })
     },
     onSuccess: () => {
-      success('Memory Added', 'Memory has been created for this agent.')
+      success('Memory added', 'Memory has been created for this agent.')
       queryClient.invalidateQueries({ queryKey: ['agent-memories', agentId] })
       // The Memory page lists the same rows under its own key, and a
       // memory added here is the org's memory too.
@@ -231,7 +233,7 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
                     <TableHead>Type</TableHead>
                     <TableHead>Scope</TableHead>
                     <TableHead>Tags</TableHead>
-                    <TableHead>Access Count</TableHead>
+                    <TableHead>Access count</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

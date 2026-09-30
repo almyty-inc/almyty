@@ -58,6 +58,8 @@ Required: `schemaVersion` (1), `base`, `tokenizer`, `license`, `created`, `files
 
 Registering an `s3://` version reads and validates `almyty-manifest.json` at the URI and fills base, size, digest and quantizations from it; an unreadable manifest is an error, because our own registry is the one place that must carry one. For `gs://`, `hf://`, `file://` and provider references the manifest is a bonus: when absent, `base` must be given and the version carries `metadata.manifest: null`. A version cannot be deleted while a deployment that is not torn down references it (`VERSION_IN_USE`).
 
+A `file://` path names a path on the host that serves the model, so the API reads nothing there by default: the path is typed by an organization admin, and the API process is not theirs to browse. An operator who keeps manifests on the API host sets `MODEL_REGISTRY_FILE_ROOT` to the one directory they live under; a `file://` manifest is then read only when its real path (symlinks followed) is inside that directory, is a regular file and is under 1 MB.
+
 ## Connection
 
 The registry is the organization's own bucket. Every read and write resolves through the organization's registry connection: a credential of type `s3_compatible` with `endpoint` (for non-AWS S3), `region`, `bucket`, optional `prefix`, `accessKeyId` and `secretAccessKey`, encrypted like every other credential. `ModelRegistryService.connectionFor(organizationId)` is the single seam; adapters get the same keys through `ModelDeploymentsService.credentialsFor()` as `registryAccessKeyId`, `registrySecretAccessKey`, `registryEndpoint`, `registryRegion`, `registryBucket` whenever the version lives at an `s3://` URI.

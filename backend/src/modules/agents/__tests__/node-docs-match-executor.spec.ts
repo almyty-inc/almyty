@@ -197,3 +197,26 @@ describe('no agents page still calls the transform a sandbox', () => {
     expect(prose).not.toMatch(/Transform nodes run in a \*\*sandboxed environment\*\*/i);
   });
 });
+
+describe('Output reads a list of sources in order', () => {
+  const output = (source: unknown, nodes: Record<string, { output: any; status?: string }>) =>
+    (executor as any).executeOutputNode({ id: 'output', data: { source } }, { input: {}, nodes });
+
+  it('takes the first source a step that ran produced, passing over a skipped one', async () => {
+    const result = await output(['nodes.escalate.output', 'nodes.draft.output'], {
+      escalate: { output: undefined, status: 'skipped' },
+      draft: { output: 'the draft' },
+    });
+    expect(result.output).toBe('the draft');
+  });
+
+  it('fails naming the sources when none of them produced anything', async () => {
+    await expect(output(['nodes.a.output', 'nodes.b.output'], {})).rejects.toThrow(
+      "Output node 'output' reads its answer from nodes.a.output, nodes.b.output, and none of those steps produced one",
+    );
+  });
+
+  it('is described on the Output node', () => {
+    expect(nodeTypesProse).toContain('`source` may also be a list of dot paths, read in order: the first one a step that ran produced is the answer.');
+  });
+});

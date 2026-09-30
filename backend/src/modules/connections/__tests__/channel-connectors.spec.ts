@@ -2,7 +2,7 @@ import { GatewayType } from '../../../entities/gateway.entity';
 import { channelConnectorKey } from '../../gateways/channels/channel-credential.service';
 import { CHANNEL_SECRET_CONFIG_KEYS, LEGACY_CHANNEL_CONFIG_KEY_MAP } from '../../gateways/channels/channel-config.helper';
 import { ConnectionValidationService } from '../connection-validation.service';
-import { BUILTIN_CONNECTORS, CHANNEL_CONNECTORS } from '../connector-catalog';
+import { BUILTIN_CONNECTORS, CHANNEL_CONNECTORS, SLACK_APP_CONNECTOR_KEY } from '../connector-catalog';
 import { schemaViolations, secretFieldsOf, validateConnectorDefinition } from '../connector-schema';
 import { ConnectorDefinition, REDIRECT_METHODS } from '../connector.types';
 import { FixtureRoute, fakeConfig, fixtureHttp } from './test-support';
@@ -47,7 +47,7 @@ function probe(connector: ConnectorDefinition, config: Record<string, any>, rout
 
 describe('chat channel connectors: catalog shape', () => {
   it('covers every credential-bearing channel type, keyed the way ChannelCredentialService tags a managed row', () => {
-    expect(CHANNEL_CONNECTORS.map((c) => c.key).sort()).toEqual(Object.keys(ADAPTER_FIELDS).map(channelConnectorKey).sort());
+    expect(CHANNEL_CONNECTORS.map((c) => c.key).sort()).toEqual([...Object.keys(ADAPTER_FIELDS).map(channelConnectorKey), SLACK_APP_CONNECTOR_KEY].sort());
     for (const type of Object.keys(ADAPTER_FIELDS)) {
       expect(byType(type)).toBeDefined();
       // The key must survive the connector key rule; `_` is not in its alphabet.
@@ -116,6 +116,22 @@ describe('chat channel connectors: catalog shape', () => {
       }
       if (connector.docsUrl !== null) expect(connector.docsUrl).toMatch(/^https:\/\//);
     }
+  });
+
+  // A Slack channel's Add to Slack keys are a credential like any other,
+  // picked or created on the channel page: the client id and secret the
+  // install exchanges codes with, and the signing secret inbound events are
+  // checked against. No token to probe, so only the shape is checked.
+  it('keeps the Add to Slack app credentials as a connector of their own, spelled as the Slack install reads them', () => {
+    const app = CHANNEL_CONNECTORS.find((c) => c.key === SLACK_APP_CONNECTOR_KEY)!;
+    expect(app.kind).toBe('channel');
+    const form = app.connect[0];
+    expect(Object.keys(form.schema!.properties).sort()).toEqual(['client_id', 'client_secret', 'signing_secret']);
+    expect(secretFieldsOf(form.schema)).toEqual(['client_secret', 'signing_secret']);
+    for (const secret of secretFieldsOf(form.schema)) expect(CHANNEL_SECRET_CONFIG_KEYS).toContain(secret);
+    expect(app.validation).toMatchObject({ kind: 'format' });
+    expect(schemaViolations({ client_id: '1234567890.987654321', client_secret: 'x'.repeat(32), signing_secret: 'y'.repeat(32) }, form.schema)).toEqual([]);
+    expect(schemaViolations({ client_id: 'nope', client_secret: 'x'.repeat(32), signing_secret: 'y'.repeat(32) }, form.schema)).toEqual(['client_id has an unexpected format']);
   });
 
   it('ranks the Slack app install first and keeps the pasted-token form as the fallback', () => {

@@ -1,5 +1,6 @@
 import tsParser from '@typescript-eslint/parser';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
+import regexp from 'eslint-plugin-regexp';
 
 // Flat config for ESLint 10, kept in step with frontend/eslint.config.mjs:
 // the TypeScript parser, the plugin's recommended rules, and no type-aware
@@ -47,6 +48,24 @@ export default [
           ignoreRestSiblings: true,
         },
       ],
+    },
+  },
+  {
+    // A regex that is quadratic or worse on hostile input fails the PR.
+    // Every shape these two rules report was found holding the event loop
+    // for seconds on 100 KB of a tool argument, a request body, an LLM
+    // reply or an uploaded spec: `/X.*Y/`, `/\/+$/` on a run that does not
+    // end the string, `\s*` beside `.+`. Linear replacements are in
+    // common/security/linear-text.ts and strip-tags.ts; a trailing-run trim
+    // takes the lookbehind form `/(?<!\/)\/+$/`. Tests may use anything.
+    files: ['src/**/*.ts', 'ee/**/*.ts'],
+    ignores: ['**/*.spec.ts', '**/__tests__/**', 'src/test/**'],
+    plugins: {
+      regexp,
+    },
+    rules: {
+      'regexp/no-super-linear-backtracking': 'error',
+      'regexp/no-super-linear-move': 'error',
     },
   },
 ];

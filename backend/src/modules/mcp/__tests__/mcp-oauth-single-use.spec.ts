@@ -139,6 +139,56 @@ describe('OAuth single-use semantics (table-backed)', () => {
 
       await expect(exchange()).rejects.toThrow('Authorization code has already been used');
       expect(tokens.rows()).toHaveLength(0);
+      expect(codes.row('code-1')!.reuseDetectedAt).toBeInstanceOf(Date);
+    });
+
+    // OAuth 2.1 section 4.1.3: a code presented twice is treated as
+    // stolen, so the pair the winning redemption got is revoked as well.
+    it('revokes the winner\'s pair when the losing redemption arrives after it', async () => {
+      build([authCodeRow()]);
+
+      const won = await exchange();
+      expect(tokens.rows().every((t) => t.isRevoked === false)).toBe(true);
+
+      // The loser read the code before the winner claimed it.
+      codes.findOne.mockImplementationOnce(async () => authCodeRow());
+      await expect(exchange()).rejects.toThrow('Authorization code has already been used');
+
+      expect(tokens.rows()).toHaveLength(2);
+      expect(tokens.rows().every((t) => t.isRevoked === true)).toBe(true);
+      expect(await helper.validateAccessToken(won.access_token)).toEqual({ valid: false });
+    });
+
+    it('leaves no live pair when two redemptions race', async () => {
+      build([authCodeRow()]);
+
+      const results = await Promise.allSettled([exchange(), exchange()]);
+
+      expect(results.some((r) => r.status === 'rejected')).toBe(true);
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          expect(await helper.validateAccessToken(r.value.access_token)).toEqual({ valid: false });
+        }
+      }
+      expect(tokens.rows().every((t) => t.isRevoked === true)).toBe(true);
+    });
+
+    // The winner minted after the loser had already revoked: the winner
+    // finds the reuse mark and revokes its own pair.
+    it('revokes a pair minted after the losing redemption finished', async () => {
+      build([authCodeRow()]);
+      const realSave = tokens.save.getMockImplementation()!;
+      tokens.save.mockImplementationOnce(async (entities: any) => {
+        // The loser runs start to finish while the winner is minting.
+        codes.findOne.mockImplementationOnce(async () => authCodeRow());
+        await expect(exchange()).rejects.toThrow('Authorization code has already been used');
+        return realSave(entities);
+      });
+
+      await expect(exchange()).rejects.toThrow('Authorization code has already been used');
+
+      expect(tokens.rows()).toHaveLength(2);
+      expect(tokens.rows().every((t) => t.isRevoked === true)).toBe(true);
     });
   });
 

@@ -84,6 +84,7 @@ describe('a team-scoped approval policy scopes to its team', () => {
     );
     const at = source.indexOf('resolveForContext(input.organizationId, {');
     expect(at).toBeGreaterThan(-1); // update this guard if the call moved
-    expect(source.slice(at, at + 400)).toContain('teamId: input.teamId');
+    // The request's own team: the agent's, or the team gateway's a run came through.
+    expect(source.slice(at, at + 400)).toMatch(/\n\s*teamId[,:]/);
   });
 });

@@ -6,7 +6,7 @@ import { CreditCard, ExternalLink, Check, AlertTriangle } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
+import { cn, pluralized, formatDate } from '@/lib/utils'
 import { billingApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { PlanComparison } from '@/components/plan-comparison'
@@ -200,7 +200,7 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
                 </Badge>
                 {isPaid && (
                   <span className="text-sm text-muted-foreground">
-                    {status?.seats} seat{status?.seats === 1 ? '' : 's'}
+                    {pluralized(status?.seats, 'seat')}
                   </span>
                 )}
                 {status?.status && (
@@ -224,7 +224,7 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
                     <p className="text-muted-foreground">
                       Your last payment failed. Update your payment method to avoid losing access
                       {status.graceUntil
-                        ? ` after ${new Date(status.graceUntil).toLocaleDateString()}`
+                        ? ` after ${formatDate(status.graceUntil)}`
                         : ''}
                       .
                     </p>
@@ -234,7 +234,7 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
 
               {status?.planExpiresAt && isPaid && (
                 <p className="text-sm text-muted-foreground">
-                  Renews / expires on {new Date(status.planExpiresAt).toLocaleDateString()}
+                  Renews / expires on {formatDate(status.planExpiresAt)}
                 </p>
               )}
 
@@ -375,7 +375,7 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
                 <div className="flex items-center gap-3">
                   <span className="font-medium">{inv.number || inv.id}</span>
                   <span className="text-muted-foreground">
-                    {new Date(inv.created).toLocaleDateString()}
+                    {formatDate(inv.created)}
                   </span>
                   {inv.status && (
                     <Badge variant="outline" className="capitalize">

@@ -1,7 +1,7 @@
 /**
  * Create or edit one connection policy, as a page:
- * /connections/policies/new (optionally `?kind=<kind>`) and
- * /connections/policies/:policyId.
+ * /credentials/policies/new (optionally `?kind=<kind>`) and
+ * /credentials/policies/:policyId.
  *
  * A kind picker (fixed when editing) switches the per-kind form:
  * connectors for allow and deny lists and rotation, principal kinds and
@@ -52,7 +52,7 @@ const SELECT_CLASS =
 const ENVIRONMENT_SUGGESTIONS = ['production', 'staging', 'development']
 
 /** Where the policies table lives; the form returns there. */
-export const CONNECTIONS_SETTINGS_PATH = '/connections/advanced'
+export const CONNECTIONS_SETTINGS_PATH = '/credentials/advanced'
 
 export interface PolicyFormProps {
   /** Editing this policy; absent means create. */
@@ -142,8 +142,8 @@ export function PolicyForm({ policy, initialKind, onSaved }: PolicyFormProps) {
               <fieldset className="space-y-1.5">
                 <legend className="text-sm font-medium">Applies to</legend>
                 <div className="flex flex-wrap gap-4" data-testid="policy-owners">
-                  <OwnerCheckbox id="policy-owner-org" label="Organization connections" owner="org" values={values} patch={patch} disabled={busy} />
-                  <OwnerCheckbox id="policy-owner-user" label="Personal connections" owner="user" values={values} patch={patch} disabled={busy} />
+                  <OwnerCheckbox id="policy-owner-org" label="Organization credentials" owner="org" values={values} patch={patch} disabled={busy} />
+                  <OwnerCheckbox id="policy-owner-user" label="Personal credentials" owner="user" values={values} patch={patch} disabled={busy} />
                 </div>
                 <p className="text-xs text-muted-foreground">Both when neither is ticked.</p>
               </fieldset>
@@ -177,9 +177,9 @@ export function PolicyForm({ policy, initialKind, onSaved }: PolicyFormProps) {
               </div>
               <div className="flex items-center gap-3">
                 <Switch id="policy-approved-only" checked={values.approvedConnectorsOnly} onCheckedChange={(approvedConnectorsOnly) => patch({ approvedConnectorsOnly })} disabled={busy} />
-                <Label htmlFor="policy-approved-only" className="font-normal">Approved connectors only (needs an allowed-connectors policy for organization connections)</Label>
+                <Label htmlFor="policy-approved-only" className="font-normal">Approved connectors only (needs an allowed-connectors policy for organization credentials)</Label>
               </div>
-              <p className="text-xs text-muted-foreground">Scope rules always require organization-owned connections; personal connections are refused for these principals.</p>
+              <p className="text-xs text-muted-foreground">Scope rules always require organization credentials; personal credentials are refused for these principals.</p>
             </>
           )}
 
@@ -256,7 +256,7 @@ export function ConnectionPolicyFormPage() {
         variant="panel"
         icon={ShieldCheck}
         title="Policy not found"
-        description="It may have been deleted. Connections > Advanced lists the rules that exist."
+        description="It may have been deleted. Credentials > Advanced lists the rules that exist."
       />
     )
   }

@@ -11,8 +11,8 @@ describe('buildProviderCreateBody', () => {
     })
   })
 
-  it('sends a connected account as credentialId and drops any typed key', () => {
-    expect(buildProviderCreateBody({ name: 'prod', type: 'openai', apiKey: 'sk-typed', connectionId: 'conn-1' })).toEqual({
+  it('sends a saved key as credentialId and drops any typed key', () => {
+    expect(buildProviderCreateBody({ name: 'prod', type: 'openai', apiKey: 'sk-typed', credentialId: 'conn-1' })).toEqual({
       name: 'prod',
       type: 'openai',
       credentialId: 'conn-1',
@@ -20,7 +20,7 @@ describe('buildProviderCreateBody', () => {
     })
   })
 
-  it('sends a picked vault credential as credentialId', () => {
+  it('sends a picked credential as credentialId', () => {
     expect(buildProviderCreateBody({ name: 'prod', type: 'anthropic', credentialId: 'cred-9' }).credentialId).toBe('cred-9')
   })
 

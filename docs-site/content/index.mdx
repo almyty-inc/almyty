@@ -13,9 +13,9 @@ almyty login
 
 ## 1. Turn an API into tools
 
-Open **APIs → Connect an API** (`/apis/new`). Paste a link to the API's description, drop the file, or paste its content, then click **Import**. almyty works out the format (OpenAPI 3, Swagger 2, GraphQL, WSDL or .proto) and reads the name, address and sign-in scheme from it. For GraphQL you can also paste the endpoint's own URL. The import runs in the background, and the next page asks only for what is missing: usually your key, and the address when the description has none. **Advanced** lets you set the name, address, sign-in type and who can use it yourself.
+Open **APIs → Connect an API** (`/apis/new`) and pick what kind of API it is: **OpenAPI / Swagger**, **GraphQL**, **SOAP / WSDL**, **gRPC / proto**, **SDK / npm** or **Manual HTTP**. Each opens its own form. For a description, give it the way that kind comes: a link, a file or the text itself (a GraphQL endpoint's own URL works too), then click **Connect API**. almyty reads the name, address and sign-in scheme from it, and refuses a description of another kind in plain words. The import runs in the background, and the next page asks only for what is missing: usually the key, which you pick from [Credentials](/credentials) or create right there, and the address when the description has none. **Advanced** lets you set the name, address, sign-in type and who can use it yourself.
 
-To replace the description later, open the API and click **Update the description**. For an npm package, pick **Import an npm package** under **Other ways**. For a single HTTP call, create a [tool](/tools/http-tools) instead.
+To replace the description later, open the API and click **Update the description**. **Manual HTTP** is an address with tools you add by hand; for a single HTTP call, create a [tool](/tools/http-tools) instead.
 
 Every operation in the schema becomes a typed, validated tool. No code.
 
@@ -23,19 +23,19 @@ Every operation in the schema becomes a typed, validated tool. No code.
 
 ## 2. Publish a gateway
 
-Tools reach your AI through a gateway. Open **Gateways → Create gateway** (`/gateways/new`), choose a tool gateway and **MCP**, and assign the tools you just made from the **Tool scoping** tab.
+Tools reach your AI through a gateway. Open **Gateways → Create gateway** (`/gateways/new`), pick **MCP**, pick the API you just imported, and click **Create gateway**.
 
 ![A gateway with tools assigned](/screenshots/gateway-detail-tools.png)
 
-Each gateway serves its selected protocol. Reuse the same tools in additional gateways for other tool protocols; an A2A gateway serves an agent:
+Each gateway speaks the protocol you pick:
 
 | Protocol | For |
 |----------|-----|
 | **MCP** | Claude Code, Cursor, Windsurf, and other MCP clients |
-| **A2A** | Google's Agent-to-Agent orchestration |
 | **UTCP** | Universal Tool Call Protocol |
 | **Agent Skills** | 30+ AI coding agents via SKILL.md |
 
+An agent you build reaches other agents over **A2A** (Google's Agent-to-Agent protocol) as a channel on the agent: see [A2A](/gateways/a2a).
 ## 3. Call it from your AI (the payoff)
 
 Point your assistant at the gateway and your API is live inside it. Grab the endpoint from the gateway's **Integrations** tab (it looks like `https://api.almyty.com/your-org/petstore`) and a key from its **Authentication** panel. Then, in Claude Code:

@@ -17,6 +17,7 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 import { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats } from './dto/tools.dto';
 import { ToolsOperationHelper } from './tools-operation.helper';
+import { assertToolAuthHoldsNoSecret } from './tool-auth-config';
 import { ToolsStatsHelper } from './tools-stats.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import {
@@ -26,7 +27,7 @@ import {
   resolveVisibilityWrite,
 } from '../../common/authorization/private-visibility';
 import { assertManageable, assertReadable } from '../../common/authorization/read-rule';
-import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
+import { assertNoSharedDependents, narrowsScope } from '../../common/authorization/private-dependents';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { precheckToolQuota, withToolQuota } from './tool-quota';
 export type { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats };
@@ -67,6 +68,7 @@ export class ToolsService {
     organizationId: string,
     userId: string
   ): Promise<Tool> {
+    assertToolAuthHoldsNoSecret(createToolDto.authConfig);
     try {
       // Verify organization and user permissions
       const organization = await this.organizationRepository.findOne({
@@ -315,6 +317,7 @@ export class ToolsService {
       }
 
       if (updateToolDto.authConfig !== undefined) {
+        assertToolAuthHoldsNoSecret(updateToolDto.authConfig);
         tool.authConfig = updateToolDto.authConfig;
       }
 
@@ -336,13 +339,19 @@ export class ToolsService {
           const api = await this.apiRepository.findOne({ where: { id: tool.apiId, organizationId } });
           if (api) assertAttachable({ visibility: scope.visibility, ownerId: scope.ownerId, noun: 'tool' }, [api], 'API');
         }
-        // Going private would detach it from shared agents and gateways
-        // that use it (they would fail at run time). Refuse and say which.
-        if (scope.visibility === 'private' && tool.visibility !== 'private') {
+        // Narrowing it (to private, to a team, or to another team) would
+        // detach it from the agents and gateways outside the new scope that
+        // use it (they would fail at run time). Refuse and say which.
+        if (narrowsScope(tool, scope)) {
           await assertNoSharedDependents(
             this.toolRepository.manager,
             this.accessPolicy,
-            { noun: 'tool', organizationId, targets: [{ kind: 'tool', id: tool.id }] },
+            {
+              noun: 'tool',
+              organizationId,
+              targets: [{ kind: 'tool', id: tool.id }],
+              into: { visibility: scope.visibility, teamId: scope.teamId },
+            },
             userId,
           );
         }

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { replaceDelimited } from '../../common/security/linear-text';
 
 export interface ExecutionContext {
   input: Record<string, any>;
@@ -21,7 +22,7 @@ export interface ExecutionContext {
    * loop node asking for 100 iterations inside a run capped at 25 steps
    * would otherwise outlive the budget that governs everything else.
    */
-  runLimits?: { maxSteps?: number; maxToolCalls?: number };
+  runLimits?: { maxSteps?: number; maxToolCalls?: number; toolErrorRetries?: number };
   /**
    * The run's tool-call ledger, counted against `runLimits.maxToolCalls`.
    * A single mutable object shared by every node of the run (the executor
@@ -109,7 +110,8 @@ export class AgentTemplateResolver {
       );
     }
 
-    return template.replace(/\{\{([^}]+)\}\}/g, (match, path: string) => {
+    // replaceDelimited is /\{\{([^}]+)\}\}/g in one pass (linear-text.ts).
+    return replaceDelimited(template, '{{', '}}', (match, path: string) => {
       const trimmedPath = path.trim();
 
       // Validate expression before resolving

@@ -12,6 +12,7 @@ import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { assertManageable } from '../../common/authorization/read-rule';
+import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import {
   APPROVAL_POLICY_HOOK,
   ApprovalPolicyApproval,
@@ -29,6 +30,8 @@ export interface CreateApprovalInput {
   reason: string;
   payload?: Record<string, any> | null;
   ttlSeconds?: number;
+  /** The principal of the run that asked; a gateway run narrows the request's scope. */
+  principal?: ExecutionPrincipal | null;
 }
 
 export interface ApprovalDecision {
@@ -133,8 +136,8 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
       if (existing) return existing;
     }
 
-    const policy = await this.resolveGoverningPolicy(input);
     const scope = await this.scopeOfRequestingAgent(input);
+    const policy = await this.resolveGoverningPolicy(input, scope.teamId ?? null);
 
     const ttl = Math.min(input.ttlSeconds ?? DEFAULT_TTL_SECONDS, MAX_TTL_SECONDS);
     const expiresAt = new Date(Date.now() + ttl * 1000);
@@ -280,6 +283,13 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
    * agent's is its team's, anything else org-wide. The agent is read in
    * the request's organization; a private agent with no recorded owner
    * cannot ask on nobody's behalf.
+   *
+   * A run through a gateway narrows it to the gateway's scope: the run is
+   * the gateway's publication, and its arguments are its callers'. An org
+   * agent asking from a run through a team gateway is that team's to see
+   * and decide (org owners and admins included, as for any team request);
+   * from a gateway private to its owner, that owner's. Nobody decides for
+   * a null user either way: deciding needs a caller who may manage the row.
    */
   private async scopeOfRequestingAgent(
     input: CreateApprovalInput,
@@ -292,6 +302,13 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
       if (!agent.createdBy) throw new BadRequestException('a private agent with no owner cannot request approval');
       return { visibility: 'private', teamId: null, ownerUserId: agent.createdBy };
     }
+    const gateway = input.principal?.kind === 'gateway' ? input.principal : null;
+    if (gateway?.visibility === 'private' && gateway.ownerUserId) {
+      return { visibility: 'private', teamId: null, ownerUserId: gateway.ownerUserId };
+    }
+    if (gateway?.visibility === 'team' && gateway.teamId) {
+      return { visibility: 'team', teamId: gateway.teamId, ownerUserId: null };
+    }
     return { visibility: input.teamId ? 'team' : 'org', teamId: input.teamId, ownerUserId: null };
   }
 
@@ -302,6 +319,9 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
    */
   private async resolveGoverningPolicy(
     input: CreateApprovalInput,
+    // The team the request is scoped to (scopeOfRequestingAgent), which a
+    // gateway run may have narrowed from the agent's.
+    teamId: string | null,
   ): Promise<ApprovalPolicyRef | null> {
     if (!this.approvalPolicyHook) return null;
     try {
@@ -310,7 +330,7 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
         agentId: input.agentId,
         runId: input.runId,
         toolCallId: input.toolCallId ?? null,
-        teamId: input.teamId,
+        teamId,
         payload: input.payload ?? {},
       });
     } catch (err: any) {

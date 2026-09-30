@@ -12,9 +12,9 @@ bedrock://...                        every 2 min                          status
 
 ## Start one
 
-A cloud account is a provider like any other, so there is one place to begin: **Models → Connect a provider**.
+A cloud account is a provider like any other, so there is one place to begin: **Credentials → Connect a provider**.
 
-1. Connect the cloud account from its tile (Hugging Face, Modal, AWS, Google Vertex AI, Azure and the rest), with its key or a saved [connection](/connections).
+1. Connect the cloud account from its tile (Hugging Face, Modal, AWS, Google Vertex AI, Azure and the rest), with its key or a saved [credential](/credentials).
 2. On the provider's page, click **Start a model**.
 3. Say which model: a Hugging Face repository such as `Qwen/Qwen3-14B`. A cloud that reads weights only from a bucket (AWS Bedrock import, Fireworks) asks for the bucket location instead. See [Model sources](#model-sources).
 4. Click **Start**.
@@ -97,7 +97,7 @@ A source the chosen cloud cannot read is refused when you submit, with `ADAPTER_
 
 ### Weights in your own bucket
 
-Most models never need a bucket: they come from Hugging Face or from the cloud's own catalog. A bucket matters only to the clouds that read object storage directly with their own role or keys: AWS Bedrock (custom import), SageMaker, Fireworks and Baseten. Connect it once under [Connections](/connections) as an S3-compatible connection (AWS S3, MinIO, Cloudflare R2, DigitalOcean Spaces). An `s3://` source in an organization with no such connection is refused with `REGISTRY_NOT_CONNECTED`. The bucket's keys are handed to the cloud per call and never stored with the model.
+Most models never need a bucket: they come from Hugging Face or from the cloud's own catalog. A bucket matters only to the clouds that read object storage directly with their own role or keys: AWS Bedrock (custom import), SageMaker, Fireworks and Baseten. Add it once under [Credentials](/credentials) as an S3-compatible bucket (AWS S3, MinIO, Cloudflare R2, DigitalOcean Spaces). An `s3://` source in an organization with no such connection is refused with `REGISTRY_NOT_CONNECTED`. The bucket's keys are handed to the cloud per call and never stored with the model.
 
 A single-tenant self-host can seed that connection from `MODEL_REGISTRY_S3_*` (falling back to `STORAGE_S3_*`) on first boot. With two or more organizations those variables are ignored.
 
@@ -180,6 +180,6 @@ An OpenAI-compatible server you already run (vLLM, TGI, llama.cpp, SGLang, a Lit
 
 - [Models](/models): the list, when a model is usable, and pricing
 - [Routing](/models/routing): how a model on your cloud gets picked
-- [Connections](/connections): cloud accounts and the bucket connection
+- [Credentials](/credentials): cloud accounts and the bucket credential
 - [Cost governance](/cost-governance): budgets a model can be tied to
 - [Models CLI](/models/cli): every command with examples

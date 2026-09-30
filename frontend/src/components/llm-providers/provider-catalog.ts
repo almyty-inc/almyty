@@ -1,5 +1,5 @@
 /**
- * The provider tiles on /models/connect: every provider type, in the order a
+ * The provider tiles on /credentials/providers/new: every provider type, in the order a
  * person looks for them, with the name they know it by.
  *
  * `provider-catalog.test.ts` fails when a provider type has no tile, so a

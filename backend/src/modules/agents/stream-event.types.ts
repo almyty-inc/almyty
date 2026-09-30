@@ -67,6 +67,20 @@ export interface PipelineExecutionFailed {
   timestamp: number;
 }
 
+/**
+ * A piece of the run's answer, as the model writes it. Emitted only when
+ * the caller asked for it (ExecuteAgentOptions.streamAnswer) and only by
+ * the llm_call whose text the output node returns unchanged; see
+ * answer-node.ts. The pieces concatenate to that node's output.
+ */
+export interface PipelineAnswerChunk {
+  type: 'answer.chunk';
+  nodeId?: string;
+  nodeType?: string;
+  data: { content: string };
+  timestamp: number;
+}
+
 // ── Runtime events (autonomous agent) ──────────────────────────────────
 
 export interface RuntimeLlmStarted {
@@ -168,7 +182,8 @@ export type PipelineStreamEvent =
   | PipelineNodeCompleted
   | PipelineNodeSkipped
   | PipelineExecutionCompleted
-  | PipelineExecutionFailed;
+  | PipelineExecutionFailed
+  | PipelineAnswerChunk;
 
 /** Runtime event types (emitted by autonomous runtime). */
 export type RuntimeStreamEvent =

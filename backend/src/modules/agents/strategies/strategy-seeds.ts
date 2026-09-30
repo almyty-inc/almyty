@@ -53,7 +53,15 @@ const panel: StrategyShape = {
     { id: 'a', kind: 'call', roleSlot: 'panelist_one', next: ['consensus'] },
     { id: 'b', kind: 'call', roleSlot: 'panelist_two', next: ['consensus'] },
     { id: 'c', kind: 'call', roleSlot: 'panelist_three', next: ['consensus'] },
-    { id: 'consensus', kind: 'merge', params: { strategy: 'consensus', consensusThreshold: 0.5 } },
+    // The judge writes the answer the panel agrees on. Optional: a judge
+    // role, else the principal, else the organization's default routing.
+    {
+      id: 'consensus',
+      kind: 'merge',
+      roleSlot: 'judge',
+      fallbackSlots: ['principal'],
+      params: { strategy: 'consensus', consensusThreshold: 0.5 },
+    },
   ],
 };
 
@@ -107,7 +115,8 @@ export const STRATEGY_SEEDS: StrategySeed[] = [
   {
     key: 'panel',
     displayName: 'Panel',
-    description: 'Three different roles answer and the shape looks for consensus. Disagreement is the signal.',
+    description:
+      'Three different roles answer and a judge writes the answer they agree on. Disagreement is the signal. The judge is optional: without a judge role the principal role judges.',
     roleSlots: ['panelist_one', 'panelist_two', 'panelist_three'],
     shape: panel,
   },

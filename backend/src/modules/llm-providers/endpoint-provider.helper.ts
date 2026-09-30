@@ -69,7 +69,7 @@ export class EndpointProviderHelper {
     }
     parsed.hash = '';
     parsed.search = '';
-    const chosen = parsed.toString().replace(/\/+$/, '');
+    const chosen = parsed.toString().replace(/(?<!\/)\/+$/, '');
     if (/\/(v\d+[a-z]*|openai|inference)(\/|$)/i.test(chosen)) return chosen;
     return `${chosen}/v1`;
   }

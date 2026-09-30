@@ -3,7 +3,7 @@ import { DataSource } from 'typeorm';
 
 import { Runner, RunnerIsolationTier, RunnerState } from '../../entities/runner.entity';
 import { RunnerSession } from '../../entities/runner-session.entity';
-import { Workspace } from '../../entities/workspace.entity';
+import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { Tool } from '../../entities/tool.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
@@ -14,6 +14,7 @@ import { AccessPolicyService } from '../../common/authorization/access-policy.se
 import { ExecutionAccessService, gatewayPrincipal, userPrincipal } from '../../common/authorization/execution-access.service';
 import { RunnerService } from '../../modules/runner/runner.service';
 import { RunnerCapabilityPublisher } from '../../modules/runner/runner-capability.publisher';
+import { WorkspaceService } from '../../modules/workspace/workspace.service';
 
 /**
  * Runner visibility against a real Postgres, through the real access
@@ -235,5 +236,49 @@ describeIfDb('Runner visibility (real Postgres)', () => {
     // A user principal is still that user.
     await expect(gated.resolveForDispatch(runner.id, userPrincipal(alice))).resolves.toMatchObject({ id: runner.id });
     await expect(gated.resolveForDispatch(runner.id, userPrincipal(bob))).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("a workspace named by a dispatch is judged by the run's principal: a gateway run uses the workspaces its scope covers", async () => {
+    // Before, the workspace check read the caller's user id, and a gateway
+    // run has none: every gateway dispatch that named a workspace was
+    // refused, whatever the gateway's scope.
+    const deploy = (await ds.getRepository(Team).save(ds.getRepository(Team).create({ name: 'Deploy', organizationId } as any)) as any).id as string;
+    const growth = (await ds.getRepository(Team).save(ds.getRepository(Team).create({ name: 'Growth', organizationId } as any)) as any).id as string;
+    await ds.getRepository(UserTeam).save(ds.getRepository(UserTeam).create({ userId: bob, teamId: deploy, role: TeamRole.MEMBER, isActive: true }));
+    const { runner } = await runners.register(input('deploy-box'), bob, organizationId);
+    const workspaceOf = async (ownerUserId: string) =>
+      ds.getRepository(Workspace).save(ds.getRepository(Workspace).create({
+        runnerId: runner.id, ownerUserId, organizationId, cwd: '/tmp/w', isolation: RunnerIsolationTier.HOST, ttlAt: null,
+        status: WorkspaceStatus.ACTIVE,
+      }));
+    const bobs = await workspaceOf(bob);
+    const carols = await workspaceOf(carol); // an org admin, not on Deploy
+    const workspaces = new WorkspaceService(ds.getRepository(Workspace), ds.getRepository(Runner), policy);
+    const find = (ws: Workspace, caller: Parameters<WorkspaceService['findForDispatch']>[2]) =>
+      workspaces.findForDispatch(ws.id, runner.id, caller).then((row) => row?.id ?? null);
+    const viaGateway = (visibility: 'org' | 'team' | 'private', over: Record<string, any> = {}) =>
+      gatewayPrincipal({ id: '00000000-0000-4000-8000-0000000000bb', organizationId, visibility, ...over });
+
+    // A user: their own only, as before (a bare id and a principal alike).
+    expect(await find(bobs, bob)).toBe(bobs.id);
+    expect(await find(bobs, userPrincipal(bob))).toBe(bobs.id);
+    expect(await find(bobs, alice)).toBeNull();
+    expect(await find(carols, userPrincipal(bob))).toBeNull();
+    expect(await find(bobs, null)).toBeNull();
+
+    // A team gateway: its members' workspaces; not an admin's who is not on the team.
+    expect(await find(bobs, viaGateway('team', { teamId: deploy }))).toBe(bobs.id);
+    expect(await find(carols, viaGateway('team', { teamId: deploy }))).toBeNull();
+    // A gateway private to its owner: that owner's.
+    expect(await find(bobs, viaGateway('private', { ownerUserId: bob }))).toBe(bobs.id);
+    expect(await find(bobs, viaGateway('private', { ownerUserId: alice }))).toBeNull();
+    // Another team's gateway, an org-wide gateway, another org's gateway: none.
+    expect(await find(bobs, viaGateway('team', { teamId: growth }))).toBeNull();
+    expect(await find(bobs, viaGateway('org'))).toBeNull();
+    expect(await find(bobs, gatewayPrincipal({ id: '00000000-0000-4000-8000-0000000000cc', organizationId: '00000000-0000-4000-8000-0000000000dd', visibility: 'team', teamId: deploy }))).toBeNull();
+
+    // Leaving the team ends it on the next dispatch.
+    await ds.getRepository(UserTeam).update({ userId: bob, teamId: deploy }, { isActive: false });
+    expect(await find(bobs, viaGateway('team', { teamId: deploy }))).toBeNull();
   });
 });

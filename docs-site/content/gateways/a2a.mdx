@@ -1,46 +1,41 @@
-# A2A Gateway
+# A2A
 
-Let other AI agents call your agent. An A2A gateway implements Google's Agent-to-Agent protocol: any A2A-compatible client reads your gateway's Agent Card, sees what the agent can do, and sends it messages over JSON-RPC.
+Let other AI agents call your agent. almyty speaks Google's Agent-to-Agent protocol: any A2A-compatible client reads your agent's Agent Card, sees what the agent can do, and sends it messages over JSON-RPC.
 
-![Gateway detail page](/screenshots/gateway-detail.png)
+An agent that other agents call is an agent in front of someone, so it is a channel on the agent, next to its web chat, its website widget and its messaging channels. There is no separate A2A gateway to create.
 
-## Create the gateway
+## Put your agent in front of other agents
 
-1. Open **Gateways → Create gateway** (`/gateways/new`)
-2. Pick **Agent** — A2A serves an agent, not a tool bundle
-3. Select **A2A** as the gateway type
-4. Pick the **Agent** that will handle requests on this gateway
-5. Enter a name, an endpoint path (the slug in the URL), and an optional description
-6. Choose visibility and click **Create gateway**
+1. Open the agent and go to its **Channels** tab
+2. Select **Add channel** and pick **Other agents (A2A)**
+3. Select **Publish**
+4. Under **How other agents sign in**, generate a key for each caller. Every JSON-RPC call sends one in the `x-api-key` header
 
-Configure the **Authentication** section on the detail page before exposing the gateway externally.
+Only an autonomous agent can have this channel: the A2A server runs a conversation, which a workflow agent does not hold, so publishing refuses one.
 
-Your A2A endpoint follows this pattern:
+The channel's page shows both addresses once it is published. The endpoint follows this pattern:
 
 ```
-https://api.almyty.com/{org}/{gateway-slug}
+https://api.almyty.com/{org}/channels/{channel-id}
 ```
 
-There is no `/a2a` path segment. Every gateway is served from the same
-`{org}/{gateway-slug}` URL, and the protocol is decided by the gateway's type, which
-you set at creation time — not by a query parameter or an `Accept` header. A gateway
-created as A2A answers A2A there; an MCP gateway answers MCP at the same URL shape.
-
-The Agent Card is generated automatically at:
+The Agent Card is generated automatically next to it:
 
 ```
-https://api.almyty.com/{org}/{gateway-slug}/.well-known/agent-card.json
+https://api.almyty.com/{org}/channels/{channel-id}/.well-known/agent-card.json
 ```
 
-`.well-known/agent.json` is accepted as an alias, and a plain `GET` on the gateway URL
-returns the same card. Those three reads are public; the JSON-RPC endpoint is not.
+`.well-known/agent.json` is accepted as an alias, and a plain `GET` on the endpoint
+returns the same card. Those three reads are public; the JSON-RPC endpoint is not. The
+card and the endpoint answer only while the channel is published and its agent is active:
+unpublish the channel, or switch the agent off, and both answer not found.
 
 ## Connect an agent
 
-Give the calling agent your Agent Card URL. It reads the card, discovers your skills, and starts sending tasks. No manual request building on your side.
+Give the calling agent your Agent Card URL and one of the keys. It reads the card, discovers your skills, and starts sending tasks. No manual request building on your side.
 
 ```
-https://api.almyty.com/acme/my-agent/.well-known/agent-card.json
+https://api.almyty.com/acme/channels/5b1f0c2e-8d4a-4c7e-9a31-2f6d7e8c9b10/.well-known/agent-card.json
 ```
 
 almyty emits A2A **v1.0**, so the card carries `supportedInterfaces` rather than a bare
@@ -53,7 +48,7 @@ almyty emits A2A **v1.0**, so the card carries `supportedInterfaces` rather than
   "version": "1.0.0",
   "supportedInterfaces": [
     {
-      "url": "https://api.almyty.com/acme/my-agent",
+      "url": "https://api.almyty.com/acme/channels/5b1f0c2e-8d4a-4c7e-9a31-2f6d7e8c9b10",
       "protocolBinding": "JSONRPC",
       "protocolVersion": "1.0"
     }
@@ -76,13 +71,13 @@ almyty emits A2A **v1.0**, so the card carries `supportedInterfaces` rather than
   ],
   "defaultInputModes": ["text"],
   "defaultOutputModes": ["text"],
-  "url": "https://api.almyty.com/acme/my-agent"
+  "url": "https://api.almyty.com/acme/channels/5b1f0c2e-8d4a-4c7e-9a31-2f6d7e8c9b10"
 }
 ```
 
 ## Supported methods
 
-Calling agents `POST` JSON-RPC 2.0 requests to the gateway URL. Each method has a v1.0
+Calling agents `POST` JSON-RPC 2.0 requests to the endpoint. Each method has a v1.0
 (PascalCase) name and a v0.2.x / v0.3.x name; both are dispatched to the same handler.
 
 | v1.0 method | v0.x method | Description |
@@ -92,7 +87,7 @@ Calling agents `POST` JSON-RPC 2.0 requests to the gateway URL. Each method has 
 | `SubscribeToTask` | `tasks/resubscribe` | Reattach an SSE stream to a running task |
 | `GetTask` | `tasks/get` | Get the status and result of a task |
 | `CancelTask` | `tasks/cancel` | Cancel a running task |
-| `ListTasks` | `tasks/list` | List tasks on this gateway |
+| `ListTasks` | `tasks/list` | List tasks on this endpoint |
 | `GetExtendedAgentCard` | `agent/getAuthenticatedExtendedCard` | The full card, including security schemes |
 
 `tasks/send` is **not** a method almyty implements — it returns `-32601 Method not found`.
@@ -104,8 +99,8 @@ accepts all three dialects on input (`{ "type": "text", ... }`, `{ "kind": "text
 `{ "text": ... }`), so a v0.x client does not have to change.
 
 ```bash
-curl -X POST https://api.almyty.com/acme/my-agent \
-  -H "x-api-key: your-gateway-key" \
+curl -X POST https://api.almyty.com/acme/channels/5b1f0c2e-8d4a-4c7e-9a31-2f6d7e8c9b10 \
+  -H "x-api-key: your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -179,8 +174,8 @@ finished Task. To get the task id back immediately and poll with `GetTask`, say 
 `configuration.blocking: false` (the v0.x spelling) does the same thing. Stating either
 flag always decides; only the unstated case falls through to waiting.
 
-Note that an A2A gateway starts an **autonomous** agent run. Workflow agents are not
-reachable over A2A — use the agent's invoke or stream endpoints instead.
+Every call starts an **autonomous** agent run. Workflow agents are not reachable over
+A2A: use the agent's invoke or stream endpoints instead.
 
 ## Task lifecycle
 
@@ -200,4 +195,4 @@ kebab-case ones from v0.2.x / v0.3.x.
 `TASK_STATE_COMPLETED`, `TASK_STATE_FAILED`, `TASK_STATE_CANCELED`, and
 `TASK_STATE_REJECTED` are terminal — nothing transitions out of them.
 
-See [Gateway Authentication](/gateways/authentication) to secure the endpoint. Discovery endpoints such as the Agent Card stay public so other agents can find you.
+The keys on the channel's page are gateway keys, so [Gateway Authentication](/gateways/authentication) applies to them: add another sign-in method there, or revoke a key. Discovery endpoints such as the Agent Card stay public so other agents can find you.

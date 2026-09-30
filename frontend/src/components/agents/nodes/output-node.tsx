@@ -11,7 +11,7 @@ export function OutputNode({ data, selected }: NodeProps) {
         <span className="text-xs font-semibold text-red-700 dark:text-red-300">Output</span>
       </div>
       <div className="p-3">
-        <div className="text-sm font-medium truncate">Pipeline Output</div>
+        <div className="text-sm font-medium truncate">What the run returns</div>
         <div className="text-xs text-muted-foreground truncate mt-0.5">
           {data.mapping ? String(data.mapping).substring(0, 40) + (String(data.mapping).length > 40 ? '...' : '') : 'No mapping'}
         </div>

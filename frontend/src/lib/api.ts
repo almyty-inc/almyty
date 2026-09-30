@@ -312,7 +312,7 @@ export const authApi = {
   getProfile: () => apiGet('/auth/profile'),
   
   /** A changed email needs `currentPassword`; the server refuses without it. */
-  updateProfile: (data: Partial<{ name: string; email: string; currentPassword: string }>) =>
+  updateProfile: (data: Partial<{ name: string; email: string; currentPassword: string; timezone: string | null }>) =>
     apiPatch('/auth/profile', data),
   
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
@@ -395,9 +395,6 @@ export const organizationsApi = {
 
   deleteTeam: (id: string, teamId: string) =>
     apiDel(`/organizations/${id}/teams/${teamId}`),
-
-  getTeamMembers: (id: string, teamId: string) =>
-    apiGet(`/organizations/${id}/teams/${teamId}/members`),
     
   addTeamMember: (orgId: string, teamId: string, data: { userId: string; role?: string }) =>
     apiPost(`/organizations/${orgId}/teams/${teamId}/members`, data),
@@ -453,13 +450,6 @@ export const gatewaysApi = {
 
   getById: (id: string) => apiGet(`/gateways/${id}`),
 
-  /**
-   * The surface catalog: every place an agent can be published to, with
-   * whether it is usable and why not. The publish canvas renders one
-   * node per entry rather than hardcoding the list client-side.
-   */
-  listSurfaces: () => apiGet('/gateways/surfaces'),
-
   create: (data: any) => apiPost('/gateways', data),
 
   update: (id: string, data: any) => apiPatch(`/gateways/${id}`, data),
@@ -481,8 +471,6 @@ export const gatewaysApi = {
   // Tool association endpoints
   getTools: (id: string) => apiGet(`/gateways/${id}/tools`),
 
-  getAvailableTools: (id: string) => apiGet(`/gateways/${id}/tools/available`),
-
   assignTool: (gatewayId: string, toolId: string) =>
     apiPost(`/gateways/${gatewayId}/tools`, { toolId }),
 
@@ -498,24 +486,16 @@ export const gatewaysApi = {
   updateToolConfig: (gatewayId: string, gatewayToolId: string, data: any) =>
     apiPatch(`/gateways/${gatewayId}/tools/${gatewayToolId}`, data),
 
-  getToolStats: (gatewayId: string) => apiGet(`/gateways/${gatewayId}/tools/stats`),
-
   // Gateway operations
   activate: (id: string) => apiPost(`/gateways/${id}/activate`),
 
   deactivate: (id: string) => apiPost(`/gateways/${id}/deactivate`),
-
-  testConnection: (id: string) => apiPost(`/gateways/${id}/health-check`),
-
-  testChannelConnection: (id: string) => apiPost(`/gateways/${id}/test-connection`),
 
   // Multi-workspace channel installations (e.g. Slack OAuth installs)
   getInstallations: (id: string) => apiGet(`/gateways/${id}/installations`),
 
   revokeInstallation: (gatewayId: string, installationId: string) =>
     apiPost(`/gateways/${gatewayId}/installations/${installationId}/revoke`),
-
-  getMetrics: (id: string, params?: any) => apiGet(`/gateways/${id}/stats`, { params }),
 
   // Auth configuration
   getAuthConfigs: (gatewayId: string) => apiGet(`/gateways/${gatewayId}/auth`),
@@ -530,8 +510,6 @@ export const gatewaysApi = {
 
   // Export formats
   getSkills: (id: string) => apiGet(`/gateways/${id}/skills`),
-  getCliBundle: (id: string, format: 'bash' | 'node' = 'bash') => apiGet(`/gateways/${id}/cli-bundle`, { params: { format } }),
-  getSdk: (id: string) => apiGet(`/gateways/${id}/sdk`),
 
   // Channel events log (per-gateway observability surface)
   listEvents: (gatewayId: string, limit?: number) =>
@@ -542,11 +520,7 @@ export const gatewaysApi = {
 export const externalAgentsApi = {
   preview: (url: string) => apiPost('/external-agents/preview', { url }),
   getAll: () => apiGet('/external-agents'),
-  getById: (id: string) => apiGet(`/external-agents/${id}`),
   create: (data: any) => apiPost('/external-agents', data),
-  update: (id: string, data: any) => apiPatch(`/external-agents/${id}`, data),
-  delete: (id: string) => apiDel(`/external-agents/${id}`),
-  refresh: (id: string) => apiPost(`/external-agents/${id}/refresh`),
 }
 
 // APIs API
@@ -604,18 +578,22 @@ export const apisApi = {
   
   getOperations: (id: string) => apiGet(`/apis/${id}/operations`),
   
-  getResources: (id: string) => apiGet(`/apis/${id}/resources`),
-  
   getSchemas: (id: string) => apiGet(`/apis/${id}/schemas`),
 
   getParsedSchema: (id: string, schemaId: string) =>
     apiGet(`/apis/${id}/schemas/${schemaId}/parsed`),
 
-  updateStatus: (id: string, status: string) => apiPut(`/apis/${id}/status`, { status }),
-
   createSdkApi: (data: any) => apiPost('/apis/sdk', data),
+  /** An API without a description: a base URL, with tools added by hand. */
+  createHttpApi: (data: {
+    name: string
+    baseUrl: string
+    description?: string
+    authentication?: { type: string; config?: Record<string, unknown> }
+    visibility?: 'org' | 'team' | 'private'
+    teamId?: string | null
+  }) => apiPost('/apis/http', data),
   getSdkMaps: (apiId: string) => apiGet(`/apis/${apiId}/sdk-maps`),
-  addDependency: (apiId: string, packageName: string, version: string) => apiPost(`/apis/${apiId}/dependencies`, { packageName, version }),
 
   // Connect an API from its description in one call: a link, a file or
   // pasted text. The response says what was found and what is still needed.
@@ -655,14 +633,6 @@ export const toolsApi = {
     }
     return apiPost('/tools', data)
   },
-  
-  update: (id: string, data: any, organizationId?: string) => {
-    const orgId = organizationId || readCurrentOrgId()
-    if (!orgId) {
-      return Promise.reject(new Error('No organization context. Pick an org before updating tools.'))
-    }
-    return apiPut(`/organizations/${orgId}/tools/${id}`, data)
-  },
 
   delete: (id: string, organizationId?: string) => {
     const orgId = organizationId || readCurrentOrgId()
@@ -676,15 +646,9 @@ export const toolsApi = {
   deactivate: (id: string, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/deactivate`),
 
   execute: (id: string, data: any, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/execute`, data),
-  
-  getUsage: (id: string, params?: any) => apiGet(`/tools/${id}/usage`, { params }),
-
-  getSchema: (id: string) => apiGet(`/tools/${id}/schema`),
 
   // Export formats
   getSkill: (id: string, organizationId: string) => apiGet(`/organizations/${organizationId}/tools/${id}/skill`),
-  getCli: (id: string, organizationId: string, format: 'bash' | 'node' = 'bash') => apiGet(`/organizations/${organizationId}/tools/${id}/cli`, { params: { format } }),
-  getSdk: (id: string, organizationId: string) => apiGet(`/organizations/${organizationId}/tools/${id}/sdk`),
 }
 
 // MCP Sources API (external MCP servers as tool sources)
@@ -719,8 +683,6 @@ export const llmProvidersApi = {
   getAll: () => apiGet('/llm-providers'),
   
   getById: (id: string) => apiGet(`/llm-providers/${id}`),
-  
-  create: (data: any) => apiPost('/llm-providers', data),
 
   /**
    * Save a provider only if its key works: checks the key, lists the
@@ -736,31 +698,17 @@ export const llmProvidersApi = {
   update: (id: string, data: any) => apiPatch(`/llm-providers/${id}`, data),
   
   delete: (id: string) => apiDel(`/llm-providers/${id}`),
+
+  /** The agents whose model runs on this connection: the ones the caller can see by name, the rest as a count. */
+  agents: (id: string) => apiGet<{ agents: Array<{ id: string; name: string }>; others: number }>(`/llm-providers/${id}/agents`),
   
   test: (id: string) => apiPost(`/llm-providers/${id}/test`),
   
   chat: (id: string, data: any) => apiPost(`/llm-providers/${id}/chat`, data),
-  
-  getSessions: (id: string) => apiGet(`/llm-providers/${id}/sessions`),
-
-  getUsage: (id: string, params?: any) => apiGet(`/llm-providers/${id}/usage`, { params }),
-
-  getModels: (id: string) => apiGet(`/llm-providers/${id}/models`),
-
-  getModelsByType: (type: string, apiKey: string) => apiPost('/llm-providers/models/by-type', { type, apiKey }),
-
-  testConnection: (type: string, apiKey: string) => apiPost('/llm-providers/test-connection', { type, apiKey }),
 }
 
 // Analytics / Monitoring API
 export const analyticsApi = {
-  getDashboard: () => apiGet('/monitoring/enterprise/dashboard'),
-  getLiveStats: () => apiGet('/monitoring/stats/live'),
-  getMetrics: () => apiGet('/monitoring/metrics'),
-  getMetricsHistory: (hours = 1) => apiGet(`/monitoring/metrics/history?hours=${hours}`),
-  getAlerts: () => apiGet('/monitoring/alerts'),
-  getHealth: () => apiGet('/monitoring/health'),
-  // Real analytics endpoints
   getOverview: () => apiGet('/analytics/overview'),
   getRequestLogs: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
@@ -772,7 +720,6 @@ export const analyticsApi = {
   getTimeline: (timeframe = '24h', granularity = 'hour') =>
     apiGet(`/analytics/timeline?timeframe=${timeframe}&granularity=${granularity}`),
   getAuditSummary: () => apiGet('/analytics/audit-summary'),
-  getAgentRunsSummary: () => apiGet('/analytics/agent-runs'),
   exportData: (format: string, type: string, from?: string, to?: string) => {
     const params = new URLSearchParams({ format, type })
     if (from) params.set('from', from)
@@ -796,7 +743,6 @@ export const budgetsApi = {
 export const providerUsageApi = {
   getReconciliation: (period: 'day' | 'month' = 'month') =>
     apiGet(`/provider-usage/reconciliation?period=${period}`),
-  getCapabilities: () => apiGet('/provider-usage/capabilities'),
   sync: (data: { from?: string; to?: string; providerId?: string } = {}) =>
     apiPost('/provider-usage/sync', data),
 }
@@ -806,7 +752,12 @@ export const ssoApi = {
   getConfig: () => apiGet('/sso/settings'),
   saveConfig: (data: any) => apiPut('/sso/settings', data),
   rotateScimToken: () => apiPost('/sso/settings/scim-token'),
-  revealScimToken: () => apiGet('/sso/settings/scim-token'),
+  // Email domains the organization has proven with a DNS TXT record; SSO
+  // creates accounts only for addresses on a verified one.
+  listDomains: () => apiGet('/sso/settings/domains'),
+  addDomain: (domain: string) => apiPost('/sso/settings/domains', { domain }),
+  verifyDomain: (id: string) => apiPost(`/sso/settings/domains/${id}/verify`),
+  removeDomain: (id: string) => apiDel(`/sso/settings/domains/${id}`),
 }
 
 // Advanced RBAC API (EE — gated by the `advanced_rbac` entitlement).
@@ -879,7 +830,6 @@ export interface CreatePolicyPayload {
 export const rbacApi = {
   // Custom roles
   listRoles: () => apiGet<CustomRole[]>('/rbac/roles'),
-  getRole: (id: string) => apiGet<CustomRole>(`/rbac/roles/${id}`),
   createRole: (data: CreateRolePayload) => apiPost<CustomRole>('/rbac/roles', data),
   updateRole: (id: string, data: UpdateRolePayload) =>
     apiPatch<CustomRole>(`/rbac/roles/${id}`, data),
@@ -887,8 +837,6 @@ export const rbacApi = {
   // Assignments
   assignUser: (roleId: string, userId: string) =>
     apiPost<CustomRoleAssignment>(`/rbac/roles/${roleId}/assignments`, { userId }),
-  unassignUser: (roleId: string, userId: string) =>
-    apiDel(`/rbac/roles/${roleId}/assignments/${userId}`),
   // Effective permissions for a user
   getUserPermissions: (userId: string) =>
     apiGet<string[]>(`/rbac/users/${userId}/permissions`),
@@ -961,14 +909,11 @@ export const agentsApi = {
   deactivate: (id: string) => apiPost(`/agents/${id}/deactivate`),
   duplicate: (id: string) => apiPost(`/agents/${id}/duplicate`),
   invoke: (id: string, input: any, options?: any) => apiPost(`/agents/${id}/invoke`, { input, options }),
-  stream: (id: string, input: any) => apiPost(`/agents/${id}/stream`, { input }, { responseType: 'stream' }),
   getExecutions: (id: string, params?: any) => apiGet(`/agents/${id}/executions`, { params }),
-  getExecution: (id: string, execId: string) => apiGet(`/agents/${id}/executions/${execId}`),
   // Templates
   getTemplates: () => apiGet('/agents/templates'),
   // Versioning
   getVersions: (id: string) => apiGet(`/agents/${id}/versions`),
-  saveVersion: (id: string, changelog?: string) => apiPost(`/agents/${id}/versions`, { changelog }),
   rollback: (id: string, versionIndex: number) => apiPost(`/agents/${id}/versions/${versionIndex}/rollback`),
   // Import / Export
   exportAgent: (id: string) => apiGet(`/agents/${id}/export`),
@@ -978,8 +923,6 @@ export const agentsApi = {
       responseType: 'text',
     }),
   importAgent: (data: any) => apiPost('/agents/import', data),
-  // Cost estimation
-  getCostEstimate: (id: string) => apiGet(`/agents/${id}/cost-estimate`),
   // Audit log
   getAuditLog: (id: string) => apiGet(`/agents/${id}/audit-log`),
   // Scheduling
@@ -989,16 +932,8 @@ export const agentsApi = {
   setHeartbeat: (id: string, body: { enabled: boolean; intervalMinutes?: number; prompt?: string }) =>
     apiPatch(`/agents/${id}/heartbeat`, body),
   // Runs (autonomous mode)
-  startRun: (id: string, input: any, options?: any) => apiPost(`/agents/${id}/runs`, { input, ...options }),
   listRuns: (id: string, params?: any) => apiGet(`/agents/${id}/runs`, { params }),
   getRun: (id: string, runId: string) => apiGet(`/agents/${id}/runs/${runId}`),
-  cancelRun: (id: string, runId: string) => apiPost(`/agents/${id}/runs/${runId}/cancel`),
-  sendRunInput: (id: string, runId: string, input: string) => apiPost(`/agents/${id}/runs/${runId}/input`, { input }),
-}
-
-// Runs API (standalone access)
-export const runsApi = {
-  getRun: (runId: string) => apiGet(`/agents/runs/${runId}`),
 }
 
 // Promoted Skills API (run -> skill)
@@ -1006,7 +941,6 @@ export const promotedSkillsApi = {
   promote: (body: { runId: string; name?: string; description?: string; distill?: { providerId: string; model?: string } }) =>
     apiPost('/promoted-skills', body),
   list: () => apiGet('/promoted-skills'),
-  get: (id: string) => apiGet(`/promoted-skills/${id}`),
   remove: (id: string) => apiDel(`/promoted-skills/${id}`),
   replay: (id: string, input?: any) => apiPost(`/promoted-skills/${id}/replay`, { input }),
 }
@@ -1077,7 +1011,7 @@ export const workspacesApi = {
 // Items are scoped via { scope_type, scope_id }; the UI defaults
 // scope_type=workspace and scope_id=current organization id when
 // the caller doesn't override.
-export type MemoryScopeType = 'user' | 'workspace' | 'project' | 'collab'
+export type MemoryScopeType = 'user' | 'workspace' | 'project' | 'collab' | 'agent'
 export type MemoryMode = 'memory' | 'document'
 export type MemoryTier = 'short' | 'project' | 'long' | 'shared'
 
@@ -1106,7 +1040,6 @@ export const memoriesApi = {
     top_k?: number
     fts_only?: boolean
   }) => apiPost('/memory/canonical/search', body),
-  getById: (id: string) => apiGet(`/memory/canonical/${id}`),
   put: (body: {
     mode: MemoryMode
     scope: MemoryScopeRef
@@ -1132,10 +1065,10 @@ export const memoriesApi = {
   }) => apiPost('/memory/canonical', body),
   remove: (id: string, mode: 'soft' | 'hard' = 'soft') =>
     apiDel(`/memory/canonical/${id}?mode=${mode}`),
-  supersede: (id: string, body: any) =>
-    apiPost(`/memory/canonical/${id}/supersede`, body),
   // Backend roster + transfer (router-level operations)
   listBackends: () => apiGet('/memory/canonical/backends'),
+  /** almyty's own memory and every outside memory account the organization has set up. */
+  listAccounts: () => apiGet('/memory/canonical/accounts'),
   backendsHealth: () => apiGet('/memory/canonical/backends/health'),
   // Workspace config (per-scope routing + softcap behavior + credentials wiring)
   getConfig: (scope_type: MemoryScopeType, scope_id: string) =>
@@ -1171,7 +1104,6 @@ export const filesApi = {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
     return apiGet(`/files${qs}`)
   },
-  getById: (id: string) => apiGet(`/files/${id}`),
   upload: (file: File, agentId?: string, runId?: string) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -1184,7 +1116,6 @@ export const filesApi = {
     })
   },
   download: (id: string) => api.get(`/files/${id}/download`, { responseType: 'blob' }),
-  delete: (id: string) => apiDel(`/files/${id}`),
 }
 
 // Audit Logs API
@@ -1194,8 +1125,6 @@ export const auditLogsApi = {
     // Return full response with data + pagination (not just data array)
     return api.get(`/audit-logs${qs}`).then(r => r.data)
   },
-  getResourceHistory: (resourceType: string, resourceId: string, limit?: number) =>
-    apiGet(`/audit-logs/resource?resourceType=${resourceType}&resourceId=${resourceId}${limit ? `&limit=${limit}` : ''}`),
 }
 
 // EE audit-export (gated on the `audit_export` entitlement — Business+). The
@@ -1223,12 +1152,11 @@ export const auditExportApi = {
 // Credentials Vault API
 export const credentialsApi = {
   getAll: () => apiGet('/credentials'),
-  getById: (id: string) => apiGet(`/credentials/${id}`),
+  /** One credential, secrets masked. */
+  getById: (id: string) => apiGet(`/credentials/${encodeURIComponent(id)}`),
+  /** Delete a key a single API, MCP server, channel or app keeps (a shared one goes through the connections endpoint). */
+  remove: (id: string) => apiDel(`/credentials/${encodeURIComponent(id)}`),
   create: (data: any) => apiPost('/credentials', data),
-  update: (id: string, data: any) => apiPatch(`/credentials/${id}`, data),
-  delete: (id: string) => apiDel(`/credentials/${id}`),
-  test: (id: string) => apiPost(`/credentials/${id}/test`, {}),
-  getUsage: (id: string) => apiGet(`/credentials/${id}/usage`),
   /** Start an OAuth 2.0 sign-in; the browser goes to authorizationUrl and comes back to returnTo. */
   oauth2Authorize: (data: {
     apiId?: string
@@ -1258,23 +1186,9 @@ export const accessKeysApi = {
   revoke: (id: string) => apiDel(`/access-keys/${id}`),
 }
 
-// Users API (admin)
-export const usersApi = {
-  getAll: () => apiGet('/users'),
-  
-  getById: (id: string) => apiGet(`/users/${id}`),
-  
-  update: (id: string, data: any) => apiPatch(`/users/${id}`, data),
-  
-  delete: (id: string) => apiDel(`/users/${id}`),
-  
-  getActivity: (id: string, params?: any) => apiGet(`/users/${id}/activity`, { params }),
-}
-
 // Versions API (entity version history via typeorm-versions)
 export const versionsApi = {
   getVersions: (entityType: string, entityId: string) => apiGet(`/versions/${entityType}/${entityId}`),
-  getVersion: (versionId: string) => apiGet(`/versions/detail/${versionId}`),
 }
 
 // Tool Hub API
@@ -1289,14 +1203,11 @@ export interface PublishToolTemplatePayload {
   version?: string
 }
 
-export type UpdateToolTemplatePayload = Omit<Partial<PublishToolTemplatePayload>, 'toolId'>
-
 export const toolHubApi = {
   getTemplates: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
     return apiGet(`/tool-hub/templates${qs}`)
   },
-  getTemplate: (id: string) => apiGet(`/tool-hub/templates/${id}`),
   getProviders: () => apiGet('/tool-hub/providers'),
   getCategories: () => apiGet('/tool-hub/categories'),
   installTemplate: (id: string, data?: any) => apiPost(`/tool-hub/templates/${id}/install`, data || {}),
@@ -1305,14 +1216,11 @@ export const toolHubApi = {
   // current organization on the template and never accepts one from the
   // body, so a template can only ever be published into your own hub.
   publishTemplate: (data: PublishToolTemplatePayload) => apiPost('/tool-hub/templates', data),
-  updateTemplate: (id: string, data: UpdateToolTemplatePayload) =>
-    apiPatch(`/tool-hub/templates/${id}`, data),
   deleteTemplate: (id: string) => apiDel(`/tool-hub/templates/${id}`),
 }
 
 export const approvalsApi = {
   list: () => apiGet('/approvals'),
-  getById: (id: string) => apiGet(`/approvals/${id}`),
   approve: (id: string, decisionReason?: string) =>
     apiPost(`/approvals/${id}/approve`, { decisionReason }),
   reject: (id: string, decisionReason?: string) =>
@@ -1386,15 +1294,13 @@ export interface OnboardingState {
     external_client: boolean
     agent: boolean
     agent_run: boolean
-    app: boolean
-    distribution: boolean
+    channel: boolean
     runner: boolean
   }
   /** The org's own objects a step deep-links into, when they exist. */
   links: {
     gateway: { id: string; name: string; type: string; endpoint: string } | null
     agent: { id: string; name: string } | null
-    app: { slug: string; name: string } | null
   }
   dismissed: boolean
   /** Page intros this user closed. */
@@ -1426,14 +1332,12 @@ export function normalizeOnboardingState(raw: Partial<OnboardingState> | null | 
       external_client: step('external_client'),
       agent: step('agent'),
       agent_run: step('agent_run'),
-      app: step('app'),
-      distribution: step('distribution'),
+      channel: step('channel'),
       runner: step('runner'),
     },
     links: {
       gateway: links.gateway ?? null,
       agent: links.agent ?? null,
-      app: links.app ?? null,
     },
     dismissed: raw?.dismissed === true,
     dismissedIntros: Array.isArray(raw?.dismissedIntros) ? raw!.dismissedIntros! : [],

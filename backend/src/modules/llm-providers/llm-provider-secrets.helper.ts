@@ -10,6 +10,15 @@ import {
 } from '../credentials/credential-ref.resolver';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 
+/**
+ * The name of a key a provider made for itself. The inference key is the
+ * connection, as far as a person is concerned, so it has the connection's
+ * name; the usage (admin) key says what it is.
+ */
+export function managedKeyName(providerName: string, kind: 'inference' | 'usage'): string {
+  return kind === 'inference' ? providerName : `${providerName} usage key`;
+}
+
 /** The marker maskSensitiveData() puts in place of a key; a client that round-trips it is not rotating. */
 export const MASKED_PROVIDER_KEY = '***masked***';
 
@@ -125,7 +134,7 @@ export class LlmProviderSecretsHelper {
         });
       } else {
         row = await this.credentialRefs.createManaged(provider.organizationId, {
-          name: kind === 'inference' ? `${provider.name} API key` : `${provider.name} usage API key`,
+          name: managedKeyName(provider.name, kind),
           description: kind === 'inference'
             ? `Inference key for the ${provider.type} provider "${provider.name}"`
             : `Usage/admin key for the ${provider.type} provider "${provider.name}"`,
@@ -150,11 +159,19 @@ export class LlmProviderSecretsHelper {
    * A private connection is its owner's alone, so it can back only a
    * provider that is private to the same owner -- otherwise everyone the
    * provider answers would be calling with the owner's key. Another
-   * user's private connection is reported as not found. Rows this
-   * provider manages for itself follow the provider (syncManagedScope).
+   * user's private connection is reported as not found. A team connection
+   * backs only a provider of that team (or one private to someone who may
+   * use it): on an org-wide provider every run outside the team would fail
+   * to resolve the key, so the save is refused and says who
+   * (CredentialRefResolver.assertAttachable). Rows this provider manages
+   * for itself follow the provider (syncManagedScope).
    */
   async assertKeysServable(
-    provider: Pick<LlmProvider, 'organizationId' | 'visibility' | 'ownerUserId' | 'credentialId' | 'usageCredentialId'> & { id?: string },
+    provider: Pick<LlmProvider, 'organizationId' | 'visibility' | 'ownerUserId' | 'credentialId' | 'usageCredentialId'> & {
+      id?: string;
+      teamId?: string | null;
+      name?: string | null;
+    },
     actorId: string,
   ): Promise<void> {
     const refs: Array<[ProviderKeyKind, string | null | undefined]> = [
@@ -165,6 +182,20 @@ export class LlmProviderSecretsHelper {
       if (!credentialId) continue;
       const row = await this.credentialRefs.load(provider.organizationId, credentialId);
       if (provider.id && CredentialRefResolver.isManagedBy(row, this.managedBy(provider as LlmProvider, kind))) continue;
+      if (row.visibility === 'team') {
+        await this.credentialRefs.assertAttachable(
+          row,
+          {
+            organizationId: provider.organizationId,
+            visibility: provider.visibility,
+            teamId: provider.visibility === 'team' ? (provider.teamId ?? null) : null,
+            ownerUserId: provider.ownerUserId ?? null,
+            noun: 'LLM provider',
+          },
+          { actorId },
+        );
+        continue;
+      }
       if (row.visibility !== 'private') continue;
       if (!row.ownerUserId || row.ownerUserId !== actorId) {
         throw new NotFoundException({ code: 'CREDENTIAL_NOT_FOUND', message: 'credential not found' });
@@ -191,6 +222,16 @@ export class LlmProviderSecretsHelper {
           : { visibility: 'org', teamId: null, ownerUserId: null };
     await this.credentialRefs.setManagedScope(provider.organizationId, provider.credentialId, this.managedBy(provider, 'inference'), scope);
     await this.credentialRefs.setManagedScope(provider.organizationId, provider.usageCredentialId, this.managedBy(provider, 'usage'), scope);
+  }
+
+  /**
+   * The key a provider made for itself carries the connection's name, so
+   * Credentials lists the connection by the name people gave it. A shared
+   * credential the provider points at keeps its own name.
+   */
+  async syncManagedName(provider: Pick<LlmProvider, 'id' | 'organizationId' | 'name' | 'credentialId' | 'usageCredentialId'>): Promise<void> {
+    await this.credentialRefs.renameManaged(provider.organizationId, provider.credentialId, this.managedBy(provider as LlmProvider, 'inference'), managedKeyName(provider.name, 'inference'));
+    await this.credentialRefs.renameManaged(provider.organizationId, provider.usageCredentialId, this.managedBy(provider as LlmProvider, 'usage'), managedKeyName(provider.name, 'usage'));
   }
 
   /** Delete the rows this provider manages (shared connections are left alone). */

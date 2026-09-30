@@ -50,7 +50,7 @@ export interface VerifyResult {
 const TOKEN_VERSION = 'v1';
 
 function base64urlEncode(buf: Buffer): string {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/(?<!=)=+$/, '');
 }
 
 function base64urlDecode(str: string): Buffer {

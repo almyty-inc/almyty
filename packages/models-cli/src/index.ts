@@ -11,7 +11,8 @@
  * Adapter configuration and endpoint keys are secrets, so they are never
  * taken from argv: argv is readable through `ps` and lands in shell history.
  */
-import { readFileSync } from 'fs';
+import { readFileSync, realpathSync } from 'fs';
+import { fileURLToPath } from 'url';
 import { AlmytyClient, resolveCredentialsOrExit } from '@almyty/client';
 import { EXIT, EXIT_CODE_HELP, UsageError, describeError, exitCodeFor } from './exit-codes.js';
 import { VERSION } from './version.js';
@@ -143,8 +144,8 @@ Hosting:
                                                                  a model already on that platform
                                        \`adapters\` lists what each provider accepts; one that
                                        cannot read your source is refused before anything runs.
-                                       Prefer --credential (a connection made with
-                                       \`almyty connections connect\`) over pasting a key.
+                                       Prefer --credential (a credential added with
+                                       \`almyty credentials add\`) over pasting a key.
   hosted                               List hosted models: desired vs actual, state, spend
   hosted <id>                          One hosted model in full
   scale <hostedId> <replicas>          Set desired replicas; 0 scales to zero
@@ -530,7 +531,7 @@ function readStdin(): Promise<string> {
 const CONFIG_ALTERNATIVES = [
   '--config-file <path>       read the JSON object from a file',
   '--config-stdin             read the JSON object from stdin',
-  '--credential <id>          use a connection made with `almyty connections connect`',
+  '--credential <id>          use a credential added with `almyty credentials add`',
 ];
 
 /**
@@ -718,8 +719,22 @@ async function main(): Promise<void> {
   }
 }
 
-const invokedDirectly = process.argv[1] && /models-cli|almyty-models|dist\/index\.js|src\/index\.ts/.test(process.argv[1]) && !process.env.VITEST;
-if (invokedDirectly) {
+/**
+ * True when `argv1` is this module, directly or through the npm bin
+ * symlink. The old check matched the path against a regex and bailed out
+ * when VITEST was set, so a smoke test that spawned the built CLI from
+ * vitest inherited VITEST and got no output at all.
+ */
+export function isEntrypoint(argv1: string | undefined, moduleUrl: string): boolean {
+  if (!argv1) return false;
+  try {
+    return realpathSync(argv1) === realpathSync(fileURLToPath(moduleUrl));
+  } catch {
+    return false;
+  }
+}
+
+if (isEntrypoint(process.argv[1], import.meta.url)) {
   main().catch((err) => {
     console.error(describeError(err, process.env.ALMYTY_URL));
     process.exit(exitCodeFor(err));

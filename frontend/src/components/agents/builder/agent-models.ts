@@ -14,6 +14,7 @@ import type {
   AutonomousStrategyKey,
   RolePurpose,
 } from '@/types/agent-models'
+import { pluralize, pluralized } from '@/lib/utils'
 
 export const AUTONOMOUS_STRATEGY_KEYS: readonly AutonomousStrategyKey[] = [
   'single',
@@ -28,6 +29,7 @@ export const ROLE_PURPOSES: readonly RolePurpose[] = [
   'drafter',
   'checker',
   'panelist',
+  'judge',
   'explorer',
   'summariser',
   'teammate',
@@ -57,7 +59,7 @@ export const STRATEGY_OPTIONAL: Record<AutonomousStrategyKey, RolePurpose[]> = {
   single: [],
   cascade: [],
   best_of_n: [],
-  panel: ['checker'],
+  panel: ['judge'],
   explore_extract_patch: [],
 }
 
@@ -74,18 +76,77 @@ export const STRATEGY_DESCRIPTIONS: Record<AutonomousStrategyKey, string> = {
   single: 'One model does everything.',
   cascade: 'A cheaper model answers first and a checker double-checks it. The main model steps in only when the check fails.',
   best_of_n: 'The main model writes several answers and the checker picks the best.',
-  panel: 'Other models or agents answer too, and one answer is written from all of them.',
+  panel: 'Other models or agents answer too, and a judge writes one answer from all of them. Without a judge, the main model does.',
   explore_extract_patch: 'Helpers look around first and their findings are summed up. The main model works from that, and a checker checks the answer.',
 }
 
-/** The strategies shown up front; the rest wait under "More ways". */
-export const PRIMARY_STRATEGY_KEYS: readonly AutonomousStrategyKey[] = ['single', 'cascade', 'best_of_n']
+/** One slot a work mode shows under the dropdown: a purpose, how many, whether it may stay empty. */
+export interface SlotSpec {
+  purpose: RolePurpose
+  /** Roles of this purpose the mode needs (0 for an optional one). */
+  min: number
+  /** Whether a person can add more than one (panelists, explorers). */
+  many: boolean
+  optional: boolean
+}
+
+const one = (purpose: RolePurpose): SlotSpec => ({ purpose, min: 1, many: false, optional: false })
+
+/**
+ * The slots each work mode fills, in the order the work flows. The mode
+ * decides the slots: choosing Cascade shows a drafter, a checker and the
+ * main model, and nothing else. Checked against STRATEGY_SLOTS and
+ * STRATEGY_OPTIONAL (the engine's) by the source guard.
+ */
+export const WORK_MODE_SLOTS: Record<AutonomousStrategyKey, SlotSpec[]> = {
+  single: [one('main')],
+  cascade: [one('drafter'), one('checker'), one('main')],
+  best_of_n: [one('main'), one('checker')],
+  panel: [one('main'), { purpose: 'panelist', min: 2, many: true, optional: false }, { purpose: 'judge', min: 0, many: false, optional: true }],
+  explore_extract_patch: [{ purpose: 'explorer', min: 1, many: true, optional: false }, one('summariser'), one('main'), one('checker')],
+}
+
+/**
+ * The agent switched to `strategy`: every slot the mode needs gets a role
+ * (with no model yet, so the page asks for one), and a role the agent
+ * already has for a purpose is kept. Roles of other purposes stay in the
+ * draft, so switching back restores them; a save leaves them out
+ * (modelsPayload).
+ */
+export function withWorkMode(models: AgentModels, strategy: AutonomousStrategyKey): AgentModels {
+  let roles = models.roles
+  for (const slot of WORK_MODE_SLOTS[strategy]) {
+    const have = roles.filter((r) => r.purpose === slot.purpose).length
+    for (let i = have; i < slot.min; i++) roles = [...roles, newRole(roles, slot.purpose)]
+  }
+  const next: AgentModels = { ...models, strategy, roles }
+  if (strategy === 'best_of_n' && next.candidates === undefined) next.candidates = BEST_OF_N_DEFAULT
+  return next
+}
+
+/**
+ * Agent teammates, which the Capabilities section now lists as agents it
+ * may call, taken out of the models: the ids go to agentConfig.callableAgentIds.
+ * Model teammates stay under the work mode.
+ */
+export function splitAgentTeammates(models: AgentModels): { models: AgentModels; agentIds: string[] } {
+  const agentIds: string[] = []
+  const roles = models.roles.filter((r) => {
+    if (r.purpose === 'teammate' && r.kind === 'agent') {
+      if (r.agentId) agentIds.push(r.agentId)
+      return false
+    }
+    return true
+  })
+  return { models: { ...models, roles }, agentIds }
+}
 
 export const PURPOSE_LABELS: Record<RolePurpose, string> = {
   main: 'Main',
   drafter: 'Drafter',
   checker: 'Checker',
   panelist: 'Panelist',
+  judge: 'Judge',
   explorer: 'Explorer',
   summariser: 'Summariser',
   teammate: 'Teammate',
@@ -96,6 +157,7 @@ export const PURPOSE_DESCRIPTIONS: Record<RolePurpose, string> = {
   drafter: 'A cheaper model that answers first.',
   checker: 'Double-checks an answer, or picks the best one.',
   panelist: 'Answers the same question too.',
+  judge: 'Writes one answer from what the panel said. Without a judge, the main model does.',
   explorer: 'Looks around with the tools first.',
   summariser: 'Sums up what the explorers found.',
   teammate: 'The main model can hand it work.',
@@ -129,7 +191,7 @@ function missingSlotsWords(models: Pick<AgentModels, 'strategy' | 'roles'>): str
     const min = STRATEGY_SLOTS[models.strategy][purpose] ?? 1
     if (min === 1) return withArticle(purpose)
     const have = min - n
-    return have === 0 ? `${min} ${purpose}s` : `${n} more ${purpose}${n === 1 ? '' : 's'}`
+    return have === 0 ? pluralized(min, purpose) : `${n} more ${pluralize(n, purpose)}`
   })
   return joinAnd(parts)
 }
@@ -138,12 +200,6 @@ function missingSlotsWords(models: Pick<AgentModels, 'strategy' | 'roles'>): str
 export function missingSlotsSentence(models: Pick<AgentModels, 'strategy' | 'roles'>): string | null {
   const words = missingSlotsWords(models)
   return words ? `${STRATEGY_LABELS[models.strategy]} needs ${words}` : null
-}
-
-/** "Add a drafter and a checker": only what is missing, or null when nothing is. */
-export function missingSlotsAction(models: Pick<AgentModels, 'strategy' | 'roles'>): string | null {
-  const words = missingSlotsWords(models)
-  return words ? `Add ${words}` : null
 }
 
 /** Purposes the chosen strategy reads. Teammates are read by every strategy. */
@@ -161,10 +217,6 @@ export function roleIsUsed(strategy: AutonomousStrategyKey, role: Pick<AgentMode
 
 export function canBeAgent(purpose: RolePurpose): boolean {
   return AGENT_ALLOWED_PURPOSES.includes(purpose)
-}
-
-export function allowsMultiple(purpose: RolePurpose): boolean {
-  return MULTIPLE.has(purpose)
 }
 
 /**
@@ -185,12 +237,6 @@ export function defaultRoleName(roles: Pick<AgentModelRole, 'purpose'>[], purpos
   if (!MULTIPLE.has(purpose)) return PURPOSE_LABELS[purpose]
   const n = roles.filter((r) => r.purpose === purpose).length + 1
   return `${PURPOSE_LABELS[purpose]} ${n}`
-}
-
-/** Whether a name is one the page gave the role, so it may follow a purpose change. */
-export function isDefaultName(name: string, purpose: RolePurpose): boolean {
-  const label = PURPOSE_LABELS[purpose]
-  return name === label || new RegExp(`^${label} \\d+$`).test(name)
 }
 
 export function newRole(roles: AgentModelRole[], purpose: RolePurpose): AgentModelRole {
@@ -283,12 +329,23 @@ function hasProvider(role: AgentModelRole): boolean {
 }
 
 /**
- * The shape the backend stores: fields that do not apply to a role's kind
- * are dropped, empty ones are left out, and `candidates` only rides along
- * for Best of N.
+ * The roles the work mode uses: what the page shows and what a save sends.
+ * A role of another mode's slot stays in the draft (switching back brings
+ * it back) and is left out here; so is an agent teammate, which the
+ * Capabilities section lists as an agent it may call.
+ */
+export function rolesInUse(models: Pick<AgentModels, 'strategy' | 'roles'>): AgentModelRole[] {
+  const used = usedPurposes(models.strategy)
+  return models.roles.filter((r) => used.has(r.purpose) && !(r.purpose === 'teammate' && r.kind === 'agent'))
+}
+
+/**
+ * The shape the backend stores: only the roles the work mode uses, fields
+ * that do not apply to a role's kind dropped, empty ones left out, and
+ * `candidates` only for Best of N.
  */
 export function modelsPayload(models: AgentModels): AgentModels {
-  const roles = models.roles.map((r) => {
+  const roles = rolesInUse(models).map((r) => {
     const out: AgentModelRole = { key: r.key, name: r.name.trim(), purpose: r.purpose, kind: r.kind }
     if (r.kind === 'agent') {
       if (r.agentId) out.agentId = r.agentId
@@ -314,7 +371,9 @@ export function modelsPayload(models: AgentModels): AgentModels {
  * Everything that would stop the save, one sentence each, in the words a
  * person needs to fix it. Empty means the backend will accept the models.
  */
-export function modelsProblems(models: AgentModels): string[] {
+export function modelsProblems(draft: AgentModels): string[] {
+  // Only what a save would send: a role of another mode's slot is not.
+  const models: AgentModels = { ...draft, roles: rolesInUse(draft) }
   const problems: string[] = []
   const label = (r: AgentModelRole) => (r.name.trim() ? r.name.trim() : PURPOSE_LABELS[r.purpose])
 
@@ -346,7 +405,7 @@ export function modelsProblems(models: AgentModels): string[] {
   for (const purpose of ROLE_PURPOSES) {
     if (MULTIPLE.has(purpose)) continue
     const n = models.roles.filter((r) => r.purpose === purpose).length
-    if (n > 1) problems.push(`There are ${n} ${purpose} roles; there can be one`)
+    if (n > 1) problems.push(`There are ${pluralized(n, `${purpose} role`)}; there can be one`)
   }
 
   const keys = new Set<string>()
@@ -358,7 +417,7 @@ export function modelsProblems(models: AgentModels): string[] {
   if (models.strategy === 'best_of_n' && models.candidates !== undefined) {
     const n = models.candidates
     if (!Number.isInteger(n) || n < BEST_OF_N_MIN || n > BEST_OF_N_MAX) {
-      problems.push(`Best of N takes ${BEST_OF_N_MIN} to ${BEST_OF_N_MAX} candidates`)
+      problems.push(`Best of N takes ${BEST_OF_N_MIN} to ${pluralized(BEST_OF_N_MAX, 'candidate')}`)
     }
   }
 

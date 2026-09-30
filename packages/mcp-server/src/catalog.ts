@@ -119,7 +119,7 @@ export function sanitizePromptName(name: string): string {
   return name
     .replace(/[^a-zA-Z0-9_-]/g, '_')
     .replace(/_{2,}/g, '_')
-    .replace(/^_+|_+$/g, '') || 'skill';
+    .replace(/^_+|(?<!_)_+$/g, '') || 'skill';
 }
 
 /**

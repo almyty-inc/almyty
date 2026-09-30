@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
@@ -8,6 +8,33 @@ const bypassHtmlGetRequests = (req) => {
   if (req.method === 'GET' && acceptsHtml) {
     return '/index.html'
   }
+}
+
+/**
+ * The body of /runtime-config.js, the same shape docker-entrypoint.sh
+ * writes for nginx to serve. Only a bare hostname survives, so a bad
+ * value cannot break out of the string literal.
+ */
+export function runtimeConfigScript(domain = ''): string {
+  const safe = domain.replace(/[^A-Za-z0-9.-]/g, '')
+  return `window.__ALMYTY_RUNTIME__ = { hostedChatBaseDomain: "${safe}" };\n`
+}
+
+/**
+ * index.html loads /runtime-config.js before the app. nginx serves it in
+ * a container; vite has no such file, and a 404 there is a console error
+ * on every dev page load. This serves it from ALMYTY_HOSTED_CHAT_BASE_DOMAIN.
+ */
+const devRuntimeConfig: Plugin = {
+  name: 'almyty-dev-runtime-config',
+  apply: 'serve',
+  configureServer(server) {
+    server.middlewares.use('/runtime-config.js', (_req, res) => {
+      res.setHeader('Content-Type', 'application/javascript')
+      res.setHeader('Cache-Control', 'no-store')
+      res.end(runtimeConfigScript(process.env.ALMYTY_HOSTED_CHAT_BASE_DOMAIN))
+    })
+  },
 }
 
 // https://vitejs.dev/config/
@@ -25,7 +52,7 @@ export default defineConfig({
   // Client-exposed env vars carry the product's name, not the build
   // tool's. Only ALMYTY_-prefixed vars reach the bundle.
   envPrefix: 'ALMYTY_',
-  plugins: [react()],
+  plugins: [react(), devRuntimeConfig],
 
   resolve: {
     alias: {
@@ -97,14 +124,6 @@ export default defineConfig({
       '/referrals': {
         target: apiTarget,
         changeOrigin: true,
-      },
-      // The agent factory. /apps is both an API prefix and a router
-      // path, so HTML GETs stay with the SPA and everything else
-      // (including /apps/:slug/builds) reaches the backend.
-      '/apps': {
-        target: apiTarget,
-        changeOrigin: true,
-        bypass: bypassHtmlGetRequests,
       },
       '/gateways': {
         target: apiTarget,
@@ -240,6 +259,8 @@ export default defineConfig({
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
+      // Served by the credentials controller, which has no prefix of its own.
+      '/access-keys': { target: apiTarget, changeOrigin: true },
       '/external-agents': {
         target: apiTarget,
         changeOrigin: true,

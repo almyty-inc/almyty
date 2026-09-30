@@ -10,6 +10,7 @@ import { gatewayPrincipal } from '../../common/authorization/execution-access.se
 import { findGatewayRun } from '../gateways/gateway-servable';
 import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
 import { MetricType } from '../../entities/usage-metric.entity';
+import { withChannelPolicy, type ChannelPolicy } from '../gateways/channel-policy.service';
 import { agentRunToTask } from './a2a-task.mapper';
 import { a2aPartsToAgentInput } from './a2a-part.mapper';
 import type {
@@ -95,6 +96,9 @@ export class A2AMessageHandler {
     gateway: Gateway,
     params: any,
     _rpcId: string | number,
+    // The channel this A2A gateway is, already admitted by the caller:
+    // every run below starts with its cost cap, channel stamp and memory rule.
+    policy?: ChannelPolicy | null,
   ): Promise<Task> {
     if (!params?.message?.parts || !Array.isArray(params.message.parts)) {
       throw Object.assign(new Error('Invalid params: message.parts must be an array'), {
@@ -121,10 +125,10 @@ export class A2AMessageHandler {
         gateway.organizationId,
         null,
         text,
-        {
+        withChannelPolicy(policy, {
           ...(existingRun.conversationId ? { conversationId: existingRun.conversationId } : {}),
           principal: gatewayPrincipal(gateway),
-        },
+        }),
       );
       this.recordWorkflow(gateway);
       // Return task with the ORIGINAL task ID (the one the client sent)
@@ -171,7 +175,7 @@ export class A2AMessageHandler {
       text,
       // Runs in the gateway's scope: an A2A gateway serves its agent only
       // when its own visibility covers it, re-checked on every message.
-      { principal: gatewayPrincipal(gateway) },
+      withChannelPolicy(policy, { principal: gatewayPrincipal(gateway) }),
     );
     this.recordWorkflow(gateway);
 
@@ -201,6 +205,7 @@ export class A2AMessageHandler {
     rpcId: string | number,
     req: Request,
     res: Response,
+    policy?: ChannelPolicy | null,
   ): Promise<void> {
     if (!params?.message?.parts) {
       const error = this.helpers.jsonRpcError(rpcId, A2A_ERROR_CODES.INVALID_PARAMS, 'Missing message.parts in params');
@@ -230,7 +235,7 @@ export class A2AMessageHandler {
           gateway.organizationId,
           null,
           text,
-          { principal: gatewayPrincipal(gateway) },
+          withChannelPolicy(policy, { principal: gatewayPrincipal(gateway) }),
         );
         this.recordWorkflow(gateway);
       }
@@ -240,7 +245,7 @@ export class A2AMessageHandler {
         gateway.organizationId,
         null,
         text,
-        { principal: gatewayPrincipal(gateway) },
+        withChannelPolicy(policy, { principal: gatewayPrincipal(gateway) }),
       );
       this.recordWorkflow(gateway);
     }

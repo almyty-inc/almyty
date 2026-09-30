@@ -1,8 +1,11 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 
 import { OrganizationRole, UserOrganization } from '../../../entities/user-organization.entity';
-import { OrganizationsInvitesHelper } from '../organizations-invites.helper';
+import { OrganizationsInvitesHelper, hashInviteToken } from '../organizations-invites.helper';
 import { fakeRepository, FakeRepository } from '../../../test/fake-repository';
+
+/** What the table holds for the token 'tok-1': its hash, never the token. */
+const TOKEN_HASH = hashInviteToken('tok-1');
 
 /**
  * Accepting and revoking a membership invite are writes to one
@@ -27,7 +30,7 @@ describe('OrganizationsInvitesHelper membership-invite writes', () => {
     role: OrganizationRole.MEMBER,
     isActive: true,
     inviteAccepted: false,
-    inviteToken: 'tok-1',
+    inviteToken: TOKEN_HASH,
     inviteExpiresAt: future(),
     ...over,
   });
@@ -35,8 +38,10 @@ describe('OrganizationsInvitesHelper membership-invite writes', () => {
   function build(rows: any[]) {
     memberships = fakeRepository<any>({ seed: rows, make: () => new UserOrganization() });
     const users = fakeRepository<any>([
-      { id: 'invitee', email: 'invitee@example.com' },
-      { id: 'someone-else', email: 'else@example.com' },
+      { id: 'invitee', email: 'invitee@example.com', isVerified: true, verifiedAt: new Date() },
+      { id: 'someone-else', email: 'else@example.com', isVerified: true, verifiedAt: new Date() },
+      // Registered the invitee's address without holding the mailbox.
+      { id: 'squatter', email: 'squatted@example.com', isVerified: false, verifiedAt: null },
     ]);
     helper = new OrganizationsInvitesHelper(
       fakeRepository<any>() as any,
@@ -61,7 +66,17 @@ describe('OrganizationsInvitesHelper membership-invite writes', () => {
       build([invite()]);
 
       await expect(helper.acceptInvite('tok-1', 'someone-else')).rejects.toBeInstanceOf(NotFoundException);
-      expect(memberships.row('m-1')).toMatchObject({ inviteAccepted: false, inviteToken: 'tok-1' });
+      expect(memberships.row('m-1')).toMatchObject({ inviteAccepted: false, inviteToken: TOKEN_HASH });
+    });
+
+    it('does not let an account whose address was never proven accept an invite made out to it', async () => {
+      // Someone registers an address they do not hold; the org then invites
+      // that address, the invite lands on the squatted account, and its
+      // token sits in that account's notifications.
+      build([invite({ userId: 'squatter' })]);
+
+      await expect(helper.acceptInvite('tok-1', 'squatter')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(memberships.row('m-1')).toMatchObject({ inviteAccepted: false, inviteToken: TOKEN_HASH });
     });
   });
 
@@ -82,7 +97,7 @@ describe('OrganizationsInvitesHelper membership-invite writes', () => {
       build([invite({ organizationId: OTHER_ORG })]);
 
       await expect(helper.revokePendingInvite(ORG, 'mem:m-1')).rejects.toBeInstanceOf(NotFoundException);
-      expect(memberships.row('m-1')).toMatchObject({ isActive: true, inviteToken: 'tok-1' });
+      expect(memberships.row('m-1')).toMatchObject({ isActive: true, inviteToken: TOKEN_HASH });
     });
 
     it('does not deactivate a membership whose invite was already accepted', async () => {

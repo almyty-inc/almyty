@@ -151,9 +151,9 @@ service's.
 
 | Method | Path | Body | Result |
 |--------|------|------|--------|
-| GET | `/connections/:id/grants` | | `GrantView[]` |
-| POST | `/connections/:id/grants` | `{ principalType, principalId, permission?, budgetId?, expiresAt? }` | `GrantView` |
-| DELETE | `/connections/:id/grants/:grantId` | | the removed `GrantView` |
+| GET | `/credentials/:id/grants` | | `GrantView[]` |
+| POST | `/credentials/:id/grants` | `{ principalType, principalId, permission?, budgetId?, expiresAt? }` | `GrantView` |
+| DELETE | `/credentials/:id/grants/:grantId` | | the removed `GrantView` |
 
 `GrantView`: `{ id, connectionId, principalType, principalId, permission,
 budgetId, grantedBy, createdAt, expiresAt, expired }`.

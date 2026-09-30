@@ -11,6 +11,7 @@ import * as crypto from 'crypto';
 import { ApiKey } from '../../../entities/api-key.entity';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
+import { CompatAgentInvoker } from '../compat-agent-invoker.service';
 import { AgentAnthropicCompatController } from '../agent-anthropic-compat.controller';
 import { AgentOpenAICompatController } from '../agent-openai-compat.controller';
 import { AgentOpenAIStreamHelper } from '../agent-openai-stream.helper';
@@ -39,6 +40,7 @@ describe('compat-route rate limit parity', () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [AgentAnthropicCompatController, AgentOpenAICompatController],
       providers: [
+        CompatAgentInvoker,
         { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         {
           provide: AgentsService,
@@ -99,10 +101,14 @@ describe('compat-route rate limit parity', () => {
     expect(second.headers['x-ratelimit-remaining']).toBe(String(COMPAT_RATE_LIMIT_RPM - 2));
   });
 
-  it('refuses the request that exhausts the per-key window, in the Anthropic error shape', async () => {
+  it('serves the whole window, then refuses in the Anthropic error shape with a Retry-After', async () => {
+    const statuses: number[] = [];
     for (let i = 0; i < COMPAT_RATE_LIMIT_RPM; i++) {
-      await post();
+      statuses.push((await post()).status);
     }
+    // The request that spends the last slot is served; refusing on
+    // "remaining <= 0" used to turn it away and serve 59 of 60.
+    expect(statuses.every((s) => s === 200)).toBe(true);
 
     const refused = await post();
 
@@ -110,6 +116,7 @@ describe('compat-route rate limit parity', () => {
     expect(refused.body.type).toBe('error');
     expect(refused.body.error.type).toBe('rate_limit_error');
     expect(refused.headers['x-ratelimit-remaining']).toBe('0');
+    expect(Number(refused.headers['retry-after'])).toBeGreaterThan(0);
   });
 
   it('does not let one key spend another key window', async () => {

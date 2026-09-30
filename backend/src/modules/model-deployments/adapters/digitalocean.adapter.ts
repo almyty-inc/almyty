@@ -171,7 +171,7 @@ export class DigitalOceanAdapter implements ModelProviderAdapter {
   private static fqdn(inference: any): string | undefined {
     const endpoints = inference?.endpoints ?? {};
     const fqdn = endpoints.public_endpoint_fqdn ?? endpoints.private_endpoint_fqdn;
-    return fqdn ? String(fqdn).replace(/\/+$/, '') : undefined;
+    return fqdn ? String(fqdn).replace(/(?<!\/)\/+$/, '') : undefined;
   }
 
   private static totalScale(inference: any): number {

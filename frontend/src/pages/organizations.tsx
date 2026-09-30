@@ -17,7 +17,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
-import { formatDate, getInitials } from '@/lib/utils'
+import { formatDate, getInitials, pluralized } from '@/lib/utils'
 import { PageHeader } from '@/components/layout/page-header'
 import { Organization, OrganizationPlan } from '@/types'
 
@@ -89,7 +89,7 @@ export function OrganizationsPage() {
                 {org.name}
               </Link>
               <div className="text-sm text-muted-foreground">
-                {org.memberCount ?? org.members?.length ?? 0} members
+                {pluralized(org.memberCount ?? org.members?.length, 'member')}
               </div>
             </div>
           </div>

@@ -384,10 +384,16 @@ describe('McpOAuthService', () => {
       ).rejects.toThrow(/redirect_uri exceeds/);
     });
 
-    it('rejects registration when the gateway has reached the per-gateway client cap', async () => {
-      // Simulate the cap being full by returning the limit from
-      // the `count` stub.
+    it('rejects registration when every slot at the cap belongs to an authorized client', async () => {
+      // The cap is full and none of the clients is unused, so there is
+      // nothing to make room with.
       jest.spyOn(oauthClientRepository, 'count').mockResolvedValueOnce(500);
+      (oauthClientRepository as any).createQueryBuilder = jest.fn(() => {
+        const qb: any = {};
+        for (const m of ['select', 'where', 'andWhere', 'orderBy', 'limit']) qb[m] = jest.fn(() => qb);
+        qb.getMany = jest.fn(async () => []);
+        return qb;
+      });
 
       await expect(
         service.registerClient('gateway-1', 'org-1', validDto),

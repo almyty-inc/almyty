@@ -11,6 +11,7 @@ Models arrive from connected providers by themselves ([`POST /llm-providers/conn
 | Method | Endpoint | Role | Description |
 |--------|----------|------|-------------|
 | `GET` | `/models` | member | List models. Filters: `status`, `privacyTier`, `providerId`, `selectable=true` |
+| `GET` | `/models/agents/:agentId/issues` | member | The models an agent names that cannot be used now, and why (the banner on the agent) |
 | `POST` | `/models` | admin | Add a model a provider serves but does not list |
 | `POST` | `/models/sync` | admin | Read one provider's list again (`{ providerId }`), or every active one with no body |
 | `GET` | `/models/:id` | member | Model detail |
@@ -18,7 +19,22 @@ Models arrive from connected providers by themselves ([`POST /llm-providers/conn
 | `POST` | `/models/:id/validate` | admin | One real call through one model. A provider's key check covers its models; this is for an endpoint with no provider row |
 | `DELETE` | `/models/:id` | admin | Remove a model |
 
-Every model in a response carries two computed fields: `selectable` (usable right now) and `effectivePricing` (the override when set, else the feed price).
+Every model in a response carries computed fields: `selectable` (usable right now), `allowed` (its connection offers it; see [Which models a connection offers](/api-reference/llm-providers-api#which-models-a-connection-offers)), `effectivePricing` (the override when set, else the feed price) and, on the list, `isNew` (its connection started listing it within the last week).
+
+### Models an agent cannot use
+
+`GET /models/agents/:agentId/issues` answers, for an agent you can read, every model it names (its model, roles, steps, checkers and team) that cannot be used now:
+
+```json
+{
+  "success": true,
+  "data": [
+    { "model": "Qwen/Qwen3-32B", "modelName": "Qwen/Qwen3-32B", "providerId": "7c1e...", "connectionName": "HF - everything", "reason": "The provider no longer lists it.", "where": ["model", "role Checker"], "since": "2026-09-29T08:00:00.000Z" }
+  ]
+}
+```
+
+`connectionName` is `null` when the connection is not yours to see. The list is empty once every model is usable again.
 
 ### Add a model by hand
 
@@ -86,7 +102,7 @@ A failed run answers with `success: false`, `passed: false` and `error`, and rec
 
 ### Model fields
 
-`id`, `name`, `providerId`, `providerType`, `vendorModelId`, `endpointRef`, `base`, `modelVersionId`, `capabilities`, `contextLength`, `pricing`, `pricingSource` (`feed:litellm`, `feed:openrouter`, `native`, `adapter`, `manual`, `unpriced`), `pricingFetchedAt`, `pricingOverride`, `measuredLatencyMs` (`{ p50, p95, updatedAt }`), `privacyTier`, `region`, `status` (`active`, `inactive`, `error`, `deploying`), `validationStatus` (`never`, `passed`, `failed`), `lastValidatedAt`, `lastValidationError`, `metadata`, `createdAt`, `updatedAt`, plus the computed `selectable` and `effectivePricing`.
+`id`, `name`, `providerId`, `providerType`, `vendorModelId`, `endpointRef`, `base`, `modelVersionId`, `capabilities`, `contextLength`, `pricing`, `pricingSource` (`feed:litellm`, `feed:openrouter`, `native`, `adapter`, `manual`, `unpriced`), `pricingFetchedAt`, `pricingOverride`, `measuredLatencyMs` (`{ p50, p95, updatedAt }`), `privacyTier`, `region`, `status` (`active`, `inactive`, `error`, `deploying`), `validationStatus` (`never`, `passed`, `failed`), `lastValidatedAt`, `lastValidationError`, `metadata`, `createdAt`, `updatedAt`, plus the computed `allowed`, `selectable`, `effectivePricing` and `isNew`.
 
 For a model on your cloud account, `endpointRef` carries `url`, `providerType` and `deploymentId` (the id under `/model-deployments` below).
 

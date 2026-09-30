@@ -138,7 +138,7 @@ $ npx @almyty/models host bedrock://anthropic.claude-3-sonnet-20240229-v1:0 --ad
 | `--config-file <path>` | The cloud's config read from a JSON file. The way to pass secret fields |
 | `--config-stdin` | The cloud's config read from stdin. Same, for a secret that should not touch disk |
 | `--config '<json>'` | The cloud's config inline. Refused if it carries a field the cloud marks secret, or if the catalog could not be read to check |
-| `--credential <id>` | A connection made with `almyty connections connect`; the cloud's secrets are read from there instead of from any config you pass |
+| `--credential <id>` | A credential added with `almyty credentials add`; the cloud's secrets are read from there instead of from any config you pass |
 | `--desired` | JSON: `hardware`, `replicas`, `minScale`, `maxScale`, `quantization`, `region`, `privacyTier` |
 | `--budget` | A spend budget; reaching it stops the model (scales it to zero) |
 | `--card` | An existing model to attach instead of adding a new one; it gets the endpoint once ready and keeps being priced from the cloud |

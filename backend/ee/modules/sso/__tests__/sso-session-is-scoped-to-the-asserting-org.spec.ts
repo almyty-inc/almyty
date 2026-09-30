@@ -46,14 +46,17 @@ describe('an SSO session is scoped to the organization whose IdP asserted it', (
     organizationMemberships: [member(ORG_A), member(ORG_B)],
   };
 
-  it('the SSO callback mints a session naming the asserting organization', async () => {
+  it('the SAML completion mints a session naming the asserting organization', async () => {
     const auth = { generateTokens: jest.fn(async () => ({ accessToken: 't' })) };
-    const sso = { handleSamlCallback: jest.fn(async () => user) };
-    const controller = new SsoController(sso as any, auth as any, {} as any);
-    const res: any = { cookie: jest.fn(), redirect: jest.fn() };
-    const req: any = { headers: {}, get: () => 'api.test', protocol: 'https' };
+    const sso = { completeSsoLogin: jest.fn(async () => user) };
+    const signIns = {
+      takeHandoff: jest.fn(async () => ({ relayState: 'r', organizationId: ORG_A, profile: { email: user.email } })),
+    };
+    const controller = new SsoController(sso as any, auth as any, {} as any, signIns as any);
+    const res: any = { cookie: jest.fn(), redirect: jest.fn(), clearCookie: jest.fn() };
+    const req: any = { cookies: { sso_saml_state: 'r' } };
 
-    await controller.samlCallback(ORG_A, 'resp', req, res);
+    await controller.samlComplete(ORG_A, 'handoff', req, res);
 
     expect(auth.generateTokens).toHaveBeenCalledWith(user, { ssoOrganizationId: ORG_A });
   });
@@ -61,7 +64,7 @@ describe('an SSO session is scoped to the organization whose IdP asserted it', (
   it('the OIDC callback does the same', async () => {
     const auth = { generateTokens: jest.fn(async () => ({ accessToken: 't' })) };
     const sso = { handleOidcCallback: jest.fn(async () => user) };
-    const controller = new SsoController(sso as any, auth as any, {} as any);
+    const controller = new SsoController(sso as any, auth as any, {} as any, {} as any);
     const res: any = { cookie: jest.fn(), redirect: jest.fn(), clearCookie: jest.fn() };
     const req: any = { cookies: { sso_oidc_state: 's' } };
 
@@ -75,17 +78,43 @@ describe('an SSO session is scoped to the organization whose IdP asserted it', (
     const self = {
       userRepository: { findOne: jest.fn(async () => user) },
       jwtService: { sign },
+      authSessions: {
+        start: jest.fn(async (_userId: string, options: any) => ({
+          id: 'sess-1',
+          refreshJti: 'jti-1',
+          ssoOrganizationId: options.ssoOrganizationId ?? null,
+        })),
+      },
     };
     await (AuthService.prototype.generateTokens as any).call(self, user, { ssoOrganizationId: ORG_A });
 
     const payload: any = (sign.mock.calls[0] as any[])[0];
     expect(payload.sso).toBe(ORG_A);
     expect(payload.organizations.map((o: any) => o.id)).toEqual([ORG_A]);
+    // The server-side session records the scope, so a refresh keeps it.
+    expect(self.authSessions.start).toHaveBeenCalledWith('u-1', { ssoOrganizationId: ORG_A });
+  });
+
+  it('a refresh keeps the session scoped to the asserting organization', async () => {
+    const sign = jest.fn(() => 'tok');
+    const self = {
+      userRepository: { findOne: jest.fn(async () => user) },
+      jwtService: { sign },
+      authSessions: { start: jest.fn() },
+    };
+    // What refreshToken() hands generateTokens: the rotated session row.
+    const session = { id: 'sess-1', refreshJti: 'jti-2', ssoOrganizationId: ORG_A };
+    await (AuthService.prototype.generateTokens as any).call(self, user, { session });
+
+    const payload: any = (sign.mock.calls[0] as any[])[0];
+    expect(payload.sso).toBe(ORG_A);
+    expect(payload.organizations.map((o: any) => o.id)).toEqual([ORG_A]);
+    expect(self.authSessions.start).not.toHaveBeenCalled();
   });
 
   function strategy() {
     const repo = { findOne: jest.fn(async () => ({ ...user, organizationMemberships: [member(ORG_A), member(ORG_B)] })) };
-    return new JwtStrategy({ get: () => 'secret' } as any, repo as any);
+    return new JwtStrategy({ get: () => 'secret' } as any, repo as any, { count: async () => 1 } as any);
   }
 
   it('refuses to open another organization on an SSO session', async () => {

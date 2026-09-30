@@ -30,7 +30,7 @@ const HF_API_HOST = 'huggingface.co';
 
 /** Whether `hostname` is Hugging Face's own: the apex or a subdomain of it. */
 export function isHuggingFaceHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/\.+$/, '');
+  const host = hostname.toLowerCase().replace(/(?<!\.)\.+$/, '');
   return HF_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
 }
 

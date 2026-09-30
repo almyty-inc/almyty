@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ConflictException, ForbiddenException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -33,6 +33,8 @@ import { providerListsModels } from './provider-profile';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { Credential } from '../../entities/credential.entity';
 import { LlmProviderSecretsHelper, MASKED_PROVIDER_KEY } from './llm-provider-secrets.helper';
+import { applyModelAccess, providerAllowsModel, type ModelAccessFields } from './allowed-models';
+import { ModelUsageService, type AgentsForViewer } from '../model-catalog/notices/model-usage.service';
 
 import { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters, ConnectProviderInput } from './dto/llm-providers.dto';
 export type { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters };
@@ -153,6 +155,9 @@ export class LlmProvidersService {
     // without it.
     @Optional() @Inject(forwardRef(() => ModelCatalogService))
     private readonly catalog?: ModelCatalogService,
+    // Which agents use which models of a connection (model-catalog/notices).
+    @Optional() @Inject(forwardRef(() => ModelUsageService))
+    private readonly usage?: ModelUsageService,
   ) {}
 
   async createProvider(
@@ -200,11 +205,13 @@ export class LlmProvidersService {
       );
       const scope = normaliseVisibility(createDto.visibility, createDto.teamId);
       // Before anything reads the key (the model probe below does): a
-      // private connection only backs a provider private to its owner.
+      // private connection only backs a provider private to its owner, a
+      // team connection a provider of its team.
       await this.secrets.assertKeysServable(
         {
           organizationId,
           visibility: scope.visibility,
+          teamId: scope.teamId,
           ownerUserId: userId,
           credentialId: createAny.credentialId ?? null,
           usageCredentialId: createAny.usageCredentialId ?? null,
@@ -218,10 +225,23 @@ export class LlmProvidersService {
       // Set default capabilities if not provided
       const capabilities = createDto.capabilities || this.modelsHelper.getDefaultCapabilities(createDto.type);
 
+      // Which models the connection may be used for: every one unless the
+      // request says otherwise (allowed-models.ts). Checked before saving.
+      const access: Partial<LlmProvider> = { allowNewModels: true, hiddenModels: null, allowedModels: null };
+      applyModelAccess(access, createDto);
+
       // Create provider
-      const { credentialId: _credentialId, usageCredentialId: _usageCredentialId, ...providerFields } = createAny;
+      const {
+        credentialId: _credentialId,
+        usageCredentialId: _usageCredentialId,
+        allowNewModels: _allowNewModels,
+        hiddenModels: _hiddenModels,
+        allowedModels: _allowedModels,
+        ...providerFields
+      } = createAny;
       const provider = this.llmProviderRepository.create({
         ...providerFields,
+        ...access,
         configuration,
         organizationId,
         capabilities,
@@ -305,6 +325,9 @@ export class LlmProvidersService {
         visibility: input.visibility,
         teamId: input.teamId,
         credentialId: input.credentialId ?? undefined,
+        allowNewModels: input.allowNewModels,
+        hiddenModels: input.hiddenModels,
+        allowedModels: input.allowedModels,
       } as CreateLlmProviderDto,
       organizationId,
       userId,
@@ -333,6 +356,8 @@ export class LlmProvidersService {
         this.logger.warn(`Model list for provider ${provider.id} failed after a passing check: ${error?.message ?? error}`);
         models = await this.catalog.list(organizationId, { providerId: provider.id });
       }
+      // Say which of them the connection allows, as every other list does.
+      await this.catalog.markAllowed?.(organizationId, models);
     }
     const fresh = (await this.llmProviderRepository.findOne({ where: { id: provider.id, organizationId } })) ?? provider;
     return { provider: fresh, models, check: { ok: true, responseTime: check.responseTime } };
@@ -340,12 +365,14 @@ export class LlmProvidersService {
 
   /** Undo a connect whose check failed: the provider, and the key row it made (a shared connection stays). */
   private async discardUncheckedProvider(provider: LlmProvider, organizationId: string, userId: string): Promise<void> {
+    // Read before the remove: TypeORM clears the id on the entity it removed.
+    const { id, name } = provider;
     try {
       await this.secrets.release(provider);
       await this.llmProviderRepository.remove(provider);
-      this.auditLogService.logDelete(organizationId, userId, AuditResource.LLM_PROVIDER, provider.id, provider.name);
+      this.auditLogService.logDelete(organizationId, userId, AuditResource.LLM_PROVIDER, id, name);
     } catch (error: any) {
-      this.logger.error(`Failed to remove provider ${provider.id} after a failed check: ${error?.message ?? error}`);
+      this.logger.error(`Failed to remove provider ${id} after a failed check: ${error?.message ?? error}`);
     }
   }
 
@@ -441,17 +468,24 @@ export class LlmProvidersService {
       // Credential row. A credentialId in the body points the provider at
       // a shared connection; null clears it.
       const updateAny = updateDto as UpdateLlmProviderDto & { credentialId?: string | null; usageCredentialId?: string | null };
-      // A newly referenced connection is checked against the scope the
-      // provider is about to have, before the model probe below reads it.
-      if (updateAny.credentialId || updateAny.usageCredentialId) {
+      // A newly referenced connection, or a change of the provider's scope,
+      // is checked against the scope the provider is about to have, before
+      // the model probe below reads the key or anything is written.
+      const scopeChanging = updateDto.visibility !== undefined || updateDto.teamId !== undefined;
+      if (updateAny.credentialId || updateAny.usageCredentialId || scopeChanging) {
+        const next = normaliseVisibility(
+          updateDto.visibility ?? provider.visibility,
+          updateDto.teamId !== undefined ? updateDto.teamId : provider.teamId,
+        );
         await this.secrets.assertKeysServable(
           {
             id: provider.id,
             organizationId,
-            visibility: (updateDto.visibility ?? provider.visibility) as LlmProvider['visibility'],
+            visibility: next.visibility as LlmProvider['visibility'],
+            teamId: next.teamId,
             ownerUserId: provider.ownerUserId ?? userId,
-            credentialId: updateAny.credentialId ?? null,
-            usageCredentialId: updateAny.usageCredentialId ?? null,
+            credentialId: updateAny.credentialId || (scopeChanging && updateAny.credentialId === undefined ? provider.credentialId : null),
+            usageCredentialId: updateAny.usageCredentialId || (scopeChanging && updateAny.usageCredentialId === undefined ? provider.usageCredentialId : null),
           },
           userId,
         );
@@ -483,7 +517,19 @@ export class LlmProvidersService {
       }
 
       // Update other fields
-      if (updateDto.name) provider.name = updateDto.name;
+      const renamed = !!updateDto.name?.trim() && updateDto.name.trim() !== provider.name;
+      if (updateDto.name?.trim()) provider.name = updateDto.name.trim();
+      // Which models the connection may be used for.
+      const accessChanging = updateDto.allowNewModels !== undefined || updateDto.hiddenModels !== undefined || updateDto.allowedModels !== undefined;
+      if (accessChanging) {
+        const before = { allowNewModels: provider.allowNewModels, hiddenModels: provider.hiddenModels, allowedModels: provider.allowedModels };
+        applyModelAccess(provider, updateDto);
+        // A model an agent uses cannot be turned off under it: the agent
+        // would fail on its next run. Change the agents first.
+        await this.assertNoAgentLosesModel(provider, before, userId);
+        // A default picked from the old list may be hidden now.
+        this.defaultModels.invalidate(provider.id);
+      }
       if (updateDto.description !== undefined) provider.description = updateDto.description;
       if (updateDto.capabilities) {
         provider.capabilities = { ...provider.capabilities, ...updateDto.capabilities };
@@ -524,13 +570,27 @@ export class LlmProvidersService {
       await this.secrets.assertKeysServable(provider, userId);
       await this.secrets.syncManagedScope(provider);
       const updatedProvider = await this.llmProviderRepository.save(provider);
+      // The key a provider made for itself is listed under Credentials by
+      // the connection's name.
+      if (renamed) await this.secrets.syncManagedName(updatedProvider);
 
-      // Perform health check after update, scoped to the same org
-      // we just validated membership in.
-      setTimeout(
-        () => this.performHealthCheck(provider.id, organizationId),
-        1000,
-      );
+      // Check the key again when something that reaches the vendor changed.
+      // A rename, a description or the model list is not one of those, and
+      // a check spends a real call.
+      const reachChanged =
+        updateDto.configuration !== undefined ||
+        updateAny.credentialId !== undefined ||
+        updateAny.usageCredentialId !== undefined ||
+        updateDto.visibility !== undefined ||
+        updateDto.teamId !== undefined ||
+        updateDto.capabilities !== undefined ||
+        updateDto.metadata !== undefined;
+      if (reachChanged) {
+        setTimeout(
+          () => this.performHealthCheck(provider.id, organizationId),
+          1000,
+        );
+      }
       if (updateDto.configuration) {
         this.scheduleCatalogSync(provider.id, organizationId, 'provider_configuration_changed');
       }
@@ -647,6 +707,41 @@ export class LlmProvidersService {
       limit,
       totalPages,
     };
+  }
+
+  /**
+   * Refuse a change of which models a connection offers that would take a
+   * model away from an agent that uses it, naming the agents (the ones the
+   * person may see; the rest counted).
+   */
+  private async assertNoAgentLosesModel(provider: LlmProvider, before: ModelAccessFields, userId: string): Promise<void> {
+    if (!this.usage) return;
+    const inUse = await this.usage.modelsInUse(provider.organizationId, provider.id);
+    const lost = [...inUse.keys()].filter((model) => providerAllowsModel(before, model) && !providerAllowsModel(provider, model));
+    if (lost.length === 0) return;
+    const agentIds = [...new Set(lost.flatMap((model) => inUse.get(model) ?? []))];
+    const who = await this.usage.forViewer(provider.organizationId, agentIds, userId);
+    const models = lost.map((m) => `"${m}"`);
+    const modelsText = models.length === 1 ? models[0] : `${models.slice(0, -1).join(', ')} and ${models[models.length - 1]}`;
+    const agentCount = who.agents.length + who.others;
+    throw new ConflictException({
+      code: 'MODEL_IN_USE',
+      message: `${modelsText} ${lost.length === 1 ? 'is' : 'are'} used by ${ModelUsageService.describe(who)}. Pick another model for ${agentCount === 1 ? 'that agent' : 'those agents'} first, then turn ${lost.length === 1 ? 'it' : 'them'} off.`,
+      models: lost,
+      agents: who.agents,
+      otherAgents: who.others,
+    });
+  }
+
+  /**
+   * The agents that use a connection, for the confirmation before it is
+   * removed: the ones `userId` may see by name, the rest counted.
+   */
+  async agentsUsingProvider(providerId: string, organizationId: string, userId: string): Promise<AgentsForViewer> {
+    await this.getProvider(providerId, organizationId, false, { id: userId });
+    if (!this.usage) return { agents: [], others: 0 };
+    const ids = await this.usage.agentsUsingConnection(organizationId, providerId);
+    return this.usage.forViewer(organizationId, ids, userId);
   }
 
   async deleteProvider(

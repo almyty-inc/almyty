@@ -5,6 +5,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
 import { User } from '../../../entities/user.entity';
+import { AuthSession } from '../../../entities/auth-session.entity';
 import { OrganizationRole } from '../../../entities/user-organization.entity';
 import { RolesGuard, ROLES_KEY } from '../guards/roles.guard';
 import { JwtStrategy } from '../strategies/jwt.strategy';
@@ -76,6 +77,7 @@ describe('a revoked or pending invite is not a membership', () => {
           JwtStrategy,
           { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('test-secret') } },
           { provide: getRepositoryToken(User), useValue: { findOne: jest.fn() } },
+          { provide: getRepositoryToken(AuthSession), useValue: { count: jest.fn().mockResolvedValue(1) } },
         ],
       }).compile();
       strategy = module.get(JwtStrategy);

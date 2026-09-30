@@ -30,6 +30,7 @@ export enum AgentMode {
 @Index(['organizationId', 'createdAt'])
 @Index(['status'])
 @Index('IDX_agent_runs_conversationId', ['conversationId'])
+@Index('IDX_agent_runs_channelId_updatedAt', ['channelId', 'updatedAt'], { where: '"channelId" IS NOT NULL' })
 export class AgentRun {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -56,6 +57,15 @@ export class AgentRun {
    */
   @Column({ type: 'uuid', nullable: true })
   endUserId: string | null;
+
+  /**
+   * The channel (web chat, widget, messaging platform, A2A) this run
+   * answered on, when it came from one. What the channel spend caps sum:
+   * see gateways/channel-policy.service.ts. Not a foreign key, like
+   * endUserId: a run outlives the channel it was served on.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  channelId: string | null;
 
   /**
    * Whose scope this run executes in: the user who started it (session,

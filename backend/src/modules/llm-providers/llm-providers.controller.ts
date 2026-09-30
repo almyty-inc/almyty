@@ -194,6 +194,31 @@ export class LlmProvidersController {
     }
   }
 
+  // Above ':providerId', which would otherwise take this path as an id.
+  @Get('provider-types')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Get available provider types' })
+  @ApiResponse({ status: 200, description: 'Provider types retrieved successfully' })
+  async getProviderTypes() {
+    const providerTypes = Object.values(LlmProviderType).map(type => ({
+      type,
+      name: getProviderDisplayName(type),
+      description: getProviderDescription(type),
+      features: getProviderFeatures(type),
+      keyUrl: getProviderKeyUrl(type),
+      docsUrl: getProviderDocsUrl(type),
+      // False when the vendor serves no model list: connecting it then
+      // needs the model to use (connect answers MODEL_REQUIRED otherwise).
+      listsModels: providerListsModels(type),
+    }));
+
+    return {
+      success: true,
+      data: providerTypes,
+      message: 'Provider types retrieved successfully',
+    };
+  }
+
   @Get(':providerId')
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get provider by ID' })
@@ -314,15 +339,34 @@ export class LlmProvidersController {
         message: 'Provider updated',
       };
     } catch (error) {
+      // A refusal with a code of its own (MODEL_IN_USE) keeps it, and what it names.
+      const response = error instanceof HttpException ? error.getResponse() : null;
+      const coded = response && typeof response === 'object' ? (response as Record<string, any>) : {};
       throw new HttpException(
         {
           success: false,
           message: error.message,
-          error: 'PROVIDER_UPDATE_FAILED',
+          error: typeof coded.code === 'string' ? coded.code : 'PROVIDER_UPDATE_FAILED',
+          ...(Array.isArray(coded.agents) ? { agents: coded.agents, otherAgents: coded.otherAgents ?? 0, models: coded.models } : {}),
         },
         failureStatus(error, HttpStatus.BAD_REQUEST),
       );
     }
+  }
+
+  /**
+   * The agents that use this connection, for the confirmation before it is
+   * removed. Only agents you may see are named; the rest are counted.
+   */
+  @Get(':providerId/agents')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Agents that use this provider connection' })
+  async agentsUsingProvider(@Param('providerId', ParseUUIDPipe) providerId: string, @Request() req: any) {
+    const organizationId = req.user.currentOrganizationId;
+    if (!organizationId) {
+      throw new HttpException({ success: false, message: 'No organization found', error: 'NO_ORGANIZATION' }, HttpStatus.BAD_REQUEST);
+    }
+    return { success: true, data: await this.llmProvidersService.agentsUsingProvider(providerId, organizationId, req.user.id) };
   }
 
   @Delete(':providerId')
@@ -450,32 +494,6 @@ export class LlmProvidersController {
         failureStatus(error, HttpStatus.BAD_GATEWAY),
       );
     }
-  }
-
-
-  // Utility endpoints
-  @Get('provider-types')
-  @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Get available provider types' })
-  @ApiResponse({ status: 200, description: 'Provider types retrieved successfully' })
-  async getProviderTypes() {
-    const providerTypes = Object.values(LlmProviderType).map(type => ({
-      type,
-      name: getProviderDisplayName(type),
-      description: getProviderDescription(type),
-      features: getProviderFeatures(type),
-      keyUrl: getProviderKeyUrl(type),
-      docsUrl: getProviderDocsUrl(type),
-      // False when the vendor serves no model list: connecting it then
-      // needs the model to use (connect answers MODEL_REQUIRED otherwise).
-      listsModels: providerListsModels(type),
-    }));
-
-    return {
-      success: true,
-      data: providerTypes,
-      message: 'Provider types retrieved successfully',
-    };
   }
 
   @Post('models/by-type')

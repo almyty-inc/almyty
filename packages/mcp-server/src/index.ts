@@ -161,15 +161,18 @@ async function main() {
     },
     {
       name: 'almyty_create_gateway',
-      description: 'Create a gateway that exposes tools OR an agent over a protocol (MCP, A2A, UTCP, Skills). Use kind="tool" for a tool gateway or kind="agent" for an agent gateway.',
+      description: 'Share tools over one protocol: MCP, UTCP or Skills (one gateway each). An agent is put in front of people or other agents (web, chat apps, A2A) through an app, not here.',
       shape: {
         name: z.string().describe('Gateway name'),
-        type: z.enum(['mcp', 'a2a', 'utcp', 'skills']).describe('Protocol type'),
+        type: z.enum(['mcp', 'utcp', 'skills']).default('mcp').describe('The one protocol this gateway serves'),
         endpoint: z.string().describe('URL slug for the gateway endpoint'),
-        kind: z.enum(['tool', 'agent']).default('tool').describe('What the gateway exposes: tools or a single agent'),
-        agentId: z.string().optional().describe('Agent ID (required when kind is "agent")'),
       },
-      run: (args) => proxy.createGateway({ ...args, configuration: {} }),
+      run: (args) =>
+        proxy.createGateway({
+          ...args,
+          kind: 'tool',
+          configuration: args.type === 'mcp' ? { transport: 'http' } : args.type === 'utcp' ? { protocol: 'http' } : {},
+        }),
     },
     {
       name: 'almyty_assign_tool',
@@ -208,19 +211,19 @@ async function main() {
     },
     {
       name: 'almyty_list_providers',
-      description: 'List the LLM providers configured in your organization, with the connection backing each one.',
+      description: 'List the LLM providers configured in your organization, with the credential backing each one.',
       shape: {},
       run: () => proxy.listProviders(),
     },
     {
       name: 'almyty_add_provider',
       description:
-        'Add an LLM provider backed by an existing connection. Connect the vendor account first with `npx @almyty/connections connect <vendor>` and pass the connection id here. ' +
+        'Add an LLM provider backed by an existing credential. Add the vendor key first with `npx @almyty/credentials add <vendor>` and pass the credential id here. ' +
         'This tool deliberately does not take an API key: a key passed as a tool argument would be written into this conversation\'s transcript and the host editor\'s logs.',
       shape: {
         name: z.string().describe('Display name for the provider'),
         type: z.string().describe('Provider type (openai, anthropic, gemini, azure, bedrock, ...)'),
-        credentialId: z.string().describe('Id of an existing connection, from `npx @almyty/connections list`'),
+        credentialId: z.string().describe('Id of an existing credential, from `npx @almyty/credentials list`'),
       },
       run: (args) => proxy.addProvider({ name: args.name, type: args.type, credentialId: args.credentialId, configuration: {} }),
     },
@@ -258,39 +261,16 @@ async function main() {
     }),
   );
 
-  // ── Connect, then discover ───────────────────────────────────────
-  // This order is the point: the client gets its handshake even when the
-  // backend is unreachable, so the editor shows a server that explains the
-  // problem instead of one that died.
-
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  log(`ready on stdio (mode: ${ALMYTY_MODE}, ${management.length} management tools)`);
-
-  await catalog.refresh();
-  if (catalog.lastError) {
-    log(`gateway discovery failed: ${catalog.lastError}`);
-    log('the management tools still work; almyty_execute will report this until discovery succeeds');
-  } else {
-    log(`${catalog.tools.length} gateway tools, ${catalog.skills.length} skills`);
-  }
-
-  // Skills as prompts, loaded on demand rather than held in context.
-  const promptNames = uniquePromptNames(catalog.skills.map((s) => s.name));
-  catalog.skills.forEach((skill, i) => {
-    server.prompt(
-      promptNames[i],
-      `How to use: ${skill.name} (${skill.toolCount} tools)`,
-      async () => ({
-        messages: [{ role: 'user' as const, content: { type: 'text' as const, text: skill.content } }],
-      }),
-    );
-  });
-
-  // A compact index of everything available, as one prompt.
-  server.prompt(
+  // A compact index of everything available, as one prompt. Registered
+  // before connect: the SDK declares the prompts capability on the first
+  // prompt and refuses to after the transport is up, so a first prompt
+  // added after discovery killed the server with "Cannot register
+  // capabilities after connecting to transport". Its description gets
+  // the tool count once discovery has run.
+  let promptNames: string[] = [];
+  const overview = server.prompt(
     'almyty-overview',
-    `Overview: ${catalog.tools.length} API tools available via almyty`,
+    'Overview: the API tools available via almyty',
     async () => {
       await catalog.ensureFresh();
       const lines = [
@@ -320,6 +300,36 @@ async function main() {
       return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: lines.filter(Boolean).join('\n') } }] };
     },
   );
+
+  // ── Connect, then discover ───────────────────────────────────────
+  // This order is the point: the client gets its handshake even when the
+  // backend is unreachable, so the editor shows a server that explains the
+  // problem instead of one that died.
+
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  log(`ready on stdio (mode: ${ALMYTY_MODE}, ${management.length} management tools)`);
+
+  await catalog.refresh();
+  if (catalog.lastError) {
+    log(`gateway discovery failed: ${catalog.lastError}`);
+    log('the management tools still work; almyty_execute will report this until discovery succeeds');
+  } else {
+    log(`${catalog.tools.length} gateway tools, ${catalog.skills.length} skills`);
+  }
+
+  // Skills as prompts, loaded on demand rather than held in context.
+  promptNames = uniquePromptNames(catalog.skills.map((s) => s.name));
+  overview.update({ description: `Overview: ${catalog.tools.length} API tools available via almyty` });
+  catalog.skills.forEach((skill, i) => {
+    server.prompt(
+      promptNames[i],
+      `How to use: ${skill.name} (${skill.toolCount} tools)`,
+      async () => ({
+        messages: [{ role: 'user' as const, content: { type: 'text' as const, text: skill.content } }],
+      }),
+    );
+  });
 
   if (ALMYTY_MODE === 'full') {
     // Every gateway tool individually. The JSON Schema the gateway returns
@@ -395,9 +405,9 @@ Management tools (both modes), for building on almyty from your assistant:
   almyty_list_agents      almyty_create_agent     almyty_invoke_agent
   almyty_list_providers   almyty_add_provider
 
-  almyty_add_provider takes a connection id, never an API key: a key passed as
+  almyty_add_provider takes a credential id, never an API key: a key passed as
   a tool argument would land in the assistant's transcript and the editor's
-  logs. Make the connection first with \`npx @almyty/connections connect <vendor>\`.
+  logs. Add the credential first with \`npx @almyty/credentials add <vendor>\`.
 
 Authentication:
   npx @almyty/auth login              Browser-based login (one-time setup)

@@ -35,8 +35,8 @@ export const EE_ENTITLEMENTS = {
   CHARGEBACK: 'chargeback',
   BYO_KMS: 'byo_kms',
   APPROVAL_POLICY: 'approval_policy',
-  /** Connections governance: policy rules, review, scheduled rotation and expiry, audit export. */
-  CONNECTIONS_GOVERNANCE: 'connections_governance',
+  /** Credentials governance: policy rules, review, scheduled rotation and expiry, audit export. */
+  CREDENTIALS_GOVERNANCE: 'credentials_governance',
   /**
    * Removes the almyty mark from a hosted chat app, and unlocks the sso
    * auth mode on a surface. The chat app itself is core: this gates the

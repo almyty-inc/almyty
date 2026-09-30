@@ -84,7 +84,7 @@ Two ways to self-host:
 
 **Build** agents visually or let them run autonomously. 12 node types, 39 LLM providers. ([docs](https://docs.almyty.com/agents))
 
-**Deploy** tools and agents behind gateways. One endpoint, every protocol. ([docs](https://docs.almyty.com/gateways/mcp))
+**Deploy** tools and agents behind gateways, one protocol each: MCP, UTCP, Agent Skills, A2A. ([docs](https://docs.almyty.com/gateways/mcp))
 
 ## CLI
 
@@ -104,7 +104,7 @@ almyty agents run my-agent --watch        # run one, streaming, with cost and th
 almyty chat my-agent                      # interactive REPL with an agent
 almyty models list --selectable           # model cards the router may pick
 almyty models route --objective cheapest  # what the router would choose, and what it passed over
-almyty connections connectors             # what can be connected, and how
+almyty credentials services               # what a credential can be added for, and how
 almyty skills install @acme/petstore      # install tools as Agent Skills into Claude Code, Cursor, etc.
 almyty mcp                                # run almyty as an MCP server proxy
 almyty acp                                # run almyty as an ACP agent
@@ -112,7 +112,7 @@ almyty runner start --name laptop         # register this machine as a runner
 almyty completion zsh                     # shell completion; bash and fish too
 ```
 
-Each subcommand maps to a standalone npm package (`@almyty/auth`, `@almyty/agents`, `@almyty/chat`, `@almyty/models`, `@almyty/connections`, `@almyty/skills`, `@almyty/mcp-server`, `@almyty/acp-server`, `@almyty/runner`) and the umbrella delegates to whichever you call. See the [CLI docs](https://docs.almyty.com/cli/authentication) for the full reference.
+Each subcommand maps to a standalone npm package (`@almyty/auth`, `@almyty/agents`, `@almyty/chat`, `@almyty/models`, `@almyty/credentials`, `@almyty/skills`, `@almyty/mcp-server`, `@almyty/acp-server`, `@almyty/runner`) and the umbrella delegates to whichever you call. See the [CLI docs](https://docs.almyty.com/cli/authentication) for the full reference.
 
 **Scripting.** Every read command takes `--json` and writes nothing but JSON to stdout. Every CLI shares one exit-code table: `0` ok, `1` unexpected, `2` usage, `3` not authenticated, `4` not found, `5` the operation ran and failed — so a script can tell a stale login from a crash from an agent that ran and returned an error. `NO_COLOR` and `CI` are honoured, and `ALMYTY_NON_INTERACTIVE=1` blocks every prompt.
 

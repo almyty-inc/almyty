@@ -35,12 +35,20 @@ describe('canonical memory scope_type is always a real ScopeType', () => {
 
   it('never yields a scope_type outside SCOPE_TYPE_VALUES', () => {
     for (const scopeType of SCOPE_TYPE_VALUES) {
-      const scope = ownScope({ scope_type: scopeType, scope_id: 'org-1' });
+      // An agent scope names its agent; every other scope is sent as the org.
+      const sent = scopeType === 'agent' ? 'org-1:agent:a-1' : 'org-1';
+      const scope = ownScope({ scope_type: scopeType, scope_id: sent });
       expect(SCOPE_TYPE_VALUES).toContain(scope.scope_type);
       // Every scope is the caller's organization; `user` is additionally
-      // the caller's own slice of it.
-      expect(scope.scope_id).toBe(scopeType === 'user' ? 'org-1:user:u-1' : 'org-1');
+      // the caller's own slice of it, `agent` one agent's.
+      expect(scope.scope_id).toBe(scopeType === 'user' ? 'org-1:user:u-1' : sent);
     }
+  });
+
+  it("an agent scope is one agent's inside the caller's organization, and nothing else", () => {
+    expect(() => ownScope({ scope_type: 'agent', scope_id: 'org-1' })).toThrow(HttpException);
+    expect(() => ownScope({ scope_type: 'agent', scope_id: 'org-1:agent:' })).toThrow(HttpException);
+    expect(() => ownScope({ scope_type: 'agent', scope_id: 'org-2:agent:a-1' })).toThrow(HttpException);
   });
 
   it('refuses a missing scope_type instead of inventing one', () => {
@@ -57,9 +65,9 @@ describe('canonical memory scope_type is always a real ScopeType', () => {
     expect(() => ownScope(undefined)).toThrow(HttpException);
   });
 
-  it('refuses a scope_type that is not one of the four', () => {
+  it('refuses a scope_type that is not one of the five', () => {
     // 'org' is the exact value the old fallback produced.
-    for (const bad of ['org', 'organization', 'agent', '']) {
+    for (const bad of ['org', 'organization', 'person', '']) {
       expect(() => ownScope({ scope_type: bad, scope_id: 'org-1' })).toThrow(HttpException);
     }
   });

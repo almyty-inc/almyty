@@ -175,29 +175,41 @@ describe('no control is stored and then ignored', () => {
       // and the NOT IMPLEMENTED comment in the entity together.
       expect(callers.filter((l) => /[Cc]onversation/.test(l))).toEqual([]);
     });
+  });
 
-    /**
-     * Runner.labels. Described as routing labels in the entity and told
-     * to users in the same words on the runner detail page, while
-     * WorkspaceService.pickRunner takes an explicit runnerId or the
-     * account's single runner and never reads the column. Label-based
-     * selection is the v1.x scheduler (docs/runner.md says so); until it
-     * ships, the copy has to match.
-     */
-    it('runner labels are not claimed to route, in the entity or the UI', () => {
-      expect(src('backend/src/entities/runner.entity.ts')).toContain('NOT USED FOR ROUTING TODAY');
-      expect(src('frontend/src/pages/runner-detail.tsx')).toContain(
-        'affect where work is dispatched yet',
-      );
+  /**
+   * Runner.labels. These were descriptive only for a while: the entity
+   * and both runner pages said work was not routed by them, and this
+   * guard pinned that wording. Labels route now -- a dispatch with label
+   * requirements (an agent's agentConfig.runnerLabels, a workspace
+   * created with labels) goes to an online runner whose labels match --
+   * so the arms check the reader exists end to end, and that the old
+   * disclaimers are gone.
+   */
+  describe('runner labels are read when work is routed', () => {
+    it('dispatch resolution selects on labels', () => {
+      const service = src('backend/src/modules/runner/runner.service.ts');
+      const at = service.indexOf('async resolveByLabels(');
+      expect(at).toBeGreaterThan(-1);
+      expect(service.slice(at, at + 1500)).toContain('labelsMatch(r.labels, required)');
+      expect(src('backend/src/modules/runner/runner-call.service.ts')).toContain('this.runners.resolveByLabels(');
     });
 
-    it('pickRunner still does not select on labels', () => {
-      const source = src('backend/src/modules/workspace/workspace.service.ts');
-      const at = source.indexOf('pickRunner');
+    it('both places a runner is chosen pass the requirements on', () => {
+      const workspace = src('backend/src/modules/workspace/workspace.service.ts');
+      const at = workspace.indexOf('private async pickRunner');
       expect(at).toBeGreaterThan(-1);
-      // When the scheduler ships, this reads labels — and then the copy
-      // pinned above is what needs changing, which is why both are here.
-      expect(source.slice(at, at + 2000)).not.toContain('.labels');
+      expect(workspace.slice(at, at + 2500)).toContain('resolveByLabels(');
+      expect(src('backend/src/modules/tools/tool-executor.service.ts')).toContain('labels: options.runnerLabels');
+      expect(src('backend/src/modules/agents/agent-step-processor.ts')).toContain('runnerLabels: agent.agentConfig?.runnerLabels');
+      expect(src('backend/src/modules/agents/agent-execution.engine.ts')).toContain('runnerLabels: agent.agentConfig?.runnerLabels');
+      expect(src('backend/src/modules/agents/agent-node-executor.ts')).toContain('runnerLabels: options.runnerLabels');
+    });
+
+    it('no longer tells anyone labels do nothing', () => {
+      expect(src('backend/src/entities/runner.entity.ts')).not.toContain('NOT USED FOR ROUTING TODAY');
+      expect(src('frontend/src/pages/runner-detail.tsx')).not.toContain('for now they only help you tell runners apart');
+      expect(src('frontend/src/pages/runner-new.tsx')).not.toContain('not routed by label yet');
     });
   });
 

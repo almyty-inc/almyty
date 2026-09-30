@@ -9,13 +9,9 @@ import { Tool } from '../../entities/tool.entity';
 import { principalOfRun } from '../../common/authorization/execution-access.service';
 import { AgentRun } from '../../entities/agent-run.entity';
 import { AgentRunStatus } from '../../entities/agent-run.entity';
-import { MemoryError } from '../memory/canonical/canonical.types';
-import { legacyTypeToTier } from './agent-runtime.service';
-import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
-import { Provenance, Tier } from '../memory/canonical/canonical.types';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { ApprovalsService } from '../approvals/approvals.service';
-import { runMayWriteSharedMemory } from './memory-autosave.policy';
+import { mayCallAgent, temporaryAgentLimits } from './agent-capabilities';
 import { canReference } from '../../common/authorization/private-visibility';
 
 @Injectable()
@@ -25,8 +21,6 @@ export class AgentBuiltInToolsHelper {
     private readonly agentRepository: Repository<Agent>,
     @InjectQueue('agent-runtime')
     private readonly runtimeQueue: Queue,
-    @Inject(forwardRef(() => CanonicalMemoryService))
-    private readonly memoryService: CanonicalMemoryService,
     @Inject(forwardRef(() => AgentRuntimeService))
     private readonly runtime: AgentRuntimeService,
     private readonly approvals: ApprovalsService,
@@ -71,76 +65,39 @@ export class AgentBuiltInToolsHelper {
         };
       }
 
-      case 'store_memory': {
-        // A visitor's run does not write shared memory unless the product
-        // opted its visitors in -- the rule auto-save follows too.
-        if (!runMayWriteSharedMemory(run)) {
-          return { result: null, error: 'memory is not kept for visitor conversations' };
-        }
-        try {
-          // Map the legacy `type` hint into the canonical tier:
-          //   'fact'/'preference'/'instruction' → 'long' (durable)
-          //   'context' → 'short' (within-session)
-          //   'episode' → 'project' (work-product)
-          //   anything else → 'project' (sane default)
-          const tier: Tier = legacyTypeToTier(parameters.type as string | undefined);
-          const provenance: Provenance = {
-            agent_id: agent.id,
-            session_id: run.id,
-            collab_id: null,
-            model: null,
-            provider: null,
-            tool_chain: ['store_memory'],
-            created_by: 'agent',
-            source_backend: 'almyty-native',
-          };
-          const item = await this.memoryService.put(
-            {
-              mode: 'memory',
-              scope: { scope_type: 'workspace', scope_id: run.organizationId },
-              content: parameters.content,
-              tier,
-              tags: parameters.tags || [],
-              metadata: { source: { type: 'agent_runtime', id: run.id, name: agent.name } },
-              provenance,
-            },
-            { user_id: run.userId },
-          );
-          return { result: `Memory stored (id: ${item.id})` };
-        } catch (err) {
-          if (err instanceof MemoryError) {
-            return { result: null, error: `memory rejected: ${err.tag.kind}` };
-          }
-          return { result: null, error: `Failed to store memory: ${(err as Error).message}` };
-        }
-      }
-
-      case 'recall_memory': {
-        try {
-          const ranked = await this.memoryService.search({
-            scope: { scope_type: 'workspace', scope_id: run.organizationId },
-            query: parameters.query,
-            mode: 'memory',
-            top_k: parameters.limit || 5,
-          });
-          if (ranked.length === 0) {
-            return { result: 'No relevant memories found.' };
-          }
-          const formatted = ranked.map((r, i) =>
-            `${i + 1}. [${r.item.tier ?? 'memory'}] (score: ${r.score.toFixed(2)}) ${r.item.content}`,
-          ).join('\n');
-          return { result: formatted };
-        } catch (err) {
-          return { result: null, error: `Failed to recall memory: ${err.message}` };
-        }
-      }
-
       case 'create_agent': {
         // Offered only when the agent may create agents (buildToolDefinitions),
         // but a tool call is whatever name the model emits, so the gate has
         // to hold here too.
         if (!agent.agentConfig?.canCreateAgents) {
           return { result: null, error: 'This agent is not allowed to create agents' };
+        }
+        // Its limits: so many per run, and so many existing at once across
+        // its runs (temporary agents are removed when their run ends).
+        const limits = temporaryAgentLimits(agent);
+        if (limits.perRun !== null || limits.alive !== null) {
+          const temporary = await this.agentRepository.find({
+            where: { organizationId: run.organizationId, isTemporary: true },
+            select: { id: true, parentRunId: true },
+          });
+          const thisRun = temporary.filter((t) => t.parentRunId === run.id).length;
+          if (limits.perRun !== null && thisRun >= limits.perRun) {
+            return { result: null, error: `This agent may create at most ${limits.perRun} temporary ${limits.perRun === 1 ? 'agent' : 'agents'} per run` };
+          }
+          if (limits.alive !== null) {
+            const parentRunIds = [...new Set(temporary.map((t) => t.parentRunId).filter((id): id is string => !!id))];
+            const ownRuns = parentRunIds.length
+              ? await this.agentRepository.manager.getRepository(AgentRun).find({
+                  where: { id: In(parentRunIds), agentId: agent.id },
+                  select: { id: true },
+                })
+              : [];
+            const own = new Set(ownRuns.map((r) => r.id));
+            const alive = temporary.filter((t) => t.parentRunId && own.has(t.parentRunId)).length;
+            if (alive >= limits.alive) {
+              return { result: null, error: `This agent may have at most ${limits.alive} temporary ${limits.alive === 1 ? 'agent' : 'agents'} at once` };
+            }
+          }
         }
         // A child gets a subset of the parent's own tools, never more. The
         // ids came straight from the model's arguments, so a parent limited
@@ -230,7 +187,7 @@ export class AgentBuiltInToolsHelper {
         const ownTemporary = !!target && target.isTemporary && target.parentRunId === run.id;
         const callable =
           !!target &&
-          !!agent.agentConfig?.canCallAgents &&
+          mayCallAgent(agent, target.id) &&
           !target.isTemporary &&
           target.id !== agent.id &&
           target.status === ('active' as any) &&
@@ -284,6 +241,8 @@ export class AgentBuiltInToolsHelper {
             toolCallId: parameters._toolCallId ?? null,
             reason: parameters.reason || 'agent requested approval',
             payload: parameters.payload ?? null,
+            // A run through a gateway asks in its gateway's scope.
+            principal: principalOfRun(run),
           });
           run.status = AgentRunStatus.WAITING_APPROVAL;
           return {

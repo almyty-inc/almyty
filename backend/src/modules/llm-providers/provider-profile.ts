@@ -1,4 +1,5 @@
 import { LlmProviderType } from '../../entities/llm-provider-type';
+import { replaceDelimited } from '../../common/security/linear-text';
 
 /**
  * A vendor as data.
@@ -911,7 +912,7 @@ function at(configuration: Record<string, any> | undefined, path: string): strin
 
 /** Fill `{dotted.path||default}` placeholders from the configuration. */
 function fill(template: string, configuration: Record<string, any>): string {
-  return template.replace(/\{([^}]+)\}/g, (_match, path: string) => {
+  return replaceDelimited(template, '{', '}', (_match, path: string) => {
     const [dotted, fallback = ''] = path.split('||');
     return at(configuration, dotted.trim()) ?? fallback.trim();
   });

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes } from 'crypto';
 
 /**
  * Tier 2 of the hosted chat app: a tenant serves their chat on a domain
@@ -111,24 +111,36 @@ export function isVerified(
   return records.some((record) => (record ?? '').trim().replace(/^"|"$/g, '') === expected);
 }
 
-/**
- * A stable, DNS-safe name for the Kubernetes objects backing a custom
- * domain, derived from the hostname. Hostnames can contain characters
- * and lengths a resource name cannot, so this hashes rather than
- * sanitises: two different hostnames must never collide onto one
- * certificate.
- */
-export function resourceNameFor(hostname: string): string {
-  const digest = createHash('sha256').update(hostname.trim().toLowerCase()).digest('hex').slice(0, 10);
-  const readable = hostname
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40);
-  return `chat-${readable}-${digest}`;
-}
 
+/** Looks up TXT records at a name; injectable so specs do not touch real DNS. */
+export const TXT_RESOLVER = Symbol('TXT_RESOLVER');
+export type TxtResolver = (name: string) => Promise<string[][]>;
+
+/**
+ * Look for a domain's verification TXT record (verificationRecord). "Not
+ * published yet" is the expected state for most of a domain's life, so it
+ * is an outcome, not an error; a lookup that failed for another reason
+ * proves nothing either way and is marked transient.
+ *
+ * Shared by hosted-chat custom domains and organization domains (SSO).
+ */
+export async function checkVerificationTxt(
+  resolveTxt: TxtResolver,
+  domain: Pick<CustomDomainConfig, 'hostname' | 'verificationToken'>,
+): Promise<{ verified: boolean; error: string | null; transient?: boolean }> {
+  const name = `${VERIFICATION_RECORD_PREFIX}.${domain.hostname}`;
+  try {
+    // A long TXT value arrives split into chunks; join each record.
+    const records = (await resolveTxt(name)).map((chunks) => chunks.join(''));
+    if (isVerified(records, domain)) return { verified: true, error: null };
+    return { verified: false, error: 'The TXT record was found but did not match. Check you copied the whole value.' };
+  } catch (err: any) {
+    if (err?.code === 'ENOTFOUND' || err?.code === 'ENODATA') {
+      return { verified: false, error: 'No TXT record found at that name yet.' };
+    }
+    return { verified: false, error: 'Could not read DNS right now. Try again in a minute.', transient: true };
+  }
+}
 /**
  * Keep a `customDomain` key out of a gateway's configuration.
  *

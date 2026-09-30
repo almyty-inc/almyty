@@ -7,7 +7,7 @@ import { User } from '../../../entities/user.entity';
 import { OrganizationRole, UserOrganization } from '../../../entities/user-organization.entity';
 import { MailService } from '../../mail/mail.service';
 import { GatewaysService } from '../../gateways/gateways.service';
-import { OrganizationsInvitesHelper } from '../organizations-invites.helper';
+import { OrganizationsInvitesHelper, hashInviteToken } from '../organizations-invites.helper';
 import { TeamMembershipHelper } from '../team-membership.helper';
 
 /**
@@ -174,7 +174,7 @@ describe('OrganizationsInvitesHelper - invite permissions', () => {
                 {
                   email: 'newcomer@example.com',
                   role: 'member',
-                  inviteToken: 'tok-1',
+                  inviteToken: hashInviteToken('tok-1'),
                   inviteExpiresAt: futureExpiry,
                   invitedBy: 'inviter-1',
                   permissions: ['connections:manage'],
@@ -184,6 +184,9 @@ describe('OrganizationsInvitesHelper - invite permissions', () => {
           },
         ]),
       }));
+      // The claim finds the invite still pending.
+      const em = { query: jest.fn().mockResolvedValue([[{ id: 'org-1' }], 1]), getRepository: () => userOrganizationRepository };
+      organizationRepository.manager = { transaction: jest.fn(async (work: any) => work(em)) };
       userOrganizationRepository.findOne.mockResolvedValue(null);
       userRepository.findOne.mockResolvedValue({ id: 'user-3', email: 'newcomer@example.com' });
 

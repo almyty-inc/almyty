@@ -164,8 +164,7 @@ export function GatewayToolsTab({
 
   return (
     <>
-      {/* Scoping presets. A shared-tools page leaves them out: its list
-          below is the whole story. */}
+      {/* Scoping presets, unless the caller wants just the list. */}
       {!hidePresets && (
       <Card>
         <CardHeader>
@@ -255,33 +254,32 @@ export function GatewayToolsTab({
 
               return (
                 <Card key={group.apiId}>
-                  {/* Group header */}
-                  <button
-                    type="button"
-                    className="w-full flex items-center gap-3 p-4 text-left hover:bg-muted/50 transition-colors"
-                    onClick={() => toggleGroup(group.apiId)}
-                  >
-                    {isExpanded ? (
-                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    )}
-                    <div
+                  {/* Group header. The checkbox is a button itself, so it sits beside the expand button, not inside it. */}
+                  <div className="flex w-full items-center gap-3 p-4 hover:bg-muted/50 transition-colors">
+                    <Checkbox
                       className="shrink-0"
-                      onClick={(e) => e.stopPropagation()}
+                      checked={allAssigned ? true : someAssigned ? 'indeterminate' : false}
+                      onCheckedChange={() => handleSelectAll(group)}
+                      disabled={assignPending || removePending}
+                      aria-label={`Select all tools from ${group.apiName}`}
+                    />
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      aria-expanded={isExpanded}
+                      onClick={() => toggleGroup(group.apiId)}
                     >
-                      <Checkbox
-                        checked={allAssigned ? true : someAssigned ? 'indeterminate' : false}
-                        onCheckedChange={() => handleSelectAll(group)}
-                        disabled={assignPending || removePending}
-                        aria-label={`Select all tools from ${group.apiName}`}
-                      />
-                    </div>
-                    <span className="font-medium flex-1 truncate">{group.apiName}</span>
-                    <Badge variant="secondary" className="shrink-0">
-                      {group.assignedCount} of {group.tools.length} assigned
-                    </Badge>
-                  </button>
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                      )}
+                      <span className="font-medium flex-1 truncate">{group.apiName}</span>
+                      <Badge variant="secondary" className="shrink-0">
+                        {group.assignedCount} of {group.tools.length} assigned
+                      </Badge>
+                    </button>
+                  </div>
 
                   {/* Expanded tool list */}
                   {isExpanded && (

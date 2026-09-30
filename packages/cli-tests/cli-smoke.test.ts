@@ -1,6 +1,6 @@
 /**
  * CLI smoke tests for @almyty/chat, @almyty/mcp-server, @almyty/models
- * and @almyty/connections, exercised against a real backend.
+ * and @almyty/credentials, exercised against a real backend.
  *
  * The four core CLIs (@almyty/cli, auth, agents, skills) are covered by
  * core-cli-smoke.test.ts, which also asserts the conventions they share.
@@ -76,7 +76,7 @@ function unauthenticatedEnv(): NodeJS.ProcessEnv {
 describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
   beforeAll(() => {
     // Verify binaries exist
-    for (const pkg of ['auth-cli', 'agents-cli', 'chat-cli', 'skills-cli', 'mcp-server', 'almyty-cli']) {
+    for (const pkg of ['auth-cli', 'agents-cli', 'chat-cli', 'skills-cli', 'mcp-server', 'models-cli', 'credentials-cli', 'almyty-cli']) {
       if (!existsSync(bin(pkg))) {
         throw new Error(`${pkg} not built. Run: cd packages/${pkg} && npx tsc`);
       }
@@ -266,7 +266,7 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
       const combined = (result.stdout || '') + (result.stderr || '');
-      expect(combined).toMatch(/\d+ tools/);
+      expect(combined).toMatch(/\d+ gateway tools, \d+ skills/);
     });
   });
 
@@ -354,7 +354,9 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
         ALMYTY_TOKEN: 'smoke-not-a-real-token',
         ALMYTY_URL: 'http://127.0.0.1:9',
       });
-      const reply = JSON.parse(stdout.trim().split('\n')[0]);
+      // By id, not position: a prompts/list_changed notification can go out
+      // before the reply when discovery fails faster than stdin is read.
+      const reply = stdout.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)).find((m) => m.id === 1);
       expect(reply.id).toBe(1);
       expect(reply.result.serverInfo.name).toBe('almyty');
       expect(stderr).toMatch(/discovery failed/i);
@@ -465,22 +467,22 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
     });
   });
 
-  // ---- connections-cli ----
+  // ---- credentials-cli ----
   //
-  // Read-only only, and deliberately so: connecting an account means
-  // handling a real third-party secret. `connect`, `rotate` and
-  // `disconnect` are never exercised here.
+  // Read-only only, and deliberately so: adding a credential means
+  // handling a real third-party secret. `add`, `rotate` and `delete` are
+  // never exercised here.
 
-  describe('connections-cli', () => {
+  describe('credentials-cli', () => {
     it('--version prints a semver', () => {
-      expect(run('connections-cli', ['--version'])).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(run('credentials-cli', ['--version'])).toMatch(/^\d+\.\d+\.\d+$/);
     });
 
     it('--help names every command it implements', () => {
-      const out = run('connections-cli', ['--help']);
+      const out = run('credentials-cli', ['--help']);
       for (const command of [
-        'connectors', 'list', 'get <id>', 'connect <key>', 'complete <key>',
-        'validate <id>', 'rotate <id>', 'disconnect <id>', 'grants <id>', 'grant <id>', 'revoke <id>',
+        'services', 'list', 'get <id>', 'add <service>', 'complete <service>',
+        'validate <id>', 'rotate <id>', 'delete <id>', 'grants <id>', 'grant <id>', 'revoke <id>',
       ]) {
         expect(out, `--help should document ${command}`).toContain(command);
       }
@@ -490,8 +492,8 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
       expect(out).toContain('--headless');
     });
 
-    it('connectors --json describes what can be connected, and how', () => {
-      const connectors = JSON.parse(run('connections-cli', ['connectors', '--json']));
+    it('services --json describes what a credential can be added for, and how', () => {
+      const connectors = JSON.parse(run('credentials-cli', ['services', '--json']));
       expect(connectors.length).toBeGreaterThan(0);
       for (const connector of connectors) {
         expect(connector.key).toBeTruthy();
@@ -501,33 +503,33 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
       }
     });
 
-    it('connectors --kind filters at the API', () => {
-      const inference = JSON.parse(run('connections-cli', ['connectors', '--kind', 'inference', '--json']));
+    it('services --kind filters at the API', () => {
+      const inference = JSON.parse(run('credentials-cli', ['services', '--kind', 'inference', '--json']));
       for (const connector of inference) expect(connector.kind).toBe('inference');
     });
 
     it('list --json never returns a secret value', () => {
-      const connections = JSON.parse(run('connections-cli', ['list', '--json']));
-      expect(Array.isArray(connections)).toBe(true);
-      for (const connection of connections) {
-        expect(connection.health?.status).toBeTruthy();
+      const credentials = JSON.parse(run('credentials-cli', ['list', '--json']));
+      expect(Array.isArray(credentials)).toBe(true);
+      for (const credential of credentials) {
+        expect(credential.health?.status).toBeTruthy();
         // The store never hands a secret back, not even masked.
-        expect(connection).not.toHaveProperty('config');
-        expect(connection).not.toHaveProperty('configuration');
-        expect(JSON.stringify(connection)).not.toMatch(/"apiKey"|"accessToken"|"bot_token"/);
+        expect(credential).not.toHaveProperty('config');
+        expect(credential).not.toHaveProperty('configuration');
+        expect(JSON.stringify(credential)).not.toMatch(/"apiKey"|"accessToken"|"bot_token"/);
       }
     });
 
-    it('a missing id is a usage error, not a request for /connections/undefined', () => {
-      const { stdout, exitCode } = runOrFail('connections-cli', ['validate']);
+    it('a missing id is a usage error, not a request for /credentials/undefined', () => {
+      const { stdout, exitCode } = runOrFail('credentials-cli', ['validate']);
       expect(exitCode).toBe(2);
-      expect(stdout).toContain('connection id is required');
+      expect(stdout).toContain('credential id is required');
     });
 
     it('refuses a secret passed with --input', () => {
       // Needs a connector whose form marks a field secret; every api_key
       // connector does. Skipped when the catalog has none.
-      const connectors = JSON.parse(run('connections-cli', ['connectors', '--json']));
+      const connectors = JSON.parse(run('credentials-cli', ['services', '--json']));
       const withSecret = connectors.find((c: any) =>
         (c.connect ?? []).some((m: any) => Object.values(m.schema?.properties ?? {}).some((p: any) => p['x-secret'] === true)));
       if (!withSecret) {
@@ -539,8 +541,8 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
       const secretField = Object.entries(method.schema.properties)
         .find(([, p]: any) => p['x-secret'] === true)![0];
 
-      const { stdout, exitCode } = runOrFail('connections-cli', [
-        'connect', withSecret.key, '--method', method.type,
+      const { stdout, exitCode } = runOrFail('credentials-cli', [
+        'add', withSecret.key, '--method', method.type,
         '--input', JSON.stringify({ [secretField]: 'not-a-real-secret' }),
       ]);
       expect(exitCode).toBe(2);
@@ -549,7 +551,7 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
     });
 
     it('unknown command exits 2', () => {
-      expect(runOrFail('connections-cli', ['nonexistent-cmd']).exitCode).toBe(2);
+      expect(runOrFail('credentials-cli', ['nonexistent-cmd']).exitCode).toBe(2);
     });
   });
 });

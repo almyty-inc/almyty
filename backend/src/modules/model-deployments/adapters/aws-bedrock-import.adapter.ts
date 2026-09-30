@@ -12,6 +12,7 @@ import {
   UnsupportedOperationError,
 } from './adapter.interface';
 import { AwsHttp, classifyAwsError, signAwsRequest } from '../aws-request';
+import { assertAwsRegion } from '../../../common/security/vendor-region';
 
 /**
  * Amazon Bedrock, in the customer's own AWS account.
@@ -106,7 +107,8 @@ export class AwsBedrockImportAdapter implements ModelProviderAdapter {
     const data = body === undefined ? undefined : JSON.stringify(body);
     const signed = signAwsRequest({
       method,
-      url: `https://bedrock.${region}.amazonaws.com${path}`,
+      // The region is providerConfig and is spliced into the host: checked.
+      url: `https://bedrock.${assertAwsRegion(region)}.amazonaws.com${path}`,
       service: 'bedrock',
       region,
       headers: data ? { 'content-type': 'application/json' } : {},
@@ -122,12 +124,12 @@ export class AwsBedrockImportAdapter implements ModelProviderAdapter {
   }
 
   static invokeUrl(region: string, modelArn: string): string {
-    return `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(modelArn)}/invoke`;
+    return `https://bedrock-runtime.${assertAwsRegion(region)}.amazonaws.com/model/${encodeURIComponent(modelArn)}/invoke`;
   }
 
   /** The OpenAI-compatible base AWS recommends for new applications. */
   static openAiBase(region: string): string {
-    return `https://bedrock-runtime.${region}.amazonaws.com/openai/v1`;
+    return `https://bedrock-runtime.${assertAwsRegion(region)}.amazonaws.com/openai/v1`;
   }
 
   /** Which of the two Bedrock paths this version asks for. */

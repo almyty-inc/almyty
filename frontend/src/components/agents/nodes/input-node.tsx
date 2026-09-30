@@ -1,6 +1,7 @@
 import React from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { LogIn } from 'lucide-react'
+import { pluralized } from '@/lib/utils'
 
 export function InputNode({ data, selected }: NodeProps) {
   return (
@@ -10,9 +11,9 @@ export function InputNode({ data, selected }: NodeProps) {
         <span className="text-xs font-semibold text-green-700 dark:text-green-300">Input</span>
       </div>
       <div className="p-3">
-        <div className="text-sm font-medium truncate">Pipeline Input</div>
+        <div className="text-sm font-medium truncate">What the run starts with</div>
         <div className="text-xs text-muted-foreground truncate mt-0.5">
-          {data.schema ? `${Object.keys((data.schema as any)?.properties || {}).length} fields` : 'No schema defined'}
+          {data.schema ? pluralized(Object.keys((data.schema as any)?.properties || {}).length, 'field') : 'No schema defined'}
         </div>
       </div>
       <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-green-500 !border-green-600" />

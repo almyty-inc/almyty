@@ -37,6 +37,12 @@ import { InputSchemaViolation, schemaConstrainsAnything, schemaProblems } from '
 import { describeLimitTrip } from './run-limits';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import { bestOfNJudgePrompt, consensusJudgePrompt, parseBestOfNPick, parseConsensus } from './strategies/judging';
+import {
+  looksLikeMethodCall,
+  matchComparison,
+  matchMethodCondition,
+  singleReference,
+} from '../../common/utils/condition-expression';
 
 export interface NodeExecutionResult {
   output: any;
@@ -103,12 +109,24 @@ export interface NodeExecutionOptions {
    */
   signal?: AbortSignal;
   /**
+   * The agent's machine label requirements (agentConfig.runnerLabels),
+   * handed to every runner-backed tool call so it runs on a matching
+   * runner. Set once per run by the engine.
+   */
+  runnerLabels?: Record<string, string>;
+  /**
    * The agent's roles, filled once for this run (L4). A node naming a
    * roleKey reads its model from here rather than deciding again, which
    * is what keeps a pinned role away from the router and lets a run
    * always name the concrete model behind each role.
    */
   resolvedRoles?: Array<{ key: string; modelId: string; via: 'pinned' | 'resolved'; rationale?: string }>;
+  /**
+   * Set by the engine on the one llm_call whose text is the run's answer,
+   * when the caller streams (ExecuteAgentOptions.streamAnswer). The model
+   * call then streams and hands each piece of text here as it arrives.
+   */
+  onAnswerChunk?: (content: string) => void;
 }
 /** How long an organization's default routing policy is reused before it is read again. */
 const DEFAULT_ROUTING_TTL_MS = 30_000;
@@ -433,7 +451,23 @@ export class AgentNodeExecutor {
       }
     }
 
-    // If there's a source reference, resolve it
+    // A source is a bare dot path, read as a raw value. A list of them is
+    // read in order and the first value a step that ran produced wins: that
+    // is how a graph with a branch names its answer -- a compiled cascade
+    // reads its escalation, which runs only when the check failed, then the
+    // draft the check passed. A skipped or failed step has no output, so it
+    // falls through to the next path; a list none of whose steps produced
+    // anything fails the node rather than answering with nothing.
+    if (Array.isArray(config.source)) {
+      const paths = config.source.filter((p: unknown): p is string => typeof p === 'string');
+      for (const path of paths) {
+        const resolved = this.templateResolver.resolveValue(path, context);
+        if (resolved !== undefined) return { output: resolved };
+      }
+      throw new Error(
+        `Output node '${node.id}' reads its answer from ${paths.join(', ') || 'nothing'}, and none of those steps produced one`,
+      );
+    }
     if (config.source) {
       const resolved = this.templateResolver.resolveValue(config.source, context);
       return { output: resolved };
@@ -461,13 +495,20 @@ export class AgentNodeExecutor {
       ? this.templateResolver.resolve(config.systemPrompt, context)
       : undefined;
 
-    const userPrompt = config.userPromptTemplate
-      ? this.templateResolver.resolve(config.userPromptTemplate, context)
-      : config.userPrompt
-        ? this.templateResolver.resolve(config.userPrompt, context)
-        : undefined;
+    const promptTemplate = config.userPromptTemplate || config.userPrompt;
+    const userPrompt = promptTemplate ? this.templateResolver.resolve(promptTemplate, context) : undefined;
 
     if (!userPrompt) {
+      if (promptTemplate) {
+        // The prompt is set; what it points at is not there. Saying "missing
+        // user prompt" here sent people to a config field that was filled in.
+        const unresolved = context.unresolvedReferences?.length
+          ? ` Unresolved: ${context.unresolvedReferences.join(', ')}.`
+          : '';
+        throw new Error(
+          `LLM call node '${node.id}': its prompt '${promptTemplate}' resolved to an empty prompt.${unresolved}`,
+        );
+      }
       throw new Error(`LLM call node '${node.id}' is missing user prompt (userPromptTemplate or userPrompt)`);
     }
 
@@ -571,12 +612,21 @@ export class AgentNodeExecutor {
       // As the run's principal, inherited: a gateway run reaches the
       // providers, keys and tools of its gateway's team, whoever the run
       // row names.
-      response = await this.llmProvidersService.chat(
-        roleProviderId ?? providerId,
-        chatRequest,
-        organizationId,
-        caller,
-      );
+      //
+      // The run's answering call streams instead when its caller asked
+      // (answer-node.ts): same provider, same principal, the text handed
+      // over as it arrives. Only without tools and without a routing
+      // policy -- an organization default counts, and is only known here --
+      // since chatStream runs no tool loop and cannot fall over to the next
+      // routed candidate once tokens are out.
+      const onAnswerChunk = options?.onAnswerChunk;
+      const streams =
+        node.type === 'llm_call' && !!onAnswerChunk && !routing && !(Array.isArray(config.toolIds) && config.toolIds.length > 0);
+      response = streams
+        ? await this.llmProvidersService.chatStream(roleProviderId ?? providerId, chatRequest, organizationId, caller, (chunk) => {
+            if (chunk.content) onAnswerChunk!(chunk.content);
+          })
+        : await this.llmProvidersService.chat(roleProviderId ?? providerId, chatRequest, organizationId, caller);
     } catch (err: any) {
       // A provider error body can echo the request back, Authorization
       // header included, so it never reaches a log line or a persisted
@@ -691,6 +741,14 @@ export class AgentNodeExecutor {
       // tool executor so its axios call honours a disconnected
       // client or parent-cancelled run.
       signal: options.signal,
+      runnerLabels: options.runnerLabels,
+      // The run's tool-error retry budget. A tool's own configured retry
+      // count still wins inside the executor; this replaces only the
+      // executor's default, which is what applied to every workflow tool
+      // call whatever the agent's Run limits said.
+      ...(typeof context.runLimits?.toolErrorRetries === 'number'
+        ? { retries: context.runLimits.toolErrorRetries }
+        : {}),
     });
 
     const executionTime = Date.now() - startTime;
@@ -730,21 +788,19 @@ export class AgentNodeExecutor {
     let result: boolean;
     // Checked before the comparison form: this one is anchored to the whole
     // expression, so it cannot swallow a real comparison, while a haystack
-    // containing "==" could otherwise be mistaken for one.
-    const methodMatch = resolvedStr.match(
-      /^(!?)\s*(.+)\.(includes|startsWith|endsWith)\(\s*(.*?)\s*\)$/s,
-    );
+    // containing "==" could otherwise be mistaken for one. Both are read
+    // without a regex: the expression carries upstream output, and the
+    // regexes took seconds on a long run of spaces (condition-expression.ts).
+    const methodMatch = matchMethodCondition(resolvedStr);
     // Try to evaluate as a comparison expression (e.g. "overweight == overweight", "29.4 > 25")
-    const comparisonMatch = methodMatch
-      ? null
-      : resolvedStr.match(/^(.+?)\s*(===?|!==?|>=?|<=?)\s*(.+)$/);
+    const comparisonMatch = methodMatch ? null : matchComparison(resolvedStr);
 
     if (methodMatch) {
       // contains / does not contain / starts with / ends with. The builder
       // offers these four; nothing evaluated them, so they fell through to the
       // truthiness branch below and a non-empty string always took the true
       // branch -- the leading "!" included, since it is just a character.
-      const [, negate, receiver, method, rawArg] = methodMatch;
+      const [negate, receiver, method, rawArg] = methodMatch;
       const haystack = unquoteLiteral(receiver.trim());
       const needle = unquoteLiteral(rawArg.trim());
       const matched =
@@ -755,7 +811,7 @@ export class AgentNodeExecutor {
             : haystack.endsWith(needle);
       result = negate === '!' ? !matched : matched;
     } else if (comparisonMatch) {
-      const [, left, op, right] = comparisonMatch;
+      const [left, op, right] = comparisonMatch;
       // The visual builder emits the right-hand side as a quoted literal
       // ("{{...}} === 'positive'") while the template resolver substitutes the
       // left-hand side unquoted. Comparing them raw made every string equality
@@ -788,7 +844,7 @@ export class AgentNodeExecutor {
         default:
           result = Boolean(resolved);
       }
-    } else if (/^!?\s*.+\.\s*[A-Za-z_$][\w$]*\s*\(.*\)$/s.test(resolvedStr)) {
+    } else if (looksLikeMethodCall(resolvedStr)) {
       // The whole expression looks like a method call, but not one we
       // implement. Falling through to truthiness would make an expression we
       // could not evaluate silently take the true branch -- exactly how the
@@ -868,12 +924,22 @@ export class AgentNodeExecutor {
     // {{input.items}} were JSON-stringified and the loop would only iterate
     // a single-element array of the JSON string.
     const expression: string = config.iterableExpression;
-    const singleRefMatch =
-      typeof expression === 'string' &&
-      expression.match(/^\s*\{\{\s*([^}]+?)\s*\}\}\s*$/);
-    const resolved = singleRefMatch
-      ? this.templateResolver.resolveValue(singleRefMatch[1], context)
+    const singleRef = typeof expression === 'string' ? singleReference(expression) : null;
+    const resolved = singleRef
+      ? this.templateResolver.resolveValue(singleRef, context)
       : this.templateResolver.resolve(expression, context);
+    // Nothing to iterate is not a one-item list. A reference that resolves
+    // to nothing -- a typo, a field the input did not carry, a step that
+    // failed -- was wrapped like any other non-array value, so the loop
+    // handed `[undefined]` downstream as if it had found one item, and the
+    // single-reference path never even recorded the reference as
+    // unresolved. An empty array is still an empty list.
+    if (resolved === undefined || resolved === null || (typeof resolved === 'string' && resolved.trim() === '')) {
+      throw new Error(
+        `Loop node '${node.id}': the iterable '${expression}' resolved to nothing. ` +
+          'Point it at an array the input or an earlier step provides.',
+      );
+    }
     const items = Array.isArray(resolved) ? resolved : [resolved];
 
     return {

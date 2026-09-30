@@ -151,7 +151,7 @@ export interface ComplianceEnforcementHook {
   getEnforcement(organizationId: string): Promise<ComplianceEnforcement | null>;
 }
 
-// ── Connections governance (entitlement: connections_governance) ──
+// ── Credentials governance (entitlement: credentials_governance) ──
 
 export const CONNECTIONS_GOVERNANCE_HOOK = 'EE_CONNECTIONS_GOVERNANCE_HOOK';
 

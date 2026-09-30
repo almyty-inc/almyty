@@ -3,9 +3,11 @@ import type { AgentModels } from './autonomous-models';
 
 /**
  * Every tool and agent an agent definition points at: `toolIds`, the
- * `tool_call` and `sub_agent` nodes of its pipeline, and the
- * collaboration roster (members and judge). Used to decide whether the
- * agent may reference them (see assertAttachable).
+ * `tool_call` and `sub_agent` nodes of its pipeline, the tool list of its
+ * `llm_call` nodes, the collaboration roster (members and judge) and its
+ * autonomous agent roles. Used to decide whether the agent may reference
+ * them (see assertAttachable) and who loses a tool or agent whose scope
+ * narrows (see private-dependents).
  */
 type LegacyCollaboration = { agents?: Array<{ agentId: string }>; judgeAgentId?: string };
 type ParticipantLike = { kind?: string; agentId?: string } | null | undefined;
@@ -15,6 +17,7 @@ export function collectAgentReferences(agent: {
   pipeline?: AgentPipeline | null;
   collaboration?: Agent['collaboration'] | LegacyCollaboration | null;
   models?: Pick<AgentModels, 'roles'> | null;
+  agentConfig?: Pick<NonNullable<Agent['agentConfig']>, 'callableAgentIds'> | null;
 }): { toolIds: Set<string>; agentIds: Set<string> } {
   const toolIds = new Set<string>();
   const agentIds = new Set<string>();
@@ -22,6 +25,10 @@ export function collectAgentReferences(agent: {
   for (const node of agent.pipeline?.nodes ?? []) {
     const data: Record<string, any> = (node as any).data || (node as any).config || {};
     if (node.type === 'tool_call' && typeof data.toolId === 'string' && data.toolId) toolIds.add(data.toolId);
+    // An llm_call step offers the model its own tool list.
+    if (node.type === 'llm_call' && Array.isArray(data.toolIds)) {
+      for (const id of data.toolIds) if (typeof id === 'string' && id) toolIds.add(id);
+    }
     if (node.type === 'sub_agent' && typeof data.agentId === 'string' && data.agentId) agentIds.add(data.agentId);
   }
   // Collaboration members are `participants` (agents or models) plus an
@@ -44,8 +51,69 @@ export function collectAgentReferences(agent: {
   for (const role of agent.models?.roles ?? []) {
     if (role && role.kind === 'agent' && typeof role.agentId === 'string' && role.agentId) agentIds.add(role.agentId);
   }
+  // The agents its Capabilities section lets it call.
+  for (const id of agent.agentConfig?.callableAgentIds ?? []) if (typeof id === 'string' && id) agentIds.add(id);
   return { toolIds, agentIds };
 }
+/** One model an agent names by connection and model id, and where. */
+export interface AgentModelReference {
+  providerId: string;
+  model: string;
+  /** Where in the agent: "model", "step <label>", "role <name>", "checker", ... */
+  where: string;
+}
+
+/**
+ * Every (connection, model) pair an agent definition names: the same
+ * places collectProviderReferences reads, keeping only those that name a
+ * model. A reference with a connection and no model uses whatever the
+ * connection defaults to, and a routed one names no model at all, so
+ * neither is "using" a particular model. Roles bound in the agent_roles
+ * table name a model card instead and are read by whoever needs them.
+ */
+export function collectModelReferences(agent: {
+  modelConfig?: Agent['modelConfig'] | null;
+  pipeline?: AgentPipeline | null;
+  agentConfig?: Agent['agentConfig'] | null;
+  collaboration?: Agent['collaboration'] | LegacyCollaboration | null;
+  models?: Pick<AgentModels, 'roles'> | null;
+}): AgentModelReference[] {
+  const out: AgentModelReference[] = [];
+  const add = (ref: { providerId?: unknown; model?: unknown } | null | undefined, where: string) => {
+    const providerId = typeof ref?.providerId === 'string' ? ref.providerId.trim() : '';
+    const model = typeof ref?.model === 'string' ? ref.model.trim() : '';
+    if (providerId && model) out.push({ providerId, model, where });
+  };
+  const modelConfig = agent.modelConfig as { providerId?: string; model?: string; compaction?: { providerId?: string; model?: string } } | null | undefined;
+  // An autonomous agent's main role is mirrored into modelConfig; it is one
+  // place to a person, named by the role below.
+  const mainRoleMirrored = (agent.models?.roles ?? []).some((role) => role?.purpose === 'main' && role.kind === 'model');
+  if (!mainRoleMirrored) add(modelConfig, 'model');
+  add(modelConfig?.compaction, 'context compaction');
+  for (const node of agent.pipeline?.nodes ?? []) {
+    const data: Record<string, any> = (node as any).data || (node as any).config || {};
+    const label = typeof data.label === 'string' && data.label.trim() ? data.label.trim() : node.id;
+    if (node.type === 'llm_call' || node.type === 'extract_context') add(data, `step ${label}`);
+    if (node.type === 'verify' && Array.isArray(data.checkers)) {
+      for (const checker of data.checkers) add(checker, `step ${label}`);
+    }
+  }
+  const agentConfig = agent.agentConfig as { verify?: { checkers?: Array<{ providerId?: string; model?: string }> }; constraints?: { distill?: { providerId?: string; model?: string } } } | null | undefined;
+  for (const checker of agentConfig?.verify?.checkers ?? []) add(checker, 'checker');
+  add(agentConfig?.constraints?.distill, 'constraints');
+  const collab = agent.collaboration as
+    | { participants?: Array<{ kind?: string; providerId?: string; model?: string } | null>; judge?: { kind?: string; providerId?: string; model?: string } | null }
+    | null
+    | undefined;
+  for (const p of [...(collab?.participants ?? []), collab?.judge]) {
+    if (p && p.kind === 'model') add(p, 'team');
+  }
+  for (const role of agent.models?.roles ?? []) {
+    if (role && role.kind === 'model') add(role, `role ${role.name || role.key}`);
+  }
+  return out;
+}
+
 /**
  * Every LLM provider an agent definition names directly: its own model
  * config and compaction model, the model nodes of its pipeline (`llm_call`,

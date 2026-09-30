@@ -4,6 +4,9 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  Optional,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual, EntityManager } from 'typeorm';
@@ -11,6 +14,16 @@ import { Repository, LessThanOrEqual, EntityManager } from 'typeorm';
 import { Runner, RunnerIsolationTier } from '../../entities/runner.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { canAcceptWork } from '../runner/runner-state';
+import { RunnerService } from '../runner/runner.service';
+import {
+  type LabelRequirements,
+  describeLabelRequirements,
+  hasLabelRequirements,
+  labelsMatch,
+  parseLabelRequirements,
+} from '../runner/runner-labels';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import type { ExecutionPrincipal, GatewayPrincipal } from '../../common/authorization/execution-access.service';
 
 const DEFAULT_TTL_MS = 60 * 60 * 1000; // 1 hour
 const MAX_TTL_MS = 24 * 60 * 60 * 1000;
@@ -24,12 +37,15 @@ export interface CreateWorkspaceInput {
   /** Time-to-live in milliseconds. Default 1 hour, max 24 hours. */
   ttlMs?: number;
   /**
-   * Optional explicit runner id. v1.0 ignores this beyond verifying
-   * ownership; the user's single registered runner is always picked.
-   * The field exists so call sites can pass it forward when v1.x
-   * scheduler logic ships.
+   * Optional explicit runner id: one of the caller's own runners.
    */
   runnerId?: string;
+  /**
+   * Label requirements for the machine (`gpu=yes, os=mac` or an object).
+   * Without a runnerId the workspace goes on an online runner the caller
+   * may use whose labels include all of them.
+   */
+  labels?: Record<string, string> | string;
 }
 
 @Injectable()
@@ -41,6 +57,14 @@ export class WorkspaceService {
     private readonly workspaces: Repository<Workspace>,
     @InjectRepository(Runner)
     private readonly runners: Repository<Runner>,
+    // Team membership for a team gateway's dispatch (findForDispatch).
+    // Optional only for hand-built specs; without it a team gateway is
+    // covered by no workspace (fail closed).
+    @Optional() private readonly accessPolicy?: AccessPolicyService,
+    // Label routing for a workspace created with label requirements.
+    // forwardRef: RunnerModule and WorkspaceModule import each other.
+    // Optional only for hand-built specs; without it such a create is refused.
+    @Optional() @Inject(forwardRef(() => RunnerService)) private readonly runnerService?: RunnerService,
   ) {}
 
   /**
@@ -63,7 +87,7 @@ export class WorkspaceService {
     if (!input.cwd || typeof input.cwd !== 'string') {
       throw new BadRequestException('cwd is required');
     }
-    const runner = await this.pickRunner(ownerUserId, organizationId, input.runnerId);
+    const runner = await this.pickRunner(ownerUserId, organizationId, input.runnerId, parseLabelRequirements(input.labels));
     if (!canAcceptWork(runner.state)) {
       throw new ConflictException(`runner ${runner.name} is ${runner.state}; cannot create workspace`);
     }
@@ -105,27 +129,56 @@ export class WorkspaceService {
 
   /**
    * The workspace a dispatch names, if the caller may send work into it:
-   * the caller's own, ACTIVE, pinned to the runner the work is going to,
-   * and not past its TTL (the sweep runs on a timer, so an expired row can
-   * still read ACTIVE for a while). Null otherwise -- including for a
-   * dispatch with no identified caller, since a workspace is always
-   * somebody's.
+   * ACTIVE, pinned to the runner the work is going to, not past its TTL
+   * (the sweep runs on a timer, so an expired row can still read ACTIVE for
+   * a while), and one the caller's principal covers. Null otherwise --
+   * including for a dispatch with no identified caller, since a workspace
+   * is always somebody's.
+   *
+   * Who is covered, judged by the run's principal (a user id is a user):
+   * - a user: their own workspaces, nobody else's.
+   * - a gateway private to its owner: that owner's.
+   * - a gateway scoped to a team: those of the team's current members --
+   *   the team published the gateway, and its members' workspaces are what
+   *   it may work in. Membership proper: an org admin who is not on the
+   *   team is not covered, as the admin's own machine is not the team's.
+   * - an org-wide gateway: none. It answers the whole organization (or
+   *   whoever its auth admits), and a workspace is one person's.
    *
    * RunnerCallService.dispatch asks this before any envelope leaves.
    */
   async findForDispatch(
     id: string,
     runnerId: string,
-    callerUserId: string | null | undefined,
+    caller: string | ExecutionPrincipal | null | undefined,
     now = new Date(),
   ): Promise<Workspace | null> {
-    if (!callerUserId || !UUID_RE.test(id ?? '')) return null;
-    const ws = await this.workspaces.findOne({
-      where: { id, runnerId, ownerUserId: callerUserId, status: WorkspaceStatus.ACTIVE },
-    });
+    if (!caller || !UUID_RE.test(id ?? '')) return null;
+    const principal: ExecutionPrincipal = typeof caller === 'string' ? { kind: 'user', userId: caller, source: 'session' } : caller;
+    if (principal.kind === 'user') {
+      if (!principal.userId) return null;
+      return this.liveWorkspace({ id, runnerId, ownerUserId: principal.userId }, now);
+    }
+    const ws = await this.liveWorkspace({ id, runnerId, organizationId: principal.organizationId }, now);
+    if (!ws) return null;
+    return (await this.gatewayCovers(principal, ws)) ? ws : null;
+  }
+
+  private async liveWorkspace(where: Partial<Pick<Workspace, 'id' | 'runnerId' | 'ownerUserId' | 'organizationId'>>, now: Date): Promise<Workspace | null> {
+    const ws = await this.workspaces.findOne({ where: { ...where, status: WorkspaceStatus.ACTIVE } });
     if (!ws) return null;
     if (ws.ttlAt && ws.ttlAt.getTime() <= now.getTime()) return null;
     return ws;
+  }
+
+  /** Does a gateway's scope cover the owner of `ws`? See findForDispatch. */
+  private async gatewayCovers(gateway: GatewayPrincipal, ws: Workspace): Promise<boolean> {
+    if (ws.organizationId !== gateway.organizationId) return false;
+    if (gateway.visibility === 'private') return !!gateway.ownerUserId && gateway.ownerUserId === ws.ownerUserId;
+    if (gateway.visibility !== 'team' || !gateway.teamId || !this.accessPolicy) return false;
+    if (!(await this.accessPolicy.getOrgRole(ws.ownerUserId, ws.organizationId))) return false;
+    const teams = await this.accessPolicy.getTeamMemberships(ws.ownerUserId, ws.organizationId);
+    return teams.has(gateway.teamId);
   }
 
   /**
@@ -283,17 +336,36 @@ export class WorkspaceService {
 
   // ── internals ───────────────────────────────────────────────────────
 
+  /**
+   * Which runner a new workspace goes on.
+   *
+   * - With label requirements and no runnerId: an online runner the
+   *   caller may use whose labels include every one, which can be another
+   *   member's org or team runner (RunnerService.resolveByLabels, the same
+   *   rules as dispatch). None: "No machine with gpu=yes is online".
+   * - With a runnerId: that runner of the caller's; with requirements too,
+   *   it must carry them.
+   * - Otherwise the caller's single runner.
+   */
   private async pickRunner(
     ownerUserId: string,
     organizationId: string,
     requestedId?: string,
+    required: LabelRequirements = {},
   ): Promise<Runner> {
     if (requestedId) {
       const runner = await this.runners.findOne({
         where: { id: requestedId, ownerUserId, organizationId },
       });
       if (!runner) throw new NotFoundException('runner not found');
+      if (!labelsMatch(runner.labels, required)) {
+        throw new BadRequestException(`${runner.name} does not have ${describeLabelRequirements(required)}`);
+      }
       return runner;
+    }
+    if (hasLabelRequirements(required)) {
+      if (!this.runnerService) throw new ConflictException('label routing is not available here');
+      return this.runnerService.resolveByLabels(required, ownerUserId, organizationId);
     }
     const owned = await this.runners.find({ where: { ownerUserId, organizationId } });
     if (owned.length === 0) {

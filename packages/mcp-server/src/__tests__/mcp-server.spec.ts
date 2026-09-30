@@ -314,3 +314,40 @@ describe('exit codes', () => {
     expect(EXIT_CODE_HELP).toContain('3  not authenticated');
   });
 });
+
+/**
+ * The connections CLI became @almyty/credentials, and the provider tool
+ * takes a credentialId. Help text and README have to say the same thing,
+ * or a user goes looking for a command that no longer exists.
+ */
+describe('credential wording', () => {
+  const source = readFileSync(join(import.meta.dirname, '..', 'index.ts'), 'utf-8');
+  const readme = readFileSync(join(import.meta.dirname, '..', '..', 'README.md'), 'utf-8');
+
+  it.each([['index.ts', source], ['README.md', readme]])('%s points at @almyty/credentials, never connections', (_name, text) => {
+    expect(text).toContain('npx @almyty/credentials add');
+    expect(text).not.toMatch(/@almyty\/connections|almyty connections|connection id|connections flow/i);
+  });
+});
+
+/**
+ * The MCP SDK declares the prompts capability when the first prompt is
+ * registered and throws once a transport is connected. With every prompt
+ * added after discovery the server died on startup ("Cannot register
+ * capabilities after connecting to transport"). One prompt has to be in
+ * place before connect.
+ */
+describe('startup order', () => {
+  const source = readFileSync(join(import.meta.dirname, '..', 'index.ts'), 'utf-8');
+
+  it('registers a prompt and a tool before connecting the transport', () => {
+    const connectAt = source.indexOf('await server.connect(transport)');
+    expect(connectAt).toBeGreaterThan(0);
+    const overviewAt = source.indexOf("'almyty-overview'");
+    expect(overviewAt).toBeGreaterThan(0);
+    expect(overviewAt).toBeLessThan(connectAt);
+    const firstToolAt = source.indexOf('server.tool(');
+    expect(firstToolAt).toBeGreaterThan(0);
+    expect(firstToolAt).toBeLessThan(connectAt);
+  });
+});

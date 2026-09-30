@@ -46,7 +46,7 @@ curl -X POST https://api.almyty.com/gateways \
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | string | Yes | Gateway name |
-| `type` | string | Yes | `mcp`, `a2a`, `utcp`, `skills` |
+| `type` | string | Yes | `mcp`, `utcp` or `skills`: the one protocol the gateway serves. A web chat, website widget, messaging channel or A2A endpoint is a channel of an agent, and is refused here (`CHANNEL_GATEWAY_NEEDS_AGENT`) |
 | `endpoint` | string | Yes | URL path (unique within org) |
 | `description` | string | No | Description |
 | `configuration` | object | No | Type-specific config |

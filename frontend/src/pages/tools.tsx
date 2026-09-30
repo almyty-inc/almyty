@@ -166,7 +166,7 @@ export function ToolsPage() {
       setSelectedToolIds(new Set())
       if (failed.length === 0) {
         notifications.success(
-          activated === 1 ? 'Tool activated' : `${activated} tools activated`,
+          `${pluralized(activated, 'tool')} activated`,
           'Active tools can be assigned to a gateway.',
         )
         return
@@ -176,7 +176,7 @@ export function ToolsPage() {
         notifications.error('Could not activate', detail)
       } else {
         notifications.warning(
-          `${activated} of ${activated + failed.length} tools activated`,
+          `${activated} of ${pluralized(activated + failed.length, 'tool')} activated`,
           detail,
         )
       }
@@ -561,17 +561,17 @@ export function ToolsPage() {
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="all">All status</SelectItem>
                       <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="inactive">Inactive</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger className="w-32" aria-label="Filter by Type">
+                    <SelectTrigger className="w-32" aria-label="Filter by type">
                       <SelectValue placeholder="Type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="all">All types</SelectItem>
                       <SelectItem value="REST_API">REST</SelectItem>
                       <SelectItem value="GRAPHQL">GraphQL</SelectItem>
                       <SelectItem value="SOAP">SOAP</SelectItem>

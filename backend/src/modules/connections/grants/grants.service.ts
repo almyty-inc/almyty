@@ -97,7 +97,7 @@ function userIdOf(principal: ConnectionPrincipal | GrantPrincipal): string {
  * Grants: who besides the owner may use a connection. `assertCanUse` is
  * the check the resolver seam calls on every resolve-for-use;
  * `recordResolve` writes the audit row for it. list / grant / revoke
- * back the /connections/:id/grants endpoints.
+ * back the /credentials/:id/grants endpoints.
  */
 @Injectable()
 export class GrantsService {
@@ -140,7 +140,14 @@ export class GrantsService {
 
   /** Same as `principalFrom` for a known organization. */
   async principalFor(user: ConnectionPrincipal, organizationId: string, context: GrantContext = {}): Promise<GrantPrincipal> {
-    const membership = membershipOf(user, organizationId);
+    // A request user carries its memberships (JwtStrategy). A user a run
+    // acts for arrives as a bare `{ id }` from the resolver seam; without
+    // this read it had no role and no team, so an admin lost the
+    // connections:manage bypass and a team grant never matched a member.
+    const known = user.organizationMemberships
+      ? user
+      : { ...user, organizationMemberships: await this.memberships.find({ where: { userId: user.id, organizationId } }) };
+    const membership = membershipOf(known, organizationId);
     const teamIds = membership ? await this.teamIdsOf(user.id, organizationId) : [];
     return {
       userId: user.id,

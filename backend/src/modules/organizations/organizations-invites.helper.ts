@@ -1,6 +1,6 @@
 import { ForbiddenException, BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import * as crypto from 'crypto';
 
 import { Organization } from '../../entities/organization.entity';
@@ -28,6 +28,22 @@ function normalizeInvitePermissions(permissions?: string[]): string[] {
     if (trimmed) seen.add(trimmed);
   }
   return [...seen];
+}
+
+/**
+ * The stored form of an invite token: its SHA-256, as for password-reset
+ * tokens. The raw token exists only in the invitation email, so a read
+ * of `user_organizations` or of an organization's settings yields
+ * nothing that accepts an invite.
+ */
+export function hashInviteToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+/** node-postgres through TypeORM answers an UPDATE ... RETURNING with [rows, count]. */
+function returnedRows(result: any): any[] {
+  const rows = Array.isArray(result?.[0]) ? result[0] : result;
+  return Array.isArray(rows) ? rows : [];
 }
 
 /**
@@ -105,7 +121,9 @@ export class OrganizationsInvitesHelper {
     const inviter = await this.userRepository.findOne({ where: { id: invitedBy } });
     const inviterName = inviter ? `${inviter.firstName} ${inviter.lastName}`.trim() : 'A team member';
 
+    // Only the hash is stored; the token itself goes out in the email.
     const inviteToken = crypto.randomBytes(32).toString('base64url');
+    const inviteTokenHash = hashInviteToken(inviteToken);
     const inviteExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
     // Check if user already exists
@@ -119,6 +137,7 @@ export class OrganizationsInvitesHelper {
         where: { userId: user.id, organizationId },
       });
 
+      let membershipId: string;
       if (existingMembership) {
         if (existingMembership.isActive && existingMembership.inviteAccepted) {
           throw new ConflictException('User is already a member of this organization');
@@ -127,11 +146,11 @@ export class OrganizationsInvitesHelper {
         existingMembership.role = inviteUserDto.role;
         if (permissionsProvided) existingMembership.permissions = grantedPermissions;
         existingMembership.invitedBy = invitedBy;
-        existingMembership.inviteToken = inviteToken;
+        existingMembership.inviteToken = inviteTokenHash;
         existingMembership.inviteExpiresAt = inviteExpiresAt;
         existingMembership.inviteAccepted = false;
         existingMembership.isActive = true;
-        await this.userOrganizationRepository.save(existingMembership);
+        membershipId = (await this.userOrganizationRepository.save(existingMembership)).id;
       } else {
         // Create membership for existing user (pending acceptance)
         const membership = this.userOrganizationRepository.create({
@@ -140,12 +159,12 @@ export class OrganizationsInvitesHelper {
           role: inviteUserDto.role,
           permissions: permissionsProvided ? grantedPermissions : undefined,
           invitedBy,
-          inviteToken,
+          inviteToken: inviteTokenHash,
           inviteExpiresAt,
           inviteAccepted: false,
           isActive: true,
         });
-        await this.userOrganizationRepository.save(membership);
+        membershipId = (await this.userOrganizationRepository.save(membership)).id;
       }
 
       // Send invite email to existing user
@@ -162,6 +181,11 @@ export class OrganizationsInvitesHelper {
       // users only — a not-yet-registered invitee has no inbox to put
       // a row in). Email channel intentionally omitted: sendInvitation
       // above already delivered it.
+      //
+      // The link names the membership row, not the token: a notification
+      // is stored and listed for as long as the inbox keeps it, and a
+      // token in it would outlive the invite. Accepting by row id is open
+      // to one account only, the one the row was made out to.
       if (this.notifications) {
         this.notifications
           .emit({
@@ -171,7 +195,7 @@ export class OrganizationsInvitesHelper {
             toInvitees: true,
             title: `You're invited to ${org.name}`,
             body: `${inviterName} invited you to join ${org.name} as ${inviteUserDto.role}.`,
-            link: `/invite/accept?token=${encodeURIComponent(inviteToken)}`,
+            link: `/invite/accept?membership=${encodeURIComponent(membershipId)}`,
           })
           .catch(() => {});
       }
@@ -185,7 +209,7 @@ export class OrganizationsInvitesHelper {
     const pendingInvite = {
       email: inviteUserDto.email,
       role: inviteUserDto.role,
-      inviteToken,
+      inviteToken: inviteTokenHash,
       inviteExpiresAt: inviteExpiresAt.toISOString(),
       invitedBy,
       ...(permissionsProvided ? { permissions: grantedPermissions } : {}),
@@ -222,7 +246,7 @@ export class OrganizationsInvitesHelper {
       isNewUser: true,
     });
 
-    this.logger.log(`Invitation sent to new user: ${inviteUserDto.email} (token: ${inviteToken.substring(0, 8)}...)`);
+    this.logger.log(`Invitation sent to new user: ${inviteUserDto.email}`);
     return { inviteSent: emailSent };
   }
 
@@ -235,6 +259,7 @@ export class OrganizationsInvitesHelper {
     if (!token || typeof token !== 'string') {
       throw new NotFoundException('Invalid or expired invitation');
     }
+    const tokenHash = hashInviteToken(token);
 
     // Resolve the caller. We need their email so we can verify that
     // the pending-invite path creates a membership for the right person.
@@ -245,53 +270,25 @@ export class OrganizationsInvitesHelper {
 
     // Check membership-based invites (existing users)
     const membership = await this.userOrganizationRepository.findOne({
-      where: { inviteToken: token },
+      where: { inviteToken: tokenHash },
       relations: { organization: true },
     });
 
     if (membership) {
-      if (membership.inviteExpiresAt && membership.inviteExpiresAt < new Date()) {
-        throw new BadRequestException('Invitation has expired');
-      }
-      if (membership.inviteAccepted) {
-        throw new ConflictException('Invitation has already been accepted');
-      }
-      // The membership row was created by inviteUser() with the invited
-      // user's id already filled in. If the CALLER isn't that user, they
-      // must not be allowed to accept on someone else's behalf.
-      if (membership.userId !== userId) {
-        throw new NotFoundException('Invalid or expired invitation');
-      }
-
-      membership.inviteAccepted = true;
-      membership.inviteToken = null;
-      await this.userOrganizationRepository.save(membership);
-      await this.teamMembershipHelper.joinDefaultTeam(membership.organizationId, userId, membership.role);
-
-      return {
-        organizationId: membership.organizationId,
-        organizationName: membership.organization?.name || 'Organization',
-      };
+      return this.acceptMembershipInvite(membership, caller);
     }
 
-    // Check pending invites in org metadata (new users).
-    //
-    // Previously this iterated every organization row in memory
-    // (O(orgs) per accept + an unbounded `find()` load that is a
-    // DoS vector on a large instance). Now we narrow to the single
-    // matching row via a JSONB containment query — the JSON path
-    // operator `@>` lets Postgres match elements of
-    // `settings.pendingInvites` that contain `{inviteToken: <t>}`
-    // in a single round trip, bounded work regardless of org count.
+    // Check pending invites in org metadata (new users), narrowed to the
+    // one matching row by a JSONB containment query.
     const candidateOrgs = await this.organizationRepository
       .createQueryBuilder('org')
       .where(`org.settings->'pendingInvites' @> :needle`, {
-        needle: JSON.stringify([{ inviteToken: token }]),
+        needle: JSON.stringify([{ inviteToken: tokenHash }]),
       })
       .getMany();
     for (const org of candidateOrgs) {
       const pendingInvites = (org.settings as any)?.pendingInvites || [];
-      const invite = pendingInvites.find((i: any) => i.inviteToken === token);
+      const invite = pendingInvites.find((i: any) => i.inviteToken === tokenHash);
       if (invite) {
         if (new Date(invite.inviteExpiresAt) < new Date()) {
           throw new BadRequestException('Invitation has expired');
@@ -307,7 +304,6 @@ export class OrganizationsInvitesHelper {
           throw new NotFoundException('Invalid or expired invitation');
         }
 
-        // Create the real membership
         const newMembership = this.userOrganizationRepository.create({
           userId,
           organizationId: org.id,
@@ -317,25 +313,121 @@ export class OrganizationsInvitesHelper {
           inviteAccepted: true,
           isActive: true,
         });
+        // Single use, decided by the database: the invite is taken out of
+        // the array by a conditional UPDATE, and only the request whose
+        // UPDATE found it there creates the membership. Both happen in one
+        // transaction, so a failed insert puts the invite back.
         try {
-          await this.userOrganizationRepository.save(newMembership);
+          await this.organizationRepository.manager.transaction(async (em) => {
+            if (!(await this.removePendingInvite(org.id, tokenHash, em))) {
+              throw new ConflictException('Invitation has already been accepted');
+            }
+            await em.getRepository(UserOrganization).save(newMembership);
+          });
         } catch (err: any) {
-          // The membership unique index on (userId, organizationId) is
-          // the backstop for a token accepted twice. Say so, rather
-          // than letting the driver error out as a 500.
+          // The membership unique index on (userId, organizationId):
+          // the caller already belongs to the organization.
           if (!isUniqueViolation(err)) throw err;
           throw new ConflictException('You are already a member of this organization');
         }
         await this.teamMembershipHelper.joinDefaultTeam(org.id, userId, invite.role);
-
-        // Remove from pending, in the database.
-        await this.removePendingInvite(org.id, token);
 
         return { organizationId: org.id, organizationName: org.name };
       }
     }
 
     throw new NotFoundException('Invalid or expired invitation');
+  }
+
+  /**
+   * Accept a membership invite from the invitee's own in-app notification,
+   * which names the row rather than carrying the token. Open to the
+   * account the row was made out to, and to no one else.
+   */
+  async acceptInviteForMembership(
+    membershipId: string,
+    userId: string,
+  ): Promise<{ organizationId: string; organizationName: string }> {
+    const caller = await this.userRepository.findOne({ where: { id: userId } });
+    const membership =
+      caller && typeof membershipId === 'string' && membershipId
+        ? await this.userOrganizationRepository.findOne({
+            where: { id: membershipId, userId },
+            relations: { organization: true },
+          })
+        : null;
+    if (!caller || !membership || (!membership.inviteToken && !membership.inviteAccepted)) {
+      throw new NotFoundException('Invalid or expired invitation');
+    }
+    return this.acceptMembershipInvite(membership, caller);
+  }
+
+  /** What the invitee's notification link shows before they accept. */
+  async getInviteDetailsForMembership(
+    membershipId: string,
+    userId: string,
+  ): Promise<{ organizationName: string; role: string; isExpired: boolean }> {
+    const membership =
+      typeof membershipId === 'string' && membershipId
+        ? await this.userOrganizationRepository.findOne({
+            where: { id: membershipId, userId },
+            relations: { organization: true },
+          })
+        : null;
+    if (!membership || !membership.inviteToken || membership.inviteAccepted) {
+      throw new NotFoundException('Invalid invitation');
+    }
+    return {
+      organizationName: membership.organization?.name || 'Organization',
+      role: membership.role,
+      isExpired: membership.inviteExpiresAt ? membership.inviteExpiresAt < new Date() : false,
+    };
+  }
+
+  private async acceptMembershipInvite(
+    membership: UserOrganization,
+    caller: User,
+  ): Promise<{ organizationId: string; organizationName: string }> {
+    if (membership.inviteExpiresAt && membership.inviteExpiresAt < new Date()) {
+      throw new BadRequestException('Invitation has expired');
+    }
+    if (membership.inviteAccepted) {
+      throw new ConflictException('Invitation has already been accepted');
+    }
+    // The membership row was created by inviteUser() with the invited
+    // user's id already filled in. If the CALLER isn't that user, they
+    // must not be allowed to accept on someone else's behalf.
+    if (membership.userId !== caller.id) {
+      throw new NotFoundException('Invalid or expired invitation');
+    }
+    // The row names an account by id, and that account is only its
+    // owner's once the address has been proven. Anyone can register an
+    // address they do not hold (registration hands back a session before
+    // verification), and an invite to that address then lands on their
+    // account and in its in-app notifications. So the account has to
+    // have answered a mail to the address before it can join.
+    if (!caller.verifiedAt && !caller.isVerified) {
+      throw new ForbiddenException({
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'Verify your email address before accepting this invitation.',
+      });
+    }
+
+    // Single use: a compare-and-set on the pending row. Of two concurrent
+    // accepts only one finds it still pending with this token.
+    const claim = await this.userOrganizationRepository.update(
+      { id: membership.id, userId: caller.id, inviteAccepted: false, inviteToken: membership.inviteToken },
+      { inviteAccepted: true, inviteToken: null },
+    );
+    if (claim.affected !== 1) {
+      throw new ConflictException('Invitation has already been accepted');
+    }
+    await this.teamMembershipHelper.joinDefaultTeam(membership.organizationId, caller.id, membership.role);
+
+    return {
+      organizationId: membership.organizationId,
+      organizationName: membership.organization?.name || 'Organization',
+    };
   }
 
   /**
@@ -348,20 +440,19 @@ export class OrganizationsInvitesHelper {
    * link enumerate "who was this sent to" across the platform,
    * which is a privacy regression.
    *
-   * Also: the pending-invites lookup now uses a JSONB containment
-   * query instead of `organizationRepository.find()` + in-memory
-   * scan. The old shape was O(orgs) per call and loaded every org
-   * row into memory — a DoS vector on a large instance.
+   * The pending-invites lookup is a JSONB containment query, bounded
+   * work regardless of how many organizations exist.
    */
   async getInviteDetails(token: string): Promise<{ organizationName: string; role: string; isExpired: boolean }> {
     // Defense-in-depth: reject empty/null tokens before the DB.
     if (!token || typeof token !== 'string') {
       throw new NotFoundException('Invalid invitation');
     }
+    const tokenHash = hashInviteToken(token);
 
     // Check membership-based invites (existing users)
     const membership = await this.userOrganizationRepository.findOne({
-      where: { inviteToken: token },
+      where: { inviteToken: tokenHash },
       relations: { organization: true },
     });
 
@@ -379,12 +470,12 @@ export class OrganizationsInvitesHelper {
     const candidateOrgs = await this.organizationRepository
       .createQueryBuilder('org')
       .where(`org.settings->'pendingInvites' @> :needle`, {
-        needle: JSON.stringify([{ inviteToken: token }]),
+        needle: JSON.stringify([{ inviteToken: tokenHash }]),
       })
       .getMany();
     for (const org of candidateOrgs) {
       const pendingInvites = (org.settings as any)?.pendingInvites || [];
-      const invite = pendingInvites.find((i: any) => i.inviteToken === token);
+      const invite = pendingInvites.find((i: any) => i.inviteToken === tokenHash);
       if (invite) {
         return {
           organizationName: org.name,
@@ -512,22 +603,30 @@ export class OrganizationsInvitesHelper {
 
   /**
    * Drop one invite from `settings.pendingInvites`, matching on its
-   * token, without rewriting the rest of the column.
+   * stored token hash, without rewriting the rest of the column.
    *
    * Both callers used to filter their own in-memory copy of the array
    * and write `settings: { ...org.settings, pendingInvites: filtered }`
    * — the whole json column, from a snapshot read earlier. Two
    * invitees accepting different invites at the same time each wrote
    * their own full array, so the one the other had just removed came
-   * back; a second accept of a resurrected token then hit the
-   * membership unique index. An admin editing org settings alongside
-   * an accept had their edit reverted wholesale for the same reason.
+   * back. An admin editing org settings alongside an accept had their
+   * edit reverted wholesale for the same reason.
+   *
+   * Only a row that still holds the invite is updated, and the row lock
+   * makes a second concurrent UPDATE re-read it after the first commits,
+   * so exactly one caller sees `true` for a given invite. acceptInvite
+   * uses that as its single-use claim.
    *
    * The column is jsonb (see the JsonbAndKmsFk migration), so the
    * jsonb operators below apply to it.
    */
-  private async removePendingInvite(organizationId: string, inviteToken: string): Promise<void> {
-    await this.organizationRepository.query(
+  private async removePendingInvite(
+    organizationId: string,
+    inviteTokenHash: string,
+    runner: Pick<EntityManager, 'query'> = this.organizationRepository,
+  ): Promise<boolean> {
+    const result = await runner.query(
       `UPDATE organizations
           SET settings = jsonb_set(
             COALESCE(settings, '{}'::jsonb),
@@ -542,9 +641,11 @@ export class OrganizationsInvitesHelper {
               '[]'::jsonb
             )
           )
-        WHERE id = $1`,
-      [organizationId, inviteToken],
+        WHERE id = $1
+          AND settings->'pendingInvites' @> $3::jsonb
+        RETURNING id`,
+      [organizationId, inviteTokenHash, JSON.stringify([{ inviteToken: inviteTokenHash }])],
     );
+    return returnedRows(result).length > 0;
   }
-
 }

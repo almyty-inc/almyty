@@ -1,10 +1,10 @@
 /**
  * One credential of a provider (the inference key or the usage key) in the
- * edit dialog: what backs it today (a connection, a pasted key, nothing)
+ * provider page: what backs it today (a saved key, a pasted key, nothing)
  * and the ways to change it. The form fields it writes are read by the
  * page's update mutation:
  *
- *   `<idField>`: undefined = keep, a connection id = point at it, null = clear
+ *   `<idField>`: undefined = keep, a credential id = point at it, null = clear
  *   `<keyField>`: a pasted key; blank means keep
  *
  * The masked marker the API returns for a stored key is never a value here.
@@ -15,10 +15,8 @@ import type { UseFormReturn } from 'react-hook-form'
 import { Button } from '@/components/ui/button'
 import { SecretInput } from '@/components/ui/secret-input'
 import { Label } from '@/components/ui/label'
-import { ConnectAccountButton } from '@/components/connections/connect-flow'
-import { ConnectedChip } from '@/components/connections/connected-chip'
 import { ConnectionHealthBadge } from '@/components/connections/health-badge'
-import { ConnectionSelect } from '@/components/connections/connection-select'
+import { CredentialPicker } from '@/components/credentials/credential-picker'
 import { cn } from '@/lib/utils'
 import type { Connection, ConnectionHealthStatus } from '@/types/connections'
 
@@ -31,16 +29,16 @@ export function isMaskedKey(value: unknown): boolean {
   return typeof value === 'string' && /^\*+masked\*+$/.test(value)
 }
 
-export type CredentialSlotMode = 'keep' | 'connection' | 'paste' | 'clear'
+export type CredentialSlotMode = 'keep' | 'saved' | 'paste' | 'clear'
 
 export interface CredentialSlotProps {
   /** Heading of the slot, e.g. "API key". */
   label: string
-  /** The connection backing this slot now, from the provider view. */
+  /** The credential backing this slot now, from the provider view. */
   credentialRef?: LlmProviderCredentialRef | null
   /** True when a pasted key is stored inline (the view shows it masked). */
   hasStoredKey?: boolean
-  /** The vendor, used to pick matching connections first. */
+  /** The vendor, whose saved keys are listed first. */
   connectorKey?: string
   form: UseFormReturn<any>
   idField: 'credentialId' | 'usageCredentialId'
@@ -60,7 +58,7 @@ export function CredentialRefSummary({ credentialRef, hasStoredKey, className }:
   if (credentialRef) {
     return (
       <div className={cn('flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm', className)} data-testid="credential-ref">
-        <span className="font-medium">{credentialRef.name || 'Connection'}</span>
+        <span className="font-medium">{credentialRef.name || 'Saved key'}</span>
         {credentialRef.connectorKey && <span className="font-mono text-xs text-muted-foreground">{credentialRef.connectorKey}</span>}
         <ConnectionHealthBadge health={{ status: (credentialRef.healthStatus as ConnectionHealthStatus | null) ?? 'unknown' }} />
       </div>
@@ -75,7 +73,7 @@ export function CredentialRefSummary({ credentialRef, hasStoredKey, className }:
 
 export function CredentialSlot({ label, credentialRef, hasStoredKey, connectorKey, form, idField, keyField, keyInputId, keyLabel, keyPlaceholder, keyHelp, allowClear = true, className }: CredentialSlotProps) {
   // A slot with nothing behind it opens on the paste field, as before;
-  // one backed by a connection or a stored key opens on "keep".
+  // one backed by a saved or stored key opens on "keep".
   const [mode, setMode] = useState<CredentialSlotMode>(credentialRef || hasStoredKey ? 'keep' : 'paste')
   const [picked, setPicked] = useState<Connection | null>(null)
 
@@ -86,9 +84,9 @@ export function CredentialSlot({ label, credentialRef, hasStoredKey, connectorKe
     if (next === 'clear') form.setValue(idField, null)
     else form.setValue(idField, undefined)
   }
-  const pick = (connection: Connection | null) => {
-    setPicked(connection)
-    form.setValue(idField, connection ? connection.id : undefined)
+  const pick = (credential: Connection | null) => {
+    setPicked(credential)
+    form.setValue(idField, credential ? credential.id : undefined)
     form.setValue(keyField, '')
   }
 
@@ -104,7 +102,7 @@ export function CredentialSlot({ label, credentialRef, hasStoredKey, connectorKe
         <span className="text-sm font-medium">{label}</span>
         <div className="flex flex-wrap gap-1" role="group" aria-label={`${label} source`}>
           {(credentialRef || hasStoredKey) && option('keep', 'Keep current')}
-          {option('connection', 'Use existing connection')}
+          {option('saved', 'Use a saved key')}
           {option('paste', 'Paste a key')}
           {allowClear && (credentialRef || hasStoredKey) && option('clear', 'Remove')}
         </div>
@@ -112,15 +110,17 @@ export function CredentialSlot({ label, credentialRef, hasStoredKey, connectorKe
 
       {mode === 'keep' && <CredentialRefSummary credentialRef={credentialRef} hasStoredKey={hasStoredKey} />}
 
-      {mode === 'connection' && (
-        picked ? (
-          <ConnectedChip connection={picked} onClear={() => pick(null)} />
-        ) : (
-          <div className="space-y-2">
-            <ConnectionSelect id={`${keyInputId}-connection`} kind="inference" preferConnectorKey={connectorKey} value="" onChange={pick} helper="Connections of this vendor come first." />
-            <ConnectAccountButton kind="inference" connectorKey={connectorKey} onConnected={pick} />
-          </div>
-        )
+      {mode === 'saved' && (
+        <CredentialPicker
+          id={`${keyInputId}-saved`}
+          label="Saved key"
+          value={picked?.id ?? ''}
+          onChange={pick}
+          kind="inference"
+          connectorKey={connectorKey}
+          placeholder="Pick a saved key"
+          hint="Keys of this provider come first."
+        />
       )}
 
       {mode === 'paste' && (

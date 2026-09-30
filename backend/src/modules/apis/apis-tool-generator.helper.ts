@@ -17,6 +17,7 @@ import { Operation } from '../../entities/operation.entity';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 
 import { ToolsService } from '../tools/tools.service';
+import { applyGeneratedToolScope } from '../tools/generated-tool-scope';
 import {
   assertWithinPerSchemaCap,
   capGeneratedDescription,
@@ -188,6 +189,7 @@ export class ApisToolGeneratorHelper {
         existing.description = built.description;
         existing.parameters = built.parameters;
         existing.metadata = { ...existing.metadata, ...built.metadata };
+        if (existing.generated) applyGeneratedToolScope(existing, api);
         return existing;
       },
     );

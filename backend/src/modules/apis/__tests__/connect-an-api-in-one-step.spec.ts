@@ -66,7 +66,11 @@ function setup(opts: { maxApis?: number } = {}) {
   return { apis, controller, queue, queued, req };
 }
 
-const file = (name: string) => ({ buffer: Buffer.from(fixture(name)), originalname: name });
+// An upload arrives as the file multer spooled to disk (files/temp-upload.ts).
+const file = (name: string) => ({
+  path: join(__dirname, '..', '..', 'schema-parser', '__fixtures__', name),
+  originalname: name,
+});
 
 afterEach(() => jest.restoreAllMocks());
 
@@ -155,6 +159,25 @@ describe('POST /apis/import', () => {
       "We couldn't read this as OpenAPI, GraphQL, WSDL or proto.",
     );
     await expect(controller.connect(req, {} as any, file('not-an-api.json'))).rejects.toBeInstanceOf(BadRequestException);
+    expect(apis.rows()).toHaveLength(0);
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+
+  it('takes the kind the person picked when the description is that kind', async () => {
+    const { controller, apis, req } = setup();
+    await controller.connect(req, { content: fixture('temperature.wsdl'), type: 'soap' } as any);
+    expect(apis.rows()[0]).toMatchObject({ type: ApiType.SOAP });
+  });
+
+  it('refuses a description of another kind than the one picked, in words, and creates and queues nothing', async () => {
+    const { controller, apis, queue, req } = setup();
+
+    await expect(controller.connect(req, { content: fixture('temperature.wsdl'), type: 'openapi' } as any)).rejects.toThrow(
+      'This is a SOAP description, not an OpenAPI one. Pick SOAP instead, or give an OpenAPI description.',
+    );
+    await expect(controller.connect(req, { type: 'grpc' } as any, file('openapi3-petstore.json'))).rejects.toThrow(
+      'This is an OpenAPI description, not a gRPC one.',
+    );
     expect(apis.rows()).toHaveLength(0);
     expect(queue.add).not.toHaveBeenCalled();
   });

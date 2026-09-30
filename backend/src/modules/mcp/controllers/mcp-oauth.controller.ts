@@ -79,7 +79,7 @@ export class McpOAuthController {
   private checkResource(orgSlug: string, gatewaySlug: string, resource: unknown): string | undefined {
     if (resource === undefined || resource === null || resource === '') return undefined;
     const gatewayResource = `${this.resolve.getBaseUrl()}/${orgSlug}/${gatewaySlug}`;
-    const given = typeof resource === 'string' ? resource.replace(/\/+$/, '') : '';
+    const given = typeof resource === 'string' ? resource.replace(/(?<!\/)\/+$/, '') : '';
     if (given !== gatewayResource && !given.startsWith(`${gatewayResource}/`)) {
       throw new HttpException(
         { error: 'invalid_target', error_description: 'resource is not this gateway' },
@@ -429,6 +429,9 @@ export class McpOAuthController {
   // POST /:orgSlug/:gatewaySlug/token
   // ---------------------------------------------------------------------------
   @Post(':orgSlug/:gatewaySlug/token')
+  // Tighter than the global limit: this is where client secrets, codes and
+  // refresh tokens are presented, and a real client needs a handful a minute.
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @Header('Content-Type', 'application/json')
   @Header('Cache-Control', 'no-store')

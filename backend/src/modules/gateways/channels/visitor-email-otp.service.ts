@@ -52,7 +52,18 @@ export const VERIFY_LIMITS = Object.freeze({
 
 const SWEEP_EVERY_MS = 15 * 60 * 1000;
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ADDRESS = /^[^\s@]+@([^\s@]+)$/;
+
+/**
+ * `/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)`: one `@`, no spaces, and a
+ * dot inside the domain. The regex let its two domain runs trade dots,
+ * which is polynomial; the length cap made that cheap here, but the
+ * shape fails the regexp lint, so the dot is looked for directly.
+ */
+function isAddress(value: string): boolean {
+  const domain = ADDRESS.exec(value)?.[1];
+  return domain !== undefined && domain.lastIndexOf('.', domain.length - 2) >= 1;
+}
 
 export class VisitorSignInError extends HttpException {
   constructor(code: string, message: string, status: HttpStatus, retryAfterSeconds?: number) {
@@ -88,7 +99,7 @@ export class VisitorEmailOtpService implements OnModuleInit, OnModuleDestroy {
   static normalizeEmail(input: unknown): string | null {
     if (typeof input !== 'string') return null;
     const value = input.trim().toLowerCase();
-    if (!value || value.length > 254 || !EMAIL.test(value)) return null;
+    if (!value || value.length > 254 || !isAddress(value)) return null;
     return value;
   }
 

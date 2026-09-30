@@ -19,11 +19,9 @@ import {
   Sun,
   Moon,
   Monitor,
-  Plug,
   Database,
   Cpu,
-  FolderGit2,
-  Package,
+  KeyRound,
   Shield,
 } from 'lucide-react'
 
@@ -55,7 +53,7 @@ import { KeyboardShortcutsListener } from '@/components/keyboard-shortcuts'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { EmailVerificationBanner } from '@/components/layout/email-verification-banner'
-import { PlanBadge } from '@/components/plan-indicator'
+import { PlanLine } from '@/components/plan-indicator'
 
 // Suspense fallback for lazy page chunks. Rendered INSIDE the main
 // landmark so the sidebar + header + <main> stay mounted during
@@ -89,19 +87,15 @@ interface DashboardLayoutProps {
 // an agent but left newcomers wondering what to click first.
 const navigation: { name: string; href: string; icon: any }[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  // Core workflow — follows the APIs → Tools → Gateways → Agents → Apps
-  // pipeline narrative. Apps sits directly after Agents because that is
-  // the last link of the chain: you build agents, then you ship them as
-  // a product. Putting it here also keeps it above the fold rather than
-  // buried below Runners.
+  // Core workflow — follows the APIs → Tools → Gateways → Agents pipeline
+  // narrative. Where an agent is put in front of people (its channels)
+  // lives on the agent itself.
   { name: 'APIs', href: '/apis', icon: Globe },
   { name: 'Tools', href: '/tools', icon: Wrench },
   { name: 'Gateways', href: '/gateways', icon: Zap },
   { name: 'Agents', href: '/agents', icon: Bot },
-  { name: 'Apps', href: '/apps', icon: Package },
   { name: 'Runners', href: '/runners', icon: Cpu },
-  { name: 'Workspaces', href: '/workspaces', icon: FolderGit2 },
-  { name: 'Connections', href: '/connections', icon: Plug },
+  { name: 'Credentials', href: '/credentials', icon: KeyRound },
   { name: 'Approvals', href: '/approvals', icon: Shield },
   // Configuration
   { name: 'divider', href: '', icon: null as any },
@@ -303,10 +297,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <div className="mt-2 flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Plan</span>
-                <PlanBadge />
-              </div>
+              <PlanLine className="mt-2" />
             </div>
           )}
 

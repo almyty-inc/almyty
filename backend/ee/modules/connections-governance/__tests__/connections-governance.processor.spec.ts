@@ -75,7 +75,7 @@ describe('ConnectionsGovernanceProcessor handlers', () => {
     const { processor, governance, licenses } = build();
     const summary = await processor.handleExpiry();
     expect(governance.organizationsWithPolicies).toHaveBeenCalledWith(['expiry_rule']);
-    expect(licenses.hasForOrg).toHaveBeenCalledWith('org-community', 'connections_governance');
+    expect(licenses.hasForOrg).toHaveBeenCalledWith('org-community', 'credentials_governance');
     expect(governance.enforceExpiry).toHaveBeenCalledTimes(1);
     expect(governance.enforceExpiry).toHaveBeenCalledWith('org-licensed');
     expect(governance.sweepRetention).toHaveBeenCalledWith('org-licensed');

@@ -8,6 +8,7 @@ import { AgentOpenAICompatController } from '../agent-openai-compat.controller';
 import { AgentAnthropicCompatController } from '../agent-anthropic-compat.controller';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
+import { CompatAgentInvoker } from '../compat-agent-invoker.service';
 import { AgentOpenAIStreamHelper, USAGE_SPLIT_HEADER } from '../agent-openai-stream.helper';
 import { ApiKey } from '../../../entities/api-key.entity';
 
@@ -119,6 +120,7 @@ describe('compat request fidelity', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AgentOpenAICompatController, AgentAnthropicCompatController],
       providers: [
+        CompatAgentInvoker,
         { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         {
           provide: AgentsService,

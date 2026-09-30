@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
+import { pluralized } from '@/lib/utils'
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -61,6 +62,8 @@ interface DataTableProps<TData, TValue> {
   onPageChange?: (pageIndex: number) => void
   /** Page size for manual pagination (default: 10) */
   pageSize?: number
+  /** Rows per page when the table pages its own data (default: 10). */
+  initialPageSize?: number
 }
 
 export function DataTable<TData, TValue>({
@@ -80,6 +83,7 @@ export function DataTable<TData, TValue>({
   pageIndex,
   onPageChange,
   pageSize = 10,
+  initialPageSize,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -104,6 +108,7 @@ export function DataTable<TData, TValue>({
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
+    ...(!manualPagination && initialPageSize ? { initialState: { pagination: { pageIndex: 0, pageSize: initialPageSize } } } : {}),
     state: {
       sorting,
       columnFilters,
@@ -260,7 +265,7 @@ export function DataTable<TData, TValue>({
           {!hideSelectionCount && (
             <div className="flex-1 text-sm text-muted-foreground">
               {table.getFilteredSelectedRowModel().rows.length} of{" "}
-              {table.getFilteredRowModel().rows.length} row(s) selected.
+              {pluralized(table.getFilteredRowModel().rows.length, 'row')} selected.
             </div>
           )}
           {hideSelectionCount && manualPagination && pageCount !== undefined && pageIndex !== undefined ? (

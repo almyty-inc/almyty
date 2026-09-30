@@ -259,6 +259,9 @@ describe('a cascade checks with its verifier role and only escalates when the ch
       agent.pipeline = compiledCascade();
       agent.variables = {};
       agent.settings = {};
+      // The escalation below costs $1, which is the default run cost cap on
+      // its own; room for it, so what is tested is the branch, not the cap.
+      agent.agentConfig = { runLimits: { maxCostCents: 500 } } as any;
       agent.metadata = {};
       agent.totalExecutions = 0;
       agent.successfulExecutions = 0;

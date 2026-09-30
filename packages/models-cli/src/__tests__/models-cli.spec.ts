@@ -1,6 +1,10 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  isEntrypoint,
   COMMAND_ALIASES,
   helpText,
   resolveCommand,
@@ -454,5 +458,31 @@ describe('version', () => {
 
   it('falls back rather than crashing when package.json cannot be read', () => {
     expect(readVersion('9.9.9')).toMatch(/^\d+\.\d+\.\d+/);
+  });
+});
+
+describe('isEntrypoint', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'almyty-entry-'));
+  const file = join(dir, 'index.js');
+  writeFileSync(file, '');
+  const link = join(dir, 'bin-link');
+  symlinkSync(file, link);
+  const url = pathToFileURL(file).href;
+
+  it('runs when started as the file or through the npm bin symlink', () => {
+    expect(isEntrypoint(file, url)).toBe(true);
+    expect(isEntrypoint(link, url)).toBe(true);
+  });
+
+  it('does not run when imported by something else, or with no argv[1]', () => {
+    expect(isEntrypoint(join(dir, 'vitest.mjs'), url)).toBe(false);
+    expect(isEntrypoint(process.argv[1], url)).toBe(false);
+    expect(isEntrypoint(undefined, url)).toBe(false);
+  });
+
+  it('no longer depends on VITEST, which a spawned smoke-test CLI inherits', () => {
+    const source = readFileSync(join(import.meta.dirname, '..', 'index.ts'), 'utf-8');
+    expect(source).not.toContain('process.env.VITEST');
+    expect(source).toContain('if (isEntrypoint(process.argv[1], import.meta.url))');
   });
 });

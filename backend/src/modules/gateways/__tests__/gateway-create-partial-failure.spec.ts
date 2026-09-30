@@ -50,6 +50,7 @@ describe('GatewaysService - createGateway leaves nothing behind when it fails', 
       } as any,
       'org-1',
       'user-1',
+      { forChannel: { channelId: 'app-1' } },
     );
 
   beforeEach(() => {
@@ -112,7 +113,7 @@ describe('GatewaysService - createGateway leaves nothing behind when it fails', 
       } as any,
       'org-1',
       'user-1',
-      GatewayStatus.INACTIVE,
+      { initialStatus: GatewayStatus.INACTIVE, forChannel: { channelId: 'app-1' } },
     );
 
     expect(gateway.status).toBe(GatewayStatus.INACTIVE);

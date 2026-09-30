@@ -38,6 +38,11 @@ import {
 export class Mem0Backend implements MemoryBackend {
   readonly id = 'mem0';
   readonly schema_version = 1;
+
+  nativeId(item: MemoryItem): string | null {
+    const id = (item.metadata as Record<string, unknown>)?.mem0_id;
+    return typeof id === 'string' && id ? id : null;
+  }
   readonly capabilities = new Set<Capability>([
     'mode_memory',
     'vector_search',

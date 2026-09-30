@@ -3,7 +3,11 @@ import {
   Get,
   Put,
   Post,
+  Delete,
   Body,
+  Param,
+  ParseUUIDPipe,
+  HttpCode,
   Req,
   UseGuards,
   HttpException,
@@ -19,6 +23,7 @@ import { EntitlementGuard } from '../../../src/modules/licensing/guards/entitlem
 import { RequiresEntitlement } from '../../../src/modules/licensing/decorators/requires-entitlement.decorator';
 import { EE_ENTITLEMENTS } from '../../../src/modules/licensing/license.constants';
 import { SsoConfigService, UpsertSsoConfigDto } from './sso-config.service';
+import { OrgDomainService } from './org-domain.service';
 import { publicBaseUrl } from './sso.util';
 
 /**
@@ -33,7 +38,10 @@ import { publicBaseUrl } from './sso.util';
 @UseGuards(JwtAuthGuard, RolesGuard, EntitlementGuard)
 @RequiresEntitlement(EE_ENTITLEMENTS.SSO)
 export class SsoConfigController {
-  constructor(private readonly configService: SsoConfigService) {}
+  constructor(
+    private readonly configService: SsoConfigService,
+    private readonly domains: OrgDomainService,
+  ) {}
 
   private orgId(req: Request): string {
     const organizationId = (req as any).user?.currentOrganizationId;
@@ -98,5 +106,37 @@ export class SsoConfigController {
       success: true,
       data: { token, scimBaseUrl: `${publicBaseUrl(req)}/scim/v2` },
     };
+  }
+
+  // ── Verified email domains (SSO provisions only these) ─────────────
+
+  @Get('domains')
+  @Roles('owner', 'admin')
+  @ApiOperation({ summary: "List the organization's email domains and their verification records" })
+  async listDomains(@Req() req: Request) {
+    return { success: true, data: await this.domains.list(this.orgId(req)) };
+  }
+
+  @Post('domains')
+  @Roles('owner', 'admin')
+  @ApiOperation({ summary: 'Add an email domain; it counts once its DNS TXT record is verified' })
+  async addDomain(@Req() req: Request, @Body() body: { domain?: unknown }) {
+    return { success: true, data: await this.domains.add(this.orgId(req), body?.domain) };
+  }
+
+  @Post('domains/:id/verify')
+  @HttpCode(200)
+  @Roles('owner', 'admin')
+  @ApiOperation({ summary: "Check a domain's DNS TXT record" })
+  async verifyDomain(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string) {
+    return { success: true, data: await this.domains.verify(this.orgId(req), id) };
+  }
+
+  @Delete('domains/:id')
+  @Roles('owner', 'admin')
+  @ApiOperation({ summary: 'Remove an email domain' })
+  async removeDomain(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string) {
+    await this.domains.remove(this.orgId(req), id);
+    return { success: true };
   }
 }

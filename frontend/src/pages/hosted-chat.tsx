@@ -595,12 +595,18 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
       // re-ask the backend and the page flips to the sign-in screen.
       if (status === 401) void refetchMe()
       const code = err?.response?.data?.error?.code
+      const said = err?.response?.data?.error?.message
       setError(
         status === 429 && code === 'VISITOR_RATE_LIMITED'
-          ? err?.response?.data?.error?.message || "You've sent a lot of messages in a short time. Please wait a moment."
-          : status === 429
-            ? 'This assistant is busy right now. Please try again in a moment.'
-            : getApiErrorMessage(err, 'Something went wrong. Please try again.'),
+          ? said || "You've sent a lot of messages in a short time. Please wait a moment."
+          : status === 429 && code === 'CHANNEL_SPEND_CAP_REACHED'
+            ? // The app has spent its allowance for the day (or month): the
+              // server's own plain sentence, never "busy", which would send
+              // the visitor to retry something that cannot succeed today.
+              said || 'This chat has reached its limit for today.'
+            : status === 429
+              ? 'This assistant is busy right now. Please try again in a moment.'
+              : getApiErrorMessage(err, 'Something went wrong. Please try again.'),
       )
       // Drop the optimistic user turn: leaving it implies it was sent.
       setMessages((current) => current.filter((m) => !m.id.startsWith('local-')))

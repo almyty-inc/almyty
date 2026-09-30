@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { useBillingPlan } from '@/hooks/use-billing-plan'
+import { useBillingPlan, type BillingStatus } from '@/hooks/use-billing-plan'
 import {
   PLANS,
   PLAN_ENTITLEMENTS,
@@ -71,10 +71,13 @@ export function PlanBadge({ plan, asLink = true, className }: PlanBadgeProps) {
   const { plan: billingPlan, isLoading } = useBillingPlan({ enabled: plan === undefined })
 
   // Until the billing status resolves, render a skeleton rather than flashing a
-  // wrong "Free". An explicit `plan` prop bypasses the fetch entirely.
-  if (plan === undefined && (isLoading || billingPlan === undefined)) {
+  // wrong "Free". With no status at all (billing not installed, or the request
+  // failed) there is no plan to show, so render nothing rather than a
+  // placeholder that never fills in.
+  if (plan === undefined && isLoading) {
     return <span className={cn('inline-block h-5 w-14 rounded bg-muted animate-pulse', className)} />
   }
+  if (plan === undefined && billingPlan === undefined) return null
 
   const key: PlanKey = plan !== undefined ? toPlanKey(plan) : billingPlan!
   const meta = PLANS[key]
@@ -100,6 +103,33 @@ export function PlanBadge({ plan, asLink = true, className }: PlanBadgeProps) {
     >
       {badge}
     </Link>
+  )
+}
+
+/**
+ * Whether a billing status names a plan worth showing. An install without
+ * hosted billing, no subscription and no license reports the default Free
+ * plan, which says nothing there, so it counts as no plan.
+ */
+export function hasPlanToShow(status: BillingStatus | undefined): boolean {
+  if (!status) return false
+  return status.stripeConfigured || status.hasSubscription || status.hasLicenseToken || toPlanKey(status.plan) !== 'free'
+}
+
+/**
+ * "Plan: Pro", once, under the organization switcher. Renders nothing while
+ * the status loads and nothing when there is no plan to show (billing not
+ * installed, billing off, or the request failed): a label with no value
+ * is noise.
+ */
+export function PlanLine({ className }: { className?: string }) {
+  const { plan, status, isLoading } = useBillingPlan()
+  if (isLoading || !plan || !hasPlanToShow(status)) return null
+  return (
+    <div className={cn('flex items-center gap-1.5 text-xs text-muted-foreground', className)} data-testid="plan-line">
+      <span>Plan:</span>
+      <PlanBadge plan={plan} />
+    </div>
   )
 }
 

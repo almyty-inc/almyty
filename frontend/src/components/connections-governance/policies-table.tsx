@@ -32,7 +32,7 @@ import { POLICY_KIND_LABELS, type ConnectionPolicy, type ConnectionPolicyKind } 
 import { Link } from 'react-router-dom'
 
 /** The connection policy create/edit page (policy-form.tsx). */
-export const POLICIES_PAGE_PATH = '/connections/policies'
+export const POLICIES_PAGE_PATH = '/credentials/policies'
 
 const KIND_BADGE_CLASS: Record<ConnectionPolicyKind, string> = {
   connector_allowlist: 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400',
@@ -101,7 +101,7 @@ export function PoliciesTable() {
   return (
     <div className="space-y-3" data-testid="policies-panel">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">Org-wide rules over what may be connected and how connections may be used. Disabled rules are kept but never evaluated.</p>
+        <p className="text-sm text-muted-foreground">Org-wide rules over which services may be added and how credentials may be used. Disabled rules are kept but never evaluated.</p>
         <Button size="sm" asChild className="shrink-0">
           <Link to={`${POLICIES_PAGE_PATH}/new`}>
             <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />

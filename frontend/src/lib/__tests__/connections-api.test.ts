@@ -54,66 +54,67 @@ function connection(overrides: Partial<Connection> = {}): Connection {
 describe('connectorsApi', () => {
   it('lists connectors, optionally by kind, and creates a custom one', async () => {
     await connectorsApi.list()
-    expect(getSpy).toHaveBeenCalledWith('/connectors', undefined)
+    expect(getSpy).toHaveBeenCalledWith('/credentials/services', undefined)
     await connectorsApi.list('mcp')
-    expect(getSpy).toHaveBeenLastCalledWith('/connectors', { params: { kind: 'mcp' } })
+    expect(getSpy).toHaveBeenLastCalledWith('/credentials/services', { params: { kind: 'mcp' } })
 
     const body = { key: 'my-vllm', kind: 'inference' as const, displayName: 'Office vLLM', connect: [{ type: 'api_key' as const, label: 'API key' }], validation: { kind: 'http' as const, url: 'https://x/v1/models' } }
     await connectorsApi.create(body)
-    expect(postSpy).toHaveBeenCalledWith('/connectors', body, undefined)
+    expect(postSpy).toHaveBeenCalledWith('/credentials/services', body, undefined)
   })
 })
 
 describe('connectionsApi', () => {
-  it('lists and unwraps the envelope', async () => {
-    getSpy.mockImplementation(() => envelope([{ id: 'c1', name: 'OpenAI' }]) as any)
-    await expect(connectionsApi.list()).resolves.toEqual([{ id: 'c1', name: 'OpenAI' }])
-    expect(getSpy).toHaveBeenCalledWith('/connections', undefined)
+  it('lists the credentials added for a service, unwrapping the envelope', async () => {
+    getSpy.mockImplementation(() => envelope([
+      { id: 'c1', name: 'OpenAI', health: { status: 'valid' } },
+      // A key an API keeps for itself: on GET /credentials, but not a service credential.
+      { id: 'k1', name: 'Petstore key', type: 'api_key' },
+    ]) as any)
+    await expect(connectionsApi.list()).resolves.toEqual([{ id: 'c1', name: 'OpenAI', health: { status: 'valid' } }])
+    expect(getSpy).toHaveBeenCalledWith('/credentials', undefined)
   })
 
   it('posts connect with the method, owner and input', async () => {
     await connectionsApi.connect('openai', { method: 'api_key', owner: 'org', input: { apiKey: 'sk-1' } })
-    expect(postSpy).toHaveBeenCalledWith('/connections/connect/openai', { method: 'api_key', owner: 'org', input: { apiKey: 'sk-1' } }, undefined)
+    expect(postSpy).toHaveBeenCalledWith('/credentials/connect/openai', { method: 'api_key', owner: 'org', input: { apiKey: 'sk-1' } }, undefined)
   })
 
   it('url-encodes the connector key', async () => {
     await connectionsApi.connect('acme/mcp', { owner: 'user' })
-    expect(postSpy).toHaveBeenCalledWith('/connections/connect/acme%2Fmcp', { owner: 'user' }, undefined)
+    expect(postSpy).toHaveBeenCalledWith('/credentials/connect/acme%2Fmcp', { owner: 'user' }, undefined)
   })
 
   it('completes a headless flow and returns the connection whether bare or wrapped', async () => {
     postSpy.mockImplementation(() => envelope({ id: 'c1', name: 'Slack' }) as any)
     await expect(connectionsApi.complete('slack', { state: 'st-1', code: 'abc' })).resolves.toEqual({ id: 'c1', name: 'Slack' })
-    expect(postSpy).toHaveBeenCalledWith('/connections/connect/slack/complete', { state: 'st-1', code: 'abc' }, undefined)
+    expect(postSpy).toHaveBeenCalledWith('/credentials/connect/slack/complete', { state: 'st-1', code: 'abc' }, undefined)
 
     postSpy.mockImplementation(() => envelope({ connection: { id: 'c2' } }) as any)
     await expect(connectionsApi.complete('slack', { state: 'st-1', code: 'abc' })).resolves.toEqual({ id: 'c2' })
   })
 
-  it('gets, validates, rotates and removes by id', async () => {
-    await connectionsApi.get('c1')
-    expect(getSpy).toHaveBeenCalledWith('/connections/c1', undefined)
-
+  it('validates, rotates and removes by id', async () => {
     postSpy.mockImplementation(() => envelope({ id: 'c1', health: { status: 'valid' } }) as any)
     await expect(connectionsApi.validate('c1')).resolves.toEqual({ id: 'c1', health: { status: 'valid' } })
-    expect(postSpy).toHaveBeenCalledWith('/connections/c1/validate', undefined, undefined)
+    expect(postSpy).toHaveBeenCalledWith('/credentials/c1/validate', undefined, undefined)
 
     await connectionsApi.rotate('c1', { input: { apiKey: 'sk-2' } })
-    expect(postSpy).toHaveBeenCalledWith('/connections/c1/rotate', { input: { apiKey: 'sk-2' } }, undefined)
+    expect(postSpy).toHaveBeenCalledWith('/credentials/c1/rotate', { input: { apiKey: 'sk-2' } }, undefined)
     await connectionsApi.rotate('c1')
-    expect(postSpy).toHaveBeenLastCalledWith('/connections/c1/rotate', {}, undefined)
+    expect(postSpy).toHaveBeenLastCalledWith('/credentials/c1/rotate', {}, undefined)
 
     await connectionsApi.remove('c1')
-    expect(deleteSpy).toHaveBeenCalledWith('/connections/c1', undefined)
+    expect(deleteSpy).toHaveBeenCalledWith('/credentials/c1', undefined)
   })
 
   it('lists, adds and removes grants', async () => {
     await connectionsApi.listGrants('c1')
-    expect(getSpy).toHaveBeenCalledWith('/connections/c1/grants', undefined)
+    expect(getSpy).toHaveBeenCalledWith('/credentials/c1/grants', undefined)
     await connectionsApi.addGrant('c1', { principalType: 'team', principalId: 't1', permission: 'use' })
-    expect(postSpy).toHaveBeenCalledWith('/connections/c1/grants', { principalType: 'team', principalId: 't1', permission: 'use' }, undefined)
+    expect(postSpy).toHaveBeenCalledWith('/credentials/c1/grants', { principalType: 'team', principalId: 't1', permission: 'use' }, undefined)
     await connectionsApi.removeGrant('c1', 'g1')
-    expect(deleteSpy).toHaveBeenCalledWith('/connections/c1/grants/g1', undefined)
+    expect(deleteSpy).toHaveBeenCalledWith('/credentials/c1/grants/g1', undefined)
   })
 
   it('patches the org toggle inside settings', async () => {
@@ -220,7 +221,7 @@ describe('helpers', () => {
     const found = await pollForConnection({ connectorKey: 'openai', since }, { wait, intervalMs: 5 })
     expect(found?.id).toBe('new')
     expect(getSpy).toHaveBeenCalledTimes(3)
-    expect(getSpy).toHaveBeenCalledWith('/connections', undefined)
+    expect(getSpy).toHaveBeenCalledWith('/credentials', undefined)
     expect(wait).toHaveBeenCalledTimes(2)
   })
 
