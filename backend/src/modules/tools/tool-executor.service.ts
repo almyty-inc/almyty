@@ -692,7 +692,10 @@ export class ToolExecutorService {
     const cfg = tool.runnerConfig!;
     let workspaceId = typeof parameters.workspaceId === 'string' ? parameters.workspaceId : undefined;
     const scope = getRequestContext();
-    const runId = options.runId ?? scope?.runId ?? null;
+    // The run whose workspace this call works in: a workflow sub-agent's is
+    // its top-level run's (workspaceRunId); an autonomous child run's parent
+    // chain is walked by RunWorkspaceService.
+    const runId = options.runId ?? scope?.workspaceRunId ?? scope?.runId ?? null;
 
     if (cfg.requiresWorkspace && !workspaceId && !(runId && this.runWorkspaces)) {
       return {

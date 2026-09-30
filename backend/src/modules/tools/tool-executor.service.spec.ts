@@ -629,6 +629,14 @@ describe('ToolExecutorService', () => {
       expect(runWorkspaces.acquire).toHaveBeenCalledWith(expect.objectContaining({ runId: 'exec-9', agentId: 'agent-9' }));
     });
 
+    it('a workflow sub-agent\'s call works in its top-level run\'s workspace (one job, one folder)', async () => {
+      const runWorkspaces = (service as any).runWorkspaces;
+      await runWithRequestContext({ runId: 'exec-child', workspaceRunId: 'exec-root', agentId: 'agent-sub' }, () =>
+        service.executeTool('tool-runner-ws', { command: 'ls' }, { userId: 'user-1', organizationId: 'org-1' }),
+      );
+      expect(runWorkspaces.acquire).toHaveBeenCalledWith(expect.objectContaining({ runId: 'exec-root' }));
+    });
+
     it('uses a workspace the caller named instead of making one', async () => {
       const runWorkspaces = (service as any).runWorkspaces;
       const runnerCalls = (service as any).runnerCalls;
