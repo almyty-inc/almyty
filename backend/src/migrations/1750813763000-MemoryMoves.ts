@@ -9,8 +9,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * id, so a move that stopped part way resumes without copying a memory
  * twice. No secret is stored: an account is named by its credential id.
  */
-export class MemoryMoves1750813762000 implements MigrationInterface {
-  name = 'MemoryMoves1750813762000';
+export class MemoryMoves1750813763000 implements MigrationInterface {
+  name = 'MemoryMoves1750813763000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
