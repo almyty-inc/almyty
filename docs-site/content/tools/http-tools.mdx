@@ -1,160 +1,74 @@
-# HTTP Tools
+# HTTP tools
 
-An HTTP tool turns any REST endpoint into an agent-callable action. You control
-the method, URL, headers, query parameters, and body, and you map tool inputs
-into each of them with template expressions. Use these when no imported schema
-exists (auto-generated API tools already cover imported schemas) and you want to
-wire up a single endpoint by hand.
+An HTTP tool calls one address of a web API. Use it when you need a single action from a system and there is no API description to connect, for example "get the weather for a city" or "create a lead in the CRM". If the system does have an API description, [connect the API](/tools) instead: every action becomes a tool at once.
 
-## Create one in the UI
+## Create one
 
-1. Open **Tools → Create tool** (`/tools/new`) and select **HTTP REST API**.
-2. Give it a **name** and **description** (the description is what agents read when deciding to call it).
-3. Configure the request:
-   - **Method**: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`
-   - **URL**: full endpoint, with `{{parameters.*}}` expressions inline
-   - **Headers**: key/value pairs, including auth headers
-   - **Query parameters**: appended to the URL at execution time
-   - **Body**: JSON or text with template expressions (POST/PUT/PATCH)
-4. Define **input parameters** in the schema builder. These become `{{parameters.*}}` in the URL, headers, and body.
-5. Click **Create tool**, then test it from the tool's detail page.
+1. Open **Tools** and click **Create tool**.
+2. Under **Execution method**, pick **HTTP REST API**.
+3. Give it a **Tool name** and a **Description**. The description is what assistants read to decide when to use the tool, so say plainly what it does.
+4. Under **HTTP request**:
+   - **Link to API (optional)**: pick an API you already connected, and the address becomes a **Path** on that API (it also uses that API's sign-in). Or leave it on **None - use full URL** and type the full **URL**.
+   - **Method**: `GET` reads, `POST` creates, `PUT` and `PATCH` change, `DELETE` removes. The API's own documentation says which one to use.
+   - Put an input into the address with curly braces: `https://api.example.com/users/{id}` fills in the tool's `id` input.
+   - Add **Custom headers** and a **Body template** if the API needs them.
+5. Under **Authentication**, say how the tool signs in: **No authentication**, **API key**, **Bearer token** or **Basic auth**, and pick the key from [Credentials](/credentials) (or create one right there). The tool itself never holds the key.
+6. Under **Parameters**, list the inputs the tool takes, such as `id` or `city`.
+7. Click **Create tool**, then open it and use **Test tool** to try it with real inputs.
 
-### Template expressions
+**Response mapping** and **Pagination** are optional. Response mapping picks the useful part out of a long answer; pagination follows "next page" links so the tool returns every result, not just the first page.
 
-`{{parameters.*}}` and `{{env.*}}` expressions resolve in URLs, headers, query
-params, and body fields:
+## For developers
 
-```
-URL:     https://api.example.com/users/{{parameters.userId}}
-Header:  Authorization: Bearer {{parameters.token}}
-Body:    { "name": "{{parameters.name}}", "email": "{{parameters.email}}" }
-```
+### How inputs are filled in
 
-### Custom code
+`{name}` placeholders are replaced with the tool's input of that name in the URL or path (values are URL-encoded), in query parameters, in header values and in the body template. For `GET` and `DELETE`, inputs not used in the path are sent as query parameters. For `POST`, `PUT` and `PATCH` with no body template, inputs not used in the path are sent as the JSON body. A body template is parsed first and values are placed into it, so an input cannot add fields of its own.
 
-For request logic that templates cannot express, switch to the code editor and
-write JavaScript. The `axios` library is available as a global:
+### The tool definition
 
-```javascript
-const response = await axios({
-  method: 'POST',
-  url: `https://api.example.com/search`,
-  headers: {
-    'Authorization': `Bearer ${parameters.apiKey}`,
-    'Content-Type': 'application/json',
-  },
-  data: {
-    query: parameters.query,
-    filters: parameters.filters || {},
-  },
-  timeout: 10000,
-});
-
-return {
-  results: response.data.items,
-  total: response.data.total,
-};
-```
-
-## The tool definition
-
-The request config is the tool. A weather-lookup HTTP tool defines its inputs
-and maps them into a `GET` request:
+The HTTP request is the tool's `httpConfig`:
 
 ```json
 {
   "name": "fetch_weather",
   "description": "Fetch current weather for a city",
-  "type": "http",
+  "type": "query",
+  "executionMethod": "http",
   "parameters": {
     "type": "object",
     "properties": {
-      "city": {
-        "type": "string",
-        "description": "City name"
-      },
-      "units": {
-        "type": "string",
-        "enum": ["metric", "imperial"],
-        "default": "metric"
-      }
+      "city": { "type": "string", "description": "City name" },
+      "units": { "type": "string", "enum": ["metric", "imperial"], "default": "metric" }
     },
     "required": ["city"]
   },
-  "executionConfig": {
+  "httpConfig": {
     "method": "GET",
-    "url": "https://api.weather.example.com/v1/current",
-    "headers": {
-      "X-API-Key": "{{env.WEATHER_API_KEY}}"
-    },
-    "queryParams": {
-      "q": "{{parameters.city}}",
-      "units": "{{parameters.units}}"
-    }
-  }
+    "path": "https://api.weather.example.com/v1/current",
+    "queryParams": { "q": "{city}", "units": "{units}" }
+  },
+  "authConfig": { "type": "apiKey", "config": { "credentialId": "<credential id>", "headerName": "X-API-Key" } }
 }
 ```
 
-## Configuration reference
+| Field | Type | Description |
+|-------|------|-------------|
+| `httpConfig.method` | string | `GET`, `POST`, `PUT`, `PATCH` or `DELETE` |
+| `httpConfig.path` | string | Full URL, or a path relative to the linked API's base URL |
+| `httpConfig.headers` | object | Request headers; values may use `{name}` |
+| `httpConfig.queryParams` | object | Query string parameters; values may use `{name}` |
+| `httpConfig.bodyEncoding` | string | `json` (default), `form-urlencoded`, `multipart` or `raw` |
+| `httpConfig.bodyTemplate` | string | Body with `{name}` placeholders |
+| `httpConfig.responseMapping` | object | `dataPath`, `errorPath`, `successCondition` |
+| `httpConfig.pagination` | object | `type` (`cursor`, `offset`, `link-header`), `cursorPath`, `cursorParam`, `offsetParam`, `limitParam`, `defaultLimit`, `resultsPath`, `maxPages` |
+| `configuration.timeout` | number | Request timeout in milliseconds, default `30000` |
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `method` | string | (required) | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
-| `url` | string | (required) | Full URL, supports template expressions |
-| `headers` | object | `{}` | Request headers, supports template expressions |
-| `queryParams` | object | `{}` | Query string parameters |
-| `body` | object/string | (none) | Request body (for POST/PUT/PATCH) |
-| `timeout` | number | `30000` | Request timeout in milliseconds |
-| `retries` | number | `0` | Number of retry attempts on failure |
+### Authentication
 
-## Authentication
+`authConfig` says how the tool signs its calls (`type` and, for an API key, `headerName`) and which credential it uses (`config.credentialId`). A secret sent inline is refused with `TOOL_SECRET_INLINE`. A tool linked to an API uses that API's key instead.
 
-On **Create tool**, **Authentication** says how the tool signs its calls (an
-API key, a bearer token, or a username and password) and the credential it
-uses, picked from Credentials or created right there. The tool keeps only
-which credential it uses.
+### Errors
 
-In a tool's configuration, reference credentials with `{{env.*}}` expressions
-in headers so secrets never live in the tool body:
+A `2xx` answer is returned as the result. Any other status, a timeout or a failed connection returns a failed result with the error message. Calls to private or internal addresses are blocked unless the organization allows that host.
 
-**API Key**
-
-```json
-{
-  "headers": {
-    "X-API-Key": "{{env.API_KEY}}"
-  }
-}
-```
-
-**Bearer Token**
-
-```json
-{
-  "headers": {
-    "Authorization": "Bearer {{env.ACCESS_TOKEN}}"
-  }
-}
-```
-
-**Basic Auth**
-
-```json
-{
-  "headers": {
-    "Authorization": "Basic {{base64(env.USERNAME + ':' + env.PASSWORD)}}"
-  }
-}
-```
-
-## Error handling
-
-| Status Code | Behavior |
-|-------------|----------|
-| 2xx | Success. Response body is returned. |
-| 4xx | Client error. Error message returned to the caller. |
-| 5xx | Server error. Retried if `retries > 0`, then error. |
-| Timeout | Request timed out. Error returned. |
-| Network | Connection failed. Retried if configured. |
-
-Custom code can implement additional error handling logic.
+For logic a template can't express, write a [JavaScript tool](/tools/javascript-tools) instead: `fetch()` and npm packages such as `axios` are available there.

@@ -1,36 +1,27 @@
-# MCP Tools
+# MCP tools
 
-Connect a remote MCP server once, and every tool it exposes becomes a regular
-almyty tool: usable in agent pipelines, servable through gateways, and testable
-in the tool tester. almyty consumes any server that speaks the streamable HTTP
-transport, the same protocol almyty itself serves.
+MCP (Model Context Protocol) is a common standard AI apps use to call tools. Many services already run an MCP server that offers their actions as tools. Connect one here once and every tool it offers becomes a regular almyty tool: your agents can use it, you can put it in a [gateway](/gateways), and you can try it on its **Test tool** tab.
 
-## Adding an MCP server
+## Add an MCP server
 
-On the **Tools** page, click **Add MCP server** to open `/tools/mcp-servers/new`. Enter a name, the server URL,
-and an optional bearer token (stored encrypted, never returned by the API).
-almyty runs the MCP handshake (`initialize`, then `tools/list`) and registers
-each remote tool with an `MCP` badge.
+1. Open **Tools** and click **Add MCP server**.
+2. Enter a **Name**. It goes in front of every tool name from this server, so you can tell them apart.
+3. Enter the **Server URL**, the address the service gives for its MCP server.
+4. If the server needs a key, pick it under **Token (optional)** from [Credentials](/credentials), or create one right there. It is sent as a bearer token (the usual way to pass a key).
+5. Click **Add server**. almyty connects, asks the server what tools it has, and adds each one to your tools list with an **MCP** badge. They are active straight away.
 
-Re-sync a source at any time to pick up added, changed, or removed tools. Removed
-remote tools are marked inactive so run history and gateway assignments survive.
-Deleting a source removes its tools.
+The server then appears on **Tools** with its status, its address, how many tools it has and when it last synced.
 
-## Execution
+**Keep it up to date.** Click **Sync** next to the server to pick up tools it added, changed or removed. A tool the server no longer offers is set to inactive rather than deleted, so past runs and gateway settings stay intact. Deleting the server (after a **Delete MCP server?** confirmation) removes its tools too.
 
-When an agent calls an MCP tool, almyty issues `tools/call` against the source
-with the agent's arguments and maps the result back as the tool output. Remote
-failures surface as typed tool errors on the run (`MCP_CONNECT_FAILED`,
-`MCP_TIMEOUT`, `MCP_REMOTE_ERROR`, and so on) rather than an opaque crash.
+If a call fails, the run shows why in plain terms: the server couldn't be reached, it took too long, or it answered with an error.
 
-## Security
+## For developers
 
-- Server URLs are validated before every request: private ranges, loopback, link-local, and cloud-metadata addresses are blocked, and redirects are refused. Self-hosted deployments that need in-cluster MCP servers can set `MCP_ALLOW_PRIVATE_URLS=true` (http/https only).
-- Auth secrets (bearer tokens, custom headers) are AES-256-GCM encrypted at rest.
+**Protocol.** Streamable HTTP transport; almyty sends protocol version `2025-06-18` and uses the version the server answers with. Both plain-JSON and SSE-framed responses are handled, and the `Mcp-Session-Id` session header is managed for you. Not supported: stdio servers, the legacy HTTP+SSE transport (2024-11-05), and server-initiated requests such as sampling and elicitation. Put those behind a bridge if you need them.
 
-## Supported protocol
+**Discovery and calls.** Adding or syncing runs `initialize` then `tools/list`. When an agent calls a tool, almyty sends `tools/call` with the agent's arguments and returns the result as the tool output.
 
-Streamable HTTP transport, protocol revision 2025-03-26 and later (both
-plain-JSON and SSE response framings; `Mcp-Session-Id` handled automatically).
-Not supported: stdio servers, the legacy HTTP+SSE transport, and server-initiated
-sampling. Expose those through a bridge if you need them.
+**Error codes.** Failures come back as typed tool errors on the run: `MCP_CONNECT_FAILED`, `MCP_TIMEOUT`, `MCP_HTTP_ERROR`, `MCP_PROTOCOL_ERROR`, `MCP_REMOTE_ERROR`, `MCP_RESPONSE_TOO_LARGE` and `MCP_URL_BLOCKED`.
+
+**Security.** Server URLs are checked before every request: private ranges, loopback, link-local and cloud-metadata addresses are blocked, and redirects are refused. A self-hosted install that needs in-cluster MCP servers can set `MCP_ALLOW_PRIVATE_URLS=true` (http and https only). The token is a credential kept on Credentials, encrypted at rest; the MCP server entry only points at it.

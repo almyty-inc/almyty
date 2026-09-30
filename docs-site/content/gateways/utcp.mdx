@@ -1,20 +1,22 @@
-# UTCP Gateway
+# UTCP gateway
 
-Call your tools over a plain REST API. A UTCP (Universal Tool Call Protocol) gateway lists and invokes tools with ordinary HTTP, so it works from any client library or agent framework with no special SDK.
+UTCP (Universal Tool Call Protocol) is a simple way for software to find and call tools over ordinary web requests, with no special library. A UTCP gateway gives a program, a script or a partner's system one address where it can read the list of your tools and run them. For example, a logistics partner's system can look up an order's status in yours without you building an integration for them.
 
 ![Gateway detail page](/screenshots/gateway-detail.png)
 
 ## Create the gateway
 
-1. Open **Gateways** and click **Create gateway** (`/gateways/new`)
-2. Under **Protocol**, pick **UTCP**
-3. Under **Tools**, pick a whole API or single tools (a draft can't be served until it is active)
-4. Name it; the address follows from the name (**Advanced** changes the path and who can use it)
-5. Click **Create gateway** and copy the access key: it is shown once, in the ready-made `curl` for the manual
+1. Open **Gateways** and click **Create gateway**.
+2. Under **Protocol**, pick **UTCP**.
+3. Under **Tools**, pick a whole API or single tools. A draft tool can't be offered until it is active.
+4. Give it a **Name**; its address follows from the name (**Advanced** changes the path and who can use it).
+5. Click **Create gateway** and copy the access key. It is shown only once, on the next page, filled into a ready-made example request.
 
-Change which tools it serves from **Tool scoping** on the gateway detail page, and its auth from the **Authentication** section.
+Change which tools it offers under **Tool scoping** on the gateway's page, and who may call it in its **Authentication** section. Hand the address and a key to whoever builds the other side; the **Integrations** tab lists the addresses they need.
 
 ![Assigning tools on the gateway Tool scoping tab](/screenshots/gateway-detail-tools.png)
+
+## For developers
 
 Your UTCP endpoint follows this pattern:
 
@@ -27,7 +29,7 @@ There is no `/utcp` path segment. Every gateway is served from its own
 `/.well-known/utcp` are the paths under it. A UTCP gateway serves UTCP only: the same tools
 over MCP or as Agent Skills need a gateway of that protocol.
 
-## Endpoints
+### Endpoints
 
 UTCP is a manual-driven protocol: you fetch one manual that describes every tool and how
 to call it. There is no `/health` on the gateway path (platform health lives at `/health`
@@ -36,13 +38,13 @@ on the API root).
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/.well-known/utcp` | public | Discovery: where the manual and execute URLs are, and what auth the gateway wants |
-| `GET` | `/manual` | required | The UTCP manual — every tool on this gateway, with its call template |
+| `GET` | `/manual` | required | The UTCP manual: every tool on this gateway, with its call template |
 | `POST` | `/execute` | required | Run a tool through almyty (proxy mode, an almyty extension) |
 | `POST` | `/execute/{toolId}` | required | Run one tool, arguments as query string or JSON body: the address a hand-made tool's call template names |
 
 Any other sub-path returns `404 Unknown UTCP action`.
 
-### Discovery
+#### Discovery
 
 ```bash
 curl https://api.almyty.com/acme/tools-api/.well-known/utcp
@@ -65,9 +67,9 @@ curl https://api.almyty.com/acme/tools-api/.well-known/utcp
 If the gateway has auth configured, an `auth` field describes it (one object, or an array
 when several methods are active).
 
-### Manual
+#### Manual
 
-The manual is snake_case throughout — UTCP SDKs parse against these exact field names.
+The manual is snake_case throughout: UTCP SDKs parse against these exact field names.
 Each tool carries an inline `tool_call_template` pointing at the upstream API, so a UTCP
 client can call the tool directly without proxying through almyty.
 
@@ -134,11 +136,11 @@ works too, and wins where both name the same argument.
 
 The manual is cached for five minutes per gateway.
 
-### Execute
+#### Execute
 
 `/execute` is an almyty extension, not part of the UTCP spec. It runs the tool
 server-side, which means almyty supplies the API's stored credentials and enforces the
-gateway's rate limits and per-tool security policy. `toolId` is the tool's almyty id — the
+gateway's rate limits and per-tool security policy. `toolId` is the tool's almyty id, the
 UUID in the tool's dashboard URL (`/tools/{id}`).
 
 ```bash
@@ -176,9 +178,9 @@ always carries `success` and `metadata`:
 
 A failure returns `"success": false` with an `error` object instead of `data`.
 
-## Connect from code
+### Connect from code
 
-### Python
+#### Python
 
 ```python
 import requests
@@ -196,7 +198,7 @@ result = requests.post(
 ).json()["data"]
 ```
 
-### JavaScript
+#### JavaScript
 
 ```javascript
 const base = "https://api.almyty.com/acme/tools-api";
@@ -211,9 +213,9 @@ const { data } = await fetch(`${base}/execute`, {
 }).then(r => r.json());
 ```
 
-## Error codes
+### Error codes
 
-`/execute` answers with HTTP 200 and `"success": false` — the code is in `error.code`:
+`/execute` answers with HTTP 200 and `"success": false`, and the code is in `error.code`:
 
 | Code | Description |
 |------|-------------|
@@ -226,6 +228,6 @@ Everything before the tool runs is an ordinary HTTP error:
 |-------------|-------------|
 | 401 | Missing or invalid authentication |
 | 404 | Unknown UTCP action (a sub-path other than `manual`, `execute`, or `.well-known/utcp`) |
-| 429 | Gateway rate limit exceeded — the body carries `code`, and `retryAfter` when known |
+| 429 | Gateway rate limit exceeded; the body carries `code`, and `retryAfter` when known |
 
 See [Gateway Authentication](/gateways/authentication) for the auth methods you can put in front of the endpoint.

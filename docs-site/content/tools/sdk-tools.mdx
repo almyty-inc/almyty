@@ -1,53 +1,34 @@
 # SDK tools
 
-Connect an npm package as an SDK API, then turn one of its mapped methods into
-a tool. The API owns the package and version; the tool chooses the export,
-constructor arguments, method and inputs.
+Many services publish a JavaScript library (an SDK, published as an npm package) instead of, or as well as, a web API. An SDK tool uses one function from such a library, for example "create a customer" from a payments library, and makes it a tool your assistants can call. You don't write any code: you pick the package, the function and where each of its inputs comes from.
 
-## Create one in the UI
+## Create one
 
-1. Open **APIs → Connect an API** (`/apis/new`) and pick **SDK / npm** (`/apis/new/sdk`).
-2. Add the package names and versions. For a private registry, tick **Use a private npm registry** and give its URL, its scope and its token, picked from Credentials or created there.
-3. Create the API and wait for package analysis to finish. Its SDK maps describe the available exports, methods and parameter types.
-4. Open **Tools → Create tool** (`/tools/new`) and select **SDK / npm package**.
-5. Name the tool, choose its **SDK API**, then select a package, class or export, and method from the discovered map.
-6. Map each constructor or method argument to a tool **parameter**, a fixed **literal**, or a **credential** path. Parameter mappings build the tool's input schema.
-7. Optionally choose a response data path and inspect the generated-code preview.
-8. Set visibility and click **Create tool**. Test the saved tool from its detail page before assigning it to an agent or gateway.
+**First, connect the library as an API.**
 
-Package analysis happens on the API, not through a separate Discover button on
-the tool-creation page. If the SDK API or method is missing, check the API's
-analysis result before continuing.
+1. Open **APIs**, click **Connect an API** and pick **SDK / npm**.
+2. Give it a **Name** and, under **Packages**, add each package name and version.
+3. If the package lives in your company's private package registry, tick **Use a private npm registry** and fill in the **Registry URL**, the **Scope (optional)** and the **Auth token**, picked from [Credentials](/credentials) or created right there.
+4. Click **Connect API** and wait for almyty to finish reading the package. It lists what the package offers: its classes, functions and their inputs.
 
-## What is stored and executed
+**Then make the tool.**
 
-The tool stores an `sdkConfig`: package name and version, imports, optional
-client construction, method call and argument mappings. At execution time,
-almyty assembles JavaScript from that configuration and runs it through the
-SDK execution path. You do not need to paste generated code into the tool.
+5. Open **Tools**, click **Create tool** and, under **Execution method**, pick **SDK / npm package**.
+6. Name the tool, choose its **SDK API**, then pick the **Package**, the **Class / export** and the **Method** from what almyty found.
+7. For each input under **Constructor parameters** and **Method arguments**, choose where the value comes from: **Tool param** (the assistant supplies it), **Hardcoded** (a fixed value) or **Credential** (a key kept on Credentials). The tool params become the tool's inputs.
+8. Optionally set a **Response data path** to return only part of the answer, and open **View generated code** to see what will run.
+9. Choose who can use it and click **Create tool**. Test it on its **Test tool** tab before you give it to an agent or gateway.
 
-The schema comes from the SDK map and the arguments you expose as parameters.
-Review it before publishing: package type information and runtime behavior can
-differ, and a mapped method still needs a real test with representative inputs.
+If the SDK API or the method you want is missing, open the API and check what almyty found when it read the package.
 
-## Credentials
+## For developers
 
-Create secrets in the [credential vault](/credentials), then use credential
-mappings for constructor or method arguments that need them. A mapping stores
-a reference such as `credentialName.field`, not the secret itself. Use literals
-for non-secret constants and parameters for values callers should supply.
+**What is stored.** The tool keeps an `sdkConfig`: package name and version, imports, optional client construction, the method call and each argument's mapping. When it runs, almyty assembles JavaScript from that configuration and runs it in the same sandbox as [JavaScript tools](/tools/javascript-tools). You never paste generated code into the tool.
 
-The private registry's token is a credential the SDK API points at. It authorizes
-package retrieval and are separate from the credentials a method needs when
-it calls an upstream service.
+**Inputs.** The tool's input schema comes from the package's type information and the arguments you map as tool params. Review it before publishing: type information and runtime behaviour can differ, so test the method with representative inputs.
 
-## Packages and runtime limits
+**Credentials.** A credential mapping stores a reference such as `credentialName.field`, not the secret. Use hardcoded values for non-secret constants. The private registry's token is a separate credential the SDK API points at (`npmRegistry.credentialId`); it only authorizes downloading the package, not the calls the method makes.
 
-Package installation and introspection must succeed before methods are
-available to select. Native addons, host access and outbound requests remain
-subject to the runtime's security restrictions; installation alone does not
-prove every export can run.
+**Limits.** Installing and reading the package must succeed before its methods can be picked. Native addons, access to the host and outbound requests stay subject to the sandbox's restrictions, so a package that installs is not proof every export runs.
 
-Use the [API reference](/api-reference) for SDK API creation, package maps and
-tool configuration, and [JavaScript tools](/tools/javascript-tools) for the
-code-execution model.
+See the [API reference](/api-reference) for creating SDK APIs, package maps and tool configuration.
