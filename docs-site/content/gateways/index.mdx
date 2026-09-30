@@ -1,75 +1,55 @@
 # Gateways
 
-Publish your tools once, reach them from any agent or client. A gateway takes the
-tools you have already built and serves them over one protocol (MCP, UTCP or Agent
-Skills) from an authenticated address. You pick the protocol and which tools a gateway
-serves, so every address has a focused, purpose-built surface.
+A gateway is one address that offers a set of your tools to AI apps and other software, with a key to control who gets in. Make one, and an AI app such as Claude Code or Cursor can look up orders, track shipments or open tickets in your own systems, using only the tools you chose.
+
+For example, a "Northwind Support Tools" gateway can offer the order and helpdesk tools to the support team's AI apps, while an "Orders for partners" gateway offers only order lookups to logistics partners.
 
 ![A gateway detail page with its assigned tools, endpoint, and auth](/screenshots/gateway-detail-tools.png)
 
-## The payoff
-
-Scope a gateway to the tools you want, generate a key in its Authentication section, then
-add it to Claude Code in one line:
-
-```bash
-claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
-# clients send: x-api-key: <your gateway key>
-```
-
-```text
-> look up pet #2 and show its status
-  Claude calls getPetById via almyty -> "Rosie", available
-```
-
-Create another gateway over the same tools to reach clients that speak another protocol.
-Putting an agent in front of
-people or other systems is a different job: web chats, website widgets, messaging
-channels and A2A endpoints for other agents are channels of an agent, added on the agent's
-**Channels** tab. The **Gateways** page lists only MCP, UTCP and Skills gateways; a channel
-is opened from its agent.
-
 ## Create a gateway
 
-1. Open **Gateways** in the sidebar and click **Create gateway** to open `/gateways/new`
-2. Under **Protocol**, pick **MCP**, **UTCP** or **Skills**. Nothing is picked for you
-3. Under **Tools**, pick a whole API or single tools (a draft can't be served until it is active)
-4. Name it; the address follows from the name, and **Advanced** changes the path and who can use it
-5. Click **Create gateway**. An MCP or UTCP gateway shows its access key once, on the next page, with the setup for each client that speaks its protocol already filled in with the key. A Skills gateway has no access key: the Skills CLI signs in as you
-6. Change which tools it serves from **Tool scoping** on the gateway page, and its auth from the **Authentication** section
+1. Open **Gateways** and click **Create gateway**.
+2. Under **Protocol**, pick how the apps that will use it connect (nothing is picked for you):
+   - **MCP**: AI apps such as Claude Code, Cursor, Claude Desktop and VS Code. The usual choice.
+   - **UTCP**: programs and partner systems that call tools over plain web requests.
+   - **Skills**: AI coding assistants, as installable skill files.
+3. Under **Tools**, pick a whole API or single tools. A draft tool can't be offered until it is active.
+4. Give it a **Name**; its address follows from the name. **Advanced** changes the path and who can use it.
+5. Click **Create gateway**. For MCP and UTCP, the next page shows the access key once, with a ready-made setup for each app filled in. Copy it now. A Skills gateway has no access key: the Skills tool signs in as you.
 
-An API's page has **Create gateway** too, with that API's tools already picked.
+An API's own page has **Create gateway** too, with that API's tools already picked.
 
-The gateway's **Integrations** tab gives you the live endpoint plus discovery URLs to
-paste into any client:
+On the gateway's page, **Tool scoping** changes which tools it offers, the **Authentication** section manages keys and sign-in, and the **Integrations** tab gives the address and setup for each app:
 
 ![A gateway's MCP endpoint, SSE, and discovery URLs](/screenshots/gateway-petstore-integration.png)
 
-## Protocols
+## Which kind of gateway
 
-Each gateway serves one protocol, the one it was created for, at
-`api.almyty.com/{org}/{gateway}`. To reach the same tools over MCP, UTCP and Agent Skills,
-create a gateway for each and pick the same tools.
+Each gateway speaks one protocol, the one it was created with. To offer the same tools over MCP and as Skills, create a gateway for each and pick the same tools.
 
-| Protocol | Reach it with | Endpoint |
+| Kind | Who uses it | Page |
 |----------|---------------|----------|
-| [MCP](/gateways/mcp) | Claude, Cursor, Windsurf, VS Code Copilot | `api.almyty.com/{org}/{gateway}` |
-| [UTCP](/gateways/utcp) | Any HTTP client or agent framework | `api.almyty.com/{org}/{gateway}` |
-| [Agent Skills](/gateways/skills) | 30+ coding agents, via the Skills CLI | Installed as `SKILL.md` files |
+| MCP | AI apps: Claude Code, Cursor, Claude Desktop, VS Code | [MCP gateway](/gateways/mcp) |
+| UTCP | Programs and partner systems, over plain web requests | [UTCP gateway](/gateways/utcp) |
+| Skills | 30 AI coding assistants, through the Skills tool | [Skills gateway](/gateways/skills) |
 
-An agent, rather than a set of tools, reaches other agents over [A2A](/gateways/a2a): add
-**Other agents (A2A)** as a channel on the agent, and it answers at
-`api.almyty.com/{org}/channels/{channel-id}` with its Agent Card next to it.
+**Gateways offer tools; channels put an agent in front of people.** A web chat, a website widget, Slack and the other messaging apps, and A2A (for other agents to call one of yours) are channels of an agent, added on the agent's **Channels** tab. The **Gateways** page lists only MCP, UTCP and Skills gateways; see [Channels](/channels) and [A2A](/gateways/a2a).
 
-Agents you build on almyty also get an [OpenAI-compatible endpoint](/api-reference/openai-compatible),
-so anything that talks to the OpenAI API can call an agent without code changes.
+## Control what each gateway offers
 
-## Control what each gateway exposes
+- **[Authentication](/gateways/authentication)**: a gateway turns everyone away until you add a way in. Use access keys, one per app or person, or OAuth sign-in.
+- **[Tool scoping](/gateways/tool-scoping)**: choose exactly which tools a gateway offers, and limit what each may reach.
 
-- **[Authentication](/gateways/authentication)**: default-deny on every gateway. Add API
-  key, bearer, basic, JWT, OAuth 2.1, and manage keys per client.
-- **[Tool scoping](/gateways/tool-scoping)**: choose exactly which tools a gateway serves,
-  with per-gateway rate limits and security policies on each tool.
+## For developers
+
+Every gateway is served at `https://api.almyty.com/{org}/{gateway}`. Add an MCP gateway to Claude Code in one line:
+
+```bash
+claude mcp add petstore --transport http https://api.almyty.com/acme/petstore \
+  --header "x-api-key: <your gateway key>"
+```
+
+An agent's A2A channel answers at `https://api.almyty.com/{org}/channels/{channel-id}`, with its Agent Card next to it. Agents you build also have an [OpenAI-compatible endpoint](/api-reference/openai-compatible), so anything that talks to the OpenAI API can call an agent without code changes. To use a gateway from a client that only speaks stdio, see the [MCP server CLI](/cli/mcp-server).
 
 ## Related
 
