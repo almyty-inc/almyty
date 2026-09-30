@@ -11,7 +11,7 @@ const { values } = parseArgs({ options: {
   init: { type: 'boolean' }, image: { type: 'string' }, path: { type: 'string' },
   title: { type: 'string' }, 'captured-at': { type: 'string' }, route: { type: 'string' },
   sources: { type: 'string', multiple: true },
-  package: { type: 'string' }, command: { type: 'string' }, notes: { type: 'string' },
+  package: { type: 'string' }, command: { type: 'string' }, notes: { type: 'string' }, environment: { type: 'string' },
 } })
 let manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
 if (values.init) {
@@ -51,7 +51,7 @@ if (values.init) {
     sha256: digest(readFileSync(destination)),
     source: values.package
       ? { kind: 'published-cli', package: values.package, command: values.command }
-      : { kind: 'browser', environment: 'staging', route: values.route },
+      : { kind: 'browser', environment: values.environment || 'staging', route: values.route },
     sources: values.sources, sourceDigest: fingerprint,
     ...(values.notes ? { notes: values.notes } : {}),
   }

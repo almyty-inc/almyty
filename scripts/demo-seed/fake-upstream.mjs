@@ -155,6 +155,10 @@ function text(content) {
 
 function sampleArgs(schema, question) {
   const args = {}
+  if (schema?.properties?.reason && schema?.properties?.payload) {
+    const order = (question.match(/NW-\d{5}/) || ['NW-44120'])[0]
+    return { reason: `Refund of $820 on order ${order} is over the $500 limit for automatic refunds`, payload: { orderId: order, amount: 820, currency: 'USD', customer: 'Brightway Logistics', tool: 'northwind_orders_create_refund' } }
+  }
   const props = schema?.properties || {}
   const order = (question.match(/NW-\d{5}/) || ['NW-10428'])[0]
   for (const [name, prop] of Object.entries(props)) {
@@ -177,6 +181,8 @@ function pickTool(tools, question) {
     if (/track|ship|where|delay/.test(q) && /track|shipment/.test(n)) s += 3
     if (/order|nw-/.test(q) && /get.?order|getorder/.test(n)) s += 2
     if (/refund/.test(q) && /refund/.test(n)) s += 3
+    // A refund over the limit goes to a person first: the built-in approval tool.
+    if (/refund/.test(q) && /\$\d{3,}|over|approv/.test(q) && n.startsWith('request_approval')) s += 5
     if (/ticket|triage/.test(q) && /ticket/.test(n)) s += 2
     if (/csat|satisfaction/.test(q) && /csat/.test(n)) s += 3
     if (/remember|recall|memory/.test(q) && /memory|recall/.test(n)) s += 2
@@ -194,9 +200,14 @@ const ANSWERS = [
   [/triage|ticket/i, 'Ticket T-5521 is a shipping delay on a high-value account: priority high, routed to Tier 2, reply drafted from the "Shipping delay apology" macro.'],
 ]
 
-function answerFor(conversation, toolResult) {
-  const all = conversation + ' ' + (toolResult || '')
-  for (const [re, answer] of ANSWERS) if (re.test(all)) return answer
+// The question and what the tool returned decide the answer; the rest of the
+// conversation (system prompts mention refunds and policies) only breaks a tie.
+function answerFor(question, toolResult, conversation) {
+  const [verdict, ...rest] = ANSWERS
+  if (verdict[0].test(conversation)) return verdict[1]
+  for (const text of [question + ' ' + (toolResult || ''), conversation]) {
+    for (const [re, answer] of rest) if (re.test(text)) return answer
+  }
   return 'Done. Everything checks out and nothing needs a follow-up.'
 }
 
@@ -212,7 +223,7 @@ function decide({ messages, tools, system }) {
     const tool = pickTool(tools, question)
     return { toolCall: { name: tool.name, args: sampleArgs(tool.parameters, question) }, promptTokens, completionTokens: 42 }
   }
-  const content = answerFor(`${question} ${convo.slice(-1500)}`, hasToolResult ? text(last.content) : '')
+  const content = answerFor(question, hasToolResult ? text(last.content) : '', convo.slice(-4000))
   return { content, promptTokens, completionTokens: Math.round(content.length / 4) }
 }
 

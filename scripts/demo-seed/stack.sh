@@ -53,6 +53,8 @@ case "${1:-}" in
     export LLM_ALLOW_PRIVATE_URLS=true MCP_ALLOW_PRIVATE_URLS=true
     # Model prices come from the live feed, as in production; offline they read "Price unknown".
     export MODEL_PRICE_FEED_DISABLED="${MODEL_PRICE_FEED_DISABLED:-false}"
+    # The commercial build, as staging runs it: compliance, audit streams and the other ee/ pages have their API.
+    export BACKEND_EE="${BACKEND_EE:-true}"
     if ! curl -sf "http://localhost:$FAKE_PORT/health" >/dev/null 2>&1; then
       FAKE_PORT="$FAKE_PORT" nohup node "$HERE/fake-upstream.mjs" >"$LOG_DIR/fake.log" 2>&1 &
       echo $! >"$LOG_DIR/fake.pid"
