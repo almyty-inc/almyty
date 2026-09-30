@@ -113,6 +113,8 @@ export function MemoriesPage() {
       mode: modeFilter,
       tier: tierFilter === 'all' ? undefined : tierFilter,
       limit: 100,
+      // A document is shown whole; its chunks are what agents look up.
+      hide_chunks: true,
     }),
   })
 

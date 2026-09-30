@@ -109,6 +109,20 @@ describe('MemoriesPage', () => {
     })
   })
 
+  // A document is kept whole plus the chunks agents look up; the page lists
+  // it once, not once per chunk.
+  it('lists documents whole, without their chunks', async () => {
+    ;(memoriesApi.list as any).mockResolvedValue({ items: [], next_cursor: null })
+    ;(memoriesApi.listBackends as any).mockResolvedValue([])
+    ;(memoriesApi.backendsHealth as any).mockResolvedValue([])
+    ;(memoriesApi.getConfig as any).mockResolvedValue({})
+
+    render(<MemoriesPage />)
+
+    await waitFor(() => expect(memoriesApi.list).toHaveBeenCalled())
+    expect((memoriesApi.list as any).mock.calls[0][0]).toMatchObject({ hide_chunks: true })
+  })
+
   // The trash button sits right next to the memory body, so a single stray
   // click used to soft-delete a memory with no confirm and no way back.
   it('confirms before deleting a memory rather than deleting on the first click', async () => {

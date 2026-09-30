@@ -233,6 +233,8 @@ export interface ListQuery {
   include_superseded?: boolean;
   /** Show soft-deleted rows. Default: false */
   include_deleted?: boolean;
+  /** Leave out document chunks (list documents whole). Default: false */
+  hide_chunks?: boolean;
   limit?: number;
   cursor?: string | null;
 }
