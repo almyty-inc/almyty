@@ -35,6 +35,8 @@ import { Credential } from '../../entities/credential.entity';
 import { LlmProviderSecretsHelper, MASKED_PROVIDER_KEY } from './llm-provider-secrets.helper';
 import { applyModelAccess, providerAllowsModel, type ModelAccessFields } from './allowed-models';
 import { ModelUsageService, type AgentsForViewer } from '../model-catalog/notices/model-usage.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { OrganizationRole } from '../../entities/user-organization.entity';
 
 import { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters, ConnectProviderInput } from './dto/llm-providers.dto';
 export type { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters };
@@ -158,6 +160,8 @@ export class LlmProvidersService {
     // Which agents use which models of a connection (model-catalog/notices).
     @Optional() @Inject(forwardRef(() => ModelUsageService))
     private readonly usage?: ModelUsageService,
+    // Tells a connection's people when a refused key turns it off.
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
   async createProvider(
@@ -953,6 +957,7 @@ export class LlmProvidersService {
       const keyRejected = !notFound && isKeyRejection(error);
       if (keyRejected && provider) {
         await this.applyCatalogCheck(provider, { passed: false, keyRejected: true, error: upstreamMessage });
+        await this.deactivateOnRefusedKey(provider, upstreamMessage);
       }
 
       return {
@@ -1143,6 +1148,46 @@ export class LlmProvidersService {
   // fire-and-forget and logs instead of throwing.
 
   /** The readiness rule's writer (see ModelCatalogService.applyProviderCheck). Awaited, never throws. */
+  /**
+   * A check the provider answered by refusing the key (401/403, or its
+   * wording for it; never a timeout or a network error) turns an active
+   * connection off, recorded as `check_failed` so a passing Check again
+   * turns it back on. Its owner and the organization's owners and admins
+   * are told, in the app and by email unless they turned that off; a
+   * private connection's owner alone. Never fails the check.
+   */
+  private async deactivateOnRefusedKey(provider: LlmProvider, reason: string): Promise<void> {
+    if (provider.status !== LlmProviderStatus.ACTIVE) return;
+    try {
+      await this.llmProviderRepository.update(
+        { id: provider.id, organizationId: provider.organizationId },
+        { status: LlmProviderStatus.INACTIVE, inactiveReason: 'check_failed' },
+      );
+      provider.status = LlmProviderStatus.INACTIVE;
+      provider.inactiveReason = 'check_failed';
+      this.logger.warn(`LLM provider ${provider.id} is inactive: the provider refused its key`);
+    } catch (err: any) {
+      this.logger.warn(`Could not mark provider ${provider.id} inactive: ${err?.message ?? err}`);
+      return;
+    }
+    if (!this.notifications) return;
+    if (provider.visibility === 'private' && !provider.ownerUserId) return;
+    try {
+      await this.notifications.emit({
+        type: 'connections.inactive',
+        organizationId: provider.organizationId,
+        userIds: provider.ownerUserId ? [provider.ownerUserId] : undefined,
+        roleTarget: provider.visibility === 'private' ? undefined : { orgRoles: [OrganizationRole.OWNER, OrganizationRole.ADMIN] },
+        title: `${provider.name} is inactive: its key was refused`,
+        body: `${reason} Its models are not offered until the key works. Replace the key, then Check again to turn it back on.`,
+        link: `/credentials/providers/${provider.id}`,
+        email: { template: 'connections.inactive', params: { connectionName: provider.name, reason, url: `${(process.env.FRONTEND_URL || 'https://app.almyty.com').replace(/\/+$/, '')}/credentials/providers/${provider.id}` } },
+      });
+    } catch (err: any) {
+      this.logger.warn(`connection notification for provider ${provider.id} failed: ${err?.message ?? err}`);
+    }
+  }
+
   /** Whether this user may change the provider (the rule updateProvider enforces), as a yes or no. */
   private async mayManage(provider: LlmProvider, userId: string): Promise<boolean> {
     try {

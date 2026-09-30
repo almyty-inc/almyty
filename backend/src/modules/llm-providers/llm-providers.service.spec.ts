@@ -27,6 +27,7 @@ import { LlmModelsHelper } from './llm-models.helper';
 import { DefaultModelResolver } from './default-model.resolver';
 import { ModelNotFoundError } from './model-errors';
 import { ModelCatalogService } from '../model-catalog/model-catalog.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 
 // jest.mock with __esModule: true short-circuits __importDefault so the
@@ -47,6 +48,8 @@ describe('LlmProvidersService', () => {
   let service: LlmProvidersService;
   let modelsHelperInstance: LlmModelsHelper;
   let accessPolicy: any;
+  // Fresh per test: who was told a connection went off.
+  let notifications: { emit: jest.Mock };
   let runnerInstance: LlmChatRunnerHelper;
   let llmProviderRepository: any;
   let conversationRepository: any;
@@ -60,6 +63,7 @@ describe('LlmProvidersService', () => {
   let usage: { modelsInUse: jest.Mock; forViewer: jest.Mock; agentsUsingConnection: jest.Mock };
 
   beforeEach(async () => {
+    notifications = { emit: jest.fn().mockResolvedValue(undefined) };
     usage = {
       modelsInUse: jest.fn().mockResolvedValue(new Map()),
       forViewer: jest.fn().mockResolvedValue({ agents: [], others: 0 }),
@@ -183,6 +187,7 @@ describe('LlmProvidersService', () => {
         },
         { provide: ModelCatalogService, useValue: catalog },
         { provide: ModelUsageService, useValue: usage },
+        { provide: NotificationsService, useValue: notifications },
       ],
     }).compile();
 
@@ -1448,6 +1453,65 @@ describe('LlmProvidersService', () => {
         expect(result.isHealthy).toBe(true);
         expect(result.reactivated).toBeUndefined();
         expect(llmProviderRepository.update).toHaveBeenCalledWith({ id: 'provider-1' }, expect.not.objectContaining({ status: expect.anything() }));
+      });
+    });
+
+    describe('a key the provider refuses', () => {
+      const active = (over: Record<string, unknown> = {}) => {
+        const provider = {
+          id: 'provider-1', name: 'OpenAI prod', type: LlmProviderType.OPENAI, configuration: { apiKey: 'k', model: 'gpt-4o-mini' },
+          status: LlmProviderStatus.ACTIVE, inactiveReason: null, organizationId: 'org-1', visibility: 'org', ownerUserId: 'owner-1', ...over,
+        };
+        Object.setPrototypeOf(provider, LlmProvider.prototype);
+        llmProviderRepository.findOne.mockResolvedValue(provider);
+        llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+        return provider;
+      };
+      const refuses = () =>
+        jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(Object.assign(new Error('Incorrect API key provided'), { status: 401 }));
+
+      it('turns the connection off as check_failed and tells its owner and the admins', async () => {
+        active();
+        refuses();
+        const result = await service.performHealthCheck('provider-1', 'org-1');
+        expect(result.keyRejected).toBe(true);
+        expect(llmProviderRepository.update).toHaveBeenCalledWith(
+          { id: 'provider-1', organizationId: 'org-1' },
+          { status: LlmProviderStatus.INACTIVE, inactiveReason: 'check_failed' },
+        );
+        expect(notifications.emit).toHaveBeenCalledWith(expect.objectContaining({
+          type: 'connections.inactive',
+          organizationId: 'org-1',
+          userIds: ['owner-1'],
+          roleTarget: { orgRoles: ['owner', 'admin'] },
+          link: '/credentials/providers/provider-1',
+          email: expect.objectContaining({ template: 'connections.inactive' }),
+        }));
+      });
+
+      it('tells a private connection its owner alone', async () => {
+        active({ visibility: 'private' });
+        refuses();
+        await service.performHealthCheck('provider-1', 'org-1');
+        const sent = notifications.emit.mock.calls[0][0];
+        expect(sent.userIds).toEqual(['owner-1']);
+        expect(sent.roleTarget).toBeUndefined();
+      });
+
+      it('leaves it on for a timeout or a network error, which are not a refused key', async () => {
+        active();
+        jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(Object.assign(new Error('timeout of 30000ms exceeded'), { code: 'ECONNABORTED' }));
+        const result = await service.performHealthCheck('provider-1', 'org-1');
+        expect(result.isHealthy).toBe(false);
+        for (const [, columns] of llmProviderRepository.update.mock.calls) expect(columns).not.toHaveProperty('status');
+        expect(notifications.emit).not.toHaveBeenCalled();
+      });
+
+      it('says nothing again about one that is already off', async () => {
+        active({ status: LlmProviderStatus.INACTIVE, inactiveReason: 'check_failed' });
+        refuses();
+        await service.performHealthCheck('provider-1', 'org-1');
+        expect(notifications.emit).not.toHaveBeenCalled();
       });
     });
 
