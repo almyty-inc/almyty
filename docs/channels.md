@@ -6,9 +6,9 @@ An agent's **Channels** tab (`/agents/:id?tab=channels`). The agent's own API ke
 
 ## Why this exists
 
-Every competitor terminates at a hosted widget, a messaging channel, or an API. All three keep the end user tethered to the vendor. A signed binary the customer hands to their own users does not: it carries their name, their identifier, their signature, and the operating system that asks who published it gets their answer, not ours.
+A hosted chat, a widget, a messaging channel and an API all keep the end user on almyty's side. A signed binary the customer hands to their own users carries their name, their identifier and their signature, and the operating system that asks who published it gets their answer.
 
-That is the part nobody else ships, so it is the part this subsystem is built around.
+That is why builds and signing are a first-class part of this subsystem.
 
 ## The two nouns
 

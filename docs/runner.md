@@ -17,14 +17,12 @@ data is* — against a private repo, behind a VPN, on a box with a GPU or a
 licensed binary or a VPN-only database — is a runner job, and most of them have
 nothing to do with coding agents.
 
-One case it happens to be unusually good at is orchestrating coding-agent CLIs.
-Every such CLI on the market is single-vendor: Claude Code calls Anthropic
-models, Codex calls OpenAI's, gemini-cli calls Google's, aider lets you pick but
-each subagent is still locked to one provider per turn. Because the runner
-exposes a generic process surface rather than per-tool wrappers, one almyty
-workflow can drive any of them with any model, in one coherent workspace: a PM
-agent plans, dispatches subtasks to specialist agents on different CLIs and
-different models, all editing the same checkout on the same runner.
+One case it handles well is orchestrating coding-agent CLIs such as Claude Code,
+Codex, gemini-cli and aider. Because the runner exposes a generic process
+surface rather than per-tool wrappers, one almyty workflow can drive any of
+them with any model, in one coherent workspace: a PM agent plans, dispatches
+subtasks to specialist agents on different CLIs and different models, all
+editing the same checkout on the same runner.
 
 **v1 limit:** one runner per account. Multi-machine registration is not
 available yet.
