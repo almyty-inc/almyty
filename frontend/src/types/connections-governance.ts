@@ -7,7 +7,7 @@
  * Mirrors backend/src/entities/connection-policy.entity.ts and
  * backend/ee/modules/connections-governance/*. Dates travel as ISO strings.
  */
-import type { ConnectionHealthStatus, ConnectionOwner, GrantPrincipalType } from './connections'
+import type { ConnectionHealthStatus, GrantPrincipalType } from './connections'
 
 export type ConnectionPolicyKind =
   | 'connector_allowlist'
