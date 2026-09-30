@@ -119,6 +119,13 @@ export function extractUpstreamErrorMessage(error: any): string {
   return String(first).replace(SECRET_VALUE_PATTERN, '[REDACTED]').slice(0, 500);
 }
 
+/** A dashboard address for an email link. */
+function dashboardUrl(path: string): string {
+  let base = process.env.FRONTEND_URL || 'https://app.almyty.com';
+  while (base.endsWith('/')) base = base.slice(0, -1);
+  return `${base}${path}`;
+}
+
 @Injectable()
 export class LlmProvidersService {
   private readonly logger = new Logger(LlmProvidersService.name);
@@ -1181,7 +1188,7 @@ export class LlmProvidersService {
         title: `${provider.name} is inactive: its key was refused`,
         body: `${reason} Its models are not offered until the key works. Replace the key, then Check again to turn it back on.`,
         link: `/credentials/providers/${provider.id}`,
-        email: { template: 'connections.inactive', params: { connectionName: provider.name, reason, url: `${(process.env.FRONTEND_URL || 'https://app.almyty.com').replace(/\/+$/, '')}/credentials/providers/${provider.id}` } },
+        email: { template: 'connections.inactive', params: { connectionName: provider.name, reason, url: dashboardUrl(`/credentials/providers/${provider.id}`) } },
       });
     } catch (err: any) {
       this.logger.warn(`connection notification for provider ${provider.id} failed: ${err?.message ?? err}`);
