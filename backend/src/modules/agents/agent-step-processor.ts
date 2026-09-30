@@ -23,6 +23,7 @@ import { AgentRoleCall, ModelRoleCall, Team, TeamRole, stampOf, teamOf, teammate
 import { AutonomousStrategyRunner, answeredBy, chargeRole, checkedBy } from './autonomous-strategy.runner';
 import type { ResolvedRunLimits } from './run-limits';
 import type { ApprovalGateHit } from '../tools/tool-approval-gate.service';
+import { NamedTool, readableToolName } from '../tools/tool-readable-name';
 
 
 /**
@@ -1665,7 +1666,7 @@ export class AgentStepProcessor {
           ? `${hit.summary}. On this call ${hit.argument} is not a number.`
           : `${hit.summary}. On this call ${hit.argument} is ${hit.value}.`,
       payload: {
-        tool: tool.name,
+        tool: readableToolName(tool as NamedTool),
         parameters,
         _gate: {
           policyId: hit.policyId,

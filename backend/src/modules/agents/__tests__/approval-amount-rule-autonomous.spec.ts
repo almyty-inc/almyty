@@ -75,8 +75,8 @@ describe('approval over an amount in an autonomous agent', () => {
     expect(asked).toMatchObject({
       runId: 'run-1',
       agentId: 'agent-1',
-      reason: 'Ask before issue_refund when amount is over 500. On this call amount is 820.',
-      payload: { tool: 'issue_refund', parameters: { amount: 820, order: 'NW-44120' }, _gate: { policyId: 'policy-refunds', value: 820 } },
+      reason: 'Ask before “Issue refund” when amount is over 500. On this call amount is 820.',
+      payload: { tool: 'Issue refund', parameters: { amount: 820, order: 'NW-44120' }, _gate: { policyId: 'policy-refunds', value: 820 } },
     });
     expect(result.run.workingMemory.gatedToolCalls).toHaveLength(1);
     expect(harness.audit.log).toHaveBeenCalledWith(expect.objectContaining({ status: 'held' }));

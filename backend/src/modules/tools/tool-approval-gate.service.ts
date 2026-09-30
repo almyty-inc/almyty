@@ -12,6 +12,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import { ToolExecutorService } from './tool-executor.service';
+import { NamedTool, readableToolName } from './tool-readable-name';
 
 /**
  * A tool call an approval policy's amount rule holds for a person:
@@ -206,7 +207,7 @@ export class ToolApprovalGateService implements OnModuleInit {
       fingerprint: hit.paramsHash,
       reason: `${hit.summary}. On this call ${why}.`,
       payload: {
-        tool: tool.name,
+        tool: readableToolName(tool as NamedTool),
         parameters,
         _gate: {
           policyId: hit.policyId,
@@ -273,7 +274,7 @@ export class ToolApprovalGateService implements OnModuleInit {
 
   /** The first enabled rule on this tool the call is over, highest priority first. */
   async check(
-    tool: { id: string; name: string },
+    tool: NamedTool & { id: string },
     params: unknown,
     context: GateContext,
   ): Promise<ApprovalGateHit | null> {
@@ -306,7 +307,8 @@ export class ToolApprovalGateService implements OnModuleInit {
       return {
         policyId: policy.id,
         policyName: policy.name,
-        summary: describeToolAmountRule({ ...trigger, toolName: tool.name }),
+        // The tool as people know it (its summary), in quotes: the sentence goes on the approval request.
+        summary: describeToolAmountRule({ ...trigger, toolName: `“${readableToolName(tool)}”` }),
         toolId: tool.id,
         toolName: tool.name,
         argument: trigger.argument,

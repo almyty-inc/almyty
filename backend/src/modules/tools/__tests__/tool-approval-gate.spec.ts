@@ -18,7 +18,7 @@ jest.mock('axios', () => {
 });
 
 /**
- * "Ask before issue_refund when amount is over 500": an approval policy's
+ * "Ask before “Issue refund” when amount is over 500": an approval policy's
  * amount rule, enforced by the tool executor itself, so no caller -- an
  * agent's model, a workflow node, a gateway -- can run the call around it.
  */
@@ -105,19 +105,19 @@ describe('approval over an amount at the tool call', () => {
         expect(asked).toMatchObject({
           runId: null,
           toolId: 'tool-refund',
-          reason: 'Ask before issue_refund when amount is over 500. On this call amount is 820.',
-          payload: { tool: 'issue_refund', parameters: { amount: 820, order: 'NW-44120' } },
+          reason: 'Ask before “Issue refund” when amount is over 500. On this call amount is 820.',
+          payload: { tool: 'Issue refund', parameters: { amount: 820, order: 'NW-44120' } },
         });
         expect(result).toMatchObject({ approvalId: asked.id, approvalStatus: 'pending' });
         expect(result.error).toBe(
-          `Waiting for approval: Ask before issue_refund when amount is over 500 (amount is 820). The call was not made yet; it runs once a person approves it in Approvals. Call again with _approvalId "${asked.id}" for the result.`,
+          `Waiting for approval: Ask before “Issue refund” when amount is over 500 (amount is 820). The call was not made yet; it runs once a person approves it in Approvals. Call again with _approvalId "${asked.id}" for the result.`,
         );
         expect(harness.audit.log).toHaveBeenCalledWith(
           expect.objectContaining({
             action: AuditAction.APPROVAL_GATE,
             resourceId: 'tool-refund',
             status: 'held',
-            details: expect.objectContaining({ rule: 'Ask before issue_refund when amount is over 500', value: 820 }),
+            details: expect.objectContaining({ rule: 'Ask before “Issue refund” when amount is over 500', value: 820 }),
           }),
         );
       });
@@ -176,7 +176,7 @@ describe('approval over an amount at the tool call', () => {
       it('only reports the rule; it raises the request', async () => {
         const result = await call({ amount: 820, order: 'NW-44120' }, { holdForApproval: 'caller' });
         expect(result.error).toBe(
-          'Needs approval: Ask before issue_refund when amount is over 500 (amount is 820). The call was not made.',
+          'Needs approval: Ask before “Issue refund” when amount is over 500 (amount is 820). The call was not made.',
         );
         expect(result.approvalRequired).toMatchObject({ policyId: 'policy-refunds', value: 820, amount: 500 });
         expect(harness.approvals.created).toHaveLength(0);

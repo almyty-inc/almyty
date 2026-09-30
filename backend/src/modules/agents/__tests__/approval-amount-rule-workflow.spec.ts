@@ -95,7 +95,7 @@ describe('approval over an amount in a workflow agent', () => {
     const execution = await run({ amount: 820, order: 'NW-44120' });
     // A workflow cannot pause: the run stops, and says it is waiting and on what.
     expect(execution.status).toBe(AgentExecutionStatus.FAILED);
-    expect(execution.error).toContain('Waiting for approval: Ask before issue_refund when amount is over 500 (amount is 820)');
+    expect(execution.error).toContain('Waiting for approval: Ask before “Issue refund” when amount is over 500 (amount is 820)');
     const refund = execution.nodeResults.refund;
     expect(refund.errorCode).toBe('AWAITING_APPROVAL');
     const [asked] = harness.approvals.created;
