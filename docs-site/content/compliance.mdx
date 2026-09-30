@@ -1,60 +1,70 @@
 # Compliance
 
-almyty is orchestration tooling: you bring your own models, build agents, and deploy them to your users. That split matters legally. Under the EU AI Act, the obligations of a *model provider* (OpenAI, Anthropic, Google, and others) stay with the model provider, and the obligations of a *deployer* sit with you, the organization putting an agent in front of people. almyty's job is to make meeting those obligations straightforward. This page maps what the platform gives you to what the regulations ask for, and is explicit about what remains your responsibility.
+This page is for whoever has to answer "are our AI assistants compliant?" It lists what almyty already does for you (telling people they are talking to an AI, asking a person before risky actions, keeping records, deleting old data) and what stays your job. For example: every web chat tells visitors it is an AI by default, and you can download a technical description of any agent to file with your own assessment.
 
-> **This page is not legal advice.** Compliance is assessed per deployment, not per tool. Use this mapping as the starting point for your own conformity assessment.
+> **This is not legal advice.** Compliance is judged per use, not per tool. Use this as a starting point for your own assessment.
+
+## Who is responsible for what
+
+almyty is the tool you build and run assistants with; you bring the AI models. Under the EU AI Act that split matters. The duties of a **model provider** (the company that makes the model you connect) stay with that company. The duties of a **deployer** (whoever puts an assistant in front of people) sit with you. almyty's job is to make your part easy.
 
 ## EU AI Act
 
-The AI Act classifies systems by risk. Most agents built on almyty (support assistants, internal automation, data pipelines) fall under **limited or minimal risk**, where the main obligation is transparency. If you deploy agents in an Annex III domain (employment screening, credit scoring, essential services, and similar), you are operating a **high-risk** system and the full deployer obligations apply.
+The AI Act sorts AI systems by risk. Most assistants built on almyty (support assistants, internal helpers, data jobs) are **limited or minimal risk**, where the main duty is to be open that people are talking to an AI. If you use an assistant in an area the Act lists as high-risk (screening job applicants, credit scoring, access to essential services and similar), the full set of deployer duties applies.
 
-### What the platform provides, article by article
+### What almyty gives you, requirement by requirement
 
-| AI Act requirement | almyty feature | Where |
+| What the Act asks | What almyty has | Where |
 |---|---|---|
-| **Art. 50, transparency**: people must be told they are interacting with an AI | Per-channel **AI disclosure** switch, on by default: the first reply of every conversation on a channel carries a disclosure line ("You are chatting with an AI assistant.", or the line set in the agent's branding). Turning it off needs the white-label entitlement | [Channels](/channels), [Hosted chat](/hosted-chat) |
-| **Art. 14, human oversight**: humans must be able to intervene | Built-in `request_approval` tool pauses any run for human sign-off; [approval policies](/enterprise/approval-policies) (multi-step, conditional, quorum) let you require multiple reviewers for sensitive actions | [Approvals](/approvals) |
-| **Art. 12, record-keeping**: automatic logging over the system lifetime | Every run stores its steps, tool calls, cost, and outcome; the audit log records sensitive actions; entity versioning keeps a change history of every agent, tool, and gateway | [Analytics](/analytics), agent run history |
-| **Annex IV, technical documentation** | One-click **technical documentation export** per agent: general description, models and parameters, tools and capabilities, oversight configuration, data governance, logging, and change history, as Markdown | Agent detail, **Tech doc** |
-| **Art. 9, risk management** | Guardrail constraints on agents, the pii-filter and security-scanner plugins, and (Enterprise) the [compliance pack](/enterprise/compliance-pack) that enforces them org-wide with a posture report | Agent constraints, [Plugins](/self-hosting) |
-| **Art. 15, robustness**: high-risk systems need appropriate accuracy, robustness and cybersecurity | Per-agent [run limits](/run-limits) bound steps, tokens, spend and wall clock, resolved min-wins so no agent can raise a ceiling set above it, with an operator-owned floor no in-product role can lift; inbound on every messaging channel is authenticated and fails closed | [Run limits](/run-limits), [Channels](/channels) |
-| **Art. 26, deployer duties** (use per instructions, monitor, retain logs) | Usage monitoring, [spend governance](/cost-governance), per-run traces, and audit retention/[export](/enterprise/audit-export) (Enterprise) give you the operational evidence | [Analytics](/analytics) |
+| **Art. 50, transparency**: tell people they are talking to an AI | An **AI disclosure** switch on every channel, on by default. The first reply of every conversation carries a line such as "You are chatting with an AI assistant." (or the line in the agent's branding). Turning it off needs the Enterprise plan's white-label feature | [Channels](/channels), [Hosted chat](/hosted-chat) |
+| **Art. 14, human oversight**: people can step in | An agent can pause and ask a person to approve before it acts. [Approval policies](/enterprise/approval-policies) can require several reviewers, in order, for sensitive actions | [Approvals](/approvals) |
+| **Art. 12, record-keeping** | Every run keeps its steps, tool calls, cost and outcome. The audit log records sensitive actions. Every agent, tool and gateway keeps a history of changes | [Analytics](/analytics), the agent's runs |
+| **Annex IV, technical documentation** | A one-click download per agent describing it: what it does, its models and settings, its tools, human oversight, data handling, logging and change history | The agent's page, **Tech doc** |
+| **Art. 9, risk management** | Rules (constraints) on each agent, filters that remove personal data or block risky input, and on Business and Enterprise plans the [compliance pack](/enterprise/compliance-pack), which makes those filters mandatory for the whole organization and reports on them | The agent's constraints, [Self-hosting](/self-hosting) |
+| **Art. 15, robustness** | [Run limits](/run-limits) on steps, spend and time that no agent can raise past what the organization or the operator set; every messaging channel checks that incoming messages really come from the platform, and refuses them when it cannot | [Run limits](/run-limits), [Channels](/channels) |
+| **Art. 26, deployer duties** (use as instructed, monitor, keep logs) | Usage monitoring, [spending limits](/cost-governance), a trace of every run, and on Business and Enterprise plans [audit export](/enterprise/audit-export) | [Analytics](/analytics) |
 
 ### What remains yours
 
-- **Risk classification.** Decide which tier each deployment falls into. almyty cannot know whether your agent screens job applicants.
-- **Conformity assessment and registration** for high-risk systems.
-- **Instructions for use** to your own users, and incident reporting to authorities where required.
-- **Model choice.** GPAI obligations rest with the model providers you bring keys for; check their AI Act documentation (transparency reports, training-data summaries) as inputs to your own file.
+- **Deciding the risk level** of each use. almyty cannot know whether your assistant screens job applicants.
+- **The conformity assessment and registration** for high-risk uses.
+- **Instructions for your own users**, and reporting incidents to authorities where required.
+- **Choosing models.** The model makers carry the duties for general-purpose models; read their AI Act documents as input for your own file.
 
 ## GDPR
 
-Agent conversations routinely contain personal data, so GDPR applies to almost every real deployment.
+Conversations with an assistant usually contain personal data, so GDPR applies to almost every real use.
 
-- **Minimization and filtering**: the pii-filter plugin can strip or mask personal data before it reaches a model or a log.
-- **Encryption**: credentials and provider secrets are AES-256-GCM encrypted at rest; self-hosters control the key (`ENCRYPTION_KEY`), and Enterprise adds customer-managed KMS keys.
-- **Erasure**: memory entries and conversations are deletable per record; deleting an agent removes its runs.
-- **Members of the public**: what a web chat or widget visitor leaves behind, where it goes and who can read it is spelled out in [Hosted chat app, What almyty stores about a visitor](/hosted-chat#what-almyty-stores-about-a-visitor). Visitors can delete and export their own data from the chat page unless the agent's visitor rules switch that off, visitor runs stay out of shared agent memory unless the agent opts in, a channel's visitor-data retention can only shorten the organization policy, and tenant chat hosts carry none of almyty's analytics.
+- **Less personal data**: the personal-data filter can remove or mask personal details before they reach a model or a log.
+- **Encryption**: keys and passwords you store in almyty are encrypted. Self-hosters hold the encryption key, and the Enterprise plan adds keys you manage in your own cloud account.
+- **Deleting**: memories and conversations can be deleted one by one; deleting an agent deletes its runs.
+- **Members of the public**: what a web chat or website bubble visitor leaves behind, where it goes and who can read it is spelled out in [Hosted chat app, What almyty stores about a visitor](/hosted-chat#what-almyty-stores-about-a-visitor). Visitors can delete and download their own data from the chat unless the agent's visitor rules turn that off. Visitor conversations stay out of the agent's shared memory unless the agent opts in. A channel's own retention can only be shorter than the organization's, and chat pages carry none of almyty's analytics.
+- **How long data is kept**: admins set a period (1 to 3650 days) for agent runs, conversations, request logs, usage metrics and the audit log in the **Data retention** card under **Settings → Organization → Details**. An hourly clean-up deletes records older than that for good. It never touches runs that are still going or waiting for approval, and it records what it removed in the audit log. Empty fields keep records forever.
+- **Your side**: a record-of-processing entry for each assistant, a lawful basis for the data it handles, and data-processing agreements with your model vendors (you send them conversations under your own keys). Self-hosting in your own EU infrastructure keeps where data lives entirely in your hands.
 
-- **Retention**: configurable per organization. Admins set independent retention periods (1 to 3650 days) for agent runs, conversations, request logs, usage metrics, and the audit log in the **Data retention** card under Settings, Organization. An hourly sweep permanently deletes records older than each period (never touching runs that are still executing or awaiting approval) and records a `retention_sweep` audit entry with per-class counts. Fields left empty keep records indefinitely.
-- **Your side**: a records-of-processing entry for each agent, a lawful basis for the data it handles, and data-processing agreements with your model providers (you are sending them conversation content under your own API keys). Self-hosting in your own EU infrastructure keeps residency entirely in your hands.
+## Other rules worth knowing
 
-## Other regimes worth knowing
-
-| Regime | Applies when | Relevant almyty capabilities |
+| Rule | Applies when | What helps |
 |---|---|---|
-| **Cyber Resilience Act** (EU, phasing in to 2027) | You distribute or sell software with digital elements in the EU, including a commercial almyty-based product | Dependency-audit and secret-scanning gates in CI, security-scanner plugin; publish your own vulnerability-disclosure policy and SBOM |
-| **NIS2** | Your customers are in essential/important sectors and flow supply-chain security requirements down to you | [SSO/SAML + SCIM](/enterprise/sso), [RBAC](/enterprise/advanced-rbac), [audit export to SIEM](/enterprise/audit-export) (all Enterprise) are the standard answers to those questionnaires |
-| **DORA** | Financial-sector customers in the EU | Audit trails, exit-friendly data export, incident evidence from run logs |
-| **SOC 2 / ISO 27001** | Enterprise sales, not law | The technical prerequisites (SSO, RBAC, audit logging, encryption at rest, change history) ship with the platform; the certification process is organizational |
-| **ePrivacy** | You embed the chat widget on a public site | The widget sets no tracking cookies by default; consent is only needed for what you add around it |
+| **Cyber Resilience Act** (EU, phasing in to 2027) | You sell software in the EU, including a product built on almyty | Dependency checks and secret scanning in almyty's own build pipeline, the security-scanner filter; publish your own vulnerability-disclosure policy and software bill of materials |
+| **NIS2** | Your customers are in essential or important sectors and pass supply-chain security demands on to you | [Single sign-on and automatic user provisioning](/enterprise/sso), [custom roles](/enterprise/advanced-rbac), [audit export to your security tools](/enterprise/audit-export) (Business and Enterprise plans) are the usual answers |
+| **DORA** | Financial-sector customers in the EU | Audit trails, data export if you leave, incident evidence from run logs |
+| **SOC 2 / ISO 27001** | Enterprise sales (not law) | The technical basics (single sign-on, roles, audit logging, encryption, change history) are in the product; certification itself is an organizational process |
+| **ePrivacy** | You put the chat bubble on a public website | The bubble sets no tracking cookies by default; consent is only needed for what you add around it |
 
-## Practical checklist for a new deployment
+## Checklist for a new assistant
 
-1. Classify the use case (minimal / limited / high-risk).
-2. Keep **AI disclosure** on for every channel people reach (it is on by default).
-3. Configure `request_approval` (and [approval policies](/enterprise/approval-policies)) for consequential actions.
-4. Export the agent's **technical documentation** and file it with your assessment.
-5. Enable the pii-filter where conversations may contain personal data.
-6. Set retention and review the audit/run logs as part of your monitoring duty.
-7. Set [run limits](/run-limits) on any agent facing the public, so a single conversation cannot exhaust your budget. Every run records the ceilings that actually applied to it.
+1. Decide the risk level of the use (minimal, limited or high).
+2. Keep **AI disclosure** on for every channel people use (it is on by default).
+3. Make the agent ask for [approval](/approvals) before consequential actions, and add [approval policies](/enterprise/approval-policies) where you need more than one reviewer.
+4. Download the agent's **Tech doc** and file it with your assessment.
+5. Turn on the personal-data filter where conversations may contain personal data.
+6. Set how long data is kept, and review the audit log and runs as part of your monitoring.
+7. Set [run limits](/run-limits) on any assistant open to the public, so one conversation cannot use up your budget. Every run records the limits that applied to it.
+
+## For developers
+
+- Human oversight is the built-in `request_approval` tool: the run pauses until a reviewer decides.
+- The personal-data and security filters are the `pii-filter` and `security-scanner` plugins; see [Self-hosting](/self-hosting) for plugins.
+- Credentials and provider secrets are encrypted at rest with AES-256-GCM. Self-hosters set the key with `ENCRYPTION_KEY`; the Enterprise `byo_kms` entitlement adds customer-managed AWS KMS keys (see [Enterprise](/enterprise#customer-managed-keys)).
+- The retention sweep records a `retention_sweep` audit entry with counts per data class.
