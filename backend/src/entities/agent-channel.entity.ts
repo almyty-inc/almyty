@@ -111,6 +111,11 @@ export interface ChannelBranding {
   primaryColor?: string;
   logoUrl?: string | null;
   iconUrl?: string | null;
+  /**
+   * The app icon uploaded on the branding page: a PNG in this
+   * organization's files. Desktop builds use it before iconUrl.
+   */
+  iconFileId?: string | null;
   greeting?: string;
   theme?: 'dark' | 'light' | 'auto';
   suggestedPrompts?: string[];

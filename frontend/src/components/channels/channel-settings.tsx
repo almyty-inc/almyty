@@ -636,7 +636,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
           </div>
           {own && (
             <div className="space-y-6" data-testid="channel-own-settings">
-              <PublicSettingsFields form={overrideForm} onChange={setOverrideForm} idPrefix="channel" scope="channel" />
+              <PublicSettingsFields form={overrideForm} onChange={setOverrideForm} idPrefix="channel" scope="channel" agentId={agent.id} />
             </div>
           )}
         </FormSection>

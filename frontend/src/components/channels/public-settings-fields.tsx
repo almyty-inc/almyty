@@ -2,6 +2,7 @@ import { Globe, KeyRound, Mail, Plus, ShieldCheck, X } from 'lucide-react'
 import { useState } from 'react'
 
 import { Field, FormSection } from '@/components/layout/form-page'
+import { AppIconField } from '@/components/channels/app-icon-field'
 import { ChoiceTile, ChoiceTiles } from '@/components/connect/service-tiles'
 import { Button } from '@/components/ui/button'
 import { Disclosure } from '@/components/ui/disclosure'
@@ -43,6 +44,8 @@ export interface PublicSettingsForm {
   appName: string
   primaryColor: string
   theme: NonNullable<ChannelBranding['theme']>
+  /** The uploaded app icon's file id; null for none. */
+  iconFileId: string | null
   greeting: string
   prompts: string[]
   aiDisclosure: string
@@ -70,6 +73,7 @@ export function formFromEffective(effective: EffectiveSettings): PublicSettingsF
     appName: b.appName ?? '',
     primaryColor: b.primaryColor ?? '#8b5cf6',
     theme: b.theme ?? 'auto',
+    iconFileId: b.iconFileId ?? null,
     greeting: b.greeting ?? '',
     prompts: b.suggestedPrompts ?? [],
     aiDisclosure: b.aiDisclosure ?? '',
@@ -99,6 +103,8 @@ export function settingsFromForm(form: PublicSettingsForm): { branding: ChannelB
       appName: form.appName.trim(),
       primaryColor: form.primaryColor,
       theme: form.theme,
+      // Null removes an uploaded icon; the server checks the id is this organization's PNG.
+      iconFileId: form.iconFileId,
       greeting: form.greeting,
       suggestedPrompts: form.prompts,
       // Null means the default wording; an empty string is a deliberate
@@ -191,6 +197,8 @@ export interface PublicSettingsFieldsProps {
   idPrefix?: string
   /** What the spend limits apply to, in the sentence under them. */
   scope?: 'agent' | 'channel'
+  /** The agent an uploaded app icon is filed under. */
+  agentId?: string
 }
 
 /**
@@ -199,7 +207,7 @@ export interface PublicSettingsFieldsProps {
  * fields for an agent (what every channel inherits) and for one channel
  * (its own).
  */
-export function PublicSettingsFields({ form, onChange, idPrefix = 'ps', scope = 'agent' }: PublicSettingsFieldsProps) {
+export function PublicSettingsFields({ form, onChange, idPrefix = 'ps', scope = 'agent', agentId }: PublicSettingsFieldsProps) {
   const entitlements = useEntitlements()
   const canWhiteLabel = entitlements.has('white_label')
   const [promptDraft, setPromptDraft] = useState('')
@@ -246,6 +254,9 @@ export function PublicSettingsFields({ form, onChange, idPrefix = 'ps', scope = 
             </Select>
           </Field>
         </div>
+        <Field id={id('icon')} label="App icon">
+          <AppIconField id={id('icon')} value={form.iconFileId} onChange={(fileId) => set('iconFileId', fileId)} agentId={agentId} />
+        </Field>
         <Field id={id('greeting')} label="Greeting">
           <Textarea id={id('greeting')} value={form.greeting} onChange={(e) => set('greeting', e.target.value)} rows={2} placeholder="How can we help?" />
         </Field>

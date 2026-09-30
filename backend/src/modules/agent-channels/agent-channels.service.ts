@@ -28,6 +28,8 @@ import { EE_ENTITLEMENTS } from '../licensing/license.constants';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { channelSecretKeysIn } from '../gateways/channels/channel-config.helper';
 import { ChannelPolicyService, SpendStatus } from '../gateways/channel-policy.service';
+import { FilesService } from '../files/files.service';
+import { MAX_ICON_BYTES } from './build-icon';
 import {
   ChannelCheck,
   ChannelContext,
@@ -141,6 +143,10 @@ export class AgentChannelsService {
     private readonly credentialRefs?: CredentialRefResolver,
     // The spend caps and what the agent has spent against them.
     private readonly policy?: ChannelPolicyService,
+    // The organization's files, where an uploaded app icon is kept. Without
+    // it an uploaded icon is refused.
+    @Optional()
+    private readonly files?: FilesService,
   ) {}
 
   // ─── Agents ──────────────────────────────────────────────────────────
@@ -186,6 +192,7 @@ export class AgentChannelsService {
     } catch (err: any) {
       throw new BadRequestException(err?.message ?? 'Those settings are not valid.');
     }
+    await this.assertIconFile(organizationId, agent.branding);
     // Only these two columns: an agent save touches its version history
     // and a whole-row save would race the agent editor.
     await this.agentRepository.update(
@@ -262,7 +269,7 @@ export class AgentChannelsService {
 
     const slug = SLUGGED_CHANNEL_TYPES.includes(input.type) ? await this.freeSlug(agent, input.type, input.slug) : null;
     const name = await this.freeName(agent, input.type, input.name);
-    const overrides = this.normalizedOverrides(input);
+    const overrides = await this.normalizedOverrides(organizationId, input);
 
     let configuration: Record<string, any> = this.withoutKeys(input.configuration);
     await this.assertDisclosureSwitch(agent, input.type, configuration);
@@ -307,7 +314,7 @@ export class AgentChannelsService {
   ): Promise<ChannelView> {
     const agent = await this.manageableAgent(organizationId, agentId, caller);
     const channel = await this.channelOf(organizationId, agent, channelId);
-    const overrides = this.normalizedOverrides(input);
+    const overrides = await this.normalizedOverrides(organizationId, input);
     if (input.name !== undefined && input.name.trim() !== channel.name) {
       channel.name = await this.freeName(agent, channel.type, input.name, channel.id);
     }
@@ -485,18 +492,37 @@ export class AgentChannelsService {
 
   // ─── Internals ───────────────────────────────────────────────────────
 
-  private normalizedOverrides(input: { branding?: unknown; visitorRules?: unknown }): {
+  private async normalizedOverrides(organizationId: string, input: { branding?: unknown; visitorRules?: unknown }): Promise<{
     branding?: ChannelBranding | null;
     visitorRules?: VisitorRules | null;
-  } {
+  }> {
+    let out: { branding?: ChannelBranding | null; visitorRules?: VisitorRules | null };
     try {
-      return {
+      out = {
         ...(input.branding !== undefined ? { branding: normalizeBranding(input.branding) } : {}),
         ...(input.visitorRules !== undefined ? { visitorRules: normalizeVisitorRules(input.visitorRules) } : {}),
       };
     } catch (err: any) {
       throw new BadRequestException(err?.message ?? 'Those settings are not valid.');
     }
+    await this.assertIconFile(organizationId, out.branding);
+    return out;
+  }
+
+  /**
+   * The uploaded app icon has to be this organization's file, a PNG (the
+   * branding page converts a JPG or WebP to one before uploading), and no
+   * bigger than a build takes. Anything else would only be found out when
+   * a desktop build ships with the default icon.
+   */
+  private async assertIconFile(organizationId: string, branding: ChannelBranding | null | undefined): Promise<void> {
+    const fileId = branding?.iconFileId;
+    if (!fileId) return;
+    if (!this.files) throw new BadRequestException('App icons cannot be uploaded on this server.');
+    const file = await this.files.findById(fileId, organizationId).catch(() => null);
+    if (!file) throw new BadRequestException('That icon was not found. Upload it again.');
+    if (file.mimeType !== 'image/png') throw new BadRequestException('The app icon has to be a PNG.');
+    if (file.size > MAX_ICON_BYTES) throw new BadRequestException('The app icon is larger than 4 MB.');
   }
 
   /**
