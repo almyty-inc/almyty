@@ -55,7 +55,7 @@ import { execStatusVariant, diffObjects, formatDiffValue } from './constants'
 import { IntegrationSnippets } from './integration-snippets'
 import { AgentConfigPanel } from './agent-config-panel'
 import { ExecutionRouting } from './routing-attribution'
-import { DeliveryNote, ScheduleCard } from './schedule-card'
+import { DeliveryNote, HeldCallNote, ScheduleCard } from './schedule-card'
 import { modelsApi } from '@/lib/models-api'
 import { invokeAndSettle, runOutcome } from '@/lib/agent-run'
 import type { Agent, AgentExecution, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
@@ -315,6 +315,7 @@ export function OverviewTab({
                           {exec.status}
                         </Badge>
                         <DeliveryNote outcome={exec.metadata?.channelDelivery} />
+                        <HeldCallNote execution={exec} />
                       </TableCell>
                       <TableCell className="max-w-[320px]">
                         <ExecutionRouting nodeResults={exec.nodeResults} cardNames={cardNames} />

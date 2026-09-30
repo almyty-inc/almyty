@@ -18,7 +18,7 @@ const notify = { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn
 vi.mock('@/store/app', () => ({ useNotifications: () => notify }))
 
 import { agentsApi } from '@/lib/api'
-import { DeliveryNote, ScheduleCard } from '../schedule-card'
+import { DeliveryNote, HeldCallNote, ScheduleCard } from '../schedule-card'
 
 const api = agentsApi as unknown as Record<string, ReturnType<typeof vi.fn>>
 
@@ -75,6 +75,27 @@ describe('ScheduleCard', () => {
     expect(screen.getByTestId('schedule-card-summary')).toHaveTextContent('Off: Every weekday at 8:00, Europe/Berlin')
     await user.click(screen.getByRole('switch'))
     await waitFor(() => expect(api.schedule).toHaveBeenCalledWith('a1', weekdays))
+  })
+})
+
+describe('HeldCallNote', () => {
+  it('says a workflow run is waiting on an approval, and where to give it', () => {
+    render(
+      <MemoryRouter>
+        <HeldCallNote execution={{ nodeResults: { refund: { errorCode: 'AWAITING_APPROVAL', input: { approvalId: 'ap-1' } } } }} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText(/waiting for a person to approve it/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'See what is waiting' })).toHaveAttribute('href', '/approvals')
+  })
+
+  it('says nothing about a run that failed for another reason, or finished', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <HeldCallNote execution={{ nodeResults: { refund: { errorCode: 'MODEL_NOT_FOUND' }, out: { output: 'x' } } }} />
+      </MemoryRouter>,
+    )
+    expect(container).toBeEmptyDOMElement()
   })
 })
 

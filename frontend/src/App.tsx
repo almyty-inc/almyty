@@ -70,6 +70,7 @@ const MemoryMoveDetailPage = lazy(() => import('@/pages/memory-accounts').then(m
 const MemoryAccountNewPage = lazy(() => import('@/pages/memory-accounts').then(m => ({ default: m.MemoryAccountNewPage })))
 const AnalyticsBudgetPage = lazy(() => import('@/pages/analytics-budget').then(m => ({ default: m.AnalyticsBudgetPage })))
 const ApprovalPolicyPage = lazy(() => import('@/pages/approval-policy').then(m => ({ default: m.ApprovalPolicyPage })))
+const ApprovalRulePage = lazy(() => import('@/pages/approval-rule').then(m => ({ default: m.ApprovalRulePage })))
 const CredentialDetailRoutePage = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.CredentialDetailRoutePage })))
 const CustomServiceNewPage = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.CustomServiceNewPage })))
 const CredentialPolicyPage = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.CredentialPolicyPage })))
@@ -223,6 +224,8 @@ export function createAppRoutes() {
           <Route path="/memories/accounts/new" element={<MemoryAccountNewPage />} />
           <Route path="/settings/approvals/policies/new" element={<ApprovalPolicyPage />} />
           <Route path="/settings/approvals/policies/:policyId" element={<ApprovalPolicyPage />} />
+          <Route path="/settings/approvals/rules/new" element={<ApprovalRulePage />} />
+          <Route path="/settings/approvals/rules/:ruleId" element={<ApprovalRulePage />} />
           <Route path="/settings/*" element={<SettingsPage />} />
           {/* /credentials?connection=<id> is where a sign-in at a service comes back. */}
           <Route path="/credentials" element={<CredentialsPage />} />

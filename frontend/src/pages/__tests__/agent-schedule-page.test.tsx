@@ -176,6 +176,47 @@ describe('/agents/:id/schedule', () => {
     expect(screen.getByRole('option', { name: /add a webhook URL first/ })).toHaveAttribute('aria-disabled', 'true')
   })
 
+  it('asks an autonomous agent in words what to do each time', async () => {
+    const user = userEvent.setup()
+    api.getById.mockResolvedValue({ ...agent(), mode: 'autonomous' })
+    renderAtRoute(<AgentSchedulePage />, AT)
+    await screen.findByRole('heading', { name: 'Set up a schedule' })
+    expect(screen.queryByLabelText('Input JSON')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save schedule' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Say what it should do each time.')
+
+    await user.type(screen.getByLabelText('Message'), 'Summarise yesterday.')
+    await user.click(screen.getByRole('button', { name: 'Save schedule' }))
+    await waitFor(() => expect(api.schedule).toHaveBeenCalledWith('a1', expect.objectContaining({ input: { message: 'Summarise yesterday.' } })))
+  })
+
+  it('runs on the last day of every month', async () => {
+    const user = userEvent.setup()
+    renderAtRoute(<AgentSchedulePage />, AT)
+    await screen.findByRole('heading', { name: 'Set up a schedule' })
+    await pick(user, 'Repeat', 'Once a month')
+    await pick(user, 'Day of the month', 'Last day of the month')
+    expect(screen.getByTestId('schedule-summary')).toHaveTextContent('On the last day of every month at 9:00, Europe/Berlin')
+    await user.click(screen.getByRole('button', { name: 'Save schedule' }))
+    await waitFor(() => expect(api.schedule).toHaveBeenCalledWith('a1', expect.objectContaining({ kind: 'monthly', dayOfMonth: 'last' })))
+  })
+
+  it('shows Slack channels by name, and takes a channel ID under Other', async () => {
+    const user = userEvent.setup()
+    renderAtRoute(<AgentSchedulePage />, AT)
+    await screen.findByRole('heading', { name: 'Set up a schedule' })
+    await pick(user, 'Where', /Sales Slack/)
+    await user.click(screen.getByRole('combobox', { name: 'Slack channel' }))
+    expect(await screen.findByRole('option', { name: '#sales' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'C0123ABCDEF' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: 'Other (enter its ID)' }))
+    await user.type(screen.getByLabelText('Other slack channel'), 'C0999SUPPORT')
+    await user.click(screen.getByRole('button', { name: 'Save schedule' }))
+    await waitFor(() =>
+      expect(api.schedule).toHaveBeenCalledWith('a1', expect.objectContaining({ deliverTo: { kind: 'channel', channelId: 'ch-slack', to: 'C0999SUPPORT' } })),
+    )
+  })
+
   it('opens a saved monthly schedule as it was, and keeps every few minutes working', async () => {
     const user = userEvent.setup()
     api.getById.mockResolvedValue(

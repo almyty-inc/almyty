@@ -20,6 +20,7 @@ import { WithAgent } from '@/components/channels/channel-page-loader'
 import { TimeZoneSelect, browserTimeZone } from '@/components/settings/time-zone-select'
 import { CodeEditor } from '@/components/ui/code-editor'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -54,7 +55,7 @@ function channelLabel(c: PostChannelOption): string {
   const platform = CHANNEL_LABELS[c.type as keyof typeof CHANNEL_LABELS] ?? c.type
   return c.name === platform ? c.name : `${c.name} (${platform})`
 }
-/** "Enter another" in a destination list. */
+/** "Other (enter its ID)" in a destination list. */
 const ENTER_OWN = '__enter__'
 
 export interface ScheduleForm {
@@ -62,7 +63,7 @@ export interface ScheduleForm {
   time: string
   dayChoice: DayChoice
   days: number[]
-  dayOfMonth: number
+  dayOfMonth: number | 'last'
   timezone: string
   every: number
   unit: 'minutes' | 'hours'
@@ -72,6 +73,8 @@ export interface ScheduleForm {
   /** The destination typed. */
   typed: string
   input: string
+  /** An autonomous agent's input: what it is asked each run. */
+  message: string
 }
 
 /** The form a stored schedule opens as; a new one starts at weekdays, 9:00, in the person's zone. */
@@ -94,6 +97,7 @@ export function formFromSchedule(schedule: AgentSchedule | null | undefined, zon
     pick: deliverTo?.kind === 'channel' ? (deliverTo.to ?? '') : '',
     typed: deliverTo?.kind === 'channel' ? (deliverTo.to ?? '') : '',
     input: JSON.stringify(schedule?.input ?? {}, null, 2),
+    message: typeof schedule?.input?.message === 'string' ? schedule.input.message : '',
   }
 }
 
@@ -123,16 +127,21 @@ function typesDestination(channel: PostChannelOption | undefined, form: Schedule
   return false
 }
 
-/** The whole request, or the sentence that says what is missing. */
 export function requestFromForm(
   form: ScheduleForm,
   options: DeliveryOptions | undefined,
+  autonomous = false,
 ): { request?: ScheduleRequest; error?: string } {
   let input: Record<string, any>
-  try {
-    input = form.input.trim() ? JSON.parse(form.input) : {}
-  } catch {
-    return { error: 'What the agent is given has to be valid JSON, or {} for nothing.' }
+  if (autonomous) {
+    if (!form.message.trim()) return { error: 'Say what it should do each time.' }
+    input = { message: form.message.trim() }
+  } else {
+    try {
+      input = form.input.trim() ? JSON.parse(form.input) : {}
+    } catch {
+      return { error: 'What the agent is given has to be valid JSON, or {} for nothing.' }
+    }
   }
   if (form.kind === 'interval' && !(form.every >= 1)) return { error: 'Choose how often it runs.' }
   if (form.kind === 'days' && daysOf(form).length === 0) return { error: 'Pick at least one day.' }
@@ -179,6 +188,8 @@ function SchedulePage({ agent, zone }: { agent: Agent; zone: string }) {
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
   const back = `/agents/${agent.id}`
+  // An autonomous agent is asked in words; a workflow is given JSON input.
+  const autonomous = agent.mode === 'autonomous'
   const initial = useMemo(() => formFromSchedule(agent.settings?.schedule, zone), [agent, zone])
   const [form, setForm] = useState<ScheduleForm>(initial)
   const [problem, setProblem] = useState<string | null>(null)
@@ -221,7 +232,7 @@ function SchedulePage({ agent, zone }: { agent: Agent; zone: string }) {
   })
 
   const submit = () => {
-    const { request, error } = requestFromForm(form, options.data)
+    const { request, error } = requestFromForm(form, options.data, autonomous)
     if (!request) {
       setProblem(error ?? 'Something is missing.')
       return
@@ -296,8 +307,8 @@ function SchedulePage({ agent, zone }: { agent: Agent; zone: string }) {
         )}
 
         {form.kind === 'monthly' && (
-          <Field id="schedule-day-of-month" label="Day of the month" hint="Up to the 28th, so it runs every month.">
-            <Select value={String(form.dayOfMonth)} onValueChange={(v) => set({ dayOfMonth: Number(v) })}>
+          <Field id="schedule-day-of-month" label="Day of the month" hint="The 29th to the 31st are missing in some months, so pick the last day for the end of every month.">
+            <Select value={String(form.dayOfMonth)} onValueChange={(v) => set({ dayOfMonth: v === 'last' ? 'last' : Number(v) })}>
               <SelectTrigger id="schedule-day-of-month">
                 <SelectValue />
               </SelectTrigger>
@@ -307,6 +318,7 @@ function SchedulePage({ agent, zone }: { agent: Agent; zone: string }) {
                     {d}
                   </SelectItem>
                 ))}
+                <SelectItem value="last">Last day of the month</SelectItem>
               </SelectContent>
             </Select>
           </Field>
@@ -405,7 +417,7 @@ function SchedulePage({ agent, zone }: { agent: Agent; zone: string }) {
                     {d.label}
                   </SelectItem>
                 ))}
-                {channel.choose === 'pick_or_enter' && <SelectItem value={ENTER_OWN}>Enter another</SelectItem>}
+                {channel.choose === 'pick_or_enter' && <SelectItem value={ENTER_OWN}>Other (enter its ID)</SelectItem>}
               </SelectContent>
             </Select>
           </Field>
@@ -431,12 +443,29 @@ function SchedulePage({ agent, zone }: { agent: Agent; zone: string }) {
         )}
       </FormSection>
 
-      <FormSection
-        title="What the agent is given"
-        description="The same input every run, written as JSON. Leave {} if the agent needs nothing."
-      >
-        <CodeEditor value={form.input} onChange={(value) => set({ input: value })} language="json" height="100px" />
-      </FormSection>
+      {autonomous ? (
+        <FormSection
+          title="What it should do each time"
+          description="Written the way you would ask it in a chat. The agent gets this message on every run."
+        >
+          <Field id="schedule-message" label="Message">
+            <Textarea
+              id="schedule-message"
+              rows={4}
+              placeholder="Summarise yesterday's sales and point out anything unusual."
+              value={form.message}
+              onChange={(e) => set({ message: e.target.value })}
+            />
+          </Field>
+        </FormSection>
+      ) : (
+        <FormSection
+          title="What the agent is given"
+          description="The same input every run, written as JSON. Leave {} if the agent needs nothing."
+        >
+          <CodeEditor value={form.input} onChange={(value) => set({ input: value })} language="json" height="100px" />
+        </FormSection>
+      )}
 
       {problem && (
         <p role="alert" className="text-sm text-destructive">

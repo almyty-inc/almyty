@@ -246,6 +246,10 @@ export class ScheduledPostService implements ScheduledResultPoster {
       if (!known) throw new BadRequestException(`Choose a ${target.noun.toLowerCase()} from the list.`);
       context = known.context;
       label = known.label;
+    } else if (target.choose === 'pick_or_enter' && label === to) {
+      // A typed ID the channel knows by name reads as that name (#sales), not the ID.
+      const known = await this.knownDestinations(gateway!).catch(() => [] as PostDestination[]);
+      label = known.find((d) => d.to === to)?.label ?? label;
     }
     return { kind: 'channel', channelId: channel.id, to, label, ...(context ? { context } : {}) };
   }

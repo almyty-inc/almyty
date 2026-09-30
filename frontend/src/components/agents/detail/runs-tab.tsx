@@ -31,6 +31,7 @@ import { VerifyStepCard, VerifySummary } from './verify-step'
 import { PromoteRunSection } from './promote-run-section'
 import { RouteTraceTimeline } from './route-trace-timeline'
 import { RoleCostTable, StepRoleLine, hasStepSummary, stepSummary } from './run-roles'
+import { DeliveryNote } from './schedule-card'
 
 interface RunsTabProps {
   runs: AgentRun[]
@@ -111,6 +112,7 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                           {run.status === 'running' && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
                           {run.status.replace('_', ' ')}
                         </Badge>
+                        <DeliveryNote outcome={run.metadata?.channelDelivery} />
                       </TableCell>
                       <TableCell className="text-sm max-w-[200px] truncate">
                         {run.input ? JSON.stringify(run.input).slice(0, 80) : '--'}

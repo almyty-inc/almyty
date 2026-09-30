@@ -1372,6 +1372,25 @@ export const approvalPoliciesApi = {
   delete: (id: string) => apiDel(`/approval-policies/${id}`),
 }
 
+/** An amount rule as the free rules endpoints take it (backend AmountRulesService). */
+export interface UpsertAmountRule {
+  name?: string
+  description?: string | null
+  teamId?: string | null
+  enabled?: boolean
+  trigger?: ApprovalToolAmountTrigger
+  /** Business plan only; without it one approval decides. */
+  steps?: ApprovalStep[]
+}
+
+/** Amount rules ("ask before refunds over 500"): free for every organization. */
+export const approvalRulesApi = {
+  list: () => apiGet<ApprovalPolicy[]>('/approval-rules'),
+  getById: (id: string) => apiGet<ApprovalPolicy>(`/approval-rules/${id}`),
+  create: (data: UpsertAmountRule) => apiPost<ApprovalPolicy>('/approval-rules', data),
+  update: (id: string, data: UpsertAmountRule) => apiPatch<ApprovalPolicy>(`/approval-rules/${id}`, data),
+  delete: (id: string) => apiDel(`/approval-rules/${id}`),
+}
 /**
  * Mirrors backend/src/modules/onboarding/dto/onboarding.dto.ts. Every step
  * is computed server-side from what exists in the org, never from a box

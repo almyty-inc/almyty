@@ -12,7 +12,7 @@ import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { Plus, ShieldCheck, Trash2 } from 'lucide-react'
 
 import { Field, FormPage, FormSection } from '@/components/layout/form-page'
@@ -36,7 +36,9 @@ import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { approvalPoliciesApi, type ApprovalPolicy, type UpsertApprovalPolicy } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
-import { AmountRuleFields } from './approval-amount-rule'
+import { useOrganizationStore } from '@/store/organization'
+import { Disclosure } from '@/components/ui/disclosure'
+import { VisibilityField } from '@/components/ui/visibility-field'
 
 export const APPROVAL_POLICIES_PATH = '/settings/approvals'
 
@@ -70,31 +72,15 @@ const stepSchema = z.object({
     .min(1, 'Must be at least 1'),
 })
 
-export const approvalPolicySchema = z
-  .object({
-    name: z.string().min(1, 'Name is required').max(128, 'Max 128 characters'),
-    description: z.string().optional(),
-    teamId: z.string().optional(),
-    priority: z.number({ message: 'Must be a number' }).int(),
-    enabled: z.boolean(),
-    match: z.array(conditionSchema),
-    steps: z.array(stepSchema).min(1, 'Add at least one approval step'),
-    /** 'amount': the policy's amount rule asks at the tool call. 'agent': it governs what agents ask. */
-    when: z.enum(['agent', 'amount']),
-    toolId: z.string(),
-    argument: z.string(),
-    op: z.enum(['gt', 'gte']),
-    amount: z.string(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.when !== 'amount') return
-    if (!data.toolId) ctx.addIssue({ code: 'custom', path: ['toolId'], message: 'Choose the tool' })
-    if (!data.argument) ctx.addIssue({ code: 'custom', path: ['argument'], message: 'Choose the number to compare' })
-    const amount = Number(data.amount)
-    if (data.amount.trim() === '' || !Number.isFinite(amount) || amount < 0) {
-      ctx.addIssue({ code: 'custom', path: ['amount'], message: 'Enter an amount of 0 or more' })
-    }
-  })
+export const approvalPolicySchema = z.object({
+  name: z.string().min(1, 'Name is required').max(128, 'Max 128 characters'),
+  description: z.string().optional(),
+  teamId: z.string().optional(),
+  priority: z.number({ message: 'Must be a number' }).int(),
+  enabled: z.boolean(),
+  match: z.array(conditionSchema),
+  steps: z.array(stepSchema).min(1, 'Add at least one approval step'),
+})
 
 export type ApprovalPolicyFormValues = z.infer<typeof approvalPolicySchema>
 
@@ -134,6 +120,7 @@ export interface ApprovalPolicyFormProps {
 }
 
 export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolicyFormProps) {
+  const { currentOrganization } = useOrganizationStore()
   const form = useForm<ApprovalPolicyFormValues>({
     resolver: zodResolver(approvalPolicySchema),
     defaultValues: {
@@ -151,11 +138,6 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
         policy?.steps && policy.steps.length > 0
           ? policy.steps.map((s) => ({ ...s }))
           : [{ name: '', approverRole: '*', minApprovals: 1 }],
-      when: policy?.trigger ? 'amount' : 'agent',
-      toolId: policy?.trigger?.toolId ?? '',
-      argument: policy?.trigger?.argument ?? '',
-      op: policy?.trigger?.op ?? 'gt',
-      amount: policy?.trigger ? String(policy.trigger.amount) : '',
     },
   })
   const guard = useLeaveGuard(form.formState.isDirty)
@@ -170,20 +152,11 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
       teamId: data.teamId?.trim() ? data.teamId.trim() : null,
       priority: data.priority,
       enabled: data.enabled,
-      // A policy with an amount rule asks on its own at the tool call; the
-      // conditions only select requests an agent raises itself.
-      match:
-        data.when === 'amount'
-          ? []
-          : data.match.map((c) => ({
-              attr: c.attr.trim(),
-              op: c.op,
-              value: coerceValue(c.op, c.value),
-            })),
-      trigger:
-        data.when === 'amount'
-          ? { kind: 'tool_amount', toolId: data.toolId, argument: data.argument, op: data.op, amount: Number(data.amount) }
-          : null,
+      match: data.match.map((c) => ({
+        attr: c.attr.trim(),
+        op: c.op,
+        value: coerceValue(c.op, c.value),
+      })),
       steps: data.steps.map((s) => ({
         name: s.name.trim(),
         approverRole: s.approverRole.trim(),
@@ -200,7 +173,6 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
   }
 
   const errors = form.formState.errors
-  const when = form.watch('when')
 
   return (
     <FormPage
@@ -219,19 +191,17 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
         <Field id="policy-description" label="Description">
           <Textarea placeholder="Why this policy exists (optional)" {...form.register('description')} />
         </Field>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field
-            id="policy-priority"
-            label="Priority"
-            hint="Highest priority wins when several policies match."
-            error={errors.priority?.message}
-          >
-            <Input type="number" {...form.register('priority', { valueAsNumber: true })} />
-          </Field>
-          <Field id="policy-team" label="Team ID (optional)" hint="Settings > Members & teams shows each team's ID.">
-            <Input placeholder="Scope to a team" {...form.register('teamId')} />
-          </Field>
-        </div>
+        <VisibilityField
+          organizationId={currentOrganization?.id ?? ''}
+          options={['org', 'team']}
+          label="Which agents it applies to"
+          descriptions={{
+            org: 'Requests from every agent in the organization.',
+            team: "Only requests from the team's agents.",
+          }}
+          value={{ visibility: form.watch('teamId') ? 'team' : 'org', teamId: form.watch('teamId') || null }}
+          onChange={(next) => form.setValue('teamId', next.teamId ?? '', { shouldDirty: true })}
+        />
         <div className="flex items-center justify-between gap-4 rounded-md border p-3">
           <div>
             <Label htmlFor="policy-enabled">Enabled</Label>
@@ -247,45 +217,16 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
         </div>
       </FormSection>
 
-      <FormSection title="When to ask">
-        <Field id="policy-when" label="Ask for approval when">
-          <Select value={when} onValueChange={(v) => form.setValue('when', v as 'agent' | 'amount', { shouldDirty: true })}>
-            <SelectTrigger id="policy-when">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="amount">A tool is called with an amount over a limit</SelectItem>
-              <SelectItem value="agent">An agent asks for approval itself</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-        {when === 'amount' ? (
-          <AmountRuleFields
-            value={{
-              toolId: form.watch('toolId'),
-              argument: form.watch('argument'),
-              op: form.watch('op'),
-              amount: form.watch('amount'),
-            }}
-            onChange={(patch) => {
-              for (const [key, v] of Object.entries(patch)) {
-                form.setValue(key as 'toolId' | 'argument' | 'op' | 'amount', v as any, { shouldDirty: true, shouldValidate: form.formState.isSubmitted })
-              }
-            }}
-            errors={{ toolId: errors.toolId?.message, argument: errors.argument?.message, amount: errors.amount?.message }}
-          />
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            The agent calls request_approval when its instructions tell it to. The conditions below decide which of
-            those requests this policy governs.
-          </p>
-        )}
-      </FormSection>
-
-      {when === 'agent' && (
       <FormSection
         title="Match conditions"
-        description="All conditions must hold (AND). Leave empty to match every request."
+        description={
+          <>
+            An agent asks for approval when its instructions tell it to. These conditions pick which of those
+            requests this policy governs; all must hold. Leave empty to govern every request. To ask before a tool
+            call over an amount whatever the agent was told, add an amount rule under{' '}
+            <Link to={APPROVAL_POLICIES_PATH} className="underline">Ask before large amounts</Link>.
+          </>
+        }
       >
         {matchArray.fields.length === 0 && (
           <p className="text-sm italic text-muted-foreground">
@@ -347,7 +288,6 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
           <Plus className="mr-1 h-4 w-4" /> Add condition
         </Button>
       </FormSection>
-      )}
 
       <FormSection
         title="Approval steps"
@@ -419,6 +359,17 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
           <Plus className="mr-1 h-4 w-4" /> Add step
         </Button>
       </FormSection>
+
+      <Disclosure title="Advanced" summary={`Priority ${form.watch('priority') ?? 0}`}>
+        <Field
+          id="policy-priority"
+          label="Priority"
+          hint="When more than one policy fits a request, the one with the higher number decides who signs off. Leave it at 0 unless two of your policies overlap."
+          error={errors.priority?.message}
+        >
+          <Input type="number" className="w-32" {...form.register('priority', { valueAsNumber: true })} />
+        </Field>
+      </Disclosure>
     </FormPage>
   )
 }

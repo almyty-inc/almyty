@@ -15,7 +15,8 @@ export interface ScheduleTiming {
   time?: string
   /** 0 = Sunday ... 6 = Saturday. */
   days?: number[]
-  dayOfMonth?: number
+  /** 1-28, or 'last' for the month's last day. */
+  dayOfMonth?: number | 'last'
   timezone?: string
 }
 
@@ -166,6 +167,7 @@ export function describeSchedule(timing: ScheduleTiming | null | undefined): str
   const zone = timing.timezone || 'UTC'
   const when = at ? ` at ${at}, ${zone}` : ''
   if (kind === 'monthly') {
+    if (timing.dayOfMonth === 'last') return `On the last day of every month${when}`
     return timing.dayOfMonth ? `On the ${ordinal(timing.dayOfMonth)} of every month${when}` : `Once a month${when}`
   }
   const days = [...new Set(timing.days ?? [])].sort((a, b) => a - b)

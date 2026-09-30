@@ -116,6 +116,7 @@ export function CommandPalette() {
     { id: 'act-new-custom-connector', label: 'Add a custom service', hint: 'Any service that takes a key or a sign-in', icon: Plus, action: () => go('/credentials/custom/new') },
     { id: 'act-new-credential-policy', label: 'Add a credential rule', hint: 'Govern who may use which credential', icon: Plus, action: () => go('/credentials/policies/new') },
     { id: 'act-new-approval-policy', label: 'Add approval policy', hint: 'Require a human to approve an action', icon: Plus, action: () => go('/settings/approvals/policies/new') },
+    { id: 'act-new-approval-rule', label: 'Ask before a large amount', hint: 'A person approves a tool call over an amount', icon: Plus, action: () => go('/settings/approvals/rules/new') },
     { id: 'act-new-memory', label: 'Add memory', hint: 'A fact or preference agents can recall', icon: Plus, action: () => go('/memories/new') },
     { id: 'act-move-memories', label: 'Move memories', hint: 'From one memory account to another', icon: Plus, action: () => go('/memories/move') },
     { id: 'act-new-memory-account', label: 'Add memory account', hint: 'An account at Mem0, Zep or another memory service', icon: Plus, action: () => go('/memories/accounts/new') },

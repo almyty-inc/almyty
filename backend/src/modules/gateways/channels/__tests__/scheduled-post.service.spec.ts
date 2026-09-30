@@ -144,7 +144,8 @@ describe('ScheduledPostService', () => {
   afterEach(() => fetchMock.restore());
 
   /** The one request that is not a token exchange. */
-  const sendCall = () => fetchMock.calls.filter((c) => !/login\.microsoftonline|oauth2/.test(c.url));
+  /** The sends: not a token exchange, not a lookup of the places a channel can post to. */
+  const sendCall = () => fetchMock.calls.filter((c) => !/login\.microsoftonline|oauth2|conversations\.list/.test(c.url));
 
   describe('posts through each platform to the chosen destination', () => {
     it.each([
@@ -265,6 +266,21 @@ describe('ScheduledPostService', () => {
     });
   });
 
+  it('offers the Slack channels the bot is in by name, and names a typed channel ID the same way', async () => {
+    seedChannel('slack');
+    fetchMock.setNextResponse({
+      ok: true,
+      status: 200,
+      json: { ok: true, channels: [{ id: 'C0123ABCDEF', name: 'sales', is_member: true }, { id: 'C0999SUPPORT', name: 'support', is_member: true }] },
+    });
+    const [slackOption] = await service.destinations(agent);
+    expect(slackOption.destinations).toEqual([
+      { to: 'C0123ABCDEF', label: '#sales' },
+      { to: 'C0999SUPPORT', label: '#support' },
+    ]);
+    const typed = await service.checkDestination(agent, { kind: 'channel', channelId: 'ch-slack', to: 'C0999SUPPORT' });
+    expect(typed.label).toBe('#support');
+  });
   it('carries the channel AI disclosure at the top of the post', async () => {
     seedChannel('slack', { gateway: { configuration: { ...CONFIG.slack, aiDisclosure: 'This message was written by an AI.' } } });
     await service.post(agent, execution(), { kind: 'channel', channelId: 'ch-slack', to: 'C0123ABCDEF' });

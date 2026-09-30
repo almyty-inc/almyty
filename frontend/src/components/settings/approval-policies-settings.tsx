@@ -45,22 +45,27 @@ import {
 import { APPROVAL_POLICIES_PATH } from './approval-policy-form'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { describeAmountRule } from '@/lib/approval-rules'
+import { AmountRulesCard } from './amount-rules-card'
 
 export function ApprovalPoliciesSettings() {
   return (
-    <EntitlementGate
-      feature="approval_policy"
-      mode="lock"
-      fallback={
-        <UpgradePrompt
-          feature="approval_policy"
-          title="Approval policies"
-          description="Require multi-step, conditional, or quorum sign-off before an agent runs a sensitive action — e.g. refunds over a threshold need finance and a manager."
-        />
-      }
-    >
-      <ApprovalPoliciesManager />
-    </EntitlementGate>
+    <div className="space-y-6">
+      {/* Free for everyone: the Business gate below is for the rest. */}
+      <AmountRulesCard />
+      <EntitlementGate
+        feature="approval_policy"
+        mode="lock"
+        fallback={
+          <UpgradePrompt
+            feature="approval_policy"
+            title="Approval policies"
+            description="Require multi-step, conditional, or quorum sign-off before an agent runs a sensitive action — e.g. refunds over a threshold need finance and a manager."
+          />
+        }
+      >
+        <ApprovalPoliciesManager />
+      </EntitlementGate>
+    </div>
   )
 }
 
@@ -83,7 +88,8 @@ function ApprovalPoliciesManager() {
 
   const { data: policies, isLoading } = useQuery<ApprovalPolicy[]>({
     queryKey: ['approval-policies'],
-    queryFn: () => approvalPoliciesApi.list(),
+    // Amount rules have their own list above (AmountRulesCard).
+    queryFn: async () => (await approvalPoliciesApi.list()).filter((p) => !p.trigger),
   })
 
   const invalidate = () =>
