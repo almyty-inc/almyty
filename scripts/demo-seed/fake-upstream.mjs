@@ -123,6 +123,90 @@ function helpdeskOpenApi() {
   }
 }
 
+// ---------- the systems the use-case guides connect ----------
+// A CRM (sales), health checks of the company's own systems (operations),
+// the public help center (marketing) and the staff intranet (internal help
+// desk). Each is described in OpenAPI like the two above, and the guides
+// connect them from the UI with Connect an API.
+
+const op = (operationId, summary, tag, extra = {}) => ({ operationId, summary, tags: [tag], responses: { 200: { description: summary } }, ...extra })
+const pathParam = (name, example, description) => ({ name, in: 'path', required: true, schema: { type: 'string', example }, description })
+const queryParam = (name, description) => ({ name, in: 'query', required: true, schema: { type: 'string' }, description })
+const jsonBody = (required, properties) => ({ required: true, content: { 'application/json': { schema: { type: 'object', required, properties } } } })
+
+function guideOpenApi(key) {
+  const specs = {
+    crm: {
+      info: { title: 'Northwind CRM', version: '4.1.0', description: 'Customer accounts, contacts, deals and meeting notes for the Northwind sales team.' },
+      servers: [{ url: `${ORIGIN}/crm/api` }],
+      paths: {
+        '/accounts': { get: op('findAccounts', 'Find customer accounts by name', 'Accounts', { parameters: [queryParam('name', 'Part of the company name, e.g. Kestrel')] }) },
+        '/accounts/{accountId}': { get: op('getAccount', 'Get an account with its contacts, open deals and recent activity', 'Accounts', { parameters: [pathParam('accountId', 'A-2204', 'Account number, e.g. A-2204')] }) },
+        '/accounts/{accountId}/notes': { post: op('addMeetingNote', 'Add a meeting note to an account', 'Notes', { parameters: [pathParam('accountId', 'A-2204', 'Account number')], requestBody: jsonBody(['summary'], { summary: { type: 'string', description: 'What was discussed' }, nextSteps: { type: 'string', description: 'Agreed next steps and owners' } }) }) },
+      },
+    },
+    status: {
+      info: { title: 'Northwind Status', version: '1.2.0', description: 'Health checks for the systems Northwind runs: website, checkout, payments, backups and storage.' },
+      servers: [{ url: `${ORIGIN}/status/api` }],
+      paths: {
+        '/checks': { get: op('runHealthChecks', 'Check the health of every system', 'Checks') },
+        '/jobs/failed': { get: op('listFailedJobs', 'List background jobs that failed in the last 24 hours', 'Jobs') },
+      },
+    },
+    kb: {
+      info: { title: 'Northwind Help Center', version: '2.0.0', description: 'The public product documentation and help articles for Northwind coffee equipment.' },
+      servers: [{ url: `${ORIGIN}/kb/api` }],
+      paths: {
+        '/articles': { get: op('searchArticles', 'Search the product documentation and help articles', 'Articles', { parameters: [queryParam('query', 'What the visitor is asking about')] }) },
+        '/articles/{articleId}': { get: op('getArticle', 'Read one help article', 'Articles', { parameters: [pathParam('articleId', 'KB-118', 'Article id')] }) },
+      },
+    },
+    intranet: {
+      info: { title: 'Northwind Intranet', version: '3.0.0', description: 'Staff handbook, HR and IT policies, leave balances and IT requests for Northwind employees.' },
+      servers: [{ url: `${ORIGIN}/intranet/api` }],
+      paths: {
+        '/policies': { get: op('searchPolicies', 'Search the staff handbook and HR and IT policies', 'Policies', { parameters: [queryParam('query', 'What the employee is asking about')] }) },
+        '/people/{email}/leave': { get: op('getLeaveBalance', 'Get how many vacation days an employee has left', 'People', { parameters: [pathParam('email', 'sam.rivera@northwind.example', 'Work email')] }) },
+        '/it-requests': { post: op('openItRequest', 'Open an IT request (new laptop, access, password reset)', 'IT', { requestBody: jsonBody(['summary'], { summary: { type: 'string' }, requester: { type: 'string' } }) }) },
+      },
+    },
+  }
+  const s = specs[key]
+  return s && { openapi: '3.0.3', ...s }
+}
+
+const ACCOUNT = {
+  id: 'A-2204', name: 'Kestrel Coffee Co.', customerSince: '2022-03-01', locations: 38, owner: 'Ava Chen',
+  renewal: { date: '2026-11-30', value: 48000 },
+  contacts: [{ name: 'Dana Ortiz', title: 'COO' }, { name: 'Luis Park', title: 'Head of Purchasing' }],
+  openDeals: [{ name: 'Espresso line expansion', value: 22000, stage: 'Negotiation' }],
+  recentActivity: [{ at: '2026-09-18', note: 'Dana asked about volume pricing for 12 more grinders.' }],
+  openTickets: 2,
+}
+
+function guideAnswer(method, path) {
+  let m
+  if (path === '/crm/api/accounts') return [{ id: 'A-2204', name: 'Kestrel Coffee Co.', owner: 'Ava Chen' }]
+  if ((m = path.match(/^\/crm\/api\/accounts\/([^/]+)\/notes$/))) return { noteId: 'N-5120', accountId: m[1], saved: true }
+  if ((m = path.match(/^\/crm\/api\/accounts\/([^/]+)$/))) return { ...ACCOUNT, id: m[1] }
+  if (path === '/status/api/checks') return { checkedAt: '2026-09-30T02:00:00Z', systems: [
+    { name: 'Website', status: 'ok', uptime: '100%' },
+    { name: 'Checkout', status: 'ok', p95ms: 420 },
+    { name: 'Payment webhooks', status: 'degraded', detail: '3 failed deliveries since 02:10 UTC, retrying' },
+    { name: 'Nightly backup', status: 'ok', detail: 'Finished 01:04 UTC' },
+    { name: 'Reporting database disk', status: 'warning', detail: '81% full' },
+  ] }
+  if (path === '/status/api/jobs/failed') return [{ job: 'payment-webhook-delivery', failures: 3, lastError: 'Timeout from payment provider' }]
+  if (path === '/kb/api/articles') return [{ id: 'KB-118', title: 'Brew 2 grinder: power and voltage', excerpt: 'The Brew 2 runs on 100 to 240 V, so it works in the US, the EU and the UK with the plug that ships for your country. Help center article.' }]
+  if ((m = path.match(/^\/kb\/api\/articles\/([^/]+)$/))) return { id: m[1], title: 'Brew 2 grinder: power and voltage', body: 'The Brew 2 runs on 100 to 240 V. Help center article.' }
+  if (path === '/intranet/api/policies') return [{ id: 'HB-4.2', title: 'Laptops and equipment', excerpt: 'Laptops are replaced every three years, or sooner if broken. Ask through an IT request. Staff handbook, section 4.2.' }]
+  if ((m = path.match(/^\/intranet\/api\/people\/([^/]+)\/leave$/))) return { email: decodeURIComponent(m[1]), year: 2026, allowance: 28, taken: 16, left: 12, handbook: 'Staff handbook, section 6.1' }
+  if (path === '/intranet/api/it-requests') return { id: 'IT-3317', status: 'open', queue: 'IT hardware' }
+  // A Slack incoming webhook stands in here: the operations guide posts its report to it.
+  if (path.startsWith('/slack/services/') && method === 'POST') return { ok: true }
+  return null
+}
+
 function apiAnswer(method, path, url) {
   let m
   if ((m = path.match(/^\/orders\/v2\/orders\/([^/]+)\/shipment$/))) {
@@ -142,6 +226,8 @@ function apiAnswer(method, path, url) {
   if (path === '/helpdesk/api/csat') return { days: Number(url.searchParams.get('days') || 7), responses: 214, score: 4.6 }
   if (path === '/helpdesk/api/macros') return [{ id: 'M-12', title: 'Shipping delay apology' }, { id: 'M-19', title: 'Refund over threshold' }]
   if (path.startsWith('/helpdesk/api/tickets')) return { id: path.split('/')[4] || 'T-5530', status: method === 'POST' ? 'created' : 'ok' }
+  const more = guideAnswer(method, path, url)
+  if (more) return more
   return null
 }
 
@@ -165,6 +251,10 @@ function sampleArgs(schema, question) {
     if (!(schema.required || []).includes(name) && !/order|id|query|city/i.test(name)) continue
     if (/order/i.test(name)) args[name] = order
     else if (/ticket/i.test(name)) args[name] = 'T-5521'
+    else if (/account/i.test(name)) args[name] = 'A-2204'
+    else if (/email/i.test(name)) args[name] = 'sam.rivera@northwind.example'
+    else if (/summary|text|body|note/i.test(name)) args[name] = question.slice(0, 280)
+    else if (name === 'name') args[name] = (question.match(/Kestrel|Brightway/i) || ['Kestrel'])[0]
     else if (/customer/i.test(name)) args[name] = 'C-1182'
     else if (prop?.type === 'number' || prop?.type === 'integer') args[name] = 7
     else if (prop?.type === 'boolean') args[name] = false
@@ -186,6 +276,15 @@ function pickTool(tools, question) {
     if (/ticket|triage/.test(q) && /ticket/.test(n)) s += 2
     if (/csat|satisfaction/.test(q) && /csat/.test(n)) s += 3
     if (/remember|recall|memory/.test(q) && /memory|recall/.test(n)) s += 2
+    // The use-case guides: sales, operations, marketing, internal help desk.
+    if (/note|notes|write (?:it|them) back|save/.test(q) && /meeting.?note/.test(n)) s += 6
+    if (/call|account|kestrel|brief|crm/.test(q) && /get.?account/.test(n)) s += 4
+    if (/check|systems?|health|nightly|report/.test(q) && /health.?check/.test(n)) s += 4
+    if (/post|send|slack|share/.test(q) && /post.?to.?slack|slack/.test(n) && /report|summary|posted|send/.test(q)) s += 1
+    if (/voltage|volt|grinder|brew|product|warranty|work with|does it/.test(q) && /search.?articles/.test(n)) s += 4
+    if (/vacation|holiday|leave|days off/.test(q) && /leave.?balance/.test(n)) s += 5
+    if (/laptop|password|access|it request/.test(q) && /polic/.test(n)) s += 3
+    if (/policy|handbook|expense/.test(q) && /polic/.test(n)) s += 3
     return s
   }
   return [...tools].sort((a, b) => score(b) - score(a))[0]
@@ -193,6 +292,13 @@ function pickTool(tools, question) {
 
 const ANSWERS = [
   [/verdict|refute|check (?:the|this) answer|verifier/i, '{"verdict":"pass","confidence":0.92,"issues":[]}'],
+  // The use-case guides first: each keys on what its own tool returned.
+  [/"noteId"|N-5120/i, 'Saved to Kestrel Coffee Co. in the CRM (note N-5120): Dana wants volume pricing for 12 more grinders before the November renewal. Next step: you send a quote by Friday.'],
+  [/"renewal"|Espresso line expansion/i, 'Kestrel Coffee Co. (A-2204): customer since March 2022, 38 locations. Renewal due November 30, worth $48,000 a year. Open deal: Espresso line expansion, $22,000, in negotiation. Last contact September 18: Dana Ortiz (COO) asked about volume pricing for 12 more grinders. Two support tickets are open. Suggested opener: bring the volume quote.'],
+  [/"systems"|Payment webhooks/i, 'Nightly check, September 30: 4 of 5 systems healthy. Needs attention: payment webhooks had 3 failed deliveries since 02:10 UTC (retrying), and the reporting database disk is 81% full. Backups finished at 01:04 UTC.'],
+  [/KB-118|power and voltage/i, 'Yes. The Brew 2 grinder runs on 100 to 240 V, so it works in the US, the EU and the UK with the plug that ships for your country. Source: "Brew 2 grinder: power and voltage" in the help center.'],
+  [/"allowance"|section 6\.1/i, 'You have 12 vacation days left this year: 28 in your allowance, 16 taken. Unused days carry over until March 31 (staff handbook, section 6.1).'],
+  [/HB-4\.2|Laptops and equipment/i, 'Laptops are replaced every three years, or sooner if broken (staff handbook, section 4.2). Yours is due, so ask IT through an IT request and mention the model you have now.'],
   [/refund|NW-44120/i, 'Brightway Logistics reported order NW-44120 ($820) arrived defective. Refunds over $500 need a human decision, so I have escalated it for approval and let the customer know we will confirm within one business day.'],
   [/delay|NW-10428|where is/i, 'Order NW-10428 for Harbor & Pine Outfitters is delayed: DHL Express is holding it at customs in Leipzig. The new delivery estimate is October 2. I drafted a reply apologising for the delay and offering free expedited shipping on the next order, per the delayed-shipment policy.'],
   [/csat|satisfaction|digest|report/i, 'Last 7 days: 214 CSAT responses, average 4.6 out of 5. Two themes in the low scores: customs delays on EU shipments and slow refund confirmations. No action is overdue.'],
@@ -212,18 +318,32 @@ function answerFor(question, toolResult, conversation) {
 }
 
 function decide({ messages, tools, system }) {
-  const last = messages[messages.length - 1] || {}
   const users = messages.filter((m) => m.role === 'user')
   const question = text(users[users.length - 1]?.content) || ''
-  const hasToolResult = messages.some((m) => m.role === 'tool' || m.role === 'function' ||
+  // Only this turn counts: tool calls and results after the last user message.
+  const lastUser = messages.map((m) => m.role).lastIndexOf('user')
+  const turn = messages.slice(lastUser + 1)
+  const results = turn.filter((m) => m.role === 'tool' || m.role === 'function' ||
     (Array.isArray(m.content) && m.content.some((c) => c?.type === 'tool_result' || c?.functionResponse)))
+  const hasToolResult = results.length > 0
+  const called = turn.flatMap((m) => (m.tool_calls || []).map((c) => c.function?.name))
   const convo = `${system || ''} ${messages.map((m) => text(m.content)).join(' ')}`
   const promptTokens = Math.max(180, Math.round(convo.length / 3.8))
   if (tools?.length && !hasToolResult) {
     const tool = pickTool(tools, question)
     return { toolCall: { name: tool.name, args: sampleArgs(tool.parameters, question) }, promptTokens, completionTokens: 42 }
   }
-  const content = answerFor(question, hasToolResult ? text(last.content) : '', convo.slice(-4000))
+  const found = results.map((m) => text(m.content)).join(' ')
+  const content = answerFor(question, found, convo.slice(-4000))
+  // Asked to post a report to Slack and holding a tool for it: post, then say so.
+  const post = (tools || []).find((t) => /slack/i.test(`${t.name} ${t.description || ''}`) && /post|send/i.test(`${t.name} ${t.description || ''}`))
+  if (post && /slack/i.test(convo) && !called.includes(post.name)) {
+    return { toolCall: { name: post.name, args: { text: content } }, promptTokens, completionTokens: 60 }
+  }
+  if (post && called.includes(post.name)) {
+    const report = answerFor(question, found.replace(/\{"ok":true\}/g, ''), convo.slice(-4000))
+    return { content: `Posted to Slack. ${report}`, promptTokens, completionTokens: Math.round(report.length / 4) }
+  }
   return { content, promptTokens, completionTokens: Math.round(content.length / 4) }
 }
 
@@ -267,6 +387,8 @@ const server = createServer(async (req, res) => {
     if (path === '/health') return json(res, 200, { ok: true })
     if (path === '/orders/openapi.json') return json(res, 200, ordersOpenApi())
     if (path === '/helpdesk/openapi.json') return json(res, 200, helpdeskOpenApi())
+    const guideSpec = path.match(/^\/(crm|status|kb|intranet)\/openapi\.json$/)
+    if (guideSpec) return json(res, 200, guideOpenApi(guideSpec[1]))
 
     let m
     if ((m = path.match(/^\/(\w+)\/v1\/models$/)) && MODELS[m[1]]) {
