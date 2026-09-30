@@ -639,11 +639,6 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
               <PublicSettingsFields form={overrideForm} onChange={setOverrideForm} idPrefix="channel" scope="channel" />
             </div>
           )}
-          {!own && type === 'web' && stored.slug && (
-            <p className="text-xs text-muted-foreground">
-              People open it at <span className="font-mono">{webChatUrl(stored.slug)}</span>.
-            </p>
-          )}
         </FormSection>
       )}
       {confirmDialog}

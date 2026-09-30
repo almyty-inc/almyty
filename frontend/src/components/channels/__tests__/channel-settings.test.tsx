@@ -202,6 +202,12 @@ describe('a channel page', () => {
       await waitFor(() => expect(agentChannelsApi.update).toHaveBeenCalledWith('agent-1', 'c-web', { slug: 'acme-help' }))
     })
 
+    it('is said once, in the Live section, not again under branding', async () => {
+      render(<ChannelSettings agent={agent} channel={web()} inherited={inherited} />)
+      await screen.findByLabelText(/^Address/)
+      expect(screen.getAllByText(/People open it at/)).toHaveLength(1)
+    })
+
     it('refuses an unusable one before asking the server', async () => {
       render(<ChannelSettings agent={agent} channel={web()} inherited={inherited} />)
       fireEvent.change(await screen.findByLabelText(/^Address/), { target: { value: '-bad-' } })
