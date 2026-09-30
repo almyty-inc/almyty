@@ -288,6 +288,7 @@ const BRANDING_FIELDS = [
   'primaryColor',
   'logoUrl',
   'iconUrl',
+  'iconFileId',
   'greeting',
   'theme',
   'suggestedPrompts',
@@ -306,8 +307,17 @@ function pick<T extends object>(value: unknown, fields: readonly string[]): T | 
   return out as T;
 }
 
+const FILE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function normalizeBranding(branding: unknown): ChannelBranding | null {
-  return pick<ChannelBranding>(branding, BRANDING_FIELDS);
+  const picked = pick<ChannelBranding>(branding, BRANDING_FIELDS);
+  // The uploaded icon is a file id or nothing; whose file it is, and what
+  // it holds, the service checks against the organization's files.
+  const iconFileId = picked?.iconFileId;
+  if (iconFileId !== undefined && iconFileId !== null && !(typeof iconFileId === 'string' && FILE_ID.test(iconFileId))) {
+    throw new Error('The app icon is not a file uploaded here.');
+  }
+  return picked;
 }
 
 /** Visitor rules as stored: known fields only, limits checked. */

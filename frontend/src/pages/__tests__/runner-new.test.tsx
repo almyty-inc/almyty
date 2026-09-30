@@ -64,11 +64,11 @@ describe('RunnerNewPage', () => {
     unregister.mockResolvedValue({})
   })
 
-  it('offers Private, Team and Org-wide, with Private chosen by default', async () => {
+  it('offers Only you, One team and Everyone, with Only you chosen by default', async () => {
     render(<RunnerNewPage />)
-    expect(await screen.findByRole('radio', { name: /private/i })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByRole('radio', { name: /team/i })).toHaveAttribute('aria-checked', 'false')
-    expect(screen.getByRole('radio', { name: /org-wide/i })).toHaveAttribute('aria-checked', 'false')
+    expect(await screen.findByRole('radio', { name: /^only you/i })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: /^one team/i })).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('radio', { name: /^everyone/i })).toHaveAttribute('aria-checked', 'false')
   })
 
   it('rejects names already taken in the organization', async () => {
@@ -132,7 +132,7 @@ describe('RunnerNewPage', () => {
     await user.click(screen.getByRole('button', { name: /^back$/i }))
     const name = await screen.findByLabelText(/^name$/i)
     expect(name).toHaveValue('my-laptop')
-    await user.click(screen.getByRole('radio', { name: /org-wide/i }))
+    await user.click(screen.getByRole('radio', { name: /^everyone/i }))
     await user.click(screen.getByRole('button', { name: /update command/i }))
     await screen.findByText(/Run these on the target machine/i)
     expect(create).toHaveBeenCalledTimes(1)

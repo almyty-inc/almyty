@@ -107,11 +107,19 @@ export async function writeIcon(
     };
   }
 
+  return placeIcon(data, projectDir);
+}
+
+/** Write icon bytes where the packager finds them, when they are a PNG. */
+async function placeIcon(data: Buffer, projectDir: string): Promise<IconOutcome> {
   if (!looksLikePng(data)) {
     return {
       written: false,
       reason: 'The icon is not a PNG, so it ships with the default one.',
     };
+  }
+  if (data.length > MAX_ICON_BYTES) {
+    return { written: false, reason: 'The icon is larger than an icon should be, so it ships with the default one.' };
   }
 
   const target = join(projectDir, ICON_RELATIVE_PATH);
@@ -119,4 +127,29 @@ export async function writeIcon(
   await fs.writeFile(target, data);
 
   return { written: true, reason: null };
+}
+
+/**
+ * The icon a build wears, from the branding: the one uploaded on the
+ * branding page (a file of the channel's organization, read from storage,
+ * no request to anyone's server) before an icon address set through the
+ * API. Never fails the build, like writeIcon.
+ */
+export async function writeBrandingIcon(
+  branding: { iconFileId?: string | null; iconUrl?: string | null },
+  projectDir: string,
+  readUploaded: ((fileId: string) => Promise<Buffer>) | null,
+  fetcher: (url: string) => Promise<Buffer> = fetchIconBytes,
+): Promise<IconOutcome> {
+  if (!branding.iconFileId) return writeIcon(branding.iconUrl, projectDir, fetcher);
+  if (!readUploaded) {
+    return { written: false, reason: 'The uploaded icon cannot be read on this build host, so it ships with the default one.' };
+  }
+  let data: Buffer;
+  try {
+    data = await readUploaded(branding.iconFileId);
+  } catch {
+    return { written: false, reason: 'The uploaded icon could not be read, so it ships with the default one.' };
+  }
+  return placeIcon(data, projectDir);
 }

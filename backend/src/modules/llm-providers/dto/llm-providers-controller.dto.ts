@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsNumber, Min, Max, IsBoolean, MaxLength, IsUUID, ValidateIf, ArrayMaxSize } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsIn, IsObject, IsArray, IsNumber, Min, Max, IsBoolean, MaxLength, IsUUID, ValidateIf, ArrayMaxSize } from 'class-validator';
 import { Type } from 'class-transformer';
 
 import { LlmProviderType, LlmProviderStatus } from '../../../entities/llm-provider.entity';
@@ -188,6 +188,11 @@ export class UpdateLlmProviderBodyDto extends ModelAccessBodyDto {
   @IsOptional()
   @IsString()
   teamId?: string | null;
+
+  /** Turn the connection off (inactive) or back on (active), on purpose. */
+  @IsOptional()
+  @IsIn([LlmProviderStatus.ACTIVE, LlmProviderStatus.INACTIVE])
+  status?: LlmProviderStatus;
 }
 
 export class ChatMessageDto {

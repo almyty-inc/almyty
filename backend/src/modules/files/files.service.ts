@@ -10,6 +10,14 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { Readable } from 'stream';
 
+/**
+ * What an upload is for, when the uploader says. Only an app icon has one
+ * today: an icon chosen on the branding page and never saved is cleared by
+ * a sweep a day later.
+ */
+export const FILE_PURPOSES = ['app_icon'] as const;
+export type FilePurpose = (typeof FILE_PURPOSES)[number];
+
 /** Every file column a list returns: all of them but `extractedText`. */
 const FILE_LIST_COLUMNS: FindOptionsSelect<AgentFile> = {
   id: true,
@@ -46,7 +54,7 @@ export class FilesService {
   async upload(
     organizationId: string,
     file: { path: string; originalname: string; mimetype: string; size: number },
-    options?: { agentId?: string; runId?: string; uploadedBy?: string; extractText?: boolean },
+    options?: { agentId?: string; runId?: string; uploadedBy?: string; extractText?: boolean; purpose?: FilePurpose },
   ): Promise<AgentFile> {
     // agentId becomes a storage-key segment. Unchecked, `../<other org>/x`
     // normalizes to a key under another org's prefix, which the key guard
@@ -88,6 +96,7 @@ export class FilesService {
       storageUrl,
       extractedText,
       uploadedBy: options?.uploadedBy || null,
+      metadata: options?.purpose ? { purpose: options.purpose } : null,
     });
 
     let saved: AgentFile;
@@ -141,6 +150,21 @@ export class FilesService {
     });
     const data = rows.map(({ extractedText: _omitted, ...file }) => file);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  /**
+   * Files uploaded for `purpose` before `before`, in every organization,
+   * oldest first: for the sweeps that clear uploads nothing came to use
+   * (an app icon chosen on the branding page and never saved).
+   */
+  async findForPurposeBefore(purpose: FilePurpose, before: Date, limit = 500): Promise<AgentFile[]> {
+    return this.fileRepository
+      .createQueryBuilder('f')
+      .where(`f.metadata ->> 'purpose' = :purpose`, { purpose })
+      .andWhere('f.createdAt < :before', { before })
+      .orderBy('f.createdAt', 'ASC')
+      .take(limit)
+      .getMany();
   }
 
   async findById(id: string, organizationId: string): Promise<AgentFile> {

@@ -51,6 +51,7 @@ export interface ApprovalToolAmountTrigger {
   op: 'gt' | 'gte';
   amount: number;
 }
+
 /**
  * EE (approval_policy): a declarative, multi-step / conditional / quorum
  * approval policy. The single-gate approval (one authorized approver

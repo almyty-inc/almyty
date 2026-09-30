@@ -23,7 +23,7 @@
       ],
       "sourceDigest": "21d25a65a28a4d3e86aee455c2b8bad63082bdb0e306c3401cfcc4867cf5896e",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
     },
     {
       "id": "agent-builder-node-palette",
@@ -46,7 +46,7 @@
       ],
       "sourceDigest": "21d25a65a28a4d3e86aee455c2b8bad63082bdb0e306c3401cfcc4867cf5896e",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
     },
     {
       "id": "agent-builder",
@@ -69,7 +69,7 @@
       ],
       "sourceDigest": "21d25a65a28a4d3e86aee455c2b8bad63082bdb0e306c3401cfcc4867cf5896e",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
     },
     {
       "id": "agent-channels",
@@ -116,7 +116,7 @@
       ],
       "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
     },
     {
       "id": "agent-detail-overview",
@@ -139,7 +139,7 @@
       ],
       "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
     },
     {
       "id": "agent-skill-viewer",
@@ -162,7 +162,7 @@
       ],
       "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
     },
     {
       "id": "agent-work-mode-panel",
@@ -185,7 +185,7 @@
       ],
       "sourceDigest": "21d25a65a28a4d3e86aee455c2b8bad63082bdb0e306c3401cfcc4867cf5896e",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
     },
     {
       "id": "agents-list",
@@ -208,14 +208,14 @@
       ],
       "sourceDigest": "beb8b197f6151858a6a52441167f96da6d7d517e0175af799449a292f190c742",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
     },
     {
       "id": "analytics-agents",
       "title": "Analytics: agents",
       "path": "screenshots/analytics-agents.png",
       "capturedAt": "2026-09-30T11:23:13.983Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b264b5e9c16cd79de33264230034d140528c834a3f2c020876a66fa56685aabf",
       "source": {
         "kind": "browser",
@@ -230,14 +230,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "analytics-audit",
       "title": "Audit trail",
       "path": "screenshots/analytics-audit.png",
       "capturedAt": "2026-09-30T11:23:21.766Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "fd1d94c1b1596d0fa097a457261991b7149fa915c78ee8d9f912754c4ac9bb57",
       "source": {
         "kind": "browser",
@@ -252,14 +253,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "analytics-chargeback-locked",
       "title": "Chargeback (Enterprise, locked)",
       "path": "screenshots/analytics-chargeback-locked.png",
       "capturedAt": "2026-09-30T11:23:24.243Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f7ec69cb930d2b5eea3a339271cd2e9e326661421d1a821ca3305cd1cb214bd0",
       "source": {
         "kind": "browser",
@@ -274,14 +276,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "analytics-gateways",
       "title": "Analytics: gateways",
       "path": "screenshots/analytics-gateways.png",
       "capturedAt": "2026-09-30T11:23:19.136Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "88aa07490ff5133741a23fd2dfe69f586f9eabc30b941b17f47e334adb901cc3",
       "source": {
         "kind": "browser",
@@ -296,14 +299,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "analytics-overview",
       "title": "Analytics overview",
       "path": "screenshots/analytics-overview.png",
       "capturedAt": "2026-09-30T11:23:11.408Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "888346d6d3eb666c174aa00d1683830bca40a3ccfa4837af6552e76f76e10a3c",
       "source": {
         "kind": "browser",
@@ -318,14 +322,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "analytics-tools",
       "title": "Analytics: tools",
       "path": "screenshots/analytics-tools.png",
       "capturedAt": "2026-09-30T11:23:16.590Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6b251bb0d6ca7afb586836d09fc28ea7462490351e6d1a636b76dc0a07f55cf0",
       "source": {
         "kind": "browser",
@@ -340,14 +345,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "apis-list",
       "title": "APIs list",
       "path": "screenshots/apis-list.png",
       "capturedAt": "2026-09-30T11:22:16.214Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8926e3866f767097a1946a539c2304f55f72984ba289a82078f8ac56855ff60c",
       "source": {
         "kind": "browser",
@@ -362,14 +368,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3afdadb963fff69dd580e9ac81afaa289ee652dfd68d21bd25c221b5c4ceee17",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "approval-refund-820",
       "title": "Refund approval",
       "path": "screenshots/approval-refund-820.png",
       "capturedAt": "2026-09-30T11:23:03.673Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5d62612dcdc2dfeb4535f7053e308d97205f0ceaa9f19687df374d38f0536a0c",
       "source": {
         "kind": "browser",
@@ -384,14 +391,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3412ac0088b43cdd8b2f5fd9cd84481a03e5f37fc7677e2b66f3d501fcd9a05e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "approvals-pending",
       "title": "Pending approvals",
       "path": "screenshots/approvals-pending.png",
       "capturedAt": "2026-09-30T11:23:00.490Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5d62612dcdc2dfeb4535f7053e308d97205f0ceaa9f19687df374d38f0536a0c",
       "source": {
         "kind": "browser",
@@ -406,7 +414,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3412ac0088b43cdd8b2f5fd9cd84481a03e5f37fc7677e2b66f3d501fcd9a05e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "apps-hosted-chat-routing-failure",
@@ -422,7 +431,7 @@
       "title": "Create account",
       "path": "screenshots/auth-register.png",
       "capturedAt": "2026-09-30T11:23:54.181Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0fd0ae6cb048a83098acac5ce38ccac627a4dd850110428e20666f1a23b3b4f6",
       "source": {
         "kind": "browser",
@@ -436,7 +445,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "f14bb7176b1196f64238073d745f797017496f755214b3f97ccaab50347e1114",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "channel-branding-rules",
@@ -695,7 +705,7 @@
       "title": "Credentials",
       "path": "screenshots/credentials-vault.png",
       "capturedAt": "2026-09-30T11:22:48.078Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "db83bc771d3747ea8fa3f8cb810b0916b87a6b198d5c421e19142c17dd440f9c",
       "source": {
         "kind": "browser",
@@ -711,14 +721,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "1b85e8dcec82369aa8e4c589bdeaf2def75a74297bfa7b425d85adb862f5ea9a",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "gateway-detail-tools",
       "title": "Gateway tool scoping",
       "path": "screenshots/gateway-detail-tools.png",
       "capturedAt": "2026-09-30T11:22:30.824Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4d1007f176e496932570dee716fb3392a90c8f851b388f4ea65cd00eac4d474a",
       "source": {
         "kind": "browser",
@@ -733,14 +744,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "gateway-detail",
       "title": "Gateway detail",
       "path": "screenshots/gateway-detail.png",
       "capturedAt": "2026-09-30T11:22:27.664Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7e3613dc1952d220912bd04ea61e4819c58f09a35ddc9d24251331f9cbbdaa9d",
       "source": {
         "kind": "browser",
@@ -755,14 +767,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "gateway-petstore-config",
       "title": "Petstore gateway",
       "path": "screenshots/gateway-petstore-config.png",
       "capturedAt": "2026-09-30T11:22:33.556Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6e87207b33d863c00415c21c72168e1cf6e8104660a46a915cc154ccc2a50eed",
       "source": {
         "kind": "browser",
@@ -777,14 +790,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "gateway-petstore-integration",
       "title": "Gateway integrations",
       "path": "screenshots/gateway-petstore-integration.png",
       "capturedAt": "2026-09-30T11:22:39.360Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "20679cb329ac6bd8697180dece8972877626127d9073947c5f3e6c19fa42ca44",
       "source": {
         "kind": "browser",
@@ -799,7 +813,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "hosted-chat-privacy",
@@ -969,7 +984,7 @@
       "title": "Imported API",
       "path": "screenshots/quickstart-api-imported.png",
       "capturedAt": "2026-09-30T11:22:18.791Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e915b3cd315ad4d7af5c7a7ba6b0a337fbdca296fc9c2cc4352128b49b192a27",
       "source": {
         "kind": "browser",
@@ -984,14 +999,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "cea1a73e4b21db230fbda91dacd79e607f75b3e39a817c09cc48bc32a69b0fb4",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "quickstart-claude-config",
       "title": "Client setup",
       "path": "screenshots/quickstart-claude-config.png",
       "capturedAt": "2026-09-30T11:22:45.503Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0e903eb574d5f84db88acc45f73c93b27b12308594caab94e9170ec43231ba58",
       "source": {
         "kind": "browser",
@@ -1006,14 +1022,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "quickstart-gateway-mcp",
       "title": "Petstore MCP gateway",
       "path": "screenshots/quickstart-gateway-mcp.png",
       "capturedAt": "2026-09-30T11:22:36.258Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "df12fbd6b9b699cc3f1a044ce60f453d92eb3424ad9f0fd31139c734c0b86f95",
       "source": {
         "kind": "browser",
@@ -1028,14 +1045,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "quickstart-mcp-endpoints",
       "title": "MCP endpoints",
       "path": "screenshots/quickstart-mcp-endpoints.png",
       "capturedAt": "2026-09-30T11:22:42.499Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3ab2edc123911318a3fc1e40a10853987ed2e1d9d61435e5a8d84d9bff60e068",
       "source": {
         "kind": "browser",
@@ -1050,7 +1068,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "runner-detail",
@@ -1121,7 +1140,7 @@
       ],
       "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The schedule moved from an inline every-N-minutes card to its own page (a time of day on chosen days, once a month or every few minutes, in a time zone, with the next runs and where the result goes). This capture shows the old card."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The schedule moved from an inline every-N-minutes card to its own page (a time of day on chosen days, once a month or every few minutes, in a time zone, with the next runs and where the result goes). This capture shows the old card."
     },
     {
       "id": "self-hosting-compose",
@@ -1154,7 +1173,7 @@
       ],
       "sourceDigest": "db4e5d0deef4890ab59c6b7d72f1c2531bc7a4278d0ba928232f28595a22a11c",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The approval policy editor gained 'When to ask' with the amount rule (tool, number, comparison, amount), and the policy list names such a rule in plain words. Recapture the changed view."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The approval policy editor gained 'When to ask' with the amount rule (tool, number, comparison, amount), and the policy list names such a rule in plain words. Recapture the changed view."
     },
     {
       "id": "settings-approval-policy-new",
@@ -1177,7 +1196,7 @@
       ],
       "sourceDigest": "8557a39fe39b18927925183db5774e9cd16a1019b3d9c19d08748ad069331bc2",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The approval policy editor gained 'When to ask' with the amount rule (tool, number, comparison, amount), and the policy list names such a rule in plain words. Recapture the changed view."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The approval policy editor gained 'When to ask' with the amount rule (tool, number, comparison, amount), and the policy list names such a rule in plain words. Recapture the changed view."
     },
     {
       "id": "settings-audit-streams-enabled",
@@ -1200,7 +1219,7 @@
       ],
       "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
     },
     {
       "id": "settings-compliance-enabled",
@@ -1223,7 +1242,7 @@
       ],
       "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
     },
     {
       "id": "settings-encryption-locked",
@@ -1246,7 +1265,7 @@
       ],
       "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
     },
     {
       "id": "settings-rbac-enabled",
@@ -1269,7 +1288,7 @@
       ],
       "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
     },
     {
       "id": "settings-rbac-new-policy",
@@ -1292,7 +1311,7 @@
       ],
       "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
     },
     {
       "id": "settings-rbac-new-role",
@@ -1315,7 +1334,7 @@
       ],
       "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
     },
     {
       "id": "settings-sso-enabled",
@@ -1338,7 +1357,7 @@
       ],
       "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
     },
     {
       "id": "settings-teams",
@@ -1362,7 +1381,7 @@
       ],
       "sourceDigest": "7e044a520664a0ed4d39db23b3c2ca18f57196386d67d02bbeadbaac0cade2c9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
     },
     {
       "id": "support-agent-constraints",
@@ -1385,7 +1404,7 @@
       ],
       "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
     },
     {
       "id": "support-agent-overview",
@@ -1408,7 +1427,7 @@
       ],
       "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
     },
     {
       "id": "support-agent-runs",
@@ -1431,7 +1450,7 @@
       ],
       "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
     },
     {
       "id": "tool-detail",
@@ -1461,7 +1480,7 @@
       "title": "Tools list",
       "path": "screenshots/tools-list.png",
       "capturedAt": "2026-09-30T11:22:21.417Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "106af29b1d76c0a9abd453dbb4d8f2c65a961eca1f0aca8278485101394aed1f",
       "source": {
         "kind": "browser",
@@ -1476,7 +1495,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "3d0f69adaee5f2a5a416ab868a47ab4928b55c6a2d3957ddcca1b19d9a9c58bc",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
     },
     {
       "id": "versioning-history",
@@ -1499,7 +1519,7 @@
       ],
       "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
     },
     {
       "id": "versioning",
@@ -1522,7 +1542,7 @@
       ],
       "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
     },
     {
       "id": "webhook-config",
@@ -1545,7 +1565,7 @@
       ],
       "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released. Also: The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
     },
     {
       "id": "widget-builder",

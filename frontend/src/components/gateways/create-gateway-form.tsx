@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import type { VisibilityValue } from '@/components/ui/visibility-field'
-import { WhoCanUse } from '@/components/connect/who-can-use'
+import { WHO_CAN_USE_LABELS, WhoCanUse } from '@/components/connect/who-can-use'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { gatewaysApi } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
@@ -257,7 +257,7 @@ export function CreateGatewayForm() {
     })
   }
 
-  const whoSummary = { org: 'everyone in your organization', team: 'one team', private: 'only you' }[effectiveScope.visibility]
+  const whoSummary = WHO_CAN_USE_LABELS[effectiveScope.visibility]
 
   return (
     <FormPage

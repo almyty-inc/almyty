@@ -35,6 +35,8 @@ import { Credential } from '../../entities/credential.entity';
 import { LlmProviderSecretsHelper, MASKED_PROVIDER_KEY } from './llm-provider-secrets.helper';
 import { applyModelAccess, providerAllowsModel, type ModelAccessFields } from './allowed-models';
 import { ModelUsageService, type AgentsForViewer } from '../model-catalog/notices/model-usage.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { OrganizationRole } from '../../entities/user-organization.entity';
 
 import { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters, ConnectProviderInput } from './dto/llm-providers.dto';
 export type { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters };
@@ -117,6 +119,13 @@ export function extractUpstreamErrorMessage(error: any): string {
   return String(first).replace(SECRET_VALUE_PATTERN, '[REDACTED]').slice(0, 500);
 }
 
+/** A dashboard address for an email link. */
+function dashboardUrl(path: string): string {
+  let base = process.env.FRONTEND_URL || 'https://app.almyty.com';
+  while (base.endsWith('/')) base = base.slice(0, -1);
+  return `${base}${path}`;
+}
+
 @Injectable()
 export class LlmProvidersService {
   private readonly logger = new Logger(LlmProvidersService.name);
@@ -158,6 +167,8 @@ export class LlmProvidersService {
     // Which agents use which models of a connection (model-catalog/notices).
     @Optional() @Inject(forwardRef(() => ModelUsageService))
     private readonly usage?: ModelUsageService,
+    // Tells a connection's people when a refused key turns it off.
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
   async createProvider(
@@ -531,6 +542,15 @@ export class LlmProvidersService {
         this.defaultModels.invalidate(provider.id);
       }
       if (updateDto.description !== undefined) provider.description = updateDto.description;
+      // A person turning the connection off or on. Off on purpose is
+      // recorded as such, so a passing check never turns it back on.
+      if (updateDto.status !== undefined && updateDto.status !== provider.status) {
+        if (updateDto.status !== LlmProviderStatus.ACTIVE && updateDto.status !== LlmProviderStatus.INACTIVE) {
+          throw new BadRequestException('A connection can only be turned on (active) or off (inactive).');
+        }
+        provider.status = updateDto.status;
+        provider.inactiveReason = updateDto.status === LlmProviderStatus.INACTIVE ? 'switched_off' : null;
+      }
       if (updateDto.capabilities) {
         provider.capabilities = { ...provider.capabilities, ...updateDto.capabilities };
       }
@@ -795,8 +815,12 @@ export class LlmProvidersService {
      * kick-off still works.
      */
     organizationId: string,
-    /** syncModels: false when the caller lists the models itself next (the boot and on-load catalog sync). */
-    options: { syncModels?: boolean } = {},
+    /**
+     * syncModels: false when the caller lists the models itself next (the boot and on-load catalog sync).
+     * reactivateFor: the user who asked for this check; a connection that is off comes back on when it
+     * passes and they may change it. Only the Check again route passes it.
+     */
+    options: { syncModels?: boolean; reactivateFor?: string } = {},
   ): Promise<{
     isHealthy: boolean;
     responseTime?: number;
@@ -806,6 +830,8 @@ export class LlmProvidersService {
     keyRejected?: boolean;
     /** The model the check called (configured, or the vendor's current default). */
     probedModel?: string;
+    /** The connection was off and this passing check turned it back on. */
+    reactivated?: boolean;
   }> {
     let provider: LlmProvider | null = null;
     try {
@@ -845,13 +871,36 @@ export class LlmProvidersService {
       const response = await this.runner.callLlmProvider(provider, testRequest, session, []);
       const responseTime = Date.now() - startTime;
 
+      // A connection a failed check turned off comes back on when someone
+      // who may change it asks for this check and the key works: the check
+      // is what it was waiting for. Never one a person switched off on
+      // purpose, or whose endpoint stopped (inactiveReason), and sweeps and
+      // internal checks leave the status alone (status is the operator's
+      // intent; see LlmProviderStatus.ERROR).
+      const reactivated =
+        provider.status === LlmProviderStatus.INACTIVE &&
+        provider.inactiveReason === 'check_failed' &&
+        !!options.reactivateFor &&
+        (await this.mayManage(provider, options.reactivateFor));
+
       // Update provider health status. Partial UPDATE so we don't
       // race with concurrent writers who might also be touching
       // totalRequests / lastError via the save() path.
       await this.llmProviderRepository.update(
         { id: provider.id },
-        { isHealthy: true, lastHealthCheckAt: new Date(), lastError: null },
+        {
+          isHealthy: true,
+          lastHealthCheckAt: new Date(),
+          lastError: null,
+          ...(reactivated ? { status: LlmProviderStatus.ACTIVE, inactiveReason: null } : {}),
+        },
       );
+      if (reactivated) {
+        this.logger.log(`LLM provider ${provider.id} is active again: a check passed`);
+        this.auditLogService.logUpdate(provider.organizationId, options.reactivateFor!, AuditResource.LLM_PROVIDER, provider.id, provider.name, undefined, {
+          status: { from: LlmProviderStatus.INACTIVE, to: LlmProviderStatus.ACTIVE }, reason: 'a check passed',
+        });
+      }
 
       // The probe was a real call with a real model and this key: every
       // model the provider lists becomes usable (the readiness rule), the
@@ -867,6 +916,7 @@ export class LlmProvidersService {
         isHealthy: true,
         responseTime,
         probedModel: healthCheckModel,
+        ...(reactivated ? { reactivated: true } : {}),
         details: {
           model: response.model,
           tokenUsage: response.usage.totalTokens,
@@ -914,6 +964,7 @@ export class LlmProvidersService {
       const keyRejected = !notFound && isKeyRejection(error);
       if (keyRejected && provider) {
         await this.applyCatalogCheck(provider, { passed: false, keyRejected: true, error: upstreamMessage });
+        await this.deactivateOnRefusedKey(provider, upstreamMessage);
       }
 
       return {
@@ -1104,6 +1155,56 @@ export class LlmProvidersService {
   // fire-and-forget and logs instead of throwing.
 
   /** The readiness rule's writer (see ModelCatalogService.applyProviderCheck). Awaited, never throws. */
+  /**
+   * A check the provider answered by refusing the key (401/403, or its
+   * wording for it; never a timeout or a network error) turns an active
+   * connection off, recorded as `check_failed` so a passing Check again
+   * turns it back on. Its owner and the organization's owners and admins
+   * are told, in the app and by email unless they turned that off; a
+   * private connection's owner alone. Never fails the check.
+   */
+  private async deactivateOnRefusedKey(provider: LlmProvider, reason: string): Promise<void> {
+    if (provider.status !== LlmProviderStatus.ACTIVE) return;
+    try {
+      await this.llmProviderRepository.update(
+        { id: provider.id, organizationId: provider.organizationId },
+        { status: LlmProviderStatus.INACTIVE, inactiveReason: 'check_failed' },
+      );
+      provider.status = LlmProviderStatus.INACTIVE;
+      provider.inactiveReason = 'check_failed';
+      this.logger.warn(`LLM provider ${provider.id} is inactive: the provider refused its key`);
+    } catch (err: any) {
+      this.logger.warn(`Could not mark provider ${provider.id} inactive: ${err?.message ?? err}`);
+      return;
+    }
+    if (!this.notifications) return;
+    if (provider.visibility === 'private' && !provider.ownerUserId) return;
+    try {
+      await this.notifications.emit({
+        type: 'connections.inactive',
+        organizationId: provider.organizationId,
+        userIds: provider.ownerUserId ? [provider.ownerUserId] : undefined,
+        roleTarget: provider.visibility === 'private' ? undefined : { orgRoles: [OrganizationRole.OWNER, OrganizationRole.ADMIN] },
+        title: `${provider.name} is inactive: its key was refused`,
+        body: `${reason} Its models are not offered until the key works. Replace the key, then Check again to turn it back on.`,
+        link: `/credentials/providers/${provider.id}`,
+        email: { template: 'connections.inactive', params: { connectionName: provider.name, reason, url: dashboardUrl(`/credentials/providers/${provider.id}`) } },
+      });
+    } catch (err: any) {
+      this.logger.warn(`connection notification for provider ${provider.id} failed: ${err?.message ?? err}`);
+    }
+  }
+
+  /** Whether this user may change the provider (the rule updateProvider enforces), as a yes or no. */
+  private async mayManage(provider: LlmProvider, userId: string): Promise<boolean> {
+    try {
+      await assertManageable(this.accessPolicy, userId, provider, 'Provider');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async applyCatalogCheck(
     provider: { id: string; organizationId: string },
     outcome: { passed: boolean; keyRejected?: boolean; error?: string },

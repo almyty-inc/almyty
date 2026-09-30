@@ -322,6 +322,12 @@ export const authApi = {
   createApiKey: (data: { name: string; scopes?: string[]; expiresAt?: string }) =>
     apiPost('/auth/api-keys', data),
 
+  /** Your own API keys, newest first; only the first characters of each. */
+  listApiKeys: () => apiGet('/auth/api-keys'),
+
+  /** Revoke one of your own keys; it stops working right away. */
+  revokeApiKey: (keyId: string) => apiDel(`/auth/api-keys/${encodeURIComponent(keyId)}`),
+
   resendVerification: () => apiPost('/auth/resend-verification'),
   // Unauthenticated resend, keyed off the email — used by the login page
   // when a login attempt is refused with EMAIL_NOT_VERIFIED (no token yet
@@ -1172,12 +1178,14 @@ export const filesApi = {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
     return apiGet(`/files${qs}`)
   },
-  upload: (file: File, agentId?: string, runId?: string) => {
+  /** `purpose: 'app_icon'` marks a branding page's icon, cleared a day later if never saved. */
+  upload: (file: File, agentId?: string, runId?: string, purpose?: 'app_icon') => {
     const formData = new FormData()
     formData.append('file', file)
     const params = new URLSearchParams()
     if (agentId) params.set('agentId', agentId)
     if (runId) params.set('runId', runId)
+    if (purpose) params.set('purpose', purpose)
     const qs = params.toString() ? `?${params.toString()}` : ''
     return apiPost(`/files/upload${qs}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

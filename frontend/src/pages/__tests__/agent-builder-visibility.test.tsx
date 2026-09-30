@@ -74,10 +74,10 @@ describe('agent visibility in the builder', () => {
     const user = userEvent.setup()
     renderWithProviders(<AgentBuilderPage />)
 
-    await user.click(await screen.findByRole('button', { name: 'Visibility: Org-wide' }))
-    await user.click(screen.getByRole('radio', { name: /Private/ }))
+    await user.click(await screen.findByRole('button', { name: 'Visibility: Everyone' }))
+    await user.click(screen.getByRole('radio', { name: /^Only you/ }))
     expect(screen.getByText(/Only you can see and use this agent/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Visibility: Private' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Visibility: Only you' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /save/i }))
 
@@ -102,7 +102,7 @@ describe('agent visibility in the builder', () => {
     const user = userEvent.setup()
     renderWithProviders(<AgentBuilderPage />)
 
-    expect(await screen.findByRole('button', { name: 'Visibility: Private' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Visibility: Only you' })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: /save/i })).toBeEnabled())
     await user.click(screen.getByRole('button', { name: /save/i }))
 

@@ -70,6 +70,10 @@ export const connectionsApi = {
 
   remove: (id: string) => apiDel<DisconnectResult>(`/credentials/${id}`),
 
+  /** Who can use it, changed after it was added: everyone, one team (with its id) or only you. */
+  setSharing: (id: string, body: { owner: 'org' | 'team' | 'private'; teamId?: string }) =>
+    apiPatch<unknown>(`/credentials/${id}/sharing`, body).then(unwrapConnection),
+
   listGrants: (id: string) => apiGet<ConnectionGrant[]>(`/credentials/${id}/grants`),
 
   addGrant: (id: string, body: CreateGrantBody) => apiPost<ConnectionGrant>(`/credentials/${id}/grants`, body),
