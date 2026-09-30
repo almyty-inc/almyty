@@ -6,7 +6,7 @@ Adding a channel records where an agent will be; **publishing** it is the separa
 
 The Slack channel leads with **Add to Slack**. Create a Slack app at api.slack.com/apps, then pick its credentials, or select **Create one here** and enter its client ID, client secret and signing secret, and publish. The page then shows the redirect URL to add to your Slack app and the install link to share; every workspace that installs it is listed with a revoke action. A single workspace can use a bot token credential instead, under **Advanced**.
 
-![The Slack channel with its keys](/screenshots/apps-slack-credentials.png)
+![The Slack channel with its keys](/screenshots/channel-slack-keys.png)
 
 ## The other messaging channels
 
@@ -14,7 +14,7 @@ Telegram, WhatsApp and the rest take their platform keys as a credential, picked
 
 Once published, the channel is live and shows an **Unpublish** action.
 
-![The Slack channel published and live](/screenshots/apps-slack-live.png)
+![The Slack channel published and live](/screenshots/channel-slack-live.png)
 
 Publishing again re-syncs the channel rather than failing, because the second attempt is usually you reapplying a settings change. **Unpublishing** stops the channel answering without deleting it, so taking an agent off Slack for an afternoon does not mean re-registering a Slack app afterwards; publishing again keeps the same address and keys.
 
@@ -22,9 +22,9 @@ Publishing again re-syncs the channel rather than failing, because the second at
 
 The **Web chat** is a hosted chat on its own address, carrying the agent's name, greeting, colour and AI disclosure rather than the dashboard chrome. Its address is made from the agent's name; change it under **Address** on its page. It is a web address, so it has to be free across almyty, and the page says so when another web chat has it. Publishing shows the link straight away; your own domain and the sites allowed to embed it are on the same page.
 
-![The published web chat channel](/screenshots/apps-web-published.png)
+![The published web chat channel](/screenshots/channel-web-published.png)
 
-![The branded hosted chat](/screenshots/apps-hosted-chat.png)
+![The branded hosted chat](/screenshots/hosted-chat.png)
 
 See **[Hosted Chat App](/hosted-chat)** for addressing, custom domains and self-hosting.
 
@@ -56,4 +56,4 @@ While you are still editing, the channel's page lists what stops it being publis
 
 Who may use a channel is never read as unset: when nothing is chosen, it is open to anyone, because the permissive reading of missing configuration is the one that gets someone billed. A per-run or message limit left empty is stored as unset, not as zero.
 
-![Branding and visitor rules, with visitor data controls, spend limits and message limits](/screenshots/apps-settings.png)
+![Branding and visitor rules, with visitor data controls, spend limits and message limits](/screenshots/channel-branding-rules.png)
