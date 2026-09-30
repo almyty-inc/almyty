@@ -126,4 +126,82 @@ describe('team connections', () => {
     const bare = new ConnectionsResolverService(h.service, h.catalog, h.audit);
     await expect(bare.resolveForUse(offTeam, view.id, { purpose: 'llm_call' })).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
   });
+
+  describe('changing who can use it later', () => {
+    const U_TEAMMATE = randomUUID();
+    const teammate = principal(U_TEAMMATE, ORG, OrganizationRole.MEMBER);
+
+    async function privateOf(h: ReturnType<typeof setup>, who = onTeam) {
+      const done = await h.service.connect(who, ORG, 'openai', { owner: 'private', input: { apiKey: 'sk-mine-12345678' } });
+      if (done.pending !== false) throw new Error('expected a connection');
+      return done.connection;
+    }
+    const withTeammate = (h: ReturnType<typeof setup>) => {
+      (h.grants as any).memberships.rows.push({ id: randomUUID(), userId: U_TEAMMATE, organizationId: ORG, isActive: true });
+      (h.grants as any).userTeams.rows.push({ id: randomUUID(), userId: U_TEAMMATE, teamId: TEAM, isActive: true });
+    };
+
+    it('its owner shares a private credential with their team, and the team can use it', async () => {
+      const h = setup();
+      withTeammate(h);
+      const mine = await privateOf(h);
+      await expect(h.resolver.resolveForUse(teammate, mine.id, { purpose: 'llm_call' })).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
+
+      const shared = await h.service.setSharing(onTeam, ORG, mine.id, { owner: 'team', teamId: TEAM });
+
+      expect(shared).toMatchObject({ owner: 'team', teamId: TEAM, ownerUserId: null });
+      await expect(h.resolver.resolveForUse(teammate, mine.id, { purpose: 'llm_call' })).resolves.toMatchObject({ config: { apiKey: 'sk-mine-12345678' } });
+      await expect(h.resolver.resolveForUse(offTeam, mine.id, { purpose: 'llm_call' })).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
+      expect(h.audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'connection_share', details: expect.objectContaining({ from: 'private', to: 'team' }) }));
+    });
+
+    it('an admin opens it to everyone; a member may not', async () => {
+      const h = setup();
+      const mine = await privateOf(h, admin);
+      await expect(h.service.setSharing(offTeam, ORG, mine.id, { owner: 'org' })).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
+      const everyone = await h.service.setSharing(admin, ORG, mine.id, { owner: 'org' });
+      expect(everyone).toMatchObject({ owner: 'org', ownerUserId: null, teamId: null });
+      // Everyone means every member, through the default grant.
+      await expect(h.resolver.resolveForUse(offTeam, mine.id, { purpose: 'llm_call' })).resolves.toBeTruthy();
+    });
+
+    it('a member cannot open their own key to everyone, which needs connections:manage', async () => {
+      const h = setup();
+      const mine = await privateOf(h);
+      await expect(h.service.setSharing(onTeam, ORG, mine.id, { owner: 'org' })).rejects.toMatchObject({ response: { code: 'CONNECTIONS_PERMISSION_REQUIRED' } });
+      expect(h.credentials.rows[0]).toMatchObject({ visibility: 'private', ownerUserId: U_TEAM });
+    });
+
+    it('a member outside the team cannot change a team credential; it does not exist for them', async () => {
+      const h = setup();
+      const view = await connectForTeam(h);
+      await expect(h.service.setSharing(offTeam, ORG, view.id, { owner: 'private' })).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
+      expect(h.credentials.rows[0]).toMatchObject({ visibility: 'team', teamId: TEAM });
+    });
+
+    it('a team is only one the caller may use', async () => {
+      const h = setup();
+      const mine = await privateOf(h);
+      await expect(h.service.setSharing(onTeam, ORG, mine.id, { owner: 'team', teamId: OTHER_TEAM })).rejects.toMatchObject({ response: { code: 'TEAM_NOT_FOUND' } });
+      await expect(h.service.setSharing(onTeam, ORG, mine.id, { owner: 'team' })).rejects.toMatchObject({ response: { code: 'CONNECTION_TEAM_REQUIRED' } });
+    });
+
+    it('is refused, and nothing changes, when something that uses it would fall outside the new audience', async () => {
+      const h = setup();
+      const view = await connectForTeam(h);
+      const covered = jest.fn(async (next: any) => {
+        expect(next).toMatchObject({ visibility: 'private', ownerUserId: U_ADMIN });
+        throw Object.assign(new Error('used by an API everyone uses'), { response: { code: 'CREDENTIAL_SCOPE' } });
+      });
+      await expect(h.service.setSharing(admin, ORG, view.id, { owner: 'private' }, covered)).rejects.toThrow('used by an API');
+      expect(h.credentials.rows[0]).toMatchObject({ visibility: 'team', teamId: TEAM, ownerUserId: null });
+    });
+
+    it('leaves the key a provider connection keeps for itself to that connection', async () => {
+      const h = setup();
+      const view = await connectForTeam(h);
+      h.credentials.rows[0].metadata = { ...(h.credentials.rows[0].metadata ?? {}), managedBy: { kind: 'llm_provider', id: 'p1' } };
+      await expect(h.service.setSharing(admin, ORG, view.id, { owner: 'org' })).rejects.toMatchObject({ response: { code: 'CONNECTION_MANAGED' } });
+    });
+  });
 });

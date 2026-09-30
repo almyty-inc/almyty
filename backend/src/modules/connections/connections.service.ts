@@ -392,6 +392,64 @@ export class ConnectionsService {
     }
   }
 
+  /**
+   * Change who can use a credential after it was added, with the rules
+   * a provider connection's scope change has: the caller must be able to
+   * manage the credential as it is (the read rule first, so a hidden one
+   * is not found), and able to make one for the new audience (Everyone
+   * needs connections:manage, One team a member of that team or
+   * connections:manage, Only you the organization's allowance for personal
+   * keys). Only its owner makes an owned credential private. The key a
+   * provider connection keeps for itself follows that connection, so it is
+   * changed there. `assertConsumersCovered` is the save-time check that
+   * whatever uses the credential is still inside its new audience.
+   */
+  async setSharing(
+    principal: ConnectionPrincipal,
+    organizationId: string,
+    id: string,
+    body: { owner: 'org' | 'team' | 'private'; teamId?: string | null },
+    assertConsumersCovered?: (next: Credential) => Promise<void>,
+  ): Promise<ConnectionView> {
+    const row = await this.load(organizationId, id);
+    await this.assertCanManage(principal, row);
+    if ((row.metadata as Record<string, any> | null | undefined)?.managedBy) {
+      throw new BadRequestException({ code: 'CONNECTION_MANAGED', message: 'this key belongs to a connection; change who can use it on that connection' });
+    }
+    const owner = body.owner;
+    if (!['org', 'team', 'private'].includes(owner)) {
+      throw new BadRequestException({ code: 'CONNECTION_OWNER_INVALID', message: 'who can use it is org, team or private' });
+    }
+    const teamId = owner === 'team' ? body.teamId ?? null : null;
+    await this.assertCanCreate(principal, organizationId, owner, teamId);
+    if (owner === 'private' && row.ownerUserId && row.ownerUserId !== principal.id) {
+      throw new ForbiddenException({ code: 'CONNECTION_FORBIDDEN', message: "only its owner can make someone else's credential private" });
+    }
+
+    const before = connectionOwnerOf(row);
+    const next = Object.assign(Object.create(Object.getPrototypeOf(row)), row) as Credential;
+    next.visibility = owner;
+    next.teamId = teamId;
+    next.ownerUserId = owner === 'private' ? principal.id : null;
+    await assertConsumersCovered?.(next);
+
+    row.visibility = next.visibility;
+    row.teamId = next.teamId;
+    row.ownerUserId = next.ownerUserId;
+    const saved = await this.credentials.save(row);
+    this.auditLog.log({
+      organizationId, userId: principal.id, action: AuditAction.CONNECTION_SHARE, resourceType: AuditResource.CONNECTION,
+      resourceId: saved.id, resourceName: saved.name,
+      details: { connectorKey: saved.connectorKey, from: before, to: connectionOwnerOf(saved), teamId: saved.teamId ?? null },
+    });
+    // Everyone and One team are the organization's: members use them
+    // through the default grant (the team gate narrows it to the team), as
+    // when one is added that way.
+    if (owner !== 'private') await this.applyDefaultGrant(saved, principal.id);
+    const connector = await this.catalog.find(organizationId, saved.connectorKey!);
+    return this.view(saved, connector);
+  }
+
   async disconnect(principal: ConnectionPrincipal, organizationId: string, id: string): Promise<{ revoked: boolean; revokeError?: string }> {
     const row = await this.load(organizationId, id);
     await this.assertCanManage(principal, row);

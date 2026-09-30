@@ -16,6 +16,12 @@ export class CompleteConnectDto {
   @IsString() @MinLength(1) @MaxLength(4096) code: string;
 }
 
+/** Who can use a credential, changed after it was added. */
+export class SharingBodyDto {
+  @IsIn(['org', 'team', 'private']) owner: 'org' | 'team' | 'private';
+  @IsOptional() @IsUUID() teamId?: string | null;
+}
+
 export class RotateBodyDto {
   @IsOptional() @IsObject() input?: Record<string, unknown>;
   @IsOptional() @IsIn(['browser', 'headless']) mode?: 'browser' | 'headless';
