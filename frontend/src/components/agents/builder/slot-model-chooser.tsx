@@ -1,13 +1,9 @@
 /**
  * The model a work mode slot uses: the one place the autonomous builder
- * chooses a model for a role.
- *
- * INTEGRATION POINT for the shared model chooser (price, status, and an
- * inline "add a connection"), which is being built separately: swap the
- * body of this component for it. Every slot (main, drafter, checker,
- * panelist, judge, explorer, summariser, model teammate) renders through
- * here, and the value and onChange shapes are the ModelPicker's, so no
- * caller changes.
+ * chooses a model for a role. Every slot (main, drafter, checker,
+ * panelist, judge, explorer, summariser, model teammate) renders the
+ * shared ModelPicker through here, with its price, status and inline
+ * "Add a connection".
  */
 import { ModelPicker, type ModelSelection } from '@/components/model-picker'
 
