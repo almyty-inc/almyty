@@ -211,12 +211,18 @@ function ownerOf(input: AcquireRunWorkspaceInput): string {
 
 /** Lowercase letters, digits and dashes, as the runner accepts (`workspace.prepare`). */
 export function workspaceFolderName(agentName: string, runId: string): string {
-  const slug = agentName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
-    .replace(/-+$/g, '');
+  // Words of letters and digits joined by one dash: no leading, trailing or
+  // doubled dashes, and no backtracking regex to get there.
+  const words = agentName.toLowerCase().split(/[^a-z0-9]/).filter(Boolean);
+  let slug = '';
+  for (const word of words) {
+    const next = slug ? `${slug}-${word}` : word;
+    if (next.length > 60) {
+      if (!slug) slug = word.slice(0, 60);
+      break;
+    }
+    slug = next;
+  }
   const run = runId.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 8) || 'run';
   return slug ? `${slug}-${run}` : `run-${run}`;
 }
