@@ -152,7 +152,7 @@ function ApprovalPoliciesManager() {
                         </p>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
+                    <TableCell className="text-sm text-muted-foreground max-w-xs truncate" title={summarizeMatch(policy)}>
                       {summarizeMatch(policy)}
                     </TableCell>
                     <TableCell className="text-center">{policy.steps?.length ?? 0}</TableCell>

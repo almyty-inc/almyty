@@ -49,6 +49,11 @@ import type { Agent } from '@/types'
 /** Where the result goes, as the form holds it. */
 type Target = 'none' | 'webhook' | `channel:${string}`
 
+/** "Sales Slack (Slack)", or just "Slack" when the channel is named after its platform. */
+function channelLabel(c: PostChannelOption): string {
+  const platform = CHANNEL_LABELS[c.type as keyof typeof CHANNEL_LABELS] ?? c.type
+  return c.name === platform ? c.name : `${c.name} (${platform})`
+}
 /** "Enter another" in a destination list. */
 const ENTER_OWN = '__enter__'
 
@@ -369,7 +374,7 @@ function SchedulePage({ agent, zone }: { agent: Agent; zone: string }) {
               </SelectItem>
               {available.map((c) => (
                 <SelectItem key={c.channelId} value={`channel:${c.channelId}`}>
-                  {c.name} ({CHANNEL_LABELS[c.type as keyof typeof CHANNEL_LABELS] ?? c.type})
+                  {channelLabel(c)}
                 </SelectItem>
               ))}
               {unavailable.map((c) => (
