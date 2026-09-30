@@ -313,22 +313,93 @@ describe('GatewayResolverService', () => {
       expect(JSON.stringify(e.getResponse())).not.toContain('auth-cfg-7');
     });
 
-    it('should throw 403 for invalid auth', async () => {
+    const refuse = async (gateway: Partial<Gateway>, errorCode: string): Promise<any> => {
       jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(mockOrganization as Organization);
-      jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(mockGateway as Gateway);
+      jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(gateway as Gateway);
       jest.spyOn(gatewayAuthService, 'authenticateRequest').mockResolvedValue({
         isValid: false,
-        error: 'Invalid API key',
-        errorCode: 'API_KEY_INVALID',
+        error: 'refused',
+        errorCode,
       });
+      const e: any = await service
+        .resolveAndAuthenticate('test-org', '/my-gateway', mockReq)
+        .catch((err: any) => err);
+      expect(e).toBeInstanceOf(HttpException);
+      return e;
+    };
 
-      try {
-        await service.resolveAndAuthenticate('test-org', '/my-gateway', mockReq);
-        fail('Expected HttpException');
-      } catch (e) {
-        expect(e).toBeInstanceOf(HttpException);
-        expect(e.getStatus()).toBe(HttpStatus.FORBIDDEN);
-      }
+    const oauthGateway = {
+      ...mockGateway,
+      authConfigs: [{ type: GatewayAuthType.OAUTH2, isActive: true }],
+    } as unknown as Partial<Gateway>;
+
+    // RFC 6750 section 3.1: an invalid, expired or revoked bearer token is
+    // 401 with error="invalid_token". MCP clients only re-authorize on a
+    // 401; a 403 here left a client holding a revoked token stuck.
+    it.each([
+      'BEARER_TOKEN_INVALID',
+      'BEARER_TOKEN_EXPIRED',
+      'OAUTH2_TOKEN_EXPIRED',
+      'OAUTH2_TOKEN_WRONG_GATEWAY',
+      'JWT_INVALID',
+    ])('answers a refused bearer token (%s) 401 with error="invalid_token"', async (code) => {
+      const e = await refuse(oauthGateway, code);
+      expect(e.getStatus()).toBe(HttpStatus.UNAUTHORIZED);
+      expect(e.wwwAuthenticate).toMatch(
+        /^Bearer resource_metadata=".*\/test-org\/my-gateway\/\.well-known\/oauth-protected-resource", error="invalid_token"$/,
+      );
+    });
+
+    it.each([
+      'API_KEY_INVALID',
+      'API_KEY_INVALID_FORMAT',
+      'API_KEY_EXPIRED',
+      'BASIC_AUTH_INVALID',
+      'BASIC_AUTH_FORMAT_ERROR',
+      'CUSTOM_AUTH_INVALID',
+    ])('answers a bad non-bearer credential (%s) 401 without a bearer error', async (code) => {
+      const e = await refuse(oauthGateway, code);
+      expect(e.getStatus()).toBe(HttpStatus.UNAUTHORIZED);
+      expect(e.wwwAuthenticate).toBeDefined();
+      expect(e.wwwAuthenticate).not.toContain('error=');
+    });
+
+    // Known caller, not allowed: re-authenticating would not help, so 403
+    // and no challenge.
+    it.each([
+      'OAUTH2_TOKEN_HOLDER_NOT_MEMBER',
+      'BASIC_AUTH_CROSS_ORG',
+      'JWT_CROSS_ORG',
+      'IP_RESTRICTED',
+      'NO_AUTH_CONFIGURED',
+      'AUTH_MISCONFIGURED',
+      'JWT_NOT_CONFIGURED',
+      'UNSUPPORTED_AUTH_TYPE',
+      'SYSTEM_ERROR',
+      'NO_AUTH',
+    ])('answers %s 403 without a challenge', async (code) => {
+      const e = await refuse(oauthGateway, code);
+      expect(e.getStatus()).toBe(HttpStatus.FORBIDDEN);
+      expect(e.wwwAuthenticate).toBeUndefined();
+    });
+
+    it('adds error="invalid_token" to every Bearer challenge and to no other scheme', async () => {
+      const e = await refuse(
+        {
+          ...mockGateway,
+          name: 'Multi',
+          authConfigs: [
+            { type: GatewayAuthType.OAUTH2, isActive: true },
+            { type: GatewayAuthType.BEARER_TOKEN, isActive: true },
+            { type: GatewayAuthType.BASIC_AUTH, isActive: true },
+          ],
+        } as unknown as Partial<Gateway>,
+        'BEARER_TOKEN_INVALID',
+      );
+      expect(e.getStatus()).toBe(HttpStatus.UNAUTHORIZED);
+      expect(e.wwwAuthenticate).toContain('/.well-known/oauth-protected-resource", error="invalid_token"');
+      expect(e.wwwAuthenticate).toContain('Bearer realm="Multi", error="invalid_token"');
+      expect(e.wwwAuthenticate).toMatch(/Basic realm="Multi"$/);
     });
   });
 

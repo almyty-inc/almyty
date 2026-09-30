@@ -1,6 +1,10 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  isEntrypoint,
   assertNoArgvSecrets,
   assertStdinIsPiped,
   chooseMethod,
@@ -333,5 +337,86 @@ describe('version', () => {
 
   it('falls back rather than crashing when package.json cannot be read', () => {
     expect(readVersion('9.9.9')).toMatch(/^\d+\.\d+\.\d+/);
+  });
+});
+
+/**
+ * The CLI once called /connections routes after the backend had moved
+ * them to /credentials, and every unit test stayed green because none of
+ * them looked at the server. This reads both sides: every (method, path)
+ * the CLI sends has to be a route some backend controller declares.
+ */
+describe('routes the CLI calls exist on the backend', () => {
+  const backendModules = join(import.meta.dirname, '..', '..', '..', '..', 'backend', 'src', 'modules');
+  const cliSource = readFileSync(join(import.meta.dirname, '..', 'index.ts'), 'utf-8');
+  const norm = (path: string) =>
+    ('/' + path.split('?')[0])
+      .replace(/\$\{[^}]*\}/g, ':p')
+      .replace(/\/:[A-Za-z_]+/g, '/:p')
+      .replace(/\/+/g, '/')
+      .replace(/\/$/, '');
+
+  function served(): Set<string> {
+    const routes = new Set<string>();
+    const files = (readdirSync(backendModules, { recursive: true }) as string[])
+      .filter((f) => f.endsWith('.controller.ts'));
+    for (const file of files) {
+      const src = readFileSync(join(backendModules, file), 'utf-8');
+      const prefix = /@Controller\(\s*(?:'([^']*)')?\s*\)/.exec(src)?.[1] ?? '';
+      for (const m of src.matchAll(/@(Get|Post|Put|Patch|Delete)\(\s*(?:'([^']*)')?\s*\)/g)) {
+        routes.add(`${m[1].toUpperCase()} ${norm(`${prefix}/${m[2] ?? ''}`)}`);
+      }
+    }
+    return routes;
+  }
+
+  function called(): string[] {
+    const calls: string[] = [];
+    for (const line of cliSource.split('\n')) {
+      const m = /\b(q|post)\(\s*[`'](\/[^`'$?]*(?:\$\{[A-Za-z.]+\}[^`'$?]*)*)/.exec(line);
+      if (!m) continue;
+      const method = m[1] === 'post' ? 'POST' : /method:\s*'([A-Z]+)'/.exec(line)?.[1] ?? 'GET';
+      calls.push(`${method} ${norm(m[2])}`);
+    }
+    return calls;
+  }
+
+  it('finds the calls and the routes it compares', () => {
+    expect(called().length).toBeGreaterThan(10);
+    expect(served().size).toBeGreaterThan(50);
+  });
+
+  it('calls only /credentials routes the backend serves', () => {
+    const routes = served();
+    for (const call of called()) {
+      expect(call).toMatch(/^[A-Z]+ \/credentials(\/|$)/);
+      expect(routes, call).toContain(call);
+    }
+  });
+});
+
+describe('isEntrypoint', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'almyty-entry-'));
+  const file = join(dir, 'index.js');
+  writeFileSync(file, '');
+  const link = join(dir, 'bin-link');
+  symlinkSync(file, link);
+  const url = pathToFileURL(file).href;
+
+  it('runs when started as the file or through the npm bin symlink', () => {
+    expect(isEntrypoint(file, url)).toBe(true);
+    expect(isEntrypoint(link, url)).toBe(true);
+  });
+
+  it('does not run when imported by something else, or with no argv[1]', () => {
+    expect(isEntrypoint(join(dir, 'vitest.mjs'), url)).toBe(false);
+    expect(isEntrypoint(process.argv[1], url)).toBe(false);
+    expect(isEntrypoint(undefined, url)).toBe(false);
+  });
+
+  it('no longer depends on VITEST, which a spawned smoke-test CLI inherits', () => {
+    const source = readFileSync(join(import.meta.dirname, '..', 'index.ts'), 'utf-8');
+    expect(source).not.toContain('process.env.VITEST');
+    expect(source).toContain('if (isEntrypoint(process.argv[1], import.meta.url))');
   });
 });

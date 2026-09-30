@@ -46,6 +46,14 @@ describe('subcommand table', () => {
     }
   });
 
+  it('routes `credentials` to @almyty/credentials and has no `connections` command', () => {
+    // The connections CLI was renamed to credentials, along with the
+    // backend routes it calls. Nothing may still answer to the old name.
+    expect(SUBCOMMANDS.credentials?.pkg).toBe('@almyty/credentials');
+    expect(allCommandNames()).not.toContain('connections');
+    expect(Object.keys(pkg.dependencies)).not.toContain('@almyty/connections');
+  });
+
   it('gives every command a non-empty one-line description', () => {
     for (const [name, sub] of Object.entries(SUBCOMMANDS)) {
       expect(sub.help.length, name).toBeGreaterThan(5);
@@ -148,9 +156,8 @@ describe('README matches the code', () => {
   const readme = readFileSync(join(import.meta.dirname, '../../README.md'), 'utf-8');
 
   it('lists every delegated command, and delegates it to the package the README claims', () => {
-    // The README's table omitted `models` and `connections` while
-    // --help listed both, so the two documents disagreed about what
-    // the CLI could do.
+    // The README's table once omitted `models` while --help listed it,
+    // so the two documents disagreed about what the CLI could do.
     for (const [name, sub] of Object.entries(SUBCOMMANDS)) {
       const row = readme
         .split('\n')
