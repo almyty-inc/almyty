@@ -299,7 +299,7 @@ export function PublicSettingsFields({ form, onChange, idPrefix = 'ps', scope = 
       </FormSection>
 
       <FormSection title="Who can use it">
-        <ChoiceTiles label="Who can use it">
+        <ChoiceTiles label="Who can use it" className="sm:grid-cols-2 lg:grid-cols-2">
           {MODES.map(({ mode, icon: Icon }) => {
             const locked = mode === 'sso' && !entitlements.has('sso')
             return (

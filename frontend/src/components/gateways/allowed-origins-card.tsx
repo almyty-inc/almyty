@@ -94,7 +94,7 @@ export function AllowedOriginsCard({ gateway }: AllowedOriginsCardProps) {
     setDraftError(null)
   }
 
-  const what = gateway.type === 'hosted_chat' ? 'this chat app' : 'this widget'
+  const what = gateway.type === 'hosted_chat' ? 'this web chat' : 'this widget'
 
   return (
     <Card>

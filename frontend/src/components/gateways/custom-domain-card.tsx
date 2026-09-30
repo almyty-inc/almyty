@@ -88,7 +88,7 @@ export function CustomDomainCard({ gatewayId }: { gatewayId: string }) {
       <CardHeader>
         <CardTitle className="text-base">Custom domain</CardTitle>
         <CardDescription>
-          Serve this chat app on a domain you own, for example chat.example.com. It goes live only after the DNS
+          Serve this web chat on a domain you own, for example chat.example.com. It goes live only after the DNS
           check below passes.
         </CardDescription>
       </CardHeader>

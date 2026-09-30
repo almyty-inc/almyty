@@ -159,7 +159,7 @@ function CredentialLists({ rows }: { rows: ReturnType<typeof useCredentialRows> 
         </CardContent>
       </Card>
       <Card data-testid="model-provider-credentials">
-        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+        <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1.5">
             <CardTitle className="text-base">Model providers</CardTitle>
             <CardDescription>
@@ -170,7 +170,7 @@ function CredentialLists({ rows }: { rows: ReturnType<typeof useCredentialRows> 
               .
             </CardDescription>
           </div>
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline" size="sm" className="shrink-0">
             <Link to={connectProviderPath()}>
               <Plus className="mr-2 h-4 w-4" aria-hidden />
               Connect a provider
