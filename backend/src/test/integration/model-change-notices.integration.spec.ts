@@ -258,6 +258,10 @@ describeIfDb('model change notices (real Postgres)', () => {
     // 06:00 UTC is 08:00 for the owner only.
     mail.sendTemplate.mockClear();
     const sixUtc = nextUtc(6);
+    // The changes happened an hour before, so each digest that day still
+    // covers them whatever the time the suite runs at (a person's first
+    // digest looks back one day).
+    await ds.query(`UPDATE "model_change_events" SET "createdAt" = $1 WHERE "notifiedAt" IS NULL`, [new Date(sixUtc.getTime() - 60 * 60 * 1000)]);
     expect((await notices.sendDigest(sixUtc)).emails).toBe(1);
     await settle();
     expect(await sentTo('models.digest')).toEqual({ owner: 1 });
