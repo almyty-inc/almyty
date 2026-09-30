@@ -1875,7 +1875,8 @@
       "title": "Memory",
       "path": "screenshots/memory.png",
       "capturedAt": "2026-09-30T16:32:49.148Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "memories.tsx now lists each document once (its chunks hidden); no visible change expected on the seeded page, recapture to refresh the source digest.",
       "sha256": "16eae1d86f93fe323b45a65aefe4d718c0bc102269e900e44d0f9987d12c5795",
       "source": {
         "kind": "browser",
