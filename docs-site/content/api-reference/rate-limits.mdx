@@ -1,64 +1,55 @@
-# Rate Limits
+# Rate limits
 
-> This is the HTTP API reference. For UI walkthroughs, see [Getting Started](/) and the feature guides above.
+A rate limit is a cap on how many calls a program may make in a given time, so one busy script can't slow almyty down for everyone else. This page lists those caps and how a program should react when it hits one (wait and retry). For example, a script that imports hundreds of records should pause when it gets a "too many requests" answer. If you only use the app, you can skip this page; limits for people chatting with your agents are set on the agent (see [Channels](/channels)).
 
+## Default limits
 
-almyty applies rate limits to protect the platform and ensure fair usage.
-Limits vary by endpoint type and authentication method.
+Every client IP address gets a general allowance of 100 requests a minute across the API. The operator sets it with `RATE_LIMIT_MAX` and `RATE_LIMIT_TTL` (the window, in seconds). Some routes have a tighter limit of their own:
 
-## Default Limits
+| Route | Limit |
+|-------|-------|
+| Sign in (`POST /auth/login`, `POST /auth/token`) | 10 per 5 minutes per IP, and 10 per 15 minutes per account |
+| Register (`POST /auth/register`) | 10 per hour |
+| Refresh a session (`POST /auth/refresh`) | 20 per 5 minutes |
+| Forgot password (`POST /auth/forgot-password`) | 5 per hour per IP, and 3 per hour per account |
+| Start an autonomous run (`POST /agents/:id/runs`) | 20 per minute |
+| Invoke or stream an agent (`POST /agents/:id/invoke`, `/stream`) | 30 per minute |
+| Gateway endpoints (`/:org/:gateway`, the unified root endpoint) | 60 per minute |
+| OpenAI- and Anthropic-compatible APIs | 60 per minute per key |
+| Health checks (`/health*`) | No limit |
 
-| Endpoint Category | Rate Limit | Window |
-|-------------------|-----------|--------|
-| Authentication (`/auth/*`) | 10 requests | per minute |
-| API Management (`/apis/*`, `/tools/*`, `/gateways/*`) | 120 requests | per minute |
-| Agent Invocations (`/agents/:id/invoke`) | 60 requests | per minute |
-| Gateway Endpoints (`/mcp/*`, `/a2a/*`, `/utcp/*`) | 300 requests | per minute |
-| Analytics (`/analytics/*`) | 30 requests | per minute |
-| Health Checks (`/health*`) | No limit |, |
+A gateway, and a channel open to visitors, can add limits of its own on top: see below and [Channels](/channels).
 
-## Rate Limit Headers
+## Rate limit headers
 
-Every response includes rate limit information in headers:
+Responses carry the standard rate limit headers:
 
 | Header | Description |
 |--------|-------------|
 | `X-RateLimit-Limit` | Maximum requests allowed in the window |
 | `X-RateLimit-Remaining` | Requests remaining in the current window |
-| `X-RateLimit-Reset` | Unix timestamp when the window resets |
+| `X-RateLimit-Reset` | When the window resets |
 | `Retry-After` | Seconds until the next request is allowed (only on 429) |
 
-Example headers:
+## Exceeding limits
 
-```
-X-RateLimit-Limit: 120
-X-RateLimit-Remaining: 85
-X-RateLimit-Reset: 1711234620
-```
+When you exceed a limit, the API answers `429 Too Many Requests` with a `Retry-After` header and the usual error body, whose `error.code` is `RATE_LIMITED`:
 
-## Exceeding Limits
-
-When you exceed the rate limit, the API returns:
-
-```
-HTTP/1.1 429 Too Many Requests
-Retry-After: 30
-X-RateLimit-Limit: 120
-X-RateLimit-Remaining: 0
-X-RateLimit-Reset: 1711234620
-Content-Type: application/json
-
+```json
 {
   "success": false,
-  "message": "Rate limit exceeded. Retry after 30 seconds.",
-  "error": "RATE_LIMITED",
-  "statusCode": 429
+  "message": "ThrottlerException: Too Many Requests",
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "ThrottlerException: Too Many Requests",
+    "statusCode": 429
+  }
 }
 ```
 
-## Handling Rate Limits
+## Handling rate limits
 
-### Exponential Backoff
+### Exponential backoff
 
 The recommended strategy for handling rate limits:
 
@@ -104,34 +95,24 @@ def request_with_retry(url, headers, max_retries=3):
     raise Exception("Max retries exceeded")
 ```
 
-## Per-Gateway Rate Limits
+## Per-gateway and per-tool limits
 
-Individual gateway tools can have custom rate limits configured
-through [Tool Scoping](/gateways/tool-scoping):
+A gateway can carry its own limits (requests per minute, hour and day), set on the gateway in the app and enforced on its protocol traffic. Individual tools on a gateway can have their own per-minute and per-hour limit as an override, set through [Tool scoping](/gateways/tool-scoping):
 
 ```bash
 curl -X PATCH https://api.almyty.com/gateways/{gatewayId}/tools/{gatewayToolId} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "rateLimit": 50
+    "overrides": { "rateLimit": { "requestsPerMinute": 50 } }
   }'
 ```
 
-Gateway-level rate limits are applied per API key, allowing different
-keys to have different limits.
+## Best practices
 
-## Burst Allowance
-
-Rate limits include a small burst allowance. You can briefly exceed
-the per-minute rate for short bursts, as long as the sustained rate
-stays within limits. The burst window is typically 10 seconds.
-
-## Best Practices
-
-1. **Respect `Retry-After`**: Always wait the specified duration before retrying
-2. **Implement backoff**: Use exponential backoff for retry logic
-3. **Cache responses**: Avoid unnecessary repeated requests
-4. **Batch operations**: Use bulk endpoints where available (e.g., `/tools/bulk`)
-5. **Monitor headers**: Track `X-RateLimit-Remaining` to proactively slow down
-6. **Use webhooks**: For event-driven workflows, use webhooks instead of polling
+1. **Respect `Retry-After`**: always wait the specified duration before retrying
+2. **Implement backoff**: use exponential backoff for retry logic
+3. **Cache responses**: avoid unnecessary repeated requests
+4. **Batch operations**: use bulk endpoints where available (e.g. `POST /gateways/{gatewayId}/tools/bulk`)
+5. **Monitor headers**: track `X-RateLimit-Remaining` to slow down before you are refused
+6. **Use webhooks**: for event-driven workflows, use webhooks instead of polling

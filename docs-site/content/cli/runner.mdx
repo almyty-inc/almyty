@@ -1,6 +1,8 @@
 # Runner
 
-Connect one of your machines to almyty. Agents can then run tools, shell commands, and coding CLIs on it. Commands execute locally, but their results return to the agent; review the host-access limits below before exposing sensitive files or credentials.
+A runner is a small program you start on one of your own machines (a laptop, a build server, a box inside your network) so almyty agents can do work there: run a script, read a file, run a command, or drive a coding assistant. For example, a nightly agent can run your backup check on the server that holds the backups, without that server being opened to the internet. Commands run on that machine, and their results go back to the agent, so read [what a runner can do on your machine](#what-a-runner-can-do-on-your-machine) before you connect one that holds sensitive files or keys.
+
+This page is the terminal reference. For what runners are and how to manage them in the app, see [Runners](/runner).
 
 ```bash
 npm i -g @almyty/runner @almyty/auth
@@ -9,14 +11,14 @@ almyty-runner start --name my-laptop --org <org-id>
 ```
 
 Install once and call the installed `almyty-runner` binary: the runner is a
-daemon you restart, query and stop on that machine. If you already have the
+daemon (a program that keeps running in the background) you restart, query and stop on that machine. If you already have the
 umbrella [`@almyty/cli`](/cli), `almyty runner …` runs the same commands.
 
 ![A connected runner](/screenshots/runner-detail.png)
 
 Once it is running, the machine appears under **Runners** and its capabilities show up as tools. Who can see and use them follows the runner's visibility: **Private** (the default, you only), **Team**, or **Org-wide**, set on the Runners page.
 
-v1 attaches one runner per account: registering a second one for the same account returns 409 until you release the first. Multi-machine registration is not available yet.
+Each account attaches one runner: registering a second one for the same account is refused (409, conflict) until you release the first.
 
 ## Commands
 
@@ -68,7 +70,7 @@ The backend can only *constrain* a runner further at registration time (lower li
 
 `defaultIsolation: "container"` and `networkBlocked: true` are accepted by the config loader but **not implemented in this build**. If you set either one, the runner refuses *every* spawn and *every* shell command rather than silently running on the host anyway.
 
-So there is currently no configuration that gives you a sandboxed or network-isolated runner that still executes anything. Either the runner has host access, or it does nothing. Plan for that before you connect a machine. Both refusal cases are reported once at boot rather than per command, so a runner you meant to lock down does not sit there looking healthy while denying everything.
+So there is no configuration that gives you a sandboxed or network-isolated runner that still executes anything. Either the runner has host access, or it does nothing. Plan for that before you connect a machine. Both refusal cases are reported once at boot rather than per command, so a runner you meant to lock down does not sit there looking healthy while denying everything.
 
 See [docs/runner.md](https://github.com/almyty-inc/almyty/blob/master/docs/runner.md) for the config schema and the full method surface (`process.*`, `agent.*`, `coding.*`).
 
