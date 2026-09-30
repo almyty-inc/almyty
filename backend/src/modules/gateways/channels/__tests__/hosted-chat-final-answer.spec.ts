@@ -200,6 +200,7 @@ describe('hosted chat: the answer is a no-tools call that streams', () => {
       { bumpSessionStats: async () => undefined, bumpProviderStats: jest.fn(async () => undefined) } as any,
       {
         resolveProviderSecrets: async () => undefined,
+        resolveAttachments: async (_org: string | undefined, _provider: unknown, request: any) => request,
         planRouteHead: async () => {
           throw new UnmodelledQueryError('these runs name a provider, not a routing policy');
         },

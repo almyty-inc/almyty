@@ -9,6 +9,7 @@ import {
   PRICE_FEED_MAX_AGE_MS,
   PriceFeedService,
   snapshotAlias,
+  withFeedInputs,
 } from '../price-feed.service';
 import { Model } from '../../../../entities/model.entity';
 import { LlmProvider, LlmProviderType } from '../../../../entities/llm-provider.entity';
@@ -611,6 +612,60 @@ describe('PriceFeedService', () => {
       auditLog.log.mockRejectedValue(new Error('audit down'));
       modelRepository.find.mockResolvedValue([makeRow({ id: 'a', vendorModelId: 'gpt-4o' })]);
       await expect(service.applyToCatalog()).resolves.toEqual({ priced: 1, unpriced: 0, flagged: 0 });
+    });
+  });
+
+  describe('what a model takes besides text (image, PDF)', () => {
+    const LITELLM_WITH_INPUTS = {
+      'gpt-4o': { ...LITELLM_FIXTURE['gpt-4o'], supports_vision: true, supports_pdf_input: true },
+      'o1-2024-12-17': { ...LITELLM_FIXTURE['o1-2024-12-17'], supports_vision: false },
+      'mistral/mistral-large-latest': LITELLM_FIXTURE['mistral/mistral-large-latest'],
+    };
+    const OPENROUTER_WITH_INPUTS = {
+      data: [
+        { id: 'x-ai/grok-4', pricing: { prompt: '0.000003', completion: '0.000015' }, architecture: { input_modalities: ['text', 'image'] } },
+        { id: 'z-ai/glm-5', pricing: { prompt: '0.000001', completion: '0.0000032' }, architecture: { input_modalities: ['text', 'image', 'file'] } },
+      ],
+    };
+
+    it('reads LiteLLM\'s flags and OpenRouter\'s input modalities onto the quote', async () => {
+      routeAxios({ litellm: LITELLM_WITH_INPUTS, openrouter: OPENROUTER_WITH_INPUTS });
+      await service.refresh();
+      expect(service.lookup('openai', 'gpt-4o')?.inputs).toEqual({ image: true, pdf: true });
+      // A model the feed says nothing about has no inputs, not false ones.
+      expect(service.lookup('openai', 'o1-2024-12-17')?.inputs).toBeUndefined();
+      expect(service.lookup('mistral', 'mistral-large-latest')?.inputs).toBeUndefined();
+      expect(service.lookup('xai', 'grok-4')?.inputs).toEqual({ image: true, pdf: false });
+      expect(service.lookup('zai', 'glm-5')?.inputs).toEqual({ image: true, pdf: true });
+    });
+
+    it('sets vision and pdfInput on cards that have no value, and never over an operator\'s', async () => {
+      routeAxios({ litellm: LITELLM_WITH_INPUTS, openrouter: OPENROUTER_WITH_INPUTS });
+      await service.refresh();
+      const rows = [
+        makeRow({ id: 'fresh', vendorModelId: 'gpt-4o', capabilities: {} }),
+        makeRow({ id: 'operator-said-no', vendorModelId: 'gpt-4o', capabilities: { vision: false, tools: true } }),
+        makeRow({ id: 'silent', providerType: 'mistral', vendorModelId: 'mistral-large-latest', capabilities: {} }),
+      ];
+      modelRepository.find.mockResolvedValue(rows);
+
+      await service.applyToCatalog();
+
+      expect(rows[0].capabilities).toEqual({ vision: true, pdfInput: true });
+      expect(rows[1].capabilities).toEqual({ vision: false, tools: true, pdfInput: true });
+      expect(rows[2].capabilities).toEqual({});
+
+      // Settled: a second pass saves nothing for capabilities' sake.
+      modelRepository.save.mockClear();
+      await service.applyToCatalog();
+      expect(modelRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('withFeedInputs adds only true values, and says when nothing changes', () => {
+      expect(withFeedInputs(undefined, { image: true, pdf: false })).toEqual({ vision: true });
+      expect(withFeedInputs({ vision: true }, { image: true, pdf: false })).toBeNull();
+      expect(withFeedInputs({ tools: true }, undefined)).toBeNull();
+      expect(withFeedInputs({ pdfInput: false }, { image: false, pdf: true })).toBeNull();
     });
   });
 });

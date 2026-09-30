@@ -41,6 +41,15 @@ export class AgentFile {
   @Column({ nullable: true })
   memoryId: string;
 
+  /**
+   * The conversation a file someone sent in chat belongs to (a channel or
+   * web chat attachment). The retention sweep and visitor erasure find it
+   * by this; the foreign key cascades (migration FileConversation).
+   */
+  @Index('IDX_files_conversationId')
+  @Column({ type: 'uuid', nullable: true })
+  conversationId: string | null;
+
   @Column({ nullable: true })
   uploadedBy: string;
 

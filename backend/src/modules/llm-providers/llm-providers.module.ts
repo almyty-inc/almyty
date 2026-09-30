@@ -8,6 +8,10 @@ import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Tool } from '../../entities/tool.entity';
+import { Model } from '../../entities/model.entity';
+import { AgentFile } from '../../entities/file.entity';
+import { FilesModule } from '../files/files.module';
+import { MessageAttachmentResolver } from './message-attachments.resolver';
 
 import { LlmProvidersService } from './llm-providers.service';
 import { LlmProvidersController } from './llm-providers.controller';
@@ -35,7 +39,12 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
       Organization,
       Gateway,
       Tool,
+      // The card a call's model is checked against for image and PDF input,
+      // and the files a message refers to (message-attachments.resolver.ts).
+      Model,
+      AgentFile,
     ]),
+    FilesModule,
     forwardRef(() => ToolsModule),
     AuthorizationModule,
     // Supplies PriceFeedService (live prices for cost calculation) and the
@@ -43,7 +52,7 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     // needs the runner back, hence the forwardRef.
     forwardRef(() => ModelCatalogModule),
   ],
-  providers: [LlmProvidersService, LlmModelsHelper, LlmChatHelper, LlmStatsHelper, LlmChatRunnerHelper, DefaultModelResolver, LlmProviderSecretsHelper, EndpointProviderHelper],
+  providers: [LlmProvidersService, LlmModelsHelper, LlmChatHelper, LlmStatsHelper, LlmChatRunnerHelper, DefaultModelResolver, LlmProviderSecretsHelper, EndpointProviderHelper, MessageAttachmentResolver],
   controllers: [LlmProvidersController, LlmSessionsController],
   exports: [LlmProvidersService, LlmModelsHelper, LlmChatRunnerHelper, LlmProviderSecretsHelper, EndpointProviderHelper],
 })

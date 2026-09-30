@@ -76,3 +76,34 @@ export function attachmentDisposition(name: string): string {
   const utf8 = encodeURIComponent(name || 'download').replace(/['()]/g, (c) => extra[c]);
   return `attachment; filename="${fallback}"; filename*=UTF-8''${utf8}`;
 }
+
+/**
+ * The type the bytes themselves say, for the kinds a model can be shown
+ * (PNG, JPEG, GIF, WebP, PDF), or null. A file someone sent on a channel
+ * arrives with a name and a type chosen by whoever sent it; neither is
+ * evidence of what the bytes are, and a model vendor refuses an image
+ * whose declared type does not match its content.
+ */
+export function sniffMediaType(bytes: Uint8Array): string | null {
+  const starts = (...sig: number[]) => sig.every((b, i) => bytes[i] === b);
+  if (bytes.length >= 8 && starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return 'image/png';
+  if (bytes.length >= 3 && starts(0xff, 0xd8, 0xff)) return 'image/jpeg';
+  if (bytes.length >= 6 && (starts(0x47, 0x49, 0x46, 0x38, 0x37, 0x61) || starts(0x47, 0x49, 0x46, 0x38, 0x39, 0x61))) {
+    return 'image/gif';
+  }
+  if (
+    bytes.length >= 12 &&
+    starts(0x52, 0x49, 0x46, 0x46) &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return 'image/webp';
+  }
+  if (bytes.length >= 5 && starts(0x25, 0x50, 0x44, 0x46, 0x2d)) return 'application/pdf';
+  return null;
+}
+
+/** The image types every vision-capable vendor here accepts. */
+export const MODEL_IMAGE_TYPES: ReadonlySet<string> = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);

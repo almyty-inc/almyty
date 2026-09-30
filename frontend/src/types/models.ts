@@ -27,14 +27,17 @@ export interface ModelCapabilities {
   reasoning?: boolean
   embedding?: boolean
   structuredOutput?: boolean
+  /** Takes PDF documents as input (price feed or set on the card). */
+  pdfInput?: boolean
 }
 
 export type ModelCapabilityKey = keyof ModelCapabilities
 
-export const MODEL_CAPABILITY_KEYS: ModelCapabilityKey[] = ['tools', 'vision', 'reasoning', 'embedding', 'structuredOutput']
+export const MODEL_CAPABILITY_KEYS: ModelCapabilityKey[] = ['tools', 'vision', 'pdfInput', 'reasoning', 'embedding', 'structuredOutput']
 export const MODEL_CAPABILITY_LABELS: Record<ModelCapabilityKey, string> = {
   tools: 'Tools',
   vision: 'Vision',
+  pdfInput: 'PDF input',
   reasoning: 'Reasoning',
   embedding: 'Embedding',
   structuredOutput: 'Structured output',

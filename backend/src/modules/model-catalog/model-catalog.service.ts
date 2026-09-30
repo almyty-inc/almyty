@@ -13,7 +13,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { LlmChatRunnerHelper } from '../llm-providers/llm-chat-runner.helper';
 import { LlmModelsHelper } from '../llm-providers/llm-models.helper';
-import { PriceFeedService } from './pricing/price-feed.service';
+import { PriceFeedService, withFeedInputs } from './pricing/price-feed.service';
 import { ModelRouterService } from './routing/model-router.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { providerUsableByUser, usableProviders } from '../llm-providers/private-provider';
@@ -732,6 +732,9 @@ export class ModelCatalogService {
     card.pricingSource = quote.source;
     card.pricingFetchedAt = new Date();
     if (!card.contextLength && quote.contextLength) card.contextLength = quote.contextLength;
+    // Image and PDF input where the feed knows them (price-feed.service.ts withFeedInputs).
+    const capabilities = withFeedInputs(card.capabilities, quote.inputs);
+    if (capabilities) card.capabilities = capabilities;
 
     card.metadata = { ...(card.metadata ?? {}), pricingFeedSource: quote.source };
   }
