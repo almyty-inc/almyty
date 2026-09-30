@@ -67,7 +67,7 @@ Each channel's page on the agent shows what that platform needs and where to pas
 ### Slack
 
 1. Create an app at [api.slack.com/apps](https://api.slack.com/apps) (from scratch).
-2. Under **OAuth & Permissions**, add the bot scopes `chat:write`, `app_mentions:read`, and `im:history`, then install the app to your workspace.
+2. Under **OAuth & Permissions**, add the bot scopes `chat:write`, `app_mentions:read`, `im:history`, `files:read` (to read files people share with the agent) and `users:read` (to name who wrote each message in a channel), then install the app to your workspace.
 3. On the channel's page, under **Add to Slack**, pick or create the Slack app credential (client ID, client secret, signing secret). For a single workspace, a bot token (xoxb-...) credential goes under **Advanced** instead.
 4. Under **Event Subscriptions**, enable events and paste your almyty webhook URL as the Request URL.
 5. Subscribe to the bot events `message.im` and `app_mention`, then save.
