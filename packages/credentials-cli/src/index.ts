@@ -81,7 +81,7 @@ Read:
   grants <id>                           Who may use this credential
 
 Add:
-  add <service> [--method m] [--owner org|user|private] [--name n] [--headless] [--open]
+  add <service> [--method m] [--owner org|team|user|private] [--team id|slug] [--name n] [--headless] [--open]
                                         A sign-in prints an authorize URL (--open launches a
                                         browser, --headless asks the service for a code to paste).
                                         A key form prompts for each field, secrets not echoed.
@@ -136,13 +136,49 @@ export function needArg(positional: string[], index: number, name: string, usage
   return v;
 }
 
-export function connectBody(flags: ParsedArgs['flags'], input?: Record<string, unknown>): Record<string, unknown> {
+export function connectBody(flags: ParsedArgs['flags'], input?: Record<string, unknown>, teamId?: string): Record<string, unknown> {
   const body: Record<string, unknown> = { owner: str(flags, 'owner') ?? 'org' };
-  if (!['org', 'user', 'private'].includes(body.owner as string)) throw new UsageError('--owner must be org, user or private');
+  if (!['org', 'team', 'user', 'private'].includes(body.owner as string)) throw new UsageError('--owner must be org, team, user or private');
+  if (body.owner === 'team') {
+    if (!teamId) throw new UsageError('--owner team needs the team: --team <id|slug>');
+    body.teamId = teamId;
+  } else if (str(flags, 'team')) {
+    throw new UsageError('--team goes with --owner team');
+  }
   if (str(flags, 'method')) body.method = str(flags, 'method');
   if (str(flags, 'name')) body.name = str(flags, 'name');
   if (input && Object.keys(input).length > 0) body.input = input;
   return body;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A team's name as a slug: "Customer Support" is customer-support. */
+export function teamSlug(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/** Whether --team is an id already (sent as is; the API checks it). */
+export function isTeamId(ref: string): boolean {
+  return UUID.test(ref);
+}
+
+/** The team --team <slug> names, out of the organization's teams. */
+export function pickTeam(teams: Array<{ id: string; name: string }>, ref: string): string {
+  const wanted = teamSlug(ref);
+  const matches = teams.filter((t) => teamSlug(t.name) === wanted);
+  if (matches.length === 1) return matches[0].id;
+  if (matches.length > 1) throw new UsageError(`more than one team is called ${ref}; pass its id with --team`);
+  const known = teams.map((t) => teamSlug(t.name)).join(', ') || 'none';
+  throw new UsageError(`no team ${ref} in this organization (teams: ${known})`);
+}
+
+/** The organization a slug is looked up in: the one the key acts in, or the only one. */
+export function organizationOf(profile: { currentOrganizationId?: string; organizations?: Array<{ id: string }> }): string {
+  if (profile.currentOrganizationId) return profile.currentOrganizationId;
+  const orgs = profile.organizations ?? [];
+  if (orgs.length === 1) return orgs[0].id;
+  throw new UsageError('this login reaches more than one organization; pass the team id with --team');
 }
 
 export function grantBody(flags: ParsedArgs['flags']): Record<string, unknown> {
@@ -269,7 +305,7 @@ export function formatConnectionDetail(c: any): string {
     `${c.name ?? c.connectorKey}`,
     `  id          ${c.id}`,
     `  service     ${c.connectorKey}${c.connectorDisplayName ? ` (${c.connectorDisplayName})` : ''}${c.kind ? `  [${c.kind}]` : ''}`,
-    `  owner       ${c.owner}${c.ownerUserId ? ` (${c.ownerUserId})` : ''}`,
+    `  owner       ${c.owner}${c.owner === 'team' && c.teamId ? ` (${c.teamId})` : c.ownerUserId ? ` (${c.ownerUserId})` : ''}`,
     `  method      ${c.method ?? 'unknown'}`,
     `  account     ${c.accountLabel ?? '(the provider named none)'}`,
     `  health      ${c.health?.status ?? 'unknown'}${c.health?.checkedAt ? `, checked ${c.health.checkedAt}` : ', never checked'}`,
@@ -483,7 +519,19 @@ async function main(): Promise<void> {
         requireTty(`connect ${key} via ${method.type}`);
         input = await promptForSchema(method.schema);
       }
-      const body = connectBody({ ...args.flags, method: method.type }, input);
+      const teamRef = str(args.flags, 'team');
+      let teamId: string | undefined;
+      if (teamRef && str(args.flags, 'owner') === 'team') {
+        if (isTeamId(teamRef)) {
+          teamId = teamRef;
+        } else {
+          const profile = await q('/auth/profile');
+          const orgId = organizationOf(profile.data ?? {});
+          const teams = await q(`/organizations/${orgId}/teams`);
+          teamId = pickTeam(teams.data ?? [], teamRef);
+        }
+      }
+      const body = connectBody({ ...args.flags, method: method.type }, input, teamId);
       if (isRedirect) body.mode = connectMode(args.flags);
       const res = await post(`/credentials/connect/${key}`, body);
       if (res.data?.authorizeUrl) {
