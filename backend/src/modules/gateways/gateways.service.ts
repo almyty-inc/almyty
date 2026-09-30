@@ -359,13 +359,20 @@ export class GatewaysService {
       );
   }
 
-  private removeWebhookRegistration(gateway: Gateway): void {
-    this.webhookRegistrar
+  /**
+   * Take the platform webhook registration and the email inbound address
+   * down. Awaited, and before the gateway's credential is released: the
+   * platform call (Sendblue, Telegram, Twilio) authenticates with the keys
+   * that credential holds, so releasing it first left the webhook
+   * registered at the platform. Neither step throws.
+   */
+  private async removeWebhookRegistration(gateway: Gateway): Promise<void> {
+    await this.webhookRegistrar
       ?.remove(gateway)
       .catch((err: any) =>
         this.logger.warn(`Failed to remove channel webhook registration: ${err.message}`),
       );
-    this.emailProvisioner
+    await this.emailProvisioner
       ?.remove(gateway)
       .catch((err: any) =>
         this.logger.warn(`Failed to remove email inbound provisioning: ${err.message}`),
@@ -1252,16 +1259,40 @@ export class GatewaysService {
       throw new BadRequestException('System gateways cannot be deleted');
     }
 
+    await this.tearDown(gateway, organizationId, userId);
+  }
+
+  /**
+   * Delete the gateways that answered for an agent that is being deleted:
+   * its channels' gateways and any other agent gateway bound to it.
+   *
+   * No permission check of its own: the caller (AgentsService.deleteAgent,
+   * through AgentChannelsService) has already decided the user may delete
+   * the agent, and a gateway of a deleted agent must not outlive it
+   * whoever created the gateway. Otherwise it keeps its address taken and
+   * answers requests for an agent that no longer exists.
+   */
+  async deleteGatewayOfDeletedAgent(gateway: Gateway, userId?: string | null): Promise<void> {
+    if (gateway.isSystem) return;
+    await this.tearDown(gateway, gateway.organizationId, userId ?? null);
+  }
+
+  /**
+   * What deleting a gateway takes, in order: stop its inbound transport,
+   * take its platform webhook down while its keys can still be read,
+   * release the credential it managed, then delete the row.
+   */
+  private async tearDown(gateway: Gateway, organizationId: string, userId: string | null): Promise<void> {
+    const gatewayId = gateway.id;
+    this.stopDiscordTransport(gateway);
+    await this.removeWebhookRegistration(gateway);
     await this.releaseChannelCredential(gateway);
     await this.gatewayRepository.remove(gateway);
-
-    this.stopDiscordTransport(gateway);
-    this.removeWebhookRegistration(gateway);
 
     this.logger.log(`Gateway '${gateway.name}' deleted`);
 
     // Audit log (fire-and-forget)
-    this.auditLogService.logDelete(organizationId, userId, AuditResource.GATEWAY, gatewayId, gateway.name);
+    if (userId) this.auditLogService.logDelete(organizationId, userId, AuditResource.GATEWAY, gatewayId, gateway.name);
   }
 
   /**
