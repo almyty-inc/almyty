@@ -28,8 +28,8 @@ On the agent, open **Channels** and select **Add channel**, then pick the kind. 
 A channel's page has what that channel needs and nothing else:
 
 - Its **name**, and for a web chat its **address**.
-- **Keys** for a messaging channel: pick a credential you keep on Credentials, or select **Create one here** to add one without leaving the page. Only credentials for that platform are offered.
-- **AI disclosure**: a switch, on by default, that tells people they are talking to an AI, with the line from the branding.
+- **Keys** for a messaging channel: pick a credential you keep on Credentials, or select **Create one here** to add one without leaving the page. Only credentials for that platform are offered. On Slack this section is **Add to Slack** and takes your Slack app's credential.
+- **AI disclosure**: a switch, on by default, that tells people they are talking to an AI, with the line from the branding. Turning it off needs the white-label entitlement.
 - The **Callback URL** to paste into the platform's console, where the platform needs one. Telegram and the Twilio channels register it for you when you publish.
 - **Publish** and **Unpublish**. Unpublishing stops the channel answering and keeps its settings and address, so publishing again needs no re-registration on the platform side.
 - **Delete** removes the channel and the gateway it answers on, and stops it answering.
@@ -42,7 +42,7 @@ What people see, and who can use the agent's channels, is set once on the agent:
 
 - **Look**: the name people see, brand colour, theme, greeting, suggested prompts, the AI disclosure line, and whether the almyty mark shows (removing it needs the white-label entitlement).
 - **Who can use it**: anyone with the link, email verification, sign-in with OAuth, or enterprise SSO (commercial edition).
-- Under **Advanced**, what it may cost and what it keeps: a spend limit per run, per day and per month, messages per visitor and per IP address an hour, how long visitor data is kept, and whether visitors may download or delete their own data.
+- Under **Advanced**, what it may cost and what it keeps: a spend limit per run, per day and per month, messages per visitor and per IP address an hour, how long visitor data is kept, whether visitors may download or delete their own data, and whether visitor conversations may go into the agent's shared memory (off by default).
 
 ![Branding and visitor rules](/screenshots/apps-settings.png)
 
@@ -57,10 +57,11 @@ The per-run limit stops a single run that would cost more. The per-day and per-m
 Publishing turns away what would produce a channel that is live and useless, or open when you meant it closed, and says every reason at once:
 
 - **Missing keys**: each platform declares exactly what it uses, so you are told which key is missing.
-- **No spend limit or message limits on a channel open to anyone**: anyone with the link can spend against your model keys.
+- **No per-run spend limit, or no per-visitor and per-IP message limits, on a channel open to anyone**: anyone with the link can spend against your model keys.
 - **A workflow agent, or an agent private to its owner.**
 - **The website widget on a channel people must sign in to**: the widget has no sign-in, so it only goes on a channel anyone can use.
 - **A desktop app with no web chat to open**: a desktop app is a window onto the agent's web chat, so add a web chat channel first.
+- **What needs a commercial licence**: enterprise SSO sign-in, removing the almyty mark, or turning the AI disclosure off, without that entitlement.
 
 ## Where the gateways fit
 

@@ -5,7 +5,7 @@ event data. One `retention_policies` row per org; each `*Days` field is a
 number of days, and **null means keep forever**, which is the default for
 every class. An org with no policy row is never swept.
 
-Configured under Settings → Data Retention, or over the API with `GET`/`PUT /organizations/:organizationId/retention`.
+Configured in the Data retention card under Settings → Organization, or over the API with `GET`/`PUT /organizations/:organizationId/retention`.
 
 ## The classes
 

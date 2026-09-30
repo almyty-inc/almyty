@@ -26,12 +26,12 @@ checks the draft before it ships. Two real runs from its history:
 
 ## Build it
 
-1. **Create the agent** (*Agents → Create → Autonomous*) with a primary model, this one uses
+1. **Create the agent** (*Agents → Create agent*, autonomous) with a primary model, this one uses
    **GPT-4o at temp 0.3**: and instructions to triage the ticket, look up the order, and draft
    a reply in your voice.
 2. **Attach the tools** it needs, here an **order-lookup** tool generated from a connected
    orders API. (Connect yours in *APIs → Connect an API*: pick its kind, give the spec link, click **Connect API**.)
-3. **Add a verifier panel** (*Models & Verification → Configure*): add reviewers from more than
+3. **Add a verifier panel** (on the agent's **Overview** tab, **Models & verification** → **Configure verification**): add reviewers from more than
    one vendor, this agent runs **GPT-4o + Gemini 1.5 Pro** with `any_fail_blocks` and up to
    **2 revisions**, triggered `on_final_output`. The primary drafts, the reviewers try to
    refute, and it revises before anything ships.
@@ -45,7 +45,7 @@ checks the draft before it ships. Two real runs from its history:
 5. **Turn on memory** so it carries context between runs, and gate refunds with
    `request_approval`, that's what paused the Brightway Logistics ticket above.
 6. **Wire the trigger**: call the agent's API when a ticket arrives (its endpoint is on the
-   Overview → Integration panel), or publish it on Slack.
+   Overview tab's **Integration** panel), or add a **Slack** channel on its **Channels** tab.
 
 ## Make it yours
 

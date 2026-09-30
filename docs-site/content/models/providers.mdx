@@ -9,7 +9,7 @@ Connecting, checking and managing a provider in the dashboard is described in [C
 ## A vendor's API or your cloud
 
 - **A vendor's API** hosts models and answers chat requests. almyty calls it with your key, or calls your own server at its URL. That is every entry below.
-- **[Your cloud account](/models/your-cloud)** runs an open model you pick on capacity in your own account, which almyty starts, sizes and stops. You connect the cloud account like any other provider and use **Start a model** on its page. A few names appear on both lists (Together, Fireworks, Baseten, Nebius, DigitalOcean, Modal) because the vendor both serves a pay-per-call catalog and rents dedicated capacity.
+- **[Your cloud account](/models/your-cloud)** runs an open model you pick on capacity in your own account, which almyty starts, sizes and stops. You connect the cloud account like any other provider and use **Start a model** under **Open models on this account** on its page. A few names appear on both lists (Together, Fireworks, Baseten, Nebius, DigitalOcean, Modal) because the vendor both serves a pay-per-call catalog and rents dedicated capacity.
 
 DigitalOcean is the clearest case of both: Gradient Serverless Inference is a pay-per-call provider here, nothing to start. Gradient Dedicated Inference is [a cloud you run a model on](/models/your-cloud#digitalocean) with reserved GPUs. They are different products behind the same account.
 
@@ -98,7 +98,7 @@ Every native type ships with its default base URL; set `configuration.apiUrl` to
 - **Azure OpenAI, Azure AI Foundry and Modal cannot be validated by key alone.** `model` is the customer's own deployment or endpoint name, so a valid key against nothing deployed still cannot answer. Modal in particular needs a Shared Endpoint created first from its own dashboard.
 - **RunPod always carries an endpoint id in the URL.** There is no shared base URL: for the public catalog it is a shared model slug, for a private worker it is the customer's own endpoint id. Either way it is a required field.
 - **DigitalOcean's tool calling is not documented** on the Gradient Serverless Inference surface, and streaming is only implied by "OpenAI-compatible" rather than shown in a documented example. **Nebius streaming is not documented** either, though the rest of the surface is OpenAI-compatible. None of these is asserted as working; the health check is what tells you.
-- **Perplexity is Responses-shaped now**, not Chat Completions. The legacy Sonar chat-completions alias retires 2026-09-27; the Router API that would replace it is still private preview. The default base already targets the Responses-shaped surface a paying customer can use today.
+- **Perplexity is Responses-shaped**, not Chat Completions, and the Router API is still private preview. The default base targets the Responses-shaped surface a paying customer can use.
 - **Hosts that serve other authors' open models** (DeepInfra, Novita, Together, Fireworks, Baseten, Nebius, SambaNova, Cerebras, RunPod, Modal, OpenRouter) are priced from the feed under their own namespace. A DeepSeek model on RunPod is never billed at DeepSeek's list price; without a feed quote it stays unpriced. DigitalOcean, RunPod and Modal currently have no LiteLLM namespace at all, so models there are unpriced until one exists.
 - **Usage reconciliation.** Only OpenAI and Anthropic document a usage or billing API almyty can ingest, so [cost governance](/cost-governance) cannot reconcile estimates against actuals for anything else.
 - **Replicate** is not a provider type: its API is predictions-based and has no chat-completions endpoint to ride.
@@ -111,7 +111,7 @@ A key belongs to one provider connection, is stored in [Credentials](/credential
 
 vLLM, Ollama, TGI, llama.cpp, a LiteLLM proxy, a vendor that is not on the list: if it answers `POST <base>/chat/completions`, it is **Your own server** (type `custom`).
 
-In the dashboard, open **Credentials → Connect a provider**, pick **Your own server (OpenAI-compatible)**, and give the base URL and, if the server checks one, a key. almyty checks it with one real call and lists what `GET <base>/models` serves; every model it lists is usable once the check passes. Ollama has its own tile: pick **Your own server** on it for an Ollama you run, which reads your pulled models from `GET /api/tags`.
+In the dashboard, open **Credentials → Connect a provider**, pick **Your own server (OpenAI-compatible)**, and give the base URL and, if the server checks one, a key. almyty checks it with one real call and lists what `GET <base>/models` serves; every model it lists is usable once the check passes. Ollama has its own tile: under **Where Ollama runs**, **Ollama Cloud** is picked first; pick **Your own server** for an Ollama you run, which reads your pulled models from `GET /api/tags`.
 
 Over the API it is one call:
 

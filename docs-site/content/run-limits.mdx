@@ -63,7 +63,7 @@ Self-hosters own these. They are the only ceiling no in-product role can raise.
 
 There is exactly one run-scoped accumulator and it is the `agent_runs` row: `currentStep`, `totalTokens`, `totalCost`, `executionTime`, `toolCallCount`, `recursionDepth`.
 
-A nested run (a sub-agent, a collaboration member) inherits its parent's resolved limits and increments `recursionDepth`, so nesting stays **inside** the same budget rather than starting a fresh one alongside it. Without that, an agent allowed one dollar could spawn ten sub-agents allowed one dollar each.
+A nested run (a sub-agent, another agent it calls, a temporary agent) inherits its parent's resolved limits and increments `recursionDepth`, so nesting stays **inside** the same budget rather than starting a fresh one alongside it. Without that, an agent allowed one dollar could spawn ten sub-agents allowed one dollar each.
 
 The loop node in the pipeline builder is bound by the same ceiling. A loop asking for 100 iterations inside a run capped at 25 steps gets 25.
 

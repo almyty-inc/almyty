@@ -13,8 +13,10 @@ models, deployments, APIs, tools and the registry use it.
 `/credentials` in the sidebar is a table of every credential: name and
 logo, service, whether it works ("Works", "Needs attention", or "Saved"
 for a key nobody can check), who can use it, what uses it, and when it
-was added. Keys a model provider uses are their own group, "Model
-providers", added and changed on Models. The table also lists the keys a
+was added. Model provider connections are their own group below it,
+"Model providers": one row per connection (several per provider, keyless
+ones such as an Ollama you run included), each opening its page at
+`/credentials/providers/:id`, and "Connect a provider" adds one. The table also lists the keys a
 single API, MCP server, channel or app keeps for itself (credential rows
 without a connector, from `GET /credentials`), each saying what keeps it.
 

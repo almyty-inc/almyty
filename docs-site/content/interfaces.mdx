@@ -41,19 +41,19 @@ Twilio signs the exact URL it called, so `webhook_url` has to match what is conf
 
 | Channel | Inbound | Outbound | You need |
 |---|---|---|---|
-| **Slack** | Events API webhook, request-signature verified | `chat.postMessage` | Bot token, signing secret |
+| **Slack** | Events API webhook, request-signature verified | chat.postMessage | A Slack app (client ID, client secret, signing secret) for **Add to Slack**, or a bot token for one workspace |
 | **Telegram** | Bot webhook (registered automatically) | Bot API `sendMessage` | Bot token |
 | **Discord** | Gateway events | Channel messages | Bot token |
 | **WhatsApp** (Twilio) | Twilio webhook (registered automatically), `X-Twilio-Signature` verified | Twilio Messages API | Account SID, auth token, WhatsApp sender |
-| **WhatsApp Cloud** (Meta), rolling out | Meta callback webhook, app-secret verified | WhatsApp Cloud API | Access token, phone number ID, verify token, app secret |
-| **SMS** (Twilio), rolling out | Twilio webhook (registered automatically), `X-Twilio-Signature` verified | Twilio Messages API | Account SID, auth token, phone number |
+| **WhatsApp Cloud** (Meta) | Meta callback webhook, app-secret verified | WhatsApp Cloud API | Access token, phone number ID, verify token, app secret |
+| **SMS** (Twilio) | Twilio webhook (registered automatically), X-Twilio-Signature verified | Twilio Messages API | Account SID, auth token, phone number |
 | **Microsoft Teams** | Bot Framework activities, JWT verified | Bot Framework replies | Bot ID and password (Azure bot registration) |
 | **Google Chat** | Space webhook, verification token | Incoming webhook | Webhook URL, verification token |
 | **Signal** | signal-cli REST bridge webhook | Bridge send API | Self-hosted signal-cli bridge URL, phone number |
-| **Matrix** | Homeserver sync | Room `send` | Homeserver URL, access token, room ID |
+| **Matrix** | Bridge webhook, bearer token | Room send | Homeserver URL, access token, a bridge that forwards room messages |
 | **IRC** | IRC-to-HTTP bridge webhook | Bridge send | Bridge webhook URL |
 | **Email** | Inbound MIME parsing | Resend API | Resend API key |
-| **Webhook** | Any HTTP POST, optional HMAC verification | POST to your callback URL | Callback URL, optional shared secret |
+| **Webhook** | Any HTTP POST, HMAC-SHA256 verified | POST to your callback URL | Callback URL, shared secret |
 | **Chat Widget** | Widget POST | SSE / polling delivery | Nothing, add the **Website widget** channel and paste its line |
 
 Every inbound request is authenticated against the platform's mechanism before it reaches an agent: Slack and Webhook use HMAC signatures, WhatsApp validates the Twilio signature, Teams verifies the Bot Framework JWT, Google Chat checks its verification token. Requests that fail verification are rejected, never queued.
@@ -66,25 +66,25 @@ Each channel's page on the agent shows what that platform needs and where to pas
 
 1. Create an app at [api.slack.com/apps](https://api.slack.com/apps) (from scratch).
 2. Under **OAuth & Permissions**, add the bot scopes `chat:write`, `app_mentions:read`, and `im:history`, then install the app to your workspace.
-3. Paste the Bot Token (`xoxb-...`) and Signing Secret into the channel's configuration in almyty.
+3. On the channel's page, under **Add to Slack**, pick or create the Slack app credential (client ID, client secret, signing secret). For a single workspace, a bot token (xoxb-...) credential goes under **Advanced** instead.
 4. Under **Event Subscriptions**, enable events and paste your almyty webhook URL as the Request URL.
 5. Subscribe to the bot events `message.im` and `app_mention`, then save.
 
 ### Telegram
 
-1. Message [@BotFather](https://t.me/BotFather), run `/newbot`, and copy the bot token into the channel's configuration.
+1. Message [@BotFather](https://t.me/BotFather), run `/newbot`, and copy the bot token into the channel's credential.
 2. Done. The webhook is registered automatically on deploy.
 
 ### WhatsApp and SMS (Twilio)
 
 1. Copy the Account SID and Auth Token from the [Twilio Console](https://console.twilio.com).
 2. Enter the sender number (your WhatsApp sender or SMS phone number).
-3. The number's inbound webhook is registered automatically where the platform supports it. SMS is rolling out.
+3. The number's inbound webhook is set on your Twilio number automatically when you publish.
 
-### WhatsApp Cloud (Meta), rolling out
+### WhatsApp Cloud (Meta)
 
 1. Create a Meta app with the WhatsApp product at [developers.facebook.com](https://developers.facebook.com).
-2. Paste the access token, phone number ID, verify token, and app secret into the channel's configuration.
+2. Paste the access token, phone number ID, verify token, and app secret into the channel's credential.
 3. In the app's **WhatsApp, Configuration** page, paste your almyty webhook URL as the callback URL, using the same verify token.
 4. Subscribe the app to the `messages` webhook field.
 
@@ -98,11 +98,11 @@ Each channel's page on the agent shows what that platform needs and where to pas
 ### Google Chat
 
 1. Create a Chat app in the Google Cloud console and set your almyty webhook URL as its HTTP endpoint.
-2. Paste the space's incoming webhook URL and the verification token into the channel's configuration.
+2. Paste the space's incoming webhook URL and the verification token into the channel's credential.
 
 ### Microsoft Teams
 
-1. Register a bot in Azure (Bot Framework) and copy the bot ID, password, and tenant ID into the channel's configuration.
+1. Register a bot in Azure (Bot Framework) and copy the bot ID, password, and tenant ID into the channel's credential.
 2. Set the bot's messaging endpoint to your almyty webhook URL.
 
 ### Signal
@@ -112,8 +112,8 @@ Each channel's page on the agent shows what that platform needs and where to pas
 
 ### Matrix
 
-1. Enter the homeserver URL, an access token for the bot account, and the room ID.
-2. No webhook needed. almyty syncs from the homeserver.
+1. Enter the homeserver URL and an access token for the bot account.
+2. Point your Matrix bridge at your almyty webhook URL to forward room messages, sending the incoming token as a Bearer token. Replies are sent to the room the message came from.
 
 ### IRC
 
@@ -127,7 +127,7 @@ Each channel's page on the agent shows what that platform needs and where to pas
 
 ### Webhook
 
-1. POST messages to your almyty webhook URL; optionally sign requests with the shared secret (HMAC).
+1. POST messages to your almyty webhook URL, signed with the shared secret (HMAC-SHA256 over the body). Unsigned requests are refused.
 2. Replies are POSTed to the callback URL you configure on the channel.
 
 ### Chat Widget
@@ -152,13 +152,13 @@ The widget's look is the agent's: its colour, name, greeting, theme and AI discl
 
 ## AI disclosure (EU AI Act Art. 50)
 
-Every messaging channel has an **AI disclosure** switch on its page, on by default. While it is on, the first outbound message of each conversation is preceded by the disclosure line from the agent's branding (or the channel's own), by default:
+Every channel people talk to (each messaging channel, the web chat and the website widget) has an **AI disclosure** switch on its page, on by default. While it is on, the first outbound message of each messaging conversation is preceded by the disclosure line from the agent's branding (or the channel's own), by default:
 
 > You are chatting with an AI assistant.
 
 Change the line under **Branding and visitor rules**. Turning the switch off needs the white-label entitlement: Article 50 of the AI Act requires that people be informed they are interacting with an AI system. See [Compliance](/compliance) for the full mapping.
 
-The [hosted chat app](/hosted-chat) is the exception: it shows the disclosure by default, and removing it needs an entitlement and is recorded.
+The web chat and the website widget carry the same switch and show the line under the message box instead.
 
 ## Operational notes
 

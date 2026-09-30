@@ -2,7 +2,7 @@
 
 The **Desktop app** and **Terminal app** channels are downloads: a build runs on our machines and produces a file people install. It does not run on your users' laptops, which is the difference between "download this app" and "install Node and run this command".
 
-Add one on the agent's **Channels** tab with **Add channel**. Its page has **Build**, the build history and the download links. Everything knowable up front (an unknown platform, a missing toolchain) is checked before the build is queued, so you find out at once rather than twenty minutes into a job.
+Add one on the agent's **Channels** tab with **Add channel**. Its page has **Build for** (the platform), **Sign with** (a certificate, or nothing), **Build**, the build history and the download links. Everything knowable up front (an unknown platform, a missing toolchain) is checked before the build is queued, so you find out at once rather than twenty minutes into a job.
 
 ## Channels and platforms
 
@@ -15,7 +15,7 @@ Everything cross-compiles: a Linux executable and a macOS app both build on eith
 
 ## The icon
 
-The app wears your icon. Set the icon URL in the agent's branding (or the channel's own) and the build fetches it and derives the platform formats from it; without one, every app would wear the default framework logo. The icon never fails a build: if it cannot be fetched, the build falls back to a default and tells you which happened.
+The app wears your icon: the build fetches the icon URL in the agent's branding (or the channel's own) and derives the platform formats from it. The icon URL is set through the API (`PATCH /agents/:agentId/public-settings` with `branding.iconUrl`); the branding form has no field for it. The icon never fails a build: if there is none, or it cannot be fetched, the build falls back to a default and tells you which happened.
 
 ## Desktop apps
 

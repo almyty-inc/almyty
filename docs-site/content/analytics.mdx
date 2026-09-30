@@ -18,7 +18,7 @@ See what every protocol, tool, agent, and model is doing in real time. Eleven ta
 
 Eight tiles over two windows: requests, tool executions, average response time, errors, and model calls for the last 24 hours, then requests, tool executions, and model cost for the last 7 days. Below them, a 7-day line chart of request volume. This tab refreshes itself every 30 seconds.
 
-### Request Log
+### Request log
 
 Paginated list of every gateway request with time, method, path, status, duration, protocol, and caller IP, filterable to successes or errors.
 
@@ -60,7 +60,7 @@ The ceilings behind the Cost tab. Each budget is a cents limit for a period, sco
 
 Cost attribution: what each team and each agent spent this period, each with its share of the total, plus a straight-line projection for the rest of the period — presented as a trend, not a commitment. **Chargeback is an enterprise-edition feature**; an organization without the entitlement sees an upgrade prompt here instead of the report.
 
-### Audit Trail
+### Audit trail
 
 Chronological log of every sensitive action with time, user, action, resource type, resource name, status, duration, and source IP, filterable by resource and action. The log itself is available to everyone; **exporting it is an enterprise-edition feature** and the export buttons are locked without the entitlement.
 
@@ -85,7 +85,7 @@ Per-entity reports — `/analytics/tool-usage`, `/analytics/gateway-usage`, `/an
 
 ## Retention
 
-Nothing is pruned by default: an organization's retention policy starts with every window unset, which means keep forever. Set windows per data class — agent runs, conversations, request logs, usage metrics, audit log, tool executions, notifications — under **Settings → Data retention**, or over REST at `PUT /organizations/:id/retention`. Each window is between 1 and 3650 days, and clearing one goes back to keeping that class forever. An hourly sweep applies whatever the policy says.
+Nothing is pruned by default: an organization's retention policy starts with every window unset, which means keep forever. Set windows per data class — agent runs, conversations, request logs, usage metrics, audit log, tool executions, notifications — in the **Data retention** card under **Settings → Organization**, or over REST at `PUT /organizations/:id/retention`. Each window is between 1 and 3650 days, and clearing one goes back to keeping that class forever. An hourly sweep applies whatever the policy says.
 
 ## API
 

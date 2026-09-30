@@ -23,7 +23,7 @@ Two tabs at the top switch between **Workflow** (visual DAG) and **Autonomous**
 
 ### Add nodes
 
-Find the node type you need in the **Node Palette** on the left and drag it onto
+Find the node type you need in the **Steps** palette on the left and drag it onto
 the canvas. It appears with default configuration and unconnected handles.
 
 ![Node palette](/screenshots/agent-builder-node-palette.png)
@@ -74,6 +74,9 @@ for quick identification.
 | **Parallel** | Marks a fan-out point; the branches wired to it run together |
 | **Merge** | Combines outputs from multiple upstream nodes into a single value |
 | **Sub-agent** | Invokes another agent as a step in this pipeline |
+| **Verify** | Checks a value against a spec with a panel of refute-only checker models |
+| **Extract context** | Sums up what earlier steps found into a short brief |
+| **Decision** | Asks a model one question with fixed answers and follows the chosen answer's edge |
 
 See [Node Types](/agents/node-types) for full configuration details on each.
 
@@ -87,14 +90,16 @@ full control over execution order.
 
 ### Autonomous Mode
 
-Switching to the **Autonomous** tab replaces the canvas with a form:
+Switching to the **Autonomous** tab replaces the canvas with a form, in this
+order:
 
-- **System Instructions**: free-text prompt describing the agent's behavior
-- **Tools**: select which tools the agent can call
-- **Memory**: toggle persistent memory across conversations
-- **Collaboration**: add agents or models as participants, choose sequential, parallel, race or debate, and optionally choose an agent or model as judge
+- **Personality & style** and **Instructions**: who the agent is and what it should do
+- **Work mode**: Single, Cascade, Best of N, Panel, or Explore, extract, patch, with the model slots that mode needs
+- **Memory**: whether it remembers between conversations, in which memory account, for whom, what it saves and for how long
+- **Capabilities**: the tools and APIs it may use, other agents it can call, the machine its runner tools run on, and temporary agents
+- **Run limits** and an optional **Heartbeat**
 
-The LLM decides at runtime which tools to call and in what order. Best for
+The model decides at runtime which tools to call and in what order. Best for
 open-ended tasks where rigid sequencing is unnecessary. See
 [Autonomous agents](/agents/autonomous).
 

@@ -38,7 +38,7 @@ agent's model (readiness, the model-issue banner, compaction, a compat
 request's sampling override) therefore reads the model the loop uses, and
 the loop reads the main role's call settings from `modelConfig`.
 
-Teammates replace the old collaboration roster. The page offers model
+The page does not edit an agent's `collaboration` field: it shows any participants and judge still stored there as teammate roles, and a save writes them as roles and clears `collaboration`. The page offers model
 teammates under the work mode's Advanced; other agents the agent may call
 are picked once, under Capabilities (`agentConfig.callableAgentIds`, offered
 as `call_agent_*` tools, see `agent-capabilities.ts`). An agent teammate
@@ -219,11 +219,3 @@ tools offered and the only agents `invoke_agent` starts (an API client
 that sets only `canCallAgents` still means every agent). `runnerLabels` go
 with every tool call. `create_agent` refuses past `maxTemporaryAgents` in
 the run or `maxTemporaryAgentsAlive` across the agent's runs.
-
-## Migration
-
-`1750812200000-AgentModels` adds the column and gives every autonomous
-agent whose `modelConfig` names a provider or routing policy a Single
-strategy with that model as its main role, so it runs as before. Its
-collaboration participants and judge become teammate roles, and
-`collaboration` is cleared.

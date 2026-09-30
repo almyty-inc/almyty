@@ -9,8 +9,8 @@ polling.
 
 ## Set it up
 
-On the agent's detail page, turn on the webhook, paste the URL almyty should
-call, and save. From then on, every completed run POSTs to that URL.
+On the agent's **Overview** tab, paste the URL almyty should call into
+**Webhook URL** on the **Webhook** card and click **Save**. Clear it and save to stop.
 
 The request is hardened: the target URL is validated against SSRF (no internal
 or link-local hosts), redirects are not followed, and the call times out quickly.
