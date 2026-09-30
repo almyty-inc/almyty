@@ -478,8 +478,8 @@ const OTHER_CONNECTORS: ConnectorDefinition[] = [
   {
     key: 'toolsource-openapi',
     kind: 'tool_source',
-    displayName: 'OpenAPI document',
-    description: 'An OpenAPI spec URL whose operations become tools.',
+    displayName: 'API key or token (for an imported API)',
+    description: 'The key or token an API imported from an OpenAPI document is called with.',
     connect: [{
       type: 'api_key',
       label: 'Spec URL and key',
