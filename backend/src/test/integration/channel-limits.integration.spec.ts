@@ -326,8 +326,6 @@ run('channel limits and visitor rights (real Postgres)', () => {
       { resolveAndAuthenticate: async (_o: string, _e: string, r: any) => ({ auth: r.__auth }) } as any,
       a2a,
       unused,
-      unused,
-      unused,
       { get: () => 'https://api.example.test' } as any,
       rateLimit,
       channels,

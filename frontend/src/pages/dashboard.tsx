@@ -28,7 +28,7 @@ import { pluralize, pluralized } from '@/lib/utils'
 import type { RequestLog } from '@/types'
 
 /** Gateway types that take gateway sign-in (API key, bearer, OAuth). */
-const PROTOCOL_GATEWAY_TYPES = new Set(['mcp', 'utcp', 'skills', 'a2a', 'acp', 'openai_chat'])
+const PROTOCOL_GATEWAY_TYPES = new Set(['mcp', 'utcp', 'skills', 'a2a'])
 
 // Helper to humanize a log path. The activity feed only receives
 // protocol traffic (MCP/UTCP/A2A requests and tool executions), so

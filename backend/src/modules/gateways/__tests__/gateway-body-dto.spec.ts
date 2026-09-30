@@ -34,4 +34,15 @@ describe('gateway body DTOs', () => {
   it('refuses a gateway of every protocol: each gateway serves one', async () => {
     expect(await errorsOf(CreateGatewayBodyDto, { ...create, type: 'tools' })).toEqual(['type']);
   });
+
+  it.each(['mcp', 'utcp', 'skills'])('accepts a %s gateway: the protocols a gateway serves', async (type) => {
+    expect(await errorsOf(CreateGatewayBodyDto, { ...create, type })).toEqual([]);
+  });
+
+  // An agent's OpenAI-compatible API is the agent's own endpoint and ACP is
+  // the @almyty/acp-server package; neither is a gateway type.
+  it.each(['acp', 'openai_chat'])('refuses a %s gateway on create and on update', async (type) => {
+    expect(await errorsOf(CreateGatewayBodyDto, { ...create, type })).toEqual(['type']);
+    expect(await errorsOf(UpdateGatewayBodyDto, { type })).toEqual(['type']);
+  });
 });
