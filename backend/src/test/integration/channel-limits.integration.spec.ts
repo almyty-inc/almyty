@@ -285,6 +285,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
       type: 'telegram',
       extractTenantId: () => null,
       verifyWebhook: async () => true,
+      carriesMessage: () => true,
       deliveryId: (body: any) => String(body.update_id),
       normalizeInbound: (body: any) => ({
         text: body.text,
@@ -302,7 +303,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
       events,
       runtime as any,
       new ChatWidgetAdapter(events),
-      stub, stub, telegram, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub,
+      stub, stub, telegram, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub,
       undefined,
       undefined,
       rateLimit,

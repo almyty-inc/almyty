@@ -35,6 +35,8 @@ import { MicrosoftTeamsAdapter } from '../adapters/microsoft-teams.adapter';
 import { SignalAdapter } from '../adapters/signal.adapter';
 import { MatrixAdapter } from '../adapters/matrix.adapter';
 import { IrcAdapter } from '../adapters/irc.adapter';
+import { IMessageSendblueAdapter } from '../adapters/imessage-sendblue.adapter';
+import { IMessageLoopMessageAdapter } from '../adapters/imessage-loopmessage.adapter';
 import { installFetchMock } from '../adapters/__tests__/test-helpers';
 
 /**
@@ -240,7 +242,7 @@ describe('channel pipeline reads decrypted, key-normalized config', () => {
       new MicrosoftTeamsAdapter(),
       new SignalAdapter(),
       new MatrixAdapter(),
-      new IrcAdapter(),
+      new IrcAdapter(), new IMessageSendblueAdapter(), new IMessageLoopMessageAdapter(),
     );
     fetchMock = installFetchMock();
   });

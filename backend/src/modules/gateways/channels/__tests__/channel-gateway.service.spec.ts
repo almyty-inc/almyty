@@ -14,6 +14,8 @@ import { MicrosoftTeamsAdapter } from '../adapters/microsoft-teams.adapter';
 import { SignalAdapter } from '../adapters/signal.adapter';
 import { MatrixAdapter } from '../adapters/matrix.adapter';
 import { IrcAdapter } from '../adapters/irc.adapter';
+import { IMessageSendblueAdapter } from '../adapters/imessage-sendblue.adapter';
+import { IMessageLoopMessageAdapter } from '../adapters/imessage-loopmessage.adapter';
 import { installFetchMock } from '../adapters/__tests__/test-helpers';
 import {
   ClauseModel,
@@ -61,7 +63,7 @@ describe('ChannelGatewayService.testConnection', () => {
       new MicrosoftTeamsAdapter(),
       new SignalAdapter(),
       new MatrixAdapter(),
-      new IrcAdapter(),
+      new IrcAdapter(), new IMessageSendblueAdapter(), new IMessageLoopMessageAdapter(),
     );
     fetchMock = installFetchMock();
   });
@@ -76,6 +78,8 @@ describe('ChannelGatewayService.testConnection', () => {
         GatewayType.WHATSAPP,
         GatewayType.WHATSAPP_CLOUD,
         GatewayType.SMS,
+        GatewayType.IMESSAGE_SENDBLUE,
+        GatewayType.IMESSAGE_LOOPMESSAGE,
         GatewayType.EMAIL,
         GatewayType.WEBHOOK,
         GatewayType.GOOGLE_CHAT,
@@ -163,6 +167,41 @@ describe('ChannelGatewayService.testConnection', () => {
       const res = await service.testConnection(gw(GatewayType.WHATSAPP, { twilio_account_sid: 'AC1' }));
       expect(fetchMock.calls.length).toBe(0);
       expect(res.ok).toBe(false);
+    });
+  });
+
+  describe('imessage via sendblue', () => {
+    it('probes GET /api/lines with both key headers', async () => {
+      fetchMock.setNextResponse({ ok: true, status: 200, json: [] });
+      const res = await service.testConnection(
+        gw(GatewayType.IMESSAGE_SENDBLUE, { api_key_id: 'kid', api_secret_key: 'sec' }),
+      );
+      expect(fetchMock.calls[0].url).toBe('https://api.sendblue.co/api/lines');
+      expect(fetchMock.calls[0].init.headers).toMatchObject({ 'sb-api-key-id': 'kid', 'sb-api-secret-key': 'sec' });
+      expect(res).toEqual({ ok: true, detail: 'sendblue keys accepted' });
+    });
+
+    it('maps a refusal to ok=false and needs both keys before calling', async () => {
+      fetchMock.setNextResponse({ ok: false, status: 401, json: {} });
+      const refused = await service.testConnection(
+        gw(GatewayType.IMESSAGE_SENDBLUE, { api_key_id: 'kid', api_secret_key: 'bad' }),
+      );
+      expect(refused).toEqual({ ok: false, detail: 'sendblue 401' });
+      const missing = await service.testConnection(gw(GatewayType.IMESSAGE_SENDBLUE, { api_key_id: 'kid' }));
+      expect(missing.ok).toBe(false);
+      expect(fetchMock.calls).toHaveLength(1);
+    });
+  });
+
+  describe('imessage via loopmessage', () => {
+    it('checks the keys are present without sending anything, and says it could not check more', async () => {
+      const res = await service.testConnection(
+        gw(GatewayType.IMESSAGE_LOOPMESSAGE, { api_key: 'k', inbound_token: 't' }),
+      );
+      expect(fetchMock.calls).toHaveLength(0);
+      expect(res.ok).toBe(true);
+      expect(res.detail).toMatch(/no read-only check/);
+      expect((await service.testConnection(gw(GatewayType.IMESSAGE_LOOPMESSAGE, { api_key: 'k' }))).ok).toBe(false);
     });
   });
 
@@ -281,7 +320,7 @@ describe('ChannelGatewayService.testConnection', () => {
         new MicrosoftTeamsAdapter(),
         new SignalAdapter(),
         new MatrixAdapter(),
-        new IrcAdapter(),
+        new IrcAdapter(), new IMessageSendblueAdapter(), new IMessageLoopMessageAdapter(),
       );
     });
 
@@ -391,7 +430,7 @@ describe('ChannelGatewayService.testConnection', () => {
         new MicrosoftTeamsAdapter(),
         new SignalAdapter(),
         new MatrixAdapter(),
-        new IrcAdapter(),
+        new IrcAdapter(), new IMessageSendblueAdapter(), new IMessageLoopMessageAdapter(),
       );
     });
 
@@ -469,7 +508,7 @@ describe('ChannelGatewayService — secrets through the credential store', () =>
       null as any, null as any, null as any, null as any,
       new ChatWidgetAdapter(null as any), new SlackAdapter(), new DiscordAdapter(), new TelegramAdapter(),
       new WhatsAppAdapter(), new WhatsAppCloudAdapter(), new SmsAdapter(), new EmailAdapter(), new WebhookAdapter(),
-      new GoogleChatAdapter(), new MicrosoftTeamsAdapter(), new SignalAdapter(), new MatrixAdapter(), new IrcAdapter(),
+      new GoogleChatAdapter(), new MicrosoftTeamsAdapter(), new SignalAdapter(), new MatrixAdapter(), new IrcAdapter(), new IMessageSendblueAdapter(), new IMessageLoopMessageAdapter(),
       undefined, undefined, undefined, channelCredentials as any,
     );
 

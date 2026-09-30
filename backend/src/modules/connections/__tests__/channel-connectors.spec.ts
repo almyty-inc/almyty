@@ -22,6 +22,8 @@ const ADAPTER_FIELDS: Record<string, string[]> = {
   [GatewayType.WHATSAPP]: ['twilio_account_sid', 'twilio_auth_token', 'phone_number'],
   [GatewayType.SMS]: ['twilio_account_sid', 'twilio_auth_token', 'phone_number'],
   [GatewayType.WHATSAPP_CLOUD]: ['phone_number_id', 'access_token', 'app_secret', 'verify_token'],
+  [GatewayType.IMESSAGE_SENDBLUE]: ['api_key_id', 'api_secret_key', 'phone_number', 'signing_secret'],
+  [GatewayType.IMESSAGE_LOOPMESSAGE]: ['api_key', 'sender_name', 'inbound_token'],
   [GatewayType.MICROSOFT_TEAMS]: ['bot_id', 'bot_password', 'service_url'],
   [GatewayType.GOOGLE_CHAT]: ['webhook_url', 'verification_token'],
   [GatewayType.SIGNAL]: ['api_url', 'phone_number', 'inbound_token'],

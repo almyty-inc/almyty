@@ -66,6 +66,8 @@ const INVENTORY: Record<string, [Kind, string]> = {
   'src/modules/gateways/channels/adapters/webhook.adapter.ts': ['gated', 'outbound webhook_url / callback_url: assertEgress + egressInit + capped read'],
   'src/modules/gateways/channels/adapters/matrix.adapter.ts': ['gated', 'homeserver_url: assertEgress + egressInit'],
   'src/modules/gateways/channels/adapters/signal.adapter.ts': ['gated', 'signal-cli api_url: assertEgress + egressInit'],
+  'src/modules/gateways/channels/adapters/imessage-sendblue.adapter.ts': ['gated', 'api.sendblue.co send-message: assertEgress + egressInit'],
+  'src/modules/gateways/channels/adapters/imessage-loopmessage.adapter.ts': ['gated', 'a.loopmessage.com message/send: assertEgress + egressInit'],
   'src/modules/gateways/channels/adapters/google-chat.adapter.ts': ['gated', 'webhook_url: assertEgress + egressInit'],
   'src/modules/gateways/channels/adapters/irc.adapter.ts': ['gated', 'bridge webhook_url: assertEgress + egressInit'],
   'src/modules/gateways/channels/adapters/microsoft-teams.adapter.ts': ['gated', 'activity service_url: assertEgress + egressInit; JWKS/token are Microsoft constants'],

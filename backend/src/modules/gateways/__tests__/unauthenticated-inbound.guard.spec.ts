@@ -19,6 +19,8 @@ import { MicrosoftTeamsAdapter } from '../channels/adapters/microsoft-teams.adap
 import { SignalAdapter } from '../channels/adapters/signal.adapter';
 import { MatrixAdapter } from '../channels/adapters/matrix.adapter';
 import { IrcAdapter } from '../channels/adapters/irc.adapter';
+import { IMessageSendblueAdapter } from '../channels/adapters/imessage-sendblue.adapter';
+import { IMessageLoopMessageAdapter } from '../channels/adapters/imessage-loopmessage.adapter';
 
 /**
  * The invariant that governs every unauthenticated inbound surface.
@@ -65,6 +67,8 @@ describe('unauthenticated inbound surfaces', () => {
     [GatewayType.SIGNAL, new SignalAdapter()],
     [GatewayType.MATRIX, new MatrixAdapter()],
     [GatewayType.IRC, new IrcAdapter()],
+    [GatewayType.IMESSAGE_SENDBLUE, new IMessageSendblueAdapter()],
+    [GatewayType.IMESSAGE_LOOPMESSAGE, new IMessageLoopMessageAdapter()],
   ];
 
   /** The protected flag, read off the instance. */
