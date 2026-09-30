@@ -170,6 +170,18 @@ describe('/credentials', () => {
     expect(await screen.findByText('at /credentials/new')).toBeInTheDocument()
   })
 
+  it('shows only the model providers when they are all there is, with no empty table above them', async () => {
+    vi.mocked(connectionsApi.list).mockResolvedValue([
+      connection({ id: 'conn-3', name: 'OpenAI', connectorKey: 'openai', connectorDisplayName: 'OpenAI', kind: 'inference', accountLabel: null }),
+    ])
+    vi.mocked(credentialsApi.getAll).mockResolvedValue([])
+    at()
+    const group = await screen.findByTestId('model-provider-credentials')
+    expect(await within(group).findByText('OpenAI', { selector: 'span.truncate' })).toBeInTheDocument()
+    expect(screen.queryByTestId('credentials-table')).not.toBeInTheDocument()
+    expect(screen.queryByText('No credentials yet')).not.toBeInTheDocument()
+  })
+
   it('gives admins an Advanced tab, and nobody else', async () => {
     const { unmount } = at()
     await screen.findByTestId('credentials-table')

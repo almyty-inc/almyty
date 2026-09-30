@@ -143,21 +143,24 @@ function CredentialLists({ rows }: { rows: ReturnType<typeof useCredentialRows> 
   const open = (row: CredentialRow) => navigate(row.href)
   return (
     <div className="space-y-6">
-      <Card>
-        <CardContent className="pt-6" data-testid="credentials-table">
-          <DataTable
-            columns={columns}
-            data={others}
-            loading={rows.isLoading}
-            onRowClick={open}
-            searchKey="name"
-            searchPlaceholder="Search credentials"
-            hideSelectionCount
-            hideColumnsButton
-            emptyState={<EmptyState variant="inline" icon={KeyRound} title="No credentials yet" description="Model providers are listed below." />}
-          />
-        </CardContent>
-      </Card>
+      {/* Shown only when it has rows: with model providers alone, their
+          list below is the page. */}
+      {(rows.isLoading || others.length > 0) && (
+        <Card>
+          <CardContent className="pt-6" data-testid="credentials-table">
+            <DataTable
+              columns={columns}
+              data={others}
+              loading={rows.isLoading}
+              onRowClick={open}
+              searchKey="name"
+              searchPlaceholder="Search credentials"
+              hideSelectionCount
+              hideColumnsButton
+            />
+          </CardContent>
+        </Card>
+      )}
       <Card data-testid="model-provider-credentials">
         <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1.5">
