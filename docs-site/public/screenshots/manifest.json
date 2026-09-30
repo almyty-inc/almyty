@@ -879,7 +879,8 @@
       "title": "Add memory",
       "path": "screenshots/memory-write.png",
       "capturedAt": "2026-09-30T11:22:57.927Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The Memory page has an Accounts tab and the storage service cards are gone from Storage. Recapture on staging once it is deployed; the prior capture is kept.",
       "sha256": "7786413e5bfedd08a2b08cb2da55b620839935778e23326012324d20444f9443",
       "source": {
         "kind": "browser",
@@ -901,7 +902,8 @@
       "title": "Memory",
       "path": "screenshots/memory.png",
       "capturedAt": "2026-09-30T11:22:55.532Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The Memory page has an Accounts tab (every memory account with its health, Add account for a service with none, and the moves between accounts), and moving memories is its own page. Recapture on staging once it is deployed; the prior capture is kept.",
       "sha256": "78e932e3eace2487d579082b2e6bbc83c000c101a58b0f1bcf75440f994b0ae0",
       "source": {
         "kind": "browser",
