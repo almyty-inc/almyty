@@ -1,4 +1,5 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Not, Repository } from 'typeorm';
 import { createHash } from 'crypto';
@@ -8,6 +9,9 @@ import { ApprovalRequest } from '../../entities/approval-request.entity';
 import { Agent } from '../../entities/agent.entity';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { ApprovalsService } from '../approvals/approvals.service';
+import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
+import { ToolExecutorService } from './tool-executor.service';
 
 /**
  * A tool call an approval policy's amount rule holds for a person:
@@ -106,19 +110,40 @@ export function paramsHash(params: unknown): string {
 }
 
 /**
+ * What a held call needs to run later exactly as it was asked: who asked,
+ * in which scope, through which gateway.
+ */
+export interface HeldCallContext {
+  userId: string | null;
+  principal: ExecutionPrincipal | null;
+  gatewayId: string | null;
+  scopes: string[] | null;
+  runnerLabels: Record<string, string> | null;
+  agentTeamId: string | null;
+}
+
+/** Where a held call stands, for a caller that comes back with its approval id. */
+export type HeldCallState =
+  | { status: 'waiting' }
+  | { status: 'refused'; reason: string }
+  | { status: 'done'; result: Record<string, any> };
+
+/**
  * The amount rules of approval policies, enforced where a tool is called.
  *
  * ToolExecutorService asks `check` before it runs anything. A call over a
- * rule's amount does not run: the executor answers with the hit instead,
- * and the caller decides what that means. The autonomous runtime asks a
- * person (an approval request, the run paused until they decide) and runs
- * the call with `approvedGate` once they approve; every other caller has
- * no one to wait for, so the call stays refused. `approved` is how the
- * executor tells an approval that really covers this call -- the same
- * tool, the same parameters, decided "approved" -- from anything else.
+ * rule's amount does not run. The autonomous runtime asks a person itself
+ * (its run pauses) and calls again with `approvedGate` once they approve.
+ * Every other caller cannot wait, so the call is held here (`hold`): it
+ * waits in Approvals as a request with no run, and once approved it runs
+ * once, exactly as asked (`runHeld`, on the 'approval.decided' event), and
+ * what it returned is kept on the request for the caller to collect.
+ * `approved` is how the executor tells an approval that really covers a
+ * call -- the same tool, the same parameters, decided "approved" -- from
+ * anything else.
  */
 @Injectable()
-export class ToolApprovalGateService {
+export class ToolApprovalGateService implements OnModuleInit {
   private readonly logger = new Logger(ToolApprovalGateService.name);
 
   constructor(
@@ -130,7 +155,121 @@ export class ToolApprovalGateService {
     @Optional()
     @InjectRepository(Agent)
     private readonly agents?: Repository<Agent>,
+    // The approvals service and the executor, reached lazily: the approvals
+    // module imports the agents module, which imports this one, and the
+    // executor injects this service.
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
+
+  private approvalsService(): ApprovalsService | null {
+    try {
+      return (this.moduleRef?.get(ApprovalsService, { strict: false }) as ApprovalsService) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  onModuleInit(): void {
+    const approvals = this.approvalsService();
+    approvals?.on('approval.decided', (row: ApprovalRequest) => {
+      if (!row?.toolId || row.runId || row.status !== 'approved') return;
+      this.runHeld(row.id, row.organizationId).catch((err: any) =>
+        this.logger.error(`Could not run the approved call ${row.id}: ${err?.message ?? err}`),
+      );
+    });
+  }
+
+  /**
+   * Hold a call nobody can wait for: ask a person. The same call held
+   * twice while the first is still pending is one request.
+   */
+  async hold(
+    tool: { id: string; name: string },
+    parameters: Record<string, any>,
+    hit: ApprovalGateHit,
+    context: GateContext,
+    call: HeldCallContext,
+  ): Promise<ApprovalRequest | null> {
+    const pending = await this.requests.findOne({
+      where: { organizationId: context.organizationId, toolId: tool.id, fingerprint: hit.paramsHash, status: 'pending' },
+    });
+    if (pending) return pending;
+    const approvals = this.approvalsService();
+    if (!approvals) return null;
+    const why = hit.value === null ? `${hit.argument} is not a number` : `${hit.argument} is ${hit.value}`;
+    const row = await approvals.create({
+      organizationId: context.organizationId,
+      teamId: call.agentTeamId ?? null,
+      runId: null,
+      agentId: context.agentId ?? null,
+      toolId: tool.id,
+      fingerprint: hit.paramsHash,
+      reason: `${hit.summary}. On this call ${why}.`,
+      payload: {
+        tool: tool.name,
+        parameters,
+        _gate: {
+          policyId: hit.policyId,
+          toolId: hit.toolId,
+          argument: hit.argument,
+          value: hit.value,
+          op: hit.op,
+          amount: hit.amount,
+          paramsHash: hit.paramsHash,
+          rule: hit.summary,
+          call,
+        },
+      },
+      principal: call.principal,
+    });
+    await this.record(hit, context, 'held');
+    return row;
+  }
+
+  /** Where a held call stands, for the caller that comes back with its approval id. */
+  async stateOf(approvalId: string, hit: ApprovalGateHit, organizationId: string): Promise<HeldCallState | null> {
+    const row = await this.requests.findOne({ where: { id: approvalId, organizationId } }).catch(() => null);
+    if (!row || row.toolId !== hit.toolId || row.fingerprint !== hit.paramsHash) return null;
+    if (row.status === 'pending') return { status: 'waiting' };
+    if (row.status === 'rejected' || row.status === 'expired') {
+      return { status: 'refused', reason: row.status === 'expired' ? 'nobody decided in time' : row.decisionReason || 'a person rejected it' };
+    }
+    if (row.resultAt && row.result) return { status: 'done', result: row.result };
+    // Approved, and running now (or about to).
+    return { status: 'waiting' };
+  }
+
+  /**
+   * Run an approved held call, once. `resultAt` is claimed before it runs,
+   * so the event and a retry arriving together cannot both run it.
+   */
+  async runHeld(approvalId: string, organizationId: string): Promise<void> {
+    const row = await this.requests.findOne({ where: { id: approvalId, organizationId } });
+    if (!row || row.status !== 'approved' || !row.toolId || row.runId) return;
+    const claim = await this.requests.update(
+      { id: row.id, status: 'approved', resultAt: IsNull() },
+      { resultAt: new Date() },
+    );
+    if (!claim.affected) return;
+    const call = (row.payload?._gate?.call ?? {}) as Partial<HeldCallContext>;
+    const executor = this.moduleRef?.get(ToolExecutorService, { strict: false });
+    if (!executor) return;
+    const result = await executor.executeTool(row.toolId, row.payload?.parameters ?? {}, {
+      organizationId,
+      userId: call.userId ?? (undefined as any),
+      ...(call.principal ? { principal: call.principal } : {}),
+      ...(call.gatewayId ? { gatewayId: call.gatewayId } : {}),
+      ...(call.scopes ? { scopes: call.scopes } : {}),
+      ...(call.runnerLabels ? { runnerLabels: call.runnerLabels } : {}),
+      agentId: row.agentId ?? null,
+      agentTeamId: call.agentTeamId ?? null,
+      approvedGate: { approvalId: row.id },
+    });
+    await this.requests.update(
+      { id: row.id },
+      { result: { success: result.success, data: result.data ?? null, error: result.error ?? null } as any },
+    );
+  }
 
   /** The first enabled rule on this tool the call is over, highest priority first. */
   async check(

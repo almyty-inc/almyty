@@ -19,6 +19,7 @@ import {
   CollectedApproval,
   PolicyProgress,
 } from './approval-policy.evaluator';
+import { checkAmountRule } from '../../../src/modules/approvals/amount-rules.service';
 
 export interface CreateApprovalPolicyInput {
   organizationId: string;
@@ -32,9 +33,6 @@ export interface CreateApprovalPolicyInput {
   /** An amount rule: the policy asks on its own when the tool is called over the amount. Null clears it. */
   trigger?: ApprovalToolAmountTrigger | null;
 }
-
-/** A dot path into a tool's input: `amount`, `refund.total`. */
-const ARGUMENT_PATH = /^[A-Za-z_$][\w$-]*(\.[A-Za-z_$][\w$-]*)*$/;
 
 /**
  * EE (approval_policy): CRUD for multi-step / conditional / quorum
@@ -127,28 +125,12 @@ export class ApprovalPolicyService {
     return this.evaluator.progress(policy, approvals);
   }
 
-  /**
-   * An amount rule in its stored shape, or null. The tool has to be one
-   * of the organization's, and its name is taken from the tool row (it is
-   * what the rule's plain-language summary says).
-   */
-  private async checkTrigger(
+  /** An amount rule in its stored shape, or null (the shared check in the free rules module). */
+  private checkTrigger(
     organizationId: string,
     trigger: ApprovalToolAmountTrigger | null | undefined,
   ): Promise<ApprovalToolAmountTrigger | null> {
-    if (trigger == null) return null;
-    if (trigger.kind !== 'tool_amount') throw new BadRequestException('the rule must be a tool amount rule');
-    const tool =
-      typeof trigger.toolId === 'string' && trigger.toolId
-        ? await this.tools.findOne({ where: { id: trigger.toolId, organizationId }, select: { id: true, name: true } })
-        : null;
-    if (!tool) throw new BadRequestException('Choose one of your tools for the rule.');
-    const argument = typeof trigger.argument === 'string' ? trigger.argument.trim() : '';
-    if (!ARGUMENT_PATH.test(argument)) throw new BadRequestException('Choose the number the rule compares.');
-    if (trigger.op !== 'gt' && trigger.op !== 'gte') throw new BadRequestException('The comparison must be over, or at or over.');
-    const amount = Number(trigger.amount);
-    if (!Number.isFinite(amount) || amount < 0) throw new BadRequestException('The amount must be a number of 0 or more.');
-    return { kind: 'tool_amount', toolId: tool.id, toolName: tool.name, argument, op: trigger.op, amount };
+    return checkAmountRule(this.tools, organizationId, trigger);
   }
   private validateSteps(steps: ApprovalStep[]): void {
     if (!Array.isArray(steps)) throw new BadRequestException('steps must be an array');

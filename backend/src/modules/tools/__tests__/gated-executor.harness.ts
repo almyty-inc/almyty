@@ -6,7 +6,10 @@
  *
  * Not a `.spec.ts`, deliberately: jest collects `.*\.spec\.ts$`.
  */
+import { EventEmitter } from 'events';
+
 import { ToolExecutorService } from '../tool-executor.service';
+import { ApprovalsService } from '../../approvals/approvals.service';
 import { ToolApprovalGateService } from '../tool-approval-gate.service';
 import { ToolHttpExecutor } from '../executors/tool-http.executor';
 import { ToolStatus, ToolType } from '../../../entities/tool.entity';
@@ -47,13 +50,43 @@ export const REFUNDS_OVER_500 = {
   trigger: { kind: 'tool_amount', toolId: 'tool-refund', toolName: 'issue_refund', argument: 'amount', op: 'gt', amount: 500 },
 };
 
+/**
+ * The approvals service as far as a held call sees it: `create` files a
+ * pending request in the same table the gate reads, and `decide` flips it
+ * and emits 'approval.decided' the way ApprovalsService.decide does (its
+ * own specs cover who may decide).
+ */
+export class FakeApprovals extends EventEmitter {
+  created: any[] = [];
+  constructor(private readonly rows: ReturnType<typeof fakeRepository<any>>) {
+    super();
+  }
+  async create(input: any) {
+    const { principal: _p, teamId: _t, ttlSeconds: _ttl, ...rest } = input;
+    const saved = await this.rows.save({ ...rest, status: 'pending', result: null, resultAt: null, decisionReason: null });
+    this.created.push(saved);
+    return saved;
+  }
+  async decide(id: string, status: 'approved' | 'rejected', decisionReason: string | null = null) {
+    await this.rows.update({ id }, { status, decisionReason });
+    const row = await this.rows.findOne({ where: { id } });
+    this.emit('approval.decided', row);
+    return row;
+  }
+}
+
 export function gatedExecutor(executionAccess: ExecutionAccessService, opts: { policies?: any[]; tools?: any[] } = {}) {
   const policies = fakeRepository<any>(opts.policies ?? [REFUNDS_OVER_500]);
   const approvalRequests = fakeRepository<any>({ idPrefix: 'approval' } as any);
   const agents = fakeRepository<any>([]);
   const audit = { log: jest.fn(async () => null) };
-  const gate = new ToolApprovalGateService(policies as any, approvalRequests as any, audit as any, agents as any);
-  const executor = new ToolExecutorService(
+  const approvals = new FakeApprovals(approvalRequests);
+  let executor: ToolExecutorService;
+  const moduleRef = {
+    get: (token: unknown) => (token === ApprovalsService ? approvals : token === ToolExecutorService ? executor : null),
+  };
+  const gate = new ToolApprovalGateService(policies as any, approvalRequests as any, audit as any, agents as any, moduleRef as any);
+  executor = new ToolExecutorService(
     fakeRepository<any>(opts.tools ?? [REFUND_TOOL]) as any,
     {} as any,
     { findOne: jest.fn().mockResolvedValue({ hasPermissionInOrganization: () => true, organizationMemberships: [] }) } as any,
@@ -77,5 +110,7 @@ export function gatedExecutor(executionAccess: ExecutionAccessService, opts: { p
     undefined,
     gate,
   );
-  return { executor, gate, policies, approvalRequests, agents, audit };
+  // Subscribes to 'approval.decided', as Nest does at start-up.
+  gate.onModuleInit();
+  return { executor, gate, policies, approvalRequests, agents, audit, approvals };
 }

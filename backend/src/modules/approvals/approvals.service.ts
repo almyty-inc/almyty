@@ -24,8 +24,13 @@ import {
 export interface CreateApprovalInput {
   organizationId: string;
   teamId: string | null;
-  runId: string;
-  agentId: string;
+  /** The run that paused; null for a held tool call from a caller that cannot pause. */
+  runId: string | null;
+  /** The agent that asked; null for a held tool call no agent made. */
+  agentId: string | null;
+  /** A held tool call: the tool, and a fingerprint of the call's parameters. */
+  toolId?: string | null;
+  fingerprint?: string | null;
   toolCallId?: string | null;
   reason: string;
   payload?: Record<string, any> | null;
@@ -129,7 +134,7 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
    * the policy's steps/quorum. No policy (or no hook) → OSS single gate.
    */
   async create(input: CreateApprovalInput): Promise<ApprovalRequest> {
-    if (input.toolCallId) {
+    if (input.toolCallId && input.runId) {
       const existing = await this.approvals.findOne({
         where: { runId: input.runId, toolCallId: input.toolCallId },
       });
@@ -144,8 +149,10 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     const row = this.approvals.create({
       organizationId: input.organizationId,
       ...scope,
-      runId: input.runId,
-      agentId: input.agentId,
+      runId: input.runId ?? null,
+      agentId: input.agentId ?? null,
+      toolId: input.toolId ?? null,
+      fingerprint: input.fingerprint ?? null,
       toolCallId: input.toolCallId ?? null,
       reason: input.reason,
       payload: policy
@@ -177,7 +184,8 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     }
 
     // Pause the run.
-    await this.runs.update({ id: input.runId }, { status: AgentRunStatus.WAITING_APPROVAL });
+    // Pause the run; a held tool call has none to pause.
+    if (input.runId) await this.runs.update({ id: input.runId }, { status: AgentRunStatus.WAITING_APPROVAL });
 
     this.emit('approval.requested', saved);
     this.notifyPending(saved).catch(() => {});
@@ -294,6 +302,16 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
   private async scopeOfRequestingAgent(
     input: CreateApprovalInput,
   ): Promise<Pick<ApprovalRequest, 'visibility' | 'teamId' | 'ownerUserId'>> {
+    // A held tool call no agent made: the scope of the gateway it came
+    // through, else the organization's (owners and admins decide).
+    if (!input.agentId) {
+      const gateway = input.principal?.kind === 'gateway' ? input.principal : null;
+      if (gateway?.visibility === 'private' && gateway.ownerUserId) {
+        return { visibility: 'private', teamId: null, ownerUserId: gateway.ownerUserId };
+      }
+      if (gateway?.visibility === 'team' && gateway.teamId) return { visibility: 'team', teamId: gateway.teamId, ownerUserId: null };
+      return { visibility: input.teamId ? 'team' : 'org', teamId: input.teamId, ownerUserId: null };
+    }
     const agent = await this.approvals.manager.getRepository(Agent).findOne({
       where: { id: input.agentId, organizationId: input.organizationId },
       select: { id: true, visibility: true, createdBy: true },
@@ -602,8 +620,9 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
    */
   private async notifyDecided(row: ApprovalRequest): Promise<void> {
     if (!this.notifications) return;
-    const run = await this.runs.findOne({ where: { id: row.runId } });
-    const initiatorId = run?.userId;
+    // A held tool call has no run; whoever made the call asked (payload._gate).
+    const run = row.runId ? await this.runs.findOne({ where: { id: row.runId } }) : null;
+    const initiatorId = run?.userId ?? (row.payload as any)?._gate?.call?.userId ?? null;
     if (!initiatorId || initiatorId === row.decidedBy) return;
     const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
     const outcome = row.status === 'approved' ? 'approved' : row.status === 'expired' ? 'expired' : 'rejected';

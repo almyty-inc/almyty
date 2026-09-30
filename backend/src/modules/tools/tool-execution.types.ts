@@ -117,6 +117,13 @@ export interface ToolExecutionOptions {
    */
   approvedGate?: { approvalId: string };
   /**
+   * Who asks a person when an approval policy's amount rule holds the
+   * call. 'caller': the caller does (the autonomous runtime, which pauses
+   * its run); the executor only reports the hit. Absent: the executor holds
+   * the call itself and it runs once approved (ToolApprovalGateService).
+   */
+  holdForApproval?: 'caller';
+  /**
    * The team of the agent making the call. A team's amount rule holds only
    * that team's agents; absent (no agent behind the call), every rule on
    * the tool applies.
@@ -151,6 +158,10 @@ export interface ToolExecutionResult {
    * `approvedGate`; every other caller reports the refusal.
    */
   approvalRequired?: ApprovalGateHit;
+  /** A held call: the approval request it waits on (callers retry with it as `_approvalId`). */
+  approvalId?: string;
+  /** A held call: 'pending' while it waits, 'rejected' once refused. */
+  approvalStatus?: 'pending' | 'rejected';
 }
 
 export interface GraphQLRequest {

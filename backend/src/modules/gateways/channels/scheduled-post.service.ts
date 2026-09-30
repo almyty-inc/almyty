@@ -4,7 +4,8 @@ import { Repository } from 'typeorm';
 
 import { Agent } from '../../../entities/agent.entity';
 import { AgentChannel, ChannelStatus } from '../../../entities/agent-channel.entity';
-import { AgentExecution, AgentExecutionStatus } from '../../../entities/agent-execution.entity';
+import { AgentExecution } from '../../../entities/agent-execution.entity';
+import { AgentRun } from '../../../entities/agent-run.entity';
 import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
 import { GATEWAY_TYPE_FOR_CHANNEL } from '../../agent-channels/channel-publish';
 import { resourceOwnerId } from '../../../common/authorization/access-policy.service';
@@ -14,6 +15,7 @@ import type {
   ChannelDeliveryOutcome,
   PostChannelOption,
   PostDestination,
+  ScheduledResult,
   ScheduledResultPoster,
 } from '../../agents/scheduled-result-poster';
 import { ChannelPolicyService } from '../channel-policy.service';
@@ -88,6 +90,10 @@ export class ScheduledPostService implements ScheduledResultPoster {
     private readonly slack: SlackAdapter,
     @Optional() private readonly policies?: ChannelPolicyService,
     @Optional() private readonly notifications?: NotificationsService,
+    // An autonomous agent's scheduled result is a run, not an execution.
+    @Optional()
+    @InjectRepository(AgentRun)
+    private readonly runs?: Repository<AgentRun>,
   ) {}
 
   /** A channel of this agent, with its gateway and what a post there needs. */
@@ -269,7 +275,7 @@ export class ScheduledPostService implements ScheduledResultPoster {
 
   async post(
     agent: Agent,
-    execution: AgentExecution,
+    execution: ScheduledResult,
     delivery: ChannelDelivery,
     when: { timezone?: string } = {},
   ): Promise<ChannelDeliveryOutcome> {
@@ -290,7 +296,7 @@ export class ScheduledPostService implements ScheduledResultPoster {
     const target = resolved?.target ?? null;
     const named = { ...base, ...(channel ? { channelName: channel.name, channelType: channel.type } : {}) };
 
-    if (execution.status !== AgentExecutionStatus.COMPLETED) {
+    if (execution.status !== 'completed') {
       // The failed run is reported on its own (run.failed); a channel is
       // not told about it.
       outcome = { ...named, status: 'skipped', error: 'the run did not finish, so there was nothing to post' };
@@ -333,10 +339,11 @@ export class ScheduledPostService implements ScheduledResultPoster {
   }
 
   /** Written onto the run, beside the webhook's outcome. Recording must not become its own failure. */
-  private async record(execution: AgentExecution, outcome: ChannelDeliveryOutcome): Promise<void> {
+  private async record(execution: ScheduledResult, outcome: ChannelDeliveryOutcome): Promise<void> {
     execution.metadata = { ...(execution.metadata ?? {}), channelDelivery: outcome };
     try {
-      await this.executions.update(execution.id, { metadata: execution.metadata });
+      if (execution.kind === 'run') await this.runs?.update(execution.id, { metadata: execution.metadata });
+      else await this.executions.update(execution.id, { metadata: execution.metadata });
     } catch (err: any) {
       this.logger.warn(`Could not record the channel post for ${execution.id}: ${err?.message ?? err}`);
     }
@@ -347,7 +354,7 @@ export class ScheduledPostService implements ScheduledResultPoster {
    * type, so it follows the same preferences (in the app; email off by
    * default) and a private agent's note goes to its owner alone.
    */
-  private async notify(agent: Agent, execution: AgentExecution, outcome: ChannelDeliveryOutcome): Promise<void> {
+  private async notify(agent: Agent, execution: ScheduledResult, outcome: ChannelDeliveryOutcome): Promise<void> {
     if (!this.notifications) return;
     const recipient = agent.visibility === 'private' ? resourceOwnerId(agent) : execution.userId;
     if (!recipient) return;
