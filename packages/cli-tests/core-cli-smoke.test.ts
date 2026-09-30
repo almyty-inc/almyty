@@ -3,7 +3,7 @@
  * @almyty/agents and @almyty/skills.
  *
  * Separate from cli-smoke.test.ts, which covers chat, mcp-server,
- * models and connections. The split is deliberate: these four share a
+ * models and credentials. The split is deliberate: these four share a
  * set of conventions (one exit-code table, --json on every read
  * command, --flag=value parsing, version read from package.json) and
  * the first describe block asserts those conventions across all four
@@ -365,14 +365,24 @@ describe.skipIf(GATED)('core CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
       expect(out.split('\n').length).toBeLessThan(20);
     });
 
-    it('help lists every routed command, models and connections included', () => {
+    it('help lists every routed command, models and credentials included', () => {
       const out = run('almyty-cli', ['help']);
       for (const command of [
         'login', 'logout', 'whoami', 'auth', 'agents', 'chat',
-        'skills', 'models', 'connections', 'runner', 'mcp', 'acp',
+        'skills', 'models', 'credentials', 'runner', 'mcp', 'acp',
       ]) {
         expect(out, command).toContain(command);
       }
+      expect(out).not.toMatch(/^ {2}connections\b/m);
+    });
+
+    it('delegates credentials to @almyty/credentials', () => {
+      expect(run('almyty-cli', ['credentials', '--help'])).toContain('@almyty/credentials');
+      expect(Array.isArray(JSON.parse(run('almyty-cli', ['credentials', 'list', '--json'])))).toBe(true);
+    });
+
+    it('has no connections command', () => {
+      expect(runOrFail('almyty-cli', ['connections', 'list']).exitCode).toBe(EXIT.USAGE);
     });
 
     it('delegates whoami to auth-cli', () => {

@@ -76,7 +76,7 @@ function unauthenticatedEnv(): NodeJS.ProcessEnv {
 describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
   beforeAll(() => {
     // Verify binaries exist
-    for (const pkg of ['auth-cli', 'agents-cli', 'chat-cli', 'skills-cli', 'mcp-server', 'almyty-cli']) {
+    for (const pkg of ['auth-cli', 'agents-cli', 'chat-cli', 'skills-cli', 'mcp-server', 'models-cli', 'credentials-cli', 'almyty-cli']) {
       if (!existsSync(bin(pkg))) {
         throw new Error(`${pkg} not built. Run: cd packages/${pkg} && npx tsc`);
       }
@@ -266,7 +266,7 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
       const combined = (result.stdout || '') + (result.stderr || '');
-      expect(combined).toMatch(/\d+ tools/);
+      expect(combined).toMatch(/\d+ gateway tools, \d+ skills/);
     });
   });
 
@@ -354,7 +354,9 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
         ALMYTY_TOKEN: 'smoke-not-a-real-token',
         ALMYTY_URL: 'http://127.0.0.1:9',
       });
-      const reply = JSON.parse(stdout.trim().split('\n')[0]);
+      // By id, not position: a prompts/list_changed notification can go out
+      // before the reply when discovery fails faster than stdin is read.
+      const reply = stdout.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)).find((m) => m.id === 1);
       expect(reply.id).toBe(1);
       expect(reply.result.serverInfo.name).toBe('almyty');
       expect(stderr).toMatch(/discovery failed/i);
@@ -473,7 +475,7 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
 
   describe('credentials-cli', () => {
     it('--version prints a semver', () => {
-      expect(run('connections-cli', ['--version'])).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(run('credentials-cli', ['--version'])).toMatch(/^\d+\.\d+\.\d+$/);
     });
 
     it('--help names every command it implements', () => {
@@ -507,14 +509,14 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
     });
 
     it('list --json never returns a secret value', () => {
-      const connections = JSON.parse(run('credentials-cli', ['list', '--json']));
-      expect(Array.isArray(connections)).toBe(true);
-      for (const connection of connections) {
-        expect(connection.health?.status).toBeTruthy();
+      const credentials = JSON.parse(run('credentials-cli', ['list', '--json']));
+      expect(Array.isArray(credentials)).toBe(true);
+      for (const credential of credentials) {
+        expect(credential.health?.status).toBeTruthy();
         // The store never hands a secret back, not even masked.
-        expect(connection).not.toHaveProperty('config');
-        expect(connection).not.toHaveProperty('configuration');
-        expect(JSON.stringify(connection)).not.toMatch(/"apiKey"|"accessToken"|"bot_token"/);
+        expect(credential).not.toHaveProperty('config');
+        expect(credential).not.toHaveProperty('configuration');
+        expect(JSON.stringify(credential)).not.toMatch(/"apiKey"|"accessToken"|"bot_token"/);
       }
     });
 
