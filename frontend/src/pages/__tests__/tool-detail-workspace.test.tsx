@@ -6,9 +6,9 @@ import { ToolDetailPage } from '../tool-detail'
 import { toolsApi, workspacesApi } from '../../lib/api'
 
 // A runner method that runs inside a workspace needs one picked on the Test
-// tab. The runner's Workspaces tab lists and releases workspaces but has no
-// create button: a workspace is made with POST /workspaces. The copy used to
-// send people to the runner page to create one, which they could not do.
+// tab. Nobody creates a workspace by hand: an agent run that calls the tool
+// gets one automatically, and the runner's Workspaces tab lists and releases
+// them. The copy used to say a workspace was made only through the API.
 
 vi.mock('../../lib/api', () => ({
   toolsApi: { getById: vi.fn(), activate: vi.fn(), deactivate: vi.fn(), execute: vi.fn() },
@@ -46,11 +46,12 @@ describe('ToolDetailPage workspace picker', () => {
     vi.mocked(workspacesApi.getAll).mockResolvedValue([] as any)
   })
 
-  it('with no active workspace, says how one is actually created', async () => {
+  it('with no active workspace, says agent runs get one automatically', async () => {
     render(<ToolDetailPage />)
 
     const empty = await screen.findByText(/No active workspaces on this runner/)
-    expect(empty).toHaveTextContent('POST /workspaces')
+    expect(empty).toHaveTextContent('An agent run that calls this tool gets one automatically')
+    expect(empty).not.toHaveTextContent('POST /workspaces')
     expect(document.body).not.toHaveTextContent(/to create one|create a new workspace from the runner page/i)
   })
 })

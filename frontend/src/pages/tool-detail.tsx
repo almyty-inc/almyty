@@ -441,7 +441,7 @@ export function ToolDetailPage() {
                     </select>
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      No active workspaces on this runner. A workspace is made through the API: <code className="font-mono text-xs">POST /workspaces</code> with this runner&apos;s id and the folder to work in. <Link to={`/runners/${runnerId}?tab=workspaces`} className="underline">The runner&apos;s page</Link> lists and releases them.
+                      No active workspaces on this runner. An agent run that calls this tool gets one automatically; a test run from this page needs one that already exists. <Link to={`/runners/${runnerId}?tab=workspaces`} className="underline">The runner&apos;s page</Link> lists and releases them.
                     </p>
                   )}
                 </div>
