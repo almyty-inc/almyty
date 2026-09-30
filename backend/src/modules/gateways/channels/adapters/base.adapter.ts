@@ -169,15 +169,26 @@ export abstract class BaseAdapter {
    *
    * Most platforms post only messages to a channel webhook, and the
    * default says yes. The iMessage relays post everything to the one URL:
-   * our own outbound echoes, delivery statuses, reactions and group
-   * traffic. Answering one of those would at best waste a run and at
-   * worst have the agent reply to itself, so those adapters say no and
-   * the pipeline acknowledges the delivery without starting anything.
+   * our own outbound echoes, delivery statuses and reactions. Answering
+   * one of those would at best waste a run and at worst have the agent
+   * reply to itself, so those adapters say no and the pipeline
+   * acknowledges the delivery without starting anything.
    * Asked only after the delivery has been verified.
    */
   carriesMessage(_rawPayload: any): boolean {
     return true;
   }
+
+  /**
+   * Whether `normalizeInbound` attachments are public https links the
+   * pipeline should fetch and hand the agent (channel-attachments.service.ts).
+   *
+   * Off by default: the attachments other adapters record either carry no
+   * fetchable URL (email keeps MIME metadata only) or point at a bridge
+   * the operator runs (Signal), which the egress guard would refuse. The
+   * iMessage relays hand over CDN links for what was sent, and say so.
+   */
+  readonly fetchesInboundAttachments: boolean = false;
 
   // ---------------------------------------------------------------------
   // Delivery confirmation

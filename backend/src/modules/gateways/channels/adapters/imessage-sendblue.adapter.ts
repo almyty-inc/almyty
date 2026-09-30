@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
 import { sharedSecretMatches } from './shared-secret.helper';
+import { attachmentFromUrl, outboundMediaUrls } from './relay-media.helper';
 
 /**
  * iMessage through Sendblue, a relay that owns the Apple-side number.
@@ -10,21 +11,31 @@ import { sharedSecretMatches } from './shared-secret.helper';
  *   - api_secret_key  sent as `sb-api-secret-key`
  *   - phone_number    the Sendblue line replies go out from (E.164),
  *                     the API's `from_number`
- *   - signing_secret  the secret set on the receive webhook in Sendblue
- *                     (Developer -> Webhooks); Sendblue sends it back in
+ *   - signing_secret  the secret on the receive webhook. Publishing
+ *                     registers the webhook with it (channel-webhook-
+ *                     registrar.service.ts); Sendblue sends it back in
  *                     the `sb-signing-secret` header of every delivery
  *
  * Inbound (the "receive" webhook): a JSON body with `content`,
  * `from_number`, `to_number`, `message_handle`, `is_outbound`, `status`,
- * `service` and, for a group chat, `group_id`. Only 1:1 inbound text is
- * answered: an outbound echo, a status callback or a group message is
- * acknowledged and left alone.
+ * `service`, `media_url` (one CDN link, empty when nothing is attached)
+ * and, for a group chat, `group_id`, `participants` and
+ * `group_display_name`. An outbound echo or a status callback is
+ * acknowledged and left alone. A group message is answered in the group:
+ * the group is the conversation, the member who wrote is the sender.
  *
  * Outbound: POST https://api.sendblue.co/api/send-message with
- * `{ number, from_number, content }`.
+ * `{ number, from_number, content, media_url? }`, or, in a group,
+ * POST https://api.sendblue.co/api/send-group-message with
+ * `{ group_id, from_number, content, media_url? }`. `media_url` takes one
+ * link per message, so a reply with several files sends the rest as
+ * messages of their own.
  *
  * Docs:
  *   https://docs.sendblue.com/api/resources/messages/methods/send/
+ *   https://docs.sendblue.com/api/resources/groups/methods/send_message/
+ *   https://docs.sendblue.com/getting-started/receiving-messages/ (media_url, group fields)
+ *   https://docs.sendblue.com/getting-started/groups/
  *   https://docs.sendblue.com/getting-started/webhooks/
  *   https://docs.sendblue.com/guides/chat-sdk-adapter/ (sb-signing-secret)
  */
@@ -32,40 +43,63 @@ import { sharedSecretMatches } from './shared-secret.helper';
 export class IMessageSendblueAdapter extends BaseAdapter {
   private readonly logger = new Logger(IMessageSendblueAdapter.name);
   readonly type = 'imessage_sendblue';
+  readonly fetchesInboundAttachments = true;
 
   static readonly SEND_URL = 'https://api.sendblue.co/api/send-message';
+  static readonly SEND_GROUP_URL = 'https://api.sendblue.co/api/send-group-message';
   /** Sendblue's documented ceiling for `content`. */
   static readonly MAX_CONTENT_CHARS = 18_996;
+  /** Files one reply sends at most; each past the first is a message of its own. */
+  static readonly MAX_MEDIA = 5;
   /** The header Sendblue carries the configured webhook secret in. */
   static readonly SECRET_HEADER = 'sb-signing-secret';
 
   normalizeInbound(rawPayload: any): NormalizedMessage {
     const from = rawPayload?.from_number;
+    const groupId = IMessageSendblueAdapter.groupIdOf(rawPayload);
+    const media = attachmentFromUrl(rawPayload?.media_url);
     return {
       text: typeof rawPayload?.content === 'string' ? rawPayload.content : '',
+      // The member who wrote, in a group too: their share of the visitor
+      // limits is theirs, not the group's.
       userId: from || 'unknown',
-      threadId: from, // the sender's number is the conversation key
+      // The conversation: the group when there is one, else the sender.
+      threadId: groupId ?? from,
+      ...(media ? { attachments: [media] } : {}),
       metadata: {
         from,
         to: rawPayload?.to_number,
         messageHandle: rawPayload?.message_handle,
         service: rawPayload?.service,
+        ...(groupId
+          ? {
+              groupId,
+              groupName: typeof rawPayload?.group_display_name === 'string' ? rawPayload.group_display_name : undefined,
+            }
+          : {}),
         source: 'imessage_sendblue',
       },
     };
   }
 
+  /** `group_id` is present and empty on a one-to-one message. */
+  private static groupIdOf(rawPayload: any): string | undefined {
+    const id = rawPayload?.group_id;
+    return typeof id === 'string' && id.trim() ? id.trim() : undefined;
+  }
+
   /**
-   * A message someone sent to the line, one to one. Sendblue posts
-   * outbound events and status changes to webhooks too, and answering
-   * our own echo would have the agent talk to itself.
+   * A message someone sent to the line, one to one or in a group, with
+   * text or a file. Sendblue posts outbound events and status changes to
+   * webhooks too, and answering our own echo would have the agent talk to
+   * itself.
    */
   carriesMessage(rawPayload: any): boolean {
     if (!rawPayload || typeof rawPayload !== 'object') return false;
     if (rawPayload.is_outbound === true) return false;
-    if (rawPayload.group_id) return false;
     if (!rawPayload.from_number) return false;
-    return typeof rawPayload.content === 'string' && rawPayload.content.trim().length > 0;
+    const text = typeof rawPayload.content === 'string' && rawPayload.content.trim().length > 0;
+    return text || attachmentFromUrl(rawPayload.media_url) !== null;
   }
 
   /** Sendblue's message handle, the documented dedupe key across its retries. */
@@ -75,7 +109,8 @@ export class IMessageSendblueAdapter extends BaseAdapter {
   }
 
   formatOutbound(response: AdapterResponse): any {
-    return { content: response.text };
+    const media = outboundMediaUrls(response.attachments, IMessageSendblueAdapter.MAX_MEDIA);
+    return media.length ? { content: response.text, media } : { content: response.text };
   }
 
   /**
@@ -85,12 +120,13 @@ export class IMessageSendblueAdapter extends BaseAdapter {
    * ERROR status or an error key is a refusal too.
    */
   async sendResponse(config: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void> {
+    const groupId: string | undefined = threadContext?.groupId || undefined;
     const to = threadContext?.from || threadContext?.threadId;
     if (!config.api_key_id || !config.api_secret_key) {
       this.sendFailed('api_key_id and api_secret_key are not configured, so the reply could not be sent');
     }
     if (!config.phone_number) this.sendFailed('phone_number is not configured, so the reply could not be sent');
-    if (!to) this.sendFailed('the inbound message carried no sender to reply to');
+    if (!groupId && !to) this.sendFailed('the inbound message carried no sender to reply to');
 
     let content: string = formattedResponse?.content ?? '';
     if (content.length > IMessageSendblueAdapter.MAX_CONTENT_CHARS) {
@@ -99,8 +135,21 @@ export class IMessageSendblueAdapter extends BaseAdapter {
       );
       content = content.slice(0, IMessageSendblueAdapter.MAX_CONTENT_CHARS);
     }
+    const media: string[] = Array.isArray(formattedResponse?.media) ? formattedResponse.media : [];
 
-    const url = this.assertEgress(IMessageSendblueAdapter.SEND_URL);
+    // The reply goes back where it came from: the group, or the sender.
+    const url = groupId ? IMessageSendblueAdapter.SEND_GROUP_URL : IMessageSendblueAdapter.SEND_URL;
+    const address = groupId ? { group_id: groupId } : { number: to };
+
+    const messages: Array<Record<string, string>> = [
+      { ...address, from_number: config.phone_number, content, ...(media[0] ? { media_url: media[0] } : {}) },
+      ...media.slice(1).map((media_url) => ({ ...address, from_number: config.phone_number, media_url })),
+    ];
+    for (const message of messages) await this.send(config, url, message);
+  }
+
+  private async send(config: Record<string, any>, target: string, message: Record<string, string>): Promise<void> {
+    const url = this.assertEgress(target);
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
     const res = await (fetch as any)(url, this.egressInit({
       method: 'POST',
@@ -109,7 +158,7 @@ export class IMessageSendblueAdapter extends BaseAdapter {
         'sb-api-secret-key': String(config.api_secret_key),
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ number: to, from_number: config.phone_number, content }),
+      body: JSON.stringify(message),
     }));
 
     const body = await this.readJsonBody(res);

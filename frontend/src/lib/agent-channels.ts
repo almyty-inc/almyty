@@ -149,6 +149,15 @@ export interface EffectiveSettings {
   }
 }
 
+/** What publishing last did about the platform webhook (backend channel-webhook-registrar.service.ts). */
+export interface WebhookRegistration {
+  action: 'register' | 'unregister'
+  status: 'registered' | 'unregistered' | 'failed' | 'skipped'
+  /** The platform's own wording, or why it was skipped. */
+  error: string | null
+  at: string | null
+}
+
 export interface AgentChannel {
   id: string
   agentId: string
@@ -169,6 +178,11 @@ export interface AgentChannel {
   /** This channel's own visitor rules; null uses the agent's. */
   visitorRules: VisitorRules | null
   effective: EffectiveSettings
+  /**
+   * For a channel whose webhook publishing registers (CHANNEL_INBOUND mode
+   * 'auto'): how that last went. Null otherwise, or before the first try.
+   */
+  webhookRegistration?: WebhookRegistration | null
   lastBuild?: {
     version?: string
     platform?: string
@@ -255,8 +269,8 @@ export const CHANNEL_DESCRIPTIONS: Record<ChannelType, string> = {
   whatsapp: 'Answers messages to your Twilio WhatsApp sender.',
   whatsapp_cloud: 'Answers messages to your business number through Meta\u2019s Cloud API.',
   sms: 'Answers text messages to your Twilio number.',
-  imessage_sendblue: 'Answers iMessages to your Sendblue number, one to one.',
-  imessage_loopmessage: 'Answers iMessages to your LoopMessage sender, one to one.',
+  imessage_sendblue: 'Answers iMessages to your Sendblue number, one to one and in group chats.',
+  imessage_loopmessage: 'Answers iMessages to your LoopMessage sender, one to one and in group chats.',
   microsoft_teams: 'Answers as a bot in Microsoft Teams.',
   google_chat: 'Answers as a Chat app in your Google Workspace spaces.',
   email: 'Answers email sent to your receiving address, through Resend.',
@@ -390,7 +404,9 @@ export interface SpendStatus {
  *
  *  - manual: the operator pastes our URL into the platform's console.
  *  - auto:   publishing registers it (Telegram setWebhook, the Twilio
- *            number's messaging webhook -- channel-webhook-registrar.ts).
+ *            number's messaging webhook, Sendblue's receive webhook --
+ *            channel-webhook-registrar.service.ts), and unpublishing or
+ *            deleting removes it.
  *  - none:   nothing calls us: a download, the web chat, or
  *            Discord, whose messages arrive over the gateway websocket
  *            almyty opens (discord-gateway.transport.ts).
@@ -434,12 +450,12 @@ export const CHANNEL_INBOUND: Record<ChannelType, ChannelInbound> = {
     where: 'Set on your Twilio number for you when you publish. Shown here in case you need to check it.',
   },
   imessage_sendblue: {
-    mode: 'manual',
-    where: 'Sendblue dashboard → Developer → Webhooks: add this as the receive webhook, with the webhook secret above as its secret.',
+    mode: 'auto',
+    where: 'Added to your Sendblue account for you when you publish, as the receive webhook for your Sendblue number with the webhook secret from your credential, and removed when you unpublish or delete. Shown here in case you need to check it.',
   },
   imessage_loopmessage: {
     mode: 'manual',
-    where: 'LoopMessage dashboard → Webhooks: paste this as the webhook URL, with the webhook authorization value above as its authorization header.',
+    where: 'LoopMessage has no API for setting its webhook, so paste this yourself: LoopMessage dashboard → Webhooks, as the webhook URL, with the webhook authorization value from your credential as its authorization header.',
   },
   whatsapp_cloud: {
     mode: 'manual',

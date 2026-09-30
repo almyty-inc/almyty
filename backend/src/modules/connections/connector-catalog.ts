@@ -835,7 +835,9 @@ const CHANNEL_CONNECTORS: ConnectorDefinition[] = [
     // POST https://a.loopmessage.com/api/v1/message/send/ with the
     // organization API key as the bare Authorization value; webhooks carry
     // the Authorization value set for them in the dashboard. LoopMessage
-    // documents no read-only call, so the shape is checked.
+    // documents no read-only call, so the shape is checked. The sender name
+    // replies go out from is set on the channel, not here: one organization
+    // key can carry several senders.
     connect: [{
       type: 'api_key',
       label: 'LoopMessage API key',
@@ -844,7 +846,6 @@ const CHANNEL_CONNECTORS: ConnectorDefinition[] = [
         type: 'object',
         properties: {
           api_key: { type: 'string', title: 'API key', 'x-secret': true, minLength: 8 },
-          sender_name: { type: 'string', title: 'Sender name', description: 'Optional; the sender replies go out from, when the organization has more than one.' },
           inbound_token: { type: 'string', title: 'Webhook authorization value', 'x-secret': true, minLength: 16, description: 'The same value you type as the webhook authorization header in LoopMessage, so almyty can reject forgeries.' },
         },
         required: ['api_key', 'inbound_token'],
@@ -853,7 +854,7 @@ const CHANNEL_CONNECTORS: ConnectorDefinition[] = [
       keyPageUrl: 'https://dashboard.loopmessage.com/',
     }],
     capabilities: ['send', 'receive'],
-    validation: { kind: 'format', accountLabelFrom: 'sender_name' },
+    validation: { kind: 'format' },
     keyPageUrl: 'https://dashboard.loopmessage.com/',
     docsUrl: 'https://loopmessage.com/apidocs/send-message',
   },

@@ -17,7 +17,22 @@ const inboundWebhook = {
   api_version: '1.0',
 };
 
-const config = { api_key: 'loop-api-key', inbound_token: 'loop-webhook-auth-0001' };
+/**
+ * A group message with a photo: the webhook doc's optional `group`
+ * (`id`, `name`, `participants`) and `attachments` (an array of download
+ * URLs) fields.
+ */
+const groupWebhook = {
+  ...inboundWebhook,
+  contact: '+13231114455',
+  text: 'Is this the right mug?',
+  message_type: 'attachments',
+  message_id: 'GRP-59c55Ce8',
+  group: { id: '7e0b1f4a-group', name: 'Northwind ops', participants: ['+13231112233', '+13231114455'] },
+  attachments: ['https://cdn.loopmessage.com/attachments/abc/mug.jpeg'],
+};
+
+const config = { api_key: 'loop-api-key', inbound_token: 'loop-webhook-auth-0001', sender_name: 'northwind' };
 
 describe('IMessageLoopMessageAdapter', () => {
   let adapter: IMessageLoopMessageAdapter;
@@ -31,6 +46,7 @@ describe('IMessageLoopMessageAdapter', () => {
       expect(r.text).toBe('text');
       expect(r.userId).toBe('+13231112233');
       expect(r.threadId).toBe('+13231112233');
+      expect(r.attachments).toBeUndefined();
       expect(r.metadata).toMatchObject({
         from: '+13231112233',
         messageId: '59c55Ce8-41d6-43Cc-9116-8cfb2e696D7b',
@@ -48,14 +64,65 @@ describe('IMessageLoopMessageAdapter', () => {
       expect(adapter.deliveryId({})).toBeUndefined();
     });
 
-    it('answers only message_inbound text, one to one', () => {
+    it('answers message_inbound with text or files, one to one or in a group, and no other event', () => {
       expect(adapter.carriesMessage(inboundWebhook)).toBe(true);
       for (const event of ['message_sent', 'message_delivered', 'message_failed', 'message_reaction', 'message_scheduled']) {
         expect(adapter.carriesMessage({ ...inboundWebhook, event })).toBe(false);
       }
-      expect(adapter.carriesMessage({ ...inboundWebhook, group: { group_id: 'g1' } })).toBe(false);
+      expect(adapter.carriesMessage(groupWebhook)).toBe(true);
+      expect(adapter.carriesMessage({ ...groupWebhook, text: '' })).toBe(true);
       expect(adapter.carriesMessage({ ...inboundWebhook, text: '' })).toBe(false);
+      expect(adapter.carriesMessage({ ...inboundWebhook, text: '', attachments: ['http://10.0.0.1/a.png'] })).toBe(false);
       expect(adapter.carriesMessage({ ...inboundWebhook, contact: undefined })).toBe(false);
+    });
+  });
+
+  describe('group chats', () => {
+    it('keys the conversation on the group and the sender on the member who wrote', () => {
+      const r = adapter.normalizeInbound(groupWebhook);
+      expect(r.threadId).toBe('7e0b1f4a-group');
+      expect(r.userId).toBe('+13231114455');
+      expect(r.metadata).toMatchObject({ groupId: '7e0b1f4a-group', groupName: 'Northwind ops', from: '+13231114455' });
+    });
+
+    it('replies to the group, not to the member', async () => {
+      const r = adapter.normalizeInbound(groupWebhook);
+      await adapter.sendResponse(config, adapter.formatOutbound({ text: 'Yes, that one.' }), {
+        ...r.metadata,
+        threadId: r.threadId,
+        from: r.metadata?.from,
+      });
+      expect(parseSentJson(fetchMock.calls[0])).toEqual({ group: '7e0b1f4a-group', text: 'Yes, that one.', sender: 'northwind' });
+    });
+  });
+
+  describe('attachments', () => {
+    it('hands inbound attachment URLs over, https only', () => {
+      const r = adapter.normalizeInbound({
+        ...groupWebhook,
+        attachments: [...groupWebhook.attachments, 'http://cdn.example/plain.png', 42, 'https://cdn.example/voice.m4a'],
+      });
+      expect(r.attachments).toEqual([
+        { url: 'https://cdn.loopmessage.com/attachments/abc/mug.jpeg', type: 'image/jpeg', name: 'mug.jpeg' },
+        { url: 'https://cdn.example/voice.m4a', type: 'audio/mp4', name: 'voice.m4a' },
+      ]);
+      expect(adapter.fetchesInboundAttachments).toBe(true);
+    });
+
+    it('sends reply files as `attachments`, at most ten, https and at most 256 characters each', async () => {
+      const files = [
+        { url: 'http://files.example/plain.jpg', type: 'image/jpeg', name: 'plain.jpg' },
+        { url: `https://files.example/${'a'.repeat(300)}.jpg`, type: 'image/jpeg', name: 'long.jpg' },
+        ...Array.from({ length: 12 }, (_, i) => ({ url: `https://files.example/${i}.jpg`, type: 'image/jpeg', name: `${i}.jpg` })),
+      ];
+      await adapter.sendResponse(config, adapter.formatOutbound({ text: 'Photos.', attachments: files }), { from: '+13231112233' });
+      const sent = parseSentJson(fetchMock.calls[0]);
+      expect(sent.attachments).toEqual(Array.from({ length: 10 }, (_, i) => `https://files.example/${i}.jpg`));
+      expect(sent).toMatchObject({ contact: '+13231112233', text: 'Photos.', sender: 'northwind' });
+    });
+
+    it('sends no attachments field when the reply has no files', () => {
+      expect(adapter.formatOutbound({ text: 'x' })).toEqual({ text: 'x' });
     });
   });
 
@@ -79,7 +146,7 @@ describe('IMessageLoopMessageAdapter', () => {
   });
 
   describe('send', () => {
-    it('POSTs message/send with the bare API key as Authorization', async () => {
+    it('POSTs message/send with the bare API key as Authorization, from the sender name', async () => {
       fetchMock.setNextResponse({ json: { message_id: 'OUT-1', contact: '+13231112233', text: 'Hi' } });
       await adapter.sendResponse(config, adapter.formatOutbound({ text: 'Hi' }), { from: '+13231112233' });
 
@@ -87,12 +154,14 @@ describe('IMessageLoopMessageAdapter', () => {
       expect(call.url).toBe('https://a.loopmessage.com/api/v1/message/send/');
       expect(call.init.method).toBe('POST');
       expect(call.init.headers).toMatchObject({ Authorization: 'loop-api-key', 'Content-Type': 'application/json' });
-      expect(parseSentJson(call)).toEqual({ contact: '+13231112233', text: 'Hi' });
+      expect(parseSentJson(call)).toEqual({ contact: '+13231112233', text: 'Hi', sender: 'northwind' });
     });
 
-    it('names the sender when one is configured', async () => {
-      await adapter.sendResponse({ ...config, sender_name: 'northwind' }, { text: 'Hi' }, { threadId: '+13231112233' });
-      expect(parseSentJson(fetchMock.calls[0]).sender).toBe('northwind');
+    it('refuses before calling out without a sender name', async () => {
+      const { sender_name: _unset, ...unnamed } = config;
+      await expect(adapter.sendResponse(unnamed, { text: 'x' }, { from: '+1' })).rejects.toThrow(/sender_name/);
+      await expect(adapter.sendResponse({ ...config, sender_name: '   ' }, { text: 'x' }, { from: '+1' })).rejects.toThrow(/sender_name/);
+      expect(fetchMock.calls).toHaveLength(0);
     });
 
     it('goes through the guarded egress init', async () => {
@@ -121,7 +190,7 @@ describe('IMessageLoopMessageAdapter', () => {
     });
 
     it('refuses before calling out without an API key or a recipient', async () => {
-      await expect(adapter.sendResponse({ inbound_token: 't' }, { text: 'x' }, { from: '+1' })).rejects.toThrow(/api_key/);
+      await expect(adapter.sendResponse({ inbound_token: 't', sender_name: 'n' }, { text: 'x' }, { from: '+1' })).rejects.toThrow(/api_key/);
       await expect(adapter.sendResponse(config, { text: 'x' }, {})).rejects.toThrow(/no sender/);
       expect(fetchMock.calls).toHaveLength(0);
     });
