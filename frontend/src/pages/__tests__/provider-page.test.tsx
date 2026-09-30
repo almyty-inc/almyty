@@ -173,7 +173,7 @@ describe('ProviderPage', () => {
   })
 
   describe('a connection that is inactive', () => {
-    const INACTIVE = { ...OPENAI, status: 'inactive', keyChecked: false, isHealthy: false, lastSuccessAt: null, lastHealthCheckAt: NOW, lastError: '401 Incorrect API key provided.', lastErrorAt: NOW }
+    const INACTIVE = { ...OPENAI, status: 'inactive', keyChecked: false, isHealthy: false, lastSuccessAt: null, lastHealthCheckAt: NOW, lastError: '401 Incorrect API key provided.', lastErrorAt: NOW, inactiveReason: 'check_failed' }
 
     beforeEach(() => {
       vi.mocked(llmProvidersApi.getById).mockResolvedValue(INACTIVE as any)
@@ -188,6 +188,15 @@ describe('ProviderPage', () => {
       // The reason is said once, in the box, not again under it.
       expect(screen.queryByTestId('provider-last-error')).not.toBeInTheDocument()
       expect(screen.getAllByRole('button', { name: 'Check again' })).toHaveLength(1)
+    })
+
+    it('has one Check again, the one in the box, even when it lists no models', async () => {
+      vi.mocked(modelsApi.list).mockResolvedValue([])
+      at()
+      expect(await screen.findByText('No models yet')).toBeInTheDocument()
+      const buttons = screen.getAllByRole('button', { name: 'Check again' })
+      expect(buttons).toHaveLength(1)
+      expect(within(screen.getByTestId('provider-inactive')).getByRole('button', { name: 'Check again' })).toBe(buttons[0])
     })
 
     it('replaces the key right there, then checks again, and says it is active again', async () => {
@@ -212,10 +221,30 @@ describe('ProviderPage', () => {
       expect(screen.getByTestId('provider-inactive')).toBeInTheDocument()
     })
 
-    it('says so when it was turned off after a passing check, or never checked', async () => {
-      const { inactiveReason } = await import('@/components/llm-providers/provider-status')
-      expect(inactiveReason({ lastHealthCheckAt: NOW, isHealthy: true }, () => 'today')).toBe('The last check (today) passed, but the connection was turned off since. A passing check turns it back on.')
-      expect(inactiveReason({}, () => 'today')).toBe('No check has run on it yet. A passing check turns it back on.')
+    it('says why, in words, for each way it went inactive', async () => {
+      const { inactiveReason, canTurnBackOn } = await import('@/components/llm-providers/provider-status')
+      const when = () => 'today'
+      expect(inactiveReason({ inactiveReason: 'check_failed' }, when)).toBe('No check has run on it yet. A passing check turns it back on.')
+      expect(inactiveReason({ inactiveReason: 'switched_off' }, when)).toBe('Someone turned it off on purpose, so a check does not turn it back on.')
+      expect(inactiveReason({ inactiveReason: 'endpoint_stopped' }, when)).toBe('Its endpoint stopped serving. It comes back when the endpoint serves again.')
+      expect(inactiveReason({}, when)).toBe('It was turned off, so a check does not turn it back on.')
+      expect([canTurnBackOn({ inactiveReason: 'check_failed' }), canTurnBackOn({ inactiveReason: 'endpoint_stopped' }), canTurnBackOn({ inactiveReason: 'switched_off' })]).toEqual([false, false, true])
+    })
+
+    it('one switched off on purpose is turned back on by hand, not by a check', async () => {
+      vi.mocked(llmProvidersApi.getById).mockResolvedValue({ ...INACTIVE, inactiveReason: 'switched_off' } as any)
+      vi.mocked(llmProvidersApi.update).mockResolvedValue({} as any)
+      at()
+      const box = await screen.findByTestId('provider-inactive')
+      expect(within(box).getByTestId('provider-inactive-reason')).toHaveTextContent('Someone turned it off on purpose')
+      fireEvent.click(within(box).getByRole('button', { name: 'Turn it back on' }))
+      await waitFor(() => expect(llmProvidersApi.update).toHaveBeenCalledWith('p1', { status: 'active' }))
+    })
+
+    it('one a failed check turned off offers no switch: the check turns it back on', async () => {
+      at()
+      const box = await screen.findByTestId('provider-inactive')
+      expect(within(box).queryByRole('button', { name: 'Turn it back on' })).not.toBeInTheDocument()
     })
   })
 

@@ -35,18 +35,27 @@ export function ProviderStatus({ check, className }: { check: ProviderCheck; cla
 }
 
 /**
- * Why a connection that is off is off, from its last check: the check's
- * own words when it failed, or that it passed and the connection was
- * turned off anyway (by hand, or its endpoint stopped), or that nothing
- * checked it. Each ends with what turns it back on.
+ * Why a connection that is off is off, and what turns it back on.
+ *
+ * Only a connection a failed check turned off comes back with a passing
+ * check. One a person switched off stays off until someone turns it on;
+ * one whose endpoint stopped comes back when the endpoint serves again.
  */
 export function inactiveReason(
-  p: { lastHealthCheckAt?: string | null; isHealthy?: boolean; lastError?: string | null },
+  p: { lastHealthCheckAt?: string | null; isHealthy?: boolean; lastError?: string | null; inactiveReason?: string | null },
   formatWhen: (iso: string) => string = (iso) => new Date(iso).toLocaleString(),
 ): string {
+  if (p.inactiveReason === 'switched_off') return 'Someone turned it off on purpose, so a check does not turn it back on.'
+  if (p.inactiveReason === 'endpoint_stopped') return 'Its endpoint stopped serving. It comes back when the endpoint serves again.'
+  if (p.inactiveReason !== 'check_failed') return 'It was turned off, so a check does not turn it back on.'
   const fix = 'A passing check turns it back on.'
   if (!p.lastHealthCheckAt) return `No check has run on it yet. ${fix}`
   const when = formatWhen(p.lastHealthCheckAt)
   if (p.isHealthy === false) return `The last check (${when}) failed: ${(p.lastError || 'the provider did not answer').replace(/\.\s*$/, '')}. Replace the key if it was refused. ${fix}`
-  return `The last check (${when}) passed, but the connection was turned off since. ${fix}`
+  return `The last check (${when}) passed. ${fix}`
+}
+
+/** Whether a person may simply turn the connection back on (it was not a failed check or a stopped endpoint). */
+export function canTurnBackOn(p: { inactiveReason?: string | null }): boolean {
+  return p.inactiveReason !== 'check_failed' && p.inactiveReason !== 'endpoint_stopped'
 }

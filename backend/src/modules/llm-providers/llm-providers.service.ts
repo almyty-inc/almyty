@@ -531,6 +531,15 @@ export class LlmProvidersService {
         this.defaultModels.invalidate(provider.id);
       }
       if (updateDto.description !== undefined) provider.description = updateDto.description;
+      // A person turning the connection off or on. Off on purpose is
+      // recorded as such, so a passing check never turns it back on.
+      if (updateDto.status !== undefined && updateDto.status !== provider.status) {
+        if (updateDto.status !== LlmProviderStatus.ACTIVE && updateDto.status !== LlmProviderStatus.INACTIVE) {
+          throw new BadRequestException('A connection can only be turned on (active) or off (inactive).');
+        }
+        provider.status = updateDto.status;
+        provider.inactiveReason = updateDto.status === LlmProviderStatus.INACTIVE ? 'switched_off' : null;
+      }
       if (updateDto.capabilities) {
         provider.capabilities = { ...provider.capabilities, ...updateDto.capabilities };
       }
@@ -851,12 +860,15 @@ export class LlmProvidersService {
       const response = await this.runner.callLlmProvider(provider, testRequest, session, []);
       const responseTime = Date.now() - startTime;
 
-      // A connection that is off comes back on when someone who may change
-      // it asks for this check and the key works: the check is what it was
-      // waiting for. Sweeps and internal checks leave the status alone
-      // (status is the operator's intent; see LlmProviderStatus.ERROR).
+      // A connection a failed check turned off comes back on when someone
+      // who may change it asks for this check and the key works: the check
+      // is what it was waiting for. Never one a person switched off on
+      // purpose, or whose endpoint stopped (inactiveReason), and sweeps and
+      // internal checks leave the status alone (status is the operator's
+      // intent; see LlmProviderStatus.ERROR).
       const reactivated =
         provider.status === LlmProviderStatus.INACTIVE &&
+        provider.inactiveReason === 'check_failed' &&
         !!options.reactivateFor &&
         (await this.mayManage(provider, options.reactivateFor));
 
@@ -869,7 +881,7 @@ export class LlmProvidersService {
           isHealthy: true,
           lastHealthCheckAt: new Date(),
           lastError: null,
-          ...(reactivated ? { status: LlmProviderStatus.ACTIVE } : {}),
+          ...(reactivated ? { status: LlmProviderStatus.ACTIVE, inactiveReason: null } : {}),
         },
       );
       if (reactivated) {

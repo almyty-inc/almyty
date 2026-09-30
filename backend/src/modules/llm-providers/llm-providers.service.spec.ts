@@ -1368,13 +1368,14 @@ describe('LlmProvidersService', () => {
     });
 
     describe('a connection that is off', () => {
-      const inactive = () => {
+      const inactive = (inactiveReason: string | null = 'check_failed') => {
         const provider = {
           id: 'provider-1',
           name: 'OpenAI',
           type: LlmProviderType.OPENAI,
           configuration: { apiKey: 'test-key', model: 'gpt-4o-mini' },
           status: LlmProviderStatus.INACTIVE,
+          inactiveReason,
           isHealthy: false,
           lastError: 'Incorrect API key provided',
           organizationId: 'org-1',
@@ -1434,6 +1435,46 @@ describe('LlmProvidersService', () => {
         const result = await service.performHealthCheck('provider-1', 'org-1');
         expect(result.reactivated).toBeUndefined();
         expect(llmProviderRepository.update).toHaveBeenCalledWith({ id: 'provider-1' }, expect.not.objectContaining({ status: expect.anything() }));
+      });
+
+      it.each([
+        ['a person switched it off on purpose', 'switched_off'],
+        ['its endpoint stopped serving', 'endpoint_stopped'],
+        ['nobody recorded why', null],
+      ])('stays off after a passing Check again when %s', async (_label, reason) => {
+        inactive(reason as any);
+        answers();
+        const result = await service.performHealthCheck('provider-1', 'org-1', { reactivateFor: 'user-1' });
+        expect(result.isHealthy).toBe(true);
+        expect(result.reactivated).toBeUndefined();
+        expect(llmProviderRepository.update).toHaveBeenCalledWith({ id: 'provider-1' }, expect.not.objectContaining({ status: expect.anything() }));
+      });
+    });
+
+    describe('turning a connection off and on by hand', () => {
+      const stored = (status: LlmProviderStatus, inactiveReason: string | null = null) => {
+        const provider = { id: 'provider-1', name: 'OpenAI', type: LlmProviderType.OPENAI, configuration: { model: 'gpt-4o' }, status, inactiveReason, organizationId: 'org-1', visibility: 'org' };
+        Object.setPrototypeOf(provider, LlmProvider.prototype);
+        llmProviderRepository.findOne.mockResolvedValue(provider);
+        llmProviderRepository.save.mockImplementation(async (p: any) => p);
+        return provider;
+      };
+
+      it('records that it was switched off on purpose', async () => {
+        const provider = stored(LlmProviderStatus.ACTIVE);
+        await service.updateProvider('provider-1', { status: LlmProviderStatus.INACTIVE }, 'org-1', 'user-1');
+        expect(provider).toMatchObject({ status: LlmProviderStatus.INACTIVE, inactiveReason: 'switched_off' });
+      });
+
+      it('clears the reason when it is turned back on', async () => {
+        const provider = stored(LlmProviderStatus.INACTIVE, 'switched_off');
+        await service.updateProvider('provider-1', { status: LlmProviderStatus.ACTIVE }, 'org-1', 'user-1');
+        expect(provider).toMatchObject({ status: LlmProviderStatus.ACTIVE, inactiveReason: null });
+      });
+
+      it('refuses any other status', async () => {
+        stored(LlmProviderStatus.ACTIVE);
+        await expect(service.updateProvider('provider-1', { status: LlmProviderStatus.ERROR }, 'org-1', 'user-1')).rejects.toThrow('turned on (active) or off (inactive)');
       });
     });
 

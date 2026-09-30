@@ -29,7 +29,7 @@ import { HostingPanel } from '@/components/models/hosting/hosting-panel'
 import { StartModelForm } from '@/components/models/hosting/start-model-form'
 import { useHostingActions } from '@/components/models/use-model-data'
 import { CredentialSlot, CredentialRefSummary, isMaskedKey } from '@/components/llm-providers/credential-slot'
-import { ProviderStatus, inactiveReason, providerCheck } from '@/components/llm-providers/provider-status'
+import { ProviderStatus, canTurnBackOn, inactiveReason, providerCheck } from '@/components/llm-providers/provider-status'
 import { HOSTING_ADAPTER_FOR_TYPE, keyUrlFor, providerTileLabel, takesBaseUrl } from '@/components/llm-providers/provider-catalog'
 import { providerLogos, providerUsageApiSupport, usageApiSupported } from '@/components/llm-providers/provider-type-config'
 import { BASE_URL_PRIVATE_HOST_HINT, buildProviderUpdateBody } from '@/components/llm-providers/schema'
@@ -240,14 +240,21 @@ export function ProviderPage() {
               This connection is inactive
             </h2>
             <p className="break-words text-sm text-muted-foreground" data-testid="provider-inactive-reason">
-              {inactiveReason(provider, formatDateTime)} Until then its models are not offered anywhere.
+              {inactiveReason(provider, formatDateTime)} While it is off, its models are not offered anywhere.
             </p>
           </div>
           <ReplaceKey provider={provider} idPrefix="inactive-replace-key" onSaved={() => check.mutate()} />
-          <Button variant="outline" onClick={() => check.mutate()} disabled={check.isPending} className="gap-2">
-            <RefreshCw className={cn('h-4 w-4', check.isPending && 'animate-spin')} aria-hidden />
-            {check.isPending ? 'Checking...' : 'Check again'}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={() => check.mutate()} disabled={check.isPending} className="gap-2">
+              <RefreshCw className={cn('h-4 w-4', check.isPending && 'animate-spin')} aria-hidden />
+              {check.isPending ? 'Checking...' : 'Check again'}
+            </Button>
+            {canTurnBackOn(provider) && (
+              <Button variant="outline" onClick={() => update.mutate({ status: 'active' })} disabled={update.isPending}>
+                Turn it back on
+              </Button>
+            )}
+          </div>
         </section>
       )}
 
@@ -285,10 +292,13 @@ export function ProviderPage() {
             <EmptyState
               title="No models yet"
               description={takesBaseUrl(provider.type) ? 'Your server lists no models yet. Check again once it is up.' : 'The provider listed no models. Check again to fetch them.'}
+              // An inactive connection's one Check again is in the red box above.
               action={
-                <Button variant="outline" onClick={() => check.mutate()} disabled={check.isPending}>
-                  Check again
-                </Button>
+                inactive ? undefined : (
+                  <Button variant="outline" onClick={() => check.mutate()} disabled={check.isPending}>
+                    Check again
+                  </Button>
+                )
               }
             />
           ) : (
