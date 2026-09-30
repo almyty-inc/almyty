@@ -91,8 +91,10 @@ Work happens inside a **workspace**: a reservation of a working directory on the
 runner, with a time limit. Each runner's page has a **Workspaces** tab
 (`/runners/:id?tab=workspaces`) listing that runner's workspaces, active ones first,
 with the folder, status, isolation and time left; a row opens the workspace's own
-page under the runner, where an active one can be released. Agents make workspaces
-when a job needs a folder; you don't create them by hand. Processes are tracked per workspace and cleaned up
+page under the runner, where an active one can be released. A workspace is made
+through the API, `POST /workspaces` with the folder (`cwd`) and the runner
+(`runnerId`, or `labels` to let almyty pick a matching runner); the runner's
+page lists and releases workspaces but does not create them. Processes are tracked per workspace and cleaned up
 when it is released. The current runner uses host execution, not a filesystem
 or network sandbox: a workspace does not prevent a command from accessing other
 files the daemon's operating-system user can read. Set local path and command

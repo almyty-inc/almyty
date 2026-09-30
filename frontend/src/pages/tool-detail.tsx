@@ -422,7 +422,7 @@ export function ToolDetailPage() {
                     Workspace <span className="text-red-500">*</span>
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    This runner method runs inside an active workspace. Pick one or release+create a new workspace from the runner page.
+                    This runner method runs inside an active workspace on its runner.
                   </p>
                   {workspacesQuery.isLoading ? (
                     <p className="text-sm text-muted-foreground">Loading workspaces…</p>
@@ -441,7 +441,7 @@ export function ToolDetailPage() {
                     </select>
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      No active workspaces on this runner. <Link to={`/runners/${runnerId}`} className="underline">Open the runner</Link> to create one.
+                      No active workspaces on this runner. A workspace is made through the API: <code className="font-mono text-xs">POST /workspaces</code> with this runner&apos;s id and the folder to work in. <Link to={`/runners/${runnerId}?tab=workspaces`} className="underline">The runner&apos;s page</Link> lists and releases them.
                     </p>
                   )}
                 </div>
