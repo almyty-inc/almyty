@@ -3,6 +3,8 @@ import { AppBuildProcessor } from '../app-build.processor';
 import { AgentChannel } from '../../../entities/agent-channel.entity';
 import { FilesController } from '../../files/files.controller';
 import { fakeRepository } from '../../../test/fake-repository';
+import { ChannelHousekeepingProcessor, ICON_SWEEP_REPEAT_JOB_ID, UNSAVED_ICON_SWEEP_JOB } from '../channel-housekeeping.processor';
+import { snapshotEnv } from '../../../test/env';
 
 /**
  * An app icon chosen on the branding page is uploaded before the page is
@@ -55,12 +57,49 @@ describe('unsaved app icons', () => {
     expect(UNSAVED_ICON_TTL_MS).toBe(24 * 60 * 60 * 1000);
   });
 
-  it('runs with the hourly channel housekeeping sweep', async () => {
-    const builds = { failStaleBuilds: jest.fn().mockResolvedValue(0), sweepExpiredArtifacts: jest.fn().mockResolvedValue(0) };
+  it('runs on its own hourly schedule, one repeatable job however many replicas arm it', async () => {
+    const queue = { getRepeatableJobs: jest.fn().mockResolvedValue([]), add: jest.fn(), removeRepeatableByKey: jest.fn() };
     const channels = { sweepUnsavedIcons: jest.fn().mockResolvedValue(3) };
-    const processor = new AppBuildProcessor(builds as any, {} as any, {} as any, undefined, channels as any);
+    const processor = new ChannelHousekeepingProcessor(queue as any, channels as any);
+    await processor.schedule();
+    expect(queue.add).toHaveBeenCalledWith(
+      UNSAVED_ICON_SWEEP_JOB,
+      {},
+      expect.objectContaining({ jobId: ICON_SWEEP_REPEAT_JOB_ID, repeat: { cron: expect.any(String) } }),
+    );
     await processor.sweep();
     expect(channels.sweepUnsavedIcons).toHaveBeenCalled();
+  });
+
+  it('is not tied to the build artifact sweep', async () => {
+    const builds = { failStaleBuilds: jest.fn().mockResolvedValue(0), sweepExpiredArtifacts: jest.fn().mockResolvedValue(0) };
+    const processor = new AppBuildProcessor(builds as any, {} as any, {} as any);
+    await processor.sweep();
+    expect(builds.sweepExpiredArtifacts).toHaveBeenCalled();
+  });
+
+  describe('with builds off on this process', () => {
+    let restore: () => void;
+    beforeEach(() => {
+      restore = snapshotEnv('APP_BUILD_MODE');
+      process.env.APP_BUILD_MODE = 'off';
+    });
+    afterEach(() => restore());
+
+    it('still registers the icon sweep', () => {
+      let providers: unknown[] = [];
+      let buildProcessor: unknown;
+      let housekeeping: unknown;
+      jest.isolateModules(() => {
+        // The module reads APP_BUILD_MODE when it is declared, so load it fresh.
+        const { AgentChannelsModule } = require('../agent-channels.module');
+        buildProcessor = require('../app-build.processor').AppBuildProcessor;
+        housekeeping = require('../channel-housekeeping.processor').ChannelHousekeepingProcessor;
+        providers = Reflect.getMetadata('providers', AgentChannelsModule);
+      });
+      expect(providers).not.toContain(buildProcessor);
+      expect(providers).toContain(housekeeping);
+    });
   });
 
   it('marks the upload as an app icon, and refuses a purpose it does not know', async () => {

@@ -199,6 +199,8 @@ That URL is customer input and the fetch runs from the build host's own network,
 
 None of it ever fails a build. A default icon is worse than a branded one and far better than no artifact, so every path returns a sentence saying which happened.
 
+An icon uploaded on the branding page (`purpose=app_icon`) is stored before the page is saved. One that no agent's or channel's branding names a day later is cleared by an hourly repeatable job on its own `channel-housekeeping` queue, registered on every process whatever `APP_BUILD_MODE` says, so a deployment with builds off still cleans up. Override the cadence with `UNSAVED_ICON_SWEEP_CRON`.
+
 ### The desktop shell
 
 `packages/desktop-shell` is an Electron window, identical for every customer. What differs is the `app-config.json` written beside it at build time, naming the product and the web chat it opens (the channel's `webChatChannelId`, else the agent's first web chat). No customer-authored code is packaged, and only the two files that ship are copied, so a developer's `node_modules` and tests never reach an artifact.
