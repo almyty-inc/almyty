@@ -1075,7 +1075,6 @@ export const memoriesApi = {
   listBackends: () => apiGet('/memory/canonical/backends'),
   /** almyty's own memory and every outside memory account the organization has set up. */
   listAccounts: () => apiGet('/memory/canonical/accounts'),
-  backendsHealth: () => apiGet('/memory/canonical/backends/health'),
   // Workspace config (per-scope routing + softcap behavior + credentials wiring)
   getConfig: (scope_type: MemoryScopeType, scope_id: string) =>
     apiGet(`/memory/canonical/config?scope_type=${encodeURIComponent(scope_type)}&scope_id=${encodeURIComponent(scope_id)}`),
@@ -1088,20 +1087,86 @@ export const memoriesApi = {
     softcap_behavior?: 'reject' | 'warn_log' | 'silent'
     overrides?: Record<string, unknown>
   }) => apiPost('/memory/canonical/config', body),
-  transfer: (body: {
-    scope_type: MemoryScopeType
-    scope_id: string
-    source: string
-    target: string
-    mode?: MemoryMode
-    dry_run?: boolean
-  }) => apiPost('/memory/canonical/transfer', body),
   // Audit: soft-cap warnings list
   listSoftcapWarnings: (scope_type: MemoryScopeType, scope_id: string, limit = 50) =>
     apiGet(`/memory/canonical/warnings/softcap?scope_type=${encodeURIComponent(scope_type)}&scope_id=${encodeURIComponent(scope_id)}&limit=${limit}`),
   // Consolidation: trigger now (returns ConsolidationResult).
   consolidate: (body: { scope_type: MemoryScopeType; scope_id: string; force?: boolean }) =>
     apiPost('/memory/canonical/consolidate', body),
+  // Memory accounts (almyty's own and each memory connection) with health, and moving memories between them.
+  accountsOverview: () => apiGet<MemoryAccountsOverview>('/memory/canonical/accounts/overview'),
+  listMoves: () => apiGet<MemoryMove[]>('/memory/canonical/moves'),
+  getMove: (id: string) => apiGet<MemoryMove>(`/memory/canonical/moves/${encodeURIComponent(id)}`),
+  /** `source` and `target` are account ids: almyty-native, or a memory connection's id. */
+  startMove: (body: { source: string; target: string; scope_type: MemoryScopeType; scope_id: string; mode?: MemoryMode; switch_agents?: boolean }) =>
+    apiPost<MemoryMove>('/memory/canonical/moves', body),
+  previewMove: (body: { source: string; target: string; scope_type: MemoryScopeType; scope_id: string; mode?: MemoryMode }) =>
+    apiPost<MemoryMovePreview>('/memory/canonical/moves', { ...body, dry_run: true }),
+  resumeMove: (id: string) => apiPost<MemoryMove>(`/memory/canonical/moves/${encodeURIComponent(id)}/resume`),
+  /** The agents that keep their memories in an account, and whether the caller may switch each. */
+  moveAgents: (params: { source: string; scope_type: MemoryScopeType; scope_id: string }) =>
+    apiGet<MemoryAgentUse[]>(`/memory/canonical/moves/agents?${new URLSearchParams(params).toString()}`),
+}
+
+/** One memory account as the Memory page lists it. */
+export interface MemoryAccountRow {
+  /** almyty-native, or the memory connection's id. */
+  id: string
+  service: string
+  serviceName: string
+  name: string
+  accountLabel: string | null
+  owner: string
+  health: { status: 'valid' | 'failed' | 'expired' | 'revoked' | 'quota' | 'unknown'; checkedAt: string | null; error: string | null }
+  isDefault: boolean
+  canMoveFrom: boolean
+  canMoveTo: boolean
+}
+
+export interface MemoryAccountsOverview {
+  accounts: MemoryAccountRow[]
+  /** Every outside memory service, with how many accounts it has; 0 means not set up. */
+  services: Array<{ id: string; name: string; accounts: number }>
+}
+
+export type MemoryMoveStatus = 'queued' | 'running' | 'completed' | 'failed'
+
+export interface MemoryMove {
+  id: string
+  sourceService: string
+  sourceCredentialId: string | null
+  targetService: string
+  targetCredentialId: string | null
+  scopeType: MemoryScopeType
+  scopeId: string
+  mode: MemoryMode
+  status: MemoryMoveStatus
+  moved: number
+  failed: number
+  total: number | null
+  lastError: string | null
+  warnings: Array<{ capability: string; field: string; count: number }>
+  createdAt: string
+  updatedAt: string
+  finishedAt: string | null
+  switchAgents?: boolean
+  /** The agents pointed at the target when the move finished. */
+  agentsSwitched?: Array<{ id: string; name: string }> | null
+  /** The agents that used the source and were left alone, with why. */
+  agentsNotSwitched?: Array<{ id: string; name: string; reason: string }> | null
+}
+
+export interface MemoryAgentUse {
+  id: string
+  name: string
+  canSwitch: boolean
+  reason?: string
+}
+
+export interface MemoryMovePreview {
+  total: number
+  more: boolean
+  warnings: Array<{ capability: string; field: string; count: number }>
 }
 
 // Files API

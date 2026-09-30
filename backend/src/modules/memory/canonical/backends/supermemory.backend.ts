@@ -219,7 +219,8 @@ export class SupermemoryBackend implements MemoryBackend {
       embedding: null, embedding_dim: null, embedding_model: meta.embedding_model ?? null,
       embedding_status: 'skipped', embedding_error: null,
       tags: Array.isArray(meta.tags) ? meta.tags : [],
-      metadata: meta, file_refs: [],
+      // The id Supermemory deletes it by, on a listed memory too (nativeId).
+      metadata: { ...(raw?.id ? { supermemory_id: raw.id } : {}), ...meta }, file_refs: [],
       tier: isDoc ? null : (meta.tier ?? 'project'),
       valid_from: isDoc ? null : (raw?.createdAt ? new Date(raw.createdAt) : now),
       valid_until: null, superseded_by: null, ttl_seconds: null,

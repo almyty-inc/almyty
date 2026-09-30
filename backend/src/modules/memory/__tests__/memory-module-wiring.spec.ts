@@ -13,3 +13,19 @@ describe('MemoryModule wiring', () => {
     expect(controllers).toContain(CanonicalMemoryController)
   })
 })
+
+describe('MemoryModule wiring: moving memories between accounts', () => {
+  it('provides the move service and the processor that runs a move', () => {
+    const { MemoryMoveService } = require('../canonical/memory-move.service')
+    const { MemoryMoveProcessor } = require('../canonical/memory-move.processor')
+    const providers = Reflect.getMetadata('providers', MemoryModule) ?? []
+    expect(providers).toEqual(expect.arrayContaining([MemoryMoveService, MemoryMoveProcessor]))
+  })
+
+  it('registers the move queue the service enqueues on and the processor listens to', () => {
+    const { MOVE_QUEUE_NAME } = require('../canonical/memory-move.service')
+    const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'memory.module.ts'), 'utf8')
+    expect(source).toMatch(/\{ name: MOVE_QUEUE_NAME \}/)
+    expect(MOVE_QUEUE_NAME).toBe('canonical-memory-move')
+  })
+})

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Brain, Plus, Trash2, Search, ArrowRightLeft, HeartPulse, Tags as TagsIcon, Building2 } from 'lucide-react'
+import { Brain, Plus, Trash2, Search, ArrowRightLeft, Tags as TagsIcon, Building2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,7 +10,15 @@ import { Disclosure } from '@/components/ui/disclosure'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { PageIntro } from '@/components/onboarding/page-intro'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import {
+  MEMORY_MOVES_QUERY_KEY,
+  MemoryAccountsTable,
+  MemoryMovesTable,
+  addMemoryAccountPath,
+  moveMemoriesPath,
+  useMemoryAccountsOverview,
+} from '@/components/memory/memory-accounts'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -31,10 +39,11 @@ import { MEMORY_TIER_LABELS, memoryBackendName } from '@/components/memory/memor
  * ready" badges, a "Hybrid search (vector + FTS)" box and a Backends tab
  * of raw ids, capability flags and soft-cap enums. A person looking at it
  * wants to know what their agents remember and to fix a wrong fact. So:
- * two tabs for that (Memories, Search), one for where memories are kept
- * (Storage), and everything an operator tunes -- other storage services,
- * size limits, tidying, the service health cards -- under the shared
- * Advanced disclosure on Storage.
+ * two tabs for that (Memories, Search), one for the memory accounts
+ * (almyty's own and each account at a memory service, with its health,
+ * and the moves between them), and one for where memories are kept by
+ * default (Storage), with what an operator tunes -- size limits, tidying,
+ * a backup copy -- under the shared Advanced disclosure there.
  */
 
 type Item = {
@@ -60,6 +69,9 @@ type Backend = {
 
 const TIERS: MemoryTier[] = ['short', 'project', 'long', 'shared']
 
+type MemoryTab = 'browse' | 'search' | 'accounts' | 'storage'
+const MEMORY_TABS: MemoryTab[] = ['browse', 'search', 'accounts', 'storage']
+
 export function MemoriesPage() {
   const orgId = useOrganizationStore((s) => s.currentOrganization?.id)
   const notify = useNotifications()
@@ -73,7 +85,15 @@ export function MemoriesPage() {
   const scope = orgId ? { scope_type: 'workspace' as const, scope_id: orgId } : null
 
   // ── tabs ────────────────────────────────────────────────────────────
-  const [tab, setTab] = useState<'browse' | 'search' | 'storage'>('browse')
+  // In the URL (?tab=accounts), so a page that adds an account can come back to it.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab: MemoryTab = MEMORY_TABS.includes(searchParams.get('tab') as MemoryTab) ? (searchParams.get('tab') as MemoryTab) : 'browse'
+  const setTab = (next: MemoryTab) => {
+    const params = new URLSearchParams(searchParams)
+    if (next === 'browse') params.delete('tab')
+    else params.set('tab', next)
+    setSearchParams(params, { replace: true })
+  }
 
   // ── browse + filters ────────────────────────────────────────────────
   const [tierFilter, setTierFilter] = useState<MemoryTier | 'all'>('all')
@@ -135,12 +155,6 @@ export function MemoriesPage() {
     queryKey: ['memories', 'backends'],
     queryFn: () => memoriesApi.listBackends(),
   })
-  const healthQ = useQuery({
-    queryKey: ['memories', 'backends', 'health'],
-    queryFn: () => memoriesApi.backendsHealth(),
-    enabled: tab === 'storage',
-    refetchInterval: 30_000,
-  })
 
   // ── workspace config (per-scope routing + credentials) ─────────────
   const configQ = useQuery({
@@ -153,7 +167,8 @@ export function MemoriesPage() {
       memoriesApi.updateConfig(patch),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['memories', 'config', orgId] })
-      qc.invalidateQueries({ queryKey: ['memories', 'backends', 'health'] })
+      // Which account is the default just changed.
+      qc.invalidateQueries({ queryKey: ['memories', 'accounts'] })
       notify.success('Saved')
     },
     onError: (err: any) => notify.error('Save failed', err.message ?? String(err)),
@@ -180,7 +195,6 @@ export function MemoriesPage() {
   const rawItems: Item[] = (list.data?.items ?? []) as Item[]
   const items: Item[] = teamFilter === 'all' ? rawItems : filterByTeamVisibility(rawItems as any[], teamFilter) as Item[]
   const backends: Backend[] = (backendsQ.data ?? []) as Backend[]
-  const health: Record<string, { ok: boolean; latency_ms: number }> = (healthQ.data ?? {}) as any
 
   return (
     <div className="space-y-6">
@@ -195,10 +209,11 @@ export function MemoriesPage() {
       />
       <PageIntro topic="memories" />
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as MemoryTab)}>
         <TabsList>
           <TabsTrigger value="browse">Memories</TabsTrigger>
           <TabsTrigger value="search">Search</TabsTrigger>
+          <TabsTrigger value="accounts">Accounts</TabsTrigger>
           <TabsTrigger value="storage">Storage</TabsTrigger>
         </TabsList>
 
@@ -331,6 +346,11 @@ export function MemoriesPage() {
           </div>
         </TabsContent>
 
+        {/* ── Accounts ───────────────────────────────────────────── */}
+        <TabsContent value="accounts" className="space-y-6">
+          <MemoryAccountsPanel enabled={tab === 'accounts'} />
+        </TabsContent>
+
         {/* ── Storage ────────────────────────────────────────────── */}
         <TabsContent value="storage" className="space-y-4">
           <ConfigCard
@@ -340,47 +360,6 @@ export function MemoriesPage() {
             onSave={(patch) => updateConfigMut.mutate(patch)}
             orgId={orgId}
           >
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Storage services</p>
-              <p className="text-xs text-muted-foreground">
-                What each service can hold and whether it answers right now.
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {backends.map((b) => {
-                  const h = health[b.id]
-                  return (
-                    <Card key={b.id}>
-                      <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-base">{memoryBackendName(b.id)}</CardTitle>
-                          <Badge variant={h?.ok ? 'default' : 'outline'} className="flex items-center gap-1">
-                            <HeartPulse className="h-3 w-3" />
-                            {/*
-                              Three states, not two: a probe in flight and a
-                              backend that did not answer both used to read
-                              as "unconfigured", so almyty-native -- which is
-                              always configured -- showed a config error
-                              while its own health check was still running.
-                            */}
-                            {healthQ.isLoading ? 'Checking…' : h?.ok ? `${h.latency_ms}ms` : h ? 'Unreachable' : 'Not set up'}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        <div className="flex flex-wrap gap-1">
-                          {b.modes.map((m) => <Badge key={m} variant="secondary">{m === 'memory' ? 'Facts' : 'Documents'}</Badge>)}
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {b.capabilities.map((c) => (
-                            <Badge key={c} variant="outline" className="font-mono text-xs">{c}</Badge>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </div>
-            </div>
             <ConsolidationCard orgId={orgId} />
             <div className="space-y-2">
               <p className="text-sm font-medium">Too-big memories</p>
@@ -388,11 +367,6 @@ export function MemoriesPage() {
                 Each time an agent saved more than the size limit. What happens then is set above.
               </p>
               <SoftcapAuditList orgId={orgId} enabled={tab === 'storage'} />
-            </div>
-            <div>
-              <Button variant="outline" asChild>
-                <Link to="/memories/transfer"><ArrowRightLeft className="h-4 w-4 mr-2" /> Move memories to another service</Link>
-              </Button>
             </div>
           </ConfigCard>
         </TabsContent>
@@ -404,6 +378,59 @@ export function MemoriesPage() {
       */}
       {confirmDialog}
     </div>
+  )
+}
+
+// ── MemoryAccountsPanel ─────────────────────────────────────────────
+//
+// Every memory account with its health (a service with none says "Not set
+// up" and offers Add account), and the recent moves between them.
+function MemoryAccountsPanel({ enabled }: { enabled: boolean }) {
+  const overview = useMemoryAccountsOverview()
+  const movesQ = useQuery({
+    queryKey: MEMORY_MOVES_QUERY_KEY,
+    queryFn: async () => {
+      const rows = await memoriesApi.listMoves()
+      return Array.isArray(rows) ? rows : []
+    },
+    enabled,
+    // A move under way updates its row here too.
+    refetchInterval: (q) => ((q.state.data ?? []) as Array<{ status: string }>).some((m) => m.status === 'queued' || m.status === 'running') ? 3000 : false,
+  })
+  return (
+    <>
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold">Memory accounts</h2>
+            <p className="text-sm text-muted-foreground">
+              Where agents can keep their memories: almyty itself, or your accounts at a memory service. Pick one on each agent's Memory section.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link to={moveMemoriesPath()}><ArrowRightLeft className="h-4 w-4 mr-2" /> Move memories</Link>
+            </Button>
+            <Button asChild>
+              <Link to={addMemoryAccountPath()}><Plus className="h-4 w-4 mr-2" /> Add account</Link>
+            </Button>
+          </div>
+        </div>
+        {overview.isError ? (
+          <QueryError error={overview.error} onRetry={() => overview.refetch()} title="Couldn't load the memory accounts" />
+        ) : (
+          <MemoryAccountsTable overview={overview.data} loading={overview.isLoading} />
+        )}
+      </div>
+      <div className="space-y-3">
+        <h2 className="text-base font-semibold">Moves</h2>
+        {movesQ.isError ? (
+          <QueryError error={movesQ.error} onRetry={() => movesQ.refetch()} title="Couldn't load the moves" />
+        ) : (
+          <MemoryMovesTable moves={movesQ.data ?? []} accounts={overview.data?.accounts ?? []} loading={movesQ.isLoading} />
+        )}
+      </div>
+    </>
   )
 }
 
@@ -583,6 +610,7 @@ function AccountPicker({ backendId, value, saving, onPick }: { backendId: string
       label={`${memoryBackendName(backendId)} account`}
       value={value ?? ''}
       kind="memory"
+      connectorKey={backendId}
       allowNone
       placeholder="None"
       disabled={saving}

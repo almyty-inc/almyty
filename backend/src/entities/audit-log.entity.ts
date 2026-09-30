@@ -47,6 +47,8 @@ export enum AuditAction {
   MEMORY_SYNC = 'memory_sync',
   MEMORY_DENIED = 'memory_denied',
   MEMORY_SOFTCAP_WARNING = 'memory_softcap_warning',
+  /** Memories moved from one memory account to another (MemoryMoveService): started, and finished. */
+  MEMORY_MOVE = 'memory_move',
   // File
   FILE_UPLOAD = 'file_upload',
   FILE_DOWNLOAD = 'file_download',
