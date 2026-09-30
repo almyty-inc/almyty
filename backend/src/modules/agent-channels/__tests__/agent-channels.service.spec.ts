@@ -412,11 +412,14 @@ describe('AgentChannelsService', () => {
       await expect(service.publish(ORG, 'agent-open', view.id, ME)).rejects.toThrow(/spend limit per run/);
     });
 
-    it('checks SSO against the organization licence', async () => {
+    // Visitor sign-in (SSO) on a channel is the sso entitlement's, not
+    // white label's: white label removes the almyty mark and nothing else.
+    it('checks SSO against the organization licence: sso unlocks it, white label does not', async () => {
       agents.seed(agent({ id: 'agent-sso', visitorRules: { authMode: VisitorAuthMode.SSO } }));
       const unlicensed = build();
       const view = await unlicensed.add(ORG, 'agent-sso', ME, { type: ChannelType.WEB, slug: 'sso-chat' });
       await expect(unlicensed.publish(ORG, 'agent-sso', view.id, ME)).rejects.toThrow(/commercial licence/);
+      await expect(build({ licensed: ['white_label'] }).publish(ORG, 'agent-sso', view.id, ME)).rejects.toThrow(/commercial licence/);
       await expect(build({ licensed: ['sso'] }).publish(ORG, 'agent-sso', view.id, ME)).resolves.toMatchObject({ status: 'live' });
     });
 
