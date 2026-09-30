@@ -31,7 +31,10 @@ and working with versions and executions.
 | `GET` | `/agents/templates` | List available templates |
 | `GET` | `/agents/:id/cost-estimate` | Get cost estimate |
 | `GET` | `/agents/:id/audit-log` | Get audit log |
-| `POST` | `/agents/:id/schedule` | Set schedule |
+| `GET` | `/agents/:id/schedule` | Get schedule, in plain words, with its next run |
+| `POST` | `/agents/:id/schedule` | Set schedule (every N minutes, a time of day on chosen days, or once a month; see [Scheduling](/agents/scheduling#developer-reference)) |
+| `POST` | `/agents/:id/schedule/preview` | Describe a schedule and its next runs without saving it |
+| `GET` | `/agents/:id/schedule/destinations` | Where a scheduled result can go |
 | `DELETE` | `/agents/:id/schedule` | Remove schedule |
 
 ## List Agents

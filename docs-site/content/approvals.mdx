@@ -45,6 +45,24 @@ what you intend to do and the relevant amounts/parties.
 
 The tool returns when the human decides. Treat the returned value as the authorization to proceed.
 
+## Ask before a large amount
+
+An agent asks for approval when its instructions tell it to, so a prompt is the
+only thing standing between it and a large refund. For money and similar
+amounts, a rule is safer: an [approval policy](/enterprise/approval-policies)
+can say *Ask before issue_refund when amount is over 500*. almyty then checks
+every call to that tool itself, before it runs, whatever the agent was told:
+
+- a call at or under the amount runs without asking anyone;
+- a call over it does not run. An autonomous agent pauses and a request lands on
+  the **Approvals** page, showing the tool, the amount and the rule; once it is
+  approved, exactly that call runs and the agent carries on. A workflow agent
+  cannot wait for a person, so the call is refused and the run says which rule
+  stopped it.
+
+Amount rules are part of approval policies (Business or Enterprise). See
+[Ask before a tool call over an amount](/enterprise/approval-policies#ask-before-a-tool-call-over-an-amount).
+
 ## Multi-step policies (Enterprise)
 
 A single authorized reviewer is the free, default gate. If you need finance-then-admin chains, amount-conditional rules, or a two-reviewer quorum, [approval policies](/enterprise/approval-policies) (Enterprise) layer that on top of this flow.

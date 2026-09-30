@@ -42,9 +42,22 @@ The widget takes its colour, name, greeting, theme and AI disclosure from the ag
 
 **Other agents (A2A)** lets agents elsewhere call this agent over Google's Agent-to-Agent protocol. Publish it, and its page shows the Agent Card URL and the JSON-RPC endpoint, `https://<api-host>/<org>/channels/<channel-id>`. Under **How other agents sign in**, make a key for each caller; each call sends it in the `x-api-key` header. Each key has its own share of the per-visitor message limit, and each task runs under the per-run and spend limits. The card and the endpoint answer only while the channel is published and the agent is active. See **[A2A](/gateways/a2a)** for the methods and the card.
 
+## Post scheduled results
+
+A published messaging channel can also start a conversation: an agent's
+[schedule](/agents/scheduling) can send each result to it, such as a sales summary
+into a Slack channel every weekday at 8:00, a report to a Teams chat, or an email
+to the team. On the schedule page, under **Send the result to**, choose the channel
+and where on it: a Slack channel the bot is in, a Teams channel or chat where the bot
+has been talked to, email addresses, or a phone number. The web chat, the widget and
+the apps answer people who are there, so they are not offered.
+
+The post goes out like a reply: through the same bot, with the channel's AI
+disclosure line at the top, and within the channel's spend limit. A post the platform
+refuses shows on the run and in your notifications.
 ## AI disclosure
 
-Every channel people talk to (the web chat, the website widget and each messaging channel) has an **AI disclosure** switch, on by default. The web chat and the widget show the disclosure line under the message box; a messaging channel puts it before the first reply of each conversation. The line is the one in **Branding and visitor rules** (or the channel's own), and *You are chatting with an AI assistant.* when none is set. Turning the switch off removes the disclosure, which needs the white-label entitlement. See [Compliance](/compliance).
+Every channel people talk to (the web chat, the website widget and each messaging channel) has an **AI disclosure** switch, on by default. The web chat and the widget show the disclosure line under the message box; a messaging channel puts it before the first reply of each conversation, and at the top of each scheduled post. The line is the one in **Branding and visitor rules** (or the channel's own), and *You are chatting with an AI assistant.* when none is set. Turning the switch off removes the disclosure, which needs the white-label entitlement. See [Compliance](/compliance).
 
 ## What gates a channel open to anyone
 

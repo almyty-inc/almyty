@@ -8,7 +8,7 @@
 ## Build it
 
 1. **Write the policies**: e.g. *refunds over $500 → finance lead*, *any external send → manager*, *production config change → admin*. Rules live at the org level, above any single agent.
-2. **Reference the gate in agents**: the agent calls `request_approval` for the action; the policy decides who must approve and when.
+2. **Gate the actions**: for an amount, add an amount rule to the policy (*Ask before issue_refund when amount is over 500*), and almyty checks every call to that tool before it runs, whatever the agent was told; see [Ask before a tool call over an amount](/enterprise/approval-policies#ask-before-a-tool-call-over-an-amount). For anything else, the agent calls `request_approval` for the action, and the policy decides who must approve.
 3. **Route to the queue**: the run pauses at `waiting_approval` and the request lands on the [Approvals](/approvals) page with full context. Here the demo's support agent hit its refund rule on a real **$820 Brightway Logistics** claim and stopped for a human:
 
    ![A real refund escalation waiting for approval](/screenshots/approval-refund-820.png)

@@ -27,7 +27,11 @@ approver.
 
 3. **Gate the irreversible step**: the agent calls `request_approval` for refunds over the
    threshold. The run pauses at `waiting approval` and a human Approves or Rejects (the $820
-   Brightway escalation above). Below the threshold, it proceeds on its own.
+   Brightway escalation above). Below the threshold, it proceeds on its own. To make the
+   threshold hold whatever the model decides, add an approval policy with an amount rule,
+   *Ask before issue_refund when amount is over 500*: almyty then checks every refund call
+   itself before it runs. See
+   [Ask before a tool call over an amount](/enterprise/approval-policies#ask-before-a-tool-call-over-an-amount).
 
 4. **Keep the receipts**: every action and config change is in the [audit trail](/enterprise/audit-export)
    with who/when/what, exportable for compliance.

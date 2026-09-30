@@ -6,6 +6,49 @@ Requires the `approval_policy` entitlement (Business or Enterprise on the hosted
 
 When no policy matches a request, the OSS single-gate behavior applies unchanged. Policies are an overlay, not a replacement.
 
+## Ask before a tool call over an amount
+
+The simplest policy to explain to anyone: *Ask before refunds over 500.* You
+name the tool, the number that matters, and the amount; almyty checks every call
+to that tool before it runs, so it does not depend on what the agent was told.
+
+1. Go to **Settings → Advanced → Approvals** and select **New policy**.
+2. Give it a name people will recognise, such as *Refunds over 500*.
+3. Under **When to ask**, choose **A tool is called with an amount over a
+   limit**.
+4. Choose the **Tool**, then **The number** among its inputs (only its numbers
+   are listed), then **over** or **at or over**, then the **Amount**. The amount
+   is just a number; whatever currency the tool uses, it is the tool's.
+5. Under **Approval steps**, say who signs off (one step with role `*` means any
+   authorized approver).
+6. Select **Create policy**.
+
+The page says the rule back in plain words: *Ask before issue_refund when amount
+is over 500*, and the policy list shows the same sentence.
+
+**What happens then**
+
+- A call at or under the amount runs without asking anyone.
+- A call over the amount does not run.
+  - In an **autonomous agent**, the run pauses and a request appears on the
+    **Approvals** page with the tool, what the call asked for, and the rule.
+    When the policy's steps are signed off, exactly that call runs, and the
+    agent carries on with its result. If it is rejected (or expires), the run
+    stops. An approval covers that one call: a different amount needs its own.
+  - A **workflow agent** cannot pause for a person, so the call is refused and
+    the run says which rule stopped it.
+  - Anything else that calls the tool directly (a gateway, the tool's test
+    button) has nobody to wait for, so it is refused the same way.
+- A number that is there but is not a number (*"eight hundred"*) counts as over
+  the amount: a rule you could walk around by spelling the number out would not
+  be a rule.
+- Every call the rule holds, and every approved call that then runs, is written
+  to the audit log.
+
+A policy with an amount rule governs only the requests it raises itself. A
+request an agent raises with `request_approval` is governed by the other
+policies, through their match conditions.
+
 ## Anatomy of a policy
 
 With the entitlement enabled, **Settings → Advanced → Approvals** lists policies and provides **New policy**. This is separate from the free, single-gate approval queue.
@@ -38,6 +81,13 @@ A policy is a match condition, an ordered set of sign-off steps, and a priority:
 - **`steps`**: ordered sign-off stages. Each step names an `approverRole` (an org role or a [custom role](/enterprise/advanced-rbac) name; `"*"` accepts anyone authorized to approve) and a `minApprovals` count (at least 1).
 - **`priority`**: when several enabled policies match, the highest priority wins; exactly one policy governs a request.
 - **`teamId`**: optional; scope the policy to one team's agents.
+- **`trigger`**: optional; an amount rule. Set, the policy asks on its own at the tool call and `match` is not used:
+
+  ```json
+  { "kind": "tool_amount", "toolId": "<tool id>", "argument": "amount", "op": "gt", "amount": 500 }
+  ```
+
+  `argument` is a dot path into the tool's input (`refund.total`), `op` is `gt` (over) or `gte` (at or over). The server fills in `toolName` from the tool. A team's rule (`teamId` set) holds only that team's agents' calls; a call with no agent behind it is held by every rule on the tool. The approval request it raises carries the call under `payload` (`tool`, `parameters`, and `_gate` with the rule, the value and a fingerprint of the parameters), and the executor lets the call run only with an approved request whose fingerprint matches. Audit rows use the action `approval_gate` with status `held` or `approved`.
 
 A plain quorum is just a single step: `{ "approverRole": "*", "minApprovals": 2 }`.
 

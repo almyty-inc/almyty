@@ -1,74 +1,155 @@
 # Scheduling
 
-Run an agent automatically on a recurring interval, with no external cron to
-wire up. Use it for periodic data collection, reporting, monitoring, or any
-recurring AI workflow.
+A schedule runs an agent on its own, without anyone asking: a sales summary
+every weekday morning, a stock check on the first of the month, a status check
+every fifteen minutes. The result can go straight to where your team reads it,
+such as a Slack channel, a Teams chat or an email inbox.
 
-![The Schedule config on an agent: enable, interval in minutes, optional input JSON](/screenshots/schedule-config.png)
+![The Schedule card on an agent](/screenshots/schedule-config.png)
 
-## Create a schedule
+## Set up a schedule
 
-1. Open the agent's **Overview** tab
-2. On the **Schedule** card, turn on **Enable schedule**
-3. Set the **Interval (minutes)** (at least 1 minute, at most a year)
-4. Optionally provide **Input JSON**, a fixed payload sent on each run
-5. Click **Save schedule**
+1. Open the agent and go to its **Overview** tab.
+2. On the **Schedule** card, select **Set up a schedule** (or **Edit schedule**).
+3. Under **When it runs**, choose how it repeats:
+   - **At a time of day**: pick the days (every day, weekdays, or the days you
+     choose), the time, and the time zone.
+   - **Once a month**: pick the day of the month (1 to 28, so it happens every
+     month), the time and the time zone.
+   - **Every few minutes or hours**: pick how often.
+4. Under **Send the result to**, choose where the result goes (see below).
+5. Select **Save schedule**.
 
-Once it is enabled, the card says when the next run is due, counted from the
-last execution.
+The page says your schedule back in plain words, such as *Every weekday at
+8:00, Europe/Berlin*, and lists the next few runs, so you can check it before
+you save.
 
-## Remove a schedule
+The agent has to be active. A schedule on an agent that is still a draft never
+runs, so the page tells you to activate it first.
 
-On the **Schedule** card, turn **Enable schedule** off. Disabling does not
-delete existing execution history.
+### Time zones and clock changes
 
-## Configuration Reference
+The time zone starts as the one on your profile (**Settings → Profile**).
+Change it for a team elsewhere. A schedule follows the clock in its time zone:
+*8:00, Europe/Berlin* is 8:00 in Berlin in summer and in winter. On the night
+the clocks go forward, a time that does not exist that night (say 2:30) runs
+just after the change; on the night they go back, a time that happens twice
+runs once.
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `intervalMinutes` | number | Yes | How often to run (1 minute to 1 year) |
-| `input` | object | No | Static input to pass on each invocation |
+## Send the result to
 
-## Common Intervals
+Every result is kept in the agent's run history. You can also send it on:
 
-| Use Case | Interval |
-|----------|----------|
-| Real-time monitoring | 5 minutes |
-| Frequent checks | 15 minutes |
-| Hourly reports | 60 minutes |
-| Daily digest | 1440 minutes (24h) |
-| Weekly summary | 10080 minutes (7d) |
+- **The agent's webhook**: the URL on the agent's **Webhook** card, which gets
+  every finished run, this one included. Add a webhook URL first.
+- **One of the agent's channels**: a messaging channel the agent already has on
+  its **Channels** tab. Choose the channel, then where on it:
 
-## Execution history
+| Channel | Where the result goes |
+|---|---|
+| Slack | A Slack channel the bot is in. Pick it from the list, or enter its channel ID. |
+| Microsoft Teams | A channel or chat where someone has talked to the bot. Teams only lets a bot post where it has been talked to, so mention it once there first. |
+| Email | One or more email addresses (up to 10). |
+| Telegram | A chat that has talked to the bot, or a channel where the bot is an admin. |
+| Discord | A channel, by its ID. |
+| Google Chat | The space the channel is connected to. |
+| WhatsApp, SMS, iMessage, Signal | A phone number with its country code, like +14155550100. |
+| Matrix, IRC | A room or channel. |
 
-Scheduled runs appear in the agent's execution history alongside manual
-invocations, each tagged with `trigger: "schedule"` in its metadata. Review them
-on the detail page, or from your terminal:
+A scheduled message goes out the way the channel's replies do: the same bot, the
+same AI disclosure line at the top, and the same spend limit. If the channel has
+reached its spend limit for the day or month, the scheduled run is skipped and
+the run history says why. A long result is split into several messages where a
+platform limits message length, and cut short with a note if it would take too
+many.
+
+WhatsApp only delivers a business message to someone who wrote to that number
+in the last 24 hours, unless you use an approved template. A post outside that
+window is refused by WhatsApp, and you are told.
+
+### When a post does not arrive
+
+If a platform refuses a post (the bot was removed from the Slack channel, a
+number is wrong), the run still counts as done, and:
+
+- the run in **Recent runs** says *Posting failed* with the platform's own
+  reason, and
+- you get a notification (in the app; email too if you turned it on for failed
+  runs in your notification settings).
+
+## Turn a schedule off
+
+Use the switch on the **Schedule** card. It keeps everything you set, so turning
+it back on runs it exactly as before. Your run history is kept either way.
+
+A schedule can also be paused for you, with a note on the agent saying why: its
+model is no longer offered by the vendor, its owner has left the team or
+organization, or it could not be restored after a restart. Fix the cause and
+turn it back on.
+
+## What it costs
+
+Each run costs what a normal run of the agent costs; check the estimate on the
+agent's page. A weekday schedule runs about 22 times a month, a daily one about
+30, and one every 15 minutes about 2,900.
+
+## Developer reference
+
+### Endpoints
+
+| Method | Path | What it does |
+|---|---|---|
+| `GET` | `/agents/:id/schedule` | The schedule, its plain-words `summary` and its `nextRunAt` |
+| `POST` | `/agents/:id/schedule` | Turn the schedule on, or change it |
+| `PATCH` | `/agents/:id/schedule` | Same, with `enabled: false` turning it off |
+| `DELETE` | `/agents/:id/schedule` | Turn it off (the settings are kept) |
+| `POST` | `/agents/:id/schedule/preview` | `summary` and the next three runs of a schedule, without saving it |
+| `GET` | `/agents/:id/schedule/destinations` | The agent's webhook URL and the channels a result can go to, with the places each can reach |
+
+### Schedule body
+
+| Field | Type | Used with | Notes |
+|---|---|---|---|
+| `kind` | `interval` \| `days` \| `monthly` | all | Defaults to `interval` |
+| `intervalMinutes` | number | `interval` | 1 minute to 1 year |
+| `time` | `"HH:MM"` | `days`, `monthly` | 24-hour, in `timezone` |
+| `days` | number[] | `days` | 0 = Sunday to 6 = Saturday |
+| `dayOfMonth` | number | `monthly` | 1 to 28 |
+| `timezone` | string | `days`, `monthly` | IANA name, such as `Europe/Berlin`. Defaults to the caller's profile time zone, then UTC |
+| `input` | object | all | Passed to every run |
+| `deliverTo` | object \| null | all | `{ "kind": "webhook" }` or `{ "kind": "channel", "channelId", "to" }` |
+
+```bash
+curl -X POST https://api.almyty.com/agents/$AGENT_ID/schedule \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{
+    "kind": "days", "time": "08:00", "days": [1,2,3,4,5], "timezone": "Europe/Berlin",
+    "input": { "report": "sales" },
+    "deliverTo": { "kind": "channel", "channelId": "<agent channel id>", "to": "C0123ABCDEF" }
+  }'
+```
+
+`to` is what the channel reaches: a Slack channel ID, a Teams conversation ID
+(from the destinations list), comma-separated email addresses, an E.164 phone
+number, a Telegram chat ID, a Discord channel ID, a Matrix room ID or an IRC
+channel. The server checks it against the channel and answers `400` with a
+sentence when it does not fit.
+
+### How it runs
+
+Time-of-day schedules are Bull repeatable jobs with a cron expression and a time
+zone (`0 8 * * 1,2,3,4,5`, `Europe/Berlin`), evaluated with `cron-parser`; the
+next-run times the API returns come from the same expression. A run acts as the
+agent's owner. Each scheduled run is an execution with
+`metadata.triggerType: "scheduled"`. A channel post is recorded on it as
+`metadata.channelDelivery`: `status` (`delivered`, `failed` or `skipped`), the
+channel, the destination, `parts`, and the platform's `error`. Each message is
+also an outbound event on the channel. The webhook's outcome is
+`metadata.webhookDelivery`.
+
+Scheduled runs are listed with the agent's other runs, on its page or from
+your terminal:
 
 ```bash
 $ npx @almyty/agents runs daily-reporter
 ```
-
-Filter to just the scheduled failures with `--json` and `jq`:
-
-```bash
-$ npx @almyty/agents runs daily-reporter --json \
-    | jq '[.[] | select(.status == "failed")]'
-```
-
-## Cost
-
-Before enabling a frequent schedule, check the estimated cost per run on the
-agent's detail page. To project a month, multiply the per-run cost by the run
-count: `(60 * 24 * 30) / intervalMinutes`. A 60-minute schedule runs 720 times a
-month; a 5-minute schedule runs 8,640 times.
-
-## Notes
-
-- The agent must be in `active` status for scheduled runs to execute
-- If an execution fails, the schedule continues: check execution history for errors
-- Deactivating an agent pauses its schedule; reactivating resumes it
-- Deleting the schedule does not affect existing execution history
-
-To manage schedules programmatically, see the
-[API reference](/api-reference/openai-compatible).
