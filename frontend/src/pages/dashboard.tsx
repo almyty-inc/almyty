@@ -27,8 +27,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { pluralize, pluralized } from '@/lib/utils'
 import type { RequestLog } from '@/types'
 
-/** Gateway types that take gateway sign-in (API key, bearer, OAuth). */
-const PROTOCOL_GATEWAY_TYPES = new Set(['mcp', 'utcp', 'skills', 'a2a'])
+import { isProtocolGateway } from '@/components/gateways/schema'
 
 // Helper to humanize a log path. The activity feed only receives
 // protocol traffic (MCP/UTCP/A2A requests and tool executions), so
@@ -165,7 +164,9 @@ export function DashboardPage() {
     )
   }
 
-  const gateways = gatewaysData?.items ?? []
+  // Gateways are MCP, UTCP and Skills only (gatewaysQuery asks the server for
+  // kind=tool, so the total is theirs); a channel's gateway is not one.
+  const gateways = (gatewaysData?.items ?? []).filter(isProtocolGateway)
   const gatewaysTotal = gatewaysData?.total ?? gateways.length
   const tools = toolsData?.items ?? []
   const toolsTotal = toolsData?.total ?? tools.length
@@ -191,13 +192,12 @@ export function DashboardPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const apisWithNoTools = apis.filter((a: any) => typeof a.toolCount === 'number' && a.toolCount === 0)
 
-  // Action items: protocol gateways anyone can call. Only the protocol types
-  // take gateway sign-in; chat and channel gateways authenticate their own
-  // way and the built-in system gateway uses OAuth, so counting those said
-  // something untrue about them.
+  // Action items: gateways anyone can call. The built-in system gateway
+  // uses OAuth, and a channel (web chat, widget, messaging, A2A) is not a
+  // gateway here at all, so neither is counted.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const gatewaysWithNoAuth = gateways.filter((g: any) => {
-    if (g.isSystem || !PROTOCOL_GATEWAY_TYPES.has(g.type)) return false
+    if (g.isSystem) return false
     return !g.authConfigs?.length && !g.authMethods?.length
   })
 
