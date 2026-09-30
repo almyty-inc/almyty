@@ -85,9 +85,9 @@ That's a live RPC to your laptop, dispatched through the SaaS.
 
 ## Step 4: Run a workspace-scoped command
 
-Back on the runner detail page, scroll to **Workspaces** and create one (or use any existing active workspace). The default cwd is your home directory; pick whatever directory you want shell.exec to run in.
+You need an active workspace on the runner. Agents reserve one when a job needs a folder, so there is no create button in the UI; for this demo, create one over the API with `POST /workspaces` and a body such as `{ "runnerId": "<your-runner-id>", "cwd": "/path/you/want" }` (`ttlMs` optional, default one hour). It then shows on the runner detail page's **Workspaces** tab.
 
-Open **/tools/<id>** for `runner.<name>.shell.exec`. The Test Tool tab now shows a **Workspace** picker (red asterisk — required). Pick the workspace you just created. In the parameters area:
+Open **/tools/<id>** for `runner.<name>.shell.exec`. The **Test tool** tab now shows a **Workspace** picker (red asterisk — required). Pick the workspace you just created. In the parameters area:
 
 - `command`: `ls -la`
 

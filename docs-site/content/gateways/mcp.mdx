@@ -14,7 +14,7 @@ Expose your tools to any MCP-compatible client. An MCP gateway serves your tools
 
 On the gateway detail page, **Tool scoping** changes which tools it serves and the **Authentication** section its auth. The **Integrations** tab provides the client endpoints.
 
-![Assigning tools on the gateway Tools tab](/screenshots/gateway-detail-tools.png)
+![Assigning tools on the gateway Tool scoping tab](/screenshots/gateway-detail-tools.png)
 
 Your MCP endpoint follows this pattern:
 
@@ -30,7 +30,7 @@ https://api.almyty.com/{org}/{gateway-slug}
 claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
 ```
 
-Pass your gateway key as an `x-api-key` header (generate it in the gateway's **Authentication** panel).
+Pass your gateway key as an `x-api-key` header. The first key is shown once when the gateway is created; add more in the gateway's **Authentication** section.
 
 ### Claude Desktop
 

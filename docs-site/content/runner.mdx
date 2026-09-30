@@ -100,7 +100,7 @@ restrictions and review the [runner safety limits](/cli/runner#what-a-runner-can
 
 ## Notes
 
-- **One runner per account** in v1.0; multi-machine scheduling is on the way.
+- **One runner per account** in v1.0: starting a second one under another name is refused until you delete the first.
 - **Where LLM calls happen.** almyty's own agents run their LLM calls through the
   backend, not the runner. The runner just executes local processes. The
   exception is the coding-agent CLIs you spawn on the runner: they authenticate

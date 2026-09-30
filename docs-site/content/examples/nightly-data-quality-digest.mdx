@@ -1,6 +1,6 @@
 # Post a nightly data-quality digest
 
-**Stack**: `Trigger: schedule (interval)` · `Models: your choice` · `Tools: warehouse/query API` · `Mode: single agent + memory` · `Output: Slack digest via channel or webhook`
+**Stack**: `Trigger: schedule (interval)` · `Models: your choice` · `Tools: warehouse/query API` · `Mode: single agent + memory` · `Output: digest via webhook, posted to Slack`
 
 **Who it's for**: data teams who find out about broken pipelines from angry stakeholders.
 **What it does**: every night it checks freshness, row-count deltas, and null-rate spikes across your key tables, groups the problems, and posts a short digest to Slack, or says "all clear", before anyone opens a dashboard.
@@ -14,7 +14,7 @@
 
 ![The agent's schedule and webhook panels](/screenshots/schedule-config.png)
 
-5. **Deliver the result**: publish on Slack for an in-channel post, or register an outbound webhook so almyty POSTs the digest to your endpoint when the run finishes.
+5. **Deliver the result**: register an outbound webhook so almyty POSTs the digest to your endpoint when the run finishes, and post it to Slack from there.
 6. **Review runs**: every night's run is in the audit trail with exactly what it queried.
 
 ## Make it yours

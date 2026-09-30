@@ -2,13 +2,13 @@
 
 An agent's **Channels** tab (`/agents/:id?tab=channels`). The agent's own API keys (for its API and the OpenAI-compatible endpoint) are on its Overview, next to the API snippets; a channel's keys are on that channel. It puts an agent someone has already built in front of people or other agents, under their own name: a hosted chat on its own address, a chat widget on their website, a Slack or WhatsApp presence, an A2A endpoint, a terminal command, a desktop app.
 
-![An agent's Channels tab](../docs-site/public/screenshots/apps-list.png)
+![An agent's Channels tab](../docs-site/public/screenshots/agent-channels.png)
 
 ## Why this exists
 
-Every competitor terminates at a hosted widget, a messaging channel, or an API. All three keep the end user tethered to the vendor. A signed binary the customer hands to their own users does not: it carries their name, their identifier, their signature, and the operating system that asks who published it gets their answer, not ours.
+A hosted chat, a widget, a messaging channel and an API all keep the end user on almyty's side. A signed binary the customer hands to their own users carries their name, their identifier and their signature, and the operating system that asks who published it gets their answer.
 
-That is the part nobody else ships, so it is the part this subsystem is built around.
+That is why builds and signing are a first-class part of this subsystem.
 
 ## The two nouns
 
@@ -53,7 +53,7 @@ Publishing is idempotent: doing it twice re-syncs the existing gateway rather th
 
 **Every channel gateway belongs to a channel.** The gateway types a channel stands up (`CHANNEL_GATEWAY_TYPES` in `gateways/channel-surface.ts`: the hosted chat, the chat widget, A2A and the fifteen messaging platforms) are made only by `upsertForChannel`, which passes `forChannel` to `createGateway`. `createGateway` refuses one of these types without it (`CHANNEL_GATEWAY_NEEDS_AGENT`), so `POST /gateways`, the platform's own MCP tools and the CLI cannot make one outside a channel; `channel-gateways-belong-to-an-agent.spec.ts` holds `forChannel` to that one caller. ACP and OpenAI-compatible gateways are not channels.
 
-**The website widget** (`widget`, a `chat_widget` gateway) takes its look from the agent and channel on every request: `GET /gateways/:id/widget-config` overlays the effective colour, name, greeting, theme, AI disclosure (always shown) and almyty mark, and keeps only the widget's placement (`configuration.widget.position`, `launcherIcon`), which republishing keeps (with the allowed sites). It has no sign-in, so it is refused on a channel whose effective auth mode is not `public_link` (`WIDGET_HAS_NO_SIGN_IN`, in both `checkChannel` and `checkPublish`); its rate limits are per visitor, like the web chat.
+**The website widget** (`widget`, a `chat_widget` gateway) takes its look from the agent and channel on every request: `GET /gateways/:id/widget-config` overlays the effective colour, name, greeting, theme, AI disclosure (unless the channel's switch is off, `disclosureOff`) and almyty mark, and keeps only the widget's placement (`configuration.widget.position`, `launcherIcon`), which republishing keeps (with the allowed sites). It has no sign-in, so it is refused on a channel whose effective auth mode is not `public_link` (`WIDGET_HAS_NO_SIGN_IN`, in both `checkChannel` and `checkPublish`); its rate limits are per visitor, like the web chat.
 
 **A2A** (`a2a`) answers at `/{org}/channels/{channelId}` with its card at `.well-known/agent-card.json`, through the unified endpoint's channel lookup (`channelSurfaceSlug`). Callers sign in with the gateway's API keys, made on the channel's page. The card and JSON-RPC answer only for an active agent the gateway may serve (`findServableGatewayAgent`), and publishing refuses a workflow agent. Each caller credential has its own per-visitor share on the methods that start a task (`A2A_RUN_METHODS`).
 
@@ -65,17 +65,17 @@ Each channel has a `name`, unique among the agent's channels, so an agent can ha
 
 **AI disclosure.** Every channel people talk to (`carriesDisclosure`: web, widget, messaging) has a switch, `configuration.aiDisclosure`, on unless false. A messaging channel's gateway gets the effective branding line (or `true` for the default) as `aiDisclosure`, which `applyAiDisclosure` prefixes to the first reply; the web chat and widget read the switch live through `ownerOf`. Off is a removal of the disclosure: saving it needs the white-label entitlement (`DISCLOSURE_REMOVAL_NOT_ENTITLED`), refused on save as well as at publish because the web surfaces read it live.
 
-![Slack published and live, with Unpublish instead of a silent fail](../docs-site/public/screenshots/apps-slack-live.png)
+![Slack published and live, with Unpublish instead of a silent fail](../docs-site/public/screenshots/channel-slack-live.png)
 
 For the hosted chat, publish writes the `hostedChat` block it is looked up by: its address (the channel slug) and a mirror of the sign-in rule. Branding is not copied onto the gateway: `findBySlug` and `findByCustomDomain` overlay the effective look, sign-in rule and visitor rights on every request (`ChannelLinkService.withChannelSettings`, `ownerOf`, `hostedChatBlockFor`), so a change shows without republishing.
 
-![The web chat channel after a successful publish](../docs-site/public/screenshots/apps-web-published.png)
+![The web chat channel after a successful publish](../docs-site/public/screenshots/channel-web-published.png)
 
 The web chat channel page carries the sign-in provider (presets first; a discovery URL only for Other; endpoints, keys and scopes under Advanced), the custom domain and the allowed sites, keyed by the channel's `gatewayId`.
 
 A gateway a channel stood up is found from `agent_channels.gatewayId` (`GET /gateways/:id/channel`). Its page says which agent's channel it is, with a link back, and drops the settings the channel owns.
 
-![The branded hosted chat surface](../docs-site/public/screenshots/apps-hosted-chat.png)
+![The branded hosted chat surface](../docs-site/public/screenshots/hosted-chat.png)
 
 Unpublishing **deactivates** the gateway rather than deleting it. Republishing keeps the same endpoint and whatever keys were attached, so taking a channel down for an afternoon does not mean re-registering a Slack app afterwards. Deleting a channel deletes its gateway.
 
@@ -101,7 +101,7 @@ The first two are satisfied from the effective `limits`: a cost ceiling per run 
 
 Those inputs live under Advanced on **Branding and visitor rules**, below the look, with their current values summed up in one line. A channel page can switch on its own branding and visitor rules; only the fields that differ from the agent's are stored.
 
-![Branding and visitor rules with cost ceiling, spend limits and per-user / per-IP rate limits](../docs-site/public/screenshots/apps-settings.png)
+![Branding and visitor rules with cost ceiling, spend limits and per-user / per-IP rate limits](../docs-site/public/screenshots/channel-branding-rules.png)
 
 A limit left empty is stored as null, not as zero. Zero would read as "no requests allowed" rather than "unset", and the rules treat both as unprotected, but only one of them is what the operator meant.
 
@@ -212,7 +212,7 @@ Desktop builds download the pinned Electron release, so the host needs outbound 
 
 `GET /agents/:agentId/channels/:channelId/capabilities` answers both before anyone presses Build, and the panel disables the button when the host cannot compile and warns separately when it can compile but not sign. Those are different problems with different fixes, so they are said separately.
 
-![A Terminal app channel that can build now that bun is on the host](../docs-site/public/screenshots/apps-build-capabilities.png)
+![A Terminal app channel that can build now that bun is on the host](../docs-site/public/screenshots/channel-terminal-build.png)
 
 The API image should remain lean. The recommended production layout is a dedicated build worker image, with an eventual option to isolate each build in an ephemeral Kubernetes Job. The trade-offs, security boundary, and rollout are in [Builder image topology](./builder-image-topology.md).
 

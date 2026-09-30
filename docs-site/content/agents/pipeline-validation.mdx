@@ -55,6 +55,7 @@ The message names the node id, so:
 | **Tool Call** | `data.toolId` must be set |
 | **Sub-Agent** | `data.agentId` must be set, and may not be this agent |
 | **Verify** | A non-empty `checkers` array, each entry with a `providerId` or a `roleKey`; `policy`, if set, must be `all_pass`, `majority` or `any_fail_blocks` |
+| **Decision** | A `data.question` the decide contract accepts (a choice or score question with exactly one abstain option; a boolean question is refused), and `thresholds`, if set, only for declared options |
 
 Nothing else is checked. In particular, a save succeeds when an LLM Call node
 has no provider, an Output node has no mapping, a `toolId` names a tool that no

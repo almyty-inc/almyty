@@ -2,7 +2,7 @@
 
 Publish an agent as a branded, full-page chat at `https://<slug>.almyty.app`. There is no widget to embed and no separate frontend to deploy.
 
-![A branded hosted chat app on its own address](/screenshots/apps-hosted-chat.png)
+![A branded hosted chat app on its own address](/screenshots/hosted-chat.png)
 
 The page carries the name, colour, greeting and AI disclosure set on the agent. Visitors get streaming replies and conversation history without seeing the almyty dashboard.
 
@@ -17,7 +17,7 @@ The hosted chat is the **Web chat** channel of an agent, set up on the agent's *
 
 The channel changes to **Live** when the hosted chat is answering. Open `https://<slug>.almyty.app` to test it as a visitor.
 
-![The web chat channel after publishing](/screenshots/apps-web-published.png)
+![The web chat channel after publishing](/screenshots/channel-web-published.png)
 
 The address is made from the agent's name, and you can change it under **Address** on the web chat's page. It is a web address every organization shares, so it has to be free across almyty; the page says so when another web chat has it. It must be 3 to 63 characters, using lowercase letters, numbers, and hyphens without a hyphen at either end. Reserved service names cannot be used.
 
@@ -89,7 +89,7 @@ Every agent carries these settings under **Branding and visitor rules** on its C
 - **Include visitor conversations in memory** (off by default): only switch it on for an agent whose memory is meant to learn from the public.
 - **Delete visitor data after** a number of days (empty by default, meaning the organization policy applies). A value only ever shortens the organization policy; the hourly sweep removes older conversations, their messages and runs.
 
-![The hosted chat privacy menu with export and deletion controls](/screenshots/apps-hosted-chat-privacy.png)
+![The hosted chat privacy menu with export and deletion controls](/screenshots/hosted-chat-privacy.png)
 
 Switching a right off returns a plain refusal to the visitor with a stable code (`VISITOR_RIGHT_DISABLED`), and the widget stops offering the button; nothing is deleted or exported behind their back. Messaging channels and A2A have no self-service: someone who asks you through one of those to delete or export what they said is handled from the dashboard.
 
@@ -115,7 +115,7 @@ Email verification and OAuth still let anyone with an inbox or an account in, so
 
 ## AI disclosure
 
-Every hosted chat shows an AI disclosure under the composer by default. You can change the wording under **Branding and visitor rules**. Removing it requires the white-label entitlement, and the removal is recorded.
+Every hosted chat shows an AI disclosure under the composer by default. You can change the wording under **Branding and visitor rules**. Each channel's page has an **AI disclosure** switch, on by default; turning it off (or blanking the wording) requires the white-label entitlement, and publishing refuses it otherwise.
 
 See [Compliance](/compliance) for the full EU AI Act mapping.
 

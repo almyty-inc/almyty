@@ -14,7 +14,7 @@ Drop your tools into any AI coding agent as installable skills. A Skills gateway
 
 Each tool the gateway serves becomes one `SKILL.md` file; **Tool scoping** on the gateway detail page changes which. Copy the gateway slug: you will use it with the Skills CLI.
 
-![Assigning tools on the gateway Tools tab](/screenshots/gateway-detail-tools.png)
+![Assigning tools on the gateway Tool scoping tab](/screenshots/gateway-detail-tools.png)
 
 ## Install with the Skills CLI
 
@@ -24,32 +24,29 @@ Install the gateway's skills into your local agents:
 npx @almyty/skills install @acme/my-skills
 ```
 
-Authenticate first if needed:
+Sign in first if you have not (all almyty CLIs share one sign-in):
 
 ```bash
-npx @almyty/skills login
-npx @almyty/skills login --token your-api-key
+npx @almyty/auth login
+npx @almyty/auth login --token your-api-key   # CI: skip the browser
 ```
 
 ### Watch mode
 
-Poll the gateway every 30 seconds and refresh SKILL.md files when tools change:
+Poll the gateway (every 60 seconds by default, `--interval` changes it) and refresh the SKILL.md files when its tools change:
 
 ```bash
 npx @almyty/skills watch @acme/my-skills
 ```
 
-Stop with Ctrl+C or:
-
-```bash
-npx @almyty/skills stop
-```
+Stop it with Ctrl+C.
 
 ### List and remove
 
 ```bash
-npx @almyty/skills list
-npx @almyty/skills remove @acme/my-skills
+npx @almyty/skills list @acme/my-skills   # the skills a gateway serves
+npx @almyty/skills installed              # what is installed in this directory
+npx @almyty/skills remove                 # remove the almyty skills from this directory
 ```
 
 The CLI writes SKILL.md files to each agent's skill directory and registers them for auto-loading.

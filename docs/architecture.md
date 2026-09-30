@@ -91,7 +91,7 @@ rebuilt for each.
 
 That yields the four nouns everything else hangs off:
 
-- **API** — an imported schema (OpenAPI, GraphQL, SOAP, Protobuf, SDK). Parsing
+- **API** — an imported description (OpenAPI / Swagger, GraphQL, SOAP / WSDL, gRPC / proto, SDK). Parsing
   lives in `modules/schema-parser`, one parser per format.
 - **Tool** — one callable operation. Generated from an API operation, or
   authored directly as HTTP, JavaScript, GraphQL, LLM-backed or SDK. Execution
@@ -164,7 +164,7 @@ Both of these get guessed wrong:
 - `store/` — Zustand stores: auth, organization, app.
 - `types/` — shared types, including the enums mirrored from backend entities.
 
-The sidebar order in `components/layout/dashboard-layout.tsx` follows the pipeline narrative and then configuration, with a divider between: Dashboard → APIs → Tools → Gateways → Agents → Apps → Runners → Credentials → Approvals, then Models → Memory → Analytics → Settings. Workspaces are a tab on each runner's page. Apps sits directly after Agents deliberately — shipping an agent as a product is the last link of the chain, so it stays above the fold.
+The sidebar order in `components/layout/dashboard-layout.tsx` follows the pipeline narrative and then configuration, with a divider between: Dashboard → APIs → Tools → Gateways → Agents → Runners → Credentials → Approvals, then Models → Memory → Analytics → Settings. Workspaces are a tab on each runner's page, and an agent's channels are a tab on the agent's page.
 
 ## Request paths
 

@@ -1,6 +1,6 @@
 # Give Claude Code your own API
 
-**Stack**: `Trigger: Claude Code / any MCP client` · `Tools: your API (any schema)` · `Gateway: MCP (+ A2A, UTCP)` · `Auth: x-api-key` · `Output: Claude calls your API`
+**Stack**: `Trigger: Claude Code / any MCP client` · `Tools: your API (any schema)` · `Gateway: MCP` · `Auth: x-api-key` · `Output: Claude calls your API`
 
 **Who it's for**: anyone who wants Claude Code, Cursor, or Claude Desktop to call an API they already run.
 
@@ -16,9 +16,9 @@ Swagger Petstore tools over MCP with 14 real requests logged.
 
    ![The imported Swagger Petstore, 19 operations turned into tools](/screenshots/quickstart-api-imported.png)
 
-2. **Publish an MCP gateway.** Group the tools to expose and publish them as an **MCP** gateway,
-   then generate an `x-api-key` on its Authentication panel. Scope exactly which tools it serves , 
-   here, 19 of 55 available tools.
+2. **Create an MCP gateway.** *Gateways → Create gateway*: pick **MCP**, pick the Petstore API
+   (or single tools), and click **Create gateway**. Its access key is shown once, next to a ready-made
+   Claude Code setup. **Tool scoping** changes exactly which tools it serves, here 19 of 55 available tools.
 
    ![The Petstore MCP gateway, endpoint, API keys, and tool scoping](/screenshots/gateway-petstore-config.png)
 
@@ -39,8 +39,8 @@ Swagger Petstore tools over MCP with 14 real requests logged.
 
 ## Make it yours
 
-- The same gateway also speaks **A2A** and **UTCP**, so other agents and clients reach identical tools.
-- Rotate or revoke keys per client from the Authentication panel (the demo has three: a default key, a quickstart key, and a docs key).
+- The gateway speaks MCP only. To reach the same tools over **UTCP** or as **Agent Skills**, create another gateway of that protocol and pick the same API.
+- Rotate or revoke keys per client from the gateway's **Authentication** section (the demo has three: a default key, a quickstart key, and a docs key).
 - Front a [legacy SOAP service](/examples/modernize-legacy-soap) the same way.
 
 **Uses**: `Platform` · `MCP` · `Claude Code`

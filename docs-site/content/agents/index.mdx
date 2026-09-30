@@ -12,15 +12,17 @@ model from a different vendor before it returns.
 | Mode | Best for | How it works |
 |------|----------|--------------|
 | **Workflow** | A task that must run the same way every time | A visual graph of typed nodes connected by edges. See the [Builder](/agents/builder). |
-| **Autonomous** | Open-ended reasoning | Instructions, tools, memory, and a verifier panel; the model drives. See [Autonomous agents](/agents/autonomous). |
+| **Autonomous** | Open-ended reasoning | Instructions, a work mode, memory, capabilities and a verifier panel; the model drives. See [Autonomous agents](/agents/autonomous). |
 
 Both modes share the same building blocks: tools, LLM providers, memory,
 verification, scheduling, and the OpenAI-compatible endpoint. Pick per agent
 without giving anything up.
 
-Which model does the work is set separately from what the agent does, on the
-Execution tab. See [Roles and strategies](/agents/execution), which is also
-where activation sends you when an agent is not ready.
+Which model does the work is set separately from what the agent does. An
+autonomous agent picks its [work mode](/agents/autonomous#work-mode-how-it-works-and-which-models-do-it)
+and the model for each slot on its edit page. A workflow agent binds models to
+roles on the Execution tab; see [Roles and strategies](/agents/execution),
+which is also where activation sends you when a workflow agent is not ready.
 
 ### Visual builder
 
@@ -31,11 +33,13 @@ input, LLM calls, tool calls, conditions, transforms, and output. See the
 
 ### Autonomous
 
-Enter instructions, attach tools, enable memory, add constraints, and configure
-the verifier panel. The model plans its own steps, calls tools, and revises when
-a checker fails. Good runs become reusable skills.
+Write its instructions, pick a work mode and the models for it, then set its
+memory and capabilities (tools, APIs and other agents it may call). Add
+constraints and the verifier panel on the agent's page. The model plans its own
+steps, calls tools, and revises when a checker fails. Good runs become reusable
+skills.
 
-![Autonomous agent configuration with instructions, tools, and the verifier panel](/screenshots/agent-builder-autonomous.png)
+![Autonomous agent configuration: instructions, work mode, memory and capabilities](/screenshots/agent-builder-autonomous.png)
 
 ## Cross-vendor verification
 
@@ -49,9 +53,10 @@ failed check sends the agent back to revise. Details in
 
 ## Create and run
 
-In the UI: **Agents to Create Agent**, then pick **Workflow** or **Autonomous**.
-From the list you can activate, deactivate, duplicate, import from JSON, or delete
-an agent.
+In the UI: **Agents**, then **Create agent**, and pick **Workflow** or
+**Autonomous** at the top of the builder. From the list you can activate,
+deactivate, duplicate or delete an agent, and **Import** takes an agent from
+JSON or an external A2A agent.
 
 ![Agents list with mode, status, and last run](/screenshots/agents-list.png)
 

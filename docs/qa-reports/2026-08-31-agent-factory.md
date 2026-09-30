@@ -26,7 +26,7 @@ The staging API branding route returns HTTP 200, so the app record and hosted-ch
 
 ### P1 — channel distributions cannot receive credentials from the app UI
 
-![The Slack distribution instructing the operator to use Gateways but exposing no selection](../../docs-site/public/screenshots/apps-slack-credentials.png)
+(The Slack distribution capture for this finding was removed with the Apps page; Git history keeps it.)
 
 `DistributionPanel` has no credential inputs or gateway selector, while publishing reads required credentials from the distribution's own `configuration`. An independently configured Gateway is not selected or reused. The panel also labels the distribution `Ready to ship`, and a failed Publish attempt exposes no actionable error in the panel.
 

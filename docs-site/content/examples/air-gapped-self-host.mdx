@@ -7,13 +7,13 @@
 
 ## Build it
 
-1. **Self-host the platform** with Docker Compose (single box) or the Helm chart (Kubernetes). Postgres and object store are yours; no telemetry leaves the cluster.
+1. **Self-host the platform** with Docker Compose (single box) or the Kustomize manifests in `k8s/` (Kubernetes). Postgres and object store are yours; no telemetry leaves the cluster.
 
    ![The Compose file for a self-hosted deployment](/screenshots/self-hosting-compose.png)
 
-2. **Point at a local model**: add an AI Model whose base URL is a server you run (Ollama, vLLM, any OpenAI-compatible endpoint) inside the network. Inference stays on your hardware.
+2. **Point at a local model**: under **Credentials → Connect a provider**, connect a server you run inside the network: Ollama (pick **Your own server**), or vLLM and any other OpenAI-compatible endpoint as a custom provider. Inference stays on your hardware.
 
-   ![Adding a local, OpenAI-compatible model](/screenshots/llm-providers-create.png)
+   ![Adding a local, OpenAI-compatible model](/screenshots/credentials-connect-provider.png)
 
 3. **Keep secrets and data in place**: keys in your own [Credentials](/credentials) vault, memory in your Postgres, tools executed by a [runner](/runner) on machines you control.
 
