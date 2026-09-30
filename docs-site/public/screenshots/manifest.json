@@ -23,7 +23,7 @@
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed; the Delete agent confirmation says its channels go too. Recapture against the current UI."
     },
     {
       "id": "agent-builder-node-palette",
