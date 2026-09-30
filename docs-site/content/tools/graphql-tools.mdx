@@ -12,47 +12,63 @@ GraphQL is a way many modern systems let you ask for exactly the data you want i
 
 The API keeps its key, and every tool made from it signs in with it. A call that comes back with GraphQL errors is reported to the assistant as a failed call, with the API's own error messages.
 
+## Make one by hand
+
+When you need a single query and there is nothing to connect, write the tool yourself.
+
+1. Open **Tools** and click **Create tool**.
+2. Under **Execution method**, pick **GraphQL**.
+3. Give it a **Tool name** and a **Description** that says plainly what it does.
+4. Under **GraphQL**:
+   - **GraphQL endpoint**: the address the query is sent to, such as `https://api.example.com/graphql`.
+   - **Query or mutation**: the one query the tool runs, for example `query GetUser($id: Int!) { user(id: $id) { name email } }`.
+   - **Variables (optional)**: which tool input fills which query variable, such as `{ "id": "{userId}" }`. Leave it empty and the tool's inputs are sent as the variables, by name.
+5. Under **Authentication**, pick how it signs in and the key from [Credentials](/credentials).
+6. Under **Parameters**, list the tool's inputs (`userId` in the example).
+7. Click **Create tool**, then try it on **Test tool**.
+
+The tool answers with the data the query asked for. If the API answers with GraphQL errors, the assistant sees a failed call with those messages.
+
 ## For developers
 
 ### Results and errors
 
-Tools made from a connected GraphQL API return the response's `data`. A response whose `errors` list is not empty is a failed result, with the messages joined into the error (`GraphQL errors: ...`).
+A GraphQL tool returns the response's `data`. A response whose `errors` list is not empty is a failed result, with the messages joined into the error (`GraphQL errors: ...`). This holds for tools made from a connected API and for tools with their own query.
 
 ### A tool with its own query
 
-A tool can also carry a single query of its own in `graphqlConfig`, created through the [Tools API](/api-reference/tools-api):
+A hand-made tool is stored as its `graphqlConfig`, which is what **Create tool** sends to the [Tools API](/api-reference/tools-api):
 
 ```json
 {
-  "name": "search_repositories",
-  "description": "Search repositories by keyword",
+  "name": "get_user",
+  "description": "Look up a user by id",
   "type": "query",
   "executionMethod": "graphql",
-  "apiId": "<connected API id>",
   "parameters": {
     "type": "object",
-    "properties": {
-      "query": { "type": "string", "description": "Search query" },
-      "first": { "type": "integer", "description": "Number of results", "default": 10 }
-    },
-    "required": ["query"]
+    "properties": { "userId": { "type": "integer" } },
+    "required": ["userId"]
   },
   "graphqlConfig": {
-    "query": "query SearchRepos($query: String!, $first: Int!) { search(query: $query, type: REPOSITORY, first: $first) { repositoryCount } }"
-  }
+    "endpoint": "https://api.example.com/graphql",
+    "query": "query GetUser($id: Int!) { user(id: $id) { name email } }",
+    "variables": { "id": "{userId}" }
+  },
+  "authConfig": { "type": "bearer", "config": { "credentialId": "<credential id>" } }
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `graphqlConfig.endpoint` | string | GraphQL URL; overrides the linked API's base URL |
-| `graphqlConfig.query` | string | The query or mutation |
-| `graphqlConfig.variables` | object | Optional map of variable name to a `{name}` template; without it, all inputs are sent as variables unchanged |
+| `graphqlConfig.endpoint` | string | GraphQL URL (`https://` or `http://`). Required unless the tool is linked to an API with `apiId`, whose base URL is used |
+| `graphqlConfig.query` | string | The query or mutation. Required |
+| `graphqlConfig.variables` | object | Optional map of variable name to a template. A value that is exactly `{name}` passes the input unchanged, so numbers and booleans keep their type; `{name}` inside longer text is inserted as text. Without the map, all inputs are sent as variables |
 | `graphqlConfig.headers` | object | Extra request headers |
-| `graphqlConfig.responseMapping.dataPath` | string | Dot path to return instead of the whole response |
+| `graphqlConfig.responseMapping.dataPath` | string | Dot path into the whole response (`data.user`) to return instead of `data` |
 | `configuration.timeout` | number | Timeout in milliseconds, default `30000` |
 
-With a linked API (`apiId`), the call signs in with that API's key. Such a tool returns the endpoint's whole JSON response (or the part at `responseMapping.dataPath`); only a failed HTTP request is a failed result. A `{name}` template inserts the input as text, so leave `variables` out when numbers and booleans must keep their types.
+The tool signs in with `authConfig` (a credential it points at), or with the linked API's key when it has an `apiId`. A create with `executionMethod: "graphql"` and no `graphqlConfig`, or with `code`, is refused with a 400: the tool is stored in one shape, the one that runs.
 
 ### Tips
 

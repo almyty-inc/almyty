@@ -3,23 +3,27 @@
  *
  * Each of these protocols has two entry points: a structured
  * config shape (`graphqlConfig`, `soapConfig`, `grpcConfig`) for
- * tools created manually via the tool builder, and a legacy
- * operation-based path for tools that were auto-generated from a
- * parsed API schema. Both paths share the same auth / SSRF / size
- * hygiene via the shared auth service and the URL validator.
+ * tools made on the Create tool page, and an operation-based path
+ * for tools generated from an imported API schema. Both paths share
+ * the same auth / egress / size hygiene: the shared auth service,
+ * and decideToolEgress (the SSRF gate plus the organization's egress
+ * allowlist) for every outbound URL.
  *
- * Extracted from the old tool-executor.service.ts monolith. The
- * SOAP body template now runs user-supplied parameter values
+ * The SOAP body template runs user-supplied parameter values
  * through escapeXml so a value containing `</soap:Body>` can't
  * break out of its containing element and inject additional XML.
  */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
-import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 import { Tool } from '../../../entities/tool.entity';
 import { Api } from '../../../entities/api.entity';
 import { Operation } from '../../../entities/operation.entity';
-import { validateUrl, sanitizeHeaders } from '../../../common/security/url-validator';
+import { Organization } from '../../../entities/organization.entity';
+import { sanitizeHeaders } from '../../../common/security/url-validator';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
+import { decideToolEgress } from './tool-egress';
 import {
   decideToolRequest,
   effectiveMaxResponseBytes,
@@ -68,23 +72,43 @@ export class ToolProtocolExecutor {
   constructor(
     private readonly authService: ToolAuthService,
     private readonly grpcExecutor: ToolGrpcExecutor,
+    // The organization's egress allowlist; see decideToolEgress.
+    @Optional()
+    @InjectRepository(Organization)
+    private readonly organizations?: Repository<Organization>,
   ) {}
 
   // ─── GraphQL (structured config) ───────────────────────────────
 
+  /**
+   * A GraphQL tool made on the Create tool page: an endpoint, one query or
+   * mutation, and optionally a variables map. A variables value that is
+   * exactly `{param}` takes the parameter as it came (a number stays a
+   * number); `{param}` inside a longer string is substituted as text.
+   * With no variables map, the tool's parameters are the variables.
+   *
+   * The result matches an imported GraphQL tool's: the `data` object on
+   * success, a failure carrying the messages when the response has
+   * `errors`. `responseMapping.dataPath` is read from the whole response
+   * (`data.users`), as its name in the config says.
+   */
   async executeGraphQLConfig(
     tool: Tool,
     parameters: Record<string, any>,
     options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
+    const graphqlConfig = tool.graphqlConfig!;
     const api = tool.api ?? tool.operation?.api ?? null;
-    const endpoint = tool.graphqlConfig!.endpoint || api?.baseUrl || '';
+    const endpoint = graphqlConfig.endpoint || api?.baseUrl || '';
+    if (!graphqlConfig.query?.trim()) {
+      return this.failure(`GraphQL tool ${tool.name} has no query.`, startTime);
+    }
 
-    const urlCheck = validateUrl(endpoint);
-    if (!urlCheck.valid) {
-      this.logger.warn(`SSRF blocked for GraphQL tool ${tool.name}: ${urlCheck.error}`);
-      return this.blocked(urlCheck.error!, startTime);
+    const egress = await decideToolEgress(endpoint, api?.organizationId ?? tool.organizationId, this.organizations);
+    if (egress.error) {
+      this.logger.warn(`SSRF blocked for GraphQL tool ${tool.name}: ${egress.error}`);
+      return this.blocked(egress.error, startTime);
     }
 
     // Gateway-tool security policy. GraphQL and SOAP are POST-only over
@@ -97,14 +121,20 @@ export class ToolProtocolExecutor {
     }
 
     const variables: Record<string, any> = {};
-    if (tool.graphqlConfig!.variables) {
-      for (const [k, v] of Object.entries(tool.graphqlConfig!.variables)) {
-        variables[k] =
-          typeof v === 'string'
-            ? v.replace(/\{(\w+)\}/g, (_, n) =>
-                n in parameters ? String(parameters[n]) : `{${n}}`,
-              )
-            : v;
+    if (graphqlConfig.variables && Object.keys(graphqlConfig.variables).length > 0) {
+      for (const [k, v] of Object.entries(graphqlConfig.variables)) {
+        if (typeof v !== 'string') {
+          variables[k] = v;
+          continue;
+        }
+        const whole = /^\{(\w+)\}$/.exec(v);
+        if (whole) {
+          if (whole[1] in parameters) variables[k] = parameters[whole[1]];
+          continue;
+        }
+        variables[k] = v.replace(/\{(\w+)\}/g, (_, n) =>
+          n in parameters ? String(parameters[n]) : `{${n}}`,
+        );
       }
     } else {
       Object.assign(variables, parameters);
@@ -113,34 +143,43 @@ export class ToolProtocolExecutor {
     const headers: Record<string, string> = sanitizeHeaders({
       'Content-Type': 'application/json',
       ...(api?.headers || {}),
-      ...(tool.graphqlConfig!.headers || {}),
+      ...(graphqlConfig.headers || {}),
     });
 
     const axConfig: AxiosRequestConfig = {
       method: 'POST',
       url: endpoint,
       headers,
-      data: { query: tool.graphqlConfig!.query, variables },
-      timeout: tool.configuration?.timeout ?? 30000,
+      data: { query: graphqlConfig.query, variables },
+      timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
       maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
-      httpAgent: ssrfSafeHttpAgent,
-      httpsAgent: ssrfSafeHttpsAgent,
+      httpAgent: egress.httpAgent ?? ssrfSafeHttpAgent,
+      httpsAgent: egress.httpsAgent ?? ssrfSafeHttpsAgent,
       signal: options.signal,
     };
 
     if (api) await this.authService.applyApiAuth(axConfig, api, options);
+    else if (tool.authConfig) await this.authService.applyToolAuth(axConfig, tool, options);
 
     try {
       const response = await axios(axConfig);
-      let data = response.data;
-      if (tool.graphqlConfig!.responseMapping?.dataPath) {
-        data = getByDotPath(data, tool.graphqlConfig!.responseMapping.dataPath);
+      const body = response.data;
+      if (Array.isArray(body?.errors) && body.errors.length > 0) {
+        return {
+          ...this.failure(`GraphQL errors: ${body.errors.map((e: any) => e?.message).join(', ')}`, startTime),
+          data: body,
+          metadata: this.httpMeta(response),
+        };
       }
-      return this.success(data, startTime);
+      const data = graphqlConfig.responseMapping?.dataPath
+        ? getByDotPath(body, graphqlConfig.responseMapping.dataPath)
+        : body?.data ?? body;
+      return { ...this.success(data, startTime), metadata: this.httpMeta(response) };
     } catch (error: any) {
-      return this.failure(error.message, startTime);
+      const message = error?.response?.data?.errors?.[0]?.message || error?.response?.data?.message || error.message;
+      return this.failure(`GraphQL request failed: ${message}`, startTime);
     }
   }
 
@@ -156,10 +195,10 @@ export class ToolProtocolExecutor {
     const startTime = Date.now();
     const targetUrl = joinApiUrl(api.baseUrl, operation.endpoint);
 
-    const urlCheck = validateUrl(targetUrl);
-    if (!urlCheck.valid) {
+    const urlCheck = await decideToolEgress(targetUrl, api.organizationId ?? tool.organizationId, this.organizations);
+    if (urlCheck.error) {
       this.logger.warn(`SSRF blocked for GraphQL tool ${tool.name}: ${urlCheck.error}`);
-      return this.blocked(urlCheck.error!, startTime);
+      return this.blocked(urlCheck.error, startTime);
     }
 
     const gqlOpPolicy = decideToolRequest(options.securityPolicy, targetUrl, 'POST');
@@ -193,8 +232,8 @@ export class ToolProtocolExecutor {
       maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
-      httpAgent: ssrfSafeHttpAgent,
-      httpsAgent: ssrfSafeHttpsAgent,
+      httpAgent: urlCheck.httpAgent ?? ssrfSafeHttpAgent,
+      httpsAgent: urlCheck.httpsAgent ?? ssrfSafeHttpsAgent,
       signal: options.signal,
       headers: {
         'Content-Type': 'application/json',
@@ -253,19 +292,31 @@ export class ToolProtocolExecutor {
 
   // ─── SOAP (structured config) ──────────────────────────────────
 
+  /**
+   * A SOAP tool made on the Create tool page. It stores the service URL
+   * (`endpoint`), the operation and its target namespace. With no
+   * `bodyTemplate` the envelope is built the way an imported SOAP tool's
+   * is: one element named after the operation, in the target namespace,
+   * one child per parameter. A `bodyTemplate` replaces that element with
+   * the author's own XML, `{param}` placeholders escaped.
+   */
   async executeSOAPConfig(
     tool: Tool,
     parameters: Record<string, any>,
     options: ToolExecutionOptions,
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
+    const soapConfig = tool.soapConfig!;
     const api = tool.api ?? tool.operation?.api ?? null;
-    const endpoint = tool.soapConfig!.endpoint || api?.baseUrl || '';
+    const endpoint = soapConfig.endpoint || api?.baseUrl || '';
+    if (!soapConfig.operation && !soapConfig.bodyTemplate) {
+      return this.failure(`SOAP tool ${tool.name} names no operation.`, startTime);
+    }
 
-    const urlCheck = validateUrl(endpoint);
-    if (!urlCheck.valid) {
-      this.logger.warn(`SSRF blocked for SOAP tool ${tool.name}: ${urlCheck.error}`);
-      return this.blocked(urlCheck.error!, startTime);
+    const egress = await decideToolEgress(endpoint, api?.organizationId ?? tool.organizationId, this.organizations);
+    if (egress.error) {
+      this.logger.warn(`SSRF blocked for SOAP tool ${tool.name}: ${egress.error}`);
+      return this.blocked(egress.error, startTime);
     }
 
     const soapPolicy = decideToolRequest(options.securityPolicy, endpoint, 'POST');
@@ -274,48 +325,62 @@ export class ToolProtocolExecutor {
       return this.blocked(soapPolicy.reason!, startTime);
     }
 
-    // XML-escape substituted parameter values. Without this, a value
-    // containing `</soap:Body>` (or any `<`, `>`, `&`) breaks out of
-    // its containing element and injects arbitrary XML into the
-    // outbound SOAP request.
-    const soapBody = (tool.soapConfig!.bodyTemplate || '').replace(
-      /\{(\w+)\}/g,
-      (_, n) => (n in parameters ? escapeXml(String(parameters[n])) : `{${n}}`),
-    );
-    const envelope = `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns="${tool.soapConfig!.namespace}"><soap:Body>${soapBody}</soap:Body></soap:Envelope>`;
+    const namespace = soapConfig.namespace || '';
+    let envelope: string;
+    if (soapConfig.bodyTemplate) {
+      // XML-escape substituted parameter values. Without this, a value
+      // containing `</soap:Body>` (or any `<`, `>`, `&`) breaks out of
+      // its containing element and injects arbitrary XML into the
+      // outbound SOAP request.
+      const soapBody = soapConfig.bodyTemplate.replace(
+        /\{(\w+)\}/g,
+        (_, n) => (n in parameters ? escapeXml(String(parameters[n])) : `{${n}}`),
+      );
+      envelope = `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns="${escapeXml(namespace)}"><soap:Body>${soapBody}</soap:Body></soap:Envelope>`;
+    } else {
+      envelope = this.buildSoapEnvelope(soapConfig.operation, namespace, parameters || {});
+    }
 
     const headers: Record<string, string> = sanitizeHeaders({
-      'Content-Type': 'text/xml;charset=UTF-8',
+      'Content-Type': 'text/xml; charset=utf-8',
       ...(api?.headers || {}),
-      ...(tool.soapConfig!.headers || {}),
+      ...(soapConfig.headers || {}),
     });
-    if (tool.soapConfig!.soapAction) headers['SOAPAction'] = tool.soapConfig!.soapAction;
+    // Same default as an imported SOAP tool: the namespace followed by the
+    // operation name, sent bare (most .NET/WCF servers reject the quotes).
+    headers['SOAPAction'] =
+      soapConfig.soapAction || (namespace ? `${namespace}${soapConfig.operation}` : soapConfig.operation);
 
     const axConfig: AxiosRequestConfig = {
       method: 'POST',
       url: endpoint,
       headers,
       data: envelope,
-      timeout: tool.configuration?.timeout ?? 30000,
+      timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
       maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
-      httpAgent: ssrfSafeHttpAgent,
-      httpsAgent: ssrfSafeHttpsAgent,
+      httpAgent: egress.httpAgent ?? ssrfSafeHttpAgent,
+      httpsAgent: egress.httpsAgent ?? ssrfSafeHttpsAgent,
       signal: options.signal,
     };
 
     if (api) await this.authService.applyApiAuth(axConfig, api, options);
+    else if (tool.authConfig) await this.authService.applyToolAuth(axConfig, tool, options);
 
     try {
       const response = await axios(axConfig);
       let data = response.data;
-      if (tool.soapConfig!.responseMapping?.dataPath) {
-        data = getByDotPath(data, tool.soapConfig!.responseMapping.dataPath);
+      if (soapConfig.responseMapping?.dataPath) {
+        data = getByDotPath(data, soapConfig.responseMapping.dataPath);
       }
-      return this.success(data, startTime);
+      return { ...this.success(data, startTime), metadata: this.httpMeta(response) };
     } catch (error: any) {
-      return this.failure(error.message, startTime);
+      // A SOAP fault arrives as a 500 with the fault in the body; the body
+      // says what went wrong, the status line does not.
+      const body = error?.response?.data;
+      const detail = typeof body === 'string' && body ? body.slice(0, 500) : error.message;
+      return this.failure(`SOAP request failed: ${detail}`, startTime);
     }
   }
 
@@ -338,10 +403,10 @@ export class ToolProtocolExecutor {
     // "method name is not valid". Use baseUrl as-is.
     const targetUrl = api.baseUrl;
 
-    const urlCheck = validateUrl(targetUrl);
-    if (!urlCheck.valid) {
+    const urlCheck = await decideToolEgress(targetUrl, api.organizationId ?? tool.organizationId, this.organizations);
+    if (urlCheck.error) {
       this.logger.warn(`SSRF blocked for SOAP tool ${tool.name}: ${urlCheck.error}`);
-      return this.blocked(urlCheck.error!, startTime);
+      return this.blocked(urlCheck.error, startTime);
     }
 
     const soapOpPolicy = decideToolRequest(options.securityPolicy, targetUrl, 'POST');
@@ -387,8 +452,8 @@ export class ToolProtocolExecutor {
       maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
-      httpAgent: ssrfSafeHttpAgent,
-      httpsAgent: ssrfSafeHttpsAgent,
+      httpAgent: urlCheck.httpAgent ?? ssrfSafeHttpAgent,
+      httpsAgent: urlCheck.httpsAgent ?? ssrfSafeHttpsAgent,
       signal: options.signal,
       headers: {
         'Content-Type': 'text/xml; charset=utf-8',
@@ -448,7 +513,7 @@ export class ToolProtocolExecutor {
     return this.grpcExecutor.executeProtobufOperation(...args);
   }
 
-  // ─── gRPC (structured config, simulated over HTTP/2 JSON) ──────
+  // ─── SOAP envelope helpers ────────────────────────────────────
 
   /**
    * Pull the user-supplied flat fields out of a SOAPRequest payload.
