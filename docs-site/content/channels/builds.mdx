@@ -1,29 +1,54 @@
 # Downloadable apps
 
-The **Desktop app** and **Terminal app** channels are downloads: a build runs on our machines and produces a file people install. It does not run on your users' laptops, which is the difference between "download this app" and "install Node and run this command".
+Give people your assistant as an app they install: a desktop app for Mac, Windows or Linux, or a terminal app for people who work at the command line. For example, your sales team downloads a "Northwind Sales" app and chats with the assistant in its own window, with your name and colours on it.
 
-Add one on the agent's **Channels** tab with **Add channel**. Its page has **Build for** (the platform), **Sign with** (a certificate, or nothing), **Build**, the build history and the download links. Everything knowable up front (an unknown platform, a missing toolchain) is checked before the build is queued, so you find out at once rather than twenty minutes into a job.
+almyty builds the app on its own machines and gives you a download link. Nothing needs to be installed on your users' computers beforehand.
 
-## Channels and platforms
+## Build an app
+
+1. On the assistant's **Channels** tab, click **Add channel** and pick **Desktop app** or **Terminal app**.
+2. On the channel's page, pick the platform under **Build for**.
+3. Under **Sign with**, pick a code-signing certificate, or leave it empty for an unsigned app (see [Signing](/channels/signing) for why signing matters).
+4. Click **Build**. The page keeps a history of builds and the download link for each.
+
+Anything that can be checked before building (an unknown platform, a missing build tool) is checked right away, so you find out at once instead of halfway through a build.
+
+## What you get on each platform
 
 | Channel | Produces | Linux | Windows | macOS |
 |---|---|---|---|---|
-| **Terminal app** | a command-line app | bare executable | `.exe` | bare executable |
-| **Desktop app** | an installable app | `.AppImage` | NSIS installer `.exe` | `.app` in a `.zip` |
+| **Terminal app** | a command-line app | a program file | `.exe` | a program file |
+| **Desktop app** | an installable app | `.AppImage` | installer `.exe` | `.app` in a `.zip` |
 
-Everything cross-compiles: a Linux executable and a macOS app both build on either host. The one exception is a macOS `.dmg`, which needs Apple tooling, so the desktop app ships a zipped `.app` instead, which any Mac opens.
+Every platform can be built from any build machine. The one exception is a macOS `.dmg` disk image, which needs Apple's own tools, so the desktop app ships as a zipped `.app` instead, which any Mac opens.
+
+## The desktop app
+
+The desktop app is a window onto the assistant's web chat, with your name on it. So the assistant needs a **Web chat** channel first, and the desktop channel's page says which web chat it opens. The window only ever shows that web chat and refuses requests for extra access, and it is painted in your brand colour while it loads, so it never flashes white.
 
 ## The icon
 
-The app wears your icon: the build fetches the icon URL in the agent's branding (or the channel's own) and derives the platform formats from it. The icon URL is set through the API (`PATCH /agents/:agentId/public-settings` with `branding.iconUrl`); the branding form has no field for it. The icon never fails a build: if there is none, or it cannot be fetched, the build falls back to a default and tells you which happened.
+The app uses your icon. If there is none, or it cannot be fetched, the build uses a default icon and tells you so; a missing icon never fails a build.
 
-## Desktop apps
+## Download links
 
-The desktop app is an Electron window that opens the agent's web chat under your name, so the agent needs a **Web chat** channel first; the desktop channel's page says which web chat it opens. It is locked down to match: no Node in the page, navigation confined to the web chat's own origin, and permission requests refused. The window is painted in your brand colour before the page loads, so a launch shows your brand rather than flashing white.
+Each time someone asks for the download, a fresh link is made that works only for a short time, so a link pasted into a chat or a ticket stops working. The file itself is deleted some time after it is built. The downloaded file is named after the product, version and platform, so it is easy to spot in a Downloads folder.
 
-## Downloads
+## When a build machine is missing something
 
-A build produces a download link that is **minted per request and short-lived**, so a URL that ends up in a chat log or a ticket stops working. The file itself expires on its own schedule and is swept afterwards. The downloaded file is named for the product, version and platform, so it is recognisable in a Downloads folder.
+Before you click **Build**, the page checks whether the build machine can make the app and, separately, whether it can sign it. These are two different problems with different fixes, so they are reported separately. **Build** is turned off when the machine cannot make the app, and shows a warning when it can make it but not sign it.
+
+![A Terminal app channel reporting a build-capability problem](/screenshots/channel-terminal-build.png)
+
+Ready to sign what you build? See [Signing](/channels/signing).
+
+## For developers
+
+The icon is set through the API: `PATCH /agents/:agentId/public-settings` with `branding.iconUrl`; the branding form has no field for it. The build fetches that URL (or the channel's own) and makes each platform's icon formats from it.
+
+The desktop app is an Electron window with no Node in the page, navigation confined to the web chat's own origin, and permission requests refused.
+
+Builds over the API:
 
 ```
 POST /agents/:agentId/channels/:channelId/builds                queue a build
@@ -31,13 +56,7 @@ GET  /agents/:agentId/channels/:channelId/builds                build history
 GET  /agents/:agentId/channels/:channelId/builds/:id/download   a fresh download link
 ```
 
-## What a build host needs
-
-Before you press **Build**, the page checks whether the host can compile the app and, separately, whether it can sign it. These are two different problems with different fixes, so they are reported separately. The button is disabled when the host cannot compile, and warns when it can compile but not sign.
-
-![A Terminal app channel reporting a build-capability problem](/screenshots/channel-terminal-build.png)
-
-A production deployment that compiles apps needs these tools on the build host:
+A self-hosted deployment that builds apps needs these tools on the build host:
 
 | Tool | For |
 |---|---|
@@ -46,6 +65,4 @@ A production deployment that compiles apps needs these tools on the build host:
 | `rcodesign` | signing and notarising macOS apps |
 | `osslsigncode` | signing Windows executables |
 
-Because desktop builds download a pinned framework release, the host needs outbound network at build time. The recommended layout keeps the API image lean and runs builds on a dedicated worker image; see the self-hosting notes for the trade-offs.
-
-Ready to sign what you build? See **[Signing](/channels/signing)**.
+Desktop builds download a pinned framework release, so the host needs outbound network access at build time. The recommended layout keeps the API image lean and runs builds on a dedicated worker image; see the self-hosting notes for the trade-offs.
