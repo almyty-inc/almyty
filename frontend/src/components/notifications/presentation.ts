@@ -6,6 +6,8 @@ import {
   AlertTriangle,
   Archive,
   Bell,
+  CircleSlash,
+  Sparkles,
   Coins,
   Gift,
   Globe,
@@ -110,6 +112,18 @@ const PRESENTATION: Record<string, NotificationPresentation> = {
     accentClass: 'text-red-500',
     label: 'Custom domain stopped',
     description: 'A hosted chat custom domain lost its DNS proof and is no longer served.',
+  },
+  'models.new': {
+    icon: Sparkles,
+    accentClass: 'text-cyan-500',
+    label: 'New models',
+    description: 'A provider connection started offering new models. Emailed in the daily summary.',
+  },
+  'models.unavailable': {
+    icon: CircleSlash,
+    accentClass: 'text-amber-500',
+    label: 'Model no longer available',
+    description: 'A model stopped working on a provider connection. Emailed at once when an agent uses it, otherwise in the daily summary.',
   },
   'account.welcome': {
     icon: User,

@@ -34,7 +34,6 @@ const USER_FACING = [
   join(SRC, 'pages/models-connect.tsx'),
   join(SRC, 'pages/provider.tsx'),
   join(SRC, 'pages/hosted-model.tsx'),
-  join(SRC, 'pages/models-redirects.tsx'),
   join(SRC, 'components/model-picker.tsx'),
   join(SRC, 'components/llm-providers/connect-provider-form.tsx'),
   join(SRC, 'components/connect/who-can-use.tsx'),
@@ -108,13 +107,14 @@ describe('register-endpoint is gone from the frontend', () => {
 })
 
 /**
- * "Add model", with its "Where does it run?" chooser and three forms, and
- * the separate inference-provider pages, are one flow now: connect a
- * provider. Their files stay deleted and nothing links to their addresses;
- * the old addresses only redirect.
+ * Adding a model is one flow: connect a provider, under Credentials. There
+ * is no separate add-model page, no "Where does it run?" chooser, and no
+ * page or route at /llm-providers, /models/new, /models/connect or
+ * /models/providers.
  */
-describe('the old add-model flow is gone', () => {
+describe('one way to add models', () => {
   const REMOVED = [
+    'pages/models-redirects.tsx',
     'pages/model-new.tsx',
     'pages/model-detail.tsx',
     'pages/llm-providers.tsx',
@@ -140,20 +140,20 @@ describe('the old add-model flow is gone', () => {
     expect(hits.map((f) => relative(SRC, f))).toEqual([])
   })
 
-  it('nothing links to the old addresses, which only redirect', () => {
-    // App.tsx declares the redirects themselves; lib/api.ts calls the
-    // /llm-providers API, which is not a page.
-    const OLD = /['"`]\/(llm-providers\/new|models\/new|llm-providers\/\$\{)|['"`]\/llm-providers['"`?]/
+  it('has no page at those addresses, and nothing links to them', () => {
+    // lib/api.ts calls the /llm-providers API, which is not a page.
+    const GONE = /['"`]\/(llm-providers\/new|models\/new|models\/connect|models\/providers|llm-providers\/\$\{)|['"`]\/llm-providers['"`?]/
     const hits = sourceFiles(SRC)
-      .filter((f) => !f.endsWith('App.tsx') && !f.endsWith(join('lib', 'api.ts')))
-      .filter((f) => OLD.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')))
+      .filter((f) => !f.endsWith(join('lib', 'api.ts')))
+      .filter((f) => GONE.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')))
     expect(hits.map((f) => relative(SRC, f))).toEqual([])
+    expect(readFileSync(join(SRC, 'App.tsx'), 'utf8')).not.toMatch(/path="\/(llm-providers|models\/(new|connect|providers|:id))/)
   })
 })
 
 /**
  * No dialogs in the Models area. Connecting and configuring happen on real
- * pages (/models/connect, /models/providers/:id) or inline on them. The one
+ * pages (/credentials/providers/new, /credentials/providers/:id) or inline on them. The one
  * exception is a short confirmation before something is stopped or
  * removed, which is an AlertDialog.
  */

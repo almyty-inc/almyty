@@ -20,6 +20,7 @@ import { ChatRequest, ChatResponse, StreamChunk } from './dto/llm-providers.dto'
 import { safeErrorBody, safeErrorMessage, extractUpstreamErrorMessage, LLM_HEALTH_GATE_MESSAGE } from './llm-providers.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { preferredBinding, providerProfile } from './provider-profile';
+import { assertModelAllowed } from './allowed-models';
 import { ExecutionAccessService, type ExecutionPrincipal, asPrincipal } from '../../common/authorization/execution-access.service';
 
 @Injectable()
@@ -434,6 +435,7 @@ export class LlmChatHelper {
       if (!request.model) {
         request = { ...request, model: await this.defaultModels.resolve(provider) };
       }
+      assertModelAllowed(provider, request.model);
       let response: ChatResponse;
 
 

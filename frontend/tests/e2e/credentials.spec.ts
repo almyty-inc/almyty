@@ -126,10 +126,11 @@ hooked.describe('Credentials - where a key is used', () => {
   })
 
   hooked('the add flow opens inline from a model provider tile', async ({ authenticatedPage: page }) => {
-    await page.goto('/models/connect?type=openai')
+    await page.goto('/credentials/providers/new?type=openai')
     await page.waitForLoadState('networkidle')
     await expect(page.getByRole('dialog')).toHaveCount(0)
-    await page.getByRole('main').getByRole('button', { name: 'Connect an account' }).click()
+    await page.getByRole('main').getByRole('button', { name: 'Use a saved key instead' }).click()
+    await page.getByRole('main').getByRole('button', { name: 'Create one here' }).click()
     const flow = page.getByTestId('connect-flow')
     await expect(flow).toBeVisible()
     await expect(flow.locator('[data-testid^="service-tile-"], [data-testid="connect-form"]').first()).toBeVisible()

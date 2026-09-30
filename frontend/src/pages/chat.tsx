@@ -23,6 +23,7 @@ import { formatDate, pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
+import { connectProviderPath } from '@/components/llm-providers/paths'
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'tool'
@@ -230,7 +231,7 @@ export function ChatPage() {
           To start chatting, connect a provider: OpenAI, Anthropic, a server
           you run, and more.
         </p>
-        <Button onClick={() => navigate('/models/connect')}>
+        <Button onClick={() => navigate(connectProviderPath())}>
           Connect a provider
         </Button>
       </div>

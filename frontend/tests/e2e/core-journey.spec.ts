@@ -147,7 +147,8 @@ test('core journey: sign up, model, API, gateways, agent, app, credentials', asy
       const done = page.getByTestId('connect-success')
       await expect(done).toContainText(MODEL_ID)
       await done.getByRole('button', { name: 'Done' }).click()
-      await expect(page).toHaveURL(/\/models$/)
+      // Done opens the new connection, with its models ticked.
+      await expect(page).toHaveURL(/\/models\/providers\/[0-9a-f-]{36}$/)
     })
 
     let apiId = ''

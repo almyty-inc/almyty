@@ -86,7 +86,7 @@ const PAGES: Array<{ name: string; Comp: React.ComponentType; notFound: RegExp }
   { name: 'api-detail', Comp: ApiDetailPage, notFound: /API not found/i },
   { name: 'tool-detail', Comp: ToolDetailPage, notFound: /Tool not found/i },
   { name: 'gateway-detail', Comp: GatewayDetailPage, notFound: /Gateway not found/i },
-  { name: 'provider', Comp: ProviderPage, notFound: /Provider not found/i },
+  { name: 'provider', Comp: ProviderPage, notFound: /Connection not found/i },
   { name: 'agent-detail', Comp: AgentDetailPage, notFound: /Agent not found/i },
 ]
 

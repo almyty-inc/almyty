@@ -598,6 +598,19 @@ export class CredentialRefResolver {
     await this.credentials.update({ id: credential.id, organizationId }, scope);
   }
 
+  /** Rename a row its consumer manages (a provider renamed); a shared connection keeps its own name. */
+  async renameManaged(
+    organizationId: string,
+    credentialId: string | null | undefined,
+    managedBy: Pick<ManagedBy, 'kind' | 'id'>,
+    name: string,
+  ): Promise<void> {
+    if (!credentialId || !name) return;
+    const credential = await this.credentials.findOne({ where: { id: credentialId, organizationId } });
+    if (!credential || !CredentialRefResolver.isManagedBy(credential, managedBy) || credential.name === name) return;
+    await this.credentials.update({ id: credential.id, organizationId }, { name });
+  }
+
   /** Load a row of this org or throw CREDENTIAL_NOT_FOUND. */
   async load(organizationId: string, credentialId: string): Promise<Credential> {
     const credential = await this.credentials.findOne({ where: { id: credentialId, organizationId } });

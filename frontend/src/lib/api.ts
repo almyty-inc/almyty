@@ -312,7 +312,7 @@ export const authApi = {
   getProfile: () => apiGet('/auth/profile'),
   
   /** A changed email needs `currentPassword`; the server refuses without it. */
-  updateProfile: (data: Partial<{ name: string; email: string; currentPassword: string }>) =>
+  updateProfile: (data: Partial<{ name: string; email: string; currentPassword: string; timezone: string | null }>) =>
     apiPatch('/auth/profile', data),
   
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
@@ -700,6 +700,9 @@ export const llmProvidersApi = {
   update: (id: string, data: any) => apiPatch(`/llm-providers/${id}`, data),
   
   delete: (id: string) => apiDel(`/llm-providers/${id}`),
+
+  /** The agents whose model runs on this connection: the ones the caller can see by name, the rest as a count. */
+  agents: (id: string) => apiGet<{ agents: Array<{ id: string; name: string }>; others: number }>(`/llm-providers/${id}/agents`),
   
   test: (id: string) => apiPost(`/llm-providers/${id}/test`),
   

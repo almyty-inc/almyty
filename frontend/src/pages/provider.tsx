@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { ArrowLeft, ExternalLink, Loader2, Pencil, Play, RefreshCw } from 'lucide-react'
@@ -12,13 +12,18 @@ import { Label } from '@/components/ui/label'
 import { QueryError } from '@/components/ui/query-error'
 import { SecretInput } from '@/components/ui/secret-input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import type { Visibility, VisibilityValue } from '@/components/ui/visibility-field'
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
-import { ConnectAccountButton } from '@/components/connections/connect-flow'
+import { FormSection } from '@/components/layout/form-page'
+import { ServiceIcon } from '@/components/connect/service-tiles'
+import { AllowedModelsEditor } from '@/components/llm-providers/allowed-models-editor'
+import { accessSummary, modelAccessOf } from '@/lib/model-access'
+import { CredentialPicker } from '@/components/credentials/credential-picker'
 import { ModelPicker } from '@/components/model-picker'
-import { ModelRow } from '@/components/models/model-row'
 import { EditModelForm } from '@/components/models/edit-model-form'
 import { HostingPanel } from '@/components/models/hosting/hosting-panel'
 import { StartModelForm } from '@/components/models/hosting/start-model-form'
@@ -43,14 +48,18 @@ import { useLeaveGuard } from '@/hooks/use-leave-guard'
 type CheckOutcome = { ok: true; models: number } | { ok: false; message: string }
 
 /**
- * One connected provider: whether its key works, its models, the default
- * model, who can use it, and (for a cloud account) the open models almyty
- * runs there. Everything else waits under Advanced.
+ * One provider connection: its name (renameable), whether its key works,
+ * which of its models it offers, and its settings. The Models tab ticks
+ * and unticks models and holds the "allow new models automatically"
+ * switch; Settings holds the key, who can use it, the default model and
+ * everything under Advanced. A cloud account adds a tab for the open
+ * models almyty runs on it.
  */
 export function ProviderPage() {
   const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const notifications = useNotifications()
   const { confirm, dialog: confirmDialog } = useConfirm()
@@ -71,15 +80,24 @@ export function ProviderPage() {
     () => [...(modelsQuery.data ?? [])].sort((a, b) => Number(b.selectable) - Number(a.selectable) || a.name.localeCompare(b.name)),
     [modelsQuery.data],
   )
+  const hostingAdapter = provider ? HOSTING_ADAPTER_FOR_TYPE[provider.type as keyof typeof HOSTING_ADAPTER_FOR_TYPE] : undefined
+  const tabs = ['models', 'settings', ...(hostingAdapter ? ['hosting'] : [])]
+  const tab = tabs.includes(searchParams.get('tab') ?? '') ? (searchParams.get('tab') as string) : 'models'
+  const setTab = (next: string) => {
+    const params = new URLSearchParams(searchParams)
+    if (next === 'models') params.delete('tab')
+    else params.set('tab', next)
+    setSearchParams(params, { replace: true })
+  }
 
   useEffect(() => {
-    document.title = provider?.name ? `${provider.name} | Models | almyty` : 'Provider | almyty'
+    document.title = provider?.name ? `${provider.name} | Credentials | almyty` : 'Connection | almyty'
     return () => {
       document.title = 'almyty'
     }
   }, [provider?.name])
 
-  // /models links a model row here as #model-<id>.
+  // /models links a model here as #model-<id>.
   useEffect(() => {
     if (!location.hash || models.length === 0) return
     document.getElementById(location.hash.slice(1))?.scrollIntoView?.({ block: 'center' })
@@ -89,6 +107,7 @@ export function ProviderPage() {
     queryClient.invalidateQueries({ queryKey: ['llm-provider', id] })
     queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
     queryClient.invalidateQueries({ queryKey: ['models'] })
+    queryClient.invalidateQueries({ queryKey: ['credentials'] })
   }
 
   const update = useMutation({
@@ -122,16 +141,17 @@ export function ProviderPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
       queryClient.invalidateQueries({ queryKey: ['models'] })
-      notifications.success('Provider removed', `${provider?.name ?? 'The provider'} and its models are gone.`)
-      navigate('/models')
+      queryClient.invalidateQueries({ queryKey: ['credentials'] })
+      notifications.success('Connection removed', `${provider?.name ?? 'The connection'} and its models are gone.`)
+      navigate('/credentials')
     },
-    onError: (error) => notifications.error('Could not remove the provider', getApiErrorMessage(error, 'It was not removed.')),
+    onError: (error) => notifications.error('Could not remove the connection', getApiErrorMessage(error, 'It was not removed.')),
   })
 
   const back = (
-    <Link to="/models" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-      <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-      Models
+    <Link to="/credentials" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+      <ArrowLeft className="h-4 w-4" aria-hidden />
+      Credentials
     </Link>
   )
 
@@ -139,7 +159,7 @@ export function ProviderPage() {
     return (
       <div className="space-y-4">
         {back}
-        <QueryError error={providerQuery.error} onRetry={() => providerQuery.refetch()} title="Couldn't load this provider" />
+        <QueryError error={providerQuery.error} onRetry={() => providerQuery.refetch()} title="Couldn't load this connection" />
       </div>
     )
   }
@@ -154,35 +174,55 @@ export function ProviderPage() {
     return (
       <div className="space-y-4">
         {back}
-        <p className="text-muted-foreground">Provider not found.</p>
+        <p className="text-muted-foreground">Connection not found.</p>
       </div>
     )
   }
 
   const status = providerCheck(provider)
   const visibility: VisibilityValue = { visibility: (provider.visibility as Visibility) ?? 'org', teamId: provider.teamId ?? null }
+  const listedIds = models.filter((m) => m.status !== 'inactive').map((m) => m.vendorModelId)
+  const summary = accessSummary(modelAccessOf(provider), listedIds, (vid) => models.find((m) => m.vendorModelId === vid)?.name ?? vid)
+
+  const askRemove = async () => {
+    // Name the agents that lose their model before asking, so nobody removes one blind.
+    let using: { agents: Array<{ id: string; name: string }>; others: number } = { agents: [], others: 0 }
+    try {
+      using = await llmProvidersApi.agents(id)
+    } catch {
+      // The question still stands without the list; the notices name them afterwards.
+    }
+    const ok = await confirm({
+      title: `Remove ${provider.name}?`,
+      description: removeDescription(using.agents.map((a) => a.name), using.others),
+      confirmLabel: 'Remove connection',
+      destructive: true,
+    })
+    if (ok) remove.mutate()
+  }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       {back}
 
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-2xl" aria-hidden>
-            {providerLogos[provider.type] || '⚙️'}
-          </span>
+          <ServiceIcon size="lg">{providerLogos[provider.type] || '⚙️'}</ServiceIcon>
           <div className="min-w-0 space-y-1">
             <EditableName name={provider.name} saving={update.isPending} onSave={(name) => update.mutate({ name })} />
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               <span>{providerTileLabel(provider.type)}</span>
               <ProviderStatus check={status} />
+              <span data-testid="connection-model-summary">{summary}</span>
             </div>
           </div>
         </div>
-        <Button variant="outline" onClick={() => check.mutate()} disabled={check.isPending} className="gap-2">
-          <RefreshCw className={cn('h-4 w-4', check.isPending && 'animate-spin')} aria-hidden />
-          {check.isPending ? 'Checking...' : 'Check again'}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+          <Button variant="outline" onClick={() => check.mutate()} disabled={check.isPending} className="gap-2">
+            <RefreshCw className={cn('h-4 w-4', check.isPending && 'animate-spin')} aria-hidden />
+            {check.isPending ? 'Checking...' : 'Check again'}
+          </Button>
+        </div>
       </header>
 
       {status.error && !outcome && (
@@ -203,71 +243,77 @@ export function ProviderPage() {
         </p>
       )}
 
-      <Card>
-        <CardContent className="space-y-5 pt-6">
-          <ReplaceKey provider={provider} onSaved={() => check.mutate()} />
-          <WhoCanUse value={visibility} onChange={(next) => update.mutate({ visibility: next.visibility, teamId: next.teamId })} disabled={update.isPending} noun="this provider and its models" />
-          <div className="max-w-md">
-            <ModelPicker
-              idPrefix="provider-default"
-              providerLocked
-              modelOptional
-              modelLabel="Default model"
-              value={{ providerId: provider.id, model: provider.configuration?.model || '' }}
-              onChange={(next) => update.mutate({ configuration: { model: next.model ?? '' } })}
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="models">Models</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
+          {hostingAdapter && <TabsTrigger value="hosting">Open models on this account</TabsTrigger>}
+        </TabsList>
+
+        <TabsContent value="models" className="space-y-3 pt-2">
+          {modelsQuery.isError ? (
+            <QueryError error={modelsQuery.error} onRetry={() => modelsQuery.refetch()} title="Couldn't load its models" />
+          ) : modelsQuery.isLoading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : models.length === 0 ? (
+            <EmptyState
+              title="No models yet"
+              description={takesBaseUrl(provider.type) ? 'Your server lists no models yet. Check again once it is up.' : 'The provider listed no models. Check again to fetch them.'}
+              action={
+                <Button variant="outline" onClick={() => check.mutate()} disabled={check.isPending}>
+                  Check again
+                </Button>
+              }
             />
-            <p className="mt-1 text-xs text-muted-foreground">Used when an agent picks this provider without naming a model.</p>
-          </div>
-        </CardContent>
-      </Card>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Ticked models are offered in every model chooser and to the router. Untick the ones this connection should not be used for.
+              </p>
+              <AllowedModelsEditor key={`${provider.updatedAt}-${models.length}`} provider={provider} cards={models} onSaved={() => {
+                refresh()
+                notifications.success('Saved', 'The models this connection offers are updated.')
+              }} />
+            </>
+          )}
+        </TabsContent>
 
-      <section aria-labelledby="provider-models-heading" className="space-y-3">
-        <h2 id="provider-models-heading" className="text-lg font-semibold">
-          Models <span className="text-sm font-normal text-muted-foreground">({models.length})</span>
-        </h2>
-        {modelsQuery.isError ? (
-          <QueryError error={modelsQuery.error} onRetry={() => modelsQuery.refetch()} title="Couldn't load its models" />
-        ) : modelsQuery.isLoading ? (
-          <Skeleton className="h-32 w-full" />
-        ) : models.length === 0 ? (
-          <p className="text-sm text-muted-foreground" data-testid="provider-no-models">
-            {takesBaseUrl(provider.type) ? 'No models listed yet. Check again once your server is up.' : 'No models listed yet. Check again to fetch them.'}
-          </p>
-        ) : (
-          <Card>
-            <CardContent className="p-0">
-              <ul>
-                {models.map((m) => (
-                  <ModelRow key={m.id} card={m} provider={provider} />
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
+        <TabsContent value="settings" className="space-y-6 pt-2">
+          <FormSection title="Key and access">
+            <ReplaceKey provider={provider} onSaved={() => check.mutate()} />
+            <WhoCanUse value={visibility} onChange={(next) => update.mutate({ visibility: next.visibility, teamId: next.teamId })} disabled={update.isPending} noun="this connection and its models" />
+            <div className="max-w-md">
+              <ModelPicker
+                idPrefix="provider-default"
+                providerLocked
+                modelOptional
+                modelLabel="Default model"
+                value={{ providerId: provider.id, model: provider.configuration?.model || '' }}
+                onChange={(next) => update.mutate({ configuration: { model: next.model ?? '' } })}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">Used when an agent picks this connection without naming a model.</p>
+            </div>
+          </FormSection>
+
+          <Advanced provider={provider} models={models} onSaved={refresh} />
+
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 p-4">
+            <div>
+              <h2 className="text-sm font-semibold">Remove this connection</h2>
+              <p className="text-sm text-muted-foreground">Its key goes too. Agents that use its models stop working until you pick another model.</p>
+            </div>
+            <Button variant="outline" className="text-destructive hover:text-destructive" disabled={remove.isPending} onClick={askRemove}>
+              Remove connection
+            </Button>
+          </section>
+        </TabsContent>
+
+        {hostingAdapter && orgId && (
+          <TabsContent value="hosting" className="pt-2">
+            <Hosting provider={provider} orgId={orgId} />
+          </TabsContent>
         )}
-      </section>
-
-      {orgId && <Hosting provider={provider} orgId={orgId} />}
-
-      <Advanced provider={provider} models={models} onSaved={refresh} />
-
-      <section className="border-t pt-6">
-        <Button
-          variant="ghost"
-          className="text-destructive hover:text-destructive"
-          disabled={remove.isPending}
-          onClick={async () => {
-            const ok = await confirm({
-              title: `Remove ${provider.name}?`,
-              description: 'Its models go with it. Agents that use them stop working until you pick another model.',
-              confirmLabel: 'Remove provider',
-              destructive: true,
-            })
-            if (ok) remove.mutate()
-          }}
-        >
-          Remove provider
-        </Button>
-      </section>
+      </Tabs>
       {confirmDialog}
     </div>
   )
@@ -371,8 +417,19 @@ function ReplaceKey({ provider, onSaved }: { provider: any; onSaved: () => void 
                 <ExternalLink className="h-3 w-3" aria-hidden />
               </a>
             )}
-            <ConnectAccountButton kind="inference" connectorKey={provider.type} label="Use a connected account instead" onConnected={(connection) => save.mutate({ credentialId: connection.id })} />
           </div>
+          <CredentialPicker
+            id="replace-key-saved"
+            label="Or use a saved key"
+            value={provider.credentialRef?.id ?? ''}
+            onChange={(credential) => {
+              if (credential && credential.id !== provider.credentialRef?.id) save.mutate({ credentialId: credential.id })
+            }}
+            kind="inference"
+            connectorKey={provider.type}
+            placeholder="Pick a saved key"
+            hint="Saving it checks the key again."
+          />
         </div>
       )}
     </div>
@@ -429,7 +486,9 @@ function Hosting({ provider, orgId }: { provider: any; orgId: string }) {
     },
   })
 
-  if (!adapter) return null
+  if (!adapter) {
+    return adaptersQuery.isLoading ? <Skeleton className="h-24 w-full" /> : <p className="text-sm text-muted-foreground">This almyty server cannot start open models on this kind of account.</p>
+  }
 
   return (
     <section aria-labelledby="provider-hosting-heading" className="space-y-3">
@@ -474,6 +533,20 @@ function Hosting({ provider, orgId }: { provider: any; orgId: string }) {
       )}
     </section>
   )
+}
+
+/**
+ * The line under "Remove X?": which agents lose their model. Names the ones
+ * the viewer can see, counts the rest.
+ */
+export function removeDescription(names: string[], others: number): string {
+  const base = 'Its key and its models go with it.'
+  const total = names.length + others
+  if (total === 0) return `${base} No agent uses its models.`
+  const parts = [...names.map((n) => `"${n}"`), ...(others > 0 ? [pluralized(others, 'other agent')] : [])]
+  const who = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0]
+  const one = total === 1
+  return `${base} ${who} ${one ? 'uses' : 'use'} its models and ${one ? 'stops' : 'stop'} working until given another model; their owners are told.`
 }
 
 /** Everything a first connection does not need: call settings, the usage key, and per-model settings. */

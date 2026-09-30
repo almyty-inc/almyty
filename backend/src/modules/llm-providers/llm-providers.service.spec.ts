@@ -16,6 +16,7 @@ import { ToolExecutorService } from '../tools/tool-executor.service';
 import { isEncrypted } from '../../common/security/field-crypto';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
+import { ModelUsageService } from '../model-catalog/notices/model-usage.service';
 import { FakeCredentialStore, makeCredentialRefFake } from '../../test/credential-ref.fake';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
@@ -56,8 +57,14 @@ describe('LlmProvidersService', () => {
   let toolExecutorService: any;
   let catalog: any;
   let store: FakeCredentialStore;
+  let usage: { modelsInUse: jest.Mock; forViewer: jest.Mock; agentsUsingConnection: jest.Mock };
 
   beforeEach(async () => {
+    usage = {
+      modelsInUse: jest.fn().mockResolvedValue(new Map()),
+      forViewer: jest.fn().mockResolvedValue({ agents: [], others: 0 }),
+      agentsUsingConnection: jest.fn().mockResolvedValue([]),
+    };
     catalog = {
       syncInBackground: jest.fn().mockResolvedValue(null),
       recordExternalValidation: jest.fn().mockResolvedValue(null),
@@ -175,6 +182,7 @@ describe('LlmProvidersService', () => {
           },
         },
         { provide: ModelCatalogService, useValue: catalog },
+        { provide: ModelUsageService, useValue: usage },
       ],
     }).compile();
 
@@ -514,6 +522,87 @@ describe('LlmProvidersService', () => {
       name: 'Updated Provider',
       configuration: { temperature: 0.8 },
     };
+
+    const connection = (): any => {
+      const row: any = {
+        id: 'provider-1', name: 'OpenAI', type: LlmProviderType.OPENAI, organizationId: 'org-1',
+        configuration: { apiKey: 'own-key' }, capabilities: {},
+      };
+      Object.setPrototypeOf(row, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(row);
+      llmProviderRepository.save.mockImplementation(async (p: any) => p);
+      return row;
+    };
+
+    it('renames the key a connection made for itself, and a rename spends no key check', async () => {
+      jest.useFakeTimers();
+      try {
+        const row = connection();
+        const check = jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+        // The first write moves the inline key into a row the connection manages.
+        await service.updateProvider('provider-1', { configuration: { temperature: 0.1 } }, 'org-1', 'user-1');
+        jest.advanceTimersByTime(2000);
+        expect(check).toHaveBeenCalledTimes(1);
+        expect(store.rows.map((r) => r.name)).toEqual(['OpenAI']);
+
+        check.mockClear();
+        await service.updateProvider('provider-1', { name: '  OpenAI - research  ' }, 'org-1', 'user-1');
+        jest.advanceTimersByTime(2000);
+        expect(row.name).toBe('OpenAI - research');
+        expect(store.rows.map((r) => r.name)).toEqual(['OpenAI - research']);
+        expect(check).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('a shared credential keeps its own name when the connection using it is renamed', async () => {
+      const shared = store.seed({ organizationId: 'org-1', name: 'Team OpenAI', config: { apiKey: 'shared-key' }, connectorKey: 'openai' });
+      const row = connection();
+      row.credentialId = shared.id;
+      row.credential = shared;
+      row.configuration = {};
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+      await service.updateProvider('provider-1', { name: 'OpenAI - shared' }, 'org-1', 'user-1');
+      expect(shared.name).toBe('Team OpenAI');
+    });
+
+    it('stores which models the connection allows, keeping both lists across the switch', async () => {
+      const row = connection();
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+
+      await service.updateProvider('provider-1', { allowNewModels: true, hiddenModels: [' gpt-4o ', 'gpt-4o'] }, 'org-1', 'user-1');
+      expect(row).toMatchObject({ allowNewModels: true, hiddenModels: ['gpt-4o'] });
+
+      await service.updateProvider('provider-1', { allowNewModels: false, allowedModels: ['gpt-5'] }, 'org-1', 'user-1');
+      expect(row).toMatchObject({ allowNewModels: false, allowedModels: ['gpt-5'], hiddenModels: ['gpt-4o'] });
+    });
+
+    it('refuses to turn off a model an agent uses, naming the agent, and saves nothing', async () => {
+      const row = connection();
+      usage.modelsInUse.mockResolvedValue(new Map([['gpt-4o', ['agent-1']]]));
+      usage.forViewer.mockResolvedValue({ agents: [{ id: 'agent-1', name: 'Support triage' }], others: 1 });
+      await expect(service.updateProvider('provider-1', { hiddenModels: ['gpt-4o'] }, 'org-1', 'user-1')).rejects.toMatchObject({
+        status: 409,
+        response: expect.objectContaining({
+          code: 'MODEL_IN_USE',
+          message: '"gpt-4o" is used by Support triage and 1 other agent. Pick another model for those agents first, then turn it off.',
+        }),
+      });
+      expect(usage.forViewer).toHaveBeenCalledWith('org-1', ['agent-1'], 'user-1');
+      expect(llmProviderRepository.save).not.toHaveBeenCalled();
+      // A model no agent uses goes without a word.
+      await expect(service.updateProvider('provider-1', { hiddenModels: ['o3'] }, 'org-1', 'user-1')).resolves.toBeDefined();
+      expect(row.hiddenModels).toEqual(['o3']);
+    });
+
+    it('may pause a connection by allowing no model at all', async () => {
+      const row = connection();
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+      await service.updateProvider('provider-1', { allowNewModels: false, allowedModels: [] }, 'org-1', 'user-1');
+      expect(row).toMatchObject({ allowNewModels: false, allowedModels: null });
+      expect(llmProviderRepository.save).toHaveBeenCalledWith(row);
+    });
 
     it('should update provider successfully', async () => {
       const mockProvider = {

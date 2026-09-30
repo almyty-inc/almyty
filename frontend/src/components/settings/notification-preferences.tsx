@@ -160,6 +160,7 @@ export function NotificationPreferences() {
                 const current = effectivePreference(matrix, defaults, type)
                 const fallback = defaults[type]
                 const emailLocked = isEmailLocked(matrix[type], fallback)
+                const inAppLocked = !!(matrix[type]?.inAppLocked || fallback?.inAppLocked)
                 const differsFromDefault =
                   !!fallback &&
                   (current.inApp !== fallback.inApp ||
@@ -178,6 +179,9 @@ export function NotificationPreferences() {
                           {pres.description && (
                             <p className="text-xs text-muted-foreground">{pres.description}</p>
                           )}
+                          {inAppLocked && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">Always shown in the app</p>
+                          )}
                           {emailLocked && (
                             <p className="mt-0.5 text-xs text-cyan-600 dark:text-cyan-400">
                               Security notices are always emailed
@@ -189,7 +193,8 @@ export function NotificationPreferences() {
                     <TableCell className="text-center">
                       <Checkbox
                         aria-label={`${pres.label} in-app notifications`}
-                        checked={current.inApp}
+                        checked={inAppLocked ? true : current.inApp}
+                        disabled={inAppLocked}
                         onCheckedChange={(checked) =>
                           setChannel(type, 'inApp', checked === true)
                         }

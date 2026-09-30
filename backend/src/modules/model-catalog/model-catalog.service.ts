@@ -20,6 +20,8 @@ import { providerUsableByUser, usableProviders } from '../llm-providers/private-
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { providerChecked } from './readiness';
 import { isKeyRejection } from '../llm-providers/model-errors';
+import { providerAllowsModel } from '../llm-providers/allowed-models';
+import { GONE_REASONS, MODEL_CHANGE_LISTENER, type ModelChangeListener } from './notices/model-change';
 
 /** Override as the API accepts it; currency defaults to USD when omitted. */
 export type ModelPricingInput = Omit<ModelPricing, 'currency'> & { currency?: string };
@@ -111,6 +113,8 @@ export class ModelCatalogService {
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly accessPolicy?: AccessPolicyService,
+    // Who hears when a connection's models appear or go away (notices/).
+    @Optional() @Inject(MODEL_CHANGE_LISTENER) private readonly changes?: ModelChangeListener,
   ) {}
 
   /**
@@ -130,9 +134,9 @@ export class ModelCatalogService {
     if (filter.providerId) where.providerId = filter.providerId;
     const rows = await this.models.find({ where, order: { createdAt: 'ASC' } });
     const hidden = viewerId === undefined ? new Set<string>() : await this.hiddenProviderIds(organizationId, viewerId);
-    return rows
-      .filter((r) => !r.providerId || !hidden.has(r.providerId))
-      .filter((r) => (filter.selectable ? r.isSelectable() : true));
+    const visible = rows.filter((r) => !r.providerId || !hidden.has(r.providerId));
+    await this.markAllowed(organizationId, visible);
+    return visible.filter((r) => (filter.selectable ? r.isSelectable() : true));
   }
 
   async get(organizationId: string, id: string, viewerId?: string | null): Promise<Model> {
@@ -141,7 +145,23 @@ export class ModelCatalogService {
     if (viewerId !== undefined && card.providerId && (await this.hiddenProviderIds(organizationId, viewerId)).has(card.providerId)) {
       throw new NotFoundException('Model not found');
     }
+    await this.markAllowed(organizationId, [card]);
     return card;
+  }
+
+  /**
+   * Stamp `allowed` on each card from its connection's allowed models, so
+   * `isSelectable()` (and every list, chooser and MCP tool that reads it)
+   * leaves out what a connection hides. One query for the lot.
+   */
+  async markAllowed(organizationId: string, cards: Model[]): Promise<void> {
+    const ids = [...new Set(cards.map((c) => c.providerId).filter((id): id is string => !!id))];
+    if (ids.length === 0) return;
+    const rows = await this.providers.find({ where: { organizationId, id: In(ids) }, select: { id: true, allowNewModels: true, hiddenModels: true, allowedModels: true }, loadEagerRelations: false });
+    const byId = new Map(rows.map((p) => [p.id, p]));
+    for (const card of cards) {
+      card.allowed = card.providerId ? providerAllowsModel(byId.get(card.providerId), card.vendorModelId) : true;
+    }
   }
 
   /**
@@ -250,6 +270,9 @@ export class ModelCatalogService {
     // provider, or a team provider outside their teams, does not exist;
     // lifecycle syncs run with no user.
     if (!provider || (userId && !(await providerUsableByUser(this.accessPolicy, provider, userId)))) throw new NotFoundException('Provider not found');
+    // The first import of a connection's list is not "new models": the
+    // person who just connected it is looking at them.
+    const firstImport = !provider.modelsSyncedAt;
     const listed = await this.modelsHelper.fetchModelsFromProvider(provider);
     const existing = await this.models.find({ where: { organizationId, providerId } });
     const byVendorId = new Map(existing.map((m) => [m.vendorModelId, m]));
@@ -284,10 +307,13 @@ export class ModelCatalogService {
       }
     }
     const retired: Model[] = [];
+    // Retired cards someone could use until now: those are the ones to tell people about.
+    const wentAway: Model[] = [];
     if (listed.length > 0) {
       const listedIds = new Set(listed.map((m) => m.id));
       for (const card of existing) {
         if (card.status === 'inactive' || listedIds.has(card.vendorModelId)) continue;
+        if (card.validationStatus === 'passed' && providerAllowsModel(provider, card.vendorModelId)) wentAway.push(card);
         card.status = 'inactive';
         card.metadata = { ...(card.metadata ?? {}), retiredAt: now, retiredReason: 'not listed by provider' };
         retired.push(await this.models.save(card));
@@ -307,6 +333,14 @@ export class ModelCatalogService {
     if (created.some((c) => c.validationStatus === 'never')) {
       const now = await this.providers.findOne({ where: { id: providerId, organizationId } });
       if (now && providerChecked(now)) await this.applyProviderCheck(organizationId, providerId, { passed: true });
+    }
+    if (this.changes && ((created.length > 0 && !firstImport) || wentAway.length > 0)) {
+      await this.changes.modelsChanged({
+        organizationId,
+        providerId,
+        appeared: firstImport ? [] : created,
+        gone: wentAway.map((card) => ({ card, reason: GONE_REASONS.notListed })),
+      });
     }
     return { created, skipped, retired, reinstated };
   }
@@ -446,15 +480,23 @@ export class ModelCatalogService {
    */
   async retireProviderCards(organizationId: string, providerId: string, reason = 'provider deleted'): Promise<number> {
     const cards = await this.models.find({ where: { organizationId, providerId } });
+    // Read while the connection still exists: who hears, and what it offered.
+    const provider = this.changes ? await this.providers.findOne({ where: { id: providerId, organizationId } }) : null;
+    const wentAway: Model[] = [];
     let retired = 0;
     for (const card of cards) {
       if (card.status === 'inactive') continue;
+      if (card.validationStatus === 'passed' && providerAllowsModel(provider, card.vendorModelId)) wentAway.push(card);
       card.status = 'inactive';
       card.metadata = { ...(card.metadata ?? {}), retiredAt: new Date().toISOString(), retiredReason: reason };
       await this.models.save(card);
       retired++;
     }
     if (retired) this.audit(cards[0], AuditAction.UPDATE, undefined, { providerId, retired, reason });
+    // Removing a connection takes its models away like any other loss.
+    if (this.changes && provider && wentAway.length > 0) {
+      await this.changes.modelsChanged({ organizationId, providerId, provider, appeared: [], gone: wentAway.map((card) => ({ card, reason: GONE_REASONS.connectionRemoved })) });
+    }
     return retired;
   }
 
@@ -549,6 +591,14 @@ export class ModelCatalogService {
         continue;
       }
       changed.push(await this.models.save(card));
+    }
+    // A refused key takes every model of the connection away at once.
+    if (!outcome.passed && this.changes && changed.length > 0) {
+      const provider = await this.providers.findOne({ where: { id: providerId, organizationId } });
+      const gone = changed.filter((card) => card.status === 'active' && providerAllowsModel(provider, card.vendorModelId));
+      if (gone.length > 0) {
+        await this.changes.modelsChanged({ organizationId, providerId, appeared: [], gone: gone.map((card) => ({ card, reason: GONE_REASONS.keyRejected })) });
+      }
     }
     if (changed.length) {
       this.audit(changed[0], AuditAction.MODEL_VALIDATED, undefined, {

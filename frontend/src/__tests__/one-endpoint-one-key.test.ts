@@ -60,7 +60,7 @@ describe('connecting and checking a provider invalidates the models prefix', () 
     // ['models','catalog'] (Models page, every picker) and
     // ['models','by-provider',id] (a provider page) are siblings: only the
     // prefix reaches both.
-    for (const file of ['pages/models-connect.tsx', 'pages/provider.tsx']) {
+    for (const file of ['components/llm-providers/provider-connection-create.tsx', 'pages/provider.tsx']) {
       const source = read(file)
       expect(source, file).toContain("invalidateQueries({ queryKey: ['models'] })")
       expect(source, file).not.toMatch(/invalidateQueries\(\{ queryKey: MODELS_QUERY_KEY \}\)/)

@@ -179,9 +179,12 @@ curl -X PATCH https://api.almyty.com/auth/profile \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Jane Smith"
+    "name": "Jane Smith",
+    "timezone": "Europe/Berlin"
   }'
 ```
+
+`timezone` is an IANA time zone name (`null` clears it back to UTC). Emails that wait for the morning, such as the daily model digest, go out at 08:00 in it.
 
 ### Change Password
 

@@ -208,6 +208,8 @@ The [Models API](/api-reference/models-api) and [Credentials API](/api-reference
 | `ROUTE_EXHAUSTED` | provider's | Every route candidate failed for a provider-side reason; the response lists what was tried |
 | `ROUTING_UNAVAILABLE` | 400 | A routing policy was sent but the catalog module is not wired into this installation |
 | `MODEL_NOT_FOUND` | 400 | The provider does not serve the configured model; the card is marked `failed` |
+| `MODEL_NOT_ALLOWED` | 400 | The call named a model its connection does not offer (unticked on the connection); nothing was sent to the provider |
+| `MODEL_IN_USE` | 409 | A change to which models a connection offers would take away a model an agent uses; the body names the models and the agents |
 | `MODEL_NOT_CALLABLE` | 400 | A card needs a `providerId` or an `endpointRef.url` |
 | `MODEL_EXISTS` | 400 | A card for that provider and vendor id (or that name, for an endpoint) already exists; the message carries its id |
 | `MODEL_REQUIRED` | 400 | `POST /model-deployments` named neither `model` nor `modelVersionId` |

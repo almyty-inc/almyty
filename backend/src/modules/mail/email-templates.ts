@@ -647,6 +647,83 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
   }),
 };
 
+/** "gpt-4o" / "3 models" for a line in a model notice. */
+function modelLines(items: Array<{ name: string; reason?: string | null }>): string {
+  return items.map((m) => `<li><strong>${esc(m.name)}</strong>${m.reason ? ` - ${esc(m.reason)}` : ''}</li>`).join('');
+}
+
+Object.assign(TEMPLATES, {
+  // New models on one connection, when sent on their own rather than in the digest.
+  'models.new': (p: Record<string, any>): RenderedEmail => {
+    const connection = String(p.connectionName || 'a provider connection');
+    const models: Array<{ name: string }> = Array.isArray(p.models) ? p.models : [];
+    const subject = models.length === 1 ? `New model on ${connection}: ${models[0].name}` : `${models.length} new models on ${connection}`;
+    return {
+      subject: sanitizeSubject(subject),
+      html: renderBaseLayout({
+        heading: subject,
+        bodyHtml: `<ul style="margin: 0 0 12px; padding-left: 20px;">${modelLines(models)}</ul>` + para('They show up in every model chooser.'),
+        button: p.url ? { label: 'See the models', url: p.url } : undefined,
+        footerNote: 'Turn these emails off under Settings, Your account, Notifications.',
+      }),
+      text: flattenText(`${subject}: ${models.map((m) => m.name).join(', ')}. ${p.url ?? ''}`),
+    };
+  },
+  // A model an agent uses stopped being usable on its connection: sent at once.
+  'models.unavailable': (p: Record<string, any>): RenderedEmail => {
+    const connection = String(p.connectionName || 'a provider connection');
+    const models: Array<{ name: string; reason?: string | null }> = Array.isArray(p.models) ? p.models : [];
+    const yours: Array<{ name: string; url?: string }> = Array.isArray(p.yourAgents) ? p.yourAgents : [];
+    const others = Number(p.otherAgents) || 0;
+    const subject = models.length === 1 ? `${models[0].name} is no longer available from ${connection}` : `${models.length} models are no longer available from ${connection}`;
+    const agentsHtml = [
+      yours.length ? para(`Your agents that use ${models.length === 1 ? 'it' : 'them'}: ${yours.map((a) => `<strong>${esc(a.name)}</strong>`).join(', ')}. Pick another model for each, or they fail on their next run.`) : '',
+      others ? para(`${others === 1 ? '1 other agent uses' : `${others} other agents use`} ${models.length === 1 ? 'it' : 'them'}.`) : '',
+    ].join('');
+    return {
+      subject: sanitizeSubject(subject),
+      html: renderBaseLayout({
+        heading: subject,
+        bodyHtml: `<ul style="margin: 0 0 12px; padding-left: 20px;">${modelLines(models)}</ul>${agentsHtml}`,
+        button: p.url ? { label: yours.length === 1 ? 'Pick another model' : 'See the models', url: p.url } : undefined,
+        footerNote: 'You get this because you own the connection or an agent that uses the model, or you run the organization. Turn these emails off under Settings, Your account, Notifications.',
+      }),
+      text: flattenText(
+        `${subject}. ${models.map((m) => `${m.name}${m.reason ? `: ${m.reason}` : ''}`).join('; ')}. ${yours.length ? `Your agents that use it: ${yours.map((a) => a.name).join(', ')}.` : ''} ${p.url ?? ''}`,
+      ),
+    };
+  },
+
+  // Once a day: new models, and models no agent used that went away.
+  'models.digest': (p: Record<string, any>): RenderedEmail => {
+    const fresh: Array<{ connection: string; models: string; count: number; notOffered?: string; notOfferedCount?: number }> = Array.isArray(p.fresh) ? p.fresh : [];
+    const gone: Array<{ connection: string; models: string; count: number; reason?: string }> = Array.isArray(p.gone) ? p.gone : [];
+    const freshLine = (f: (typeof fresh)[number]) =>
+      [
+        f.count ? esc(f.models) : '',
+        f.notOfferedCount ? `not allowed on ${esc(f.connection)} until you tick ${f.notOfferedCount === 1 ? 'it' : 'them'}: ${esc(f.notOffered ?? '')}` : '',
+      ].filter(Boolean).join('; ');
+    const freshHtml = fresh.length
+      ? para('<strong>New models</strong>') + `<ul style="margin: 0 0 12px; padding-left: 20px;">${fresh.map((f) => `<li>${esc(f.connection)}: ${freshLine(f)}</li>`).join('')}</ul>`
+      : '';
+    const goneHtml = gone.length
+      ? para('<strong>No longer available</strong>') + `<ul style="margin: 0 0 12px; padding-left: 20px;">${gone.map((g) => `<li>${esc(g.connection)}: ${esc(g.models)}${g.reason ? ` - ${esc(g.reason)}` : ''}</li>`).join('')}</ul>`
+      : '';
+    return {
+      subject: 'Changes to your models',
+      html: renderBaseLayout({
+        heading: 'Changes to your models',
+        bodyHtml: freshHtml + goneHtml + (gone.length ? para('No agent was using the models that went away.') : ''),
+        button: p.url ? { label: 'Open Models', url: p.url } : undefined,
+        footerNote: 'One email a day at most, at 08:00 your time (set your time zone under Settings, Your account, Profile). Turn it off under Settings, Your account, Notifications.',
+      }),
+      text: flattenText(
+        `Changes to your models. ${fresh.map((f) => `New on ${f.connection}: ${[f.count ? f.models : '', f.notOfferedCount ? `not allowed until ticked: ${f.notOffered}` : ''].filter(Boolean).join('; ')}.`).join(' ')} ${gone.map((g) => `No longer available on ${g.connection}: ${g.models}.`).join(' ')} ${p.url ?? ''}`,
+      ),
+    };
+  },
+});
+
 /** Generic fallback so an unknown template id still yields a branded email. */
 function renderGeneric(params: Record<string, any>): RenderedEmail {
   const title = params.title || 'Notification from almyty';

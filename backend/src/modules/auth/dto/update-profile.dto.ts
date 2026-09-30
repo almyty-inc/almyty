@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsOptional, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsTimeZone, MinLength, MaxLength, ValidateIf } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -31,4 +31,13 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(200)
   currentPassword?: string;
+
+  @ApiPropertyOptional({
+    description: 'Your time zone, an IANA name such as Europe/Berlin. Emails sent at a time of day use it; null means UTC.',
+    example: 'Europe/Berlin',
+  })
+  @IsOptional()
+  @ValidateIf((o) => o.timezone !== null)
+  @IsTimeZone()
+  timezone?: string | null;
 }

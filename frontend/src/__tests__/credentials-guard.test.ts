@@ -42,9 +42,11 @@ function importsFrom(source: string, from: string): string[] {
 }
 
 describe('Credentials and Models are built from the same pieces', () => {
-  const modelsConnect = read('pages/models-connect.tsx')
+  // Connecting a provider (under Credentials, and inline in a model chooser) is this component.
+  const modelsConnect = read('components/llm-providers/provider-connection-create.tsx')
   const addCredential = read('pages/credential-new.tsx')
   const credentialsList = read('pages/credentials.tsx')
+  const modelsList = read('pages/models.tsx')
   const providerForm = read('components/llm-providers/connect-provider-form.tsx')
   const serviceForm = read('components/connections/connect-flow.tsx')
 
@@ -57,6 +59,8 @@ describe('Credentials and Models are built from the same pieces', () => {
   it('lists credentials in the shared table, not cards', () => {
     expect(importsFrom(credentialsList, '@/components/ui/data-table')).toContain('DataTable')
     expect(importsFrom(credentialsList, '@/components/connect/connected-card')).toEqual([])
+    // The Models catalog is the same table.
+    expect(importsFrom(modelsList, '@/components/ui/data-table')).toContain('DataTable')
   })
 
   it('both forms ask "who can use it" with the same one-liner', () => {
@@ -141,8 +145,8 @@ describe('one pick-or-create control', () => {
   })
 
   it('has no new look-alikes: the older add button and select are used only where they were', () => {
-    // The model provider forms and the channel form move to CredentialPicker
-    // with their own reworks; nothing new may join them.
+    // The channel form moves to CredentialPicker with its own rework;
+    // nothing new may join it. The model provider forms already have.
     const users = sourceFiles(SRC)
       .filter((f) => /\b(ConnectAccountButton|ConnectionSelect)\b/.test(readFileSync(f, 'utf8')))
       .map((f) => relative(SRC, f))
@@ -150,9 +154,6 @@ describe('one pick-or-create control', () => {
       .sort()
     expect(users).toEqual([
       'components/gateways/detail/channel-config-form.tsx',
-      'components/llm-providers/connect-provider-form.tsx',
-      'components/llm-providers/credential-slot.tsx',
-      'pages/provider.tsx',
     ])
   })
 
@@ -215,7 +216,6 @@ describe('adding a credential speaks plainly', () => {
     'components/credentials/credential-rows.ts',
     'components/connections/connection-status.ts',
     'components/connect/service-tiles.tsx',
-    'components/connect/connected-card.tsx',
     'components/connect/who-can-use.tsx',
     'components/connect/status-label.tsx',
     'components/access-keys/access-keys-section.tsx',

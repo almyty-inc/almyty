@@ -1,6 +1,6 @@
 # Providers
 
-A provider is where almyty calls models: a vendor's API with your key, your own OpenAI-compatible server, Ollama, or a cloud account. Connect one from **Models → Connect a provider** and every model it lists appears in [Models](/models); when its key check passes they are all usable at once. almyty ships 39 provider types: 38 named vendors, plus `custom` (shown as **Your own server**), which takes any server that speaks the OpenAI chat API.
+A provider is where almyty calls models: a vendor's API with your key, your own OpenAI-compatible server, Ollama, or a cloud account. A **connection** is one named key for one provider; connect a provider from **Credentials → Connect a provider** (or **Add a connection** in any model chooser), as often as you like, and every model the key reaches appears in [Models](/models). When its key check passes they are all usable at once, and on the connection's page you untick the ones it should not offer. almyty ships 39 provider types: 38 named vendors, plus `custom` (shown as **Your own server**), which takes any server that speaks the OpenAI chat API.
 
 ![Models page](/screenshots/models.png)
 
@@ -80,7 +80,7 @@ Every row below was checked against the vendor's current documentation on 2026-0
 
 | Type | Vendor | Default base URL | Auth | Live model list | Tools | Stream |
 |---|---|---|---|---|---|---|
-| `ollama` | Ollama | `http://localhost:11434/v1` | none (optional Bearer behind a proxy) | yes, native `GET /api/tags` | yes | yes |
+| `ollama` | Ollama | Ollama Cloud `https://ollama.com/v1` from the tile; `http://localhost:11434/v1` when an API call gives no `apiUrl` | Bearer key for Ollama Cloud; none for your own server (optional Bearer behind a proxy) | yes, native `GET /api/tags` | yes | yes |
 | `custom` | Custom (any OpenAI-compatible server) | your `configuration.apiUrl` | per `custom.authMethod` | yes, `GET <base>/models` | operator's | operator's |
 
 Every native type ships with its default base URL; set `configuration.apiUrl` to point at a compatible proxy instead. There is no top-level `baseUrl` field. The key field takes whatever token the vendor issues and is encrypted at rest.
@@ -105,13 +105,13 @@ Every native type ships with its default base URL; set `configuration.apiUrl` to
 
 ## Keys
 
-A key belongs to one provider, is stored in [Credentials](/credentials), encrypted at rest with the platform key (or your own KMS on Enterprise), and is never returned by the API. The connect form links to each vendor's key page. Instead of pasting a key you can connect an account: vendors that offer a sign-in flow can be connected without pasting anything (OpenRouter mints a key scoped to almyty when you approve it), and a key already saved as a connection can be picked.
+A key belongs to one provider connection, is stored in [Credentials](/credentials) under the connection's name (renaming one renames the other), encrypted at rest with the platform key (or your own KMS on Enterprise), and is never returned by the API. Two connections of one provider hold two keys. The connect form links to each vendor's key page. Instead of pasting a key, **Use a saved key instead** picks one already in Credentials, with the same picker every form uses; its **Create one here** adds one without leaving the form, including by signing in with vendors that offer it (OpenRouter mints a key scoped to almyty when you approve it). Every key picker lists provider keys too, since the same key serves a provider's other APIs (images, speech, embeddings).
 
 ## Your own server
 
 vLLM, Ollama, TGI, llama.cpp, a LiteLLM proxy, a vendor that is not on the list: if it answers `POST <base>/chat/completions`, it is **Your own server** (type `custom`).
 
-In the dashboard, open **Models → Connect a provider**, pick **Your own server (OpenAI-compatible)**, and give the base URL and, if the server checks one, a key. almyty checks it with one real call and lists what `GET <base>/models` serves; every model it lists is usable once the check passes. Ollama has its own tile and reads your pulled models from `GET /api/tags`.
+In the dashboard, open **Credentials → Connect a provider**, pick **Your own server (OpenAI-compatible)**, and give the base URL and, if the server checks one, a key. almyty checks it with one real call and lists what `GET <base>/models` serves; every model it lists is usable once the check passes. Ollama has its own tile: pick **Your own server** on it for an Ollama you run, which reads your pulled models from `GET /api/tags`.
 
 Over the API it is one call:
 

@@ -1097,7 +1097,7 @@
   },
   "ollama": {
     "plain": {
-      "url": "http://localhost:11434/v1",
+      "url": "https://ollama.com/v1",
       "headers": {
         "Authorization": "Bearer test-key",
         "User-Agent": "almyty/1.0",
@@ -1105,7 +1105,7 @@
       }
     },
     "bedrockRegion": {
-      "url": "http://localhost:11434/v1",
+      "url": "https://ollama.com/v1",
       "headers": {
         "Authorization": "Bearer test-key",
         "User-Agent": "almyty/1.0",
@@ -1113,7 +1113,7 @@
       }
     },
     "azureRes": {
-      "url": "http://localhost:11434/v1",
+      "url": "https://ollama.com/v1",
       "headers": {
         "Authorization": "Bearer test-key",
         "User-Agent": "almyty/1.0",
@@ -1121,7 +1121,7 @@
       }
     },
     "runpodEp": {
-      "url": "http://localhost:11434/v1",
+      "url": "https://ollama.com/v1",
       "headers": {
         "Authorization": "Bearer test-key",
         "User-Agent": "almyty/1.0",
@@ -1129,7 +1129,7 @@
       }
     },
     "vertexProj": {
-      "url": "http://localhost:11434/v1",
+      "url": "https://ollama.com/v1",
       "headers": {
         "Authorization": "Bearer test-key",
         "User-Agent": "almyty/1.0",
@@ -1137,7 +1137,7 @@
       }
     },
     "sparkLegacy": {
-      "url": "http://localhost:11434/v1",
+      "url": "https://ollama.com/v1",
       "headers": {
         "Authorization": "Bearer test-key",
         "User-Agent": "almyty/1.0",
@@ -1145,7 +1145,7 @@
       }
     },
     "sparkX15": {
-      "url": "http://localhost:11434/v1",
+      "url": "https://ollama.com/v1",
       "headers": {
         "Authorization": "Bearer test-key",
         "User-Agent": "almyty/1.0",
@@ -1153,7 +1153,7 @@
       }
     },
     "arkMainland": {
-      "url": "http://localhost:11434/v1",
+      "url": "https://ollama.com/v1",
       "headers": {
         "Authorization": "Bearer test-key",
         "User-Agent": "almyty/1.0",
@@ -1161,7 +1161,7 @@
       }
     },
     "hfEndpoint": {
-      "url": "http://localhost:11434/v1",
+      "url": "https://ollama.com/v1",
       "headers": {
         "Authorization": "Bearer test-key",
         "User-Agent": "almyty/1.0",
@@ -1169,7 +1169,7 @@
       }
     },
     "apiVersion": {
-      "url": "http://localhost:11434/v1",
+      "url": "https://ollama.com/v1",
       "headers": {
         "Authorization": "Bearer test-key",
         "User-Agent": "almyty/1.0",

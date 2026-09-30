@@ -43,7 +43,30 @@ describe('credentialRows', () => {
 
   it('puts a model provider\'s own key with the model providers, opening the provider', () => {
     const row = storedRow({ id: 'llm-p1', name: 'OpenAI API Key', type: 'api_key', _source: 'llm_provider', _sourceId: 'p1', usedBy: [{ type: 'llm_provider', id: 'p1', name: 'OpenAI' }] })
-    expect(row).toMatchObject({ group: 'models', href: '/models/providers/p1', uses: [{ label: 'OpenAI', href: '/models/providers/p1' }] })
+    expect(row).toMatchObject({ group: 'models', href: '/credentials/providers/p1', uses: [{ label: 'OpenAI', href: '/credentials/providers/p1' }] })
+  })
+
+  it('lists every model provider connection once, keyless ones included, and not its own key again', () => {
+    const rows = credentialRows(
+      [
+        connection({ id: 'key-p1', name: 'HF - everything', connectorKey: 'huggingface', kind: 'inference', providerId: 'p1' }),
+        connection({ id: 'saved-openai', name: 'OpenAI billing', connectorKey: 'openai', kind: 'inference' }),
+      ],
+      [{ id: 'usage-p1', name: 'HF usage key', type: 'api_key', metadata: { managedBy: { kind: 'llm_provider_usage', id: 'p1' } } }],
+      [],
+      [
+        { id: 'p1', name: 'HF - everything', type: 'huggingface', keyChecked: true, createdAt: '2026-09-03T00:00:00.000Z' },
+        { id: 'p2', name: 'Ollama on the build box', type: 'ollama', visibility: 'private', createdAt: '2026-09-01T00:00:00.000Z' },
+        { id: 'p3', name: 'Qwen on Modal', type: 'custom', metadata: { managedBy: { kind: 'model_endpoint' } } },
+      ],
+    )
+    expect(rows.map((r) => [r.id, r.group, r.href])).toEqual([
+      ['p1', 'models', '/credentials/providers/p1'],
+      ['saved-openai', 'models', '/credentials/saved-openai'],
+      ['p2', 'models', '/credentials/providers/p2'],
+    ])
+    expect(rows[0]).toMatchObject({ service: 'Hugging Face', check: { state: 'ok', label: 'Key works' }, who: 'Everyone' })
+    expect(rows[2]).toMatchObject({ service: 'Ollama', who: 'Only you' })
   })
 })
 

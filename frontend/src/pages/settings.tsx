@@ -24,6 +24,7 @@ import { KmsSettings } from '@/components/settings/kms-settings'
 import { ReferralsTab } from '@/components/settings/referrals-tab'
 import { DataRetentionCard } from '@/components/settings/data-retention-card'
 import { NotificationPreferences } from '@/components/settings/notification-preferences'
+import { DEFAULT_TIME_ZONE, TimeZoneSelect } from '@/components/settings/time-zone-select'
 import { BillingTab } from '@/components/BillingTab'
 import { PageHeader } from '@/components/layout/page-header'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -474,6 +475,7 @@ export function ProfileTab() {
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [currentPassword, setCurrentPassword] = useState('')
+  const [timezone, setTimezone] = useState<string>(DEFAULT_TIME_ZONE)
   const [validationErrors, setValidationErrors] = useState<ProfileErrors>({})
 
   const { data: userProfile, isLoading } = useQuery({
@@ -487,11 +489,12 @@ export function ProfileTab() {
       setFirstName(userProfile.firstName || '')
       setLastName(userProfile.lastName || '')
       setEmail(userProfile.email || '')
+      setTimezone(userProfile.timezone || DEFAULT_TIME_ZONE)
     }
   }, [userProfile, isEditing])
 
   const updateProfileMutation = useMutation({
-    mutationFn: (data: { name: string; email: string; currentPassword?: string }) =>
+    mutationFn: (data: { name: string; email: string; currentPassword?: string; timezone?: string }) =>
       authApi.updateProfile(data),
     onSuccess: async (_data, variables) => {
       const moved = !!variables.currentPassword
@@ -557,6 +560,7 @@ export function ProfileTab() {
     updateProfileMutation.mutate({
       name: `${firstName.trim()} ${lastName.trim()}`,
       email: email.trim(),
+      timezone,
       ...(emailChanged ? { currentPassword } : {}),
     })
   }
@@ -565,6 +569,7 @@ export function ProfileTab() {
     setFirstName(userProfile.firstName || '')
     setLastName(userProfile.lastName || '')
     setEmail(userProfile.email || '')
+    setTimezone(userProfile.timezone || DEFAULT_TIME_ZONE)
     setCurrentPassword('')
     setValidationErrors({})
     setIsEditing(false)
@@ -692,6 +697,16 @@ export function ProfileTab() {
           )}
         </div>
         
+        <div>
+          <label htmlFor="time-zone" className="text-sm font-medium text-muted-foreground">Time zone</label>
+          {isEditing ? (
+            <TimeZoneSelect id="time-zone" value={timezone} onChange={setTimezone} />
+          ) : (
+            <div className="text-lg mt-1" data-testid="profile-time-zone">{(userProfile.timezone || DEFAULT_TIME_ZONE).replace(/_/g, ' ')}</div>
+          )}
+          <p className="text-xs text-muted-foreground mt-1">Emails that wait for the morning, like the daily model digest, arrive at 08:00 here.</p>
+        </div>
+
         <div className="grid grid-cols-2 gap-6">
           <div>
             <label className="text-sm font-medium text-muted-foreground">Account created</label>

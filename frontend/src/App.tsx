@@ -110,7 +110,6 @@ function DashboardLayoutOutlet() {
 
 
 import { HostedChatPage } from '@/pages/hosted-chat'
-import { ConnectRedirect, ModelRedirect, ProviderRedirect, ProvidersRedirect } from '@/pages/models-redirects'
 import { AppsPage } from '@/pages/apps'
 import { AppDetailPage } from '@/pages/app-detail'
 import { currentTenantSlug } from '@/lib/tenant-host'
@@ -209,16 +208,10 @@ export function createAppRoutes() {
           <Route path="/approvals" element={<ApprovalsPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/models" element={<ModelsPage />} />
-          <Route path="/models/connect" element={<ConnectProviderPage />} />
-          <Route path="/models/providers/:id" element={<ProviderPage />} />
+          {/* Provider connections are credentials: they live under Credentials. */}
+          <Route path="/credentials/providers/new" element={<ConnectProviderPage />} />
+          <Route path="/credentials/providers/:id" element={<ProviderPage />} />
           <Route path="/models/hosting/:deploymentId" element={<HostedModelPage />} />
-          {/* Older addresses, each to the page that replaced it. */}
-          <Route path="/models/new" element={<ConnectRedirect />} />
-          <Route path="/models/:id" element={<ModelRedirect />} />
-          <Route path="/llm-providers" element={<ProvidersRedirect />} />
-          <Route path="/llm-providers/new" element={<ConnectRedirect />} />
-          <Route path="/llm-providers/:id/edit" element={<ProviderRedirect />} />
-          <Route path="/llm-providers/:id" element={<ProviderRedirect />} />
           <Route path="/analytics/budgets/new" element={<AnalyticsBudgetPage />} />
           <Route path="/analytics/budgets/:budgetId/edit" element={<AnalyticsBudgetPage />} />
           <Route path="/analytics/*" element={<AnalyticsPage />} />

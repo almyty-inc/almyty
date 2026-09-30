@@ -237,6 +237,7 @@ export class CredentialsService {
     // Can read it but not manage it: 403. userId may be undefined for
     // internal callers; they skip the gate.
     if (userId) await assertManageable(this.accessPolicy, userId, credential, 'Credential');
+    const previousName = credential.name;
     // Re-validate team scoping if it's being changed.
     if (userId && (data.visibility !== undefined || data.teamId !== undefined)) {
       const nextVis = data.visibility ?? credential.visibility;
@@ -283,11 +284,24 @@ export class CredentialsService {
 
     const saved = await this.credentialRepository.save(credential);
     this.logger.log(`Credential updated: ${saved.id} (${saved.name})`);
+    // A provider connection's key is the connection as far as a person is
+    // concerned: renaming it on Credentials renames the connection too.
+    await this.renameOwningProvider(saved, previousName);
 
     // Audit log (fire-and-forget)
     this.auditLogService.log({ organizationId, action: AuditAction.CREDENTIAL_UPDATE, resourceType: AuditResource.CREDENTIAL, resourceId: saved.id, resourceName: saved.name });
 
     return this.maskCredential(saved);
+  }
+
+  /** When `credential` is the key a provider made for itself, the provider takes its new name. */
+  private async renameOwningProvider(credential: Credential, previousName: string): Promise<void> {
+    const by = (credential.metadata as Record<string, any> | null | undefined)?.managedBy;
+    if (!by || by.kind !== 'llm_provider' || !by.id || !credential.name || credential.name === previousName) return;
+    await this.llmProviderRepository.update(
+      { id: by.id, organizationId: credential.organizationId, credentialId: credential.id },
+      { name: credential.name },
+    );
   }
 
   /**

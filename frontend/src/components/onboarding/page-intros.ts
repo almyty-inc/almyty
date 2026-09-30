@@ -36,12 +36,12 @@ export const PAGE_INTROS = {
     page: '/credentials',
     // Adds to the subtitle rather than repeating it: where keys are kept,
     // and that a key typed anywhere else lands here too.
-    text: 'Keys are stored encrypted and never shown again once saved. A key you add while setting up an API, a tool or a channel lands here too. Model provider keys are added on Models.',
+    text: 'Keys are stored encrypted and never shown again once saved. A key you add while setting up an API, a tool or a channel lands here too, and so do model providers.',
   },
   models: {
     page: '/models',
     // Adds to the subtitle rather than repeating it: prices, and when a model can be picked.
-    text: 'Prices fill in by themselves and stay current. A new model can be picked once a first test call to it has worked.',
+    text: 'Every model your provider connections reach, with prices that fill in by themselves. A model can be picked once its connection\'s key works and the connection offers it.',
   },
   memories: {
     page: '/memories',

@@ -90,6 +90,7 @@ describe('connect a provider', () => {
     const user = userEvent.setup()
     vi.mocked(llmProvidersApi.connect).mockResolvedValue({ provider: { id: 'p-1', name: 'Ollama', type: 'ollama' }, models: [] })
     render(<ConnectProviderForm type="ollama" onConnected={() => {}} />)
+    await user.type(screen.getByLabelText('Ollama Cloud API key'), 'ollama-key-1234567890')
     await user.click(screen.getByRole('button', { name: 'Change' }))
     await user.click(privateOption())
     await user.click(screen.getByRole('button', { name: 'Connect' }))

@@ -113,7 +113,7 @@ export function CommandPalette() {
     { id: 'act-new-api', label: 'Connect an API', hint: 'OpenAPI, GraphQL, SOAP, gRPC, an npm package or plain HTTP', icon: Plus, action: () => go('/apis/new') },
     { id: 'act-new-sdk-api', label: 'Connect an API: SDK / npm', hint: 'Its functions become tools', icon: Plus, action: () => go('/apis/new/sdk') },
     { id: 'act-new-http-api', label: 'Connect an API: manual HTTP', hint: 'An address, with tools added by hand', icon: Plus, action: () => go('/apis/new/http') },
-    { id: 'act-connect-provider', label: 'Connect a provider', hint: 'OpenAI, Anthropic, Gemini, your own server', icon: Plus, action: () => go('/models/connect') },
+    { id: 'act-connect-provider', label: 'Connect a provider', hint: 'OpenAI, Anthropic, Gemini, your own server', icon: Plus, action: () => go('/credentials/providers/new') },
     { id: 'act-new-runner', label: 'Register runner', hint: 'Run agents on your own machine', icon: Plus, action: () => go('/runners/new') },
     { id: 'act-add-credential', label: 'Add credential', hint: 'A key, a token or a sign-in, kept in one place', icon: Plus, action: () => go('/credentials/new') },
     { id: 'act-new-custom-connector', label: 'Add a custom service', hint: 'Any service that takes a key or a sign-in', icon: Plus, action: () => go('/credentials/custom/new') },

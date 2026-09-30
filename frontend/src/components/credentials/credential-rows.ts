@@ -2,14 +2,19 @@
  * The rows of the Credentials page, from GET /credentials: every key or
  * account added on Credentials or through the pick-or-create control
  * (with its service and whether it works), plus the keys a single API,
- * MCP server, channel or app keeps for itself. A key a model provider
- * uses goes in its own group.
+ * MCP server, channel or app keeps for itself, plus the model provider
+ * connections (GET /llm-providers), one row each, in their own group. A
+ * connection with no key (an Ollama or a server you run) is there too;
+ * the key a connection keeps for itself is not listed a second time.
  */
 import type { ServiceCheck } from '@/components/connect/status-label'
 import type { Connection, Connector, ConnectorKind } from '@/types/connections'
 
 import { connectionCheck, connectionWhoShort } from '@/components/connections/connection-status'
 import { credentialPath } from './paths'
+import { connectProviderPath, providerPath } from '@/components/llm-providers/paths'
+import { providerCheck } from '@/components/llm-providers/provider-status'
+import { providerTileLabel } from '@/components/llm-providers/provider-catalog'
 
 /** A row of GET /credentials. Secrets arrive masked, and are never read here. */
 export interface StoredCredential {
@@ -28,6 +33,21 @@ export interface StoredCredential {
   _source?: 'llm_provider'
   _sourceId?: string
   usedBy?: Array<{ type: string; id: string; name: string }>
+}
+
+/** A model provider connection, as GET /llm-providers lists it. */
+export interface ProviderConnection {
+  id: string
+  name: string
+  type: string
+  visibility?: 'org' | 'team' | 'private' | null
+  createdAt?: string
+  status?: string
+  keyChecked?: boolean
+  isHealthy?: boolean
+  lastError?: string | null
+  lastHealthCheckAt?: string | null
+  metadata?: { managedBy?: { kind: string } | null } | null
 }
 
 export interface CredentialUse {
@@ -80,7 +100,7 @@ export function managedUse(managedBy: { kind: string; id?: string } | null | und
       return { label: 'An MCP server', href: '/tools' }
     case 'llm_provider':
     case 'llm_provider_usage':
-      return { label: 'A model provider', href: id ? `/models/providers/${id}` : '/models' }
+      return { label: 'A model provider', href: id ? providerPath(id) : connectProviderPath() }
     case 'gateway_channel':
       return { label: 'A channel', href: id ? `/gateways/${id}` : undefined }
     case 'channel_installation':
@@ -106,8 +126,27 @@ export function connectionRow(connection: Connection, connector?: Pick<Connector
     who: connectionWhoShort(connection),
     uses: (connection.usedBy ?? []).map((u) => ({ label: u.name })),
     createdAt: connection.createdAt ?? null,
-    href: credentialPath(connection.id),
-    group: connection.kind && MODEL_KINDS.includes(connection.kind) ? 'models' : 'other',
+    // A provider connection's key is changed on that connection's page, with its models.
+    href: connection.providerId ? providerPath(connection.providerId) : credentialPath(connection.id),
+    group: connection.providerId || (connection.kind && MODEL_KINDS.includes(connection.kind)) ? 'models' : 'other',
+  }
+}
+
+/** A model provider connection: its page holds its key, its models and who can use it. */
+export function providerRow(provider: ProviderConnection): CredentialRow {
+  const check = providerCheck(provider as Parameters<typeof providerCheck>[0])
+  return {
+    id: provider.id,
+    name: provider.name,
+    service: providerTileLabel(provider.type),
+    connectorKey: provider.type,
+    kind: 'inference',
+    check: { state: check.state, label: check.label, error: check.error },
+    who: provider.visibility === 'private' ? 'Only you' : provider.visibility === 'team' ? 'One team' : 'Everyone',
+    uses: [],
+    createdAt: provider.createdAt ?? null,
+    href: providerPath(provider.id),
+    group: 'models',
   }
 }
 
@@ -116,13 +155,13 @@ export function storedRow(credential: StoredCredential): CredentialRow {
   const fromProvider = credential._source === 'llm_provider'
   const managed = managedUse(credential.metadata?.managedBy)
   const uses: CredentialUse[] = fromProvider
-    ? (credential.usedBy ?? []).map((u) => ({ label: u.name, href: `/models/providers/${u.id}` }))
+    ? (credential.usedBy ?? []).map((u) => ({ label: u.name, href: providerPath(u.id) }))
     : managed
       ? [managed]
       : credential.apiId
         ? [{ label: 'An API', href: `/apis/${credential.apiId}` }]
         : []
-  const providerKind = managed?.href?.startsWith('/models')
+  const providerKind = credential.metadata?.managedBy?.kind === 'llm_provider' || credential.metadata?.managedBy?.kind === 'llm_provider_usage'
   return {
     id: credential.id,
     name: credential.name,
@@ -133,8 +172,8 @@ export function storedRow(credential: StoredCredential): CredentialRow {
     who: credential.visibility === 'private' ? 'Only you' : credential.visibility === 'team' ? 'One team' : 'Everyone',
     uses,
     createdAt: credential.createdAt ?? null,
-    // A provider's own key has no page of its own here: it is changed on the provider.
-    href: fromProvider ? uses[0]?.href ?? '/models' : credentialPath(credential.id),
+    // A provider's own key has no page of its own here: it is changed on the provider connection.
+    href: fromProvider ? uses[0]?.href ?? connectProviderPath() : providerKind && managed?.href ? managed.href : credentialPath(credential.id),
     group: fromProvider || providerKind ? 'models' : 'other',
   }
 }
@@ -145,14 +184,21 @@ export function storedRow(credential: StoredCredential): CredentialRow {
  * A stored row with a service is a credential the connection list keeps
  * from this person (someone else's private key), so it stays hidden.
  */
-export function credentialRows(connections: Connection[], stored: StoredCredential[], connectors: Connector[] = []): CredentialRow[] {
+export function credentialRows(connections: Connection[], stored: StoredCredential[], connectors: Connector[] = [], providers: ProviderConnection[] = []): CredentialRow[] {
   const seen = new Set(connections.map((c) => c.id))
   const byKey = new Map(connectors.map((c) => [c.key, c]))
-  const rows = connections.map((c) => connectionRow(c, byKey.get(c.connectorKey)))
+  // Keys a listed provider connection keeps for itself show as that connection.
+  const listed = new Set(providers.map((p) => p.id))
+  const ownKeyOfListed = (managedBy?: { kind: string; id?: string } | null, providerId?: string | null) =>
+    (!!providerId && listed.has(providerId)) || (!!managedBy?.id && (managedBy.kind === 'llm_provider' || managedBy.kind === 'llm_provider_usage') && listed.has(managedBy.id))
+  const rows = connections.filter((c) => !ownKeyOfListed(null, c.providerId)).map((c) => connectionRow(c, byKey.get(c.connectorKey)))
   for (const credential of stored) {
     if (seen.has(credential.id) || credential.connectorKey) continue
+    if (ownKeyOfListed(credential.metadata?.managedBy) || (credential._source === 'llm_provider' && (credential.usedBy ?? []).some((u) => listed.has(u.id)))) continue
     rows.push(storedRow(credential))
   }
+  // A model the platform runs on your cloud account is reached through its hosting page, not here.
+  for (const provider of providers) if (provider.metadata?.managedBy?.kind !== 'model_endpoint') rows.push(providerRow(provider))
   return rows.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
 }
 
