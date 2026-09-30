@@ -67,9 +67,6 @@ export function AgentDetailPage() {
 
   // Webhook state (lifted so overview tab can use it, synced from agent data)
   const [webhookUrl, setWebhookUrl] = useState('')
-  const [scheduleEnabled, setScheduleEnabled] = useState(false)
-  const [scheduleInterval, setScheduleInterval] = useState(60)
-  const [scheduleInput, setScheduleInput] = useState('{}')
 
   // Fetch agent
   const { data: agentData, isLoading, isError, error: agentError, refetch: refetchAgent } = useQuery({
@@ -190,17 +187,9 @@ export function AgentDetailPage() {
 
   const files: AgentFile[] = Array.isArray(filesData) ? filesData : []
 
-  // Sync webhook/schedule state from agent data
+  // Sync webhook state from agent data (the schedule has its own page)
   React.useEffect(() => {
-    if (agent) {
-      setWebhookUrl(agent.webhookUrl || '')
-      const schedule = agent.settings?.schedule
-      if (schedule) {
-        setScheduleEnabled(!!schedule.enabled)
-        setScheduleInterval(schedule.intervalMinutes || 60)
-        setScheduleInput(JSON.stringify(schedule.input || {}, null, 2))
-      }
-    }
+    if (agent) setWebhookUrl(agent.webhookUrl || '')
   }, [agent])
 
   // Build React Flow nodes/edges from pipeline (read-only)
@@ -418,12 +407,6 @@ export function AgentDetailPage() {
             auditLog={auditLog}
             webhookUrl={webhookUrl}
             setWebhookUrl={setWebhookUrl}
-            scheduleEnabled={scheduleEnabled}
-            setScheduleEnabled={setScheduleEnabled}
-            scheduleInterval={scheduleInterval}
-            setScheduleInterval={setScheduleInterval}
-            scheduleInput={scheduleInput}
-            setScheduleInput={setScheduleInput}
           />
           {/* The keys that call this agent's API sit by that API. A channel's
               own keys (an A2A channel's callers) are on the channel. */}

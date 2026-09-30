@@ -7,6 +7,7 @@ import {
   recoverFromStaleOrganizationContext,
 } from '@/store/organization-selection'
 import type { ApiKeyView, ConnectApiInput, ConnectApiResult, SetApiKeyInput } from '@/types/api-connect'
+import type { DeliveryOptions, SchedulePreview, ScheduleRequest, ScheduleView } from '@/lib/schedule'
 
 const API_BASE_URL = import.meta.env.ALMYTY_API_BASE_URL || ''
 
@@ -925,9 +926,11 @@ export const agentsApi = {
   importAgent: (data: any) => apiPost('/agents/import', data),
   // Audit log
   getAuditLog: (id: string) => apiGet(`/agents/${id}/audit-log`),
-  // Scheduling
-  schedule: (id: string, intervalMinutes: number, input?: any) =>
-    apiPost(`/agents/${id}/schedule`, { intervalMinutes, input }),
+  // Scheduling (lib/schedule.ts has the shapes)
+  getSchedule: (id: string) => apiGet<ScheduleView>(`/agents/${id}/schedule`),
+  schedule: (id: string, body: ScheduleRequest) => apiPost(`/agents/${id}/schedule`, body),
+  previewSchedule: (id: string, body: ScheduleRequest) => apiPost<SchedulePreview>(`/agents/${id}/schedule/preview`, body),
+  scheduleDestinations: (id: string) => apiGet<DeliveryOptions>(`/agents/${id}/schedule/destinations`),
   unschedule: (id: string) => apiDel(`/agents/${id}/schedule`),
   setHeartbeat: (id: string, body: { enabled: boolean; intervalMinutes?: number; prompt?: string }) =>
     apiPatch(`/agents/${id}/heartbeat`, body),
@@ -1310,6 +1313,20 @@ export interface ApprovalStep {
   minApprovals: number
 }
 
+/**
+ * An approval policy's amount rule: ask before `toolId` runs when the
+ * numeric input `argument` is over (gt) or at or over (gte) `amount`.
+ * Mirrors ApprovalToolAmountTrigger on the backend entity.
+ */
+export interface ApprovalToolAmountTrigger {
+  kind: 'tool_amount'
+  toolId: string
+  toolName?: string
+  argument: string
+  op: 'gt' | 'gte'
+  amount: number
+}
+
 export interface ApprovalPolicy {
   id: string
   organizationId: string
@@ -1320,6 +1337,8 @@ export interface ApprovalPolicy {
   steps: ApprovalStep[]
   priority: number
   enabled: boolean
+  /** Set: the policy asks on its own when the tool is called over the amount. */
+  trigger?: ApprovalToolAmountTrigger | null
   createdAt: string
   updatedAt: string
 }
@@ -1332,6 +1351,7 @@ export interface UpsertApprovalPolicy {
   steps?: ApprovalStep[]
   priority?: number
   enabled?: boolean
+  trigger?: ApprovalToolAmountTrigger | null
 }
 
 export const approvalPoliciesApi = {

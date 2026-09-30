@@ -36,6 +36,7 @@ import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { approvalPoliciesApi, type ApprovalPolicy, type UpsertApprovalPolicy } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
+import { AmountRuleFields } from './approval-amount-rule'
 
 export const APPROVAL_POLICIES_PATH = '/settings/approvals'
 
@@ -69,15 +70,31 @@ const stepSchema = z.object({
     .min(1, 'Must be at least 1'),
 })
 
-export const approvalPolicySchema = z.object({
-  name: z.string().min(1, 'Name is required').max(128, 'Max 128 characters'),
-  description: z.string().optional(),
-  teamId: z.string().optional(),
-  priority: z.number({ message: 'Must be a number' }).int(),
-  enabled: z.boolean(),
-  match: z.array(conditionSchema),
-  steps: z.array(stepSchema).min(1, 'Add at least one approval step'),
-})
+export const approvalPolicySchema = z
+  .object({
+    name: z.string().min(1, 'Name is required').max(128, 'Max 128 characters'),
+    description: z.string().optional(),
+    teamId: z.string().optional(),
+    priority: z.number({ message: 'Must be a number' }).int(),
+    enabled: z.boolean(),
+    match: z.array(conditionSchema),
+    steps: z.array(stepSchema).min(1, 'Add at least one approval step'),
+    /** 'amount': the policy's amount rule asks at the tool call. 'agent': it governs what agents ask. */
+    when: z.enum(['agent', 'amount']),
+    toolId: z.string(),
+    argument: z.string(),
+    op: z.enum(['gt', 'gte']),
+    amount: z.string(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.when !== 'amount') return
+    if (!data.toolId) ctx.addIssue({ code: 'custom', path: ['toolId'], message: 'Choose the tool' })
+    if (!data.argument) ctx.addIssue({ code: 'custom', path: ['argument'], message: 'Choose the number to compare' })
+    const amount = Number(data.amount)
+    if (data.amount.trim() === '' || !Number.isFinite(amount) || amount < 0) {
+      ctx.addIssue({ code: 'custom', path: ['amount'], message: 'Enter an amount of 0 or more' })
+    }
+  })
 
 export type ApprovalPolicyFormValues = z.infer<typeof approvalPolicySchema>
 
@@ -134,6 +151,11 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
         policy?.steps && policy.steps.length > 0
           ? policy.steps.map((s) => ({ ...s }))
           : [{ name: '', approverRole: '*', minApprovals: 1 }],
+      when: policy?.trigger ? 'amount' : 'agent',
+      toolId: policy?.trigger?.toolId ?? '',
+      argument: policy?.trigger?.argument ?? '',
+      op: policy?.trigger?.op ?? 'gt',
+      amount: policy?.trigger ? String(policy.trigger.amount) : '',
     },
   })
   const guard = useLeaveGuard(form.formState.isDirty)
@@ -148,11 +170,20 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
       teamId: data.teamId?.trim() ? data.teamId.trim() : null,
       priority: data.priority,
       enabled: data.enabled,
-      match: data.match.map((c) => ({
-        attr: c.attr.trim(),
-        op: c.op,
-        value: coerceValue(c.op, c.value),
-      })),
+      // A policy with an amount rule asks on its own at the tool call; the
+      // conditions only select requests an agent raises itself.
+      match:
+        data.when === 'amount'
+          ? []
+          : data.match.map((c) => ({
+              attr: c.attr.trim(),
+              op: c.op,
+              value: coerceValue(c.op, c.value),
+            })),
+      trigger:
+        data.when === 'amount'
+          ? { kind: 'tool_amount', toolId: data.toolId, argument: data.argument, op: data.op, amount: Number(data.amount) }
+          : null,
       steps: data.steps.map((s) => ({
         name: s.name.trim(),
         approverRole: s.approverRole.trim(),
@@ -169,11 +200,12 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
   }
 
   const errors = form.formState.errors
+  const when = form.watch('when')
 
   return (
     <FormPage
       title={policy ? 'Edit approval policy' : 'New approval policy'}
-      description="Match conditions decide when an approval is required; steps decide who must sign off, in order. A request must clear every step before it is approved."
+      description="Decide when to ask for approval, and who must sign off, in order. A request must clear every step before it is approved."
       back={{ to: APPROVAL_POLICIES_PATH, label: 'Approval policies' }}
       guard={guard}
       onSubmit={form.handleSubmit(submit)}
@@ -215,6 +247,42 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
         </div>
       </FormSection>
 
+      <FormSection title="When to ask">
+        <Field id="policy-when" label="Ask for approval when">
+          <Select value={when} onValueChange={(v) => form.setValue('when', v as 'agent' | 'amount', { shouldDirty: true })}>
+            <SelectTrigger id="policy-when">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="amount">A tool is called with an amount over a limit</SelectItem>
+              <SelectItem value="agent">An agent asks for approval itself</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        {when === 'amount' ? (
+          <AmountRuleFields
+            value={{
+              toolId: form.watch('toolId'),
+              argument: form.watch('argument'),
+              op: form.watch('op'),
+              amount: form.watch('amount'),
+            }}
+            onChange={(patch) => {
+              for (const [key, v] of Object.entries(patch)) {
+                form.setValue(key as 'toolId' | 'argument' | 'op' | 'amount', v as any, { shouldDirty: true, shouldValidate: form.formState.isSubmitted })
+              }
+            }}
+            errors={{ toolId: errors.toolId?.message, argument: errors.argument?.message, amount: errors.amount?.message }}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            The agent calls request_approval when its instructions tell it to. The conditions below decide which of
+            those requests this policy governs.
+          </p>
+        )}
+      </FormSection>
+
+      {when === 'agent' && (
       <FormSection
         title="Match conditions"
         description="All conditions must hold (AND). Leave empty to match every request."
@@ -279,6 +347,7 @@ export function ApprovalPolicyForm({ policy, isSaving, onSubmit }: ApprovalPolic
           <Plus className="mr-1 h-4 w-4" /> Add condition
         </Button>
       </FormSection>
+      )}
 
       <FormSection
         title="Approval steps"

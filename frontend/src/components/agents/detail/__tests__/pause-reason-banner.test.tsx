@@ -77,7 +77,9 @@ describe('PauseReasonBanner', () => {
       agent({ settings: { schedule: { enabled: false, intervalMinutes: 45, input: { topic: 'news' }, pausedReason: ownerCannotRun } } }),
     )
     await userEvent.click(screen.getByRole('button', { name: 'Resume schedule' }))
-    await waitFor(() => expect(agentsApi.schedule).toHaveBeenCalledWith('a1', 45, { topic: 'news' }))
+    await waitFor(() =>
+      expect(agentsApi.schedule).toHaveBeenCalledWith('a1', { kind: 'interval', intervalMinutes: 45, input: { topic: 'news' } }),
+    )
   })
 
   it('explains a heartbeat switched off for the same reason, and turns it back on as it was', async () => {

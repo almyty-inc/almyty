@@ -44,6 +44,7 @@ import {
 } from '@/lib/api'
 import { APPROVAL_POLICIES_PATH } from './approval-policy-form'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { describeAmountRule } from '@/lib/approval-rules'
 
 export function ApprovalPoliciesSettings() {
   return (
@@ -64,6 +65,7 @@ export function ApprovalPoliciesSettings() {
 }
 
 function summarizeMatch(policy: ApprovalPolicy): string {
+  if (policy.trigger) return describeAmountRule(policy.trigger)
   if (!policy.match || policy.match.length === 0) return 'Every request'
   return policy.match
     .map((c) => {

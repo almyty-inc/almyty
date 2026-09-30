@@ -150,6 +150,8 @@ export const LABEL_PROPER_NOUNS = new Set([
   'RBAC', 'REST', 'S3', 'SAML', 'SDK', 'SMS', 'SOAP', 'SQL', 'SSO', 'SVG', 'Signal', 'Slack', 'Stripe',
   'TOTP', 'Teams', 'Telegram', 'UTCP', 'URL', 'URLs', 'Vertex', 'WhatsApp', 'YAML', 'gRPC',
   'Swagger', 'WSDL',
+  // Days of the week, in schedule choices.
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
 ])
 
 /** Multi-word names that keep their capitals: named surfaces and specs. */

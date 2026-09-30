@@ -41,6 +41,7 @@ const AgentChannelNewPage = lazy(() => import('@/pages/agent-channel-new').then(
 const AgentChannelPage = lazy(() => import('@/pages/agent-channel').then(m => ({ default: m.AgentChannelPage })))
 const AgentChannelSigningNewPage = lazy(() => import('@/pages/agent-channel-signing-new').then(m => ({ default: m.AgentChannelSigningNewPage })))
 const AgentPublicSettingsPage = lazy(() => import('@/pages/agent-public-settings').then(m => ({ default: m.AgentPublicSettingsPage })))
+const AgentSchedulePage = lazy(() => import('@/pages/agent-schedule').then(m => ({ default: m.AgentSchedulePage })))
 const ApisPage = lazy(() => import('@/pages/apis').then(m => ({ default: m.ApisPage })))
 const ApiDetailPage = lazy(() => import('@/pages/api-detail').then(m => ({ default: m.ApiDetailPage })))
 const ApiNewPage = lazy(() => import('@/pages/api-new').then(m => ({ default: m.ApiNewPage })))
@@ -196,6 +197,7 @@ export function createAppRoutes() {
           <Route path="/agents/import" element={<AgentImportPage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
           <Route path="/agents/:id/channels/new" element={<AgentChannelNewPage />} />
+          <Route path="/agents/:id/schedule" element={<AgentSchedulePage />} />
           <Route path="/agents/:id/channels/settings" element={<AgentPublicSettingsPage />} />
           <Route path="/agents/:id/channels/:channelId" element={<AgentChannelPage />} />
           <Route path="/agents/:id/channels/:channelId/signing/new" element={<AgentChannelSigningNewPage />} />

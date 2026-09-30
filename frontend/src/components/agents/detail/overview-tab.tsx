@@ -14,7 +14,6 @@ import {
   History,
   Clock,
   Webhook,
-  Timer,
   Save,
   RotateCcw,
   ChevronDown,
@@ -26,8 +25,6 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import { CodeEditor } from '@/components/ui/code-editor'
-import { Switch } from '@/components/ui/switch'
 import {
   Table,
   TableBody,
@@ -53,11 +50,12 @@ import { QueryError } from '@/components/ui/query-error'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
-import { formatDateTime, formatRelativeTime, pluralized } from '@/lib/utils'
+import { formatDateTime, formatRelativeTime } from '@/lib/utils'
 import { execStatusVariant, diffObjects, formatDiffValue } from './constants'
 import { IntegrationSnippets } from './integration-snippets'
 import { AgentConfigPanel } from './agent-config-panel'
 import { ExecutionRouting } from './routing-attribution'
+import { DeliveryNote, ScheduleCard } from './schedule-card'
 import { modelsApi } from '@/lib/models-api'
 import { invokeAndSettle, runOutcome } from '@/lib/agent-run'
 import type { Agent, AgentExecution, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
@@ -84,12 +82,6 @@ interface OverviewTabProps {
   auditLog: AgentAuditEntry[]
   webhookUrl: string
   setWebhookUrl: (url: string) => void
-  scheduleEnabled: boolean
-  setScheduleEnabled: (enabled: boolean) => void
-  scheduleInterval: number
-  setScheduleInterval: (interval: number) => void
-  scheduleInput: string
-  setScheduleInput: (input: string) => void
 }
 
 export function OverviewTab({
@@ -102,12 +94,6 @@ export function OverviewTab({
   auditLog,
   webhookUrl,
   setWebhookUrl,
-  scheduleEnabled,
-  setScheduleEnabled,
-  scheduleInterval,
-  setScheduleInterval,
-  scheduleInput,
-  setScheduleInput,
 }: OverviewTabProps) {
   const queryClient = useQueryClient()
   // Card names for the routing column: attribution carries card ids only.
@@ -124,22 +110,14 @@ export function OverviewTab({
   const [testError, setTestError] = useState<string | null>(null)
   const [testLoading, setTestLoading] = useState(false)
   const [webhookSaving, setWebhookSaving] = useState(false)
-  const [scheduleSaving, setScheduleSaving] = useState(false)
   const [rollbackIndex, setRollbackIndex] = useState<number | null>(null)
   const [expandedVersionId, setExpandedVersionId] = useState<number | null>(null)
 
-  // A webhook URL or schedule edited but not saved asks before a navigation
-  // throws it away. Saving refetches the agent, which brings the fields and
-  // the saved values back in line.
-  const savedSchedule = agent.settings?.schedule
+  // A webhook URL edited but not saved asks before a navigation throws it
+  // away. Saving refetches the agent, which brings the field and the saved
+  // value back in line. The schedule is edited on its own page.
   const webhookDirty = !webhookSaving && webhookUrl !== (agent.webhookUrl || '')
-  const scheduleDirty =
-    !scheduleSaving &&
-    scheduleEnabled &&
-    (!savedSchedule?.enabled ||
-      scheduleInterval !== (savedSchedule.intervalMinutes || 60) ||
-      scheduleInput !== JSON.stringify(savedSchedule.input || {}, null, 2))
-  const guard = useLeaveGuard(webhookDirty || scheduleDirty)
+  const guard = useLeaveGuard(webhookDirty)
   // The Recent Runs empty state sends the user to Try It rather than telling
   // them to go find it; the input is the only way to start a run from here.
   const testInputRef = React.useRef<HTMLInputElement>(null)
@@ -284,100 +262,7 @@ export function OverviewTab({
         </Card>
 
         {/* Schedule */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <Timer className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Schedule</CardTitle>
-            </div>
-            <CardDescription className="text-xs">
-              Run this agent automatically at a fixed interval
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="schedule-toggle">Enable schedule</Label>
-                <Switch
-                  id="schedule-toggle"
-                  checked={scheduleEnabled}
-                  onCheckedChange={async (checked: boolean) => {
-                    setScheduleEnabled(checked)
-                    if (!checked) {
-                      setScheduleSaving(true)
-                      try {
-                        await agentsApi.unschedule(agent.id)
-                        queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
-                        success('Unscheduled', 'Agent schedule removed.')
-                      } catch (err: any) {
-                        errorNotif('Failed', getApiErrorMessage(err, 'Failed to unschedule'))
-                        setScheduleEnabled(true)
-                      } finally {
-                        setScheduleSaving(false)
-                      }
-                    }
-                  }}
-                />
-              </div>
-              {scheduleEnabled && (
-                <>
-                  <div>
-                    <Label htmlFor="schedule-interval">Interval (minutes)</Label>
-                    <Input
-                      id="schedule-interval"
-                      type="number"
-                      min={1}
-                      value={scheduleInterval}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScheduleInterval(parseInt(e.target.value) || 1)}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="schedule-input">Input JSON</Label>
-                    <CodeEditor
-                      value={scheduleInput}
-                      onChange={(value) => setScheduleInput(value)}
-                      language="json"
-                      height="80px"
-                    />
-                  </div>
-                  <Button
-                    size="sm"
-                    disabled={scheduleSaving}
-                    onClick={async () => {
-                      setScheduleSaving(true)
-                      try {
-                        let parsedInput: any = {}
-                        try {
-                          parsedInput = JSON.parse(scheduleInput)
-                        } catch {
-                          errorNotif('Invalid JSON', 'Schedule input must be valid JSON')
-                          setScheduleSaving(false)
-                          return
-                        }
-                        await agentsApi.schedule(agent.id, scheduleInterval, parsedInput)
-                        queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
-                        success('Scheduled', `Agent will run every ${pluralized(Number(scheduleInterval), 'minute')}.`)
-                      } catch (err: any) {
-                        errorNotif('Failed', getApiErrorMessage(err, 'Failed to schedule'))
-                      } finally {
-                        setScheduleSaving(false)
-                      }
-                    }}
-                  >
-                    {scheduleSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                    Save schedule
-                  </Button>
-                  {agent.settings?.schedule?.enabled && (
-                    <p className="text-xs text-muted-foreground">
-                      Next run in ~{pluralized(agent.settings.schedule.intervalMinutes, 'minute')} from last execution
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <ScheduleCard agent={agent} />
       </div>
 
       {/* Recent Runs */}
@@ -429,6 +314,7 @@ export function OverviewTab({
                           {exec.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
                           {exec.status}
                         </Badge>
+                        <DeliveryNote outcome={exec.metadata?.channelDelivery} />
                       </TableCell>
                       <TableCell className="max-w-[320px]">
                         <ExecutionRouting nodeResults={exec.nodeResults} cardNames={cardNames} />
