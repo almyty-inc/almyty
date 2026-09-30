@@ -1,18 +1,32 @@
-# Versioning and Rollback
+# Versioning and rollback
 
-Every change to an agent (and to your tools, APIs, and gateways) is tracked
-automatically, so you can always see what changed and undo it. On the agent's
-**Overview** tab, the **Change history** shows each version (who changed it and
-when, expandable to the exact field diff). Below it, an **Audit log** records the
-full activity trail. Nothing to turn on.
+almyty keeps a record of every change to an agent, so you can always see who changed what and when, and put an earlier version back. The same goes for your tools, APIs and gateways. There is nothing to turn on.
 
 ![Change History and Audit Log on an agent: every change tracked, expandable to a diff, with version saves](/screenshots/versioning-history.png)
 
-## What's tracked
+## See what changed
 
-Created, configuration updated, tools changed, activated/deactivated, a version
-saved, a rollback, an invocation: each with the timestamp, the user, and what
-changed.
+Open the agent and stay on its **Overview** tab.
+
+- **Change history** lists each version: who changed it and when. Expand one to see exactly which settings changed.
+- **Audit log**, below it, records everything that happened to the agent: created, changed, activated or paused, a version saved, a rollback, a run.
+
+## Go back to an earlier version
+
+A workflow agent keeps a copy of its steps every time you save a change to them. The copies are numbered and listed under **Pipeline versions** on the **Overview** tab.
+
+![The Pipeline versions card with a Rollback on each snapshot](/screenshots/versioning.png)
+
+1. Find the version you want under **Pipeline versions**.
+2. Click **Rollback** and confirm.
+
+The agent's steps are replaced with that version, and the rollback is recorded in the audit log. Newer versions are never deleted, so you can go forward again at any time. Test the agent after a rollback to make sure it behaves as expected.
+
+An autonomous agent has no step copies to roll back to; its changes are in the **Change history** and the **Audit log** on the same tab.
+
+## For developers
+
+Audit log events:
 
 | Event | Description |
 |-------|-------------|
@@ -23,27 +37,4 @@ changed.
 | `rolled_back` | Pipeline was restored from a previous version |
 | `invoked` | Agent was executed |
 
-## Version snapshots and rollback
-
-A workflow agent keeps snapshots of its pipeline. Every time you save a change
-to the pipeline, the previous one is kept as a snapshot with an auto-incremented
-version number. They are listed on the agent's **Overview** tab under
-**Pipeline versions**. To take a snapshot with a changelog of your own, call
-`POST /agents/:id/versions` with `{ "changelog": "..." }`; the dashboard has no
-button for it.
-
-![The Pipeline versions card with a Rollback on each snapshot](/screenshots/versioning.png)
-
-To restore one, find it in the list and click **Rollback**, then confirm. The
-agent's pipeline is replaced with that snapshot, and the rollback itself is
-recorded in the audit log. Rolling back never deletes newer versions, so you can
-roll forward again at any time.
-
-An autonomous agent has no pipeline snapshots; its changes are in the **Change
-history** and the **Audit log** on the same tab.
-
-## Good practice
-
-- Before restructuring a pipeline, save a snapshot with a changelog, so there is always a named restore point.
-- Write a real changelog: it is what makes the history useful later.
-- Test the agent after a rollback to confirm the restored configuration behaves.
+To take a named snapshot with a changelog of your own, call `POST /agents/:id/versions` with `{ "changelog": "..." }`; the dashboard has no button for it. Doing this before restructuring a pipeline gives you a named restore point.

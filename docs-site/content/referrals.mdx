@@ -1,59 +1,51 @@
 # Referrals
 
-Invite other builders to almyty and both sides get free pro time. The program is built into the open-source platform: no external tracking, one httpOnly cookie, rewards applied as plan-expiry extensions.
+Invite people to almyty and you both get free Pro time. Share your personal link; when someone signs up with it they start with 30 days of Pro, and you earn more Pro days as they start using almyty and when they become a paying customer.
 
-## How it works
+## Share your link
 
-1. **Get your link.** Open **Settings → Billing → Referrals**. Every user gets one permanent 8-character code and a share link of the form:
+1. Open **Settings → Billing → Referrals**.
+2. Click **Copy** next to your link and send it to whoever you want to invite.
 
-   ```
-   https://app.example.com/r/AB3D7XKQ
-   ```
+Everyone has one permanent link. The same page shows how many people you **Invited**, how many **Qualified**, how many were **Rewarded**, your **Reward days**, and a list of **Your referrals** with their status and the days each earned you. It never shows who the people are.
 
-2. **Your invitee clicks it.** The link sets an attribution cookie (`almyty_ref`, httpOnly, 30 days) and redirects to the registration page. Attribution is last-touch: if they later click someone else's link, the newer code wins. Links of the form `/auth/register?ref=CODE` work too.
+## What you both get
 
-3. **They sign up.** The cookie is consumed at registration (single-use). If the referral is clean, their new organization starts with **30 days of pro** immediately.
+- **They get 30 days of Pro** as soon as they sign up with your link.
+- **You get 14 days of Pro** when their organization is up and running: it has at least one gateway and has completed at least one agent run.
+- **You get 30 more days** if their organization starts a paid plan. The free Pro trial does not count.
 
-4. **You get rewarded** as they become a real user:
-   - **+14 days** of pro when their org *activates*: created at least one gateway **and** completed at least one agent run.
-   - **+30 more days** if their org converts to a paid plan (an actual subscription; the free pro trial doesn't count).
+Rewards are checked every 10 minutes, so they arrive shortly after the milestone rather than instantly.
 
-Qualification is checked by a background sweep every 10 minutes, so rewards land shortly after the milestone, not instantly.
+**Good to know:**
 
-## Reward mechanics
+- Rewards extend how long your organization has Pro. There is no cash or credit.
+- You can earn at most 365 days in any 365-day period. Past that, a reward is cut down to what fits.
+- If your organization is on the free plan when a reward arrives, the days are saved and applied automatically once it is on Pro.
+- Enterprise organizations cannot take part, on either side.
+- If someone clicks several people's links, the last link they clicked counts. A link is remembered for 30 days.
 
-- Rewards extend your organization's plan expiry (`planExpiresAt`); there is no cash or credit ledger.
-- **Cap**: at most **365 reward days per rolling 365-day window** per referrer. Grants past the cap are trimmed (partial grants possible).
-- **Free-tier banking**: if your org is on the free plan when a reward lands, the days are banked (`accruedRewardDays`, visible in your stats) and applied automatically when your org is on pro.
-- **Enterprise orgs are excluded** on both sides: they can't create codes, can't be attributed as referrer or referee, and banked days are never applied to them.
+## When a referral is held for review
 
-Referral lifecycle: `pending`, then `qualified` (activation, +14d), then `rewarded` (paid conversion, +30d, terminal).
+Two things put a referral on hold: signing up with a throwaway email address, or signing up from the same internet address the link was made from (or as an earlier referral of yours). A held referral shows as **Pending review**. The new user gets no sign-up bonus and it earns you nothing until an operator clears it.
 
-## Abuse review
+## For developers
 
-Two signals flag a referral for review at signup:
+- Share links look like `https://app.example.com/r/AB3D7XKQ` (an 8-character code); `/auth/register?ref=CODE` works too.
+- The link sets an httpOnly attribution cookie, `almyty_ref`, for 30 days and redirects to registration. Attribution is last-touch; the cookie is consumed at registration.
+- The `/r/<code>` endpoint is rate-limited to 20 requests an hour per IP. Appending `?format=json` returns `{"attributed": true|false}` instead of a redirect.
+- Rewards extend the organization's `planExpiresAt`. Days banked on the free plan are `accruedRewardDays`; the total is `totalRewardDays`.
+- Referral statuses: `pending`, then `qualified` (activation, +14 days), then `rewarded` (paid conversion, +30 days, final). Held referrals are `pending_review`, flagged `disposable_email` or `same_ip`.
+- The same data is under `/referrals` in the [API reference](/api-reference/authentication).
 
-- **`disposable_email`**: the referee registered with a known throwaway-email domain.
-- **`same_ip`**: the referee registered from the same IP the code was created from, or the same IP as an earlier referral by the same referrer.
-
-A flagged referral is created but neutralized: the referee gets no signup bonus, and it never qualifies or rewards automatically. It shows as `pending_review` in your referral list and stats until an operator clears it.
-
-## Your referral data
-
-**Settings, Referrals** shows your code and share link, your funnel (invited, qualified, rewarded, pending review), your `totalRewardDays`, and banked `accruedRewardDays`. Your per-referral list carries statuses and reward days only, no referred-user PII. The same data is available programmatically under `/referrals` in the [API reference](/api-reference).
-
-The public endpoint behind `/r/<code>` links sets the attribution cookie and redirects to registration (rate-limited to 20 requests/hour per IP); appending `?format=json` returns `{"attributed": true|false}` instead of a redirect.
-
-## Configuration (self-hosting)
-
-All knobs are environment variables on the backend:
+**Configuration (self-hosting).** Environment variables on the backend:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `REFERRAL_REFEREE_DAYS` | `30` | referee's pro trial at signup |
-| `REFERRAL_TIER1_DAYS` | `14` | referrer reward on activation |
-| `REFERRAL_TIER2_DAYS` | `30` | referrer reward on paid conversion |
-| `REFERRAL_YEARLY_CAP_DAYS` | `365` | rolling-365-day cap on referrer rewards |
-| `REFERRAL_SWEEP_INTERVAL_MS` | `600000` | qualification sweep interval (10 min) |
+| `REFERRAL_REFEREE_DAYS` | `30` | the new user's Pro trial at signup |
+| `REFERRAL_TIER1_DAYS` | `14` | your reward on activation |
+| `REFERRAL_TIER2_DAYS` | `30` | your reward on paid conversion |
+| `REFERRAL_YEARLY_CAP_DAYS` | `365` | rolling 365-day cap on your rewards |
+| `REFERRAL_SWEEP_INTERVAL_MS` | `600000` | how often rewards are checked (10 minutes) |
 
-`FRONTEND_URL` is used to build share links and the post-attribution redirect.
+`FRONTEND_URL` is used to build share links and the redirect after attribution.

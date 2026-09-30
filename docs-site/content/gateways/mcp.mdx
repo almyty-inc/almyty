@@ -1,86 +1,80 @@
-# MCP Gateway
+# MCP gateway
 
-Expose your tools to any MCP-compatible client. An MCP gateway serves your tools over JSON-RPC 2.0 so Claude Code, Cursor, Windsurf, and VS Code Copilot can list and call them directly. almyty supports HTTP, SSE, and WebSocket transports.
+MCP (Model Context Protocol) is the common standard AI apps use to call tools. An MCP gateway gives AI apps such as Claude Code, Cursor and Claude Desktop one address where they find your tools and use them. Once it is connected, you can ask Claude "where is order NW-10428?" and it looks the order up in your system.
 
 ![MCP endpoints on the gateway Integrations tab](/screenshots/quickstart-mcp-endpoints.png)
 
 ## Create the gateway
 
-1. Open **Gateways** and click **Create gateway** (`/gateways/new`)
-2. Under **Protocol**, pick **MCP**
-3. Under **Tools**, pick a whole API or single tools (a draft can't be served until it is active)
-4. Name it; the address follows from the name (**Advanced** changes the path and who can use it)
-5. Click **Create gateway** and copy the access key: it is shown once, next to the Claude Code, Cursor and Claude Desktop setups
+1. Open **Gateways** and click **Create gateway**.
+2. Under **Protocol**, pick **MCP**.
+3. Under **Tools**, pick a whole API or single tools. A draft tool can't be offered until it is active.
+4. Give it a **Name**; its address follows from the name (**Advanced** changes the path and who can use it).
+5. Click **Create gateway**. The next page shows the gateway's access key once, next to ready-made setups for Claude Code, Cursor and Claude Desktop with the key already filled in. Copy the one you need now: the key is not shown again.
 
-On the gateway detail page, **Tool scoping** changes which tools it serves and the **Authentication** section its auth. The **Integrations** tab provides the client endpoints.
+On the gateway's page, **Tool scoping** changes which tools it offers, the **Authentication** section manages keys and sign-in, and the **Integrations** tab has its addresses and the **Quick setup** for each app.
 
 ![Assigning tools on the gateway Tool scoping tab](/screenshots/gateway-detail-tools.png)
 
-Your MCP endpoint follows this pattern:
+## Connect an AI app
+
+Pick your app in the setup shown after creating the gateway (or under **Quick setup** on the **Integrations** tab) and follow its one line of instructions: paste a command into a terminal for Claude Code, or a few lines into a settings file for Cursor or Claude Desktop. The app then lists the gateway's tools and calls them when they help.
+
+Need another key, for another person or app? Add one in the gateway's **Authentication** section with **Generate key**.
+
+![Claude client configured with an almyty gateway](/screenshots/quickstart-claude-config.png)
+
+## For developers
+
+The endpoint follows this pattern, and speaks MCP over HTTP (JSON-RPC 2.0 requests sent with `POST`):
 
 ```
 https://api.almyty.com/{org}/{gateway-slug}
 ```
 
-## Connect a client
+The **Integrations** tab also lists an SSE transport address (`/sse` under the endpoint) and a discovery address.
 
 ### Claude Code
 
 ```bash
-claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
+claude mcp add petstore --transport http https://api.almyty.com/acme/petstore \
+  --header "x-api-key: your-gateway-key"
 ```
-
-Pass your gateway key as an `x-api-key` header. The first key is shown once when the gateway is created; add more in the gateway's **Authentication** section.
 
 ### Claude Desktop
 
-Add to `claude_desktop_config.json`:
+Add to `claude_desktop_config.json` (Settings, Developer, Edit config), then restart Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "petstore": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://api.almyty.com/acme/petstore", "--header", "x-api-key:${ALMYTY_KEY}"],
+      "env": { "ALMYTY_KEY": "your-gateway-key" }
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to `.cursor/mcp.json` in your project, or `~/.cursor/mcp.json` for all of them:
 
 ```json
 {
   "mcpServers": {
     "petstore": {
       "url": "https://api.almyty.com/acme/petstore",
-      "headers": {
-        "x-api-key": "your-gateway-key"
-      }
+      "headers": { "x-api-key": "your-gateway-key" }
     }
   }
 }
 ```
 
-### Cursor / Windsurf
+Clients that only speak stdio can run the gateway through a local proxy: see the [MCP server CLI](/cli/mcp-server).
 
-Add to `.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "petstore": {
-      "url": "https://api.almyty.com/acme/petstore",
-      "headers": {
-        "x-api-key": "your-gateway-key"
-      }
-    }
-  }
-}
-```
-
-![Claude client configured with an almyty gateway](/screenshots/quickstart-claude-config.png)
-
-Once connected, the client calls `tools/list` and `tools/call` for you. You do not build those requests by hand.
-
-## Transport options
-
-| Transport | URL pattern | Use case |
-|-----------|-------------|----------|
-| **HTTP** | `POST /{org}/{slug}` | Standard request-response |
-| **SSE** | `GET /{org}/{slug}/sse` | Streaming, long-running tools |
-| **WebSocket** | `WS /{org}/{slug}/ws` | Bidirectional, real-time |
-
-## MCP tool schema
-
-Tools exposed through the gateway follow the MCP tool format:
+Once connected, the client calls `tools/list` and `tools/call` for you. Tools follow the MCP tool format:
 
 ```json
 {
@@ -97,18 +91,18 @@ Tools exposed through the gateway follow the MCP tool format:
 }
 ```
 
-## OAuth 2.1
+### OAuth 2.1
 
-MCP gateways with OAuth enabled expose discovery endpoints automatically:
+With an OAuth 2.0 auth method on the gateway, discovery endpoints are served automatically:
 
 ```
 https://api.almyty.com/acme/petstore/.well-known/oauth-authorization-server
 https://api.almyty.com/acme/petstore/.well-known/oauth-protected-resource
 ```
 
-On 401 responses, the gateway returns a `WWW-Authenticate` header linking to the protected resource metadata so MCP clients can start the OAuth flow automatically. See [Gateway Authentication](/gateways/authentication) for the full OAuth 2.1 walkthrough.
+A 401 carries a `WWW-Authenticate` header pointing at the protected resource metadata, so MCP clients start the OAuth flow by themselves. See [Gateway authentication](/gateways/authentication).
 
-## Error codes
+### Error codes
 
 MCP errors follow JSON-RPC 2.0:
 

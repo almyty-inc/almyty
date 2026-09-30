@@ -1,28 +1,30 @@
-# Onboard your workforce with SSO and SCIM
+# Sign in with your company accounts
 
-**Stack**: `Auth: SAML / OIDC single sign-on` · `Provisioning: SCIM` · `Mapping: directory groups → roles` · `Output: managed identity, automatic deprovisioning`
+For IT admins who want almyty behind the same company login as everything else. People sign in with their company account (from Okta, Microsoft Entra ID or another provider that supports SAML or OIDC, the two common single sign-on standards). With SCIM, a third standard, your directory adds new starters automatically and removes leavers the day they go, with no manual invites and no forgotten accounts.
 
-**Who it's for**: IT admins who want almyty behind the same identity provider as everything else, and users off it the day they leave.
-**What it does**: connects almyty to your IdP so people sign in with your directory (Okta, Entra ID, Google Workspace), and SCIM provisions and deprovisions accounts automatically, no manual invites, no orphaned access.
+Single sign-on needs the Business plan.
 
-> **Note**: SSO/SCIM is code-complete and covered by tests, but end-to-end verification needs a live IdP. Treat the steps below as the configuration path; confirm against your own IdP before relying on it in production.
+## What you need
 
-## Build it
+- The Business plan.
+- Admin access to your company's identity provider, and to your company's DNS (to prove you own your email domain).
 
-1. **Connect your IdP**: configure SAML or OIDC with your provider's metadata; users then sign in through your directory.
-2. **Enable SCIM provisioning**: point your IdP's SCIM connector at almyty so new hires get accounts and departures are removed automatically.
-3. **Map groups to roles**: a directory group becomes a [team role](/examples/multi-team-rbac), so access follows the org chart instead of manual assignment.
-4. **Enforce it**: require SSO for the org so shared logins and local passwords aren't an option.
-5. **Verify the trail**: sign-ins and provisioning events land in the [audit trail](/examples/audit-to-siem), tied to real directory identities.
+## How to build it
 
-## Make it yours
+1. **Prove your email domain.** Open **Settings**, then **Single sign-on**. Under **Email domains**, add your domain (for example `example.com`), add the TXT record it shows at your DNS provider, and click **Check DNS**. almyty only creates accounts for addresses on a domain you have proven.
+2. **Connect your identity provider.** On the same page, pick the **Protocol** and enter the details from your provider. Turn on **Just-in-time provisioning** if people should get an account the first time they sign in (they start as members). Turn on **Enable SSO login** and save.
+3. **Turn on provisioning.** Click **Generate SCIM token** on the same page and give it, with the **SCIM base URL** shown there, to your identity provider. New starters get an account; leavers lose access to your organization as soon as they are removed.
+4. **Teams follow your directory.** Groups sent from your directory become teams in almyty, with their members.
+5. **Check the record.** Sign-ins and changes are in the [audit trail](/examples/audit-to-siem), tied to real people from your directory.
 
-- Scope contractors to a group that maps to a time-boxed role.
-- Combine with [approval policies](/examples/approval-policies) so the approver is a real, current employee.
-- Deprovision instantly on offboarding, SCIM removes access without a ticket.
+Password sign-in stays available alongside single sign-on; almyty can't switch it off for your organization.
 
-**Uses**: `Enterprise` · `SSO` · `SCIM` · `Identity`
+Single sign-on is built and tested, but every identity provider is set up a little differently: try it with a test user before you rely on it.
+
+## For developers
+
+The settings as JSON, the sign-in endpoints and the SCIM operations are in [SSO and SCIM](/enterprise/sso).
 
 ## Related
 
-- [SSO](/enterprise/sso) · [Organizations](/organizations) · [Multi-team RBAC](/examples/multi-team-rbac) · [Compliance](/compliance)
+- [SSO](/enterprise/sso) · [Organizations](/organizations) · [Keep each team's assistants to that team](/examples/multi-team-rbac) · [Compliance](/compliance)

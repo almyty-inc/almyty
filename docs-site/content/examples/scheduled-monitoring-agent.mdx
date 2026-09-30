@@ -1,39 +1,32 @@
-# A scheduled agent that watches and reports
+# An assistant that checks and reports on a schedule
 
-**Goal:** every morning at 8:00, an agent checks last night's failed payments, groups them by
-reason, and drops a summary in your team's Slack — before anyone has opened a dashboard.
+An assistant that looks at something on a regular rhythm and tells you what it found. For example: once a day it checks the failed payments since its last run, groups them by reason, and sends a short summary to your team, before anyone has opened a dashboard.
 
-## 1. Build the agent
+For a full walk-through with screenshots, see [Nightly systems report](/examples/nightly-systems-report).
 
-Create an autonomous agent, attach the tools it needs — your payments API, a Slack tool — and
-give it the standing instruction: *pull failed charges since midnight, group by decline
-reason, and post a short digest; if none, say so.* Turn on **memory** so it can note
-recurring failures across days.
+## What you need
 
-## 2. Put it on a schedule
+- The system to check, connected as an API (for example your payments API).
+- Somewhere for the summary to go: a Slack or email tool, or an address of yours that receives it.
 
-On the agent's **Schedule** panel, set an interval — every day, or every few hours for
-tighter loops. almyty triggers the run on that cadence with no external cron; a missed
-window doesn't pile up.
+## How to build it
 
-![The schedule configuration for an agent](/screenshots/schedule-config.png)
+1. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. Pick the tools it needs under **Tools and APIs**, and write the standing job in **Instructions**: "Get the failed charges since the last run, group them by decline reason, and send a short summary. If there are none, say so." Turn on memory (**Remember between conversations**) so it notices failures that keep coming back.
+2. **Put it on a schedule.** On its **Overview** tab, in the **Schedule** card, turn on **Enable schedule**, set **Interval (minutes)** (1440 for once a day, 240 for every four hours) and click **Save schedule**. almyty starts each run itself; you need no other scheduler.
 
-## 3. Push the result out
+   ![The Schedule card on an agent](/screenshots/schedule-config.png)
 
-You have two ways to deliver. The agent can call a Slack (or email) tool directly as its last
-step, or you can register an **outbound webhook** so almyty POSTs the run result to an
-endpoint you own — a Slack incoming webhook, an internal service — on `agent.execution.completed`.
+3. **Send the result out.** Either give it a Slack or email tool and tell it to send the summary as its last step, or paste an address into the **Webhook** card and click **Save**: when a run finishes, almyty sends the run's result there, and your service passes it on. The webhook sends almyty's own format, so a Slack "incoming webhook" address can't take it directly.
 
-![Configuring an outbound completion webhook](/screenshots/webhook-config.png)
+   ![The Webhook card on an agent](/screenshots/webhook-config.png)
 
-## 4. Let it run
+4. **Let it run.** Each scheduled run is an ordinary run: it is on the **Runs** tab and in the audit trail, it follows the same rules and budgets, and you can open any past run to see exactly what it checked and sent.
 
-From then on the digest arrives on schedule. Because the run is a normal agent run, it's in
-the audit log, it respects the same constraints and budgets, and you can open any past run to
-see exactly what it queried and sent.
+The same pattern covers uptime checks, nightly reports, service-level alerts and data freshness checks: anything that is "look at X regularly and tell someone".
 
-The same pattern covers uptime checks, nightly report generation, SLA-breach alerts, and
-data-freshness monitors — anything that's "look at X on a cadence and tell someone."
+## For developers
+
+The webhook is a `POST` with a JSON body: `event` (`agent.execution.completed`), `timestamp`, `agent` (`id`, `name`) and `execution` (`id`, `status`, `output`, `executionTime`, `totalCost`, `totalTokens`, `error`). See [Webhooks](/agents/webhooks).
 
 ## Related
 

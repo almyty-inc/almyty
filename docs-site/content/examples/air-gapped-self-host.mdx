@@ -1,31 +1,36 @@
-# Air-gapped, self-hosted agents
+# Run everything inside your own network
 
-**Stack**: `Deploy: Docker Compose / Kubernetes (your infra)` · `Models: local (Ollama, vLLM)` · `Secrets: your vault` · `State: your Postgres` · `Output: agents, nothing leaves the network`
+For teams whose data must never leave the building: patient records, case files, trading positions. You run almyty on your own servers and point it at an AI model that also runs on your own hardware, so assistants do their work without a single call leaving your network.
 
-**Who it's for**: teams handling records that legally cannot leave the network, patient data, case files, trading positions.
-**What it does**: runs the whole platform on your own infrastructure against a local model, so agents work end to end without a single call crossing the boundary. Because the core is open source (Apache-2.0), this is configuration, not a special edition, the hosted service runs the same code.
+This is the same open-source product as the hosted service, set up on your side. It is a job for your IT or platform team.
 
-## Build it
+## What you need
 
-1. **Self-host the platform** with Docker Compose (single box) or the Kustomize manifests in `k8s/` (Kubernetes). Postgres and object store are yours; no telemetry leaves the cluster.
+- A server or cluster you run (one machine is enough to start).
+- An AI model served inside your network, for example with Ollama, or any server that speaks the OpenAI format.
+- Someone comfortable with Docker or Kubernetes for the install.
+
+## How to build it
+
+1. **Install almyty on your servers.** Your IT team follows [Self-hosting](/self-hosting): one machine with Docker Compose, or a Kubernetes cluster. The database and files stay on your machines.
 
    ![The Compose file for a self-hosted deployment](/screenshots/self-hosting-compose.png)
 
-2. **Point at a local model**: under **Credentials → Connect a provider**, connect a server you run inside the network: Ollama (pick **Your own server**), or vLLM and any other OpenAI-compatible endpoint as a custom provider. Inference stays on your hardware.
+2. **Connect your own model.** In almyty, open **Credentials** and click **Connect a provider**. For Ollama, pick it and choose **Your own server**; for any other model server that speaks the OpenAI format, pick **Custom** and give its address. The AI runs on your hardware.
 
-   ![Adding a local, OpenAI-compatible model](/screenshots/credentials-connect-provider.png)
+   ![Connecting a model provider](/screenshots/credentials-connect-provider.png)
 
-3. **Keep secrets and data in place**: keys in your own [Credentials](/credentials) vault, memory in your Postgres, tools executed by a [runner](/runner) on machines you control.
+3. **Keep keys and data in place.** Passwords and keys for your systems go in [Credentials](/credentials), stored encrypted in your own database. Memory stays in your database too. Work that has to happen on a particular machine goes through a [runner](/runner) you install there.
 
-   ![The credentials vault, local](/screenshots/credentials-vault.png)
+   ![The Credentials page](/screenshots/credentials-vault.png)
 
-## Make it yours
+Everything else works the same inside your walls: [checks, approvals and the record of every action](/examples/governed-refund-agent).
 
-- The same governance, [verify gates, approvals, audit](/examples/governed-refund-agent), applies unchanged, just inside your walls.
-- Use a runner to reach on-prem systems the cluster can't ([Give an agent a machine](/examples/expose-any-machine)).
-- Nothing has to cross the boundary: model calls, tool calls, secrets, and state all stay internal.
+## For developers
 
-**Uses**: `Enterprise` · `Self-host` · `Compliance`
+- By default almyty refuses model and tool addresses on a private network. To allow a model server inside your network, set `LLM_ALLOW_PRIVATE_URLS=true` (and `OLLAMA_ALLOW_PRIVATE_URLS=true` for Ollama) on the API.
+- almyty fetches model prices from a public price feed. With no internet access, set `MODEL_PRICE_FEED_DISABLED=true`; prices then show as unknown unless you set them on each model card.
+- Read the `ENCRYPTION_KEY` and outbound email sections of [Self-hosting](/self-hosting) before storing real data.
 
 ## Related
 

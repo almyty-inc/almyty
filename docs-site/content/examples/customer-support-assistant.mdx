@@ -1,0 +1,145 @@
+# Customer support assistant
+
+Build one assistant that answers your customers on your website, on WhatsApp and by email. It looks up their orders in your own order system, refunds small amounts on its own, and asks a manager before it refunds anything over $500.
+
+This guide builds it for Northwind, a shop that sells coffee equipment. Every step says where to click and what you will see. It takes about 20 minutes, and you do not need to write any code.
+
+**What you need**
+
+- An almyty account.
+- A key for an AI model, for example from OpenAI. almyty uses it to run your assistant, and you pay the model maker for what it uses.
+- The description of your order system's API. An API is the way one piece of software talks to another; most order, shop and helpdesk systems have one, and its description is a file (or a link) that lists what the system can do. Your IT team or the system's settings page has it, often under a name like "OpenAPI" or "Swagger".
+- For WhatsApp: a Twilio account with a WhatsApp number. For email: a Resend account with a receiving address. You can add these at the end, or skip them.
+
+## 1. Connect an AI model
+
+In the sidebar, open **Models** and click **Connect a provider**. (Later you will also find your connections under **Credentials**.) Pick **OpenAI** (or the model maker you use), paste your key into **API key** and click **Connect**.
+
+almyty checks the key and lists the models it gives you, with their prices. Leave them all ticked and click **Done**.
+
+![OpenAI connected, with its four models and their prices](/screenshots/guides/support-1-connect-model.png)
+
+You only do this once. Every assistant in your organization can use these models, and you can switch an assistant to another model at any time.
+
+## 2. Connect your order system
+
+In the sidebar, open **APIs** and click **Connect an API**. Pick **OpenAPI / Swagger**. Under **Description**, paste the link to your order system's description on **Link**, or pick **File** and upload the file.
+
+![The order system's description, ready to connect](/screenshots/guides/support-2-connect-orders.png)
+
+Click **Connect API**. almyty reads the description and works out what your system can do. Each thing becomes a tool your assistant can use: here "Get an order by number", "Track the shipment for an order", "Issue a refund for an order" and two more.
+
+![Northwind Orders, with the five things it can do](/screenshots/guides/support-3-orders-tools.png)
+
+If your order system needs a key to be called, click **Add a key** on this page and paste it. almyty keeps it locked away and sends it only to your order system.
+
+## 3. Create the assistant
+
+In the sidebar, open **Agents** and click **Create agent**. An agent is what almyty calls an assistant that does work for you. At the top, pick **Autonomous**: you tell it the goal in plain words and it works out the steps. (**Workflow** is for when you want to draw every step yourself.)
+
+- At the top, click the name **New agent** and replace it with `Customer support assistant`.
+- Under **Work mode**, open **Model** and pick a model, for example **gpt-4o**. The list shows each model's price. You can come back and pick another model later without changing anything else. (The other work modes let several models share the work, for example a cheap one that answers first and a stronger one that checks it.)
+- Under **Personality & style**, say how it should sound: `Friendly, brief and specific. Apologise once at most.`
+- Under **Instructions**, say what it should do and where its limits are:
+
+> You answer Northwind customers about their orders. Always look the order up before you answer. You may refund up to $500 yourself. For any refund over $500, ask for approval first and tell the customer a person will confirm within one business day.
+
+![A new autonomous agent with its model, personality and instructions](/screenshots/guides/support-4-new-agent.png)
+
+## 4. Pick what it may use
+
+Scroll down to **Capabilities**. Under **Tools and APIs**, tick **All tools** next to **Northwind Orders**. The assistant may use those tools and nothing else: anything not ticked here is refused.
+
+![The order system's tools ticked under Capabilities](/screenshots/guides/support-5-model-and-tools.png)
+
+Click **Save** at the top right.
+
+## 5. Turn it on and try it
+
+Click the arrow at the top left to go back to **Agents**, and open **Customer support assistant**. A new assistant starts as a draft: click **Activate** at the top.
+
+![The assistant switched on, with Try it below](/screenshots/guides/support-6-activate.png)
+
+On the **Overview** tab, find **Try it**. Type a question a customer would ask, like `Where is order NW-10428? It was due last week.`, and press Enter.
+
+![The assistant looked the order up and answered](/screenshots/guides/support-7-try-order.png)
+
+The assistant looked the order up in your system and answered with the carrier, where the parcel is and the new delivery date. Each question you try is kept under the **Runs** tab, with every step it took.
+
+## 6. See a big refund wait for approval
+
+Try a refund over the limit: `Brightway Logistics wants a refund of $820 on order NW-44120, it arrived defective.`
+
+Because your instructions say so, the assistant does not refund it. It stops and asks for approval. Open **Approvals** in the sidebar: the request is there, with its reason. Owners and admins of your organization also get a notification.
+
+![The $820 refund waiting on the Approvals page](/screenshots/guides/support-8-refund-waits.png)
+
+Click **Approve**, add a note if you like (it is saved with the decision) and click **Approve** again. The assistant carries on from where it stopped. **Reject** would cancel it instead. A request nobody decides expires after 24 hours.
+
+![Approving the refund with a note](/screenshots/guides/support-9-approve.png)
+
+On the Business plan you can go further with **Settings → Approvals**: rules for the whole organization, such as "refunds over $500 need a support lead" or "two people must approve". See [Approval rules](/enterprise/approval-policies).
+
+## 7. Put it on your website
+
+Go back to the assistant and open its **Channels** tab. A channel is a place where people can talk to the assistant. Click **Add channel** to see them all.
+
+![Every place the assistant can be put](/screenshots/guides/support-10-add-channel.png)
+
+**A chat page of its own.** Pick **Web chat** and click **Publish**. The page shows the link people open, like `customer-support-assistant.almyty.app`, and **Open it** to see it yourself. You can also put it on your own domain from this page.
+
+![The web chat, published and live](/screenshots/guides/support-11-web-chat.png)
+
+**A chat bubble on your website.** Back on **Channels**, click **Add channel**, pick **Website widget** and click **Publish**. Under **Add it to your site** you get one line to copy (the copy button is next to it). Send it to whoever looks after your website: it goes on every page that should show the chat. Under **Allowed sites**, add your website's address so only your site can show it. You also choose where the bubble sits and see a preview.
+
+![The line to add to your website, and a preview of the bubble](/screenshots/guides/support-12-widget.png)
+
+## 8. Add WhatsApp and email
+
+**WhatsApp.** On **Channels**, click **Add channel** and pick **WhatsApp (Via Twilio)**. Under **Keys**, click **Create one here** and fill in three things from your Twilio account: the **Account SID**, the **Auth token** and your **WhatsApp sender** number (written like `whatsapp:+15551234567`). **Get a key** opens the right page at Twilio. Click **Save**, then **Publish**. almyty tells Twilio where to send your WhatsApp messages for you. If you use Meta's WhatsApp directly instead of Twilio, pick **WhatsApp (Via Meta Cloud)**.
+
+![Adding the Twilio keys for WhatsApp](/screenshots/guides/support-13-whatsapp.png)
+
+**Email.** Pick **Email** on **Add channel**. Under **Keys**, click **Create one here** and paste your Resend **API key**. Then, in your Resend account, add the **Callback URL** shown on this page as a webhook for received email (Resend → Webhooks → Add endpoint). Click **Save**, then **Publish**. Mail sent to your receiving address is now answered by the assistant.
+
+![Adding the Resend key for email](/screenshots/guides/support-14-email.png)
+
+Every key you add here is kept on **Credentials** with your other keys, locked away. You can see who may use each one and replace it there.
+
+## 9. Name, greeting and spending limits
+
+On the **Channels** tab, click **Branding and visitor rules**. What you set here applies to every channel of the assistant:
+
+- **Name people see** (for example `Northwind Help`), **Brand color**, **Greeting** and up to four **Suggested prompts**, like "Where is my order?".
+- **Who can use it**: **Anyone with the link** suits a public support chat.
+- Under **Advanced**, **What it may cost**: a spend limit for each answer (**Spend limit per run**), **per day** and **per month**, and how many messages one visitor may send an hour. When a limit is reached, visitors are told to come back later, and you are notified. Here the daily limit is set to 20.
+
+![Spend limits and message limits for visitors](/screenshots/guides/support-15-branding.png)
+
+Click **Save**.
+
+## 10. What your customers see
+
+Open the web chat's link. Customers see your name and greeting, ask their question and get an answer from your order system. A line under the message box tells them they are talking to an AI assistant.
+
+![A customer asking about a late order in the web chat](/screenshots/guides/support-16-customer-view.png)
+
+## Keep an eye on it
+
+- **Runs** on the assistant shows every answer it gave: what it looked up, what it answered and what it cost.
+- **Analytics** in the sidebar shows usage and spending across all your assistants.
+- **Approvals** shows what is waiting for a person.
+- To change what it says, click **Edit**, change its **Instructions** and **Save**. Every change is recorded under **Change history** on the **Overview** tab.
+
+## For developers
+
+- The walk-through above is automated in `scripts/demo-seed/guides.mjs support`, which drives the same clicks on the local demo stack and takes these screenshots.
+- The approval is the assistant's built-in `request_approval` tool; the run pauses in `waiting_approval` until someone decides. See [Approvals](/approvals).
+- The same assistant can be called from your own code through its OpenAI-compatible endpoint, shown under **Integration** on its **Overview** tab. See the [OpenAI-compatible API](/api-reference/openai-compatible).
+- Channel keys, callback addresses and what publishing checks: [Channels](/channels) and [Chat apps](/interfaces).
+
+## Related
+
+- [Turn support tickets into drafted replies](/examples/support-ticket-triage)
+- [A refund assistant with extra checks](/examples/governed-refund-agent)
+- [Approvals](/approvals) and [Approval rules](/enterprise/approval-policies)

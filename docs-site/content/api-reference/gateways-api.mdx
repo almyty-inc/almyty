@@ -1,6 +1,6 @@
 # Gateways API
 
-> This is the HTTP API reference. For UI walkthroughs, see [Getting Started](/) and the feature guides above.
+This page is for developers who want to manage gateways from their own code. A gateway is a published set of tools with its own address and keys, which AI assistants and coding tools connect to. For example, a setup script can create a gateway for a new team and hand them its key. In the app, gateways live under **Gateways**; see [Gateways](/gateways).
 
 ![Gateway detail in the UI](/screenshots/gateway-detail.png)
 
@@ -27,7 +27,7 @@ REST API reference for managing gateways, tool assignments, and authentication.
 | `GET` | `/gateways/:id/auth/api-keys` | List API keys |
 | `DELETE` | `/gateways/:id/auth/api-keys/:keyId` | Revoke API key |
 
-## Create a Gateway
+## Create a gateway
 
 ```bash
 curl -X POST https://api.almyty.com/gateways \
@@ -69,7 +69,7 @@ curl -X POST https://api.almyty.com/gateways \
 }
 ```
 
-## Bulk Assign Tools
+## Bulk assign tools
 
 ```bash
 curl -X POST https://api.almyty.com/gateways/{id}/tools/bulk \
@@ -80,7 +80,7 @@ curl -X POST https://api.almyty.com/gateways/{id}/tools/bulk \
   }'
 ```
 
-## Add Authentication
+## Add authentication
 
 ```bash
 curl -X POST https://api.almyty.com/gateways/{id}/auth \
@@ -99,7 +99,7 @@ Auth types: `none`, `api_key`, `bearer_token`, `basic_auth`, `jwt`, `oauth2`.
 
 See [Gateway Authentication](/gateways/authentication) for detailed docs on each type.
 
-## Generate API Key
+## Generate API key
 
 ```bash
 curl -X POST https://api.almyty.com/gateways/{id}/auth/api-keys \
@@ -127,7 +127,7 @@ Response (key shown once):
 }
 ```
 
-## Gateway Endpoint URLs
+## Gateway endpoint URLs
 
 After creation, the gateway is accessible at:
 

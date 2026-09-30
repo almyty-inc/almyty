@@ -1,27 +1,28 @@
-# Triage and label GitHub issues
+# Sort and label GitHub issues
 
-**Stack**: `Trigger: schedule (poll) or GitHub webhook → agent API` · `Models: your choice` · `Tools: GitHub API or @octokit/rest (npm)` · `Mode: single agent + constraints` · `Memory: project` · `Output: labels, assignee, dedup comment`
+For maintainers whose issue list has got out of hand. The assistant reads each new issue, labels it (bug, feature, question, needs steps to reproduce), points out likely duplicates, suggests who should look at it, and asks for reproduction steps when a bug report has none.
 
-**Who it's for**: maintainers whose issue tracker is a swamp.
-**What it does**: reads each new issue, labels it (bug / feature / question / needs-repro), links likely duplicates, routes it to the right area owner, and asks for a reproduction when a bug report is missing one.
+## What you need
 
-## Build it
+- Your GitHub repository and a GitHub token that may read issues, add labels and comment. Give the token nothing more: it is what really limits what the assistant can do.
 
-1. **Give it GitHub.** Either *Connect an API* against the GitHub REST/GraphQL schema, or add the `@octokit/rest` npm package as an [SDK tool](/tools/sdk-tools), both give typed tools for issues, labels, and comments.
-2. **Create the agent** with your triage rules: *label by type and area, link duplicates, request a repro for bugs without steps.*
-3. **Add constraints**: *never close an issue; never assign core-team-only labels*, so it can organize without overstepping.
-4. **Turn on project memory** so it recognizes the same bug reported five different ways.
-5. **Let it act**: the agent applies labels, sets an assignee, and posts a short triage comment via the GitHub tools.
-6. **Trigger it**: run it on a schedule to sweep new issues, or have a GitHub webhook call the agent's API on `issues.opened`.
+## How to build it
 
-## Make it yours
+1. **Connect GitHub.** Open **APIs**, click **Connect an API**, pick **SDK / npm** and add GitHub's official package, `@octokit/rest`. Then, under **Tools**, **Create tool**, **SDK / npm package**, make a tool for each thing it should do: list issues, add labels, comment. Keep the token in [Credentials](/credentials).
+2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write your rules: "Label by type and area, link duplicates, and ask for steps to reproduce when a bug has none." Pick the GitHub tools under **Tools and APIs**.
+3. **Add firm rules.** On its **Constraints** tab, add "Never close an issue" and "Never use the core-team-only labels".
+4. **Let it remember.** Turn on **Remember between conversations** and set **Whose memory** to **This agent's own**, so it recognises the same bug reported five different ways.
+5. **Run it regularly.** On its **Overview** tab, turn on **Schedule** and set how often it sweeps new issues, for example every 60 minutes.
 
-- Add a repo-search tool so it can link the PR or commit that likely fixed a regression.
-- Escalate suspected security reports to a private channel instead of labeling in the open.
-- Promote a good triage run to a [skill](/gateways/skills) so other repos reuse the rubric.
+## Ideas
 
-**Uses**: `DevOps` · `GitHub` · `Constraints` · `Memory`
+- Send suspected security reports to a private channel instead of labelling them in public.
+- Turn a good triage run into a skill (**Promote to skill** on the run) so other repositories reuse the same rules.
+
+## For developers
+
+To react the moment an issue opens instead of on a schedule, have a GitHub Action call the agent's endpoint shown in the **Integration** card on its **Overview** tab. See the [OpenAI-compatible API](/api-reference/openai-compatible).
 
 ## Related
 
-- [SDK tools](/tools/sdk-tools) · [Autonomous agents](/agents/autonomous) · [Connect an API](/tools)
+- [SDK tools](/tools/sdk-tools) · [Autonomous agents](/agents/autonomous) · [Scheduling](/agents/scheduling)

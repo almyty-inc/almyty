@@ -1,6 +1,6 @@
 # Providers API
 
-> This is the HTTP API reference. For UI walkthroughs, see [Getting Started](/) and the feature guides above.
+This page is for developers who want to connect AI model providers from their own code. A provider is a company whose AI models you use (for example OpenAI, Anthropic or Mistral), connected once with your own key. For example, a setup script for a new organization can connect its provider keys in one call. In the app, this is **Models → Connect a provider**; see [Connect a provider](/llm-providers).
 
 ![Models page, with connected providers and their models](/screenshots/models.png)
 
@@ -89,9 +89,9 @@ curl -X PATCH https://api.almyty.com/llm-providers/7c1e... \
 ```
 
 A model the connection does not offer reads `allowed: false` and `selectable: false` on `GET /models`, the router never plans it, and a chat call that names it through this connection answers `400` with `MODEL_NOT_ALLOWED` before anything reaches the provider. A call that names no model uses the connection's default model when it is offered, else the best offered one. Changing these fields spends no key check. A change that would take away a model an agent uses is refused with `409` and `MODEL_IN_USE`; the body names the `models`, the `agents` the caller can see (`{ id, name }`) and a count of `otherAgents`, and nothing is saved. A rename changes the name of the key the connection made for itself too.
-## Add a Provider
+## Add a provider
 
-`type` picks the vendor, and everything else about the connection — the key, the base URL, the default call parameters — lives under `configuration`.
+`type` picks the vendor, and everything else about the connection (the key, the base URL, the default call parameters) lives under `configuration`.
 
 ```bash
 curl -X POST https://api.almyty.com/llm-providers \
@@ -114,8 +114,8 @@ curl -X POST https://api.almyty.com/llm-providers \
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | string | Yes | Display name, max 100 characters |
-| `type` | string | Yes | Vendor key. One of the values `GET /llm-providers/provider-types` returns — `openai`, `anthropic`, `google`, `mistral`, `ollama`, `azure_openai`, `aws_bedrock`, `custom`, and the rest. An unknown value is rejected. |
-| `configuration` | object | Yes | Connection and default call settings — see below |
+| `type` | string | Yes | Vendor key. One of the values `GET /llm-providers/provider-types` returns: `openai`, `anthropic`, `google`, `mistral`, `ollama`, `azure_openai`, `aws_bedrock`, `custom`, and the rest. An unknown value is rejected. |
+| `configuration` | object | Yes | Connection and default call settings; see below |
 | `description` | string | No | Max 1000 characters |
 | `credentialId` | uuid | No | Point at an existing connection instead of pasting `configuration.apiKey`. `null` clears the reference |
 | `usageCredentialId` | uuid | No | Connection holding the admin key for the vendor's usage/cost API |
@@ -174,7 +174,7 @@ The provider comes back with its secrets stripped: `configuration` is reduced to
 
 `status` is one of `active`, `inactive`, `error`, or `maintenance`.
 
-## Test Connection
+## Test connection
 
 Verify a saved provider is configured correctly. The platform makes one short real call, using the provider's configured model or, when it has none, whatever the vendor currently serves:
 
@@ -207,7 +207,7 @@ curl -X POST https://api.almyty.com/llm-providers/test-connection \
 
 That returns `{ok, latencyMs, modelCount}`. Ollama is keyless, so `apiKey` may be omitted for it.
 
-## Send a Chat Message
+## Send a chat message
 
 The body is a message list, not a single string:
 
@@ -227,7 +227,7 @@ curl -X POST https://api.almyty.com/llm-providers/{id}/chat \
 
 Sessions maintain conversation history. Omit `sessionId` for one-off messages.
 
-## Supported Providers
+## Supported providers
 
 Which vendors almyty can call is registry data, not a list frozen in these docs, and which *models* are usable is a property of your organization's catalog rather than of the platform. Three endpoints answer it live:
 

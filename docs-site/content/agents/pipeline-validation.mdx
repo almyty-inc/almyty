@@ -1,34 +1,27 @@
-# Pipeline Validation
+# Pipeline validation
 
-A workflow agent's graph is validated on the server every time it is saved.
-Validation is all-or-nothing: the first problem it finds is refused with a 400,
-and the agent is not written. There is no "saved with warnings" state — an
-invalid graph cannot be stored, as a draft or otherwise.
+When you save a workflow agent, almyty checks that the steps you drew make sense: that there is a start and an end, that every step is connected, and that each step has what it needs to run. This page explains what is checked, what a refusal looks like, and how to fix the common ones.
+
+The check happens every time the graph is saved. It is all-or-nothing: the first problem found is refused and the agent is not written. There is no "saved with warnings" state: an invalid graph cannot be stored, as a draft or otherwise.
 
 ![The agent builder canvas](/screenshots/agent-builder.png)
 
-## In the UI
+## In the builder
 
-The builder runs a short list of its own checks as you work, and shows them in a
-red banner above the canvas: the agent needs a name, the pipeline needs an Input
-node and an Output node, and every Model call node needs a provider, a routing
-policy or a role. **Save** stays disabled until that banner is empty.
+While you work, the builder lists what is left to do on one line under the toolbar, starting with **To finish:**. On an untouched draft it reads as a hint; once you have edited a field or pressed **Save**, the same items turn red. An item about a particular step outlines that step in red on the canvas, and clicking the item selects it. **Save** stays disabled until the line is empty.
 
-That list is not the server's. None of the rules below about edges — a
-Condition's two branches, a Merge's two inputs, a Parallel's two outputs — and
-none of the per-node config rules are checked before the request goes out, and
-the canvas gives no sign: nodes keep their normal border and edges have no
-warning markers. You draw whatever you like, press Save, and the first you hear
-of a problem is a toast carrying the one message the server returned.
+The builder checks that the agent has a name, exactly one Input step and an Output step; that each Model call has a model; that a Condition has a True path and a False path; that a Merge has at least two steps going in and a Parallel at least two going out; that a Tool call has a tool, a Sub-agent an agent, and a Verify step at least one checker with a model; that no steps loop back on each other; and that every step is connected.
 
-The message names the node id, so:
+That list is not the server's. The server also refuses a Model call with no prompt, a Condition or Transform with no expression, a Loop with no list to read, a Decision without a valid question, and two Output steps that could both run in one execution. The builder does not check those before saving, and the canvas gives no sign of them: nodes keep their normal border and edges have no warning markers. You press **Save**, and the first you hear of the problem is a message carrying the one reason the server gave.
+
+The message names the step's id, so:
 
 1. Press **Save** in the builder top bar
-2. Read the node id in the toast
-3. Find that node on the canvas, open its config panel, and fix what the message asks for
-4. Save again — and expect one message at a time, since validation stops at the first failure
+2. Read the step id in the message
+3. Find that step on the canvas, open its settings, and fix what the message asks for
+4. Save again, and expect one message at a time, since validation stops at the first failure
 
-## What is Validated
+## What is validated
 
 ### Structure
 
@@ -39,10 +32,10 @@ The message names the node id, so:
 | **One Output per run** | Two Output nodes that could both run in the same execution are refused: which one became the answer would come down to the order the nodes are stored in. Put them on opposite branches of a Condition, or merge them into one |
 | **Unique node ids** | Two nodes may not share an id |
 | **Edges reference real nodes** | Every edge's source and target must be a node in the graph |
-| **No cycles** | The graph must be a DAG |
+| **No cycles** | The graph must not loop back on itself |
 | **An Output is reachable** | At least one Output node must be reachable from the Input node by following edges |
 
-### Per Node Type
+### Per step type
 
 | Node Type | Requirement |
 |-----------|-------------|
@@ -57,15 +50,54 @@ The message names the node id, so:
 | **Verify** | A non-empty `checkers` array, each entry with a `providerId` or a `roleKey`; `policy`, if set, must be `all_pass`, `majority` or `any_fail_blocks` |
 | **Decision** | A `data.question` the decide contract accepts (a choice or score question with exactly one abstain option; a boolean question is refused), and `thresholds`, if set, only for declared options |
 
+(The LLM Call step is labelled **Model call** in the builder.)
+
 Nothing else is checked. In particular, a save succeeds when an LLM Call node
 has no provider, an Output node has no mapping, a `toolId` names a tool that no
 longer exists, or a template expression points at a node id that is not in the
 graph. Those surface at run time instead, on the node that hit them.
 
-## What a Refusal Looks Like
+## What a refusal looks like
 
-The validator raises one message, not a list. The response body is the standard
-error envelope:
+The validator raises one message, not a list. For example: `Condition node 'cond_1' must have exactly 2 outgoing edges, found 3`.
+
+## When it runs
+
+Whenever a workflow agent's steps are saved (on create and on update), and again when the agent is activated. Autonomous agents have no graph, so it is skipped for them, and a save that carries no steps at all is not checked either.
+
+## Common refusals
+
+### A Condition with three outgoing connections
+
+"On true, do A and B" is a reasonable thing to draw, but a Condition must have exactly two outgoing connections, one labelled `true` and one `false`. Send the `true` branch into a **Parallel** step and fan out from there.
+
+### A Merge or Parallel with too few connections
+
+A Merge needs two or more incoming connections and a Parallel two or more outgoing ones. A step still being wired up fails this until the second connection is drawn.
+
+### A disconnected step
+
+Every node must be reachable from the Input node. A step with no connections is refused:
+
+```
+Node(s) 'llm_2' are not reachable from the input node 'input_1'. Connect them
+with an edge, or delete them — an unconnected node still runs, in the first
+layer, before anything else.
+```
+
+The refusal exists because such a step is not harmless. A run starts with every step that has nothing leading into it, so a stray Model call left on the canvas runs first, and costs money, while contributing nothing.
+
+### A loop in the graph
+
+The graph must not loop back on itself. If A depends on B and B depends on A, the save is refused, and the message names the steps involved: `Pipeline contains a cycle through node(s) 'llm_1', 'llm_2'`. A **Loop** step does not help here: it reads a list in a single pass rather than running a branch repeatedly.
+
+### A template expression that points nowhere
+
+Not caught. `{{nodes.nonexistent.output}}` saves, runs, and resolves to an empty string, so the prompt goes out with a hole in it and the model answers anyway. Use the builder's **Test** panel to see what each expression resolved to before activating.
+
+## For developers
+
+A refusal is an HTTP 400 in the standard error envelope:
 
 ```json
 {
@@ -81,54 +113,4 @@ error envelope:
 }
 ```
 
-## When It Runs
-
-Whenever a workflow agent's pipeline is written — on create and on update — and
-again when the agent is activated. Autonomous agents have no graph, so it is
-skipped for them, and a create or update that carries no pipeline at all is not
-validated either.
-
-## Common Refusals
-
-### A Condition node with three outgoing edges
-
-"On true, do A and B" is a reasonable thing to draw, and the canvas lets you
-draw it — but a Condition node must have exactly two outgoing edges, one
-labelled `true` and one `false`. Send the `true` branch into a **Parallel**
-node and fan out from there.
-
-### A Merge or Parallel node with too few edges
-
-A Merge node needs two or more incoming edges and a Parallel node two or more
-outgoing ones. A node still being wired up fails this until the second edge is
-drawn.
-
-### A disconnected node
-
-Every node must be reachable from the Input node. A node with no edges is
-refused:
-
-```
-Node(s) 'llm_2' are not reachable from the input node 'input_1'. Connect them
-with an edge, or delete them — an unconnected node still runs, in the first
-layer, before anything else.
-```
-
-The refusal exists because such a node is not inert. The engine starts by
-running every node that has no incoming edge, so a stray LLM Call node left on
-the canvas runs first, and bills for it, while contributing nothing — no edge
-carries its output anywhere. The only evidence was the invoice.
-
-### A cycle
-
-The graph must be acyclic. If A depends on B and B depends on A, the save is
-refused, and the message names the nodes the loop runs through: `Pipeline contains
-a cycle through node(s) 'llm_1', 'llm_2'`. A **Loop** node does not help here —
-it resolves an array in a single pass rather than running a branch repeatedly.
-
-### A template expression that points nowhere
-
-Not caught. `{{nodes.nonexistent.output}}` saves, runs, and resolves to an
-empty string, so the prompt goes out with a hole in it and the model answers
-anyway. Use the builder's **Test** panel to see what each expression resolved
-to before activating.
+Validation runs on `POST /agents` and `PATCH /agents/:id` when the body carries a `pipeline`, and on activation.

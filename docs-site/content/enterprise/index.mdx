@@ -1,70 +1,67 @@
 # Enterprise
 
-almyty is open core. Everything covered so far (agents, tools, gateways, memory, runners, approvals, spend budgets, the basic audit log) is Apache-2.0 and free forever. A small set of enterprise features lives under `backend/ee/` in the same repository under a commercial license (see [LICENSING.md](https://github.com/almyty-inc/almyty/blob/master/LICENSING.md)).
+Most of almyty is free and open source: agents, tools, gateways, memory, runners, approvals, spending limits and the basic audit log. A few features for larger organizations come with the paid **Business** and **Enterprise** plans: signing in with your company account, custom roles, multi-step approvals, organization-wide safety filters, exporting the audit log, and on Enterprise, your own encryption keys, cost reports per team and removing the almyty mark.
 
-## One image, gated at runtime
+This page shows which plan includes what. To see your own plan, open **Settings → Billing → Plan and usage**.
 
-There is no separate enterprise build to deploy. The official `almyty/api` Docker image ships with the enterprise modules compiled in, and every enterprise route is gated at runtime by a license check. Without a license the platform runs as the **community** edition and enterprise endpoints return **HTTP 402 Payment Required**:
+## What each plan includes
+
+There are four plans: **Free**, **Pro** ($20 per seat), **Business** ($60 per seat) and **Enterprise** (talk to sales, because automatic user provisioning, service levels, security reviews and volume are agreed per customer).
+
+| Feature | Free | Pro | Business | Enterprise |
+|---|:-:|:-:|:-:|:-:|
+| [Single sign-on and automatic user provisioning](/enterprise/sso), and visitor sign-in with your company account on an agent's [channels](/channels) | – | – | ✓ | ✓ |
+| [Custom roles and access policies](/enterprise/advanced-rbac) | – | – | ✓ | ✓ |
+| [Multi-step, conditional and quorum approvals](/enterprise/approval-policies) | – | – | ✓ | ✓ |
+| [Organization-wide safety filters and a compliance report](/enterprise/compliance-pack) | – | – | ✓ | ✓ |
+| [Audit log export and streaming to your security tools](/enterprise/audit-export) | – | – | ✓ | ✓ |
+| [Rules for credentials: allowed services, scopes, expiry, rotation, usage limits](/credentials#advanced) | – | – | ✓ | ✓ |
+| [Your own encryption keys](#customer-managed-keys) | – | – | – | ✓ |
+| [Cost per team with a forecast](#chargeback) | – | – | – | ✓ |
+| Removing the almyty mark from an agent's [channels](/channels) (web chat, website bubble and [downloadable apps](/channels/builds)), and switching off a channel's AI disclosure | – | – | – | ✓ |
+
+Two things to know before you pick a plan:
+
+- **Pro adds no features.** It is a hosted plan: no limits on how many things you create, managed credits and email support. Everything else it lists (schedules, webhooks, analytics, the basic audit log) is already free. If you want governance features, the plan you want is Business.
+- **Business is the governance plan**, credentials rules included. Only your own encryption keys, cost per team and removing the almyty mark need Enterprise.
+
+The free plan is not a trial. The basic roles (owner, admin, member and team leads), the basic audit log, single-reviewer [approvals](/approvals) and [spending limits](/cost-governance) stay free.
+
+## Customer-managed keys
+
+With the Enterprise plan, an organization's stored secrets are encrypted with a key in its own AWS account (a KMS key) instead of almyty's. If you take away almyty's access to that key, those secrets can no longer be read. Manage it under **Settings → Advanced → Encryption** (owners and admins). Without the plan, that page is locked:
+
+![Customer-managed encryption keys locked on a demo organization without the Enterprise plan](/screenshots/settings-encryption-locked.png)
+
+Changing to a new key (rotating) re-encrypts nothing and never breaks anything: values sealed with an older key stay readable, and values stored before you added a key keep working.
+
+## Chargeback
+
+With the Enterprise plan, **Analytics → Chargeback** turns spending into an internal bill: total spend for a period, what each team and each agent spent, spend over time, and a forecast for the next period. Admins and owners only. It uses the same spending data as [cost governance](/cost-governance). Without the plan, the tab shows an upgrade prompt:
+
+![Chargeback locked on a demo organization without the Enterprise plan](/screenshots/analytics-chargeback-locked.png)
+
+## For developers
+
+**Open core.** The paid features live under `backend/ee/` in the same repository under a commercial license (see [LICENSING.md](https://github.com/almyty-inc/almyty/blob/master/LICENSING.md)); everything else is Apache-2.0.
+
+**One image, gated at runtime.** There is no separate enterprise build. The official `almyty/api` Docker image has the enterprise modules compiled in, and every enterprise route checks the license while running. Without a license almyty runs as the community edition and enterprise endpoints answer **HTTP 402 Payment Required** ("unlicensed", as opposed to 403 "not allowed"):
 
 ```json
 {
   "statusCode": 402,
   "error": "Payment Required",
-  "message": "This feature requires an enterprise license",
+  "message": "This feature requires an enterprise license entitlement: sso",
   "requiredEntitlements": ["sso"]
 }
 ```
 
-402 is deliberate: it means "unlicensed", distinct from 403 "unauthorized".
+**License keys.** Set the license token with the `ALMYTY_LICENSE_KEY` environment variable on the backend. Tokens are Ed25519-signed and checked offline against a public key built in: no phone-home and no license server, so it works without internet access. An invalid or expired token falls back to the community edition (logged, never a crash). Your edition, entitlements and limits are shown under **Settings** and available from the licensing endpoint in the [API reference](/api-reference/authentication).
 
-## License keys
+**Entitlements.** Each paid feature is a named entitlement: `sso`, `advanced_rbac`, `approval_policy`, `compliance_pack`, `audit_export` and `credentials_governance` (Business and Enterprise), and `byo_kms`, `chargeback` and `white_label` (Enterprise only).
 
-Set your license token via the `ALMYTY_LICENSE_KEY` environment variable on the backend. Tokens are Ed25519-signed and verified **offline** against a public key baked into the build: no phone-home, no license server, air-gap friendly. An invalid or expired token fails safe to the community edition (logged, never a crash). Your current edition, entitlements, and limits are shown under **Settings**, and available programmatically via the licensing endpoint in the [API reference](/api-reference).
+**Plans and tokens.** The plan chooses the entitlement set; the token is what a running almyty checks. When a hosted subscription becomes active, almyty mints an Ed25519 token with that plan's entitlements and seat count; when it lapses the token is revoked and the organization falls back to free. Every check reads the token, never the `plan` column, so a self-hoster with no plan gets exactly the entitlements in the token they were given.
 
-## Entitlements by plan
+**Customer-managed keys (`byo_kms`).** almyty generates a 256-bit data encryption key, wraps it with your AWS KMS customer-managed key (KMS `Encrypt`) and stores only the wrapped blob; the plaintext key is never written down. almyty never stores your AWS access keys: credentials come from the SDK's default provider chain (environment, IRSA or instance profile). The API can read the status, attach a key, rotate, and turn the envelope path on or off; it never returns key material, only whether a key is provisioned, the key ARN and region, and key ids (fingerprints of blobs already stored). Each sealed value names the key that sealed it, so rotation mints a new data key and keeps the old wrapped one. The two ciphertext formats are told apart by prefix and can sit in the same column. Attaching a key when one is already attached is refused with 409, because replacing a key is a rotation.
 
-Enterprise features are named **entitlements**, and what you buy is a **plan**. There are four: **Free**, **Pro** ($20/seat), **Business** ($60/seat), and **Enterprise** (contact sales, because SCIM, SLAs, security review and volume commitments are negotiated, so it is not a self-serve checkout). On almyty's hosted service the plan decides exactly which entitlements get signed into your license token.
-
-| Entitlement | What it unlocks | Free | Pro | Business | Enterprise |
-|---|---|:-:|:-:|:-:|:-:|
-| `sso` | [SAML/OIDC single sign-on + SCIM provisioning](/enterprise/sso), and visitor sign-in with your SSO on an agent's [channels](/channels) | – | – | ✓ | ✓ |
-| `advanced_rbac` | [Custom roles with wildcard permissions + ABAC policies](/enterprise/advanced-rbac) | – | – | ✓ | ✓ |
-| `approval_policy` | [Multi-step, conditional and quorum approval policies](/enterprise/approval-policies) | – | – | ✓ | ✓ |
-| `compliance_pack` | [Org-enforced guardrail policy + compliance posture report](/enterprise/compliance-pack) | – | – | ✓ | ✓ |
-| `audit_export` | [Audit log export (JSON/CSV) + SIEM streaming](/enterprise/audit-export) | – | – | ✓ | ✓ |
-| `credentials_governance` | [Connector allowlists, scope rules, expiry and rotation schedules, grant budgets](/credentials#advanced) | – | – | ✓ | ✓ |
-| `byo_kms` | Customer-managed KMS keys ([below](#byo-kms)) | – | – | – | ✓ |
-| `chargeback` | Per-team cost attribution + spend forecast ([below](#chargeback)) | – | – | – | ✓ |
-| `white_label` | Removes the almyty mark from an agent's [channels](/channels) (its web chat, website widget and [downloadable apps](/channels/builds)), and lets a channel's AI disclosure be switched off | – | – | – | ✓ |
-
-Two things to read off that table before you pick a plan.
-
-**Pro grants no enterprise entitlements at all.** It is a hosted tier, not a feature tier: unlimited resources, managed credits, email support. Everything in its feature list (scheduling, webhooks, analytics, the basic audit log) is already in the free, open-source edition, so upgrading Free to Pro unlocks no gated feature. If you are shopping for governance, the tier you want is Business.
-
-**Business is the governance tier**, and it includes credentials governance. Only customer-managed keys, chargeback and white label are Enterprise-only.
-
-The free tier is a floor, not a trial: core roles (owner/admin/member, team leads), the basic audit log, single-gate [approvals](/approvals), and [spend budgets](/cost-governance) all stay in the open-source edition.
-
-### Plans, tokens and self-hosting
-
-The plan selects the entitlement set; the **token** is what any running almyty checks. `plan` is a hosted-billing concept: when a subscription goes active, almyty mints an Ed25519 token carrying that plan's entitlements and the seat count, and when it lapses the token is revoked and the organization falls back to free. Every guard in the product reads the token, never the `plan` column, which is why a self-hoster with no plan at all still gets exactly the entitlements in the token they were issued. Your current plan and a per-tier feature matrix are in the app under **Settings → Billing → Plan and usage**.
-
-## BYO-KMS
-
-Without the `byo_kms` entitlement, **Settings → Advanced → Encryption** shows this locked view; no customer-managed key is configured by this screen:
-
-![Customer-managed encryption keys locked on a Pro demo organization](/screenshots/settings-encryption-locked.png)
-
-With the `byo_kms` entitlement an organization encrypts its secrets under its own AWS KMS customer-managed key instead of the platform key. almyty generates a 256-bit data encryption key, wraps it with your CMK (KMS `Encrypt`), and stores only the wrapped blob. The plaintext key is never written down, and almyty never stores your AWS access keys: credentials come from the SDK's default provider chain (env, IRSA, or instance profile). Revoke almyty's access to the CMK and the sealed values stop being readable.
-
-Manage it under **Settings** (owner/admin only), or over the API: read the status, attach a CMK, rotate, and enable or disable the envelope path. Nothing ever returns key material, only whether a key is provisioned, the CMK ARN and region, and the key ids, which are fingerprints of blobs already at rest.
-
-Rotation is cheap and non-destructive. Each sealed value names the key that sealed it, so rotating mints a fresh data key, retains the outgoing wrapped one, and re-encrypts nothing: old values stay readable. Values written before a CMK was attached stay on the platform path and keep working, because the two ciphertext formats are distinguished by prefix and can coexist in one column. Attaching a CMK when one is already attached is refused with 409, because replacing a key is a rotation, not an attach.
-
-## Chargeback
-
-Without the `chargeback` entitlement, **Analytics → Chargeback** shows an upgrade prompt rather than a cost-attribution report:
-
-![Chargeback locked on a Pro demo organization](/screenshots/analytics-chargeback-locked.png)
-
-With the `chargeback` entitlement, one report turns the open-source spend data into an internal billing statement: total spend for a window, **per-team** and per-agent attribution, a spend timeseries, and a linear forecast for the next period(s). Admin/owner only. It layers on the same spend pipeline as [cost governance](/cost-governance) with no separate metering. The report endpoint (period, granularity, and forecast parameters) is documented in the [API reference](/api-reference).
+**Chargeback.** The report endpoint (period, granularity and forecast parameters) is in the [API reference](/api-reference/authentication). The forecast is a straight-line projection.

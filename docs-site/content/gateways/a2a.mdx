@@ -1,19 +1,23 @@
 # A2A
 
-Let other AI agents call your agent. almyty speaks Google's Agent-to-Agent protocol: any A2A-compatible client reads your agent's Agent Card, sees what the agent can do, and sends it messages over JSON-RPC.
+A2A (Agent-to-Agent) is an open standard that lets AI agents work with each other. Put one of your agents on A2A and agents elsewhere, at a partner or in another team's system, can find out what it does and hand it work. For example, a partner's purchasing agent can ask your support agent "where is order NW-10428?" and get an answer, without anyone building an integration.
 
-An agent that other agents call is an agent in front of someone, so it is a channel on the agent, next to its web chat, its website widget and its messaging channels. There is no separate A2A gateway to create.
+An agent other agents call is an agent in front of someone, so A2A is a channel of the agent, next to its web chat, website widget and messaging channels. There is no separate A2A gateway to create.
 
-## Put your agent in front of other agents
+## Put your agent on A2A
 
-1. Open the agent and go to its **Channels** tab
-2. Select **Add channel** and pick **Other agents (A2A)**
-3. Select **Publish**
-4. Under **How other agents sign in**, generate a key for each caller. Every JSON-RPC call sends one in the `x-api-key` header
+1. Open the agent and go to its **Channels** tab.
+2. Click **Add channel** and pick **Other agents (A2A)**.
+3. Click **Publish**.
+4. Under **How other agents sign in**, make a key for each agent that will call yours. Give each caller its own key, so you can cancel one without affecting the others.
 
-Only an autonomous agent can have this channel: the A2A server runs a conversation, which a workflow agent does not hold, so publishing refuses one.
+Once published, the channel's page shows two addresses: the one other agents call, and the **Agent Card**, a public description of your agent that tells other agents what it can do. Give the other side the Agent Card address and their key; their agent does the rest.
 
-The channel's page shows both addresses once it is published. The endpoint follows this pattern:
+Only an autonomous agent can have this channel, because an A2A caller holds a conversation with it; publishing refuses a workflow agent. Each caller's key has its own share of the channel's message limits, and every task runs under the agent's per-run and spending limits. Unpublish the channel, or switch the agent off, and both addresses stop answering.
+
+## For developers
+
+The channel's page shows both addresses once it is published. Every JSON-RPC call sends a key in the `x-api-key` header. The endpoint follows this pattern:
 
 ```
 https://api.almyty.com/{org}/channels/{channel-id}
@@ -30,7 +34,7 @@ returns the same card. Those three reads are public; the JSON-RPC endpoint is no
 card and the endpoint answer only while the channel is published and its agent is active:
 unpublish the channel, or switch the agent off, and both answer not found.
 
-## Connect an agent
+### Connect an agent
 
 Give the calling agent your Agent Card URL and one of the keys. It reads the card, discovers your skills, and starts sending tasks. No manual request building on your side.
 
@@ -39,7 +43,7 @@ https://api.almyty.com/acme/channels/5b1f0c2e-8d4a-4c7e-9a31-2f6d7e8c9b10/.well-
 ```
 
 almyty emits A2A **v1.0**, so the card carries `supportedInterfaces` rather than a bare
-`url` — the top-level `url` is kept alongside it for v0.2.x / v0.3.x clients:
+`url`; the top-level `url` is kept alongside it for v0.2.x / v0.3.x clients:
 
 ```json
 {
@@ -75,7 +79,7 @@ almyty emits A2A **v1.0**, so the card carries `supportedInterfaces` rather than
 }
 ```
 
-## Supported methods
+### Supported methods
 
 Calling agents `POST` JSON-RPC 2.0 requests to the endpoint. Each method has a v1.0
 (PascalCase) name and a v0.2.x / v0.3.x name; both are dispatched to the same handler.
@@ -90,7 +94,7 @@ Calling agents `POST` JSON-RPC 2.0 requests to the endpoint. Each method has a v
 | `ListTasks` | `tasks/list` | List tasks on this endpoint |
 | `GetExtendedAgentCard` | `agent/getAuthenticatedExtendedCard` | The full card, including security schemes |
 
-`tasks/send` is **not** a method almyty implements — it returns `-32601 Method not found`.
+`tasks/send` is **not** a method almyty implements: it returns `-32601 Method not found`.
 Push notification methods (`SetTaskPushNotificationConfig` and friends) are rejected with
 an explicit "not supported" error; use `message/stream` for real-time updates.
 
@@ -149,7 +153,7 @@ directly as `result`; `SendMessage` wraps it as `result.task`.
 }
 ```
 
-### Blocking is the default
+#### Blocking is the default
 
 almyty follows the v1.0 default: a request that sends no `configuration`, or one that
 states neither flag, **waits** for the task to settle (up to 30 seconds) and returns a
@@ -177,10 +181,10 @@ flag always decides; only the unstated case falls through to waiting.
 Every call starts an **autonomous** agent run. Workflow agents are not reachable over
 A2A: use the agent's invoke or stream endpoints instead.
 
-## Task lifecycle
+### Task lifecycle
 
 A2A v1.0 carries the ProtoJSON encoding of the `TaskState` enum on every binding,
-JSON-RPC included — so the states are upper-case `TASK_STATE_*` strings, not the
+JSON-RPC included, so the states are upper-case `TASK_STATE_*` strings, not the
 kebab-case ones from v0.2.x / v0.3.x.
 
 | State | Description |
@@ -193,6 +197,6 @@ kebab-case ones from v0.2.x / v0.3.x.
 | `TASK_STATE_CANCELED` | Task was canceled |
 
 `TASK_STATE_COMPLETED`, `TASK_STATE_FAILED`, `TASK_STATE_CANCELED`, and
-`TASK_STATE_REJECTED` are terminal — nothing transitions out of them.
+`TASK_STATE_REJECTED` are terminal: nothing transitions out of them.
 
 The keys on the channel's page are gateway keys, so [Gateway Authentication](/gateways/authentication) applies to them: add another sign-in method there, or revoke a key. Discovery endpoints such as the Agent Card stay public so other agents can find you.

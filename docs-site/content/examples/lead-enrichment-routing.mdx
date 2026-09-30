@@ -1,27 +1,33 @@
-# Enrich and route inbound leads
+# Score and route new leads
 
-**Stack**: `Trigger: your form/CRM calls the agent API` · `Models: your choice` · `Tools: CRM API (HubSpot/Salesforce), enrichment API` · `Mode: single agent + constraints` · `Output: scored + routed lead, Slack ping`
+For sales teams where good leads wait in a queue while reps chase the wrong ones. When a new lead comes in, the assistant looks up the company (size, industry), scores it against your ideal customer, writes the score and the reason back into your CRM, and tells the right rep in Slack when it's a hot one.
 
-**Who it's for**: sales teams where good leads sit in a queue while reps chase noise.
-**What it does**: takes a new lead, enriches it (company size, industry, tech stack), scores it against your ICP, writes the lead back to the CRM with a reason, and pings the right rep in Slack for anything hot.
+"CRM" here means your own CRM (HubSpot, Salesforce or any other) connected through its API: almyty has no built-in CRM connector.
 
-## Build it
+For a full walk-through of a sales assistant with a CRM and Slack, see [Sales assistant in Slack](/examples/sales-assistant-slack).
 
-1. **Connect your CRM and an enrichment source.** *Connect an API* for HubSpot or Salesforce, and for Clearbit or a similar enrichment endpoint, each becomes typed tools.
-2. **Create the agent** with your qualification rubric in the instructions: *enrich, score against ICP (mid-market SaaS, 50+ seats), and set a routing owner.*
-3. **Encode the rules as constraints**: *never mark a personal-email lead as enterprise; always fill the score-reason field*, so scoring stays consistent, not vibes.
-4. **Write back to the CRM**: the agent updates the lead record with score, segment, and reason via the CRM tools.
-5. **Notify**: add a Slack channel on the agent's **Channels** tab so hot leads land in `#sales` with the enrichment summary and a link to the record.
-6. **Trigger it**: have your web form or CRM webhook call the agent's API on lead creation.
+## What you need
 
-## Make it yours
+- Your CRM's API, and optionally a company-data (enrichment) service with an API.
+- A Slack app token that may post messages, for the alerts.
+- A way to send new leads to the assistant: your web form or CRM calling it when a lead is created.
 
-- For borderline scores, set the work mode to **Panel**: two models from different providers argue fit, and a judge decides.
-- Draft a first-touch email as part of the run (see [Draft follow-ups from meeting notes](/examples/meeting-notes-to-crm)).
-- Route by territory or product line with a lookup tool.
+## How to build it
 
-**Uses**: `Sales` · `CRM` · `Slack` · `Constraints`
+1. **Connect your systems.** Open **APIs** and click **Connect an API** for your CRM and your enrichment service. For Slack alerts, create a tool under **Tools**, **Create tool** that calls Slack's "post message" with your app's token from [Credentials](/credentials).
+2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write your scoring rules: "Look up the company, score it against our ideal customer (mid-sized software companies with 50 or more staff), set an owner, and post hot leads to #sales." Pick the tools under **Tools and APIs**.
+3. **Add firm rules.** On its **Constraints** tab: "Never mark a lead with a personal email address as enterprise" and "Always fill in the reason for the score".
+4. **Send it leads.** Have your form or CRM call the assistant when a lead is created (see below).
+
+## Ideas
+
+- For borderline cases, set the **Work mode** to **Panel**: two models from different companies argue the fit and a judge decides.
+- Draft a first email as part of the run (see [Turn call notes into CRM updates](/examples/meeting-notes-to-crm)).
+
+## For developers
+
+The address to call and sample code are in the **Integration** card on the assistant's **Overview** tab. See the [OpenAI-compatible API](/api-reference/openai-compatible).
 
 ## Related
 
-- [Autonomous agents](/agents/autonomous) · [Connect an API](/tools) · [Collaboration](/agents/autonomous#collaboration)
+- [Autonomous agents](/agents/autonomous) · [Connect an API](/tools) · [HTTP tools](/tools/http-tools)

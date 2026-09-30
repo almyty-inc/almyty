@@ -167,8 +167,8 @@ async function capture(names) {
       await page.goto(path)
       await page.waitForLoadState('networkidle').catch(() => {})
       await page.waitForTimeout(1200)
-      // The React Query devtools button only exists in the dev build; the product has none.
-      await page.addStyleTag({ content: '.tsqd-parent-container, .tsqd-open-btn-container { display: none !important; }' })
+      // The React Query devtools button only exists in the dev build; the product has none. Toasts that have said their piece stay out too.
+      await page.addStyleTag({ content: '.tsqd-parent-container, .tsqd-open-btn-container, [role=region][aria-label^="Notifications"] { display: none !important; }' })
       if (prepare) await prepare(page)
       await page.mouse.move(0, 0)
       const file = join(OUT, `${name}.png`)

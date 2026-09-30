@@ -1,28 +1,27 @@
-# Stream your audit trail to a SIEM
+# Send your audit trail to your security team's tools
 
-**Stack**: `Source: every action (who/when/what)` · `Export: JSON / SIEM` · `Sinks: Splunk, Datadog, your log pipeline` · `Output: agent activity in your security stack`
+almyty records every action an assistant takes and every change anyone makes to it: who, when and what. This example sends that record to the log tools your security team already watches, so assistant activity sits next to everything else they monitor and they can set alerts on it.
 
-**Who it's for**: security and compliance teams who need agent activity in the same place as everything else they monitor.
-**What it does**: every action an agent takes and every change to its config is recorded with who, when, and what. You export that audit trail, as JSON or into your SIEM, so agent behavior is searchable, alertable, and retained alongside your other logs.
+For example: your security team gets an alert when an assistant issues more refunds in an hour than it normally does in a day.
 
-## Build it
+Exports and streaming need the Business plan. Without it, you can browse the most recent entries in almyty.
 
-1. **Confirm what's captured.** Every tool call, approval decision, config change, and run is already in the audit trail, no instrumentation to add.
+## What you need
 
-   ![The audit trail, every action with who, when, and what](/screenshots/analytics-audit.png)
-2. **Export it**: pull the audit log as CSV/JSON from Analytics, or stream events into your SIEM pipeline (Splunk, Datadog, or any log sink).
-3. **Alert on it**: build detections in your existing tooling: a spike in refunds, an agent touching a resource it shouldn't, an approval bypassed.
-4. **Retain it**: keep the exported trail for the window your compliance regime requires; it's the evidence for an audit.
-5. **Tie it to identity**: with [SSO/SCIM](/examples/sso-scim-onboarding), the "who" is a real directory user, not a shared key.
+- The Business plan.
+- A log tool that accepts events over the web: Splunk (its HTTP Event Collector), Datadog, or any address that accepts JSON.
 
-## Make it yours
+## How to build it
 
-- Feed anomalies back to an [on-call agent](/examples/oncall-alert-triage) that summarizes them.
-- Scope exports per team so each business unit sees only its own trail.
-- Combine with [approval policies](/examples/approval-policies) so the trail shows the full decision chain.
+1. **Look at what is recorded.** Open **Analytics** and the **Audit trail** tab. Tool calls, approval decisions, configuration changes and runs are already there; there is nothing to switch on.
 
-**Uses**: `Enterprise` · `Audit` · `SIEM` · `Security`
+   ![The audit trail: every action with who, when and what](/screenshots/analytics-audit.png)
+
+2. **Download it when you need it.** On the **Audit trail** tab, export the record as **CSV** or **JSON**, for example for an auditor.
+3. **Stream it continuously.** Open **Settings**, then **Audit streaming** under **Advanced**. Pick the **Target** (**Webhook**, **Splunk HEC** or **Datadog**), paste the **Endpoint** and, if needed, the **Token**, and click **Add target**. New entries are sent there as they happen.
+4. **Set alerts in your own tool**: a spike in refunds, an assistant using something it shouldn't, a rejected approval.
+5. **Know who did what.** With [single sign-on](/examples/sso-scim-onboarding), the "who" in each entry is a real person from your company directory.
 
 ## Related
 
-- [Audit export](/enterprise/audit-export) · [Analytics](/analytics) · [Compliance](/compliance) · [Versioning & audit](/agents/versioning)
+- [Audit export](/enterprise/audit-export) · [Analytics](/analytics) · [Compliance](/compliance) · [Approval rules](/examples/approval-policies)
