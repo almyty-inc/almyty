@@ -1,26 +1,29 @@
-# Summarize on-call alerts and suggest a runbook
+# Summarise on-call alerts
 
-**Stack**: `Trigger: alert webhook → agent API / schedule` · `Models: your choice` · `Tools: monitoring API (Datadog/PagerDuty), logs API, runbook search` · `Mode: single agent + memory` · `Output: Slack incident summary`
+For on-call engineers woken by a wall of alerts with no context. When an alert fires, the assistant gathers the related metrics and recent logs, compares them with past incidents, and posts a plain-language summary with the most likely runbook to your incident channel. The person on call starts fixing instead of gathering.
 
-**Who it's for**: on-call engineers woken by a wall of alerts with no context.
-**What it does**: takes a firing alert, pulls the related metrics and recent logs, correlates it with past incidents, and posts a plain-language summary plus the most likely runbook to the incident channel, so the human starts triaging, not gathering.
+## What you need
 
-## Build it
+- Your monitoring and logging tools' APIs (for example Datadog, PagerDuty or Grafana Loki), and your runbooks somewhere searchable.
+- A Slack app token that may post messages, for the summary.
+- Your alerting tool able to call a web address when an alert fires.
 
-1. **Connect your signals.** *Connect an API* against your monitoring and logging endpoints (Datadog, PagerDuty, Loki) for query tools, and expose your runbooks as a search tool.
-2. **Create the agent** with: *given an alert, gather the relevant metrics and last-15-min logs, correlate with prior incidents, and summarize likely cause + suggested runbook.*
-3. **Turn on memory** so recurring incidents ("the nightly ETL OOMs again") come with last time's resolution attached.
-4. **Post to the incident channel**: publish the agent on Slack so summaries land in `#incidents`.
-5. **Keep it advisory**: it summarizes and suggests; it does not run remediation. (Add [approvals](/approvals) later if you want it to.)
-6. **Trigger it**: your alerting tool's webhook calls the agent API when an alert fires.
+## How to build it
 
-## Make it yours
+1. **Connect your signals.** Open **APIs** and click **Connect an API** for your monitoring and logging tools, and for your runbook search. For posting the summary, create a tool under **Tools**, **Create tool** that calls Slack's "post message" with your app's token from [Credentials](/credentials).
+2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write: "Given an alert, gather the related metrics and the last 15 minutes of logs, compare with earlier incidents, and post a short summary with the likely cause and runbook to #incidents." Pick the tools under **Tools and APIs**.
+3. **Let it remember.** Turn on **Remember between conversations** with **This agent's own** memory, so a recurring incident comes with last time's fix attached.
+4. **Keep it advisory.** It summarises and suggests; give it no tools that change your systems. If you later want it to act, have it ask for approval first (see [Approvals](/approvals)).
+5. **Trigger it.** Point your alerting tool's webhook at the assistant (see below).
 
-- Add a runner so it can actually run a read-only diagnostic on the affected host, see [Give an agent a machine](/examples/expose-any-machine).
-- Gate any remediation action behind `request_approval`.
-- Feed post-incident reviews back into memory so the summaries get sharper.
+## Ideas
 
-**Uses**: `DevOps` · `Slack` · `Memory` · `Runner`
+- Let it run a read-only check on the affected machine through a runner: see [Let an assistant work on one of your machines](/examples/expose-any-machine).
+- Add your post-incident reviews to memory, so the summaries get better over time.
+
+## For developers
+
+The address to call and sample code are in the **Integration** card on the assistant's **Overview** tab. If your alerting tool cannot send what the endpoint expects, a small relay can sit in between. See the [OpenAI-compatible API](/api-reference/openai-compatible).
 
 ## Related
 
