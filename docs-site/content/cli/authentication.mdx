@@ -32,7 +32,7 @@ Pass a pre-generated API key directly. This skips the browser entirely:
 $ npx @almyty/auth login --token almyty_3f9c...
 ```
 
-Mint one with a logged-in CLI on another machine, or with `POST /auth/api-keys` (see [API keys](/api-reference/authentication#api-keys)). Use this method in CI pipelines, Docker containers, and automation scripts.
+Make one in the app under **Settings → API keys** (click **New API key**, give it a name and optionally an expiry date; the key is shown once), with a logged-in CLI on another machine, or with `POST /auth/api-keys` (see [API keys](/api-reference/authentication#api-keys)). Use this method in CI pipelines, Docker containers, and automation scripts. Revoke a key on the same Settings page.
 
 ## Login without an auto-opening browser
 

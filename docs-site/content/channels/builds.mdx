@@ -28,7 +28,9 @@ The desktop app is a window onto the assistant's web chat, with your name on it.
 
 ## The icon
 
-The app uses your icon. If there is none, or it cannot be fetched, the build uses a default icon and tells you so; a missing icon never fails a build.
+The desktop app wears your icon. Upload it once on the agent's **Channels** tab, under **Branding and visitor rules**: click **Upload icon** next to **App icon** and pick a PNG, JPG or WebP, at least 512 pixels on each side and under 4 MB. A preview shows it, and **Replace icon** or **Remove** change it later. A channel can have an icon of its own under its own branding. The terminal app has no icon.
+
+If there is no icon, the build uses a default one and tells you so; a missing icon never fails a build.
 
 ## Download links
 
@@ -44,7 +46,7 @@ Ready to sign what you build? See [Signing](/channels/signing).
 
 ## For developers
 
-The icon is set through the API: `PATCH /agents/:agentId/public-settings` with `branding.iconUrl`; the branding form has no field for it. The build fetches that URL (or the channel's own) and makes each platform's icon formats from it.
+The icon is uploaded as a file: the browser turns the picked image into a 512-pixel square PNG, which goes to the files module, and the branding keeps its `iconFileId` (each save checks it is a PNG of this organization, no larger than 4 MB). A desktop build reads the icon from storage first and falls back to `branding.iconUrl`, which can still be set through `PATCH /agents/:agentId/public-settings`. The build makes each platform's icon formats from it. Terminal builds carry no icon.
 
 The desktop app is an Electron window with no Node in the page, navigation confined to the web chat's own origin, and permission requests refused.
 
