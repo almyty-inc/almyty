@@ -22,6 +22,7 @@ import { Api } from '../../../entities/api.entity';
 import { Operation } from '../../../entities/operation.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { sanitizeHeaders } from '../../../common/security/url-validator';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 import { decideToolEgress } from './tool-egress';
 import {
   decideToolRequest,
@@ -154,8 +155,8 @@ export class ToolProtocolExecutor {
       maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
-      httpAgent: egress.httpAgent,
-      httpsAgent: egress.httpsAgent,
+      httpAgent: egress.httpAgent ?? ssrfSafeHttpAgent,
+      httpsAgent: egress.httpsAgent ?? ssrfSafeHttpsAgent,
       signal: options.signal,
     };
 
@@ -231,8 +232,8 @@ export class ToolProtocolExecutor {
       maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
-      httpAgent: urlCheck.httpAgent,
-      httpsAgent: urlCheck.httpsAgent,
+      httpAgent: urlCheck.httpAgent ?? ssrfSafeHttpAgent,
+      httpsAgent: urlCheck.httpsAgent ?? ssrfSafeHttpsAgent,
       signal: options.signal,
       headers: {
         'Content-Type': 'application/json',
@@ -359,8 +360,8 @@ export class ToolProtocolExecutor {
       maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
-      httpAgent: egress.httpAgent,
-      httpsAgent: egress.httpsAgent,
+      httpAgent: egress.httpAgent ?? ssrfSafeHttpAgent,
+      httpsAgent: egress.httpsAgent ?? ssrfSafeHttpsAgent,
       signal: options.signal,
     };
 
@@ -451,8 +452,8 @@ export class ToolProtocolExecutor {
       maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
-      httpAgent: urlCheck.httpAgent,
-      httpsAgent: urlCheck.httpsAgent,
+      httpAgent: urlCheck.httpAgent ?? ssrfSafeHttpAgent,
+      httpsAgent: urlCheck.httpsAgent ?? ssrfSafeHttpsAgent,
       signal: options.signal,
       headers: {
         'Content-Type': 'text/xml; charset=utf-8',

@@ -58,10 +58,11 @@ const INVENTORY: Record<string, [Kind, string]> = {
   'src/modules/model-deployments/adapters/ollama.adapter.ts': ['gated', 'providerConfig.baseUrl: validateUrl(AllowingPrivate under OLLAMA_ALLOW_PRIVATE_URLS) + pinned'],
   'src/modules/model-deployments/adapters/custom-endpoint.adapter.ts': ['gated', 'providerConfig.url: validateUrl + pinned'],
   'src/modules/llm-providers/providers/safe-request.ts': ['gated', 'every LLM provider call incl. model listing and custom base URLs: gatedConfig'],
-  'src/modules/tools/executors/tool-http.executor.ts': ['gated', 'HTTP tools on api.baseUrl: validateUrl + pinned + maxRedirects 0 + cap'],
+  'src/modules/tools/executors/tool-http.executor.ts': ['gated', 'HTTP tools on api.baseUrl: decideToolEgress (validateUrl + org allowlist) + pinned + maxRedirects 0 + cap'],
   'src/modules/tools/executors/tool-http-pagination.ts': ['gated', 'next-page URLs re-validated, inherits the executor config'],
-  'src/modules/tools/executors/tool-protocol.executor.ts': ['gated', 'SOAP/GraphQL tools: validateUrl + pinned + maxRedirects 0'],
-  'src/modules/tools/executors/tool-grpc.executor.ts': ['gated', 'gRPC target: pinDns'],
+  'src/modules/tools/executors/tool-protocol.executor.ts': ['gated', 'SOAP/GraphQL tools: decideToolEgress (validateUrl + org allowlist) + pinned + maxRedirects 0'],
+  // tool-grpc.executor.ts dials through GrpcCallerService with pinDns (no
+  // axios any more); every-tenant-url-is-gated.spec.ts pins that.
   'src/modules/gateways/channels/channel-gateway.service.ts': ['gated', 'channel test-connection: safeFetch for configured URLs, vendor constants otherwise'],
   'src/modules/gateways/channels/adapters/webhook.adapter.ts': ['gated', 'outbound webhook_url / callback_url: assertEgress + egressInit + capped read'],
   'src/modules/gateways/channels/adapters/matrix.adapter.ts': ['gated', 'homeserver_url: assertEgress + egressInit'],
