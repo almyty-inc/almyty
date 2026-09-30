@@ -47,6 +47,8 @@ Twilio signs the exact URL it called, so `webhook_url` has to match what is conf
 | **WhatsApp** (Twilio) | Twilio webhook (registered automatically), `X-Twilio-Signature` verified | Twilio Messages API | Account SID, auth token, WhatsApp sender |
 | **WhatsApp Cloud** (Meta) | Meta callback webhook, app-secret verified | WhatsApp Cloud API | Access token, phone number ID, verify token, app secret |
 | **SMS** (Twilio) | Twilio webhook (registered automatically), X-Twilio-Signature verified | Twilio Messages API | Account SID, auth token, phone number |
+| **iMessage** (Sendblue) | Sendblue receive webhook, `sb-signing-secret` header checked | Sendblue send-message API | API key ID, API secret key, Sendblue number, signing secret |
+| **iMessage** (LoopMessage) | LoopMessage webhook, `Authorization` header checked | LoopMessage send API | API key, inbound token, sender name (optional) |
 | **Microsoft Teams** | Bot Framework activities, JWT verified | Bot Framework replies | Bot ID and password (Azure bot registration) |
 | **Google Chat** | Space webhook, verification token | Incoming webhook | Webhook URL, verification token |
 | **Signal** | signal-cli REST bridge webhook | Bridge send API | Self-hosted signal-cli bridge URL, phone number |

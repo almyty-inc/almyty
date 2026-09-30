@@ -202,6 +202,8 @@ export enum GatewayType {
   WHATSAPP = 'whatsapp',
   WHATSAPP_CLOUD = 'whatsapp_cloud',
   SMS = 'sms',
+  IMESSAGE_SENDBLUE = 'imessage_sendblue',
+  IMESSAGE_LOOPMESSAGE = 'imessage_loopmessage',
   EMAIL = 'email',
   WEBHOOK = 'webhook',
   GOOGLE_CHAT = 'google_chat',

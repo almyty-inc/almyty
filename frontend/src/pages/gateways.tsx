@@ -32,7 +32,7 @@ import type { Gateway } from '@/types'
  * Managed under Apps, not here.
  */
 const CHANNEL_GATEWAY_TYPES: string[] = [
-  'slack', 'discord', 'telegram', 'whatsapp', 'whatsapp_cloud', 'sms',
+  'slack', 'discord', 'telegram', 'whatsapp', 'whatsapp_cloud', 'sms', 'imessage_sendblue', 'imessage_loopmessage',
   'microsoft_teams', 'google_chat', 'email', 'signal', 'matrix', 'irc',
   'webhook', 'chat_widget', 'hosted_chat',
 ]

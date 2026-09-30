@@ -27,6 +27,8 @@ const protocolStyles: Record<string, string> = {
   chat_widget: 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-500/20 dark:text-violet-300 dark:border-violet-500/30',
   whatsapp_cloud: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-500/20 dark:text-green-300 dark:border-green-500/30',
   sms: 'bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-500/20 dark:text-teal-300 dark:border-teal-500/30',
+  imessage_sendblue: 'bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-500/20 dark:text-sky-300 dark:border-sky-500/30',
+  imessage_loopmessage: 'bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-500/20 dark:text-sky-300 dark:border-sky-500/30',
   // App distribution mediums (the agent factory), so a Web / Terminal /
   // Desktop / Binary badge reads on-brand rather than as the unknown
   // grey fallback.
@@ -44,6 +46,8 @@ const protocolLabels: Record<string, string> = {
   microsoft_teams: 'Teams',
   chat_widget: 'Chat Widget',
   whatsapp_cloud: 'WhatsApp Cloud',
+  imessage_sendblue: 'iMessage · Sendblue',
+  imessage_loopmessage: 'iMessage · LoopMessage',
   tui: 'Terminal',
   web: 'Web',
   widget: 'Widget',

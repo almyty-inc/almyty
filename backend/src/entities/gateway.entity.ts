@@ -40,6 +40,10 @@ export enum GatewayType {
   WHATSAPP = 'whatsapp',
   WHATSAPP_CLOUD = 'whatsapp_cloud',
   SMS = 'sms',
+  // iMessage has no public API; it goes through a relay that owns the
+  // Apple-side number. One type per relay, picked when adding the channel.
+  IMESSAGE_SENDBLUE = 'imessage_sendblue',
+  IMESSAGE_LOOPMESSAGE = 'imessage_loopmessage',
   EMAIL = 'email',
   WEBHOOK = 'webhook',
   GOOGLE_CHAT = 'google_chat',

@@ -32,6 +32,8 @@ import { MicrosoftTeamsAdapter } from './adapters/microsoft-teams.adapter';
 import { SignalAdapter } from './adapters/signal.adapter';
 import { MatrixAdapter } from './adapters/matrix.adapter';
 import { IrcAdapter } from './adapters/irc.adapter';
+import { IMessageSendblueAdapter } from './adapters/imessage-sendblue.adapter';
+import { IMessageLoopMessageAdapter } from './adapters/imessage-loopmessage.adapter';
 import { ChannelInstallationService } from './channel-installation.service';
 import { ChannelCredentialService, ChannelUsePurpose } from './channel-credential.service';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
@@ -85,6 +87,8 @@ export class ChannelGatewayService {
     private readonly signalAdapter: SignalAdapter,
     private readonly matrixAdapter: MatrixAdapter,
     private readonly ircAdapter: IrcAdapter,
+    private readonly iMessageSendblueAdapter: IMessageSendblueAdapter,
+    private readonly iMessageLoopMessageAdapter: IMessageLoopMessageAdapter,
     // Optional so existing unit tests and minimal contexts can
     // construct the service without the installation subsystem.
     @Optional() private readonly installationService?: ChannelInstallationService,
@@ -128,6 +132,8 @@ export class ChannelGatewayService {
       [GatewayType.SIGNAL, this.signalAdapter],
       [GatewayType.MATRIX, this.matrixAdapter],
       [GatewayType.IRC, this.ircAdapter],
+      [GatewayType.IMESSAGE_SENDBLUE, this.iMessageSendblueAdapter],
+      [GatewayType.IMESSAGE_LOOPMESSAGE, this.iMessageLoopMessageAdapter],
     ]);
   }
 
@@ -225,6 +231,11 @@ export class ChannelGatewayService {
       return;
     }
 
+    // A verified delivery that is not a message to answer: a relay's
+    // echo of our own reply, a delivery status, a group message. Nothing
+    // is recorded: these arrive for every reply sent, and an event row
+    // per status callback would bury the conversations in the log.
+    if (!adapter.carriesMessage(body)) return;
     // Normalize inbound message
     const normalized: NormalizedMessage = adapter.normalizeInbound(body);
 
@@ -1161,6 +1172,28 @@ export class ChannelGatewayService {
           return res.ok ? { ok: true, detail: 'whatsapp cloud phone number reachable' }
                         : { ok: false, detail: `graph api ${res.status}` };
         }
+        case GatewayType.IMESSAGE_SENDBLUE: {
+          if (!cfg.api_key_id || !cfg.api_secret_key) {
+            return { ok: false, detail: 'api_key_id + api_secret_key required' };
+          }
+          // GET /api/lines lists the account's numbers and needs both keys
+          // (https://docs.sendblue.com/api-v2/). Read-only, sends nothing.
+          try {
+            const res = await safeFetch('https://api.sendblue.co/api/lines', {
+              headers: { 'sb-api-key-id': String(cfg.api_key_id), 'sb-api-secret-key': String(cfg.api_secret_key) },
+            });
+            return res.ok ? { ok: true, detail: 'sendblue keys accepted' }
+                          : { ok: false, detail: `sendblue ${res.status}` };
+          } catch (e: any) {
+            return { ok: false, detail: outboundFailureDetail(e) };
+          }
+        }
+        case GatewayType.IMESSAGE_LOOPMESSAGE:
+          // LoopMessage documents no read-only call to check a key with, and
+          // a send would text someone. Only presence is checked, and said so.
+          if (!cfg.api_key) return { ok: false, detail: 'api_key not configured' };
+          if (!cfg.inbound_token) return { ok: false, detail: 'inbound_token not configured' };
+          return { ok: true, detail: 'keys present; LoopMessage has no read-only check, so the first reply is the real test' };
         case GatewayType.MICROSOFT_TEAMS: {
           if (!cfg.bot_id || !cfg.bot_password) return { ok: false, detail: 'bot_id + bot_password required' };
           const tokenRes = await fetch('https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token', {
