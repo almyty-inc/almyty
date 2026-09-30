@@ -21,6 +21,9 @@ import { providerLabel, visitorOAuthConfigured } from './visitor-oauth';
 import { ChannelLinkService } from '../channel-link.service';
 import { FilesService } from '../../files/files.service';
 
+/** What a public chat address whose agent was deleted answers. */
+export const CHAT_GONE = 'This chat no longer exists';
+
 /**
  * The tenant-facing half of the hosted chat app.
  *
@@ -107,7 +110,10 @@ export class HostedChatService {
 
     // Private gateways are never public surfaces (refused at write time);
     // one that exists anyway is not served.
-    const active = gateways.filter((gateway) => gateway.isActive() && !isPrivateGateway(gateway));
+    const live = gateways.filter((gateway) => gateway.isActive() && !isPrivateGateway(gateway));
+    // Nor is one whose agent was deleted: its web chat is gone, and
+    // running a message against no agent was a 500.
+    const active = live.filter((gateway) => !Gateway.agentGone(gateway));
 
     // A tenant slug is a global public address. If bad historic data or
     // a concurrent publish ever leaves more than one live claimant,
@@ -121,6 +127,7 @@ export class HostedChatService {
       );
     }
 
+    if (active.length === 0 && live.length > 0) throw new NotFoundException(CHAT_GONE);
     if (active.length !== 1) throw new NotFoundException('Chat app not found');
     return this.withChannelSettings(active[0]);
   }
@@ -543,7 +550,7 @@ export class HostedChatService {
 
     // Private gateways are never public surfaces (refused at write time);
     // one that exists anyway is not served.
-    const active = gateways.filter((gateway) => gateway.isActive() && !isPrivateGateway(gateway));
+    const active = gateways.filter((gateway) => gateway.isActive() && !isPrivateGateway(gateway) && !Gateway.agentGone(gateway));
 
     // Same fail-closed rule as findBySlug. A hostname is a global public
     // address too, and nothing claims one exclusively: the only thing

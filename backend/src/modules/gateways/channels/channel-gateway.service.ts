@@ -191,6 +191,11 @@ export class ChannelGatewayService {
       this.logger.warn(`Inbound message refused for private gateway: ${gateway.id}`);
       return;
     }
+    // Its agent was deleted: nobody is there to answer.
+    if (Gateway.agentGone(gateway)) {
+      this.logger.warn(`Inbound message dropped for gateway ${gateway.id}: its agent was deleted`);
+      return;
+    }
 
     const adapter = this.getAdapter(gateway.type);
 
@@ -875,6 +880,8 @@ export class ChannelGatewayService {
     if (!gateway || gateway.type !== GatewayType.CHAT_WIDGET || !gateway.isActive() || isPrivateGateway(gateway)) {
       throw new NotFoundException('Widget gateway not found or inactive');
     }
+    // Its agent was deleted: the widget is gone, whatever page still embeds it.
+    if (Gateway.agentGone(gateway)) throw new NotFoundException('This chat no longer exists');
     return gateway;
   }
 
