@@ -79,7 +79,7 @@ const INVENTORY: Record<string, [Kind, string]> = {
   'src/modules/auth/captcha.service.ts': ['vendor', 'Turnstile / hCaptcha / reCAPTCHA siteverify constants'],
   'src/modules/connections/rotation/rotation.http.ts': ['vendor', 'key-rotation calls to each vendor\'s fixed admin API'],
   'src/modules/files/storage.service.ts': ['operator', 'STORAGE_S3_ENDPOINT from the operator\'s environment'],
-  'src/modules/gateways/channels/channel-webhook-registrar.service.ts': ['vendor', 'Telegram / Slack / Discord webhook registration APIs'],
+  'src/modules/gateways/channels/channel-webhook-registrar.service.ts': ['vendor', 'Telegram / Twilio / Sendblue webhook registration APIs (api.sendblue.co)'],
   'src/modules/gateways/channels/discord-gateway.transport.ts': ['vendor', 'Discord gateway WebSocket URL from Discord\'s own /gateway/bot'],
   'src/modules/gateways/channels/adapters/discord.adapter.ts': ['vendor', 'discord.com API'],
   'src/modules/gateways/channels/adapters/email.adapter.ts': ['vendor', 'api.resend.com'],

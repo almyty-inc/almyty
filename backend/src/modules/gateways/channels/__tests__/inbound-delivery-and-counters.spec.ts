@@ -673,8 +673,7 @@ describe('inbound channel pipeline under concurrency', () => {
   // ── iMessage relays through the shared pipeline ───────────────────────
   //
   // Both relays post every event to the one webhook URL. A verified
-  // delivery that is not an inbound 1:1 text must be acknowledged and
-  // left alone; one that is must run once and be answered through the
+  // delivery that is not an inbound message (an echo, a status, a\n  // reaction) must be acknowledged and left alone; one that is must run once and be answered through the
   // relay, with the AI disclosure line on the first reply.
   describe('iMessage relays', () => {
     const settle = async () => {
@@ -759,13 +758,13 @@ describe('inbound channel pipeline under concurrency', () => {
       expect(eventRepository.rows[0]).toMatchObject({ status: 'failed', errorMessage: 'signature verification failed' });
     });
 
-    it('Sendblue: an outbound echo or a group message is acknowledged without a run or a row', async () => {
+    it('Sendblue: an outbound echo or a status callback is acknowledged without a run or a row', async () => {
       const service = buildService();
       const gateway = relayGateway(GatewayType.IMESSAGE_SENDBLUE, SENDBLUE);
       const headers = { 'sb-signing-secret': SENDBLUE.signing_secret };
 
       await service.handleInboundMessage(gateway, sendblueInbound({ is_outbound: true, status: 'DELIVERED' }), headers);
-      await service.handleInboundMessage(gateway, sendblueInbound({ message_handle: 'G-1', group_id: 'group-1' }), headers);
+      await service.handleInboundMessage(gateway, sendblueInbound({ message_handle: 'S-1', is_outbound: true, status: 'SENT', group_id: 'group-1' }), headers);
 
       expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
       expect(eventRepository.rows).toHaveLength(0);
@@ -795,13 +794,13 @@ describe('inbound channel pipeline under concurrency', () => {
       expect(eventRepository.rows.find((r: any) => r.direction === 'inbound')).toMatchObject({ status: 'processed' });
     });
 
-    it('LoopMessage: status events and group messages are acknowledged without a run', async () => {
+    it('LoopMessage: status events and reactions are acknowledged without a run', async () => {
       const service = buildService();
       const gateway = relayGateway(GatewayType.IMESSAGE_LOOPMESSAGE, LOOP);
       const headers = { authorization: LOOP.inbound_token };
 
       await service.handleInboundMessage(gateway, loopInbound({ event: 'message_delivered' }), headers);
-      await service.handleInboundMessage(gateway, loopInbound({ message_id: 'G-1', group: { group_id: 'g1' } }), headers);
+      await service.handleInboundMessage(gateway, loopInbound({ message_id: 'R-1', event: 'message_reaction' }), headers);
 
       expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
       expect(eventRepository.rows).toHaveLength(0);

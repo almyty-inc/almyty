@@ -58,10 +58,10 @@ describe('IMessageSendblueAdapter', () => {
       expect(adapter.deliveryId({})).toBeUndefined();
     });
 
-    it('answers only inbound 1:1 text', () => {
+    it('answers inbound text, one to one or in a group, and nothing else', () => {
       expect(adapter.carriesMessage(receiveWebhook)).toBe(true);
       expect(adapter.carriesMessage({ ...receiveWebhook, is_outbound: true })).toBe(false);
-      expect(adapter.carriesMessage({ ...receiveWebhook, group_id: 'grp-1' })).toBe(false);
+      expect(adapter.carriesMessage({ ...receiveWebhook, group_id: 'grp-1' })).toBe(true);
       expect(adapter.carriesMessage({ ...receiveWebhook, content: '   ' })).toBe(false);
       expect(adapter.carriesMessage({ ...receiveWebhook, from_number: undefined })).toBe(false);
       expect(adapter.carriesMessage(null)).toBe(false);
@@ -136,6 +136,120 @@ describe('IMessageSendblueAdapter', () => {
       await expect(adapter.sendResponse({ ...config, phone_number: '' }, { content: 'x' }, { from: '+1' })).rejects.toThrow(/phone_number/);
       await expect(adapter.sendResponse(config, { content: 'x' }, {})).rejects.toThrow(/no sender/);
       expect(fetchMock.calls).toHaveLength(0);
+    });
+  });
+
+  /**
+   * A group message and a photo, as the receive webhook documents them
+   * (https://docs.sendblue.com/getting-started/receiving-messages/):
+   * `group_id`, `participants` and `group_display_name` on a group
+   * message, `media_url` a single CDN link, empty when nothing is attached.
+   */
+  const groupWebhook = {
+    ...receiveWebhook,
+    content: 'Can someone check order 1182?',
+    message_handle: 'GRP-HANDLE-1',
+    from_number: '+14155550101',
+    group_id: 'b1e9f6d2-group-7731',
+    participants: ['+14155550101', '+14155550102', '+15122164639'],
+    group_display_name: 'Northwind ops',
+    media_url: '',
+  };
+
+  describe('group chats', () => {
+    it('keys the conversation on the group and the sender on the member who wrote', () => {
+      const r = adapter.normalizeInbound(groupWebhook);
+      expect(r.threadId).toBe('b1e9f6d2-group-7731');
+      expect(r.userId).toBe('+14155550101');
+      expect(r.metadata).toMatchObject({ groupId: 'b1e9f6d2-group-7731', groupName: 'Northwind ops', from: '+14155550101' });
+    });
+
+    it('treats an empty group_id as one to one', () => {
+      const r = adapter.normalizeInbound({ ...receiveWebhook, group_id: '' });
+      expect(r.threadId).toBe('+19998887777');
+      expect(r.metadata?.groupId).toBeUndefined();
+    });
+
+    it('answers a group message', () => {
+      expect(adapter.carriesMessage(groupWebhook)).toBe(true);
+      // Our own reply into the group is still an echo.
+      expect(adapter.carriesMessage({ ...groupWebhook, is_outbound: true })).toBe(false);
+    });
+
+    it('replies to the group through send-group-message, not to the member', async () => {
+      fetchMock.setNextResponse({ json: { status: 'QUEUED', message_handle: 'OUT-G1' } });
+      const r = adapter.normalizeInbound(groupWebhook);
+      // The pipeline hands over every metadata key plus threadId/from.
+      await adapter.sendResponse(config, adapter.formatOutbound({ text: 'On it.' }), {
+        ...r.metadata,
+        threadId: r.threadId,
+        from: r.metadata?.from,
+      });
+
+      expect(fetchMock.calls).toHaveLength(1);
+      expect(fetchMock.calls[0].url).toBe('https://api.sendblue.co/api/send-group-message');
+      expect(parseSentJson(fetchMock.calls[0])).toEqual({
+        group_id: 'b1e9f6d2-group-7731',
+        from_number: '+15122164639',
+        content: 'On it.',
+      });
+    });
+  });
+
+  describe('media', () => {
+    it('hands an inbound media_url over as an attachment, and answers a photo sent without text', () => {
+      const photo = { ...receiveWebhook, content: '', media_url: 'https://storage.googleapis.com/inbound-file-store/abc/IMG_0042.heic' };
+      expect(adapter.carriesMessage(photo)).toBe(true);
+      expect(adapter.normalizeInbound(photo).attachments).toEqual([
+        { url: 'https://storage.googleapis.com/inbound-file-store/abc/IMG_0042.heic', type: 'image/heic', name: 'IMG_0042.heic' },
+      ]);
+      expect(adapter.fetchesInboundAttachments).toBe(true);
+    });
+
+    it('ignores a media_url that is not an https link', () => {
+      const r = adapter.normalizeInbound({ ...receiveWebhook, media_url: 'http://10.0.0.1/a.png' });
+      expect(r.attachments).toBeUndefined();
+      expect(adapter.carriesMessage({ ...receiveWebhook, content: '', media_url: 'file:///etc/passwd' })).toBe(false);
+    });
+
+    it('sends a reply file as media_url with the text', async () => {
+      const formatted = adapter.formatOutbound({
+        text: 'Here is the invoice.',
+        attachments: [{ url: 'https://files.northwind.example/invoice-1182.pdf', type: 'application/pdf', name: 'invoice-1182.pdf' }],
+      });
+      await adapter.sendResponse(config, formatted, { from: '+19998887777' });
+      expect(parseSentJson(fetchMock.calls[0])).toEqual({
+        number: '+19998887777',
+        from_number: '+15122164639',
+        content: 'Here is the invoice.',
+        media_url: 'https://files.northwind.example/invoice-1182.pdf',
+      });
+    });
+
+    it('sends each further file as a message of its own, to the group when it came from one', async () => {
+      const formatted = adapter.formatOutbound({
+        text: 'Both photos.',
+        attachments: [
+          { url: 'https://files.example/a.jpg', type: 'image/jpeg', name: 'a.jpg' },
+          { url: 'http://files.example/skipped.jpg', type: 'image/jpeg', name: 'skipped.jpg' },
+          { url: 'https://files.example/b.jpg', type: 'image/jpeg', name: 'b.jpg' },
+        ],
+      });
+      await adapter.sendResponse(config, formatted, { groupId: 'grp-9', from: '+14155550101' });
+      expect(fetchMock.calls.map((c) => c.url)).toEqual([
+        'https://api.sendblue.co/api/send-group-message',
+        'https://api.sendblue.co/api/send-group-message',
+      ]);
+      expect(parseSentJson(fetchMock.calls[0])).toEqual({
+        group_id: 'grp-9', from_number: '+15122164639', content: 'Both photos.', media_url: 'https://files.example/a.jpg',
+      });
+      expect(parseSentJson(fetchMock.calls[1])).toEqual({
+        group_id: 'grp-9', from_number: '+15122164639', media_url: 'https://files.example/b.jpg',
+      });
+    });
+
+    it('sends no media field when the reply has no files', () => {
+      expect(adapter.formatOutbound({ text: 'x' })).toEqual({ content: 'x' });
     });
   });
 });

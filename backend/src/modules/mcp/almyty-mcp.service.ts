@@ -10,6 +10,7 @@ import { ApisService } from '../apis/apis.service';
 import { ToolsService } from '../tools/tools.service';
 import { GatewaysService } from '../gateways/gateways.service';
 import { AgentStatus } from '../../entities/agent.entity';
+import { GatewayKind } from '../../entities/gateway.entity';
 import { agentIsInvokable, runsOnAutonomousRuntime } from '../agents/agent-invocation';
 import { AgentsService } from '../agents/agents.service';
 import { AgentExecutionEngine } from '../agents/agent-execution.engine';
@@ -108,7 +109,7 @@ const TOOLS = [
   { name: 'list_tools', description: 'List all tools', inputSchema: { type: 'object', properties: {} } },
   { name: 'delete_tool', description: 'Delete a tool by ID', inputSchema: { type: 'object', properties: { toolId: { type: 'string', description: 'Tool ID to delete' } }, required: ['toolId'] } },
   { name: 'activate_tool', description: 'Activate tools so gateways can serve them. Generated tools (from import_schema) land in DRAFT and a gateway only attaches ACTIVE ones — this is the step between import_schema and create_gateway. Accepts one toolId or many toolIds; each id is reported separately, so one failure does not lose the rest.', inputSchema: { type: 'object', properties: { toolId: { type: 'string', description: 'Single tool ID.' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Several tool IDs. Takes precedence over toolId.' } } } },
-  { name: 'list_gateways', description: 'List all gateways', inputSchema: { type: 'object', properties: {} } },
+  { name: 'list_gateways', description: 'List the gateways: MCP, UTCP and Skills gateways serving tools. An agent\'s channels (web chat, widget, messaging platforms, A2A) are not gateways; list them with list_channels.', inputSchema: { type: 'object', properties: {} } },
   { name: 'delete_gateway', description: 'Delete a gateway by ID', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string', description: 'Gateway ID to delete' } }, required: ['gatewayId'] } },
   { name: 'create_gateway', description: 'Create a gateway. Each gateway serves one protocol. A gateway is an MCP server, a UTCP manual or an Agent Skills bundle (mcp, utcp, skills); tools are auto-assigned. A web chat, website widget, messaging channel or A2A endpoint is a channel on an agent (add_channel) and is refused here. Only ACTIVE tools can be attached — freshly generated tools are DRAFT, so run activate_tool first or read `toolsSkipped` in the result to see exactly what was left off.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string', enum: ['mcp', 'utcp', 'skills'] }, endpoint: { type: 'string', description: 'URL slug. Auto-generated from name if omitted.' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Specific tool IDs to assign (tool-kind only)' }, apiIds: { type: 'array', items: { type: 'string' }, description: 'Assign all tools from these API IDs (tool-kind only)' }, assignTools: { type: 'boolean', description: 'Auto-assign all org tools if no toolIds/apiIds given. Default: true for tool-kind.' }, configuration: { type: 'object', description: 'Gateway-type-specific config. MCP: {transport: http|sse|websocket}. UTCP: {protocol: http|tcp}. Defaults are sensible per type.', additionalProperties: true } }, required: ['name', 'type'] } },
   { name: 'assign_tools_to_gateway', description: 'Assign tools to a gateway by tool IDs or by API name (assigns all tools from that API). Only ACTIVE tools attach; DRAFT ones come back in `toolsSkipped` with a reason — activate_tool them and call again. `toolsAssigned` is the number that actually attached, not the number requested.', inputSchema: { type: 'object', properties: { gatewayId: { type: 'string' }, toolIds: { type: 'array', items: { type: 'string' }, description: 'Tool IDs to assign' }, apiName: { type: 'string', description: 'Assign all tools from this API (by name)' } }, required: ['gatewayId'] } },
@@ -420,7 +421,9 @@ export class AlmytyMcpService {
         return { requested: ids.length, activatedCount: activated.length, activated, failed };
       }
       case 'list_gateways': {
-        const gwResult = await get(GatewaysService).getGateways({ organizationId: orgId, limit: 50, caller: { id: userId } });
+        // Gateways are MCP, UTCP and Skills; an agent's channels (web chat,
+        // widget, messaging, A2A) are listed by list_channels.
+        const gwResult = await get(GatewaysService).getGateways({ organizationId: orgId, limit: 50, kind: GatewayKind.TOOL, caller: { id: userId } });
         return { total: gwResult.total, gateways: gwResult.gateways.map(g => ({ id: g.id, name: g.name, type: g.type, kind: g.kind, status: g.status, endpoint: g.endpoint, isSystem: g.isSystem })) };
       }
       case 'delete_gateway': {

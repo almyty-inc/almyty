@@ -115,7 +115,7 @@ describe('GatewaysPage', () => {
       vi.mocked(gatewaysApi.getAll).mockResolvedValue({
         gateways: [
             { ...mockGateway, id: 'gateway-1', name: 'MCP Gateway', type: 'mcp' },
-            { ...mockGateway, id: 'gateway-2', name: 'A2A Gateway', type: 'a2a' },
+            { ...mockGateway, id: 'gateway-2', name: 'UTCP Gateway', type: 'utcp' },
         ],
       })
     })
@@ -125,7 +125,7 @@ describe('GatewaysPage', () => {
 
       await waitFor(() => {
         expect(screen.getByText('MCP Gateway')).toBeInTheDocument()
-        expect(screen.getByText('A2A Gateway')).toBeInTheDocument()
+        expect(screen.getByText('UTCP Gateway')).toBeInTheDocument()
       })
     })
 
@@ -134,7 +134,7 @@ describe('GatewaysPage', () => {
 
       await waitFor(() => {
         expect(screen.getByText('MCP')).toBeInTheDocument()
-        expect(screen.getByText('A2A')).toBeInTheDocument()
+        expect(screen.getByText('UTCP')).toBeInTheDocument()
       })
     })
 
@@ -156,6 +156,49 @@ describe('GatewaysPage', () => {
         const activeStatuses = screen.getAllByText(/active/i)
         expect(activeStatuses.length).toBeGreaterThan(0)
       })
+    })
+  })
+
+  // A gateway is MCP, UTCP or Skills. A2A, the web chat, the widget and the
+  // messaging platforms are channels on an agent, reached from its Channels
+  // tab: never listed, counted or offered as a filter here.
+  describe('MCP, UTCP and Skills only', () => {
+    beforeEach(() => {
+      vi.mocked(gatewaysApi.getAll).mockResolvedValue({
+        gateways: [
+          { ...mockGateway, id: 'gw-mcp', name: 'Petstore MCP', type: 'mcp' },
+          { ...mockGateway, id: 'gw-skills', name: 'Petstore Skills', type: 'skills' },
+          { ...mockGateway, id: 'gw-a2a', name: 'Support A2A', type: 'a2a', agentId: 'agent-1' },
+          { ...mockGateway, id: 'gw-web', name: 'Support web chat', type: 'hosted_chat', agentId: 'agent-1' },
+          { ...mockGateway, id: 'gw-slack', name: 'Support Slack', type: 'slack', agentId: 'agent-1' },
+        ],
+        total: 5,
+      })
+    })
+
+    it('asks the server for tool gateways only', async () => {
+      renderGatewaysPage()
+      await screen.findByText('Petstore MCP')
+      expect(gatewaysApi.getAll).toHaveBeenCalledWith({ kind: 'tool' })
+    })
+
+    it('lists and counts no channel gateway', async () => {
+      renderGatewaysPage()
+      await screen.findByText('Petstore MCP')
+      expect(screen.getByText('Petstore Skills')).toBeInTheDocument()
+      for (const name of ['Support A2A', 'Support web chat', 'Support Slack']) {
+        expect(screen.queryByText(name)).toBeNull()
+      }
+      expect(screen.getByText(/2 gateways/)).toBeInTheDocument()
+    })
+
+    it('offers no A2A kind in the filter', async () => {
+      const user = userEvent.setup()
+      renderGatewaysPage()
+      await screen.findByText('Petstore MCP')
+      await user.click(screen.getByRole('combobox', { name: 'Filter by kind' }))
+      const options = (await screen.findAllByRole('option')).map((o) => o.textContent)
+      expect(options).toEqual(['All kinds', 'MCP', 'UTCP', 'Skills'])
     })
   })
 
@@ -257,7 +300,7 @@ describe('GatewaysPage', () => {
       vi.mocked(gatewaysApi.getAll).mockResolvedValue({
         gateways: [
           { ...mockGateway, id: 'gateway-1', name: 'MCP Gateway', type: 'mcp', endpoint: '/mcp' },
-          { ...mockGateway, id: 'gateway-2', name: 'A2A Gateway', type: 'a2a', endpoint: '/a2a' },
+          { ...mockGateway, id: 'gateway-2', name: 'UTCP Gateway', type: 'utcp', endpoint: '/utcp' },
           { ...mockGateway, id: 'gateway-3', name: 'Skills Gateway', type: 'skills', endpoint: '/skills' },
         ],
       })
@@ -269,7 +312,7 @@ describe('GatewaysPage', () => {
 
       await waitFor(() => {
         expect(screen.getByText('MCP Gateway')).toBeInTheDocument()
-        expect(screen.getByText('A2A Gateway')).toBeInTheDocument()
+        expect(screen.getByText('UTCP Gateway')).toBeInTheDocument()
         expect(screen.getByText('Skills Gateway')).toBeInTheDocument()
       })
 
@@ -278,7 +321,7 @@ describe('GatewaysPage', () => {
 
       // Only the MCP gateway should remain visible
       expect(screen.getByText('MCP Gateway')).toBeInTheDocument()
-      expect(screen.queryByText('A2A Gateway')).not.toBeInTheDocument()
+      expect(screen.queryByText('UTCP Gateway')).not.toBeInTheDocument()
       expect(screen.queryByText('Skills Gateway')).not.toBeInTheDocument()
     })
   })
