@@ -1,6 +1,6 @@
 # Agents API
 
-> This is the HTTP API reference. For UI walkthroughs, see [Getting Started](/) and the feature guides above.
+This page is for developers who want to create, run and inspect agents from their own code. For example, your order system can start the support agent when a ticket arrives, or a script can roll an agent back to yesterday's version. In the app, the same work is on **Agents**; see [Agents](/agents).
 
 ![Agents in the UI](/screenshots/agents-list.png)
 
@@ -34,7 +34,7 @@ and working with versions and executions.
 | `POST` | `/agents/:id/schedule` | Set schedule |
 | `DELETE` | `/agents/:id/schedule` | Remove schedule |
 
-## List Agents
+## List agents
 
 ```bash
 curl https://api.almyty.com/agents \
@@ -63,7 +63,7 @@ curl https://api.almyty.com/agents \
 }
 ```
 
-## Create Agent
+## Create agent
 
 ```bash
 curl -X POST https://api.almyty.com/agents \
@@ -86,7 +86,7 @@ curl -X POST https://api.almyty.com/agents \
   }'
 ```
 
-## Invoke Agent
+## Invoke agent
 
 ```bash
 curl -X POST https://api.almyty.com/agents/{id}/invoke \
@@ -141,14 +141,14 @@ curl -X POST https://api.almyty.com/agents/{id}/invoke \
 }
 ```
 
-## Get Executions
+## Get executions
 
 ```bash
 curl "https://api.almyty.com/agents/{id}/executions?limit=20&offset=0" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### Query Parameters
+### Query parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -157,7 +157,7 @@ curl "https://api.almyty.com/agents/{id}/executions?limit=20&offset=0" \
 | `status` | string |, | Filter by status: `success`, `failed`, `running` |
 | `trigger` | string |, | Filter by trigger: `manual`, `webhook`, `schedule` |
 
-## Save Version
+## Save version
 
 ```bash
 curl -X POST https://api.almyty.com/agents/{id}/versions \

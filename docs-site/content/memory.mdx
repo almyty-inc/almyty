@@ -1,105 +1,100 @@
 # Memory
 
-Memory gives an agent recall across runs, so it remembers what matters without you restating it. Each memory is a piece of context (content plus an embedding) stored with a **scope**, a **tier**, and a validity period. At run time the agent retrieves the relevant ones by meaning and folds them into the prompt.
+Memory lets your assistants remember things between conversations, so you don't have to repeat yourself. For example, your support assistant can remember that "Brightway Logistics is an enterprise account: send their tickets to Tier 2", or that a customer prefers email, and use it the next time it matters.
 
-Memory is distinct from [constraints](/agents/autonomous#constraints): constraints are always-on prompt rules; memory is retrieved per turn by relevance.
+You can write memories yourself, and assistants can save what they learn as they work. When an assistant answers, it looks up the memories that relate to the question and uses them.
+
+Memory is different from an assistant's [rules](/agents/autonomous#constraints): rules apply to every answer, memories are looked up only when they are relevant.
 
 ![The Memory page's Memories tab filtered to long-tier demo entries with tags and embedding status](/screenshots/memory.png)
 
-## Tiers: short-term to long-term
-
-The backend organizes memory into **tiers**, not fixed types. The tier decides how long a memory lives and how it is used.
-
-| Tier | What it holds | Retention |
-|------|---------------|-----------|
-| **Short** | Session / ephemeral observations | Optional TTL; swept when it expires |
-| **Project** | Work-product for an ongoing task | Medium |
-| **Long** | Durable facts and preferences | No expiry |
-| **Shared** | Cross-agent workspace knowledge | No expiry |
-
-Short-term memory is captured continuously. An hourly **consolidation** job distills aging short-term rows into long-term facts (via an LLM), and a TTL sweeper retires short rows once they expire, but nothing is lost (see [bi-temporal](#bi-temporal-history) below). So an agent accrues observations, and the important ones graduate to durable memory on their own.
-
-> The **fact / preference / context / episode / instruction** labels you see in
-> the UI are friendly names mapped onto tiers (fact, preference, instruction map
-> to long; context maps to short; episode maps to project). They are a
-> convenience, not a separate taxonomy: the system stores a tier.
-
-## Two modes
-
-- **Memory**: facts, preferences, and observations an agent accumulates.
-- **Document**: source documents you load for retrieval; they are chunked and versioned so the agent can cite from a knowledge base.
-
-## How retrieval works
-
-Retrieval is **hybrid search**: vector similarity (pgvector, cosine) blended with Postgres full-text search, then filtered by scope, tier, tags, and validity. Embeddings are generated per scope with the organization's own providers (OpenAI `text-embedding-3-small` preferred, Mistral `mistral-embed` next, and a deterministic fallback when neither is configured) and computed asynchronously, so a new memory becomes searchable a moment after it is written. Each memory records the model that embedded it; the vector half of search only compares vectors from the same model (embeddings from different models are not comparable), falling back to full-text search across models.
-
-## Bi-temporal history
-
-Memory tracks two timelines, so you can ask not just *what is true* but *what the agent knew, and when*:
-
-- **Valid time**: when a memory is true in the agent's world.
-- **Transaction time**: when it was written.
-
-Updating a memory does not overwrite it: almyty writes a new current row and closes the old one. Expiry and consolidation also **close** rows rather than delete them. Because nothing is destroyed, an "as-of" query can reconstruct exactly what the agent knew at any past moment.
-
-## Multiple backends
-
-almyty-native (Postgres + pgvector) is the full-featured default: it is the backend with bi-temporal history, TTL, and hybrid search. But memory is pluggable: a per-scope router can point a scope at a different store, so you can bring your own.
-
-| Backend | Notes |
-|---------|-------|
-| **almyty-native** | Default; full feature set |
-| Anthropic memory tool | |
-| mem0 | |
-| Zep | |
-| Supermemory | |
-| Vertex Memory Bank | Google Vertex |
-
-Operations a backend does not support fall back to almyty-native or return a clean error, so a scope is never silently broken.
-
-## Sync
-
-A scope can mirror to a second backend. Every write is best-effort mirrored, and a scheduled reconciliation job keeps the two in lockstep (last-write-wins), so a dropped mirror write heals on its own. Use it to keep almyty-native and an external store (mem0, Zep, and so on) eventually consistent.
-
-## Scoping
-
-Every memory belongs to a scope (`user`, `workspace`, `project`, `collab`, or `agent`) and every query filters on it. That scope is the isolation boundary: an agent only ever reads memory it is entitled to. A `user` scope is one member's (or one visitor's), an `agent` scope one agent's own.
-
-## An agent's memory settings
-
-An autonomous agent's **Memory** section decides what its runs read and write. Every setting is applied by the server on each run; none of it is only shown.
-
-**Memory account.** almyty's own memory, an outside account your organization set up on the Memory page's **Storage** tab, or an account of the agent's own: anyone who can edit the agent can connect one with **Add a memory account**, without changing the organization's memory settings. An organization account is used with the organization's credential for it; the agent's own account is used as the run, so its connection's scope applies (a private connection only for an agent private to the same owner, a team one only for that team's agents; the server refuses any other).
-
-**Whose memory.**
-
-| Choice | The memory a run reads and writes |
-|---|---|
-| Each person has their own | The member the run is for. A visitor on a hosted chat or widget gets a memory of their own too, but it is written only when the agent's visitor settings allow keeping visitor memory. A run for nobody (a heartbeat, an A2A call without a person) has no memory. |
-| This agent's own | This agent's alone; no other agent reads it. It is on the agent's **Memory** tab, and only the people who can see the agent can see it (on the page and through the Memory API): its owner for a private agent, its team for a team agent, the organization for the rest. |
-| Shared by all agents | The organization's memory, read and written by every agent that shares it. |
-
-**What it saves.**
-
-- **Facts it learns**: when a run finishes, the agent's main model reads the exchange and picks out up to five lasting facts, each saved as its own long-term memory.
-- **Whole conversations**: each exchange is saved as it was said.
-- **Only when asked**: nothing is saved on its own; the agent saves something only when the person asks it to remember it.
-
-In every case the agent can also save a memory with its `store_memory` tool while it works. What a run saves after it ends is a `memory_save` step on the run, with its cost.
-
-**Never save.** Rules, one per line. Before anything is written (a fact, a conversation, or the agent's own save) the agent's main model takes out what the rules cover; when nothing is left, nothing is saved, and when the check cannot be made, the save is not made either.
-
-**How long it keeps memories.** Until deleted, or for a number of days. In almyty's own memory a memory older than that stops being used and shown (it is closed, not erased, like any expired memory). In an outside account almyty deletes it through that service's API, about once an hour; a service with no way to delete one memory (Vertex AI Memory Bank) can only keep memories until deleted. Changing the number applies to what the agent already saved.
-
 ## Add a memory
+
+1. Open **Memory** in the sidebar and click **Add memory**. To add one for a single assistant, open that assistant's **Memory** tab instead.
+2. Under **What should your agents remember?**, write it in a sentence.
+3. Optionally add **Tags** to group it, like `refunds` or `shipping`.
+4. Under **Advanced**, pick the **Kind**: a **Fact** (a short thing to remember) or a **Document** (a longer text, with **Where it came from** for a link to the original). For a fact, pick **How long to keep it**. An assistant looks up facts before it answers; documents are kept and listed here but are not what it looks up, so write what it should answer from as facts.
+5. Click **Save memory**.
 
 ![Writing a memory entry](/screenshots/memory-write.png)
 
-In the UI, click **Add memory** on the Memory page, or on an agent's **Memory** tab to add one for that agent, or let the agent save them automatically during a run.
+A new memory can be found a moment after you save it.
 
-From your AI assistant, the native MCP control plane exposes `memory_put`, `memory_search`, `memory_supersede`, and more, so you can read and write memory from Claude Code or Cursor. See [Control almyty via MCP](/control-via-mcp). Memory CRUD is also available over REST in the [API reference](/api-reference).
+### How long a memory is kept
+
+| Choice | What it's for |
+|---|---|
+| **Short-term** | Notes from recent work. Tidied into long-term facts every hour. |
+| **This project** | Kept while the project it belongs to is going. |
+| **Long-term** | Lasting facts and preferences. |
+| **Shared by all agents** | Kept for good and seen by every agent in the organization. |
+
+Short-term notes are not simply thrown away: every hour the important ones are rewritten as long-term facts by an AI model, and the rest retire when they expire.
+
+## An assistant's memory settings
+
+On an autonomous assistant, the **Memory** section decides what it remembers and where.
+
+**Whose memory**
+
+| Choice | What the assistant reads and writes |
+|---|---|
+| **Each person has their own** | A separate memory for each person it talks to. A visitor on a web chat or widget gets their own too, but it is only written when the assistant's visitor settings allow keeping visitor memory. A run for nobody in particular (a scheduled check, a call from another agent) has no memory. |
+| **This agent's own** | This assistant's alone; no other assistant reads it. It appears on the assistant's **Memory** tab, visible only to people who can see the assistant. |
+| **Shared by all agents** | The organization's memory, read and written by every assistant that shares it. |
+
+**What it saves**
+
+- **Facts it learns**: after each conversation, the assistant picks out up to five lasting facts and saves each as a long-term memory.
+- **Whole conversations**: each exchange is saved as it was said.
+- **Only when asked**: nothing is saved on its own; the assistant saves something only when the person asks it to remember it.
+
+Whatever you choose, the assistant can also save a memory on purpose while it works.
+
+**Never save.** Write rules, one per line, such as "card numbers, passwords, home addresses". Before anything is saved, the assistant removes what the rules cover. If nothing is left, nothing is saved, and if the check cannot be made, nothing is saved either.
+
+**How long it keeps memories.** Until deleted, or for a number of days. After that a memory stops being used and shown. Changing the number also applies to what the assistant already saved.
+
+**Memory account.** By default memories are kept in almyty. You can also keep them in an outside memory service your organization set up on the Memory page's **Storage** tab, or connect an account for this one assistant with **Add a memory account**, without changing anything for the rest of the organization.
+
+## Keep memories in another service
+
+almyty's own memory is the default and does everything on this page. You can also keep an assistant's memories in an outside memory service:
+
+| Service | Notes |
+|---|---|
+| **almyty (built in)** | The default; everything on this page |
+| Claude memory tool | |
+| Mem0 | |
+| Zep | |
+| Supermemory | |
+| Vertex AI Memory Bank | Google Cloud; memories can only be kept until deleted, not for a number of days |
+
+If a service cannot do something, almyty falls back to its own memory or says so plainly, so memory never silently stops working. You can also mirror memories to a second service, and the two are kept in step automatically.
+
+## Nothing is lost
+
+Changing a memory does not overwrite it: the new version is saved and the old one is closed. Expiring and tidying also close memories rather than erase them. So you can always see not just what is true now, but what an assistant knew at any moment in the past.
 
 ## Related
 
-- [Autonomous agents](/agents/autonomous): enable memory on an agent
-- [Connect a provider](/llm-providers): the provider that generates embeddings
+- [Autonomous agents](/agents/autonomous): turn on memory for an assistant
+- [Connect a provider](/llm-providers): the provider used to index memories for search
+
+## For developers
+
+**Tiers.** The API stores a tier on each memory: `short` (optional TTL, swept when it expires), `project`, `long` (no expiry) and `shared` (cross-agent workspace knowledge, no expiry). An hourly consolidation job distils ageing short-term rows into long-term facts with an LLM, and a TTL sweeper retires expired short rows.
+
+**Modes.** `memory` (facts, preferences and observations) and `document` (source documents, chunked and versioned for retrieval).
+
+**Retrieval** is hybrid search: vector similarity (pgvector, cosine) blended with Postgres full-text search, then filtered by scope, tier, tags and validity. Embeddings are made per scope with the organization's own providers (OpenAI `text-embedding-3-small` preferred, Mistral `mistral-embed` next, and a deterministic fallback when neither is configured), asynchronously. Each memory records the model that embedded it; vector search only compares vectors from the same model, and falls back to full-text search across models.
+
+**Bi-temporal history.** Memory tracks valid time (when it is true) and transaction time (when it was written). Updates write a new current row and close the old one; expiry and consolidation close rows rather than delete them, so an as-of query reconstructs what an agent knew at any past moment.
+
+**Scopes.** Every memory belongs to a scope (`user`, `workspace`, `project`, `collab` or `agent`) and every query filters on it; the scope is the isolation boundary. A `user` scope is one member's (or one visitor's), an `agent` scope one agent's own.
+
+**Backends and sync.** A per-scope router can point a scope at a different store; only almyty-native (Postgres + pgvector) has bi-temporal history, TTL and hybrid search. Operations a backend does not support fall back to almyty-native or return a clean error. A scope can mirror to a second backend: every write is mirrored best-effort, and a scheduled reconciliation job keeps the two in step (last write wins).
+
+**Agent memory settings on the server.** Every setting is applied by the server on each run. An organization memory account is used with the organization's credential; an agent's own account is used as the run, so its connection's scope applies (a private connection only for an agent private to the same owner, a team one only for that team's agents). The agent saves on purpose with its `store_memory` tool; what a run saves after it ends is a `memory_save` step on the run, with its cost. In an outside account, memories past their keep period are deleted through that service's API about once an hour.
+
+**Access from your tools.** The MCP control plane exposes `memory_put`, `memory_search`, `memory_supersede` and more; see [Control almyty via MCP](/control-via-mcp). Memory is also available over REST in the [API reference](/api-reference/authentication).

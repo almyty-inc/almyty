@@ -1,28 +1,30 @@
-# Enforce approval policies org-wide
+# Decide who signs off, once, for every assistant
 
-**Stack**: `Policy: action + threshold → required approver` · `Pause: request_approval` · `Queue: Approvals page` · `Output: consistent, provable sign-off`
+Set the sign-off rules for your whole organization in one place, instead of repeating them in every assistant's instructions. For example: refunds over $500 need a finance lead; anything over $5,000 needs a finance lead and then an admin. Whenever any assistant asks for approval, the matching rule decides who has to say yes, and every decision is recorded.
 
-**Who it's for**: teams that can't leave "should a human approve this?" to each agent's prompt.
-**What it does**: defines approval as org policy, not per-agent instruction: rules map an action and threshold to the role that must sign off. Any agent hitting a gated action pauses for the right approver, the same way, every time, with a record.
+Approval rules need the Business plan. Without them, any owner or admin can approve a request on their own.
 
-## Build it
+## What you need
 
-1. **Write the policies**: e.g. *refunds over $500 → finance lead*, *any external send → manager*, *production config change → admin*. Rules live at the org level, above any single agent.
-2. **Reference the gate in agents**: the agent calls `request_approval` for the action; the policy decides who must approve and when.
-3. **Route to the queue**: the run pauses at `waiting_approval` and the request lands on the [Approvals](/approvals) page with full context. Here the demo's support agent hit its refund rule on a real **$820 Brightway Logistics** claim and stopped for a human:
+- An assistant that asks for approval before risky steps (see [Approvals](/approvals)).
+- The Business plan, for rules with several steps or several approvers.
 
-   ![A real refund escalation waiting for approval](/screenshots/approval-refund-820.png)
-4. **Approve or reject**: the run resumes or stops on their decision; both outcomes are recorded.
-5. **Prove it**: every approval and its decider is in the audit trail (see [Stream your audit trail to a SIEM](/examples/audit-to-siem)).
+## How to build it
 
-## Make it yours
+1. **Tell the assistant when to ask.** In the assistant's instructions, and as a rule on its **Constraints** tab, say what needs a person first, for example "Ask for approval before any refund over $500". When it asks, its run pauses. The assistant decides to ask because you told it to, so keep the rule short and clear.
+2. **Write the rule.** Open **Settings**, then **Approvals** under **Advanced**, and click **New policy**. Under **Match conditions**, click **Add condition** to say which requests it covers (for example, an amount over 500). Under **Approval steps**, click **Add step** for each sign-off, in order: who approves it, and how many people must. Click **Create policy**.
+3. **Approve or reject.** Paused requests appear on the **Approvals** page with the reason and the amount. Here the demo's support assistant stopped on an $820 refund for Brightway Logistics:
 
-- Escalate by amount: auto-approve under $50, one approver under $5k, two above.
-- Different approvers per team via [RBAC](/examples/multi-team-rbac).
-- Apply the same policy across every agent so a new agent inherits the guardrails.
+   ![A refund waiting for approval](/screenshots/approval-refund-820.png)
 
-**Uses**: `Enterprise` · `Approvals` · `Governance`
+4. **Check the record.** The run carries on after the last approval, or stops on a rejection. Both are in the audit trail, with who decided and when (see [Stream your audit trail](/examples/audit-to-siem)).
+
+## Ideas
+
+- Different amounts, different people: one approver under $5,000, two steps above.
+- Rules for one team's assistants only, so each team's own lead signs off.
+- New assistants follow the same rules as soon as they ask for approval.
 
 ## Related
 
-- [Approval policies](/enterprise/approval-policies) · [Approvals](/approvals) · [Organizations](/organizations) · [Governed refund agent](/examples/governed-refund-agent)
+- [Approval policies](/enterprise/approval-policies) · [Approvals](/approvals) · [Customer support assistant](/examples/customer-support-assistant) · [Governed refund agent](/examples/governed-refund-agent)

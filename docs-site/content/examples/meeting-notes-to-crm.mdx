@@ -1,26 +1,27 @@
-# Turn call notes into CRM updates and follow-ups
+# Turn call notes into CRM updates
 
-**Stack**: `Trigger: paste notes / your app calls the agent API` · `Models: your choice` · `Tools: CRM API, calendar API` · `Mode: single agent + approval` · `Output: CRM update + drafted follow-up email`
+For reps who have good calls and then never update the CRM. Paste your notes (or a transcript) after a call. The assistant pulls out the next steps, updates the deal in your CRM, and drafts a follow-up email. Anything that leaves the company waits for your approval first.
 
-**Who it's for**: reps who take good calls and then never update the CRM.
-**What it does**: takes raw call notes (or a transcript), extracts the next steps, updates the opportunity in the CRM, and drafts a follow-up email for the rep to approve before it sends.
+"CRM" here means your own CRM connected through its API: almyty has no built-in CRM connector.
 
-## Build it
+For a full walk-through with screenshots, see [Sales assistant in Slack](/examples/sales-assistant-slack): it looks up an account before a call and writes the meeting notes back afterwards.
 
-1. **Connect the CRM** (and your calendar API if you want it to propose times) via *Connect an API*.
-2. **Create the agent** with: *from these notes, extract action items, update the opportunity stage and next-step date, and draft a follow-up email in the rep's voice.*
-3. **Constrain it**: *never advance a deal stage the notes don't support; never invent a commitment*, so the CRM stays honest.
-4. **Draft, don't send**: the agent produces the email and calls `request_approval` so the rep edits and approves before anything leaves.
-5. **Write back**: on approval, it updates the CRM record and logs the activity.
-6. **Trigger it**: paste notes into the agent's chat, or have your note-taking tool call the agent API when a call ends.
+## What you need
 
-## Make it yours
+- Your CRM's API (and, if it should send the email itself, your email service's API).
 
-- Feed it the transcript directly if you capture calls; it handles the summarization.
-- Skip approval for the CRM write and keep approval only on the outbound email.
-- Add memory so it remembers each account's tone and past commitments.
+## How to build it
 
-**Uses**: `Sales` · `CRM` · `Approvals`
+1. **Connect the CRM.** Open **APIs**, click **Connect an API**, and connect your CRM. Its operations, such as "update deal" and "log activity", become tools.
+2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write: "From these notes, list the action items, update the deal stage and next-step date, and draft a follow-up email in the rep's voice." Pick the CRM tools under **Tools and APIs**.
+3. **Keep the CRM honest.** On its **Constraints** tab, add "Never move a deal to a stage the notes don't support" and "Never invent a commitment".
+4. **Approve before anything goes out.** Add to its instructions: "Ask for approval before sending any email." When it asks, the draft and the reason appear on the **Approvals** page; you approve or reject it.
+5. **Use it.** Paste the notes into its web chat or Slack (add the channel on its **Channels** tab), or have your note-taking tool send the notes to it when a call ends.
+
+## Ideas
+
+- Only ask for approval on the outgoing email, and let the CRM update go through on its own.
+- Turn on memory so it remembers each account's tone and earlier promises.
 
 ## Related
 

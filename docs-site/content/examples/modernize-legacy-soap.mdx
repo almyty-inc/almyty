@@ -1,29 +1,28 @@
-# Modernize a legacy SOAP service
+# Give an old SOAP service a modern front door
 
-**Stack**: `Tools: WSDL import → typed tools` · `Secrets: Credentials vault` · `Gateway: MCP` · `Output: 2006 service, 2026 interface`
+For companies with a core system that still speaks SOAP (an older way for systems to talk to each other) and no appetite to rewrite it. almyty reads the service's description file (its WSDL), turns each operation into a clean tool, and handles the old message format for you. Modern AI tools and assistants can then use the old system without anyone touching it.
 
-**Who it's for**: teams with a core system that still runs over SOAP and no appetite to rewrite it.
-**What it does**: imports a WSDL, turns each operation into a clean typed tool (almyty handles the envelope, headers, and namespaces), and republishes it as an MCP gateway, so modern agents and clients call the old service through a modern interface, untouched.
+For example: a twenty-year-old stock system becomes "check stock level" and "reserve items" tools your assistants can call.
 
-## Build it
+## What you need
 
-1. **Import the WSDL.** Go to *APIs → Connect an API* (`/apis/new`), pick **SOAP / WSDL**, give the WSDL link or file, and click **Connect API**. almyty reads the address from the WSDL, parses the definitions and builds a JSON parameter schema from the XML types. Paste the service key if asked.
+- The service's WSDL (a link or a file) and its sign-in details, if it has any.
 
-2. **Review the generated tools.** Each operation becomes a tool with typed inputs and outputs; the agent never sees the SOAP envelope.
+## How to build it
 
-   ![An imported service, every operation turned into a typed tool](/screenshots/quickstart-api-imported.png)
+1. **Connect the service.** Open **APIs**, click **Connect an API**, pick **SOAP / WSDL**, give the WSDL link or file, and click **Connect API**. almyty reads the address from it and builds each operation's inputs from the service's own types. Add the sign-in details when asked.
+2. **Check the tools.** Each operation is now a tool with named inputs and outputs. Nobody using it sees the SOAP messages.
 
-3. **Store the credentials once.** WS-Security or basic auth goes in the [Credentials](/credentials) vault, referenced from the tools, one place to rotate.
-4. **Publish it forward.** Group the operations and publish an **MCP** gateway. A modern agent, Claude Code, or a partner's system now calls your 2006 service with auth, rate limits, and audit in front.
+   ![An imported service, every operation turned into a tool](/screenshots/quickstart-api-imported.png)
 
-## Make it yours
+3. **Keep the password in one place.** The service's user name and password go in [Credentials](/credentials), so there is one place to change them.
+4. **Open it up.** Give the tools to your own assistants under **Tools and APIs**, or create an **MCP** gateway under **Gateways**, **Create gateway**, so AI tools such as Claude Code can call the service, with keys, limits and a record of every call.
 
-- SOAP is one of several parsers, OpenAPI, GraphQL, and gRPC / proto import the same way, so a mixed old/new estate lands in one place.
-- Wrap several legacy services behind one gateway for a unified surface.
-- You didn't migrate the system, you gave it a new front door.
+## Ideas
 
-**Uses**: `Platform` · `Legacy` · `SOAP` · `MCP`
+- OpenAPI, GraphQL and gRPC services connect the same way, so old and new systems end up in one place.
+- Put several old services behind one gateway.
 
 ## Related
 
-- [Connect an API](/tools) · [MCP gateway](/gateways/mcp) · [Give Claude your API](/examples/give-claude-your-api)
+- [Connect an API](/tools) · [MCP gateway](/gateways/mcp) · [Give your coding assistant your own API](/examples/give-claude-your-api)

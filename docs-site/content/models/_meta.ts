@@ -5,6 +5,6 @@ export default {
   index: 'Overview',
   routing: 'Routing',
   providers: 'Providers',
-  'your-cloud': 'Your Cloud Account',
+  'your-cloud': 'Your cloud account',
   cli: 'CLI',
 }

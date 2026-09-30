@@ -1,26 +1,26 @@
 # Ask your database questions in plain English
 
-**Stack**: `Trigger: Slack / chat` · `Models: your choice` · `Tools: read-only query API over Postgres` · `Mode: single agent + constraints` · `Output: answer + the query it ran`
+For teams where every "how many X did we have last week?" turns into a request for the data team. Ask in Slack in plain words. The assistant writes a database query, runs it on a read-only copy of your data, and answers with the number and the query it used, so anyone can check it.
 
-**Who it's for**: teams where every "how many X last week?" turns into a ticket for the data team.
-**What it does**: takes a plain-English question, writes and runs a read-only query against your database, and answers in the channel, showing the SQL it ran so anyone can check it.
+## What you need
 
-## Build it
+- A read-only copy of your database with a small query service in front of it, set up by someone technical. Never point it at the database your applications write to.
+- A short description of your tables and columns.
+- A Slack workspace where you can add an app.
 
-1. **Expose a read-only query tool.** Put a read-replica behind a small query endpoint (or a stored-proc API). Connect it in *Connect an API* by pasting its OpenAPI link, or, for a single call, create an [HTTP tool](/tools/http-tools). Never point it at a writable primary.
-2. **Give the agent the schema.** Attach a schema-description tool or include table/column docs in its instructions so it writes correct queries.
-3. **Create the agent** with: *translate the question to SQL, run it read-only, and answer with the number and the query used.*
-4. **Constrain it hard**: *SELECT only; never UPDATE/DELETE/DROP; cap rows and time range*, the guardrail that makes this safe to open up.
-5. **Show the work**: instruct it to always return the query alongside the answer, so results are auditable.
-6. **Publish on Slack** so anyone can ask in `#data`.
+## How to build it
 
-## Make it yours
+1. **Connect the query service.** Open **APIs**, click **Connect an API** and give its description link, or, if it is a single call, create an [HTTP tool](/tools/http-tools) under **Tools**.
+2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, describe your tables and write: "Turn the question into SQL, run it, and answer with the number and the query you used." Pick the query tool under **Tools and APIs**.
+3. **Add firm rules.** On its **Constraints** tab: "Read only: never change or delete data" and "Limit every query to a date range and a row count."
+4. **Put it in Slack.** On its **Channels** tab, click **Add channel**, pick **Slack**, add your Slack app's keys and publish. Anyone can then ask it in a channel such as #data.
 
-- Add a chart tool so it returns a plot for time-series questions.
-- Restrict tables per team with separate tools and [RBAC](/organizations).
-- Log every query to the [audit trail](/agents/versioning) for review.
+The read-only copy is what really keeps your data safe: the rules tell the assistant what to do, the read-only access makes sure it can't do anything else.
 
-**Uses**: `Data` · `Slack` · `Constraints`
+## Ideas
+
+- Give each team its own query tool that sees only its own tables, and set each tool's **Who can use it** to that team.
+- Every run on the **Runs** tab shows the query it ran.
 
 ## Related
 

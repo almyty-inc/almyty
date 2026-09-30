@@ -1,6 +1,8 @@
 # Authentication
 
-All almyty CLI packages share a single credentials file at `~/.almyty/credentials.json`. Authenticate once with `@almyty/auth` and every other CLI picks it up automatically.
+Before any almyty command works in a terminal, it needs to know who you are. You sign in once, in your browser, and every almyty command on that machine uses the same sign-in. For example, `npx @almyty/auth login` on your laptop, and from then on `almyty agents list` shows your organization's agents. This page is for people using the [CLI](/cli); in the app you just sign in as usual.
+
+Behind the scenes, signing in saves an API key (a long secret string that proves who you are, like a password for programs) to one file, `~/.almyty/credentials.json`, which all almyty CLI packages read.
 
 ![@almyty/auth CLI help](/screenshots/cli/auth-help.png)
 
@@ -30,7 +32,7 @@ Pass a pre-generated API key directly. This skips the browser entirely:
 $ npx @almyty/auth login --token almyty_3f9c...
 ```
 
-Mint one with a logged-in CLI on another machine, or with `POST /auth/api-keys` (see [API keys](/api-reference/authentication#api-keys)). Use this method in CI pipelines, Docker containers, and automation scripts.
+Make one in the app under **Settings → API keys** (click **New API key**, give it a name and optionally an expiry date; the key is shown once), with a logged-in CLI on another machine, or with `POST /auth/api-keys` (see [API keys](/api-reference/authentication#api-keys)). Use this method in CI pipelines, Docker containers, and automation scripts. Revoke a key on the same Settings page.
 
 ## Login without an auto-opening browser
 

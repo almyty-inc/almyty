@@ -1,74 +1,65 @@
 # Scheduling
 
-Run an agent automatically on a recurring interval, with no external cron to
-wire up. Use it for periodic data collection, reporting, monitoring, or any
-recurring AI workflow.
+A schedule runs an agent by itself, over and over, at a fixed interval. Use it for jobs nobody should have to remember: a nightly summary of support tickets, an hourly check that your systems are healthy, a weekly report.
 
 ![The Schedule config on an agent: enable, interval in minutes, optional input JSON](/screenshots/schedule-config.png)
 
-## Create a schedule
+The **Schedule** card runs a workflow agent (one you drew step by step). For an autonomous agent, use **Heartbeat** instead: click **Edit**, scroll to **Heartbeat**, turn on **Wake up on a schedule**, set **Interval (minutes)** and write the **Heartbeat prompt**, what it should do each time, then **Save**. The [nightly systems report guide](/examples/nightly-systems-report#6-make-it-run-every-night) walks through it.
 
-1. Open the agent's **Overview** tab
-2. On the **Schedule** card, turn on **Enable schedule**
-3. Set the **Interval (minutes)** (at least 1 minute, at most a year)
-4. Optionally provide **Input JSON**, a fixed payload sent on each run
-5. Click **Save schedule**
+## Set up a schedule
 
-Once it is enabled, the card says when the next run is due, counted from the
-last execution.
+1. Open the agent and stay on its **Overview** tab.
+2. On the **Schedule** card, turn on **Enable schedule**.
+3. Set **Interval (minutes)**: how often it runs, from once a minute to once a year. For once a day, enter 1440.
+4. Optionally fill in **Input JSON**: the same starting information handed to every run, such as `{ "days": 1 }`.
+5. Click **Save schedule**.
 
-## Remove a schedule
+The card then says when the next run is due, counted from the last run.
 
-On the **Schedule** card, turn **Enable schedule** off. Disabling does not
-delete existing execution history.
-
-## Configuration Reference
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `intervalMinutes` | number | Yes | How often to run (1 minute to 1 year) |
-| `input` | object | No | Static input to pass on each invocation |
-
-## Common Intervals
-
-| Use Case | Interval |
+| To run it | Interval |
 |----------|----------|
-| Real-time monitoring | 5 minutes |
-| Frequent checks | 15 minutes |
-| Hourly reports | 60 minutes |
-| Daily digest | 1440 minutes (24h) |
-| Weekly summary | 10080 minutes (7d) |
+| Every 5 minutes | 5 |
+| Every 15 minutes | 15 |
+| Every hour | 60 |
+| Every day | 1440 |
+| Every week | 10080 |
 
-## Execution history
+## Stop a schedule
 
-Scheduled runs appear in the agent's execution history alongside manual
-invocations, each tagged with `trigger: "schedule"` in its metadata. Review them
-on the detail page, or from your terminal:
+On the **Schedule** card, turn **Enable schedule** off. The runs it already made stay in the agent's history.
+
+## Good to know
+
+- The agent must be active for scheduled runs to happen. Pausing the agent pauses its schedule; activating it again resumes it.
+- A failed run does not stop the schedule; check the **Runs** tab for errors.
+- almyty pauses a schedule by itself when it cannot run properly: when the model it uses no longer exists at the vendor, when the member who owns the agent leaves the organization, or when that owner can no longer run it. The agent shows why, and turning the schedule back on starts it again.
+- Scheduled runs are listed on the **Runs** tab next to the ones started by hand.
+
+## What it costs
+
+Before turning on a frequent schedule, look at **Avg cost per run** on the agent's **Overview** tab and multiply it by the number of runs. A schedule every 60 minutes runs 720 times in a 30-day month; every 5 minutes, 8,640 times. [Run limits](/run-limits) and [cost governance](/cost-governance) can cap what an agent spends.
+
+## For developers
+
+Scheduled runs carry `triggerType: "scheduled"` in their metadata. Review them from the terminal:
 
 ```bash
 $ npx @almyty/agents runs daily-reporter
 ```
 
-Filter to just the scheduled failures with `--json` and `jq`:
+Filter to the failed runs with `--json` and `jq`:
 
 ```bash
 $ npx @almyty/agents runs daily-reporter --json \
     | jq '[.[] | select(.status == "failed")]'
 ```
 
-## Cost
+The schedule is set with `POST /agents/:id/schedule` and removed with `DELETE /agents/:id/schedule`; see the [Agents API](/api-reference/agents-api).
 
-Before enabling a frequent schedule, check the estimated cost per run on the
-agent's detail page. To project a month, multiply the per-run cost by the run
-count: `(60 * 24 * 30) / intervalMinutes`. A 60-minute schedule runs 720 times a
-month; a 5-minute schedule runs 8,640 times.
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `enabled` | boolean | Yes | Turn the schedule on or off |
+| `intervalMinutes` | number | When enabling | How often to run, 1 to 525,600 (one year) |
+| `input` | object | No | Static input passed to each run |
 
-## Notes
-
-- The agent must be in `active` status for scheduled runs to execute
-- If an execution fails, the schedule continues: check execution history for errors
-- Deactivating an agent pauses its schedule; reactivating resumes it
-- Deleting the schedule does not affect existing execution history
-
-To manage schedules programmatically, see the
-[API reference](/api-reference/openai-compatible).
+Runs per 30-day month = `(60 * 24 * 30) / intervalMinutes`.

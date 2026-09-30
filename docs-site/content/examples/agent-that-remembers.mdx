@@ -1,53 +1,30 @@
-# An agent that remembers across runs
+# An assistant that remembers
 
-**Goal:** a research assistant that gets better the more you use it — it should recall the
-accounts it has already dug into, the conventions your team uses, and the conclusions it
-reached last week, instead of starting cold every session.
+A research assistant that picks up where it left off. It remembers the accounts it has already looked into, how your team likes things done, and what it concluded last week, so you don't have to explain it all again every time.
 
-## How memory is organized
+For example: last week it learned that a customer's financial year starts in July. This week you ask it to "carry on with the Acme analysis", and it already knows.
 
-Memory lives in a dedicated **Memory** workspace — a canonical, bi-temporal store with
-multi-backend routing. Every entry carries a **tier** that sets its lifetime and scope:
+![Memories the demo organization's agents keep, each with how long it is kept](/screenshots/memory.png)
 
-| Tier | Holds | Lives |
-| --- | --- | --- |
-| Short | The current run's working context | The run |
-| Project | Facts scoped to one project or agent | Until changed |
-| Long | Durable, consolidated knowledge | Across runs |
-| Shared | Knowledge several agents can read | Org-wide |
+## What you need
 
-Agents write to these tiers as they work and read from them on the next run, so knowledge
-accumulates. Durable facts — a customer's SLA, a lesson from a past analysis — land in the
-**long** tier and persist.
+- An assistant (in almyty, an "agent": an AI model with instructions and the tools it may use).
+- Nothing else: almyty keeps the memory for you. You can connect an outside memory service instead if your company already uses one.
 
-![Durable long-tier memories, each with its tier, labels, and embedding status](/screenshots/memory.png)
+## How to build it
 
-## 1. Enable it on the agent
+1. Open **Agents**, open your agent and click **Edit**. In the **Memory** section, turn on **Remember between conversations**.
+2. Under **Whose memory**, choose who the memory belongs to:
+   - **Each person has their own**: it remembers each person it talks to separately.
+   - **This agent's own**: one memory, just for this assistant.
+   - **Shared by all agents**: your organization's memory, which every assistant set to share can read and add to.
+3. Under **What it saves**, choose **Facts it learns**, **Whole conversations** or **Only when asked**, and under **How long it keeps memories**, how long. Use **Never save** to list things it must never write down, such as card numbers or passwords.
+4. Save. From now on it writes down what is worth keeping while it works, and looks up what is relevant the next time.
+5. To see or correct what it remembers, open the agent's **Memory** tab, or **Memory** in the sidebar for everything your organization keeps. **Add memory** lets you write something down yourself, for example a company policy all assistants should know.
 
-Turn on memory for the agent and choose a backend — memory persists in your own store
-(Postgres, or one of several supported backends), so what the agent learns stays with you.
-Filter the workspace by tier to see just the short-term working set or the durable knowledge.
+## How memory is kept
 
-The **New memory** page (`/memories/new`) also lets you choose the mode and scope when adding an entry manually. On an individual agent's **Memory** tab, **Add memory** opens an inline form scoped to that agent.
-
-## 2. Let it write as it learns
-
-During a run the agent records what's worth keeping — "Acme's fiscal year starts in July,"
-"the EU dataset lags two days." Entries are bi-temporal: almyty tracks both when a fact was
-true and when it was recorded, so you can ask what the agent knew at a past point in time,
-not only what it knows now.
-
-## 3. Retrieve on the next run
-
-On the following run the agent pulls the relevant memories — by semantic similarity and
-recency — back into context. Ask it to "continue the Acme analysis" and it already has the
-fiscal calendar and the caveats from last time.
-
-## 4. Share across a team of agents
-
-Promote durable facts to the **shared** tier and other agents in the org read them too — your
-triage agent and your reporting agent work from the same institutional knowledge, and it
-stays in sync across them.
+Every memory has a length of life: **Short-term** notes from recent work (tidied into lasting facts every hour), **This project**, **Long-term** facts and preferences, and **Shared by all agents**. When a fact changes, almyty keeps the old version too, so you can see what an assistant knew at any past moment.
 
 ## Related
 

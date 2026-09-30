@@ -1,8 +1,8 @@
 export default {
-  index: 'Overview & Licensing',
-  sso: 'SSO & SCIM',
-  'advanced-rbac': 'Advanced RBAC',
-  'approval-policies': 'Approval Policies',
-  'audit-export': 'Audit Export & SIEM',
-  'compliance-pack': 'Compliance Pack',
+  index: 'Plans and features',
+  sso: 'Single sign-on (SSO & SCIM)',
+  'advanced-rbac': 'Custom roles (RBAC)',
+  'approval-policies': 'Approval policies',
+  'audit-export': 'Audit export & SIEM',
+  'compliance-pack': 'Compliance pack',
 }

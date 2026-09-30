@@ -1,22 +1,46 @@
-# Approval Policies
+# Approval policies
 
-Requires the `approval_policy` entitlement (Business or Enterprise on the hosted platform). Require the right people to sign off before a consequential action goes through: finance then an admin, two reviewers for a quorum, or a gate that only trips over a dollar threshold. Single-gate [approvals](/approvals) (one authorized reviewer approves or rejects a paused run) are free and enough for most workflows. Approval policies add structured sign-off on top: **multi-step** chains, **conditional** matching ("only for refunds over $1,000"), and **quorum** ("any two reviewers").
+Make sure the right people sign off before an assistant does something that matters. For example: any refund over $1,000 needs finance to approve first and then an admin, or any payment needs two different reviewers.
 
-![A refund over threshold paused for human approval, with Approve and Reject](/screenshots/approval-refund-820.png)
+Every organization already has simple [approvals](/approvals) for free: an agent pauses, one person approves or rejects, and the run carries on or stops. That is enough for most teams. Approval policies, on the **Business** and **Enterprise** plans, add:
 
-When no policy matches a request, the OSS single-gate behavior applies unchanged. Policies are an overlay, not a replacement.
+- **Several steps in order**: finance first, then an admin.
+- **Conditions**: only for refunds over $1,000, or only for one tool.
+- **A quorum**: any two reviewers must approve.
 
-## Anatomy of a policy
+When no policy matches a request, the simple one-person approval applies as usual.
 
-With the entitlement enabled, **Settings → Advanced → Approvals** lists policies and provides **New policy**. This is separate from the free, single-gate approval queue.
+![A refund over the limit paused for human approval, with Approve and Reject](/screenshots/approval-refund-820.png)
 
-![Approval policy settings with New policy available on a Business organization](/screenshots/settings-approval-policies-enabled.png)
+## Create a policy
 
-Click **New policy** to open the dedicated editor, or create a policy through the API. The editor includes match conditions and sequential sign-off steps:
+Owners and admins manage policies.
 
-![New approval policy editor with match conditions and sequential steps](/screenshots/settings-approval-policy-new.png)
+1. Open **Settings → Advanced → Approvals** and click **New policy**.
 
-A policy is a match condition, an ordered set of sign-off steps, and a priority:
+   ![Approval policies on a Business organization, with New policy](/screenshots/settings-approval-policies-enabled.png)
+
+2. Give it a **Name** (for example "Refunds over $1,000") and optionally a **Description**.
+3. Under **Match conditions**, click **Add condition** for each thing that must be true, for example `amount`, greater than, `1000`. All conditions must match. With no conditions, the policy matches every approval request.
+4. Under **Approval steps**, click **Add step** for each stage. Give each step a name, the role that approves it (such as `admin`, a [custom role](/enterprise/advanced-rbac) like `finance`, or `*` for anyone allowed to approve) and how many approvals it needs.
+5. Set the **Priority**: if several policies match, the one with the highest priority decides. Optionally scope it to one team with **Team ID (optional)**.
+6. Leave **Enabled** on and click **Create policy**.
+
+![New approval policy editor with match conditions and steps](/screenshots/settings-approval-policy-new.png)
+
+A plain "any two reviewers" quorum is one step with approver role `*` and two approvals.
+
+## How reviewers see it
+
+Reviewers keep using **Approve** and **Reject** on the [Approvals](/approvals) page. The policy decides when the request as a whole is approved:
+
+- **Steps go in order.** Step 2 takes no approvals until step 1 is complete. An admin clicking early does not fill a later step in advance.
+- **One approval counts once.** Someone who is both in finance and an admin cannot complete both steps with one click. Two steps means two separate approvals.
+- **Progress is visible.** Each waiting request shows which step it is on and how many approvals each step has, for example "1 of 2 stages complete".
+
+## For developers
+
+A policy is a match condition, ordered steps and a priority:
 
 ```json
 {
@@ -35,18 +59,8 @@ A policy is a match condition, an ordered set of sign-off steps, and a priority:
 ```
 
 - **`match`**: conditions over the approval request's context (`agentId`, `toolName`, `amount`, and whatever the requesting agent put in the payload), ANDed. Operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `nin`. An empty `match` matches every request.
-- **`steps`**: ordered sign-off stages. Each step names an `approverRole` (an org role or a [custom role](/enterprise/advanced-rbac) name; `"*"` accepts anyone authorized to approve) and a `minApprovals` count (at least 1).
-- **`priority`**: when several enabled policies match, the highest priority wins; exactly one policy governs a request.
-- **`teamId`**: optional; scope the policy to one team's agents.
+- **`steps`**: ordered sign-off stages, each with an `approverRole` (an org role or custom role name; `"*"` accepts anyone authorized to approve) and `minApprovals` (at least 1).
+- **`priority`**: exactly one policy governs a request, the highest-priority enabled match.
+- **`teamId`**: optional, scopes the policy to one team's agents.
 
-A plain quorum is just a single step: `{ "approverRole": "*", "minApprovals": 2 }`.
-
-## Evaluation rules
-
-- **Steps are sequential.** Step 2 accepts no approvals until step 1 is satisfied. An admin clicking early doesn't pre-fill a later stage.
-- **No double-counting.** Each individual approval is credited to exactly one step. A user who holds both the finance and admin roles cannot satisfy both steps of the example above with a single approval: two distinct sign-offs means two people (or at minimum two explicit approvals).
-- **Progress is inspectable.** Each pending request under a policy reports per-step state (required, collected, satisfied) and the current step, so the Approvals UI can show "1 of 2 stages complete".
-
-## Managing policies
-
-Policy CRUD (list, read, enable/disable, delete) is org admin/owner only, under **Settings** or the [API reference](/api-reference). Reviewers themselves keep using the normal approve/reject actions from [Approvals](/approvals). The policy engine decides when the request as a whole is satisfied.
+A quorum is a single step: `{ "approverRole": "*", "minApprovals": 2 }`. Each pending request under a policy reports per-step state (required, collected, satisfied) and the current step. Policy management (list, read, enable or disable, delete) is admin or owner only; endpoints are in the [API reference](/api-reference/authentication).

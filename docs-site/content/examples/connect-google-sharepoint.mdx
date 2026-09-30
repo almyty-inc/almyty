@@ -1,25 +1,26 @@
 # Put your Google Drive or SharePoint to work
 
-**Stack**: `Data: Google Drive/Docs or Microsoft 365/SharePoint` · `Tools: their API (OAuth)` · `Trigger: schedule / chat / channel` · `Output: answers, summaries, generated docs`
+If your team's knowledge lives in Google Drive or SharePoint, an assistant can use it: find the right document, read it, answer questions from it, and write a summary back into a folder. "What's in the Q3 folder?" or "draft this week's summary from these documents" then happens without anyone opening Drive.
 
-**Who it's for**: teams whose knowledge lives in Google Drive or SharePoint and who want agents to actually use it, read it, answer from it, keep it updated.
-**What it does**: connects your document store as tools and lets an agent search folders, read and summarize documents, answer questions from them, and write results back, so "what's in the Q3 folder?" or "draft the weekly summary from these docs" happens without anyone opening Drive.
+almyty has no ready-made Google or Microsoft connector. You connect their APIs the same way you connect any other system, which takes a technical person to set up once.
 
-## Build it
+## What you need
 
-1. **Connect the store.** Both expose REST APIs, connect the **Google Drive/Docs API** or **Microsoft Graph** (SharePoint/OneDrive) in *APIs → Connect an API*, or add their SDK (`googleapis`, `@microsoft/microsoft-graph-client`) as an [SDK tool](/tools/sdk-tools). Each gives typed tools for list, read, and update.
-2. **Authorize once.** These use OAuth, store the app credentials in the [Credentials](/credentials) vault (the gateway/tool reads them at run time); scope them to the folders or sites the agent should see, nothing more.
-3. **Create the agent** with the job: *search the shared drive, read the relevant docs, and answer / summarize / draft*, and attach the Drive or Graph tools.
-4. **Automate the loop**: run it [on a schedule](/examples/nightly-data-quality-digest) (a Monday digest of new docs), add a [Slack channel](/channels/messaging) on its **Channels** tab so people ask in Slack, or have your app invoke it.
-5. **Write back**: the agent can create or update a Google Doc / SharePoint file with its output, so the summary lands where the team already looks.
+- Access to Google's Drive API or Microsoft Graph (the API behind SharePoint and OneDrive), with an app registered on their side.
+- Someone technical for the one-time setup below.
 
-## Make it yours
+## How to build it
 
-- Restrict scope to a single shared drive or site collection; least-privilege via [RBAC](/examples/multi-team-rbac).
-- Add memory so a research agent compounds what it learns across the document set.
-- Combine with your [own API](/examples/give-claude-your-api) so a doc-summary can trigger a real action.
+1. **Connect the documents.** Open **APIs** and click **Connect an API**. Either pick **OpenAPI / Swagger** and give the API description (Microsoft publishes one for Graph), and its operations (list files, read a file, update a file) become tools. Or pick **SDK / npm**, add Google's or Microsoft's official package (`googleapis`, `@microsoft/microsoft-graph-client`), then make a tool for each method you need under **Tools**, **Create tool**, **SDK / npm package**.
+2. **Sign in once.** These services use OAuth (a "Sign in with Google/Microsoft" style approval instead of a password). Save the app's details in [Credentials](/credentials) with **Add credential**. On the Google or Microsoft side, allow only the folders or sites the assistant should see.
+3. **Create the assistant.** Open **Agents**, click **Create agent**, switch to **Autonomous**, and write the job in **Instructions**: "search the shared drive, read the relevant documents, and answer, summarize or draft". Under **Tools and APIs**, pick the Drive or Graph tools. Save.
+4. **Decide how it's used.** People can ask it on Slack (add a **Slack** channel on its **Channels** tab), or it can run on its own: on the agent's **Overview** tab, turn on **Schedule**, for example once a day for a digest of new documents.
+5. **Write back.** With an "update file" or "create file" tool, it can save its summary where the team already looks.
 
-**Uses**: `Enterprise` · `Google Workspace` · `SharePoint` · `Knowledge`
+## Ideas
+
+- Keep it to one shared drive or one SharePoint site.
+- For a handful of short reference answers, you can skip the connection: add them on **Memory** with **Add memory**, set **How long to keep it** to **Shared by all agents**, and set the assistant's memory to **Shared by all agents**. (Memories of the kind **Document** are not looked up by assistants.)
 
 ## Related
 

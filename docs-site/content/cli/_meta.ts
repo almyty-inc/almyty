@@ -5,8 +5,8 @@ export default {
   agents: 'Agents',
   chat: 'Chat',
   skills: 'Skills',
-  'mcp-server': 'MCP Server',
+  'mcp-server': 'MCP server',
   runner: 'Runner',
-  'acp-server': 'ACP Server',
+  'acp-server': 'ACP server',
   models: { title: 'Models', href: '/models/cli' },
 }

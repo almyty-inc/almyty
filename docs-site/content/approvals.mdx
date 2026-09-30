@@ -1,54 +1,57 @@
 # Approvals
 
-Keep a human in the loop before an agent does something it cannot undo. When an autonomous agent needs sign-off before a non-reversible action (a payment, an external send, a destructive operation) it calls the built-in `request_approval` tool. The run pauses, an approval request appears in the **Approvals** page, and an authorized reviewer approves or rejects. The run then resumes (on approve) or terminates (on reject).
+Approvals keep a person in charge of anything an assistant cannot undo. For example, your support assistant can refund small orders on its own, but a refund over $500 waits until a manager clicks **Approve**. The same works for payments, emails to customers, or deleting something.
 
 ![A pending approval: a paused run with its escalation reason and Approve/Reject](/screenshots/approvals-pending.png)
 
 ## How it works
 
-1. **Agent requests approval.** While running, the agent invokes the built-in tool:
-   ```
-   request_approval(reason="Send a $500 wire to ACME Corp", payload={...})
-   ```
-   The runtime creates an `ApprovalRequest` row, flips the run to `waiting_approval`, and emits an event.
-
-2. **Reviewer is notified.** The Approvals page polls every 10 seconds. Org admins and `team_admin`s of the requesting agent's team see the pending request in their queue.
-
-3. **Reviewer decides.** They click **Approve** or **Reject** in the UI, optionally adding a decision reason. The decision is recorded with `decidedBy`, `decidedAt`, `decisionReason`.
-
-4. **Run resumes or terminates.** On approve, the run goes back to `running` and continues from where it paused, with the approval result available as the tool call's return value. On reject (or expiry), the run is cancelled with the rejection reason recorded as the cancellation reason.
+1. **The assistant asks.** When it reaches a step that needs sign-off, the assistant stops and asks for approval, with a short reason ("Refund of $820 on order NW-44120, over the $500 limit").
+2. **The right people are told.** The request appears on the **Approvals** page, and the people who may decide get a notification.
+3. **Someone decides.** They click **Approve** or **Reject**, and can add an optional note, which is saved with the decision.
+4. **The work continues or stops.** On approve, the assistant carries on exactly where it paused. On reject, the work is cancelled and the note is recorded as the reason. Whoever started the run is told the outcome.
 
 ![Reviewing a refund approval with its reason and amount](/screenshots/approval-refund-820.png)
 
-## Authorization
+## Tell the assistant when to ask
 
-Who can approve depends on the resource's team scoping:
-
-- **Org-wide agents** (`visibility='org'`): org `owner` or `admin` can approve.
-- **Team-scoped agents** (`visibility='team'`): org `owner`/`admin` OR the team's `team_admin` (TeamRole.LEAD) can approve. Plain team members can see the pending request but not act on it.
-
-This is enforced server-side via `AccessPolicyService.canAccess(user, approvalRequest, 'manage')`.
-
-## Expiration
-
-By default a pending approval times out after 24 hours (configurable up to 7 days when creating it via the API). A scheduled sweep flips expired requests to `'expired'` and the corresponding run is cancelled with reason `"approval expired"`.
-
-## Agent-side usage
-
-Inside an autonomous agent's instructions, instruct the model to gate sensitive actions:
+Write it into the assistant's instructions in plain words, for example:
 
 ```
-You are a billing assistant. Before issuing any refund, transfer, or other
-non-reversible action, call request_approval with a clear reason summarizing
-what you intend to do and the relevant amounts/parties.
+Before issuing any refund, transfer, or other action that cannot be undone,
+ask for approval with a clear reason that says what you intend to do and the
+amounts and people involved.
 ```
 
-The tool returns when the human decides. Treat the returned value as the authorization to proceed.
+The assistant waits for the decision and only goes ahead once it is approved.
 
-## Multi-step policies (Enterprise)
+## Who can approve
 
-A single authorized reviewer is the free, default gate. If you need finance-then-admin chains, amount-conditional rules, or a two-reviewer quorum, [approval policies](/enterprise/approval-policies) (Enterprise) layer that on top of this flow.
+It depends on who the assistant is shared with:
 
-## API
+- **Shared with the whole organization**: the organization's owners and admins.
+- **Shared with a team**: owners and admins, or a lead of that team. Other team members can see the request but cannot decide it.
+- **Private to one person**: that person.
 
-List pending approvals, approve, and reject over REST. Responses are filtered to approvals the caller can see. See the [API reference](/api-reference).
+## If nobody decides
+
+A request that nobody decides expires after 24 hours, and the work is cancelled with the reason "approval expired".
+
+## Approval rules for the whole organization
+
+One person approving is the default and is included in every plan. With **approval policies** (Business and Enterprise plans) you can set rules across every assistant: finance first and then an admin, rules that only apply above an amount, or two people who must both approve. See [approval policies](/enterprise/approval-policies).
+
+## For developers
+
+The assistant asks through its built-in `request_approval` tool:
+
+```
+request_approval(reason="Send a $500 wire to ACME Corp", payload={...})
+```
+
+The runtime creates an `ApprovalRequest` row, sets the run to `waiting_approval` and emits an event. The decision is recorded with `decidedBy`, `decidedAt` and `decisionReason`. On approve, the run returns to `running` and the approval result is the tool call's return value; on reject or expiry, the run is cancelled with the reason recorded.
+
+- **Authorization** is enforced on the server with `AccessPolicyService.canAccess(user, approvalRequest, 'manage')`. Org-wide agents (`visibility='org'`): org `owner` or `admin`. Team agents (`visibility='team'`): org `owner`/`admin` or the team's `team_admin` (TeamRole.LEAD). Private agents: the owner.
+- **Expiry**: the default 24 hours can be set up to 7 days when a request is created through the API. A scheduled sweep flips expired requests to `expired`.
+- **Page refresh**: the Approvals page checks for new requests every 10 seconds.
+- **API**: list pending approvals, approve and reject over REST; responses only include approvals the caller can see. See the [API reference](/api-reference/authentication).

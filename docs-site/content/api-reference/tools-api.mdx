@@ -1,6 +1,6 @@
 # Tools API
 
-> This is the HTTP API reference. For UI walkthroughs, see [Getting Started](/) and the feature guides above.
+This page is for developers who want to list, create and run tools from their own code. A tool is one thing an assistant can do in one of your systems, such as "look up an order" or "issue a refund". For example, a test script can run the "track shipment" tool against a known order to check your order system still answers. In the app, tools live under **Tools**; see [Tools](/tools).
 
 ![Tools in the UI](/screenshots/tools-list.png)
 
@@ -18,7 +18,7 @@ REST API reference for managing tools.
 | `DELETE` | `/tools/:id` | Delete a tool |
 | `POST` | `/organizations/{orgId}/tools/:id/execute` | Execute a tool |
 
-## List Tools
+## List tools
 
 ```bash
 curl https://api.almyty.com/organizations/{orgId}/tools \
@@ -50,7 +50,7 @@ curl https://api.almyty.com/organizations/{orgId}/tools \
 }
 ```
 
-## Create a Tool
+## Create a tool
 
 ```bash
 curl -X POST https://api.almyty.com/organizations/{orgId}/tools \
@@ -73,7 +73,7 @@ curl -X POST https://api.almyty.com/organizations/{orgId}/tools \
   }'
 ```
 
-### Tool Types
+### Tool types
 
 | Type | Required Fields |
 |------|----------------|
@@ -82,7 +82,7 @@ curl -X POST https://api.almyty.com/organizations/{orgId}/tools \
 | `graphql` | `executionConfig.endpoint`, `executionConfig.query` |
 | `llm` | `executionConfig.providerId`, `executionConfig.promptTemplate` |
 
-## Execute a Tool
+## Execute a tool
 
 ```bash
 curl -X POST https://api.almyty.com/organizations/{orgId}/tools/{id}/execute \

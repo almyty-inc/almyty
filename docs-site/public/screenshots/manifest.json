@@ -6,9 +6,9 @@
       "id": "agent-builder-autonomous",
       "title": "Autonomous agent: work mode",
       "path": "screenshots/agent-builder-autonomous.png",
-      "capturedAt": "2026-09-30T11:21:19.402Z",
-      "status": "needs-recapture",
-      "sha256": "a5b29f733cc68a0cf976dece6af72df8c925a0960f9d42af77aabcfaf5b87d14",
+      "capturedAt": "2026-09-30T16:31:15.343Z",
+      "status": "current",
+      "sha256": "077e7cf0a3ae49e2d49762a9ea520da001b9b9981283b2f7f3e64b75f4e3f24a",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -21,17 +21,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "21d25a65a28a4d3e86aee455c2b8bad63082bdb0e306c3401cfcc4867cf5896e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-builder-node-palette",
       "title": "Steps palette",
       "path": "screenshots/agent-builder-node-palette.png",
-      "capturedAt": "2026-09-30T11:21:28.067Z",
-      "status": "needs-recapture",
-      "sha256": "095e80429efc9d9797af3873ca7c013af81770a36895a3ef2659ce9c4708c2f1",
+      "capturedAt": "2026-09-30T16:31:23.724Z",
+      "status": "current",
+      "sha256": "16ed372b8779633c72addd328d2f8dd2adc8f8b263b09737d417c2bf07f6f256",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -44,17 +43,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "21d25a65a28a4d3e86aee455c2b8bad63082bdb0e306c3401cfcc4867cf5896e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-builder",
       "title": "Workflow builder",
       "path": "screenshots/agent-builder.png",
-      "capturedAt": "2026-09-30T11:21:25.279Z",
-      "status": "needs-recapture",
-      "sha256": "fed9e041c80e924c5c4efd2ff4a18c1d8e415536046f30e7a640cf8a914605be",
+      "capturedAt": "2026-09-30T16:31:21.134Z",
+      "status": "current",
+      "sha256": "7101205493af213b7b6dbbc67eb4730a8a9980de53c6384df3a440cf03dd1e06",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -67,17 +65,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "21d25a65a28a4d3e86aee455c2b8bad63082bdb0e306c3401cfcc4867cf5896e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-channels",
       "title": "An agent's Channels tab",
       "path": "screenshots/agent-channels.png",
-      "capturedAt": "2026-09-30T11:21:43.799Z",
-      "status": "needs-recapture",
-      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
+      "capturedAt": "2026-09-30T16:31:38.871Z",
+      "status": "current",
       "sha256": "530432af9fd768d2511d8a3cbf1e3b5141aed845c64f8f50dbe8252765cc3650",
       "source": {
         "kind": "browser",
@@ -92,15 +88,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "eb0df475bb2dafe9eef5b99723ea221089e3084a526b16230ac91fe3007e8878",
+      "sourceDigest": "4984f7a4169c68ac30b9c3fbea699b0f6f0b86d90132bff7788c6ba8ea5bb60d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-constraints",
       "title": "Agent constraints",
       "path": "screenshots/agent-constraints.png",
-      "capturedAt": "2026-09-30T11:21:06.997Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-09-30T16:31:04.439Z",
+      "status": "current",
       "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
       "source": {
         "kind": "browser",
@@ -114,16 +110,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-detail-overview",
       "title": "Autonomous agent overview",
       "path": "screenshots/agent-detail-overview.png",
-      "capturedAt": "2026-09-30T11:21:01.095Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-09-30T16:30:59.155Z",
+      "status": "current",
       "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
       "source": {
         "kind": "browser",
@@ -137,17 +132,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-skill-viewer",
       "title": "Agent skills",
       "path": "screenshots/agent-skill-viewer.png",
-      "capturedAt": "2026-09-30T11:21:16.058Z",
-      "status": "needs-recapture",
-      "sha256": "52408b10a2dad860b5f87e117d6c644b3adbfac144ba48999663133bdd1a4b39",
+      "capturedAt": "2026-09-30T16:31:12.292Z",
+      "status": "current",
+      "sha256": "c2b086bc7ce818fddb0a24c44b62a5666aff19edf03f2700901f0dc065a5595b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -160,17 +154,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-work-mode-panel",
       "title": "Panel work mode",
       "path": "screenshots/agent-work-mode-panel.png",
-      "capturedAt": "2026-09-30T11:21:22.595Z",
-      "status": "needs-recapture",
-      "sha256": "fcc4b552219e4517121702f10db9f5e57df35f9c9a3e7358284999a961182658",
+      "capturedAt": "2026-09-30T16:31:18.460Z",
+      "status": "current",
+      "sha256": "472eceef77a0d801d628b27c6d94382300690462de91cd2aca8f40681c2c8108",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -183,17 +176,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "21d25a65a28a4d3e86aee455c2b8bad63082bdb0e306c3401cfcc4867cf5896e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agents-list",
       "title": "Agents list",
       "path": "screenshots/agents-list.png",
-      "capturedAt": "2026-09-30T11:20:58.169Z",
-      "status": "needs-recapture",
-      "sha256": "6d7908e9e7d374cba03ef445f6ea71ce0e5b23e9da84168f9b57858f3362eb02",
+      "capturedAt": "2026-09-30T16:30:56.493Z",
+      "status": "current",
+      "sha256": "51439432f06dc456afb11b2269f589455ce90968ea8b12b619f5a5594a1d2f69",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -206,17 +198,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "beb8b197f6151858a6a52441167f96da6d7d517e0175af799449a292f190c742",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "95e5fcadc2b793781f6186159b1fea52b955cb62daffa98a151fba314ee79456",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-agents",
       "title": "Analytics: agents",
       "path": "screenshots/analytics-agents.png",
-      "capturedAt": "2026-09-30T11:23:13.983Z",
-      "status": "needs-recapture",
-      "sha256": "b264b5e9c16cd79de33264230034d140528c834a3f2c020876a66fa56685aabf",
+      "capturedAt": "2026-09-30T16:33:10.097Z",
+      "status": "current",
+      "sha256": "55d153fc2eb58ac02e0a12bc9928d2803eec8367a6b943b610846e92eed4c821",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -229,16 +220,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "dd96446c4f816b6b425bcb5471516134184b82eed88c6493fc97fae457c8361c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-audit",
       "title": "Audit trail",
       "path": "screenshots/analytics-audit.png",
-      "capturedAt": "2026-09-30T11:23:21.766Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-09-30T16:33:17.685Z",
+      "status": "current",
       "sha256": "fd1d94c1b1596d0fa097a457261991b7149fa915c78ee8d9f912754c4ac9bb57",
       "source": {
         "kind": "browser",
@@ -252,16 +242,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "dd96446c4f816b6b425bcb5471516134184b82eed88c6493fc97fae457c8361c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-chargeback-locked",
       "title": "Chargeback (Enterprise, locked)",
       "path": "screenshots/analytics-chargeback-locked.png",
-      "capturedAt": "2026-09-30T11:23:24.243Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-09-30T16:33:20.188Z",
+      "status": "current",
       "sha256": "f7ec69cb930d2b5eea3a339271cd2e9e326661421d1a821ca3305cd1cb214bd0",
       "source": {
         "kind": "browser",
@@ -275,16 +264,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "dd96446c4f816b6b425bcb5471516134184b82eed88c6493fc97fae457c8361c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-gateways",
       "title": "Analytics: gateways",
       "path": "screenshots/analytics-gateways.png",
-      "capturedAt": "2026-09-30T11:23:19.136Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-09-30T16:33:15.163Z",
+      "status": "current",
       "sha256": "88aa07490ff5133741a23fd2dfe69f586f9eabc30b941b17f47e334adb901cc3",
       "source": {
         "kind": "browser",
@@ -298,17 +286,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "dd96446c4f816b6b425bcb5471516134184b82eed88c6493fc97fae457c8361c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-overview",
       "title": "Analytics overview",
       "path": "screenshots/analytics-overview.png",
-      "capturedAt": "2026-09-30T11:23:11.408Z",
-      "status": "needs-recapture",
-      "sha256": "888346d6d3eb666c174aa00d1683830bca40a3ccfa4837af6552e76f76e10a3c",
+      "capturedAt": "2026-09-30T16:33:07.320Z",
+      "status": "current",
+      "sha256": "03aa89a5dbe1bbb447eac8d8f7e326b886793795057f0d1e04d776b3647c402c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -321,17 +308,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "dd96446c4f816b6b425bcb5471516134184b82eed88c6493fc97fae457c8361c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-tools",
       "title": "Analytics: tools",
       "path": "screenshots/analytics-tools.png",
-      "capturedAt": "2026-09-30T11:23:16.590Z",
-      "status": "needs-recapture",
-      "sha256": "6b251bb0d6ca7afb586836d09fc28ea7462490351e6d1a636b76dc0a07f55cf0",
+      "capturedAt": "2026-09-30T16:33:12.648Z",
+      "status": "current",
+      "sha256": "64856cdce045ae84a4256b53d625dc97e7a44e4c00cfef301505435b40bf28d2",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -344,17 +330,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "dd96446c4f816b6b425bcb5471516134184b82eed88c6493fc97fae457c8361c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "apis-list",
       "title": "APIs list",
       "path": "screenshots/apis-list.png",
-      "capturedAt": "2026-09-30T11:22:16.214Z",
-      "status": "needs-recapture",
-      "sha256": "8926e3866f767097a1946a539c2304f55f72984ba289a82078f8ac56855ff60c",
+      "capturedAt": "2026-09-30T16:32:10.748Z",
+      "status": "current",
+      "sha256": "22dff5aa90bf6f4cbfd7d5dc4fbc6849ba0233b29005a5feeac107705eeeb2f1",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -367,17 +352,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3afdadb963fff69dd580e9ac81afaa289ee652dfd68d21bd25c221b5c4ceee17",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "6245d5f84ed35f5cab50a4ca27f8b56bc73c59f54d3946207963b060379e861b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "approval-refund-820",
       "title": "Refund approval",
       "path": "screenshots/approval-refund-820.png",
-      "capturedAt": "2026-09-30T11:23:03.673Z",
-      "status": "needs-recapture",
-      "sha256": "5d62612dcdc2dfeb4535f7053e308d97205f0ceaa9f19687df374d38f0536a0c",
+      "capturedAt": "2026-09-30T16:32:57.431Z",
+      "status": "current",
+      "sha256": "517a1f4fdebb03353058d72aa7a2948804a5a3751bc223783ef3f2f722abf53e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -390,17 +374,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3412ac0088b43cdd8b2f5fd9cd84481a03e5f37fc7677e2b66f3d501fcd9a05e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "8538813d7a49c12abe17bef395a8e2a9a0aba0b23dfdb8a299204825d05815cf",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "approvals-pending",
       "title": "Pending approvals",
       "path": "screenshots/approvals-pending.png",
-      "capturedAt": "2026-09-30T11:23:00.490Z",
-      "status": "needs-recapture",
-      "sha256": "5d62612dcdc2dfeb4535f7053e308d97205f0ceaa9f19687df374d38f0536a0c",
+      "capturedAt": "2026-09-30T16:32:54.318Z",
+      "status": "current",
+      "sha256": "517a1f4fdebb03353058d72aa7a2948804a5a3751bc223783ef3f2f722abf53e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -413,9 +396,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3412ac0088b43cdd8b2f5fd9cd84481a03e5f37fc7677e2b66f3d501fcd9a05e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "8538813d7a49c12abe17bef395a8e2a9a0aba0b23dfdb8a299204825d05815cf",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "apps-hosted-chat-routing-failure",
@@ -430,8 +412,8 @@
       "id": "auth-register",
       "title": "Create account",
       "path": "screenshots/auth-register.png",
-      "capturedAt": "2026-09-30T11:23:54.181Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-09-30T16:33:54.217Z",
+      "status": "current",
       "sha256": "0fd0ae6cb048a83098acac5ce38ccac627a4dd850110428e20666f1a23b3b4f6",
       "source": {
         "kind": "browser",
@@ -444,18 +426,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f14bb7176b1196f64238073d745f797017496f755214b3f97ccaab50347e1114",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "87b3cd25100a829aaf59637e04645293dd846147ac923363f73610fe57dbeed1",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-branding-rules",
       "title": "Branding and visitor rules",
       "path": "screenshots/channel-branding-rules.png",
-      "capturedAt": "2026-09-30T11:21:46.410Z",
-      "status": "needs-recapture",
-      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
-      "sha256": "cec458852ad6410147e4d7ae557a5e52a6d4ea3177fc2373ce83f0f7c7722b7d",
+      "capturedAt": "2026-09-30T16:31:41.505Z",
+      "status": "current",
+      "sha256": "5fe3919689b49ac17afb25e0b3c21b321e1f2dd3f63d68cfec96dd7944aa8033",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -468,17 +448,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d190ea44bd8dc996a63124721a0acbe43dd6f590bbb9d4319fc2178ab01e2f2d",
+      "sourceDigest": "0129ba1e9a49526179cc2a1483e43ff3b692f43938e51834712d3f391a4c0744",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-slack-keys",
       "title": "Slack channel keys",
       "path": "screenshots/channel-slack-keys.png",
-      "capturedAt": "2026-09-30T11:21:51.835Z",
-      "status": "needs-recapture",
-      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
-      "sha256": "8179f4f923c8fabb17aa2dbcb5337c2c16d4cc5d4a5ab4298a834098e8e32120",
+      "capturedAt": "2026-09-30T16:31:46.846Z",
+      "status": "current",
+      "sha256": "f02ad147bb7dd07a60dbf0902c446ba0c73a65ff46399c587d9b7ff87ddd8616",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -491,17 +470,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a8c7eedd9402f8de7c0b664c33bab3b0c9e162352e357772dd08818b9a61ddbb",
+      "sourceDigest": "6596ef7e0c7ea6f51f541d1693e187b2be2fc0471c2d4cd80c996755613ac05b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-slack-live",
       "title": "Published Slack channel",
       "path": "screenshots/channel-slack-live.png",
-      "capturedAt": "2026-09-30T11:21:54.858Z",
-      "status": "needs-recapture",
-      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
-      "sha256": "4f231180ed59e39ae44b61d26a4016b1924ffab0ab4e7f2d6fb5cc0ac2fb6ea5",
+      "capturedAt": "2026-09-30T16:31:49.861Z",
+      "status": "current",
+      "sha256": "319768e01fd6f4e7453168926d5b7cc51e872c1396b50c100774524f52951f50",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -514,16 +492,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a8c7eedd9402f8de7c0b664c33bab3b0c9e162352e357772dd08818b9a61ddbb",
+      "sourceDigest": "6596ef7e0c7ea6f51f541d1693e187b2be2fc0471c2d4cd80c996755613ac05b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-terminal-build",
       "title": "Terminal app channel",
       "path": "screenshots/channel-terminal-build.png",
-      "capturedAt": "2026-09-30T11:21:57.535Z",
-      "status": "needs-recapture",
-      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
+      "capturedAt": "2026-09-30T16:31:52.587Z",
+      "status": "current",
       "sha256": "81db9c8408d17de95edf28458b79f099a72aa46ea3d4d25fef2d76adeebb4067",
       "source": {
         "kind": "browser",
@@ -537,16 +514,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a8c7eedd9402f8de7c0b664c33bab3b0c9e162352e357772dd08818b9a61ddbb",
+      "sourceDigest": "6596ef7e0c7ea6f51f541d1693e187b2be2fc0471c2d4cd80c996755613ac05b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-web-published",
       "title": "Published web chat channel",
       "path": "screenshots/channel-web-published.png",
-      "capturedAt": "2026-09-30T11:21:49.062Z",
-      "status": "needs-recapture",
-      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
+      "capturedAt": "2026-09-30T16:31:44.196Z",
+      "status": "current",
       "sha256": "ed18f83d07bef8b1484cf0040a39442cbd0298d8f6e0b15af696079653326c7a",
       "source": {
         "kind": "browser",
@@ -560,7 +536,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a8c7eedd9402f8de7c0b664c33bab3b0c9e162352e357772dd08818b9a61ddbb",
+      "sourceDigest": "6596ef7e0c7ea6f51f541d1693e187b2be2fc0471c2d4cd80c996755613ac05b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -681,9 +657,8 @@
       "id": "credentials-connect-provider",
       "title": "Connect a provider",
       "path": "screenshots/credentials-connect-provider.png",
-      "capturedAt": "2026-09-30T11:22:50.404Z",
-      "status": "needs-recapture",
-      "reason": "The model capability schema the connect form shares gained PDF input; this view should look the same, but recapture it from the page to confirm.",
+      "capturedAt": "2026-09-30T16:32:43.941Z",
+      "status": "current",
       "sha256": "17eff1ae55d6c6f71e81612ef2a7c1d7738ee6ac661224c74718d46e1931ebdb",
       "source": {
         "kind": "browser",
@@ -697,16 +672,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e624e53771154bd6d0b3202e583488a32617209e6e67f0086342c01f7610e06c",
+      "sourceDigest": "4eca76512903aaca653c464a969b5a990f2109c5636532c3b147d6f10bf5342b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "credentials-vault",
       "title": "Credentials",
       "path": "screenshots/credentials-vault.png",
-      "capturedAt": "2026-09-30T11:22:48.078Z",
-      "status": "needs-recapture",
-      "sha256": "db83bc771d3747ea8fa3f8cb810b0916b87a6b198d5c421e19142c17dd440f9c",
+      "capturedAt": "2026-09-30T16:32:41.640Z",
+      "status": "current",
+      "sha256": "a849d65fc1d24aa0c72ff59852dd4272384450db13beb2a57136819c060f895d",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -720,17 +695,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "1b85e8dcec82369aa8e4c589bdeaf2def75a74297bfa7b425d85adb862f5ea9a",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "1d988301f85ac98708d8741b2a4a84055170b4696b2feb22c73fea970caa7137",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-detail-tools",
       "title": "Gateway tool scoping",
       "path": "screenshots/gateway-detail-tools.png",
-      "capturedAt": "2026-09-30T11:22:30.824Z",
-      "status": "needs-recapture",
-      "sha256": "4d1007f176e496932570dee716fb3392a90c8f851b388f4ea65cd00eac4d474a",
+      "capturedAt": "2026-09-30T16:32:24.832Z",
+      "status": "current",
+      "sha256": "a3ed36014b8b02186baea225fb0c5cec19c9cb70ba8dc3f0b2fdd73c3144a081",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -743,17 +717,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-detail",
       "title": "Gateway detail",
       "path": "screenshots/gateway-detail.png",
-      "capturedAt": "2026-09-30T11:22:27.664Z",
-      "status": "needs-recapture",
-      "sha256": "7e3613dc1952d220912bd04ea61e4819c58f09a35ddc9d24251331f9cbbdaa9d",
+      "capturedAt": "2026-09-30T16:32:21.872Z",
+      "status": "current",
+      "sha256": "343e858c9e9877d81bd0b7c1604aedd076ec7ac792bd9ce08a264709eab8c2a8",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -766,17 +739,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-petstore-config",
       "title": "Petstore gateway",
       "path": "screenshots/gateway-petstore-config.png",
-      "capturedAt": "2026-09-30T11:22:33.556Z",
-      "status": "needs-recapture",
-      "sha256": "6e87207b33d863c00415c21c72168e1cf6e8104660a46a915cc154ccc2a50eed",
+      "capturedAt": "2026-09-30T16:32:27.447Z",
+      "status": "current",
+      "sha256": "94b5ad87d36caafc48925cb404ee3656cec454036be4fb198ff818ba69ca3d2f",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -789,17 +761,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-petstore-integration",
       "title": "Gateway integrations",
       "path": "screenshots/gateway-petstore-integration.png",
-      "capturedAt": "2026-09-30T11:22:39.360Z",
-      "status": "needs-recapture",
-      "sha256": "20679cb329ac6bd8697180dece8972877626127d9073947c5f3e6c19fa42ca44",
+      "capturedAt": "2026-09-30T16:32:33.016Z",
+      "status": "current",
+      "sha256": "a73146de1379a4cd034095c3bd31501e4ba6b15a71d473e48a1b780deda95a02",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -812,18 +783,990 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+    },
+    {
+      "id": "guides-dev-1-gateway",
+      "title": "Serve the order tools to coding assistants",
+      "path": "screenshots/guides/dev-1-gateway.png",
+      "capturedAt": "2026-09-30T16:37:20.023Z",
+      "status": "current",
+      "sha256": "52c9d9c8d8138bf59530310b58b80c476665fd2411ca5253614f133113da6533",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/gateways/new"
+      },
+      "sources": [
+        "frontend/src/pages/gateway-new.tsx",
+        "frontend/src/components/gateways",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b3537de670ffce128250dead51ffb1d31d884a3c25228a255982901fe91cf516",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-dev-2-gateway-setup",
+      "title": "The address, the key and a ready-made setup",
+      "path": "screenshots/guides/dev-2-gateway-setup.png",
+      "capturedAt": "2026-09-30T16:37:22.386Z",
+      "status": "current",
+      "sha256": "e6f8e92b18513df900998287a881d65cf80f5a92110451cb63b1884a093a1dd3",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/gateways/:id"
+      },
+      "sources": [
+        "frontend/src/pages/gateway-detail.tsx",
+        "frontend/src/components/gateways",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-dev-3-runner",
+      "title": "Start a runner on your own machine",
+      "path": "screenshots/guides/dev-3-runner.png",
+      "capturedAt": "2026-09-30T16:37:25.489Z",
+      "status": "current",
+      "sha256": "ddcf66ffe0d5f9d4f7854e6d8882c37ed58dca9030e687043f9ec2a2870d569b",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/runners/new"
+      },
+      "sources": [
+        "frontend/src/pages/runner-new.tsx",
+        "frontend/src/components/runners",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "448b431f840b992d9b36ad81238c2349bbaa3adac2ff722bcb71909b47b41560",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-dev-4-runner-command",
+      "title": "The commands to run on the machine",
+      "path": "screenshots/guides/dev-4-runner-command.png",
+      "capturedAt": "2026-09-30T16:37:27.867Z",
+      "status": "current",
+      "sha256": "69edceb4d21049826d67538f4dd05f64463b70048b9208c9577d8536c4dec4f9",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/runners/new"
+      },
+      "sources": [
+        "frontend/src/pages/runner-new.tsx",
+        "frontend/src/components/runners",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "448b431f840b992d9b36ad81238c2349bbaa3adac2ff722bcb71909b47b41560",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-helpdesk-1-connect-intranet",
+      "title": "Connect your intranet",
+      "path": "screenshots/guides/helpdesk-1-connect-intranet.png",
+      "capturedAt": "2026-09-30T16:36:49.201Z",
+      "status": "current",
+      "sha256": "639df1dea1987761d34e1cf5c1819b794fdca3472fe86d4df99aec4624c127e8",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "4a17754ecf6fb96042b63eac703a5a440e1abb864d3b7b0db3c0d616df45dbb1",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-helpdesk-2-shared-memory",
+      "title": "Something every assistant should know",
+      "path": "screenshots/guides/helpdesk-2-shared-memory.png",
+      "capturedAt": "2026-09-30T16:36:52.543Z",
+      "status": "current",
+      "sha256": "17d55bd418db683f3b6853ef0f9d150b73b4ea1c64f7e59bd233ae7f8d8c1dc3",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/memories/new"
+      },
+      "sources": [
+        "frontend/src/pages/memory-new.tsx",
+        "frontend/src/components/memory",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b451424bcf8384dc79330578b5c23b2a8a4c1c61b0908a09e1590de113ab00e9",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-helpdesk-3-agent",
+      "title": "The help desk assistant reads shared memory",
+      "path": "screenshots/guides/helpdesk-3-agent.png",
+      "capturedAt": "2026-09-30T16:36:58.800Z",
+      "status": "current",
+      "sha256": "81d2ad6fbc8b8c637699db44c59a9f9258706043876f12bb709d679e015f4066",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-helpdesk-4-leave",
+      "title": "A question answered from the HR system",
+      "path": "screenshots/guides/helpdesk-4-leave.png",
+      "capturedAt": "2026-09-30T16:37:07.836Z",
+      "status": "current",
+      "sha256": "4c0b07a3926301184d8314c5f937dfcc1cc6e4ea853759275c4492620e0e47e4",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-helpdesk-5-wifi",
+      "title": "A question answered from the office guide",
+      "path": "screenshots/guides/helpdesk-5-wifi.png",
+      "capturedAt": "2026-09-30T16:37:09.905Z",
+      "status": "current",
+      "sha256": "9818c4f019dac507c46c43ffce8e8118864a59f168bd27b63c5e339d910a6869",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-helpdesk-6-teams",
+      "title": "Add Microsoft Teams",
+      "path": "screenshots/guides/helpdesk-6-teams.png",
+      "capturedAt": "2026-09-30T16:37:15.610Z",
+      "status": "current",
+      "sha256": "cc4b79db256ca6a1a9ee0291661212e83ee11694b56c9be4dace979f5bebc2e8",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/connect",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "2ae801dd9f4c79b947922c93d18fba727710962669f18d13c187871fd0c893a7",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-marketing-1-connect-docs",
+      "title": "Connect your help center",
+      "path": "screenshots/guides/marketing-1-connect-docs.png",
+      "capturedAt": "2026-09-30T16:35:37.160Z",
+      "status": "current",
+      "sha256": "156f277f7325c00c73621de610e4988e8510d2f522887ff06f8291669499699a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "4a17754ecf6fb96042b63eac703a5a440e1abb864d3b7b0db3c0d616df45dbb1",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-marketing-2-agent",
+      "title": "A product assistant that answers from the help center",
+      "path": "screenshots/guides/marketing-2-agent.png",
+      "capturedAt": "2026-09-30T16:35:40.234Z",
+      "status": "current",
+      "sha256": "8d3bb4fe41c12f34d2926477238f0a487bb0bce2d2bb3746bbcb6127d2376fee",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-marketing-3-try",
+      "title": "An answer with its source",
+      "path": "screenshots/guides/marketing-3-try.png",
+      "capturedAt": "2026-09-30T16:35:49.200Z",
+      "status": "current",
+      "sha256": "4351a481fdc6122703320ae6ae23943e64a3e594fe9d0e6281bdeaf5d0272329",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-marketing-4-limits",
+      "title": "A daily spending cap for visitors",
+      "path": "screenshots/guides/marketing-4-limits.png",
+      "capturedAt": "2026-09-30T16:35:52.072Z",
+      "status": "current",
+      "sha256": "d0d46865f3269bf200257dba435a1389c6b992b665828fd0ff1c95c8c2adf54f",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/settings"
+      },
+      "sources": [
+        "frontend/src/pages/agent-public-settings.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "0129ba1e9a49526179cc2a1483e43ff3b692f43938e51834712d3f391a4c0744",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-marketing-5-widget",
+      "title": "The chat bubble, only on your own site",
+      "path": "screenshots/guides/marketing-5-widget.png",
+      "capturedAt": "2026-09-30T16:36:04.262Z",
+      "status": "current",
+      "sha256": "fdb6b6f7149d07940632721d094101305165955e5481693283d2accdb29ac641",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/gateways/widget-builder.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "58fb27eb16c99f9cc83b5f34ef6015ce9f5cdf243c28c0b7140dd5a632297206",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-marketing-6-visitor",
+      "title": "A visitor asks a product question",
+      "path": "screenshots/guides/marketing-6-visitor.png",
+      "capturedAt": "2026-09-30T16:36:12.269Z",
+      "status": "current",
+      "sha256": "6585c66632f7b3595004a9bde79d4019845423ebded43942ddfd6154779723fc",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/?__slug=product-questions"
+      },
+      "sources": [
+        "frontend/src/pages/hosted-chat.tsx",
+        "frontend/src/lib/hosted-chat.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "44271aaddc5f3e43995e34f5b87b0b3116412eb115c2f470e2c3c23dc62d1a16",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-ops-1-connect-status",
+      "title": "Connect the system you check",
+      "path": "screenshots/guides/ops-1-connect-status.png",
+      "capturedAt": "2026-09-30T16:36:16.955Z",
+      "status": "current",
+      "sha256": "f8d23dac1f9a7dd794eb2af28b22768dd7eaed8cb1ef106976c581185bf32461",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "4a17754ecf6fb96042b63eac703a5a440e1abb864d3b7b0db3c0d616df45dbb1",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-ops-2-slack-tool",
+      "title": "A tool that posts to Slack",
+      "path": "screenshots/guides/ops-2-slack-tool.png",
+      "capturedAt": "2026-09-30T16:36:20.491Z",
+      "status": "current",
+      "sha256": "85bcc80914eef82366db42c8881e1be16c062fd546ea79bf0d2beac157f6508d",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/tools/new"
+      },
+      "sources": [
+        "frontend/src/pages/tool-new.tsx",
+        "frontend/src/components/tools",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "e58414fb1f97cdb2151ddd39381a9747ac9ee8b05e2dd92831a8b9f145de0f1f",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-ops-3-agent",
+      "title": "The nightly check, with its two kinds of tools",
+      "path": "screenshots/guides/ops-3-agent.png",
+      "capturedAt": "2026-09-30T16:36:24.902Z",
+      "status": "current",
+      "sha256": "d47222a14a888a56bf20db1cb2789601502ffd15b93072bc571b7949942701c0",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-ops-4-try",
+      "title": "A test run posts the report",
+      "path": "screenshots/guides/ops-4-try.png",
+      "capturedAt": "2026-09-30T16:36:33.886Z",
+      "status": "current",
+      "sha256": "39acfbb597b745da38650e01ee7984bdcabd8bb84293e7097b76bc324ccf858c",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-ops-5-heartbeat",
+      "title": "Wake it up every night",
+      "path": "screenshots/guides/ops-5-heartbeat.png",
+      "capturedAt": "2026-09-30T16:36:36.645Z",
+      "status": "current",
+      "sha256": "30ab4869aceedccf04e12cf8118ce345d00ce8234689a663c725c30e1f0ddcd7",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/edit"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-ops-6-report-run",
+      "title": "A report run, step by step",
+      "path": "screenshots/guides/ops-6-report-run.png",
+      "capturedAt": "2026-09-30T16:36:43.949Z",
+      "status": "current",
+      "sha256": "c48426774dc05b80a387e27c029c541520dd9f812dca629090d1e95c264d2392",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-sales-1-connect-crm",
+      "title": "Connect your CRM",
+      "path": "screenshots/guides/sales-1-connect-crm.png",
+      "capturedAt": "2026-09-30T16:35:07.568Z",
+      "status": "current",
+      "sha256": "ce473e5a9904307c4ee1a9caa98658920b77c5415a7c67a717ab8874c0a63f49",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "4a17754ecf6fb96042b63eac703a5a440e1abb864d3b7b0db3c0d616df45dbb1",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-sales-2-agent",
+      "title": "The sales assistant and its CRM tools",
+      "path": "screenshots/guides/sales-2-agent.png",
+      "capturedAt": "2026-09-30T16:35:11.538Z",
+      "status": "current",
+      "sha256": "4fdc31139f46c69b717a0af660bd44944ce1a4d4bceb45e20fb4656cd6d1be75",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-sales-3-brief",
+      "title": "A brief before the call",
+      "path": "screenshots/guides/sales-3-brief.png",
+      "capturedAt": "2026-09-30T16:35:20.520Z",
+      "status": "current",
+      "sha256": "440c676a9696f39bda5db143ab32b27becff31c04fac068496c8c6d4c24031f2",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-sales-4-notes",
+      "title": "Meeting notes saved to the CRM",
+      "path": "screenshots/guides/sales-4-notes.png",
+      "capturedAt": "2026-09-30T16:35:22.618Z",
+      "status": "current",
+      "sha256": "0b87ef81d40d361ad1a0ecdab15026005ba2ad30f5d02d6bb6fbd6a23132e81e",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-sales-5-slack-keys",
+      "title": "Add Slack with your Slack app",
+      "path": "screenshots/guides/sales-5-slack-keys.png",
+      "capturedAt": "2026-09-30T16:35:28.326Z",
+      "status": "current",
+      "sha256": "eae7f3b21043a830d14e5697e5a8918b0e1a89c7dd89bdcf11097bd7e3110cd0",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/connect",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "2ae801dd9f4c79b947922c93d18fba727710962669f18d13c187871fd0c893a7",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-sales-6-slack-live",
+      "title": "Published: the install link and redirect URL",
+      "path": "screenshots/guides/sales-6-slack-live.png",
+      "capturedAt": "2026-09-30T16:35:32.055Z",
+      "status": "current",
+      "sha256": "cc8194ce86fc2b8ee21f32a97839109c2059ae5918ffcf334923bc6622afd5fd",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6596ef7e0c7ea6f51f541d1693e187b2be2fc0471c2d4cd80c996755613ac05b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-1-connect-model",
+      "title": "Connect an AI model",
+      "path": "screenshots/guides/support-1-connect-model.png",
+      "capturedAt": "2026-09-30T16:34:02.518Z",
+      "status": "current",
+      "sha256": "7ea268d434cc30085ece6ffb88b37f25a3d3486914c618e4e9c4a1cbebf5efa7",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/credentials/providers/new?type=openai"
+      },
+      "sources": [
+        "frontend/src/pages/models-connect.tsx",
+        "frontend/src/components/llm-providers",
+        "frontend/src/components/connect",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "301879e36c64bbd182cd5cbd98d6dc0d6b7155e4d513f36c9c4901e0e6ead904",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-10-add-channel",
+      "title": "Pick where customers reach it",
+      "path": "screenshots/guides/support-10-add-channel.png",
+      "capturedAt": "2026-09-30T16:34:32.718Z",
+      "status": "current",
+      "sha256": "7b8060a00a12a8320a7a7a81d575bf9e4c28c3b87c9e5b9ed9a030955d235790",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel-new.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "4f7bd0a7718a7a4121e613a933756090a0c6c5b0079776f0727e9eb682e6bf2a",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-11-web-chat",
+      "title": "Publish the web chat",
+      "path": "screenshots/guides/support-11-web-chat.png",
+      "capturedAt": "2026-09-30T16:34:33.486Z",
+      "status": "current",
+      "sha256": "0f696a3a50aac1b196cab4471aa49677de4488d34a500dbd6f19548edf6b0c05",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6596ef7e0c7ea6f51f541d1693e187b2be2fc0471c2d4cd80c996755613ac05b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-12-widget",
+      "title": "Put the chat bubble on your website",
+      "path": "screenshots/guides/support-12-widget.png",
+      "capturedAt": "2026-09-30T16:34:37.350Z",
+      "status": "current",
+      "sha256": "c1d615ac7ecb390d2850bb2e4a2b363280924aabb77c751b4b012d8251dae62a",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/gateways/widget-builder.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "58fb27eb16c99f9cc83b5f34ef6015ce9f5cdf243c28c0b7140dd5a632297206",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-13-whatsapp",
+      "title": "Add WhatsApp with your Twilio keys",
+      "path": "screenshots/guides/support-13-whatsapp.png",
+      "capturedAt": "2026-09-30T16:34:44.692Z",
+      "status": "current",
+      "sha256": "57022529bea35a39f29e6de4eca45560f6aad03038653438667aeb308cc94535",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/connect",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "2ae801dd9f4c79b947922c93d18fba727710962669f18d13c187871fd0c893a7",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-14-email",
+      "title": "Add email with your Resend key",
+      "path": "screenshots/guides/support-14-email.png",
+      "capturedAt": "2026-09-30T16:34:50.400Z",
+      "status": "current",
+      "sha256": "acd4d7bcc32b97ab2c5e05d4d0eeb9050e77f10929c445fa0138042192d7a9d1",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/connect",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "2ae801dd9f4c79b947922c93d18fba727710962669f18d13c187871fd0c893a7",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-15-branding",
+      "title": "Name, greeting and limits",
+      "path": "screenshots/guides/support-15-branding.png",
+      "capturedAt": "2026-09-30T16:34:54.649Z",
+      "status": "current",
+      "sha256": "b1035a3a63e7f36405ce5a54632f0d1ac311a7e5e3ef21ea8f6290a272986591",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/settings"
+      },
+      "sources": [
+        "frontend/src/pages/agent-public-settings.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "0129ba1e9a49526179cc2a1483e43ff3b692f43938e51834712d3f391a4c0744",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-16-customer-view",
+      "title": "What a customer sees",
+      "path": "screenshots/guides/support-16-customer-view.png",
+      "capturedAt": "2026-09-30T16:35:02.642Z",
+      "status": "current",
+      "sha256": "d997fe307a9d7c91571ac219770208dd6dd7787b6d7e68a00b3248a0e60af6ed",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/?__slug=customer-support-assistant"
+      },
+      "sources": [
+        "frontend/src/pages/hosted-chat.tsx",
+        "frontend/src/lib/hosted-chat.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "44271aaddc5f3e43995e34f5b87b0b3116412eb115c2f470e2c3c23dc62d1a16",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-2-connect-orders",
+      "title": "Connect your order system",
+      "path": "screenshots/guides/support-2-connect-orders.png",
+      "capturedAt": "2026-09-30T16:34:06.976Z",
+      "status": "current",
+      "sha256": "595b33955978c725da7a7bcb183958204559da0162ad866022cb5dd24b1320a6",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/new/openapi"
+      },
+      "sources": [
+        "frontend/src/pages/api-new.tsx",
+        "frontend/src/pages/api-new-description.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "41619f09f6499a2517df25f1a95a3298f68e5fe930db1d8943aec3778be828c0",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-3-orders-tools",
+      "title": "The order system, with what it can do",
+      "path": "screenshots/guides/support-3-orders-tools.png",
+      "capturedAt": "2026-09-30T16:34:08.254Z",
+      "status": "current",
+      "sha256": "41298c6bfefb1fdf00abad1ee810a3dd30a99b3011c40ae54509273177571796",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/apis/:id"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "4a17754ecf6fb96042b63eac703a5a440e1abb864d3b7b0db3c0d616df45dbb1",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-4-new-agent",
+      "title": "A new autonomous agent",
+      "path": "screenshots/guides/support-4-new-agent.png",
+      "capturedAt": "2026-09-30T16:34:12.409Z",
+      "status": "current",
+      "sha256": "8b7fbc0acbdf108da5b2da89ae412583f05bbeb1544babe1ee28fb533700a692",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-5-model-and-tools",
+      "title": "Tick the order tools",
+      "path": "screenshots/guides/support-5-model-and-tools.png",
+      "capturedAt": "2026-09-30T16:34:12.970Z",
+      "status": "current",
+      "sha256": "b2ab86892dc57197e99f2657e4accc0b03a5c77eb47b7a4c8c622668bce32275",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/new"
+      },
+      "sources": [
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-6-activate",
+      "title": "Save and turn the agent on",
+      "path": "screenshots/guides/support-6-activate.png",
+      "capturedAt": "2026-09-30T16:34:16.317Z",
+      "status": "current",
+      "sha256": "8ad15f6493a391fd6c65fd259535a6835447c5d31f728d1af17c58df80994c46",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-7-try-order",
+      "title": "Ask about an order",
+      "path": "screenshots/guides/support-7-try-order.png",
+      "capturedAt": "2026-09-30T16:34:18.446Z",
+      "status": "current",
+      "sha256": "7aa8b7fd269eeae351da00870fa2bab5d3ac56aa57f801ea2170fbcb6c0623aa",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-8-refund-waits",
+      "title": "A big refund waits for approval",
+      "path": "screenshots/guides/support-8-refund-waits.png",
+      "capturedAt": "2026-09-30T16:34:28.727Z",
+      "status": "current",
+      "sha256": "9945c5591463923f72d3c1f32e2dd340c36884f329dd87d87d7bebabaf774ef5",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "c7f2487bd278909887646363871e9764c3bdf55fe97445ff4a6b49364f316804",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-9-approve",
+      "title": "Approve the refund",
+      "path": "screenshots/guides/support-9-approve.png",
+      "capturedAt": "2026-09-30T16:34:29.583Z",
+      "status": "current",
+      "sha256": "847b0b9ea9c976d3ca77ad17aecfada1415ffcdaca1c6b79f5d86acc75cb6769",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "c7f2487bd278909887646363871e9764c3bdf55fe97445ff4a6b49364f316804",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "hosted-chat-privacy",
       "title": "Hosted chat: visitor data",
       "path": "screenshots/hosted-chat-privacy.png",
-      "capturedAt": "2026-09-30T11:22:13.583Z",
-      "status": "needs-recapture",
-      "reason": "The hosted chat composer gained an attach button and the attached-file list; this view shows the page around the privacy menu, so recapture it to confirm.",
-      "sha256": "f5bc8e7fb487c0927c392aa05ee9ff42b8a0fca06b08396045d9858c6600f50d",
+      "capturedAt": "2026-09-30T16:32:08.169Z",
+      "status": "current",
+      "sha256": "11208187d15885d3bb4a0b0785cc47b8ca759b24348c76cd76071e5742eba010",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -832,22 +1775,20 @@
       "sources": [
         "frontend/src/pages/hosted-chat.tsx",
         "frontend/src/lib/hosted-chat.ts",
-        "frontend/src/components/hosted-chat",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "422c8259f53b9bb3f02145df884d53849e871f0d49028922cb17f9c3b713dbc6",
+      "sourceDigest": "44271aaddc5f3e43995e34f5b87b0b3116412eb115c2f470e2c3c23dc62d1a16",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "hosted-chat",
       "title": "Hosted web chat",
       "path": "screenshots/hosted-chat.png",
-      "capturedAt": "2026-09-30T11:22:09.551Z",
-      "status": "needs-recapture",
-      "reason": "The composer gained an attach button and the list of attached files above the message box; recapture the page with its new composer.",
-      "sha256": "b86cf40e2d876293c9623d5e19dc03f545ee3e303d9ee4e15af9681995698c87",
+      "capturedAt": "2026-09-30T16:32:04.203Z",
+      "status": "current",
+      "sha256": "8f2479f7c99e114f697b5ff8aa02d2ec29ca5c03a9d8a8f2b53cc76799c8ad24",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -856,21 +1797,19 @@
       "sources": [
         "frontend/src/pages/hosted-chat.tsx",
         "frontend/src/lib/hosted-chat.ts",
-        "frontend/src/components/hosted-chat",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "422c8259f53b9bb3f02145df884d53849e871f0d49028922cb17f9c3b713dbc6",
+      "sourceDigest": "44271aaddc5f3e43995e34f5b87b0b3116412eb115c2f470e2c3c23dc62d1a16",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "interfaces-channel-config",
       "title": "Add channel",
       "path": "screenshots/interfaces-channel-config.png",
-      "capturedAt": "2026-09-30T11:22:00.190Z",
-      "status": "needs-recapture",
-      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
+      "capturedAt": "2026-09-30T16:31:55.129Z",
+      "status": "current",
       "sha256": "aa6a65aabbf701d494218a1311d013f4bc5cd7d662e8e8477d18684631b06957",
       "source": {
         "kind": "browser",
@@ -884,17 +1823,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9fd84ceea8f2113b6cf2eae2dd33182e03dd3460c15aec83008a709452881d3e",
+      "sourceDigest": "4f7bd0a7718a7a4121e613a933756090a0c6c5b0079776f0727e9eb682e6bf2a",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "interfaces-channel-setup",
       "title": "Microsoft Teams channel",
       "path": "screenshots/interfaces-channel-setup.png",
-      "capturedAt": "2026-09-30T11:22:02.885Z",
-      "status": "needs-recapture",
-      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
-      "sha256": "020aeb706ef795680433abd8d741cfe429256ed427fd51ae0afebb54bf49699e",
+      "capturedAt": "2026-09-30T16:31:57.802Z",
+      "status": "current",
+      "sha256": "c96bca5f7f55dd84f5a59e0c975f0abadb220a9028e206a56bae1268a1cebe50",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -907,16 +1845,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a8c7eedd9402f8de7c0b664c33bab3b0c9e162352e357772dd08818b9a61ddbb",
+      "sourceDigest": "6596ef7e0c7ea6f51f541d1693e187b2be2fc0471c2d4cd80c996755613ac05b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "memory-write",
       "title": "Add memory",
       "path": "screenshots/memory-write.png",
-      "capturedAt": "2026-09-30T11:22:57.927Z",
-      "status": "needs-recapture",
-      "reason": "The Memory page has an Accounts tab and the storage service cards are gone from Storage. Recapture on staging once it is deployed; the prior capture is kept.",
+      "capturedAt": "2026-09-30T16:32:51.514Z",
+      "status": "current",
       "sha256": "7786413e5bfedd08a2b08cb2da55b620839935778e23326012324d20444f9443",
       "source": {
         "kind": "browser",
@@ -930,17 +1867,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3922878f9f11b2b00d8f6c8d96976c322c4aac8f3d523f8798c8075fc6582d2d",
+      "sourceDigest": "b451424bcf8384dc79330578b5c23b2a8a4c1c61b0908a09e1590de113ab00e9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "memory",
       "title": "Memory",
       "path": "screenshots/memory.png",
-      "capturedAt": "2026-09-30T11:22:55.532Z",
-      "status": "needs-recapture",
-      "reason": "The Memory page has an Accounts tab (every memory account with its health, Add account for a service with none, and the moves between accounts), and moving memories is its own page. Recapture on staging once it is deployed; the prior capture is kept.",
-      "sha256": "78e932e3eace2487d579082b2e6bbc83c000c101a58b0f1bcf75440f994b0ae0",
+      "capturedAt": "2026-09-30T16:32:49.148Z",
+      "status": "current",
+      "sha256": "16eae1d86f93fe323b45a65aefe4d718c0bc102269e900e44d0f9987d12c5795",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -953,16 +1889,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3185768545ceb66f432593b45ad6f80d884943ea18b6f2538232821de65cfef4",
+      "sourceDigest": "61c844a2d9c8dbd21ed2f1ebac031ee67ed35fe18bad7e74868e1ab66242d0ee",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "models",
       "title": "Model catalog",
       "path": "screenshots/models.png",
-      "capturedAt": "2026-09-30T11:22:52.976Z",
-      "status": "needs-recapture",
-      "reason": "The model card gained a PDF input capability (vision and PDF input decide whether a file someone sent reaches the model as a file); the capability list on this page may show it, so recapture it from the page.",
+      "capturedAt": "2026-09-30T16:32:46.480Z",
+      "status": "current",
       "sha256": "69d454fd8eab70ef2b795281cba2d58bd6354b6132c8ba127c5edce184e6915e",
       "source": {
         "kind": "browser",
@@ -976,15 +1911,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0272e9480054ce9e349b515af92acda9f035f1cc7189d8d85e8042148c68f6c9",
+      "sourceDigest": "eb6834b856578f5cbffd5111cc51ab0736d6bb2e971629ac6621caa9cb31d1a0",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-api-imported",
       "title": "Imported API",
       "path": "screenshots/quickstart-api-imported.png",
-      "capturedAt": "2026-09-30T11:22:18.791Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-09-30T16:32:13.328Z",
+      "status": "current",
       "sha256": "e915b3cd315ad4d7af5c7a7ba6b0a337fbdca296fc9c2cc4352128b49b192a27",
       "source": {
         "kind": "browser",
@@ -998,17 +1933,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "cea1a73e4b21db230fbda91dacd79e607f75b3e39a817c09cc48bc32a69b0fb4",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "4a17754ecf6fb96042b63eac703a5a440e1abb864d3b7b0db3c0d616df45dbb1",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-claude-config",
       "title": "Client setup",
       "path": "screenshots/quickstart-claude-config.png",
-      "capturedAt": "2026-09-30T11:22:45.503Z",
-      "status": "needs-recapture",
-      "sha256": "0e903eb574d5f84db88acc45f73c93b27b12308594caab94e9170ec43231ba58",
+      "capturedAt": "2026-09-30T16:32:39.080Z",
+      "status": "current",
+      "sha256": "1c8b32d819ed1dabde66f6597199e8b93d74e82df34f26cb712c7148757e6f22",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1021,17 +1955,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-gateway-mcp",
       "title": "Petstore MCP gateway",
       "path": "screenshots/quickstart-gateway-mcp.png",
-      "capturedAt": "2026-09-30T11:22:36.258Z",
-      "status": "needs-recapture",
-      "sha256": "df12fbd6b9b699cc3f1a044ce60f453d92eb3424ad9f0fd31139c734c0b86f95",
+      "capturedAt": "2026-09-30T16:32:30.041Z",
+      "status": "current",
+      "sha256": "bb010649f6474ca214b8eeb41e972c52ec755e64312665db849350dcc7caedba",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1044,17 +1977,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-mcp-endpoints",
       "title": "MCP endpoints",
       "path": "screenshots/quickstart-mcp-endpoints.png",
-      "capturedAt": "2026-09-30T11:22:42.499Z",
-      "status": "needs-recapture",
-      "sha256": "3ab2edc123911318a3fc1e40a10853987ed2e1d9d61435e5a8d84d9bff60e068",
+      "capturedAt": "2026-09-30T16:32:35.993Z",
+      "status": "current",
+      "sha256": "40b6baaf71470610c1c7d08d8761e4a167c997ec31f2afe36346ed141f8f0247",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1067,18 +1999,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "runner-detail",
       "title": "Runner detail",
       "path": "screenshots/runner-detail.png",
-      "capturedAt": "2026-09-30T11:23:08.842Z",
-      "status": "needs-recapture",
-      "reason": "The runner's Workspaces tab now shows the agent and run each workspace was made for and a Release button; recapture the runner page to confirm.",
-      "sha256": "cfef5f1482e3477cfca4d98118dcffb687171b13531b09b64d8f1e6bdda1d33b",
+      "capturedAt": "2026-09-30T16:33:04.731Z",
+      "status": "current",
+      "sha256": "50122568e58ed9f50680f6329b599c4deffd243c7c58c5a6a044a979bea2e89d",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1092,16 +2022,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f17e0a3b151d96d70ae5906d374391d7e070f449a996848a53cb348acfb41c66",
+      "sourceDigest": "c625508929502099d25adada79ba3e598c113269e4b22f7f4bc752a737aae41b",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "runners-list",
       "title": "Runners",
       "path": "screenshots/runners-list.png",
-      "capturedAt": "2026-09-30T11:23:06.295Z",
-      "status": "needs-recapture",
-      "reason": "The shared runner components changed (the Workspaces tab gained agent/run and Release columns); the runners list should look the same, but recapture it to confirm.",
+      "capturedAt": "2026-09-30T16:33:01.038Z",
+      "status": "current",
       "sha256": "68fe07c48ed6f75381ff9c753b580c5705ed901412b95825f17a1d5be726e829",
       "source": {
         "kind": "browser",
@@ -1116,16 +2045,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4e462ed7be5abfe60c4561459ecfe0b9117d445ac8c7cbd86c6b394d3840cd6a",
+      "sourceDigest": "a452a589ebd73eeb1abf1ec7e2f7a31007afec3d9d2ea4cd84505bc315ee240f",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "schedule-config",
       "title": "Schedule card",
       "path": "screenshots/schedule-config.png",
-      "capturedAt": "2026-09-30T11:21:31.757Z",
-      "status": "needs-recapture",
-      "sha256": "9c14c68b9405cebbf9e39a1ea41c666b9ef5359ea43147b2896d81cdd1df9da7",
+      "capturedAt": "2026-09-30T16:31:26.849Z",
+      "status": "current",
+      "sha256": "5ea1a39891d2d5e6524c2d3067f19f48281fb7492174962f6dd681882dfc8906",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1138,9 +2067,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "self-hosting-compose",
@@ -1155,9 +2083,9 @@
       "id": "settings-approval-policies-enabled",
       "title": "Approval policies",
       "path": "screenshots/settings-approval-policies-enabled.png",
-      "capturedAt": "2026-09-30T11:23:41.402Z",
-      "status": "needs-recapture",
-      "sha256": "90c60057f93a91232887fa47f58c942cbdbce0224e121e08c1a5069aeba0a9fa",
+      "capturedAt": "2026-09-30T16:33:37.052Z",
+      "status": "current",
+      "sha256": "da6523a7ef981ce7a2eafcfefd06a2808c629a83d4c1c890912beb67a426d1d9",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1171,16 +2099,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "db4e5d0deef4890ab59c6b7d72f1c2531bc7a4278d0ba928232f28595a22a11c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "8c5378634f8eaf697bb074af0b20bb730fce7d557d95dd6a355d56f3ed973968",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-approval-policy-new",
       "title": "New approval policy",
       "path": "screenshots/settings-approval-policy-new.png",
-      "capturedAt": "2026-09-30T11:23:44.041Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-09-30T16:33:39.592Z",
+      "status": "current",
       "sha256": "682ff2c3645de5b00d7a45e3b603e689d43923223e1528c5ae0d31b8fdfbf6e1",
       "source": {
         "kind": "browser",
@@ -1194,17 +2121,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8557a39fe39b18927925183db5774e9cd16a1019b3d9c19d08748ad069331bc2",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "7a43090b29f280dfe085858ccdd5bbabb17d0d12d5267728fb6a86c294ea4ab1",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-audit-streams-enabled",
       "title": "Audit streaming",
       "path": "screenshots/settings-audit-streams-enabled.png",
-      "capturedAt": "2026-09-30T11:23:49.404Z",
-      "status": "needs-recapture",
-      "sha256": "670977e04912a2c124e217193c4235692e73ca93605bf779b428ff73072d6e01",
+      "capturedAt": "2026-09-30T16:33:49.468Z",
+      "status": "current",
+      "sha256": "2814af83e89ad903c7d8c2878fa6800e5c288e6a761e914d489f570afb5c8696",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1217,17 +2143,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "821998e41060f0d7343a97a8253968797102991c9582c628abae6d076b0e380b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-compliance-enabled",
       "title": "Compliance",
       "path": "screenshots/settings-compliance-enabled.png",
-      "capturedAt": "2026-09-30T11:23:46.795Z",
-      "status": "needs-recapture",
-      "sha256": "544094ac9f6e138e357a4a3cbcaf92246242f025c9debe8bbc9129fad3ce6572",
+      "capturedAt": "2026-09-30T16:33:46.879Z",
+      "status": "current",
+      "sha256": "b332d4756ae97808a2f4c1a58213786ad3fb604a38880a0a16207d871a3240a3",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1240,17 +2165,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "821998e41060f0d7343a97a8253968797102991c9582c628abae6d076b0e380b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-encryption-locked",
       "title": "Encryption (Enterprise, locked)",
       "path": "screenshots/settings-encryption-locked.png",
-      "capturedAt": "2026-09-30T11:23:51.887Z",
-      "status": "needs-recapture",
-      "sha256": "b0293d77eaaafcbc7ba350a5668765dd05ec38ad1b87f1c42c8557d97ed88b94",
+      "capturedAt": "2026-09-30T16:33:52.033Z",
+      "status": "current",
+      "sha256": "ca3f57182b20332d233e278098c2f9300ef16aa966a92ca58c1f1feb521024a7",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1263,17 +2187,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "821998e41060f0d7343a97a8253968797102991c9582c628abae6d076b0e380b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-enabled",
       "title": "Roles",
       "path": "screenshots/settings-rbac-enabled.png",
-      "capturedAt": "2026-09-30T11:23:29.454Z",
-      "status": "needs-recapture",
-      "sha256": "4c3ffa7f53dde124f45f6b8c041a449bd844efb3131fe073194354af459bb43a",
+      "capturedAt": "2026-09-30T16:33:25.283Z",
+      "status": "current",
+      "sha256": "67bc2b8e69f6153b3f42b8311a78756be6fc5f17ba31e2823297f919f6b25550",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1286,17 +2209,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "821998e41060f0d7343a97a8253968797102991c9582c628abae6d076b0e380b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-new-policy",
       "title": "New access policy",
       "path": "screenshots/settings-rbac-new-policy.png",
-      "capturedAt": "2026-09-30T11:23:35.963Z",
-      "status": "needs-recapture",
-      "sha256": "d5d84375cafb5b3b5e2211102d9ca4c74c10e1a01af807f3bb07d5323c221c45",
+      "capturedAt": "2026-09-30T16:33:31.881Z",
+      "status": "current",
+      "sha256": "3cc722b28c931573030004cfe046ae2ba5f7a6349a825584fd5a2eb3f5de3323",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1309,17 +2231,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "821998e41060f0d7343a97a8253968797102991c9582c628abae6d076b0e380b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-new-role",
       "title": "New role",
       "path": "screenshots/settings-rbac-new-role.png",
-      "capturedAt": "2026-09-30T11:23:32.685Z",
-      "status": "needs-recapture",
-      "sha256": "068cbacf53e590e8f3011fabbbbf12c7ec38b292b93d2dab89598e231121cd6f",
+      "capturedAt": "2026-09-30T16:33:28.609Z",
+      "status": "current",
+      "sha256": "4372359444cf418eba043e752eca0bb06f51e33ebf79e01a8f6e456edb289e0f",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1332,17 +2253,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "821998e41060f0d7343a97a8253968797102991c9582c628abae6d076b0e380b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-sso-enabled",
       "title": "Single sign-on",
       "path": "screenshots/settings-sso-enabled.png",
-      "capturedAt": "2026-09-30T11:23:38.658Z",
-      "status": "needs-recapture",
-      "sha256": "388787159f7cd8710646eaf32015aeac694819f816d37e509661562f1d2b268e",
+      "capturedAt": "2026-09-30T16:33:34.507Z",
+      "status": "current",
+      "sha256": "339d5078a61e7093f33ea8c3299add6025effe0d01185b86e14088def496ea68",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1355,17 +2275,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "821998e41060f0d7343a97a8253968797102991c9582c628abae6d076b0e380b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-teams",
       "title": "Members and teams",
       "path": "screenshots/settings-teams.png",
-      "capturedAt": "2026-09-30T11:23:26.852Z",
-      "status": "needs-recapture",
-      "sha256": "8c9454310a54eb05530c3cd97b4d9ff6d3f924e23086cda07ec4aa089f2dbe6e",
+      "capturedAt": "2026-09-30T16:33:22.699Z",
+      "status": "current",
+      "sha256": "0470f8f33bf7e9f7b78a79c9c906677fc15d4748cb0d72a2d6bb725970cb5a48",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1379,16 +2298,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7e044a520664a0ed4d39db23b3c2ca18f57196386d67d02bbeadbaac0cade2c9",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "fc85b11a97141d67811563edd91e91078612dfdc3af39961cbb9e4910f49d933",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-constraints",
       "title": "Support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
-      "capturedAt": "2026-09-30T11:21:09.854Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-09-30T16:31:07.033Z",
+      "status": "current",
       "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
       "source": {
         "kind": "browser",
@@ -1402,16 +2320,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-overview",
       "title": "Support agent overview",
       "path": "screenshots/support-agent-overview.png",
-      "capturedAt": "2026-09-30T11:21:03.938Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-09-30T16:31:01.802Z",
+      "status": "current",
       "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
       "source": {
         "kind": "browser",
@@ -1425,17 +2342,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-runs",
       "title": "Support agent runs",
       "path": "screenshots/support-agent-runs.png",
-      "capturedAt": "2026-09-30T11:21:13.051Z",
-      "status": "needs-recapture",
-      "sha256": "d34ff0022be953872a867ce29bc742adf0839cfcde88a100314c9beb260662d2",
+      "capturedAt": "2026-09-30T16:31:09.705Z",
+      "status": "current",
+      "sha256": "5c532a613cf19c9621c2fca36392e49a9521a1ebdb73ce4d704539d4ecc33a32",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1448,18 +2364,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "tool-detail",
       "title": "Tool test",
       "path": "screenshots/tool-detail.png",
-      "capturedAt": "2026-09-30T11:22:24.846Z",
-      "status": "needs-recapture",
-      "reason": "The Test tab's no-workspace line now says agent runs get a workspace automatically instead of pointing at POST /workspaces; recapture the page to confirm.",
-      "sha256": "512e0732f1250cfcaf175345d27bc5da6cfeb884a68554f15eacf36fc701d0cf",
+      "capturedAt": "2026-09-30T16:39:17.525Z",
+      "status": "current",
+      "sha256": "6060c3bd3b88b8c7e8c0df729350b1e7514b99e51eebeb34a3114e8bba2e8840",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1472,16 +2386,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "843b9b3e2ad4e8aa5c83da30404b572c13f17e03108aa48e541704e744bc49ec",
+      "sourceDigest": "b2a8a7c1ebe0985e24dfa89609b6bee89deb199c29e3ce641683fdccb4cd00f7",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "tools-list",
       "title": "Tools list",
       "path": "screenshots/tools-list.png",
-      "capturedAt": "2026-09-30T11:22:21.417Z",
-      "status": "needs-recapture",
-      "sha256": "106af29b1d76c0a9abd453dbb4d8f2c65a961eca1f0aca8278485101394aed1f",
+      "capturedAt": "2026-09-30T16:32:15.909Z",
+      "status": "current",
+      "sha256": "406ee85143d1b98ddefae4faa1ee5b74ca1abdd9da69d1069b03c0ef2850d418",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1494,17 +2408,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d0f69adaee5f2a5a416ab868a47ab4928b55c6a2d3957ddcca1b19d9a9c58bc",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "6e31b4943d1cf05db697d4ab45f519abaeae248d1dfa7ed0f78164f95fa8c471",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "versioning-history",
       "title": "Change history",
       "path": "screenshots/versioning-history.png",
-      "capturedAt": "2026-09-30T11:21:41.183Z",
-      "status": "needs-recapture",
-      "sha256": "fe01b42fc4f0b21ea501e03dcd6d4138602a2871d666007ada240b7b6c8a5d2d",
+      "capturedAt": "2026-09-30T16:31:36.193Z",
+      "status": "current",
+      "sha256": "3d9337edb0726c49a6c1bb764422caf91f262d4088e84e772d216080c8c30ccf",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1517,17 +2430,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "versioning",
       "title": "Pipeline versions",
       "path": "screenshots/versioning.png",
-      "capturedAt": "2026-09-30T11:21:38.185Z",
-      "status": "needs-recapture",
-      "sha256": "e88096c26f00296d4c083af20ef68d5278b9e33b4a93d7aa32d583b20f174afd",
+      "capturedAt": "2026-09-30T16:31:33.132Z",
+      "status": "current",
+      "sha256": "3ec54254ec29ece9dcb1ebe7ca165a1ee6b066f34b78598e3cc1f39b7cbcdb68",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1540,17 +2452,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "webhook-config",
       "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
-      "capturedAt": "2026-09-30T11:21:35.085Z",
-      "status": "needs-recapture",
-      "sha256": "9c14c68b9405cebbf9e39a1ea41c666b9ef5359ea43147b2896d81cdd1df9da7",
+      "capturedAt": "2026-09-30T16:31:29.999Z",
+      "status": "current",
+      "sha256": "5ea1a39891d2d5e6524c2d3067f19f48281fb7492174962f6dd681882dfc8906",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1563,18 +2474,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the UX decisions batch (work mode, API keys, sharing wording and team credentials, app icon, inactive providers, gateway count); recapture from app.almyty.com once they are released."
+      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "widget-builder",
       "title": "Website widget channel",
       "path": "screenshots/widget-builder.png",
-      "capturedAt": "2026-09-30T11:22:05.966Z",
-      "status": "needs-recapture",
-      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
-      "sha256": "49e2b35d84888450d3c2d8d841245a67f15849b4984bb9825cb362e4f7f02cc8",
+      "capturedAt": "2026-09-30T16:32:00.784Z",
+      "status": "current",
+      "sha256": "ce07dc4f3fc8e51c2d82bc47d7635aaffe6d9650b203c971ec18665e5635fb21",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1588,7 +2497,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9b01b6aeb52130ff97ded37af257da818b152c8623660f54a8f254ad8f442965",
+      "sourceDigest": "58fb27eb16c99f9cc83b5f34ef6015ce9f5cdf243c28c0b7140dd5a632297206",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     }
   ]

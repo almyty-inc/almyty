@@ -1,32 +1,55 @@
 # Run limits and loop safety
 
-An autonomous agent decides its own next step. That is the point of it, and it is also the thing that needs a ceiling: a loop that never converges, a tool that fails and gets retried, a prompt that grows until the context bill does. Run limits are the ceilings, and they are enforced at the point of use rather than trusted to whatever the caller asked for.
+An agent that works on its own decides its next step itself. Run limits make sure it cannot go on forever or run up a bill: every run (one job an agent does, such as answering one question) stops after a set number of steps, a set amount of money or a set time, whichever comes first. For example, "stop after 50 steps, $1 or 15 minutes".
 
-## What stops a runaway agent
+If you set nothing, every run already has sensible limits. You only change them when an agent needs more room or less.
 
-One sentence, with a file behind it: **no run may exceed the ceiling in your environment, clamped in `resolveRunLimits` at `backend/src/modules/agents/run-limits.ts`**, and nothing inside the product can raise it.
+## Change an agent's limits
 
-That matters because everything else is negotiable. An organization admin can raise the org ceiling. An agent author can set a higher number in the builder. Neither can get past the environment floor, because the resolver takes the smallest value across every scope and then clamps the result.
+1. Open the agent and click **Edit**.
+2. Find **Run limits**. On an autonomous agent it is part of the page; on a workflow agent click **Settings** in the toolbar above the canvas and it opens above the graph.
+3. The section shows, in one line, what a run will get, for example "Stops after 50 steps, $1 or 15 minutes, whichever comes first."
+4. Open **Advanced** to change the fields below. Leave a field empty to keep the default; empty never means zero.
+5. Save the agent.
 
-## The fields
-
-| Field | What it bounds | Default when no scope sets it |
+| Field | What it limits | Default |
 |---|---|---|
-| **Max steps** | How many times the agent may loop before the run stops | 50 |
-| **Token budget** | Total tokens across the whole run | 500000 |
-| **Cost cap** | Spend for the run, in cents | 100 |
-| **Timeout** | Wall clock, from when the run started | 900000 ms (15 minutes) |
-| **Max tool calls** | Total tool invocations | 100 |
-| **Max recursion depth** | How deep sub-agent nesting may go; depth 0 is the run itself | 3 |
-| **Truncation policy** | What happens when the context budget is reached: drop the oldest turns, summarise them, or stop | `drop_oldest` |
-| **Tool error retries** | How many times a failing tool is retried | 3 |
-| **Tool error feedback** | How much of a failure re-enters the model's context | `full` |
+| **Max steps** | how many times the agent may go round its loop | 50 |
+| **Spending cap ($)** | what the run may spend on models | $1 |
+| **Token budget** | how much text the run may send and receive in total (counted in tokens, the unit model vendors bill by) | 500,000 |
+| **Timeout (seconds)** | how long the run may take | 15 minutes |
+| **Max tool calls** | how many times it may use a tool | 100 |
+| **Tool error retries** | how often a failing tool is tried again | 3 |
+| **When the context budget runs out** | **Drop the oldest turns**, **Summarise the older turns**, or **Stop the run** | drop the oldest |
+| **When a tool call fails** | **Show the agent the full error**, **Show a one-line summary**, or **Only say that it failed** | full error |
 
-These are the values a run gets when nothing anywhere specified one. They are not the ceiling: the environment floor below is a separate, larger set of numbers, and the gap between the two is the room an organization or an agent author has to raise a limit. A default of 15 minutes under a ceiling of an hour means a run may be given up to an hour, and gets 15 minutes if nobody says otherwise.
+A run can also start helper agents, and those can start their own. That nesting stops after 3 levels. This one has no field on the page.
 
-Every one is editable per agent under **Run limits** in the agent builder: in the body of an autonomous agent's page, and behind **Settings** in the toolbar of a workflow agent's canvas, where it opens inline above the graph. Both are the same card. The section shows one line with what a run will get ("Stops after 50 steps, $1 or 15 minutes, whichever comes first"), counting in the organization's defaults, and keeps the fields under **Advanced**; the spending cap is typed in dollars there.
+## Organization defaults
 
-## Resolution: min-wins, four scopes
+Admins set defaults for every agent in **Settings → Organization → Details**, under **Agent defaults**: **Max cost per run ($)** and **Max steps per run**.
+
+## How the limits combine
+
+Limits can be set in four places: by whoever runs almyty (the hard ceiling), by the organization, on the agent, and for a single run. The smallest number wins. A narrower place can only tighten a limit, never loosen it, so an agent author cannot go past what the organization set, and nobody inside the product can go past the hard ceiling. By default that ceiling is 100 steps, $5, one hour, 200 tool calls, 2,000,000 tokens and 5 levels of helper agents.
+
+So a default of 15 minutes under a ceiling of one hour means a run may be given up to an hour, and gets 15 minutes if nobody says otherwise.
+
+Limits are worked out while the run is going, not when you save. If the organization tightens a limit, running agents follow it from their next step.
+
+Helper agents share their parent's limits rather than getting fresh ones. Without that, an agent allowed one dollar could start ten helpers allowed one dollar each. A loop step inside a workflow is bound too: a loop asking for 100 rounds inside a run capped at 25 steps gets 25.
+
+## When a limit is reached
+
+The run stops and says why in a sentence you can act on, for example that it reached its spending cap. It never just goes quiet. You can then try again with a smaller request, raise the limit, or pass it to a person.
+
+## Checking which limits applied
+
+Every run records the limits it actually ran under, not just what was asked for. Months later you can still see which ceilings governed a particular run, even if the policy has changed since.
+
+## For developers
+
+**Scopes, from widest to narrowest:**
 
 ```
 environment floor    RUN_LIMIT_MAX_*        operator, cannot be raised from inside
@@ -35,18 +58,11 @@ agent                agentConfig.runLimits  agent author
 run                  per-call overrides     the caller
 ```
 
-For every numeric limit the resolver takes the **smallest** value any scope specified, then clamps it to the environment floor. A narrower scope may only tighten.
+For each numeric limit the resolver takes the smallest value any scope specified, then clamps it to the environment floor (`resolveRunLimits` in `backend/src/modules/agents/run-limits.ts`). The enum limits are ranked by restrictiveness so a narrower scope cannot loosen them: truncation `fail` beats `summarise` beats `drop_oldest`; tool error feedback `suppressed` beats `summarised` beats `full`.
 
-The enum limits follow the same one-way rule, ranked by restrictiveness, so an agent cannot loosen a policy the organization pinned:
+**Defaults and fields:** `maxSteps` 50, `maxTokens` 500000, `maxCostCents` 100, `maxDurationMs` 900000, `maxToolCalls` 100, `maxRecursionDepth` 3 (depth 0 is the run itself), `truncationPolicy` `drop_oldest`, `toolErrorRetries` 3, `toolErrorFeedback` `full`. Tool error feedback `summarised` keeps the first line, capped at 200 characters; `suppressed` tells the model the call failed without the text.
 
-- truncation: `fail` beats `summarise` beats `drop_oldest`
-- tool error feedback: `suppressed` beats `summarised` beats `full`
-
-Leaving a field empty in the builder means **inherit**, not zero. Nothing is pre-filled, so an agent never quietly acquires a ceiling of its own.
-
-Resolution happens **at the point of use**, not when you press save. Tightening org policy takes effect on the next step of every running agent, without rewriting a single agent row.
-
-### The environment floor
+**The environment floor:**
 
 | Variable | Default |
 |---|---|
@@ -57,21 +73,13 @@ Resolution happens **at the point of use**, not when you press save. Tightening 
 | `RUN_LIMIT_MAX_TOOL_CALLS` | 200 |
 | `RUN_LIMIT_MAX_RECURSION_DEPTH` | 5 |
 
-Self-hosters own these. They are the only ceiling no in-product role can raise.
+Self-hosters own these; they are the only ceiling no in-product role can raise.
 
-## One ledger
+**One ledger.** The run-scoped accumulator is the `agent_runs` row: `currentStep`, `totalTokens`, `totalCost`, `executionTime`, `toolCallCount`, `recursionDepth`. A nested run (sub-agent, called agent, temporary agent) inherits its parent's resolved limits and increments `recursionDepth`.
 
-There is exactly one run-scoped accumulator and it is the `agent_runs` row: `currentStep`, `totalTokens`, `totalCost`, `executionTime`, `toolCallCount`, `recursionDepth`.
+**Workflow runs.** The timeout is the tighter of the agent's `settings.maxExecutionTime` (5 minutes when unset) and the resolved timeout; the spending cap is the tighter of `settings.budgetLimit` and the resolved cost cap. A workflow run stops with status `timeout` and `Execution timed out after <n>ms`, or `failed` and `Budget limit ($<cap>) exceeded: $<spent>`, checked between steps; a step running when the cap is crossed is aborted. Max tool calls counts every `tool_call` node, tool error retries apply to each, and max recursion depth bounds `sub_agent` nesting.
 
-A nested run (a sub-agent, another agent it calls, a temporary agent) inherits its parent's resolved limits and increments `recursionDepth`, so nesting stays **inside** the same budget rather than starting a fresh one alongside it. Without that, an agent allowed one dollar could spawn ten sub-agents allowed one dollar each.
-
-The loop node in the pipeline builder is bound by the same ceiling. A loop asking for 100 iterations inside a run capped at 25 steps gets 25.
-
-A workflow run is bound by the same limits. Its timeout is the tighter of the agent's `settings.maxExecutionTime` (5 minutes when unset) and the resolved **Timeout**; its spending cap is the tighter of `settings.budgetLimit` and the resolved **Cost cap**. It stops with status `timeout` and `Execution timed out after <n>ms`, or `failed` and `Budget limit ($<cap>) exceeded: $<spent>`, checked between steps, and a step running when the cap is crossed is aborted. **Max tool calls** counts every `tool_call` node, **Tool error retries** is how often each one is retried, and **Max recursion depth** bounds `sub_agent` nesting.
-
-## When a limit trips
-
-The run fails with a machine-readable code **and** a sentence a person can act on. Never a silent stop.
+**Trip codes.** The code lands on `run.metadata.limitTrip` and on the `run.failed` event:
 
 | Code | Meaning |
 |---|---|
@@ -83,19 +91,7 @@ The run fails with a machine-readable code **and** a sentence a person can act o
 | `RECURSION_DEPTH_EXCEEDED` | Sub-agents nested deeper than allowed |
 | `CONTEXT_BUDGET_EXCEEDED` | Context was exhausted and the policy is `fail` |
 
-The code lands on `run.metadata.limitTrip` and on the `run.failed` event, so a caller can decide whether to retry smaller, raise the ceiling, or escalate.
-
-## Tool error feedback
-
-When a tool call fails, the error text normally goes back to the model verbatim, because that is what it needs to correct course. Some tools echo their request payload back in the error, which is not always something the model should see again.
-
-- **full**: the error verbatim. The default, and usually right.
-- **summarised**: first line only, capped at 200 characters.
-- **suppressed**: the model is told the call failed, without the text. It still has to know, or it will assume success and carry on.
-
-## Auditing which limits applied
-
-Every run emits a `run_start` audit event carrying the **resolved** limits snapshot, not the requested ones. Six months later, "which ceilings governed this run" has an answer that does not depend on replaying today's policy against yesterday's run.
+**Audit.** Every run emits a `run_start` audit event carrying the resolved limits snapshot.
 
 ## Related
 

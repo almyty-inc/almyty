@@ -1,40 +1,34 @@
-# GraphQL Tools
+# GraphQL tools
 
-A GraphQL tool runs one query or mutation against an endpoint and hands the
-result back to the agent. You get structured variable mapping, automatic type
-coercion, and error detection tuned to the GraphQL response shape, so the model
-calls a clean named action instead of assembling requests.
+GraphQL is a way many modern systems let you ask for exactly the data you want in one request. Connect a system's GraphQL API and every query (a question, such as "find a customer by email") and every mutation (a change, such as "close a deal") becomes a tool your assistants can use.
 
-## Create one in the UI
+## Connect a GraphQL API
 
-1. Open **Tools → Create tool** (`/tools/new`) and select **GraphQL**.
-2. Give it a **name** and **description**.
-3. Enter the **GraphQL endpoint**.
-4. Write the **query or mutation** in the query editor.
-5. Define **input parameters**. These map to GraphQL variables via `{{parameters.*}}` expressions.
-6. Add **authentication headers** (typically a Bearer token).
-7. Click **Create tool**, then test it from the tool's detail page.
+1. Open **APIs** and click **Connect an API**.
+2. Pick **GraphQL**.
+3. Give almyty the API's description: a link, a file or the text. The GraphQL address itself works too, because most GraphQL APIs describe themselves when asked.
+4. Click **Connect API**. almyty imports it in the background, and the next page asks only for what is missing, usually the key, which you pick from [Credentials](/credentials) or create right there.
+5. Open **Tools**: each query and mutation is now a tool, as a draft. Test the ones you want on their **Test tool** tab, then activate them.
 
-### Variable mapping
+The API keeps its key, and every tool made from it signs in with it. A call that comes back with GraphQL errors is reported to the assistant as a failed call, with the API's own error messages.
 
-GraphQL variables are mapped from tool parameters with template expressions, and
-type coercion happens automatically:
+## For developers
 
-- String parameters stay as strings
-- Numeric parameters are passed as numbers
-- Boolean parameters are passed as booleans
-- Object parameters are passed as nested objects
+### Results and errors
 
-## The tool definition
+Tools made from a connected GraphQL API return the response's `data`. A response whose `errors` list is not empty is a failed result, with the messages joined into the error (`GraphQL errors: ...`).
 
-The query, variable map, and endpoint are the tool. A GitHub repository search
-maps two inputs onto a single `search` query:
+### A tool with its own query
+
+A tool can also carry a single query of its own in `graphqlConfig`, created through the [Tools API](/api-reference/tools-api):
 
 ```json
 {
   "name": "search_repositories",
-  "description": "Search GitHub repositories using GraphQL",
-  "type": "graphql",
+  "description": "Search repositories by keyword",
+  "type": "query",
+  "executionMethod": "graphql",
+  "apiId": "<connected API id>",
   "parameters": {
     "type": "object",
     "properties": {
@@ -43,75 +37,25 @@ maps two inputs onto a single `search` query:
     },
     "required": ["query"]
   },
-  "executionConfig": {
-    "endpoint": "https://api.github.com/graphql",
-    "headers": {
-      "Authorization": "Bearer {{env.GITHUB_TOKEN}}"
-    },
-    "query": "query SearchRepos($query: String!, $first: Int!) { search(query: $query, type: REPOSITORY, first: $first) { repositoryCount edges { node { ... on Repository { name description stargazerCount url } } } } }",
-    "variables": {
-      "query": "{{parameters.query}}",
-      "first": "{{parameters.first}}"
-    }
+  "graphqlConfig": {
+    "query": "query SearchRepos($query: String!, $first: Int!) { search(query: $query, type: REPOSITORY, first: $first) { repositoryCount } }"
   }
 }
 ```
-
-## Configuration reference
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `endpoint` | string | GraphQL API URL |
-| `headers` | object | Request headers (authentication, content-type, etc.) |
-| `query` | string | GraphQL query or mutation string |
-| `variables` | object | Variable mapping using `{{parameters.*}}` template expressions |
-| `operationName` | string | Operation name (required for documents with multiple operations) |
+| `graphqlConfig.endpoint` | string | GraphQL URL; overrides the linked API's base URL |
+| `graphqlConfig.query` | string | The query or mutation |
+| `graphqlConfig.variables` | object | Optional map of variable name to a `{name}` template; without it, all inputs are sent as variables unchanged |
+| `graphqlConfig.headers` | object | Extra request headers |
+| `graphqlConfig.responseMapping.dataPath` | string | Dot path to return instead of the whole response |
+| `configuration.timeout` | number | Timeout in milliseconds, default `30000` |
 
-## Authentication
+With a linked API (`apiId`), the call signs in with that API's key. Such a tool returns the endpoint's whole JSON response (or the part at `responseMapping.dataPath`); only a failed HTTP request is a failed result. A `{name}` template inserts the input as text, so leave `variables` out when numbers and booleans must keep their types.
 
-GraphQL endpoints typically use Bearer token authentication:
+### Tips
 
-```json
-{
-  "headers": {
-    "Authorization": "Bearer {{env.API_TOKEN}}",
-    "Content-Type": "application/json"
-  }
-}
-```
-
-For endpoints requiring custom authentication, add any headers you need.
-
-## Error handling
-
-GraphQL APIs return errors in a specific shape:
-
-```json
-{
-  "data": null,
-  "errors": [
-    {
-      "message": "Not found",
-      "locations": [{ "line": 2, "column": 3 }],
-      "path": ["user"]
-    }
-  ]
-}
-```
-
-almyty detects these errors and reports them as tool execution failures,
-including the messages from the API.
-
-## Response extraction
-
-By default the entire `data` object from the response is returned as the tool
-result. For complex responses, use a Transform node in an agent pipeline to
-extract specific fields.
-
-## Best practices
-
-1. **Use variables**: never interpolate values directly into the query string.
-2. **Name your operations**: helps with debugging and server-side logging.
-3. **Request only needed fields**: selective field querying is GraphQL's strength.
-4. **Handle nullable fields**: many GraphQL schemas default fields to nullable.
-5. **Test with GraphiQL**: verify queries work before creating tools.
+- Pass values as variables; don't build them into the query text.
+- Name your operations, which helps when reading the API's logs.
+- Ask only for the fields you need, so the assistant reads less.

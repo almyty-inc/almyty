@@ -1,36 +1,41 @@
-# Give an agent a machine to work on
+# Let an assistant work on one of your machines
 
-**Stack**: `Runner: any machine (laptop, build server, VPC box)` · `Connection: outbound only` · `Surface: commands + installed runtimes + filesystem` · `Output: work done on that box`
+Some work can only happen on a particular machine: a build server, a laptop with the right software, a box inside your private network that can reach an internal database. A **runner** is a small program you install on that machine. It connects out to almyty (you open no ports), and your assistants can then run commands there, use the software installed on it, and work with its files.
 
-**Who it's for**: anyone whose agent needs to reach something a hosted agent can't: internal services, on-prem data, private infrastructure.
-**What it does**: a small runner process you install on any machine gives agents a place to execute, run commands, use the runtimes already installed, touch that box's files and network. Code, data, and credentials stay put; only instructions cross the wire.
+For example: an assistant runs your test suite on the build server every night and reports what failed.
 
-## Build it
+For a full walk-through, see [For developers: APIs and machines](/examples/developers-apis-and-machines).
 
-1. **Install and start it** on the machine:
-   ```bash
-   npm i -g @almyty/runner @almyty/auth
-   almyty-auth login
-   almyty-runner start --name build-server
-   ```
-   It connects out (no inbound ports) and starts heartbeating.
+## What you need
 
-   ![The Runners list, a machine online](/screenshots/runners-list.png)
+- A machine with Node.js installed, and someone who can open a terminal on it.
+- An almyty login for that person.
 
-2. **It reports what it can do.** Open the runner and it shows the runtimes and tools it detected, Node, Python, Docker, Git, so an agent knows what's available.
+## How to build it
 
-   ![A runner's detail, detected runtimes on the machine](/screenshots/runner-detail.png)
+1. **Create the runner.** Open **Runners** and click **Start a runner**. Keep or change the name, add labels if you like (short tags such as `os=mac` that say what the machine has), and choose who may use it. The page then shows the commands to run on the machine.
+2. **Start it on the machine.** Run those commands (see below). Within a moment the runner shows as online on the **Runners** page.
 
-3. **Point an agent at it.** The agent executes on that machine as a step: run a test suite, query a DB only reachable inside the network, or process files that can't leave.
+   ![The Runners list](/screenshots/runners-list.png)
 
-## Make it yours
+3. **See what it can do.** Open the runner. It lists the programs it found on the machine and which coding assistants are installed.
 
-- Driving [coding-agent CLIs](/examples/multi-vendor-coding-fleet) is one capability built on this, not the point of the runner.
-- Reach a database that only listens on `localhost` inside a private subnet.
-- Keep regulated data on-prem while the control plane stays hosted, or [self-host all of it](/examples/air-gapped-self-host).
+   ![A runner's page, with what it found on the machine](/screenshots/runner-detail.png)
 
-**Uses**: `Platform` · `Runner` · `On-prem`
+4. **Let an assistant use it.** The runner's abilities (run a command, describe the machine, list the coding tools on it) appear as tools named after the runner. Edit your assistant and pick them under **Tools and APIs**, or, under **Machine**, fill **Machine labels** so its runner tools run on any online machine with those labels.
+
+What stays on the machine: the code and files themselves. What a command prints goes back to the assistant that ran it, so don't treat the runner as a way to keep secrets from it.
+
+## For developers
+
+```bash
+npm i -g @almyty/runner @almyty/auth
+almyty-auth login
+almyty-runner start --name build-server
+```
+
+The runner signs in as the person who ran `almyty-auth login`. Each account can have one runner for now. Commands run as the machine's user, with no sandbox, so set the path and command limits described in [the runner CLI](/cli/runner).
 
 ## Related
 
-- [Runners](/runner) · [Multi-vendor coding fleet](/examples/multi-vendor-coding-fleet) · [CLI: the runner](/cli)
+- [Runners](/runner) · [Coding assistants on your machine](/examples/multi-vendor-coding-fleet) · [CLI: the runner](/cli/runner)
