@@ -1,7 +1,6 @@
 import * as crypto from 'crypto';
 
 import { A2AAgentCardService } from '../../a2a/a2a-agent-card.service';
-import { AcpDiscoveryService } from '../../acp/acp-discovery.service';
 import { Agent, AgentStatus } from '../../../entities/agent.entity';
 import { ApiKey } from '../../../entities/api-key.entity';
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
@@ -19,9 +18,9 @@ import { UnifiedGatewayDelegation } from '../unified-gateway-delegation.helper';
  * agent behind an org-wide gateway gets the same 404 an agent that does
  * not exist gets.
  *
- * The per-gateway A2A card (both well-known paths and GET /), the ACP
- * discovery document and the API-keyed root card all used to look the
- * agent up by id and organization only.
+ * The per-gateway A2A card (both well-known paths and GET /) and the
+ * API-keyed root card both used to look the agent up by id and
+ * organization only.
  */
 describe('agent cards are served only for an active agent the gateway may serve', () => {
   const ORG = 'org-1';
@@ -96,8 +95,6 @@ describe('agent cards are served only for an active agent the gateway may serve'
       {} as any,
       {} as any,
       new A2AAgentCardService(),
-      {} as any,
-      new AcpDiscoveryService(),
       config,
       { check: async () => ({ limited: false }), checkVisitor: async () => ({ limited: false }) } as any,
       {} as any,
@@ -122,7 +119,6 @@ describe('agent cards are served only for an active agent the gateway may serve'
     ['A2A agent-card.json', GatewayType.A2A, '.well-known/agent-card.json'],
     ['A2A agent.json', GatewayType.A2A, '.well-known/agent.json'],
     ['A2A GET /', GatewayType.A2A, ''],
-    ['ACP discovery', GatewayType.ACP, '.well-known/acp'],
   ];
 
   describe.each(CARD_PATHS)('%s', (_label, type, action) => {
@@ -194,8 +190,8 @@ describe('agent cards are served only for an active agent the gateway may serve'
   });
 
   /**
-   * The JSON-RPC side of the same gateways (A2A message/send, tasks/*;
-   * ACP session/*) runs, reads and cancels the agent's work. It used to
+   * The JSON-RPC side of the same gateways (A2A message/send, tasks/*)
+   * runs, reads and cancels the agent's work. It used to
    * load the agent by id and organization only, so a gateway whose agent
    * is a draft, out of scope or gone still ran it. It answers with the
    * card's rule and the card's not-found now.
@@ -203,11 +199,9 @@ describe('agent cards are served only for an active agent the gateway may serve'
   describe('JSON-RPC (POST) answers only for an agent the gateway may serve', () => {
     let rpc: UnifiedGatewayDelegation;
     const a2aCalls: string[] = [];
-    const acpCalls: string[] = [];
 
     beforeEach(() => {
       a2aCalls.length = 0;
-      acpCalls.length = 0;
       const agents = fakeRepository<Agent>({ seed: AGENTS, make: () => new Agent() });
       const counterBump: any = { update: () => counterBump, set: () => counterBump, where: () => counterBump, execute: async () => ({ affected: 1 }) };
       const answer = (calls: string[]) => ({
@@ -228,8 +222,6 @@ describe('agent cards are served only for an active agent the gateway may serve'
         { resolveAndAuthenticate: async () => ({ auth: { authenticated: true } }) } as any,
         answer(a2aCalls) as any,
         new A2AAgentCardService(),
-        answer(acpCalls) as any,
-        new AcpDiscoveryService(),
         config,
         { check: async () => ({ limited: false }), checkVisitor: async () => ({ limited: false }) } as any,
         {} as any,
@@ -254,8 +246,6 @@ describe('agent cards are served only for an active agent the gateway may serve'
     const RPC: Array<[string, GatewayType, string, string[]]> = [
       ['A2A message/send', GatewayType.A2A, 'message/send', a2aCalls],
       ['A2A tasks/get', GatewayType.A2A, 'tasks/get', a2aCalls],
-      ['ACP session/new', GatewayType.ACP, 'session/new', acpCalls],
-      ['ACP session/get', GatewayType.ACP, 'session/get', acpCalls],
     ];
 
     describe.each(RPC)('%s', (_label, type, method, calls) => {

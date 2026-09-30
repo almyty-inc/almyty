@@ -8,7 +8,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Not, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 
 import { Agent } from '../../entities/agent.entity';
 import {
@@ -19,7 +19,8 @@ import {
   VisitorRules,
   isChannelType,
 } from '../../entities/agent-channel.entity';
-import { Gateway } from '../../entities/gateway.entity';
+import { Gateway, GatewayType } from '../../entities/gateway.entity';
+import { ChannelWebhookRegistrar } from '../gateways/channels/channel-webhook-registrar.service';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { assertManageable, assertReadable } from '../../common/authorization/read-rule';
 import { GatewaysService } from '../gateways/gateways.service';
@@ -98,11 +99,22 @@ export interface PublicSettingsInput {
   visitorRules?: VisitorRules | null;
 }
 
+/** What publishing last did about the platform webhook (channel-webhook-registrar.service.ts). */
+export interface WebhookRegistrationView {
+  action: 'register' | 'unregister';
+  status: 'registered' | 'unregistered' | 'failed' | 'skipped';
+  /** The platform's own wording, or why it was skipped. Never a key. */
+  error: string | null;
+  at: string | null;
+}
+
 /** What the channel page shows: the row, where it answers, and what it resolves to. */
 export type ChannelView = AgentChannel & {
   endpoint: string;
   /** Whether this organization may turn the AI disclosure off (the white-label entitlement). */
   disclosureRemovable: boolean;
+  /** For a channel whose webhook publishing registers: how that last went. Null otherwise. */
+  webhookRegistration: WebhookRegistrationView | null;
   effective: {
     branding: ReturnType<typeof effectiveBranding>;
     visitorRules: Omit<ReturnType<typeof effectiveVisitorRules>, 'ownSpend'> & { ownSpend: boolean };
@@ -249,16 +261,54 @@ export class AgentChannelsService {
 
   private async views(agent: Agent, channels: AgentChannel[]): Promise<ChannelView[]> {
     const disclosureRemovable = channels.length ? (await this.entitlements(agent.organizationId)).hasWhiteLabel === true : false;
+    const registrations = await this.webhookRegistrations(agent.organizationId, channels);
     return channels.map((channel) =>
       Object.assign(channel, {
         endpoint: endpointFor(channel),
         disclosureRemovable,
+        webhookRegistration: (channel.gatewayId && registrations.get(channel.gatewayId)) || null,
         effective: {
           branding: effectiveBranding(agent, channel),
           visitorRules: effectiveVisitorRules(agent, channel),
         },
       }),
     );
+  }
+
+  /**
+   * What publishing last did about the platform webhook, for the channels
+   * whose platform takes it through an API (channel-webhook-registrar.ts),
+   * read off their gateways. A failure is said on the channel page rather
+   * than only in a log.
+   */
+  private async webhookRegistrations(
+    organizationId: string,
+    channels: AgentChannel[],
+  ): Promise<Map<string, WebhookRegistrationView>> {
+    const out = new Map<string, WebhookRegistrationView>();
+    const ids = channels
+      .filter((c) => c.gatewayId && ChannelWebhookRegistrar.isRegistrable(GATEWAY_TYPE_FOR_CHANNEL[c.type] as GatewayType))
+      .map((c) => c.gatewayId as string);
+    if (!ids.length) return out;
+    try {
+      const gateways = await this.gatewayRepository.find({
+        where: { id: In(ids), organizationId },
+        select: { id: true, metadata: true },
+      });
+      for (const gateway of gateways ?? []) {
+        const r = (gateway.metadata as any)?.webhookRegistration;
+        if (!r || typeof r !== 'object') continue;
+        out.set(gateway.id, {
+          action: r.action === 'unregister' ? 'unregister' : 'register',
+          status: r.status,
+          error: typeof r.error === 'string' ? r.error : null,
+          at: typeof r.at === 'string' ? r.at : null,
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(`Could not read webhook registrations: ${err?.message ?? err}`);
+    }
+    return out;
   }
 
   async add(organizationId: string, agentId: string, caller: Caller, input: AddChannelInput): Promise<ChannelView> {
@@ -414,7 +464,9 @@ export class AgentChannelsService {
         return false;
       }
     };
-    return { hasEnterpriseAuth: await has('sso'), hasWhiteLabel: await has(EE_ENTITLEMENTS.WHITE_LABEL) };
+    // Visitor sign-in (the sso auth mode) is the SSO entitlement's; white
+    // label only removes the almyty mark and permits removing the disclosure.
+    return { hasEnterpriseAuth: await has(EE_ENTITLEMENTS.SSO), hasWhiteLabel: await has(EE_ENTITLEMENTS.WHITE_LABEL) };
   }
 
   /**

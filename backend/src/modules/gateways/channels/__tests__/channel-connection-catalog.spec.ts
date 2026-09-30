@@ -72,7 +72,8 @@ describe('a connect-sheet channel connection feeds the gateway', () => {
     [GatewayType.SMS, { twilio_account_sid: 'AC' + 'b'.repeat(32), twilio_auth_token: 'twilio-token-5678', phone_number: '+15550002222' }],
     [GatewayType.WHATSAPP_CLOUD, { phone_number_id: '109876543210', access_token: 'EAAG-cloud-access-token-1', app_secret: 'app-secret', verify_token: 'vt' }],
     [GatewayType.IMESSAGE_SENDBLUE, { api_key_id: 'sb-key-id', api_secret_key: 'sb-secret-key', phone_number: '+15550003333', signing_secret: 'sb-webhook-secret-0001' }],
-    [GatewayType.IMESSAGE_LOOPMESSAGE, { api_key: 'loop-api-key', sender_name: 'northwind', inbound_token: 'loop-webhook-auth-0001' }],
+    // The sender name is the channel's, not the connection's (channel-rules.ts SENDER_NAME_REQUIRED).
+    [GatewayType.IMESSAGE_LOOPMESSAGE, { api_key: 'loop-api-key', inbound_token: 'loop-webhook-auth-0001' }],
     [GatewayType.MICROSOFT_TEAMS, { bot_id: 'app-id', bot_password: 'app-password', tenant_id: 'botframework.com' }],
     [GatewayType.GOOGLE_CHAT, { webhook_url: 'https://chat.googleapis.com/v1/spaces/A/messages?key=k&token=t', verification_token: 'vt' }],
     [GatewayType.SIGNAL, { api_url: 'https://signal.example.com', phone_number: '+15550001111', inbound_token: 'it' }],

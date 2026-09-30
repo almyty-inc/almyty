@@ -12,7 +12,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, Not, IsNull, type FindOptionsWhere } from 'typeorm';
+import { Repository, Not, IsNull, type FindOptionsWhere } from 'typeorm';
 import { Response, Request } from 'express';
 import * as crypto from 'crypto';
 import { Organization } from '../../entities/organization.entity';
@@ -101,7 +101,7 @@ export class UnifiedEndpointController {
             where: {
               id: defaultGatewayId,
               status: GatewayStatus.ACTIVE,
-              type: In([GatewayType.A2A, GatewayType.ACP, GatewayType.OPENAI_CHAT]),
+              type: GatewayType.A2A,
               agentId: Not(IsNull()),
               // A card served to anyone is never a private gateway's.
               visibility: Not('private'),

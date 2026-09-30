@@ -155,7 +155,7 @@ async function main() {
     },
     {
       name: 'almyty_list_gateways',
-      description: 'List all gateways in your organization.',
+      description: 'List the gateways in your organization: MCP, UTCP and Skills gateways serving tools. An agent\'s channels (web chat, messaging, A2A) are not gateways.',
       shape: {},
       run: () => proxy.listGateways(),
     },

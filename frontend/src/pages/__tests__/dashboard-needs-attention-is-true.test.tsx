@@ -78,10 +78,27 @@ describe('dashboard: needs attention only says true things', () => {
         { id: 'g2', name: 'System', type: 'mcp', isSystem: true, authConfigs: [] },
         { id: 'g3', name: 'Chat', type: 'hosted_chat', authConfigs: [] },
         { id: 'g4', name: 'Slack', type: 'slack', authConfigs: [] },
+        // An A2A endpoint is a channel on an agent, not a gateway.
+        { id: 'g6', name: 'Support A2A', type: 'a2a', agentId: 'agent-1', authConfigs: [] },
         { id: 'g5', name: 'Signed MCP', type: 'mcp', authConfigs: [{ id: 'x' }] },
       ],
     )
     render(<DashboardPage />)
     expect(await screen.findByText('1 gateway is open to anyone: add sign-in', {}, WAIT)).toBeInTheDocument()
+  })
+
+  it('counts MCP, UTCP and Skills gateways only, asking the server for exactly those', async () => {
+    load([], [])
+    // What the server answers for kind=tool: the channel gateways are not in it.
+    ;(gatewaysApi.getAll as any).mockImplementation(async (params?: { kind?: string }) =>
+      params?.kind === 'tool'
+        ? { gateways: [{ id: 'g1', name: 'MCP', type: 'mcp' }, { id: 'g2', name: 'Skills', type: 'skills' }], total: 2 }
+        : { gateways: [{ id: 'g1', name: 'MCP', type: 'mcp' }, { id: 'g2', name: 'Skills', type: 'skills' }, { id: 'g3', name: 'A2A', type: 'a2a' }], total: 3 },
+    )
+    render(<DashboardPage />)
+    expect(await screen.findByText('Gateways', { selector: 'div' }, WAIT)).toBeInTheDocument()
+    const tile = screen.getByText('Gateways', { selector: 'div' }).parentElement!
+    expect(tile).toHaveTextContent(/^2Gateways$/)
+    expect(gatewaysApi.getAll).toHaveBeenCalledWith({ kind: 'tool' })
   })
 })

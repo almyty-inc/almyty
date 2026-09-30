@@ -21,7 +21,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0508a0cc0974e52dd0161a5ed3d21e209e385b1f83604213a3b6e605bb7575a4",
+      "sourceDigest": "21d25a65a28a4d3e86aee455c2b8bad63082bdb0e306c3401cfcc4867cf5896e",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -44,7 +44,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0508a0cc0974e52dd0161a5ed3d21e209e385b1f83604213a3b6e605bb7575a4",
+      "sourceDigest": "21d25a65a28a4d3e86aee455c2b8bad63082bdb0e306c3401cfcc4867cf5896e",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -67,7 +67,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0508a0cc0974e52dd0161a5ed3d21e209e385b1f83604213a3b6e605bb7575a4",
+      "sourceDigest": "21d25a65a28a4d3e86aee455c2b8bad63082bdb0e306c3401cfcc4867cf5896e",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -77,6 +77,7 @@
       "path": "screenshots/agent-channels.png",
       "capturedAt": "2026-09-30T11:21:43.799Z",
       "status": "needs-recapture",
+      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
       "sha256": "530432af9fd768d2511d8a3cbf1e3b5141aed845c64f8f50dbe8252765cc3650",
       "source": {
         "kind": "browser",
@@ -91,9 +92,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7bff77dd7c4e6cbdbb6f0714c372a3f9095f9ecbfc253086852a8512cdce230a",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
+      "sourceDigest": "eb0df475bb2dafe9eef5b99723ea221089e3084a526b16230ac91fe3007e8878",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-constraints",
@@ -114,7 +114,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
+      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -137,7 +137,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
+      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -160,7 +160,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
+      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -183,7 +183,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0508a0cc0974e52dd0161a5ed3d21e209e385b1f83604213a3b6e605bb7575a4",
+      "sourceDigest": "21d25a65a28a4d3e86aee455c2b8bad63082bdb0e306c3401cfcc4867cf5896e",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -206,7 +206,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "5b6dd9cf5ee91668cb26b29204ef4110391d8ed082e8b56fb10313d379436d74",
+      "sourceDigest": "beb8b197f6151858a6a52441167f96da6d7d517e0175af799449a292f190c742",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -229,7 +229,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "ddcae4028c4e79034ab01dece3338af8e83938cd1cced3d28eb55e58a7864d78",
+      "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -251,7 +251,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "ddcae4028c4e79034ab01dece3338af8e83938cd1cced3d28eb55e58a7864d78",
+      "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -273,7 +273,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "ddcae4028c4e79034ab01dece3338af8e83938cd1cced3d28eb55e58a7864d78",
+      "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -295,7 +295,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "ddcae4028c4e79034ab01dece3338af8e83938cd1cced3d28eb55e58a7864d78",
+      "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -317,7 +317,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "ddcae4028c4e79034ab01dece3338af8e83938cd1cced3d28eb55e58a7864d78",
+      "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -339,7 +339,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "ddcae4028c4e79034ab01dece3338af8e83938cd1cced3d28eb55e58a7864d78",
+      "sourceDigest": "3d75f66a599d9b6bbf4f4a111a5f83b29a351f1b1a04650427fc345ce4a8a275",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -361,7 +361,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "ca3e1b864ab4dd5e17698e745e51e9b0ee3238d9a667578046af760f3d42d27a",
+      "sourceDigest": "3afdadb963fff69dd580e9ac81afaa289ee652dfd68d21bd25c221b5c4ceee17",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -383,7 +383,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "858e8e8b6b0ab9beac578e714a2e83e80ff66428da8ce366d0056f31fd775e5d",
+      "sourceDigest": "3412ac0088b43cdd8b2f5fd9cd84481a03e5f37fc7677e2b66f3d501fcd9a05e",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -405,7 +405,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "858e8e8b6b0ab9beac578e714a2e83e80ff66428da8ce366d0056f31fd775e5d",
+      "sourceDigest": "3412ac0088b43cdd8b2f5fd9cd84481a03e5f37fc7677e2b66f3d501fcd9a05e",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -435,7 +435,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "642bf8a3a10a9819890334761524e4e66fcb3b133d58f98ea6653df51e85c1a0",
+      "sourceDigest": "f14bb7176b1196f64238073d745f797017496f755214b3f97ccaab50347e1114",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -444,6 +444,7 @@
       "path": "screenshots/channel-branding-rules.png",
       "capturedAt": "2026-09-30T11:21:46.410Z",
       "status": "needs-recapture",
+      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
       "sha256": "cec458852ad6410147e4d7ae557a5e52a6d4ea3177fc2373ce83f0f7c7722b7d",
       "source": {
         "kind": "browser",
@@ -457,9 +458,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b840f0b9894cdbfea120e3c801f924e8f43bfae532ef043d0e58820e893b8e6d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
+      "sourceDigest": "d190ea44bd8dc996a63124721a0acbe43dd6f590bbb9d4319fc2178ab01e2f2d",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-slack-keys",
@@ -467,6 +467,7 @@
       "path": "screenshots/channel-slack-keys.png",
       "capturedAt": "2026-09-30T11:21:51.835Z",
       "status": "needs-recapture",
+      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
       "sha256": "8179f4f923c8fabb17aa2dbcb5337c2c16d4cc5d4a5ab4298a834098e8e32120",
       "source": {
         "kind": "browser",
@@ -480,9 +481,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2b93192132d11bb6c9a2a92bf85e1fcd191565e5000b8338ee9bdff3ba77bd46",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
+      "sourceDigest": "a8c7eedd9402f8de7c0b664c33bab3b0c9e162352e357772dd08818b9a61ddbb",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-slack-live",
@@ -490,6 +490,7 @@
       "path": "screenshots/channel-slack-live.png",
       "capturedAt": "2026-09-30T11:21:54.858Z",
       "status": "needs-recapture",
+      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
       "sha256": "4f231180ed59e39ae44b61d26a4016b1924ffab0ab4e7f2d6fb5cc0ac2fb6ea5",
       "source": {
         "kind": "browser",
@@ -503,9 +504,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2b93192132d11bb6c9a2a92bf85e1fcd191565e5000b8338ee9bdff3ba77bd46",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
+      "sourceDigest": "a8c7eedd9402f8de7c0b664c33bab3b0c9e162352e357772dd08818b9a61ddbb",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-terminal-build",
@@ -513,6 +513,7 @@
       "path": "screenshots/channel-terminal-build.png",
       "capturedAt": "2026-09-30T11:21:57.535Z",
       "status": "needs-recapture",
+      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
       "sha256": "81db9c8408d17de95edf28458b79f099a72aa46ea3d4d25fef2d76adeebb4067",
       "source": {
         "kind": "browser",
@@ -526,9 +527,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2b93192132d11bb6c9a2a92bf85e1fcd191565e5000b8338ee9bdff3ba77bd46",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
+      "sourceDigest": "a8c7eedd9402f8de7c0b664c33bab3b0c9e162352e357772dd08818b9a61ddbb",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-web-published",
@@ -536,6 +536,7 @@
       "path": "screenshots/channel-web-published.png",
       "capturedAt": "2026-09-30T11:21:49.062Z",
       "status": "needs-recapture",
+      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
       "sha256": "ed18f83d07bef8b1484cf0040a39442cbd0298d8f6e0b15af696079653326c7a",
       "source": {
         "kind": "browser",
@@ -549,9 +550,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2b93192132d11bb6c9a2a92bf85e1fcd191565e5000b8338ee9bdff3ba77bd46",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
+      "sourceDigest": "a8c7eedd9402f8de7c0b664c33bab3b0c9e162352e357772dd08818b9a61ddbb",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "cli-agents-help",
@@ -645,7 +645,7 @@
         "packages/mcp-server/src",
         "packages/mcp-server/package.json"
       ],
-      "sourceDigest": "1cb70d91974cef79a675249241394e94f691a7117e1c2b450bfd8bd95aedadad",
+      "sourceDigest": "ef7b0cd77fc576aa7a3bf7df62746e73924f0028eee7b25bd91f8af1c963c7dc",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
@@ -664,7 +664,7 @@
         "packages/skills-cli/src",
         "packages/skills-cli/package.json"
       ],
-      "sourceDigest": "a4d1f482ad6092fb1e636d07b3e9037fe300b852b8080ea29ad9c3ce56e7c98c",
+      "sourceDigest": "f79824c0faeadf96b77c5c296d02f30a4eea27b19c9632cd1ac02582dc3d5956",
       "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
     },
     {
@@ -686,7 +686,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "fd162ec716ae570a25803d9c517dd63ae5480f1c364218e757a2943360a2c1b7",
+      "sourceDigest": "e624e53771154bd6d0b3202e583488a32617209e6e67f0086342c01f7610e06c",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -709,7 +709,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b5625ebeb1640c49933f1d26fccf8b6dcb2f605a372039285a5d4969e7cafdff",
+      "sourceDigest": "1b85e8dcec82369aa8e4c589bdeaf2def75a74297bfa7b425d85adb862f5ea9a",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -732,7 +732,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4c4a36616db134231824d3c8563d3d934943a1ea291a5d6d4453e5289a17419f",
+      "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -754,7 +754,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4c4a36616db134231824d3c8563d3d934943a1ea291a5d6d4453e5289a17419f",
+      "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -776,7 +776,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4c4a36616db134231824d3c8563d3d934943a1ea291a5d6d4453e5289a17419f",
+      "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -798,7 +798,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4c4a36616db134231824d3c8563d3d934943a1ea291a5d6d4453e5289a17419f",
+      "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -820,7 +820,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b35cd658a13de16100ff79d0285663bee53bb56576ebec481e2d59a30c52190c",
+      "sourceDigest": "422c8259f53b9bb3f02145df884d53849e871f0d49028922cb17f9c3b713dbc6",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -842,7 +842,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b35cd658a13de16100ff79d0285663bee53bb56576ebec481e2d59a30c52190c",
+      "sourceDigest": "422c8259f53b9bb3f02145df884d53849e871f0d49028922cb17f9c3b713dbc6",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -851,6 +851,7 @@
       "path": "screenshots/interfaces-channel-config.png",
       "capturedAt": "2026-09-30T11:22:00.190Z",
       "status": "needs-recapture",
+      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
       "sha256": "aa6a65aabbf701d494218a1311d013f4bc5cd7d662e8e8477d18684631b06957",
       "source": {
         "kind": "browser",
@@ -864,9 +865,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "07457778a4437e74c44b0bfecf54159d2d277740c840654b9ebe6c5b48fbf460",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
+      "sourceDigest": "9fd84ceea8f2113b6cf2eae2dd33182e03dd3460c15aec83008a709452881d3e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "interfaces-channel-setup",
@@ -874,6 +874,7 @@
       "path": "screenshots/interfaces-channel-setup.png",
       "capturedAt": "2026-09-30T11:22:02.885Z",
       "status": "needs-recapture",
+      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
       "sha256": "020aeb706ef795680433abd8d741cfe429256ed427fd51ae0afebb54bf49699e",
       "source": {
         "kind": "browser",
@@ -887,9 +888,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2b93192132d11bb6c9a2a92bf85e1fcd191565e5000b8338ee9bdff3ba77bd46",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
+      "sourceDigest": "a8c7eedd9402f8de7c0b664c33bab3b0c9e162352e357772dd08818b9a61ddbb",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "memory-write",
@@ -910,7 +910,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "5a9621926ba71ef6d3f7b657c9c505b94d67a1b87fc2cd71952d7a95a8b60978",
+      "sourceDigest": "3922878f9f11b2b00d8f6c8d96976c322c4aac8f3d523f8798c8075fc6582d2d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -932,7 +932,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8f9a3c38fb5ccd7cc7226b95188fae867dcd736816afed6b3787b96c9e0ef878",
+      "sourceDigest": "3185768545ceb66f432593b45ad6f80d884943ea18b6f2538232821de65cfef4",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -954,7 +954,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c0343625d6b07881a972a0713d600031dcc2f7db7c6b0964f9888846b2d6b0dd",
+      "sourceDigest": "0272e9480054ce9e349b515af92acda9f035f1cc7189d8d85e8042148c68f6c9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -976,7 +976,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "97f9463fb9d9ec713cf03f9a01ee16d34931839f80512682834f7827086140f4",
+      "sourceDigest": "cea1a73e4b21db230fbda91dacd79e607f75b3e39a817c09cc48bc32a69b0fb4",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -998,7 +998,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4c4a36616db134231824d3c8563d3d934943a1ea291a5d6d4453e5289a17419f",
+      "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -1020,7 +1020,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4c4a36616db134231824d3c8563d3d934943a1ea291a5d6d4453e5289a17419f",
+      "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -1042,7 +1042,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4c4a36616db134231824d3c8563d3d934943a1ea291a5d6d4453e5289a17419f",
+      "sourceDigest": "430a3db094e990a6250fda443d1cfaaea8cdbd420f5c3dc2bab8b12b42ef6903",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -1065,7 +1065,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e40d643fdec4d2756ea024fcc014dc791e875d54768a5ebb59c12182ab8a1e2e",
+      "sourceDigest": "f17e0a3b151d96d70ae5906d374391d7e070f449a996848a53cb348acfb41c66",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -1088,7 +1088,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8fbf3d9592559cf75d61e279a16e1c116b775b0346e03aca59fb224be2e80803",
+      "sourceDigest": "4e462ed7be5abfe60c4561459ecfe0b9117d445ac8c7cbd86c6b394d3840cd6a",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -1110,7 +1110,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
+      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1143,7 +1143,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a079093dd6d90d74769177182a8085f59c02dfbda1c201090bbb84b898a19063",
+      "sourceDigest": "db4e5d0deef4890ab59c6b7d72f1c2531bc7a4278d0ba928232f28595a22a11c",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1166,7 +1166,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "30316e6d2e5a1629d48ca6179dd414d0c269fd44c72749d88ea575a9555422c5",
+      "sourceDigest": "8557a39fe39b18927925183db5774e9cd16a1019b3d9c19d08748ad069331bc2",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1189,7 +1189,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "64a777d8d0697b2ccd031bbd7cdce8a24a61dd9ce41505980dd13d7dd5b3c62b",
+      "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1212,7 +1212,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "64a777d8d0697b2ccd031bbd7cdce8a24a61dd9ce41505980dd13d7dd5b3c62b",
+      "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1235,7 +1235,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "64a777d8d0697b2ccd031bbd7cdce8a24a61dd9ce41505980dd13d7dd5b3c62b",
+      "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1258,7 +1258,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "64a777d8d0697b2ccd031bbd7cdce8a24a61dd9ce41505980dd13d7dd5b3c62b",
+      "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1281,7 +1281,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "64a777d8d0697b2ccd031bbd7cdce8a24a61dd9ce41505980dd13d7dd5b3c62b",
+      "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1304,7 +1304,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "64a777d8d0697b2ccd031bbd7cdce8a24a61dd9ce41505980dd13d7dd5b3c62b",
+      "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1327,7 +1327,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "64a777d8d0697b2ccd031bbd7cdce8a24a61dd9ce41505980dd13d7dd5b3c62b",
+      "sourceDigest": "708042287654b18c467fb1f2d27192a22ae29406d80a90280bc7b6dc1de0ef9d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1351,7 +1351,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e1a529f629e55616f1dc71b941b943d196f02ff0c400c6747392d6ac64ac1119",
+      "sourceDigest": "7e044a520664a0ed4d39db23b3c2ca18f57196386d67d02bbeadbaac0cade2c9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1374,7 +1374,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
+      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1397,7 +1397,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
+      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1420,7 +1420,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
+      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1443,7 +1443,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "fad505b91c99bb11abe823ee7652ce1202221062ba70314d33a8c937f0246c9c",
+      "sourceDigest": "843b9b3e2ad4e8aa5c83da30404b572c13f17e03108aa48e541704e744bc49ec",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -1465,7 +1465,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "10dfb77ab0c45bf0761c04c28d96aab67fb99ce9ef62d7cdbf711d8f8bb0c2b2",
+      "sourceDigest": "3d0f69adaee5f2a5a416ab868a47ab4928b55c6a2d3957ddcca1b19d9a9c58bc",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -1487,7 +1487,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
+      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1510,7 +1510,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
+      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1533,7 +1533,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2f4b98f4699dae2994a785ceda9892b3a8364ee3576bb60e9ec98f4ee00b8058",
+      "sourceDigest": "8abb3327a11e2cfa952b4aec56975032b5f9e211d2a269e26363d73746090de5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
       "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
     },
@@ -1543,6 +1543,7 @@
       "path": "screenshots/widget-builder.png",
       "capturedAt": "2026-09-30T11:22:05.966Z",
       "status": "needs-recapture",
+      "reason": "The channel page source changed for iMessage groups, attachments, the Sendblue webhook status line and the LoopMessage sender name field; this view should look the same, but recapture it from the page to confirm.",
       "sha256": "49e2b35d84888450d3c2d8d841245a67f15849b4984bb9825cb362e4f7f02cc8",
       "source": {
         "kind": "browser",
@@ -1557,9 +1558,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0189d07f70121eaeaac56ef611367d3f1748fb4f0aec88ded1ccc5eccb0f173a",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its source changed with the work mode, API keys, team credentials, app icon and inactive provider changes; recapture from app.almyty.com once they are released."
+      "sourceDigest": "9b01b6aeb52130ff97ded37af257da818b152c8623660f54a8f254ad8f442965",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     }
   ]
 }

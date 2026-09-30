@@ -37,6 +37,7 @@ import {
   type AgentChannel,
   type ChannelCapabilities,
   type EffectiveSettings,
+  type WebhookRegistration,
 } from '@/lib/agent-channels'
 import { DEFAULT_AI_DISCLOSURE } from '@/lib/hosted-chat'
 import { useNotifications } from '@/store/app'
@@ -63,7 +64,50 @@ import {
 import { SlackInstall } from './slack-install'
 
 /** Refusals a field on this page answers; the rest are said once, next to Publish. */
-const FIELD_REFUSALS = new Set(['MISSING_CREDENTIALS', 'BUNDLE_ID_INVALID', 'DISCLOSURE_REMOVAL_NOT_ENTITLED'])
+const FIELD_REFUSALS = new Set(['MISSING_CREDENTIALS', 'BUNDLE_ID_INVALID', 'DISCLOSURE_REMOVAL_NOT_ENTITLED', 'SENDER_NAME_REQUIRED'])
+
+/** What the sender name field says when it is cleared. */
+export const SENDER_NAME_EMPTY = 'Enter the sender name replies go out from. LoopMessage cannot send a reply without one.'
+
+/** How the platform a webhook is registered with is called in a sentence. */
+const CHANNEL_REGISTRAR_NAMES: Partial<Record<AgentChannel['type'], string>> = {
+  telegram: 'Telegram',
+  whatsapp: 'Twilio',
+  sms: 'Twilio',
+  imessage_sendblue: 'Sendblue',
+}
+
+/**
+ * What publishing last did about the platform's webhook, in plain words.
+ * A failure is said here, next to the URL, with the platform's own reason.
+ */
+export function WebhookRegistrationLine({ registration, platform }: { registration: WebhookRegistration | null; platform: string }) {
+  if (!registration || registration.action !== 'register') {
+    return (
+      <p className="text-sm text-muted-foreground" data-testid="webhook-registration">
+        Registering it with {platform}...
+      </p>
+    )
+  }
+  if (registration.status === 'registered') {
+    return (
+      <p className="text-sm text-muted-foreground" data-testid="webhook-registration">
+        Registered with {platform}.
+      </p>
+    )
+  }
+  const reason = registration.error?.trim() || 'no reason was given'
+  return (
+    <p className="flex gap-2 text-sm text-destructive" role="alert" data-testid="webhook-registration">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <span>
+        {registration.status === 'skipped'
+          ? `Not registered with ${platform} automatically: ${reason}. Add the URL above there yourself.`
+          : `Could not register it with ${platform}: ${reason}. Fix the credential, then unpublish and publish again, or add the URL above there yourself.`}
+      </span>
+    </p>
+  )
+}
 
 export interface ChannelSettingsProps {
   agent: Agent
@@ -141,6 +185,14 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   const [bundleId, setBundleId] = useState(storedBundleId)
   const [bundleError, setBundleError] = useState<string | undefined>()
 
+  // LoopMessage's sender name belongs to the channel: one organization key
+  // can carry several senders, and every reply names one.
+  const senderNamed = type === 'imessage_loopmessage'
+  const storedSenderName = typeof configuration.sender_name === 'string' ? configuration.sender_name : ''
+  const [senderName, setSenderName] = useState(storedSenderName)
+  const [senderNameError, setSenderNameError] = useState<string | undefined>()
+  const senderNameChanged = senderNamed && senderName.trim() !== storedSenderName
+
   const storedCapabilities = (configuration.capabilities ?? {}) as ChannelCapabilities
   const [shell, setShell] = useState(storedCapabilities.shell === true)
   const [fsRead, setFsRead] = useState((storedCapabilities.filesystemRead ?? []).join(', '))
@@ -169,7 +221,8 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
     (credentialTouched && credentialId !== storedCredential) ||
     (packaged && bundleId !== storedBundleId) ||
     capabilitiesChanged ||
-    overridesChanged
+    overridesChanged ||
+    senderNameChanged
   const surface = useSurfaceSettings(stored)
   const pageDirty = dirty || surface.dirty
   const guard = useLeaveGuard(pageDirty)
@@ -203,6 +256,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
       setCredentialTouched(false)
       setName(saved.name)
       setSlug(saved.slug ?? '')
+      setSenderName(typeof saved.configuration?.sender_name === 'string' ? saved.configuration.sender_name : '')
       refresh(saved)
     },
     onError: (err: unknown, body) => {
@@ -283,6 +337,11 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
       return
     }
     setBundleError(undefined)
+    if (senderNameChanged && !senderName.trim()) {
+      setSenderNameError(SENDER_NAME_EMPTY)
+      return
+    }
+    setSenderNameError(undefined)
     const patch: Record<string, unknown> = {}
     if (packaged && trimmed !== storedBundleId) patch.bundleId = trimmed
     if (capabilitiesChanged) {
@@ -294,6 +353,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
       }
     }
     if (disclosureChanged) patch.aiDisclosure = disclosure
+    if (senderNameChanged) patch.sender_name = senderName.trim()
     const body: Parameters<typeof agentChannelsApi.update>[2] = {}
     if (nameChanged) body.name = name.trim()
     if (slugChanged) body.slug = slug.trim().toLowerCase()
@@ -317,14 +377,37 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
   const usingCredential = credentialTouched ? credentialId : storedCredential
   const keysMissing = !live && (check?.refusals ?? []).some((r) => r.code === 'MISSING_CREDENTIALS')
   const missingKeys = triedPublish && keysMissing ? missingKeysLine(type) : undefined
+  // LoopMessage's sender name: said next to its field once someone tries to
+  // publish without one, or straight away on a live channel that lost it.
+  const senderNameRefusal = senderNamed
+    ? (check?.refusals ?? []).find((r) => r.code === 'SENDER_NAME_REQUIRED')?.message
+    : undefined
+  const senderNameShown = senderNameError ?? ((triedPublish || live) && !senderNameChanged ? senderNameRefusal : undefined)
   const tryPublish = () => {
-    if (keysMissing) {
+    if (keysMissing || (!live && senderNameRefusal)) {
       setTriedPublish(true)
-      errorNotif('Could not publish', missingKeysLine(type))
+      errorNotif('Could not publish', keysMissing ? missingKeysLine(type) : senderNameRefusal)
       return
     }
     publish.mutate()
   }
+  // Where publishing registers the webhook itself, what that last did. While
+  // it is still under way (the registrar runs after publish answers), the
+  // channel is read again every two seconds, a few times.
+  const platformName = CHANNEL_REGISTRAR_NAMES[type] ?? label
+  const registrationAwaited =
+    inbound?.mode === 'auto' && live && (!stored.webhookRegistration || stored.webhookRegistration.action !== 'register')
+  const { data: latest } = useQuery({
+    queryKey: [...channelKeys.one(agent.id, channel.id), 'webhook-registration'],
+    queryFn: () => agentChannelsApi.get(agent.id, channel.id),
+    enabled: registrationAwaited,
+    refetchInterval: (query) => {
+      const last = query.state.data?.webhookRegistration
+      const settled = last && last.action === 'register'
+      return settled || query.state.dataUpdateCount >= 10 ? false : 2000
+    },
+  })
+  const registration = (registrationAwaited ? latest?.webhookRegistration : undefined) ?? stored.webhookRegistration ?? null
   const disclosureRefusal = (check?.refusals ?? []).find((r) => r.code === 'DISCLOSURE_REMOVAL_NOT_ENTITLED')?.message
   const disclosureLine = stored.effective.branding.aiDisclosure?.trim() || DEFAULT_AI_DISCLOSURE
 
@@ -475,6 +558,28 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
           {type === 'slack'
             ? keysPicker('channel-credential', 'Slack app', SLACK_APP_CONNECTOR_KEY)
             : keysPicker('channel-credential', 'Credential', channelConnectorKey(type))}
+          {senderNamed && (
+            <Field
+              id="channel-sender-name"
+              label="Sender name"
+              required
+              hint="The sender name replies go out from, exactly as it is set up in your LoopMessage dashboard. LoopMessage needs one for every reply."
+              error={senderNameShown}
+            >
+              <Input
+                id="channel-sender-name"
+                aria-required="true"
+                value={senderName}
+                onChange={(e) => {
+                  setSenderName(e.target.value)
+                  setSenderNameError(undefined)
+                }}
+                maxLength={100}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+          )}
           {type === 'slack' && (
             <Disclosure title="Advanced" summary="One workspace with a bot token instead">
               {keysPicker('channel-credential-bot', 'Bot token', channelConnectorKey('slack'), 'For a single workspace: a Slack bot token instead of the app.')}
@@ -488,6 +593,7 @@ export function ChannelSettings({ agent, channel, inherited }: ChannelSettingsPr
       {messaging && callbackUrl && inbound && (
         <FormSection title="Callback URL" description={inbound.where}>
           <CopyField id="channel-callback-url" value={callbackUrl} label="Callback URL" />
+          {inbound.mode === 'auto' && live && <WebhookRegistrationLine registration={registration} platform={platformName} />}
         </FormSection>
       )}
       {messaging && !callbackUrl && inbound?.why && (

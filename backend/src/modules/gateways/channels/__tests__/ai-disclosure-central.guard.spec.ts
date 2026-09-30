@@ -41,8 +41,10 @@ describe('AI disclosure cannot be bypassed per adapter', () => {
   });
 
   it('hands the adapter the disclosed text rather than the raw run output', () => {
+    // The files a run hands back may travel beside the text; the text is
+    // still the disclosed one.
     expect(service).toMatch(
-      /const responseText = await this\.applyAiDisclosure\([\s\S]{0,200}?adapter\.formatOutbound\(\{\s*text:\s*responseText\s*\}\)/,
+      /const responseText = await this\.applyAiDisclosure\([\s\S]{0,400}?adapter\.formatOutbound\(\{\s*text:\s*responseText\s*[,}]/,
     );
   });
 

@@ -196,7 +196,7 @@ export class CredentialService {
     // non-http schemes but NOT internal IPs or the metadata service.
     // Without this an admin could create an Api with baseUrl pointing
     // at 169.254.169.254 / localhost / link-local, then invoke
-    // /credentials/:id/test and exfil the auth headers straight into
+    // /apis/:id/credentials/:credentialId/test and exfil the auth headers straight into
     // the internal network. Same validator already protects the
     // refresh path a few lines below.
     const urlCheck = validateUrl(credential.api.baseUrl);

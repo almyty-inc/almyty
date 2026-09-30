@@ -303,14 +303,15 @@ export class GatewaysService {
   }
 
   /**
-   * Only the protocol surfaces (MCP, UTCP, Skills, A2A, ACP, OpenAI chat)
-   * can be private: a channel is reached by people outside almyty with no
-   * user identity, so a private one could never answer its owner either.
+   * Only the protocol surfaces (MCP, UTCP, Skills, and an agent's A2A
+   * channel) can be private: a chat channel is reached by people outside
+   * almyty with no user identity, so a private one could never answer its
+   * owner either.
    */
   private assertPrivateCapable(type: GatewayType): void {
     if (!PRIVATE_CAPABLE_GATEWAY_TYPES.has(type)) {
       throw new BadRequestException(
-        'Only MCP, UTCP, Skills, A2A, ACP and OpenAI-compatible gateways can be private; ' +
+        'Only MCP, UTCP, Skills and A2A gateways can be private; ' +
           'chat channels are reached by people who do not sign in to almyty',
       );
     }

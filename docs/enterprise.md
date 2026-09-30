@@ -39,7 +39,7 @@ token resolves to community, never to allowed.
 
 | Entitlement | What it does |
 |---|---|
-| `sso` | SAML and OIDC sign-in, plus SCIM provisioning from Okta or Entra. Configured per org under Settings → People and access → Single sign-on. |
+| `sso` | SAML and OIDC sign-in, plus SCIM provisioning from Okta or Entra. Configured per org under Settings → People and access → Single sign-on. Also unlocks visitor sign-in (the `sso` auth mode) on an agent's channels. |
 | `advanced_rbac` | Custom roles and attribute-based rules beyond the built-in owner/admin/member tiers. |
 | `approval_policy` | Multi-step and quorum approval gates. Without it, a request is decided by a single approver. |
 | `compliance_pack` | Org-enforced plugin policy — PII filtering and the security scanner applied to every run rather than per agent. |

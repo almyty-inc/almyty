@@ -122,7 +122,7 @@ builds, signing).
 
 **Serving** — `gateways` (CRUD, auth enforcement, protocol serving, the unified
 endpoint, and the chat channel adapters), `mcp` (MCP and UTCP controllers, the
-MCP OAuth 2.1 server, transports), `a2a`, `acp`, `mcp-sources`.
+MCP OAuth 2.1 server, transports), `a2a`, `mcp-sources`.
 
 **Models** — `llm-providers` (per-vendor dispatch), `model-catalog` (model
 cards, the router, the automatic price feed), `model-registry` (weights and
@@ -270,7 +270,7 @@ principal is, per surface:
 |---|---|
 | dashboard session, API key, CLI JWT, `/v1` compat, the org's own (system) MCP endpoint | that user |
 | a schedule tick or heartbeat | the agent's owner **at fire time**; an owner who has left the team (or the org) stops it with a FAILED run that says why, and the schedule or heartbeat is paused |
-| a published gateway (MCP, A2A, UTCP, Skills, ACP, a chat channel, the Webhook channel, hosted chat) | the gateway |
+| a published gateway (MCP, A2A, UTCP, Skills, a chat channel, the Webhook channel, hosted chat) | the gateway |
 
 **The gateway rule.** A gateway is a publication: whoever its own auth admits
 gets what it serves, so what it may serve is bounded by the gateway's scope.

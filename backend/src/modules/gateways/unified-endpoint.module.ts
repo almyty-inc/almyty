@@ -15,7 +15,6 @@ import { GatewaysModule } from './gateways.module';
 import { McpModule } from '../mcp/mcp.module';
 import { AgentsModule } from '../agents/agents.module';
 import { A2AModule } from '../a2a/a2a.module';
-import { AcpModule } from '../acp/acp.module';
 import { jwtSecretOrDevFallback } from '../auth/dev-jwt-secret';
 
 /**
@@ -36,7 +35,6 @@ import { jwtSecretOrDevFallback } from '../auth/dev-jwt-secret';
     forwardRef(() => McpModule),
     forwardRef(() => AgentsModule),
     forwardRef(() => A2AModule),
-    forwardRef(() => AcpModule),
     GatewaysModule,
   ],
   controllers: [UnifiedEndpointController],

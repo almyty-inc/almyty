@@ -152,9 +152,17 @@ export const CHANNEL_REFUSALS = Object.freeze({
   BUNDLE_ID_INVALID:
     'Desktop and terminal apps need a reverse-domain identifier such as com.acme.assistant.',
   DESKTOP_NEEDS_WEB_CHAT: PUBLISH_REFUSALS.DESKTOP_NEEDS_WEB_CHAT,
+  SENDER_NAME_REQUIRED:
+    'LoopMessage sends every reply from a sender name. Enter the one set up in your LoopMessage dashboard.',
 });
 
 export type ChannelRefusalCode = keyof typeof CHANNEL_REFUSALS;
+
+/** A LoopMessage channel's sender name, trimmed, or empty when there is none. */
+export function senderNameOf(configuration: Record<string, any> | null | undefined): string {
+  const value = configuration?.sender_name;
+  return typeof value === 'string' ? value.trim() : '';
+}
 
 export interface ChannelCheck {
   ok: boolean;
@@ -529,6 +537,13 @@ export function checkChannel(channel: ChannelShape, context: ChannelContext = {}
   if (servesOverGateway(channel.type)) {
     const missing = missingCredentials(channel.type, channel.configuration);
     if (missing.length) refuse('MISSING_CREDENTIALS', missing.join(', '));
+  }
+
+  // LoopMessage sends every reply from a sender name, and it belongs to
+  // the channel rather than the key: one organization key can carry
+  // several senders.
+  if (channel.type === ChannelType.IMESSAGE_LOOPMESSAGE && !senderNameOf(channel.configuration)) {
+    refuse('SENDER_NAME_REQUIRED');
   }
 
   // The widget runs on someone else's page with no sign-in of ours.

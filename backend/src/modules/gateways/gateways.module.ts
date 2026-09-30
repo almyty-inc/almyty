@@ -87,6 +87,8 @@ import { ChannelCredentialService } from './channels/channel-credential.service'
 import { SlackInstallService } from './channels/slack-install.service';
 import { ChannelInstallController } from './channels/channel-install.controller';
 import { ChannelInstallationsController } from './channels/channel-installations.controller';
+import { ChannelAttachmentReader } from './channels/channel-attachments.service';
+import { FilesModule } from '../files/files.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -113,6 +115,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
     ToolsModule,
     forwardRef(() => AgentsModule),
     AuthorizationModule,
+    FilesModule,
   ],
   providers: [
     HostedChatService,
@@ -154,6 +157,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
     IrcAdapter,
     IMessageSendblueAdapter,
     IMessageLoopMessageAdapter,
+    ChannelAttachmentReader,
   ],
   controllers: [
     // GatewayInfoController has literal-path routes (all-skills,

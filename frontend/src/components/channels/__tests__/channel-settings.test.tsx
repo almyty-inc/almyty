@@ -3,7 +3,7 @@ import { screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { render } from '../../../test/setup'
-import { ChannelSettings, missingKeysLine } from '../channel-settings'
+import { ChannelSettings, SENDER_NAME_EMPTY, missingKeysLine } from '../channel-settings'
 import { advancedSummary, formFromEffective, overridesFromForm, settingsFromForm } from '../public-settings-fields'
 import type { AgentChannel, EffectiveSettings } from '@/lib/agent-channels'
 import type { Agent } from '@/types'
@@ -56,6 +56,7 @@ vi.mock('@/lib/agent-channels', async () => {
       unpublish: vi.fn(),
       remove: vi.fn(),
       list: vi.fn().mockResolvedValue([]),
+      get: vi.fn(),
     },
   }
 })
@@ -149,8 +150,8 @@ describe('a channel page', () => {
   // relay's connector, picked or created here, and the relay is told
   // where to deliver by the callback URL on the same page.
   describe.each([
-    ['imessage_sendblue', 'iMessage (Sendblue)', 'cred-sendblue', /Sendblue line/, /LoopMessage sender/, /Sendblue dashboard/],
-    ['imessage_loopmessage', 'iMessage (LoopMessage)', 'cred-loop', /LoopMessage sender/, /Sendblue line/, /LoopMessage dashboard/],
+    ['imessage_sendblue', 'iMessage (Sendblue)', 'cred-sendblue', /Sendblue line/, /LoopMessage sender/, /Added to your Sendblue account for you when you publish/],
+    ['imessage_loopmessage', 'iMessage (LoopMessage)', 'cred-loop', /LoopMessage sender/, /Sendblue line/, /LoopMessage has no API for setting its webhook, so paste this yourself/],
   ] as const)('an iMessage channel through %s', (type, label, credId, own, other, where) => {
     const channel = () =>
       slack({ id: 'c-imsg', type, name: label, endpoint: '/channels/c-imsg', configuration: {} })
@@ -169,12 +170,125 @@ describe('a channel page', () => {
       await waitFor(() => expect(agentChannelsApi.update).toHaveBeenCalledWith('agent-1', 'c-imsg', { credentialId: credId }))
     })
 
-    it('shows the callback URL to paste into the relay, and the AI disclosure', async () => {
+    it('shows the callback URL and whether it is registered for you or pasted by hand, and the AI disclosure', async () => {
       render(<ChannelSettings agent={agent} channel={channel()} inherited={inherited} />)
       expect(await screen.findByText('https://api.test/acme/channels/c-imsg')).toBeInTheDocument()
       expect(screen.getByText(where)).toBeInTheDocument()
       expect(screen.getByRole('switch', { name: 'Tell people they are talking to an AI' })).toBeChecked()
       expect(screen.queryByRole('dialog')).toBeNull()
+    })
+  })
+
+  // LoopMessage sends every reply from a sender name, which belongs to
+  // the channel. It is a required field on this page: cleared, it says so
+  // next to the field; missing at publish, publishing is refused there too.
+  describe('the LoopMessage sender name', () => {
+    const loop = (over: Partial<AgentChannel> = {}) =>
+      slack({ id: 'c-loop', type: 'imessage_loopmessage', name: 'iMessage (LoopMessage)', endpoint: '/channels/c-loop', configuration: { credentialId: 'cred-loop' }, ...over })
+    const refused = {
+      ok: false,
+      refusals: [{ code: 'SENDER_NAME_REQUIRED', message: 'LoopMessage sends every reply from a sender name. Enter the one set up in your LoopMessage dashboard.' }],
+    }
+
+    it('is a required field, saved on the channel', async () => {
+      vi.mocked(agentChannelsApi.update).mockImplementation(async (_a, _c, body: any) => loop({ configuration: { credentialId: 'cred-loop', ...body.configuration } }))
+      render(<ChannelSettings agent={agent} channel={loop()} inherited={inherited} />)
+      const field = await screen.findByLabelText(/^Sender name/)
+      expect(field).toBeRequired()
+      fireEvent.change(field, { target: { value: '  northwind  ' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      await waitFor(() =>
+        expect(agentChannelsApi.update).toHaveBeenCalledWith('agent-1', 'c-loop', { configuration: { sender_name: 'northwind' } }),
+      )
+    })
+
+    it('will not save it cleared, and says why next to the field', async () => {
+      render(<ChannelSettings agent={agent} channel={loop({ configuration: { credentialId: 'cred-loop', sender_name: 'northwind' } })} inherited={inherited} />)
+      const field = await screen.findByLabelText(/^Sender name/)
+      fireEvent.change(field, { target: { value: '   ' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      expect(await screen.findByText(SENDER_NAME_EMPTY)).toBeInTheDocument()
+      expect(field).toHaveAttribute('aria-invalid', 'true')
+      expect(agentChannelsApi.update).not.toHaveBeenCalled()
+    })
+
+    it('blocks publishing without one, with the reason next to the field', async () => {
+      vi.mocked(agentChannelsApi.check).mockResolvedValue(refused as any)
+      render(<ChannelSettings agent={agent} channel={loop()} inherited={inherited} />)
+      const field = await screen.findByLabelText(/^Sender name/)
+      // Said once someone tries, not on first view.
+      expect(screen.queryByText(refused.refusals[0].message)).toBeNull()
+      await waitFor(() => expect(agentChannelsApi.check).toHaveBeenCalled())
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
+      await waitFor(() => expect(field).toHaveAttribute('aria-invalid', 'true'))
+      expect(screen.getAllByText(refused.refusals[0].message).length).toBeGreaterThan(0)
+      expect(agentChannelsApi.publish).not.toHaveBeenCalled()
+      // Not also listed under Publish: the field says it.
+      expect(screen.queryByTestId('channel-refusals')).toBeNull()
+    })
+
+    it('is not asked for on a Sendblue channel, which replies from its line', async () => {
+      render(<ChannelSettings agent={agent} channel={slack({ id: 'c-sb', type: 'imessage_sendblue', name: 'iMessage (Sendblue)', configuration: {} })} inherited={inherited} />)
+      expect(await screen.findByRole('heading', { name: 'iMessage (Sendblue)', level: 1 })).toBeInTheDocument()
+      expect(screen.queryByLabelText(/^Sender name/)).toBeNull()
+    })
+  })
+
+  // Publishing a Sendblue channel registers its webhook through Sendblue's
+  // API; the page says how that went, a failure included, next to the URL.
+  describe('webhook registration on the page', () => {
+    const sendblueLive = (webhookRegistration: AgentChannel['webhookRegistration']) =>
+      slack({
+        id: 'c-sb',
+        type: 'imessage_sendblue',
+        name: 'iMessage (Sendblue)',
+        status: 'live',
+        gatewayId: 'gw-sb',
+        endpoint: '/channels/c-sb',
+        configuration: { credentialId: 'cred-sendblue' },
+        webhookRegistration,
+      })
+
+    it('says it was registered', async () => {
+      render(<ChannelSettings agent={agent} channel={sendblueLive({ action: 'register', status: 'registered', error: null, at: '2026-09-30T10:00:00Z' })} inherited={inherited} />)
+      expect(await screen.findByText('Registered with Sendblue.')).toBeInTheDocument()
+      expect(agentChannelsApi.get).not.toHaveBeenCalled()
+    })
+
+    it("shows a failure with Sendblue's own reason, and what to do", async () => {
+      render(
+        <ChannelSettings
+          agent={agent}
+          channel={sendblueLive({ action: 'register', status: 'failed', error: 'Sendblue refused adding the webhook: Invalid API credentials', at: null })}
+          inherited={inherited}
+        />,
+      )
+      const line = await screen.findByRole('alert')
+      expect(line).toHaveTextContent('Could not register it with Sendblue: Sendblue refused adding the webhook: Invalid API credentials.')
+      expect(line).toHaveTextContent('Fix the credential, then unpublish and publish again')
+    })
+
+    it('reads the channel again until the registration is recorded', async () => {
+      vi.mocked(agentChannelsApi.get).mockResolvedValue(
+        sendblueLive({ action: 'register', status: 'registered', error: null, at: '2026-09-30T10:00:02Z' }),
+      )
+      render(<ChannelSettings agent={agent} channel={sendblueLive(null)} inherited={inherited} />)
+      expect(await screen.findByText('Registering it with Sendblue...')).toBeInTheDocument()
+      expect(await screen.findByText('Registered with Sendblue.')).toBeInTheDocument()
+      expect(agentChannelsApi.get).toHaveBeenCalledWith('agent-1', 'c-sb')
+    })
+
+    it('says nothing about registration for LoopMessage, whose URL is pasted by hand', async () => {
+      render(
+        <ChannelSettings
+          agent={agent}
+          channel={slack({ id: 'c-loop', type: 'imessage_loopmessage', name: 'iMessage (LoopMessage)', status: 'live', gatewayId: 'gw-l', endpoint: '/channels/c-loop', configuration: { sender_name: 'northwind' } })}
+          inherited={inherited}
+        />,
+      )
+      expect(await screen.findByText(/LoopMessage has no API for setting its webhook, so paste this yourself/)).toBeInTheDocument()
+      expect(screen.queryByTestId('webhook-registration')).toBeNull()
     })
   })
 

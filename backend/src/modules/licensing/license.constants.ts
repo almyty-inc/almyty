@@ -28,6 +28,7 @@ export const EDITION_ENTERPRISE = 'enterprise';
  * the EE roadmap (docs/plans/monetization-byok-open-core.md, WS3.3).
  */
 export const EE_ENTITLEMENTS = {
+  /** SAML/OIDC sign-in and SCIM for members, and visitor sign-in (the sso auth mode) on an agent's channels. */
   SSO: 'sso',
   ADVANCED_RBAC: 'advanced_rbac',
   AUDIT_EXPORT: 'audit_export',
@@ -38,9 +39,10 @@ export const EE_ENTITLEMENTS = {
   /** Credentials governance: policy rules, review, scheduled rotation and expiry, audit export. */
   CREDENTIALS_GOVERNANCE: 'credentials_governance',
   /**
-   * Removes the almyty mark from a hosted chat app, and unlocks the sso
-   * auth mode on a surface. The chat app itself is core: this gates the
-   * branding removal, not the feature.
+   * Removes the almyty mark from a hosted chat app, and permits removing
+   * the AI disclosure line. The chat app itself is core: this gates the
+   * branding removal, not the feature. Visitor sign-in (the sso auth mode
+   * on a channel) is the SSO entitlement's, not this one's.
    */
   WHITE_LABEL: 'white_label',
   /** Placeholder feature demonstrating the ee/ boundary + guard wiring. */

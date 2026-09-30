@@ -7,7 +7,7 @@ import { join, relative } from 'path';
  * ExecutionAccessService is the gate. The three executors every execution
  * path ends in -- AgentExecutionEngine.execute (workflow runs, sub_agent
  * nodes, schedules, compat APIs), AgentRuntimeService.startRun (autonomous
- * runs, invoke_agent, collaboration, heartbeats, A2A/ACP/channels/hosted
+ * runs, invoke_agent, collaboration, heartbeats, A2A/channels/hosted
  * chat) and ToolExecutorService.executeTool (REST, tool_call nodes, an
  * autonomous run's tool calls, MCP/UTCP/Skills, sandboxed tools.invoke) --
  * ask it before doing anything, and every call into them states whose

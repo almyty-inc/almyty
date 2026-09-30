@@ -115,8 +115,6 @@ import { GatewayRateLimitService } from '../modules/gateways/gateway-rate-limit.
 import { AgentExecutionEngine } from '../modules/agents/agent-execution.engine';
 import { A2AServerService } from '../modules/a2a/a2a-server.service';
 import { A2AAgentCardService } from '../modules/a2a/a2a-agent-card.service';
-import { AcpServerService } from '../modules/acp/acp-server.service';
-import { AcpDiscoveryService } from '../modules/acp/acp-discovery.service';
 import { UtcpService } from '../modules/mcp/utcp.service';
 import { AgentRuntimeService } from '../modules/agents/agent-runtime.service';
 
@@ -315,8 +313,6 @@ const mockRedis = {
     { provide: AgentExecutionEngine, useValue: { execute: () => ({}) } },
     { provide: A2AServerService, useValue: { handleJsonRpc: () => ({}) } },
     { provide: A2AAgentCardService, useValue: { buildAgentCard: () => ({}) } },
-    { provide: AcpServerService, useValue: { handleJsonRpc: () => ({}) } },
-    { provide: AcpDiscoveryService, useValue: { buildDiscovery: () => ({}) } },
     { provide: UtcpService, useValue: { handleRequest: () => ({}) } },
     { provide: AgentRuntimeService, useValue: { startRun: () => ({}), getRun: () => ({}), listRuns: () => ([]), getRunEmitter: () => null, subscribeRunEvents: () => ({}), sendInput: () => ({}), cancelRun: () => ({}) } },
     AgentExecutionCancellationService,

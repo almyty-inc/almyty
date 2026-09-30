@@ -82,8 +82,8 @@ export function CommandPalette() {
   const navigationEntries: Entry[] = [
     { id: 'nav-dashboard', label: 'Dashboard', icon: LayoutDashboard, action: () => go('/dashboard'), keywords: ['home'] },
     { id: 'nav-guide', label: 'Guide', icon: Compass, action: () => go('/guide'), keywords: ['getting started', 'onboarding', 'setup', 'help', 'tour'] },
-    { id: 'nav-agents', label: 'Agents', icon: Bot, action: () => go('/agents'), keywords: ['pipeline', 'workflow'] },
-    { id: 'nav-gateways', label: 'Gateways', icon: Zap, action: () => go('/gateways'), keywords: ['mcp', 'a2a', 'utcp', 'skills'] },
+    { id: 'nav-agents', label: 'Agents', icon: Bot, action: () => go('/agents'), keywords: ['pipeline', 'workflow', 'channels', 'a2a'] },
+    { id: 'nav-gateways', label: 'Gateways', icon: Zap, action: () => go('/gateways'), keywords: ['mcp', 'utcp', 'skills'] },
     { id: 'nav-tools', label: 'Tools', icon: Wrench, action: () => go('/tools'), keywords: ['http', 'javascript', 'graphql', 'llm', 'sdk'] },
     { id: 'nav-tool-hub', label: 'Tool Hub', icon: Store, action: () => go('/tool-hub'), keywords: ['templates', 'catalog'] },
     { id: 'nav-apis', label: 'APIs', icon: Globe, action: () => go('/apis'), keywords: ['openapi', 'graphql', 'soap', 'protobuf', 'sdk'] },

@@ -412,11 +412,14 @@ describe('AgentChannelsService', () => {
       await expect(service.publish(ORG, 'agent-open', view.id, ME)).rejects.toThrow(/spend limit per run/);
     });
 
-    it('checks SSO against the organization licence', async () => {
+    // Visitor sign-in (SSO) on a channel is the sso entitlement's, not
+    // white label's: white label removes the almyty mark and nothing else.
+    it('checks SSO against the organization licence: sso unlocks it, white label does not', async () => {
       agents.seed(agent({ id: 'agent-sso', visitorRules: { authMode: VisitorAuthMode.SSO } }));
       const unlicensed = build();
       const view = await unlicensed.add(ORG, 'agent-sso', ME, { type: ChannelType.WEB, slug: 'sso-chat' });
       await expect(unlicensed.publish(ORG, 'agent-sso', view.id, ME)).rejects.toThrow(/commercial licence/);
+      await expect(build({ licensed: ['white_label'] }).publish(ORG, 'agent-sso', view.id, ME)).rejects.toThrow(/commercial licence/);
       await expect(build({ licensed: ['sso'] }).publish(ORG, 'agent-sso', view.id, ME)).resolves.toMatchObject({ status: 'live' });
     });
 
@@ -533,6 +536,55 @@ describe('AgentChannelsService', () => {
         cleared: ['twilio_auth_token'],
         publicConfig: { phone_number: '+1' },
       });
+    });
+  });
+
+  // Sendblue's webhook is registered when the channel is published
+  // (channel-webhook-registrar.service.ts). What that last did is on the
+  // gateway row; the channel page reads it here, so a failure is said
+  // where the operator is looking rather than only in a log.
+  describe('webhook registration on the channel page', () => {
+    const seedLive = (type: ChannelType, gatewayId: string) =>
+      channels.seed({ id: `c-${gatewayId}`, organizationId: ORG, agentId: 'agent-1', type, name: type, status: ChannelStatus.LIVE, gatewayId, configuration: {} } as any);
+
+    it('shows the last registration outcome of a Sendblue channel, error included', async () => {
+      gatewayRows.seed({
+        id: 'gw-sb',
+        organizationId: ORG,
+        metadata: {
+          webhookRegistration: {
+            action: 'register',
+            status: 'failed',
+            url: 'https://api.almyty.example/acme/channels/c-gw-sb',
+            error: 'Sendblue refused adding the webhook: Invalid API credentials',
+            at: '2026-09-30T10:00:00.000Z',
+          },
+        },
+      });
+      seedLive(ChannelType.IMESSAGE_SENDBLUE, 'gw-sb');
+
+      const view = await build().get(ORG, 'agent-1', 'c-gw-sb', ME);
+      expect(view.webhookRegistration).toEqual({
+        action: 'register',
+        status: 'failed',
+        error: 'Sendblue refused adding the webhook: Invalid API credentials',
+        at: '2026-09-30T10:00:00.000Z',
+      });
+    });
+
+    it('is null for a channel whose webhook is pasted by hand, and for one not published yet', async () => {
+      gatewayRows.seed({ id: 'gw-loop', organizationId: ORG, metadata: { webhookRegistration: { status: 'failed', error: 'x' } } });
+      seedLive(ChannelType.IMESSAGE_LOOPMESSAGE, 'gw-loop');
+      const draft = await build().add(ORG, 'agent-1', ME, { type: ChannelType.IMESSAGE_SENDBLUE });
+
+      expect((await build().get(ORG, 'agent-1', 'c-gw-loop', ME)).webhookRegistration).toBeNull();
+      expect(draft.webhookRegistration).toBeNull();
+    });
+
+    it("never reads another organization's gateway", async () => {
+      gatewayRows.seed({ id: 'gw-theirs', organizationId: 'org-2', metadata: { webhookRegistration: { status: 'registered' } } });
+      seedLive(ChannelType.IMESSAGE_SENDBLUE, 'gw-theirs');
+      expect((await build().get(ORG, 'agent-1', 'c-gw-theirs', ME)).webhookRegistration).toBeNull();
     });
   });
 });

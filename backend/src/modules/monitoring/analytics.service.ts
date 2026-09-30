@@ -8,6 +8,7 @@ import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
 import { AuditLog } from '../../entities/audit-log.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
+import { GatewayType } from '../../entities/gateway.entity';
 import { AnalyticsExportHelper } from './analytics-export.helper';
 import { AnalyticsSummariesHelper } from './analytics-summaries.helper';
 import {
@@ -322,6 +323,13 @@ export class AnalyticsService {
       .where('metric.organizationId = :orgId', { orgId: organizationId })
       .andWhere('metric.type = :type', { type: MetricType.REQUEST_COUNT })
       .andWhere('metric.gatewayId IS NOT NULL')
+      // Per-gateway usage is per MCP, UTCP and Skills gateway. A channel's
+      // gateway (web chat, widget, messaging, A2A) is not a gateway to the
+      // person reading this: it is on the agent's Channels tab.
+      .andWhere(
+        'EXISTS (SELECT 1 FROM gateways ug WHERE ug.id = metric."gatewayId" AND ug.type IN (:...gatewayProtocols))',
+        { gatewayProtocols: [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS] },
+      )
       .andWhere(inViewerScopeGateway('metric."gatewayId"'), { privateViewerId: callerId })
       .andWhere('metric.timestamp >= :since', { since })
       .groupBy('metric.gatewayId')
