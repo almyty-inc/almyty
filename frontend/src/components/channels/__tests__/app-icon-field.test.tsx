@@ -123,6 +123,23 @@ describe('the icon in the branding', () => {
     expect(settingsFromForm({ ...form, iconFileId: null }).branding.iconFileId).toBeNull()
   })
 
+  it('keeps a logo and an icon address set through the API when the form is saved', () => {
+    const effective = {
+      branding: { appName: 'Help', logoUrl: 'https://cdn.example/logo.png', iconUrl: 'https://cdn.example/icon.png' },
+      visitorRules: {
+        authMode: 'public_link',
+        limits: {},
+        caps: { dailyCents: null, monthlyCents: null },
+        privacy: { retentionDays: null, visitorCanDelete: true, visitorCanExport: true, visitorMemory: false },
+        ownSpend: false,
+      },
+    } as any
+    const saved = settingsFromForm({ ...formFromEffective(effective), greeting: 'Hi' }).branding
+    expect(saved).toMatchObject({ logoUrl: 'https://cdn.example/logo.png', iconUrl: 'https://cdn.example/icon.png', greeting: 'Hi' })
+    // A channel that only changes its greeting does not copy them into its own.
+    expect(overridesFromForm({ ...formFromEffective(effective), greeting: 'Hi' }, effective).branding).toEqual({ greeting: 'Hi' })
+  })
+
   it('is a channel override only when the channel has its own', () => {
     const inherited = effective('file-1')
     expect(overridesFromForm(formFromEffective(inherited), inherited).branding).toBeNull()

@@ -46,6 +46,9 @@ export interface PublicSettingsForm {
   theme: NonNullable<ChannelBranding['theme']>
   /** The uploaded app icon's file id; null for none. */
   iconFileId: string | null
+  /** A logo and an icon address set through the API; not edited here, kept as they are. */
+  logoUrl: string | null
+  iconUrl: string | null
   greeting: string
   prompts: string[]
   aiDisclosure: string
@@ -74,6 +77,8 @@ export function formFromEffective(effective: EffectiveSettings): PublicSettingsF
     primaryColor: b.primaryColor ?? '#8b5cf6',
     theme: b.theme ?? 'auto',
     iconFileId: b.iconFileId ?? null,
+    logoUrl: b.logoUrl ?? null,
+    iconUrl: b.iconUrl ?? null,
     greeting: b.greeting ?? '',
     prompts: b.suggestedPrompts ?? [],
     aiDisclosure: b.aiDisclosure ?? '',
@@ -105,6 +110,10 @@ export function settingsFromForm(form: PublicSettingsForm): { branding: ChannelB
       theme: form.theme,
       // Null removes an uploaded icon; the server checks the id is this organization's PNG.
       iconFileId: form.iconFileId,
+      // Set through the API and not on this form: carried through as they
+      // are, so saving the form never drops them.
+      logoUrl: form.logoUrl,
+      iconUrl: form.iconUrl,
       greeting: form.greeting,
       suggestedPrompts: form.prompts,
       // Null means the default wording; an empty string is a deliberate
