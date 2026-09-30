@@ -365,7 +365,7 @@ describe('AgentSchedulerService', () => {
       const saved = await service.scheduleAgent('a1', 'org-1', 15);
 
       expect(saved.settings.modelIssue).toBeUndefined();
-      expect(saved.settings.schedule).toEqual({ enabled: true, intervalMinutes: 15, input: {} });
+      expect(saved.settings.schedule).toEqual({ enabled: true, kind: 'interval', intervalMinutes: 15, input: {} });
     });
   });
 

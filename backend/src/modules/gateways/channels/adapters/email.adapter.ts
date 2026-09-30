@@ -314,7 +314,9 @@ export class EmailAdapter extends BaseAdapter {
     if (!config.resend_api_key) {
       this.sendFailed('resend_api_key is not configured, so the reply could not be sent');
     }
-    const to = threadContext?.from || threadContext?.userId;
+    // `to` is set by a message the agent starts (one or more addresses);
+    // an answer goes back to whoever wrote.
+    const to = threadContext?.to || threadContext?.from || threadContext?.userId;
     if (!to) {
       this.sendFailed('the inbound mail carried no address to reply to');
     }
@@ -333,7 +335,9 @@ export class EmailAdapter extends BaseAdapter {
     }
 
     const rawSubject = (threadContext?.subject || 'Agent Response').trim();
-    const subject = /^re:/i.test(rawSubject) ? rawSubject : `Re: ${rawSubject}`;
+    // A message the agent starts (a scheduled result) has a subject of
+    // its own; only an answer to a mail is a "Re:".
+    const subject = threadContext?.newThread || /^re:/i.test(rawSubject) ? rawSubject : `Re: ${rawSubject}`;
 
     const payload: Record<string, any> = {
       from: config.reply_from || config.inbound_address || 'agent@almyty.com',

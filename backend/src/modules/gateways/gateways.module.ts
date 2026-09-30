@@ -18,6 +18,9 @@ import { EndUser } from '../../entities/end-user.entity';
 import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
 import { AgentChannel } from '../../entities/agent-channel.entity';
+import { AgentExecution } from '../../entities/agent-execution.entity';
+import { ScheduledPostService } from './channels/scheduled-post.service';
+import { SCHEDULED_RESULT_POSTER } from '../agents/scheduled-result-poster';
 import { ChannelLinkService } from './channel-link.service';
 import { ChannelPolicyService } from './channel-policy.service';
 import { ChannelLinkController } from './channel-link.controller';
@@ -110,6 +113,7 @@ import { FilesModule } from '../files/files.module';
       Message,
       VisitorEmailCode,
       AgentChannel,
+      AgentExecution,
     ]),
     JwtModule,
     ToolsModule,
@@ -158,6 +162,10 @@ import { FilesModule } from '../files/files.module';
     IMessageSendblueAdapter,
     IMessageLoopMessageAdapter,
     ChannelAttachmentReader,
+    ScheduledPostService,
+    // The scheduler (agents module) reaches the poster by this token, so the
+    // agents module need not import this one (scheduled-result-poster.ts).
+    { provide: SCHEDULED_RESULT_POSTER, useExisting: ScheduledPostService },
   ],
   controllers: [
     // GatewayInfoController has literal-path routes (all-skills,
