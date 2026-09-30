@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // The outside world of the demo organization, on one local port: three
 // OpenAI-compatible model vendors (each under its own prefix, so each
-// connects as its own provider) and two small company APIs with their
-// OpenAPI descriptions. Nothing here reaches the internet and no key is
+// connects as its own provider), the company APIs with their OpenAPI
+// descriptions (orders and helpdesk for the seed; a CRM, health checks, a
+// help center, an intranet and a Slack incoming webhook for the use-case
+// guides), and nothing else. Nothing here reaches the internet and no key is
 // checked. Answers are scripted and deterministic: offered tools and not
 // yet given a result, a model calls the tool that fits the question; given
 // the result, it answers in a sentence or two.

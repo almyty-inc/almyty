@@ -120,8 +120,23 @@ scripts/demo-seed/stack.sh up            # Postgres, Redis, the commercial API b
 node scripts/demo-seed/seed.mjs          # the Northwind AI organization, its agents, channels and runs
 node scripts/demo-seed/capture.mjs       # every shot, into /tmp/almyty-demo/shots for review
 node scripts/demo-seed/capture.mjs --register name...   # register the reviewed ones
+node scripts/demo-seed/guides.mjs        # walk the use-case guides, one shot per step
 scripts/demo-seed/stack.sh down
 ```
+
+The use-case guides under `docs-site/content/examples` are walked through the
+UI, step by step as their text says, by `scripts/demo-seed/guides.mjs` on the
+same stack, in an organization of their own (Sam Rivera's "Northwind"), so
+each guide starts where a new customer starts. It takes one screenshot per
+step into `$SHOT_DIR/guides`; a step that cannot be done as written fails the
+walk, and the guide text is fixed, not the walk. Register the reviewed shots
+with `node scripts/demo-seed/guides.mjs --register`; they are published under
+`screenshots/guides/`. Walk the guides once per fresh stack: they create what
+they describe, so a second run meets its own leftovers.
+
+`self-hosting-compose.png` stays `needs-recapture`: it is a terminal capture
+of `docker compose up` from a clean checkout, which needs the compose stack's
+own ports (4000, 3002, 5432, 6379) free on the capturing machine.
 
 Nothing leaves the machine: the three model vendors and the Northwind Orders and
 Helpdesk APIs are `scripts/demo-seed/fake-upstream.mjs`, the password is a local
