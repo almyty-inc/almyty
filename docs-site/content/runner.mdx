@@ -103,9 +103,12 @@ its own.
   under the first of the runner's `allowedCwdRoots` when those are set.
   Releasing or expiring the workspace stops its processes; the folder and its
   files stay on the machine.
-- **When the run ends** (it completes, fails, is cancelled or times out), its
-  workspaces are released right away, which frees the runner for other work.
-  The one-hour limit stays as a safety net.
+- **When the job ends**, its workspaces are released right away, which frees
+  the runner for other work. The job ends when the run and every helper or
+  sub-agent it started have finished (completed, failed, cancelled or timed
+  out). While any of them is still running, queued or waiting for input or an
+  approval, the workspace stays, so a run that finishes before its helpers does
+  not take their folder away. The one-hour limit stays as a safety net.
 - **Whose it is**: the user who started the run, or the owner of the private or
   team gateway the run came through. A run through an org-wide gateway has no
   one to hold a workspace, and its call fails saying so.

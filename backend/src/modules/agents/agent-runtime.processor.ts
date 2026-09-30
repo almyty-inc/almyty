@@ -91,7 +91,7 @@ export class AgentRuntimeProcessor {
             this.logger.log(`Run ${runId} completed`);
             // Finished (completed, failed, cancelled or timed out): its
             // runner workspaces are released now, freeing the runner.
-            await releaseRunWorkspaces(this.workspaceRepository, runId);
+            await releaseRunWorkspaces(this.workspaceRepository, runId, this.runRepository);
           }
         } catch (error) {
           this.logger.error(`Step processing failed for run ${runId}: ${error.message}`, error.stack);
@@ -179,7 +179,7 @@ export class AgentRuntimeProcessor {
     try {
       // This will be checked in processStep via checkLimits
       const result = await this.runtimeService.processStep(runId);
-      if (result === 'done') await releaseRunWorkspaces(this.workspaceRepository, runId);
+      if (result === 'done') await releaseRunWorkspaces(this.workspaceRepository, runId, this.runRepository);
     } catch (error) {
       // Rethrow. Swallowing this made a failing timeout check disappear
       // entirely: no retry, no failed job, and the run left in whatever
@@ -280,7 +280,7 @@ export class AgentRuntimeProcessor {
       return;
     }
 
-    await releaseRunWorkspaces(this.workspaceRepository, runId);
+    await releaseRunWorkspaces(this.workspaceRepository, runId, this.runRepository);
     this.logger.error(`Run ${runId} marked FAILED after exhausted retries: ${error?.message}`);
   }
 }

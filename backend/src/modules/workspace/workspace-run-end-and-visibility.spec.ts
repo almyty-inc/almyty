@@ -151,6 +151,87 @@ describe('a run\'s workspaces are released when it ends', () => {
 });
 
 /**
+ * A job is a top-level run and every run it started. Its workspaces are
+ * keyed by the top-level run and stay active while any run of the job is
+ * still going (running, queued, sleeping, waiting for input or approval);
+ * the last run of the job to end releases them. A parent that finishes
+ * before its helpers must not pull their folder away, or they would get a
+ * fresh workspace mid-job.
+ */
+describe('a job\'s workspace outlives the parent while a child is still going', () => {
+  const PARENT = RUN;
+  const CHILD = '33333333-cccc-4ccc-8ccc-333333333333';
+  const GRANDCHILD = '44444444-dddd-4ddd-8ddd-444444444444';
+
+  function job(statuses: { parent: AgentRunStatus; child: AgentRunStatus; grandchild?: AgentRunStatus }) {
+    const runs = fakeRepository<AgentRun>([
+      { id: PARENT, organizationId: ORG, parentRunId: null, status: statuses.parent } as any,
+      { id: CHILD, organizationId: ORG, parentRunId: PARENT, status: statuses.child } as any,
+      ...(statuses.grandchild ? [{ id: GRANDCHILD, organizationId: ORG, parentRunId: CHILD, status: statuses.grandchild } as any] : []),
+    ]);
+    const workspaces = fakeRepository<Workspace>([ws('job', { runId: PARENT }), ws('job-gpu', { runId: PARENT, runnerId: 'runner-2' })]);
+    const processor = (result: 'done') =>
+      new AgentRuntimeProcessor({ processStep: jest.fn(async () => result) } as any, { add: jest.fn() } as any, {} as any, runs as any, workspaces as any);
+    return { runs, workspaces, processor };
+  }
+
+  it('the parent ending while a child is running leaves the workspace active', async () => {
+    const { workspaces, processor } = job({ parent: AgentRunStatus.COMPLETED, child: AgentRunStatus.RUNNING });
+    await processor('done').handleNextStep({ data: { runId: PARENT, seq: 1 } } as any);
+    expect(workspaces.row('job')!.status).toBe(WorkspaceStatus.ACTIVE);
+    expect(workspaces.row('job-gpu')!.status).toBe(WorkspaceStatus.ACTIVE);
+  });
+
+  it.each([AgentRunStatus.PENDING, AgentRunStatus.SLEEPING, AgentRunStatus.WAITING_INPUT, AgentRunStatus.WAITING_APPROVAL])(
+    'a grandchild that is %s keeps it too',
+    async (grandchild) => {
+      const { workspaces, processor } = job({ parent: AgentRunStatus.COMPLETED, child: AgentRunStatus.COMPLETED, grandchild });
+      await processor('done').handleNextStep({ data: { runId: CHILD, seq: 1 } } as any);
+      expect(workspaces.row('job')!.status).toBe(WorkspaceStatus.ACTIVE);
+    },
+  );
+
+  it('the child ending last releases the job\'s workspaces, on every runner', async () => {
+    const { runs, workspaces, processor } = job({ parent: AgentRunStatus.COMPLETED, child: AgentRunStatus.RUNNING });
+    await processor('done').handleNextStep({ data: { runId: PARENT, seq: 1 } } as any);
+    expect(workspaces.row('job')!.status).toBe(WorkspaceStatus.ACTIVE);
+
+    await runs.update({ id: CHILD }, { status: AgentRunStatus.FAILED });
+    await processor('done').handleNextStep({ data: { runId: CHILD, seq: 2 } } as any);
+
+    expect(workspaces.row('job')).toMatchObject({ status: WorkspaceStatus.RELEASED, closeReason: { kind: 'released', detail: `run ${PARENT} ended` } });
+    expect(workspaces.row('job-gpu')!.status).toBe(WorkspaceStatus.RELEASED);
+  });
+
+  it('a cancelled child with the parent still running releases nothing', async () => {
+    const { runs, workspaces } = job({ parent: AgentRunStatus.RUNNING, child: AgentRunStatus.RUNNING });
+    const child = { id: CHILD, status: AgentRunStatus.RUNNING, isDone: () => false } as any;
+    const service = Object.create(AgentRuntimeService.prototype) as any;
+    Object.assign(service, {
+      runRepository: { ...runs, save: jest.fn(async (r: any) => runs.update({ id: r.id }, { status: r.status })) },
+      workspaceRepository: workspaces,
+      getRun: jest.fn(async () => child),
+      emitEvent: jest.fn(),
+    });
+    await service.cancelRun(CHILD, ORG);
+    expect(workspaces.row('job')!.status).toBe(WorkspaceStatus.ACTIVE);
+  });
+
+  it('the tick applies the same rule: an ended parent with a live child keeps the workspace until the child ends', async () => {
+    const { runs, workspaces } = job({ parent: AgentRunStatus.TIMEOUT, child: AgentRunStatus.WAITING_APPROVAL });
+    fakeManager([[Workspace, workspaces], [AgentRun, runs], [AgentExecution, fakeRepository<AgentExecution>()]]);
+    const service = new WorkspaceService(workspaces as any, fakeRepository() as any);
+
+    await service.releaseForEndedRuns();
+    expect(workspaces.row('job')!.status).toBe(WorkspaceStatus.ACTIVE);
+
+    await runs.update({ id: CHILD }, { status: AgentRunStatus.CANCELLED });
+    await service.releaseForEndedRuns();
+    expect(workspaces.row('job')!.status).toBe(WorkspaceStatus.RELEASED);
+  });
+});
+
+/**
  * Who sees a workspace: its owner; the owner of the runner it is on (another
  * member's agent run working on their machine); and org owners and admins,
  * for every team and org-wide runner. A private runner is its owner's alone,

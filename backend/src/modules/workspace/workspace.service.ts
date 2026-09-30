@@ -340,28 +340,35 @@ export class WorkspaceService {
   }
 
   /**
-   * The safety net for releasing a finished run's workspaces. A run's end
+   * The safety net for releasing a finished job's workspaces. A run's end
    * releases them directly (releaseRunWorkspaces), but a run can also end
    * where nothing calls that: the run reaper, a collaboration step, a
    * queue failure written by another path. The workspace tick asks this
-   * every beat: any active workspace whose run is in an ended state is
-   * released, the same way.
+   * every beat, with the same rule: a workspace is released once the run
+   * it was given to has ended and -- for an autonomous run -- no run of its
+   * job (any descendant down the parentRunId chain) is still going.
    */
   async releaseForEndedRuns(now = new Date()): Promise<number> {
     const active = (await this.workspaces.find({ where: { status: WorkspaceStatus.ACTIVE } })).filter((w) => !!w.runId);
     if (active.length === 0) return 0;
     const runIds = [...new Set(active.map((w) => w.runId as string))];
-    const ended = new Set<string>();
     const manager = this.workspaces.manager;
-    for (const entity of [AgentRun, AgentExecution] as const) {
-      const rows = await manager.getRepository<{ id: string }>(entity).find({
-        where: { id: In(runIds), status: In([...ENDED_RUN_STATUSES]) } as any,
-        select: { id: true } as any,
-      });
-      for (const r of rows) ended.add(r.id);
-    }
+    const runs = manager.getRepository(AgentRun);
     let released = 0;
-    for (const runId of ended) released += await releaseRunWorkspaces(this.workspaces, runId, now);
+
+    const endedRuns = await runs.find({
+      where: { id: In(runIds), status: In([...ENDED_RUN_STATUSES]) } as any,
+      select: { id: true } as any,
+    });
+    // releaseRunWorkspaces checks the rest of the job before releasing.
+    for (const r of endedRuns) released += await releaseRunWorkspaces(this.workspaces, r.id, runs, now);
+
+    const endedExecutions = await manager.getRepository(AgentExecution).find({
+      where: { id: In(runIds), status: In([...ENDED_RUN_STATUSES]) } as any,
+      select: { id: true } as any,
+    });
+    for (const e of endedExecutions) released += await releaseRunWorkspaces(this.workspaces, e.id, null, now);
+
     if (released > 0) this.logger.log(`released ${released} workspace(s) of ended runs`);
     return released;
   }

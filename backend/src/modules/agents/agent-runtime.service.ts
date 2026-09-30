@@ -539,7 +539,7 @@ export class AgentRuntimeService implements OnModuleInit {
     }
     run.status = AgentRunStatus.CANCELLED;
     await this.runRepository.save(run);
-    await releaseRunWorkspaces(this.workspaceRepository, run.id);
+    await releaseRunWorkspaces(this.workspaceRepository, run.id, this.runRepository);
     this.emitEvent(runId, 'run.cancelled', {});
 
     // RUN_CANCEL was declared on AuditAction and emitted by nothing.
@@ -700,7 +700,7 @@ export class AgentRuntimeService implements OnModuleInit {
         ? 'approval expired'
         : `approval rejected${approval.decisionReason ? `: ${approval.decisionReason}` : ''}`;
       await this.runRepository.save(run);
-      await releaseRunWorkspaces(this.workspaceRepository, run.id);
+      await releaseRunWorkspaces(this.workspaceRepository, run.id, this.runRepository);
       this.logger.log(`run ${run.id} cancelled after approval ${approval.status}`);
     }
   }

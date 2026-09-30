@@ -284,18 +284,24 @@ remains for scripts.
   to another runner gets the job's workspace on that runner. Either way the
   row's `runId` and `agentId` are the top-level run's and its agent's, and the
   folder is named after them.
-- **Released when the run ends**: `releaseRunWorkspaces`
-  (`backend/src/modules/workspace/run-end-release.ts`) moves the run's active
-  rows to `released` (`closeReason: { kind: 'released', detail: 'run <id>
-  ended' }`), conditionally, like every transition out of `active`. It is
-  called where runs end: the autonomous step loop when a step reports the run
-  done, the queue's exhausted-retry failure, `cancelRun`, an approval
+- **Released when the job ends**: `releaseRunWorkspaces`
+  (`backend/src/modules/workspace/run-end-release.ts`) is called where runs
+  end: the autonomous step loop when a step reports the run done, the queue's
+  exhausted-retry failure and the timeout check, `cancelRun`, an approval
   rejection, and the workflow engine's `finally` on every way out of
-  `execute`. A child run owns no rows, so its end releases nothing. The
-  workspace tick's `releaseForEndedRuns` releases whatever a run that ended
-  elsewhere (the reaper, a collaboration step) left active, within one beat.
-  The folder stays on the machine; the heartbeat stops the processes. The
-  one-hour TTL remains the safety net.
+  `execute`. For an autonomous run it finds the job's top-level run
+  (`jobRootOf`, the same walk as `jobOf`) and releases the job's active rows
+  only if no run of the job, the top-level run or any descendant, is still
+  pending, running, sleeping, waiting for input or waiting for an approval
+  (`jobHasLiveRun`). So a parent that ends before its helpers leaves them the
+  folder, and the last run of the job to end releases it. A workflow's
+  sub-agents run inside its `execute` and end before it, so a workflow run is
+  released as it ends. The transition is conditional, like every one out of
+  `active` (`closeReason: { kind: 'released', detail: 'run <top-level id>
+  ended' }`). The workspace tick's `releaseForEndedRuns` applies the same
+  rule, within one beat, to whatever a run that ended elsewhere (the reaper,
+  a collaboration step) left active. The folder stays on the machine; the
+  heartbeat stops the processes. The one-hour TTL remains the safety net.
 - **Capacity**: the runner holds at most `config.maxConcurrent` active
   workspaces; past that the call fails with `runner_at_capacity`.
 - **Failure** is the tool call's error (`<code>: <sentence>`), which the agent
