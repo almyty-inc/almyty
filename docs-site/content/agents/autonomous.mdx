@@ -1,182 +1,132 @@
-# Autonomous Agents
+# Autonomous agents
 
-Give an agent instructions, a set of tools, and a goal. It decides which tools
-to call and how to answer, with no pipeline to draw. Several models can
-collaborate inside one agent, the output is checked before it returns, and the
-agent carries memory and constraints from one run to the next. (For the opposite
-approach, where you wire each step yourself, see [workflow agents](/agents/builder).)
+An autonomous agent is an assistant you describe in plain words instead of drawing step by step. Tell it who it is, what it should do, and which of your systems it may use, and it works out the steps itself. For example: "You are Northwind's support agent. Look orders up before answering, and ask a person to approve any refund over $500."
+
+On this page: how to set one up, how it can check its own answers, the rules it follows, what it remembers, and how a good run becomes a reusable skill. (If you would rather lay out every step yourself, see [workflow agents](/agents/builder).)
 
 ![Autonomous agent detail](/screenshots/agent-detail-overview.png)
 
-You configure all of this on the agent's detail page. To run one from your
-terminal:
+## Create an autonomous agent
+
+1. Open **Agents**, click **Create agent** and pick **Autonomous** at the top.
+2. Fill in the page from top to bottom: **Personality & style** (the tone, such as "warm, brief, specific"), **Instructions** (the job), **Work mode** and its models, **Memory**, **Capabilities** (what it may use), **Run limits**, and an optional **Heartbeat** (a prompt it runs on its own every so often).
+3. Save it. Rules and answer checks are added on the agent's own page afterwards.
+
+![Autonomous agent form in the builder](/screenshots/agent-builder-autonomous.png)
+
+To try it, use **Try it** on the agent's **Overview** tab.
+
+## Work mode: how it works, and which models do it
+
+The work mode decides how many AI models take part in each answer and what each one does. Pick the mode from the **Work mode** dropdown; the model slots below it change to match, and each slot asks for exactly the model that mode needs.
+
+| Work mode | What happens | Slots it shows |
+|---|---|---|
+| **Single** | One model does it all. | Main |
+| **Cascade** | A cheaper model answers first and a checker double-checks it; the main model steps in only when the check fails. Good for keeping costs down. | Drafter, Checker, Main |
+| **Best of N** | The main model writes several answers and the checker picks the best. You set how many (2 to 5). | Main, Checker |
+| **Panel** | Several models (panelists) answer, and a judge writes one answer from all of them. | Main, two or more Panelists, Judge (optional) |
+| **Explore, extract, patch** *(experimental)* | Explorers look around with the tools, a summariser sums up what they found, the main model works from that, and a checker checks the answer. | Explorers, Summariser, Main, Checker |
+
+For each slot you pick a model from one searchable list of the models your connected providers offer, or **Automatic**, which lets almyty choose for each call by the rules you set (see [Routing](/models/routing)). A panelist can also be another of your agents. The **Judge** is optional: without one, the main model judges the panel. A judge is always a model.
+
+Switching modes keeps what you picked for the other slots while you edit, so switching back brings them back; saving keeps only the slots the chosen mode uses. Each slot's name, temperature, token limit and extra instructions are under its **Advanced**. Under the section's own **Advanced**, you can add other models the main model may hand a piece of work to, in any mode.
+
+Whatever the mode, the person asking gets one answer. Each step of a run records which slot took it and which model answered, including, for an **Automatic** slot, which model was picked and why.
+
+## Verification
+
+Verification is a second opinion before the agent answers. Reviewer models each try to find a reason the answer is wrong; if they find one, the agent fixes it and tries again.
+
+To set it up, open the agent's **Overview** tab and, on the **Models & verification** card, click **Configure verification**:
+
+1. Turn on **Enable verification**.
+2. Add reviewers. Each is a model with its own focus, such as "check every order fact against the tool results".
+3. Choose the **Merge policy**, which decides how the reviewers' verdicts combine.
+4. Pick the **Triggers**, which decide when they run.
+5. Set **Max revise loops** (how many times the agent may fix and retry), then click **Save verification**.
+
+| Merge policy | The answer passes when |
+|--------|------------------------|
+| All pass | every reviewer approves |
+| Majority | most reviewers approve |
+| Any fail blocks *(default)* | a single failure blocks it |
+
+| Trigger | What it does |
+|---|---|
+| **On final output (block + revise)** | The answer is checked before it goes out. On a failure the agent gets the feedback and revises, up to the revise limit (two by default), then finishes. The run records the verdict, how many revisions it used, and whether it ran out. |
+| **Every N steps (advisory)** or **On tool result (advisory)** | A check during the run that adds a course-correction note without stopping it. |
+
+Workflow agents can do the same with a Verify step.
+
+## Capabilities
+
+**Capabilities** is the list of what the agent may use. Anything not given here is refused when the agent asks for it, and nothing runs.
+
+- **Tools and APIs**: pick single tools, or tick **All tools** on an API. An API picked this way gives the agent every active tool of it, including tools added to the API later.
+- **Other agents it can call**: tick the agents it may hand work to, and it gets their answers back. With none ticked, it calls none.
+- **Machine**: labels of the computer its [runner](/runner) tools run on, such as `gpu=yes`. (A runner is a small program that lets almyty run jobs on a machine you choose.) Work goes only to an online machine with all the labels; see [Send work to a matching machine](/runner#send-work-to-a-matching-machine).
+- **Temporary agents**: let it create helper agents for part of a task, with a limit per run and a limit on how many may exist at once. A helper only gets tools this agent has, and is removed when its run ends.
+
+Several models working together inside one agent is the [work mode](#work-mode-how-it-works-and-which-models-do-it); several agents working together is this list.
+
+## Constraints
+
+Constraints are standing rules the agent follows on every run, such as "never promise a refund over $500 without approval" or "keep replies under 150 words". Add them on the agent's **Constraints** tab. The agent can also learn them: when a run fails, the lesson is turned into a new constraint automatically, for example "a run was blocked for issuing a $900 refund without approval, gate refunds over $500".
+
+![Constraints tab](/screenshots/agent-constraints.png)
+
+Constraints always apply. [Memory](/memory) is different: it is recalled only when it seems relevant.
+
+## Promote a run to a skill
+
+When a run goes well, you can save how it was done as a skill, so the agent (or another agent, or a coding assistant) can repeat it without working it out again.
+
+1. Open the agent's **Runs** tab and expand the run.
+2. Click **Promote to skill** and fill in the short form.
+
+almyty writes the run's steps down as a skill file in the open [Agent Skills](https://agentskills.io) format, and keeps versions of it. A run that called tools lists them in order ("1. Look up order status, 2. Search the knowledge base, ..."); a run that only reasoned is written as prose. On the **Skills** tab you can view, replay or delete it.
+
+![A promoted skill's SKILL.md, distilled from a run, with the tool procedure](/screenshots/agent-skill-viewer.png)
+
+Skills are shared through a [Skills gateway](/gateways/skills), and coding assistants can install them with [`@almyty/skills`](/cli/skills).
+
+## Memory
+
+Turn on **Remember between conversations** and the agent looks up what it saved earlier before it answers. For example, it can remember that a customer prefers email. Then choose:
+
+| Setting | Choices |
+|---|---|
+| **Memory account** | almyty's own memory, an outside memory service (Mem0, Zep, Supermemory and others) your organization has set up, or an account of the agent's own: anyone who can edit the agent can connect one with **Add a memory account**. |
+| **Whose memory** | **Each person has their own**, **This agent's own**, or **Shared by all agents**. |
+| **What it saves** | **Facts it learns** (after each conversation, the agent's main model picks out what is worth keeping), **Whole conversations**, or **Only when asked**. |
+| **Never save** | Rules, one per line, such as "payment details". Every save is checked first, and what the rules cover is taken out. |
+| **How long it keeps memories** | **Until deleted**, or **For a number of days**. |
+
+See [Memory](/memory#an-agents-memory-settings) for what each setting does while the agent runs.
+
+## Long runs
+
+A long run can outgrow how much text a model can read at once. Context compaction keeps it within bounds: past a token budget, older parts of the conversation are folded into a summary while the most recent messages are kept word for word. It is off unless turned on, and there is no switch for it on the edit page; it is set through the API (see below).
+
+## Related
+
+- [Approvals](/approvals): pause a run for a person's sign-off before something that cannot be undone
+- [Memory](/memory): what agents remember
+- [Gateways: Skills](/gateways/skills): share promoted skills
+- [Workflow builder](/agents/builder): lay out every step yourself
+
+## For developers
+
+Run an autonomous agent from the terminal and stream each step (tool calls, verifier verdicts, revisions) as it happens:
 
 ```bash
 $ npx @almyty/agents run support-orchestrator \
     --input '{"ticket": "Where is my order #4821?"}' --watch
 ```
 
-`--watch` streams each step (tool calls, verifier verdicts, revisions) as the run
-unfolds. See the [Agents CLI](/cli/agents) for the full command set.
+See the [Agents CLI](/cli/agents) for the full command set. Any client can also call an active agent through the [OpenAI-compatible API](/api-reference/openai-compatible).
 
-## Work mode: how it works, and which models do it
-
-The **Work mode** section follows **Personality & style** and
-**Instructions** on the agent's edit page, ahead of Memory and Capabilities.
-Pick the mode from the dropdown, and the model slots under it follow from the
-mode: each slot asks for exactly the model that mode needs.
-
-| Work mode | What happens | Slots it shows |
-|---|---|---|
-| **Single** | The main model does it all. | Main |
-| **Cascade** | A cheaper model answers first and a checker double-checks it; the main model steps in only when the check fails. | Drafter, Checker, Main |
-| **Best of N** | The main model writes several answers and the checker picks the best. You set how many (2 to 5). | Main, Checker |
-| **Panel** | Panelists answer too, and a judge writes one answer from all of them. | Main, two or more Panelists, Judge (optional) |
-| **Explore, extract, patch** *(experimental)* | Explorers look around with the tools, a summariser sums up what they found, the main model works from that, and a checker checks the answer. | Explorers, Summariser, Main, Checker |
-
-Each slot picks its model the same way as everywhere else in almyty: one
-searchable list of the models your connected providers offer, or
-**Automatic**, which routes each call by policy. A panelist can instead be
-another of your agents, answering with a run of its own. The **Judge** is
-optional: without one, the main model judges the panel. A judge is always a
-model.
-
-Switching the mode keeps what you picked for the other slots while you edit,
-so switching back brings them back; a save keeps only the slots the chosen
-mode uses. Each slot's name, temperature, token limit and extra instructions
-sit under its **Advanced**. Under the section's own **Advanced**, add other
-models the main model can hand a piece of work to, in any mode. Other agents
-it may call are picked under [Capabilities](#capabilities).
-
-Whatever the mode, the visitor, the API caller or **Try it** gets one answer:
-the checked draft or the main model's fix, the picked answer, the judge's
-answer, or the main model's answer from the brief. Each step on the run
-records which role took it and which model answered, including, for an
-automatic slot, what the router picked and why.
-
-## Verification
-
-On the agent's **Overview** tab, the **Models & verification** card has
-**Configure verification**. It opens in place: turn on **Enable verification**,
-add reviewers (each a model with its own focus instructions), choose the
-**Merge policy** that combines their verdicts, pick the **Triggers** that
-decide when they run, and set **Max revise loops**, then **Save verification**.
-
-Reviewers are refute-only: each tries to find a reason the answer is wrong. How
-their verdicts combine:
-
-| Policy | The answer passes when |
-|--------|------------------------|
-| All pass | every reviewer approves |
-| Majority | most reviewers approve |
-| Any fail blocks *(default)* | a single failure blocks it |
-
-When verification runs:
-
-- **On final output** is a gate. The answer is reviewed before it returns. On a
-  failure the agent gets the feedback and revises, up to the revise budget
-  (default two), then completes. The run records the verdict, how many revisions
-  it used, and whether it ran out of budget.
-- **Mid-run** (every N steps, or after a tool result) is advisory: it injects a
-  course-correction note without ending the run, so the agent can adjust before
-  going further.
-
-Workflow agents get the same capability as a verify node; the logic is shared
-between the two modes.
-
-## Capabilities
-
-**Capabilities** says what the agent may use and reach while it works.
-Anything it is not given here is refused when its model asks for it, with
-nothing run.
-
-- **Tools and APIs**: pick single tools, or tick **All tools** on an API. An
-  API picked this way gives the agent every active tool of it, including
-  tools added to the API later.
-- **Other agents it can call**: tick the agents it may hand work to. Its
-  model is offered each one as a tool and gets that agent's answer back. No
-  other agent is reachable; with none ticked, it calls none.
-- **Machine**: the labels of the machine its runner tools run on, such as
-  `gpu=yes`. The page lists the machines that carry them. Work goes only to
-  an online machine with all of the labels; see
-  [Send work to a matching machine](/runner#send-work-to-a-matching-machine).
-- **Temporary agents**: let it create helper agents for part of a task, with
-  a limit per run and a limit on how many may exist at once across its runs.
-  A helper only gets tools this agent has, and is removed when its run ends.
-
-Several models working together inside one agent is the
-[work mode](#work-mode-how-it-works-and-which-models-do-it); several agents
-working together is this list.
-
-## Constraints
-
-Constraints are per-agent rules that keep an agent from repeating mistakes. Add
-them on the agent's **Constraints** tab, or let the agent learn them: when a run
-fails, the lesson is distilled into a new constraint automatically. Active
-constraints are always-on, applied on every run, which makes them distinct from
-[memory](/memory), which is recalled by relevance.
-
-![Constraints tab](/screenshots/agent-constraints.png)
-
-For the Support Orchestrator the active rules read like "never promise a refund
-over $500 without approval," "Scale-plan customers get a four-hour SLA," and
-"keep replies under 150 words." A blocked run can add its own: "a run was blocked
-for issuing a $900 refund without approval, gate refunds over $500."
-
-## Promote a run to a skill
-
-When a run goes well, expand it on the **Runs** tab and choose **Promote to skill**. Fill in the inline form. almyty
-distills the run (its tool sequence and output) into an
-[Agent Skills](https://agentskills.io) `SKILL.md`, stored and versioned. From the
-**Skills** tab you can view it, replay it, or delete it. The skill is served over
-the [Skills gateway](/gateways/skills) and REST, so another agent, or your editor
-via [`@almyty/skills`](/cli/skills), can call it instead of re-deriving the steps.
-
-![A promoted skill's SKILL.md, distilled from a run, with the tool procedure](/screenshots/agent-skill-viewer.png)
-
-A reasoning-only run produces the procedure in prose; a run that called tools
-lists them in order ("1. Look up order status, 2. Search the knowledge base, ..."),
-so the skill captures the real steps.
-
-## Memory
-
-Turn on **Remember between conversations** and the agent looks up what it
-saved earlier before it answers. Then choose:
-
-| Setting | Choices |
-|---|---|
-| **Memory account** | almyty's own memory, an outside memory account (Mem0, Zep, Supermemory and others) your organization has set up, or an account of the agent's own: anyone who can edit the agent can connect one with **Add a memory account**. |
-| **Whose memory** | **Each person has their own**, **This agent's own**, or **Shared by all agents**. |
-| **What it saves** | **Facts it learns** (after each conversation, the agent's main model picks out what is worth keeping), **Whole conversations** (each exchange as said), or **Only when asked**. |
-| **Never save** | Rules, one per line, such as "payment details". Every save is checked by the agent's main model first, and what the rules cover is taken out. |
-| **How long it keeps memories** | **Until deleted**, or **For a number of days**. |
-
-See [Memory](/memory#an-agents-memory-settings) for what each setting does
-at run time.
-
-## Context compaction
-
-Long runs can outgrow the model's context window. Turn on compaction and almyty
-keeps the run bounded: once it goes over a token budget, the older history is
-folded into a cached summary while the recent messages are kept verbatim. It runs
-automatically; there is nothing to watch.
-
-## Create an autonomous agent
-
-In the UI: **Agents -> Create agent -> Autonomous**. Write the personality and
-instructions, pick the work mode and the models for its slots, then set
-memory, capabilities, run limits and an optional heartbeat, all on one page.
-Constraints and the verifier panel are on the agent's own page once it is saved.
-
-![Autonomous agent form in the builder](/screenshots/agent-builder-autonomous.png)
-
-Once it is active, invoke it from the terminal with
-`npx @almyty/agents run <name> --input '{...}'`, or from any client via the
-[OpenAI-compatible API](/api-reference/openai-compatible).
-
-## Related
-
-- [Approvals](/approvals): pause a run for human sign-off before irreversible actions
-- [Memory](/memory): persistent, embedding-based recall
-- [Gateways: Skills](/gateways/skills): serve promoted skills to any client
-- [Workflow builder](/agents/builder): the deterministic alternative
+- Verification lives in `agentConfig.verify` (`enabled`, `checkers`, `policy`: `all_pass`, `majority` or `any_fail_blocks`, `triggers`: `on_final_output`, `every_n_steps`, `on_tool_result`, `maxReviseLoops`, default 2). The same checking logic backs the workflow `verify` node.
+- Context compaction lives in `modelConfig.compaction`: `enabled`, `maxContextTokens`, `keepRecentMessages` (default 8), `strategy` (`summarize` or `truncate`), and an optional `providerId`/`model` for the summariser.
+- Promoted skills are stored as `SKILL.md` and are also served over REST.

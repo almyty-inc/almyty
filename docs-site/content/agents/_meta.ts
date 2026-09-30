@@ -3,13 +3,13 @@
 export default {
   index: 'Overview',
   autonomous: 'Autonomous agents',
-  execution: 'Roles & strategies',
+  execution: 'Roles and strategies',
   scheduling: 'Scheduling',
   webhooks: 'Webhooks',
   versioning: 'Versioning & rollback',
   'workflow-separator': { type: 'separator', title: 'Workflow builder' },
   builder: 'Visual builder',
-  'node-types': 'Node types',
+  'node-types': 'Step types',
   'pipeline-validation': 'Pipeline validation',
   'template-expressions': 'Template expressions',
 }

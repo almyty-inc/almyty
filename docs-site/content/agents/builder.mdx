@@ -1,52 +1,79 @@
-# Visual Pipeline Builder
+# Visual builder
 
-Design a workflow agent by dragging nodes onto a canvas, connecting them, and
-configuring each one. The builder is a ReactFlow canvas: what you draw is the
-agent's execution graph, run left to right at invocation time.
+The visual builder is where you draw a workflow agent: a fixed list of steps that runs the same way every time. You drag steps onto a canvas, connect them in order, and fill in what each one does. For example, a nightly report: fetch the numbers, have an AI write a short summary, check the numbers, return the summary.
+
+Use it when the same steps should always happen in the same order. If the work changes from one request to the next, an [autonomous agent](/agents/autonomous) is simpler.
 
 ![Visual pipeline builder](/screenshots/agent-builder.png)
 
-## Interface Overview
+## What is on the screen
 
-The builder has three main areas:
+| Area | Where | What it is for |
+|------|-------|----------------|
+| **Steps** | Left panel | Every kind of step you can drag onto the canvas |
+| **Canvas** | Middle | Where you arrange the steps and connect them |
+| **Step settings** | Right panel, opens when you click a step | What the selected step does |
 
-| Area | Location | Purpose |
-|------|----------|---------|
-| **Steps** | Left panel | Every step type you can drag onto the canvas |
-| **Canvas** | Center | The DAG workspace where you arrange and connect nodes |
-| **Node Config Panel** | Right panel (opens on node click) | Configure the selected node's properties |
+The **Workflow** and **Autonomous** switch at the top changes the kind of agent.
 
-Two tabs at the top switch between **Workflow** (visual DAG) and **Autonomous**
-(form-based) modes.
+## Build a workflow
 
-## Build a pipeline
-
-### Add nodes
-
-Find the node type you need in the **Steps** palette on the left and drag it onto
-the canvas. It appears with default configuration and unconnected handles.
+1. **Add steps.** Find the step you need in the **Steps** palette on the left and drag it onto the canvas.
+2. **Connect them.** Drag from the dot on the right side of one step to the dot on the left side of the next. The work flows left to right along the connections. To remove a connection, click it and press **Delete** or **Backspace**.
+3. **Fill in each step.** Click a step to open its settings on the right. What it asks for depends on the kind of step.
+4. **Save.** Click **Save** in the top bar. Until the workflow is complete, a **To finish:** line under the toolbar lists what is missing and **Save** stays disabled; see [Pipeline validation](/agents/pipeline-validation).
+5. **Test.** Click **Test**, give it some sample input and run it. The results show the output and what each step did.
 
 ![Node palette](/screenshots/agent-builder-node-palette.png)
 
-### Connect nodes
+## The kinds of step
 
-Hover a node's output handle (right side), then click and drag to another node's
-input handle (left side) and release to create an edge. Data flows left to right
-along edges at execution time. To remove a connection, click the edge and press
-**Delete** or **Backspace**.
+Each kind has its own colour on the canvas.
 
-### Configure a node
+| Step | What it does |
+|-----------|---------|
+| **Input** | What the run starts with |
+| **Output** | What the run returns |
+| **Model call** | Asks an AI model something and passes on the answer |
+| **Tool call** | Uses one of your tools, such as "look up an order" |
+| **Condition** | Goes one way or the other, depending on a yes/no check |
+| **Transform** | Fills in a text template with values from earlier steps |
+| **Loop** | Reads a list from earlier steps and passes it on, up to a limit |
+| **Parallel** | Starts several branches at the same time |
+| **Merge** | Joins branches back together |
+| **Sub-agent** | Runs another of your agents as one step |
+| **Verify** | Has one or more checker models look for mistakes in an answer |
+| **Extract context** | Sums up what earlier steps found into a short brief |
+| **Decision** | Asks a model one question with fixed answers and follows the chosen answer |
 
-Click any node to open the **Node Config Panel** on the right, then fill in the
-required fields (they vary by node type). Changes save to the draft automatically.
+See [Step types](/agents/node-types) for every setting of each.
 
-### Save and test
+## Workflow or autonomous
 
-1. Click **Save** in the top bar to persist the pipeline
-2. Validation runs automatically: nodes with errors show a red border (see [Pipeline Validation](/agents/pipeline-validation))
-3. Fix any issues listed in the error panel at the bottom
-4. Click **Test** to open the inline test panel, provide sample input, and run the pipeline
-5. Review the output and per-node execution details in the test results
+**Workflow** is the canvas above: you decide every step and the order they run in. Best when the job must be repeatable and predictable.
+
+Switching to **Autonomous** replaces the canvas with a form, in this order:
+
+- **Personality & style** and **Instructions**: who the agent is and what it should do
+- **Work mode**: Single, Cascade, Best of N, Panel, or Explore, extract, patch, with the model slots that mode needs
+- **Memory**: whether it remembers between conversations, where, for whom, what it saves and for how long
+- **Capabilities**: the tools and APIs it may use, other agents it can call, the machine its runner tools run on, and temporary agents
+- **Run limits** and an optional **Heartbeat**
+
+The AI then decides which tools to call and in what order. See [Autonomous agents](/agents/autonomous).
+
+## Moving around the canvas
+
+| Action | How |
+|--------|-----|
+| Move the view | Click and drag on an empty part of the canvas |
+| Zoom | Scroll wheel or pinch |
+| Select several | Shift + click, or drag a box around them |
+| Delete selected | Delete or Backspace |
+| Undo | Ctrl/Cmd + Z |
+| Redo | Ctrl/Cmd + Shift + Z |
+
+## For developers
 
 Once the agent is active, run it from your terminal:
 
@@ -57,67 +84,7 @@ $ npx @almyty/agents run invoice-pipeline \
 
 See the [Agents CLI](/cli/agents) for `--watch`, `--json`, and more.
 
-## Node Types
-
-The palette, headed **Steps**, lists every step type. Each has a distinct color on the canvas
-for quick identification.
-
-| Node Type | Purpose |
-|-----------|---------|
-| **Input** | Entry point: defines the JSON Schema for incoming data |
-| **Output** | Exit point: maps the final result from upstream nodes |
-| **Model call** | Sends a prompt to an LLM provider and returns the response |
-| **Tool call** | Invokes a tool with explicit parameter mapping |
-| **Condition** | Branches the pipeline based on a boolean expression (true/false edges) |
-| **Transform** | Renders a `{{...}}` template and outputs the resulting text |
-| **Loop** | Resolves an expression to an array and outputs it, capped |
-| **Parallel** | Marks a fan-out point; the branches wired to it run together |
-| **Merge** | Combines outputs from multiple upstream nodes into a single value |
-| **Sub-agent** | Invokes another agent as a step in this pipeline |
-| **Verify** | Checks a value against a spec with a panel of refute-only checker models |
-| **Extract context** | Sums up what earlier steps found into a short brief |
-| **Decision** | Asks a model one question with fixed answers and follows the chosen answer's edge |
-
-See [Node Types](/agents/node-types) for full configuration details on each.
-
-## Workflow vs Autonomous Mode
-
-### Workflow Mode
-
-The visual DAG shown above. You explicitly define every step, connection, and
-data transformation. Best for deterministic, repeatable pipelines where you need
-full control over execution order.
-
-### Autonomous Mode
-
-Switching to the **Autonomous** tab replaces the canvas with a form, in this
-order:
-
-- **Personality & style** and **Instructions**: who the agent is and what it should do
-- **Work mode**: Single, Cascade, Best of N, Panel, or Explore, extract, patch, with the model slots that mode needs
-- **Memory**: whether it remembers between conversations, in which memory account, for whom, what it saves and for how long
-- **Capabilities**: the tools and APIs it may use, other agents it can call, the machine its runner tools run on, and temporary agents
-- **Run limits** and an optional **Heartbeat**
-
-The model decides at runtime which tools to call and in what order. Best for
-open-ended tasks where rigid sequencing is unnecessary. See
-[Autonomous agents](/agents/autonomous).
-
-## Canvas Controls
-
-| Action | Shortcut |
-|--------|----------|
-| Pan | Click and drag on empty canvas |
-| Zoom | Scroll wheel or pinch |
-| Select multiple | Shift + click, or drag a selection box |
-| Delete selected | Delete or Backspace |
-| Undo | Ctrl/Cmd + Z |
-| Redo | Ctrl/Cmd + Shift + Z |
-
-## The pipeline object
-
-The graph you draw maps directly to a `pipeline` object of `nodes` and `edges`.
-This is what export/import produces, and what the builder stores:
+The graph you draw is stored as a `pipeline` object of `nodes` and `edges`, run as a directed acyclic graph. This is what export and import produce:
 
 ```json
 {
@@ -135,5 +102,4 @@ This is what export/import produces, and what the builder stores:
 }
 ```
 
-Each node's canvas position is stored in its `position` field (`{ x, y }`) and is
-included in export/import payloads.
+Each node's canvas position is stored in its `position` field (`{ x, y }`) and is included in export and import. The Input step's data is described with a JSON Schema; the Output step maps the final result from upstream steps.
