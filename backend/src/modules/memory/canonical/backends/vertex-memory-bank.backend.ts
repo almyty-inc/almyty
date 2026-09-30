@@ -244,7 +244,9 @@ export class VertexMemoryBankBackend implements MemoryBackend {
    * is the durable production setup.
    */
   private async resolveBearer(creds: BackendCredentials): Promise<string | null> {
-    const sa = (creds as any).serviceAccountJson;
+    // A credential stores the key file as the JSON text it was pasted as.
+    const raw = (creds as any).serviceAccountJson;
+    const sa = typeof raw === 'string' ? parseServiceAccount(raw) : raw;
     if (sa) {
       const fingerprint = JSON.stringify({ client_email: sa.client_email, private_key_id: sa.private_key_id });
       const cached = this.authCache.get(fingerprint);
@@ -268,4 +270,14 @@ export class VertexMemoryBankBackend implements MemoryBackend {
 
 function scopeToUserId(scope: ScopeRef): string {
   return `${scope.scope_type}_${scope.scope_id}`;
+}
+
+/** The key file a credential holds as text; null when it is not JSON. */
+function parseServiceAccount(text: string): Record<string, any> | null {
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
 }

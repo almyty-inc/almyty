@@ -178,7 +178,8 @@ export class ZepBackend implements MemoryBackend {
       embedding: null, embedding_dim: null, embedding_model: null,
       embedding_status: 'skipped', embedding_error: null,
       tags: Array.isArray(meta.tags) ? meta.tags : [],
-      metadata: meta, file_refs: [],
+      // The id Zep deletes it by, on a listed memory too (nativeId).
+      metadata: { ...(raw?.uuid ? { zep_uuid: raw.uuid } : {}), ...meta }, file_refs: [],
       tier: meta.tier ?? 'long',
       valid_from: raw?.validAt ? new Date(raw.validAt) : (raw?.createdAt ? new Date(raw.createdAt) : now),
       valid_until: raw?.invalidAt ? new Date(raw.invalidAt) : null,

@@ -415,6 +415,88 @@ export const OAUTH2_SIGN_IN_CONNECTOR: ConnectorDefinition = {
   docsUrl: null,
 };
 
+/**
+ * The memory services the memory module has an adapter for
+ * (memory/canonical/backends). Each connector's key IS the adapter's id,
+ * so a credential made from one is a memory account of that service: the
+ * Memory page lists them, an agent picks one, and a move names them. An
+ * organization can hold several accounts of one service.
+ *
+ * Probes checked 2026-09-30 against the live APIs with a bogus key, each
+ * answering 401 (the route exists and reads the key the way given here).
+ */
+export const MEMORY_CONNECTORS: ConnectorDefinition[] = [
+  {
+    key: 'mem0',
+    kind: 'memory',
+    displayName: 'Mem0',
+    description: 'Long-term memory for agents, kept by Mem0.',
+    connect: [{ type: 'api_key', label: 'API key', schema: API_KEY_SCHEMA, credentialType: CredentialType.MEMORY_BACKEND, keyPageUrl: 'https://app.mem0.ai/dashboard/api-keys' }],
+    capabilities: ['store', 'recall'],
+    validation: { kind: 'http', url: 'https://api.mem0.ai/v1/ping/', method: 'GET', auth: 'header', headerName: 'Authorization', headerPrefix: 'Token ' },
+    keyPageUrl: 'https://app.mem0.ai/dashboard/api-keys',
+    docsUrl: 'https://docs.mem0.ai/api-reference',
+  },
+  {
+    key: 'zep',
+    kind: 'memory',
+    displayName: 'Zep',
+    description: 'A temporal knowledge graph of what your agents learn, kept by Zep.',
+    connect: [{ type: 'api_key', label: 'API key', schema: API_KEY_SCHEMA, credentialType: CredentialType.MEMORY_BACKEND, keyPageUrl: 'https://app.getzep.com/' }],
+    capabilities: ['store', 'recall'],
+    validation: { kind: 'http', url: 'https://api.getzep.com/api/v2/users-ordered?pageSize=1', method: 'GET', auth: 'header', headerName: 'Authorization', headerPrefix: 'Api-Key ' },
+    keyPageUrl: 'https://app.getzep.com/',
+    docsUrl: 'https://help.getzep.com/',
+  },
+  {
+    key: 'supermemory',
+    kind: 'memory',
+    displayName: 'Supermemory',
+    description: 'Memories and documents for agents, kept by Supermemory.',
+    connect: [{ type: 'api_key', label: 'API key', schema: API_KEY_SCHEMA, credentialType: CredentialType.MEMORY_BACKEND, keyPageUrl: 'https://console.supermemory.ai/' }],
+    capabilities: ['store', 'recall'],
+    validation: { kind: 'http', url: 'https://api.supermemory.ai/v3/documents/list', method: 'POST', auth: 'bearer', body: { limit: 1 } },
+    keyPageUrl: 'https://console.supermemory.ai/',
+    docsUrl: 'https://docs.supermemory.ai/',
+  },
+  {
+    key: 'anthropic-memory-tool',
+    kind: 'memory',
+    displayName: 'Claude memory tool',
+    description: "Memories kept as files in your Anthropic account, through Claude's memory tool.",
+    connect: [{ type: 'api_key', label: 'API key', schema: API_KEY_SCHEMA, credentialType: CredentialType.MEMORY_BACKEND, keyPageUrl: 'https://console.anthropic.com/settings/keys' }],
+    capabilities: ['store', 'recall'],
+    validation: { kind: 'http', url: 'https://api.anthropic.com/v1/models', auth: 'header', headerName: 'x-api-key', headers: { 'anthropic-version': '2023-06-01' } },
+    keyPageUrl: 'https://console.anthropic.com/settings/keys',
+    docsUrl: 'https://docs.claude.com/en/docs/agents-and-tools/tool-use/memory-tool',
+  },
+  {
+    key: 'vertex-memory-bank',
+    kind: 'memory',
+    displayName: 'Vertex AI Memory Bank',
+    description: 'Memories kept by a Vertex AI Agent Engine, signed in with a service account.',
+    connect: [{
+      type: 'service_account',
+      label: 'Service account JSON',
+      schema: {
+        type: 'object',
+        properties: {
+          serviceAccountJson: { type: 'string', title: 'Service account key (JSON)', 'x-secret': true, minLength: 20 },
+          engine: { type: 'string', title: 'Agent Engine', description: 'projects/<project>/locations/<region>/reasoningEngines/<id>' },
+          location: { type: 'string', title: 'Region', default: 'us-central1' },
+        },
+        required: ['serviceAccountJson', 'engine'],
+      },
+      credentialType: CredentialType.MEMORY_BACKEND,
+      keyPageUrl: 'https://console.cloud.google.com/iam-admin/serviceaccounts',
+    }],
+    capabilities: ['store', 'recall'],
+    validation: { kind: 'gcp_service_account' },
+    keyPageUrl: 'https://console.cloud.google.com/iam-admin/serviceaccounts',
+    docsUrl: 'https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/memory-bank/overview',
+  },
+];
+
 const OTHER_CONNECTORS: ConnectorDefinition[] = [
   REGISTRY_S3_CONNECTOR,
   {
@@ -1092,6 +1174,7 @@ export const BUILTIN_CONNECTORS: readonly ConnectorDefinition[] = [
   ...DEPLOYMENT_CONNECTORS,
   ...CLOUD_CONNECTORS,
   ...CHANNEL_CONNECTORS,
+  ...MEMORY_CONNECTORS,
   ...OTHER_CONNECTORS,
 ];
 
