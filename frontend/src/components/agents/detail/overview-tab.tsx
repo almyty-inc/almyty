@@ -189,7 +189,15 @@ export function OverviewTab({
         setTestError(msg)
         errorNotif('Run failed', msg)
       })
-      .finally(() => setTestLoading(false))
+      .finally(() => {
+        setTestLoading(false)
+        // The run Try it made belongs in Recent runs and on the Runs tab now,
+        // not after a reload: both read these keys.
+        for (const key of ['agent-runs', 'agent-executions', 'agent', 'agent-latest-run']) {
+          queryClient.invalidateQueries({ queryKey: [key, agent.id] })
+        }
+        queryClient.invalidateQueries({ queryKey: ['agents'] })
+      })
   }
 
   return (
