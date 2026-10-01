@@ -54,6 +54,7 @@ const summary: VisitorDataSummary = {
   memories: 1,
   files: 2,
   storedReplies: 3,
+  unanswered: 4,
   runs: 2,
   recent: [
     { id: 'conv-2', title: 'Refund for order 4411', messages: 5, firstAt: '2026-09-20T09:00:00.000Z', lastAt: '2026-09-20T10:00:00.000Z' },
@@ -66,7 +67,7 @@ beforeEach(() => {
   vi.mocked(visitorDataApi.lookup).mockReset().mockResolvedValue(summary)
   vi.mocked(visitorDataApi.export).mockReset().mockResolvedValue({ conversations: [] })
   vi.mocked(visitorDataApi.erase).mockReset().mockResolvedValue({
-    conversations: 2, messages: 9, runs: 2, toolCalls: 1, memories: 1, files: 2, storedReplies: 3, visitors: 0, memoriesPending: 0,
+    conversations: 2, messages: 9, runs: 2, toolCalls: 1, memories: 1, files: 2, storedReplies: 3, unanswered: 1, visitors: 0, memoriesPending: 0,
   })
   vi.mocked(downloadBlob).mockReset()
   // What Radix Select asks of the DOM, which jsdom does not have.
@@ -132,6 +133,8 @@ describe('VisitorDataRequestPage', () => {
     expect(counts).toHaveTextContent('Messages9')
     expect(counts).toHaveTextContent('Memories1')
     expect(counts).toHaveTextContent('Files2')
+    // Messages the agent never answered (over a limit, refused) are theirs too.
+    expect(counts).toHaveTextContent('Messages not answered4')
     const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
     expect(rows.map((r) => r.textContent)).toEqual([
       expect.stringMatching(/^Refund for order 44115/),
@@ -169,7 +172,7 @@ describe('VisitorDataRequestPage', () => {
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete their data' }))
     await waitFor(() => expect(visitorDataApi.erase).toHaveBeenCalledWith('agent-1', { id: 'dana@example.com' }))
     expect(await screen.findByTestId('visitor-data-erased')).toHaveTextContent(
-      'Removed 2 conversations, 9 messages, 1 memory, 2 files, 3 saved replies, 2 runs for dana@example.com',
+      'Removed 2 conversations, 9 messages, 1 memory, 2 files, 3 saved replies, 1 message not answered, 2 runs for dana@example.com',
     )
   })
 

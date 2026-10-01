@@ -54,7 +54,7 @@ A file a web chat or widget visitor uploads waits, with no conversation, for the
 
 ## Erasure on request
 
-Retention is the schedule; a person can also ask for their data to go now. The web chat and widget offer it to their visitors, and owners and admins answer anyone else from the agent's Channels tab (`/agents/:id/channels/visitor-data`). Either way `VisitorDataService.erase` removes the person's conversations, messages, runs with their tool executions, files (stored objects included), memories in almyty's store and in an outside memory service, channel events and visitor rows at once, whatever the retention periods say, and records a `visitor_data_erase` audit entry with counts only. See `docs/channels.md` (Visitor data).
+Retention is the schedule; a person can also ask for their data to go now. The web chat and widget offer it to their visitors, and whoever may manage the agent (an organization owner or admin, or the member who owns it) answers anyone else from the agent's Channels tab (`/agents/:id/channels/visitor-data`). Either way `VisitorDataService.erase` removes the person's conversations, messages, runs with their tool executions, files (stored objects included), memories in almyty's store and in an outside memory service, channel events and visitor rows at once, whatever the retention periods say, and records a `visitor_data_erase` audit entry with counts only. See `docs/channels.md` (Visitor data).
 
 ## Entity snapshots
 

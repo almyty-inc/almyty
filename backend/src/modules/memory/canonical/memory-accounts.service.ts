@@ -261,6 +261,39 @@ export class MemoryAccountsService {
   }
 
   /**
+   * The text of these outside memories, read back from their service, for
+   * a visitor's download (VisitorDataService). `ids` are memory_expiries
+   * rows of this organization; any other id is ignored. Each read goes
+   * through the service's own client, so the organization's egress rules
+   * apply, and is given `timeoutMs`. A memory the service cannot give back
+   * (down, refused, slow, or no way to read one memory) maps to null.
+   */
+  async read(organizationId: string, ids: string[], timeoutMs = 5_000): Promise<Map<string, string | null>> {
+    const out = new Map<string, string | null>();
+    if (!ids.length) return out;
+    const rows = await this.expiryRepo.find({ where: { id: In(ids), organizationId } });
+    for (const row of rows) {
+      let timer: NodeJS.Timeout | undefined;
+      try {
+        const creds = row.credentialId ? await this.agentCredentials(row) : undefined;
+        const item = await Promise.race([
+          this.router.getOn(row.backendId, row.nativeId, orgScope(row.organizationId), creds),
+          new Promise<null>((resolve) => {
+            timer = setTimeout(() => resolve(null), timeoutMs);
+          }),
+        ]);
+        out.set(row.id, typeof item?.content === 'string' ? item.content : null);
+      } catch (e: any) {
+        out.set(row.id, null);
+        this.logger.warn(`could not read memory ${row.memoryId} from ${row.backendId}: ${e?.message ?? e}`);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
+    return out;
+  }
+
+  /**
    * Delete these outside memories now, through their service's API: a
    * visitor's erasure (VisitorDataService). `ids` are memory_expiries rows
    * of this organization; any other id is ignored. A delete the service

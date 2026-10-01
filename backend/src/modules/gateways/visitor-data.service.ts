@@ -34,6 +34,13 @@ export interface VisitorFootprint {
   runIds: string[];
   conversationIds: string[];
   widgetThreads: Array<{ gatewayId: string; threadId: string }>;
+  /**
+   * Messages the person sent on a messaging channel that never became a
+   * run (their sender was over the message limit, the spend limit was
+   * reached, the run was refused): the inbound delivery rows, found by the
+   * sender the channel recorded on them.
+   */
+  unansweredEventIds: string[];
 }
 
 /** What is held for a person, in counts and dates. No content. */
@@ -46,6 +53,8 @@ export interface VisitorDataSummary {
   memories: number;
   files: number;
   storedReplies: number;
+  /** Messages they sent that the agent never answered. */
+  unanswered: number;
   runs: number;
   /** The most recent conversations, newest first, as counts and dates. */
   recent: Array<{ id: string; title: string | null; messages: number; firstAt: string | null; lastAt: string | null }>;
@@ -60,6 +69,8 @@ export interface VisitorErasure {
   memories: number;
   files: number;
   storedReplies: number;
+  /** Messages they sent that the agent never answered. */
+  unanswered: number;
   visitors: number;
   /**
    * Memories kept in an outside memory service that did not answer the
@@ -77,9 +88,11 @@ export interface VisitorDataExport {
     startedAt: Date;
     messages: Array<{ role: string; content: string; createdAt: Date }>;
   }>;
-  memories: Array<{ id: string; keptIn: string; content?: string; createdAt: Date | string }>;
+  memories: Array<{ id: string; keptIn: string; content?: string; note?: string; createdAt: Date | string }>;
   files: Array<{ id: string; name: string; mimeType: string; size: number; createdAt: Date }>;
   storedReplies: Array<{ createdAt: Date; direction: string; message?: string }>;
+  /** Messages they sent that the agent never answered, by date and why. */
+  unanswered: Array<{ receivedAt: Date; reason: string | null }>;
   runs: Array<{ id: string; status: string; startedAt: Date; lastActiveAt: Date }>;
 }
 
@@ -112,7 +125,7 @@ export function a2aCallerCandidates(value: string): string[] {
 
 /** An empty footprint: nothing found. */
 export function emptyFootprint(organizationId: string, gatewayIds: string[] = []): VisitorFootprint {
-  return { organizationId, gatewayIds, endUserIds: [], runIds: [], conversationIds: [], widgetThreads: [] };
+  return { organizationId, gatewayIds, endUserIds: [], runIds: [], conversationIds: [], widgetThreads: [], unansweredEventIds: [] };
 }
 
 /** Several footprints in one organization as one, each id once. Another organization's are dropped. */
@@ -128,6 +141,7 @@ export function mergeFootprints(organizationId: string, parts: VisitorFootprint[
     runIds: uniq(own.flatMap((p) => p.runIds)),
     conversationIds: uniq(own.flatMap((p) => p.conversationIds)),
     widgetThreads: [...threads.values()],
+    unansweredEventIds: uniq(own.flatMap((p) => p.unansweredEventIds)),
   };
 }
 
@@ -143,6 +157,8 @@ interface HeldMemory {
   content: string | null;
   createdAt: Date | string;
   keptIn: string;
+  /** Why an outside memory's text is missing from a download. */
+  note?: string;
 }
 
 /**
@@ -164,7 +180,8 @@ interface HeldMemory {
  * sent yet, or produced by those runs; the memories in the visitor's own
  * memory and those their runs wrote anywhere else, in almyty's store or
  * an outside memory service; the stored widget replies and channel
- * deliveries; and the web chat visitor rows.
+ * deliveries, including the messages that never became a run; and the
+ * web chat visitor rows.
  */
 @Injectable()
 export class VisitorDataService {
@@ -262,32 +279,31 @@ export class VisitorDataService {
 
   /**
    * A messaging-channel sender: the platform's id for them, as the channel
-   * recorded it on the run. Phone-number channels match on the digits
-   * ("+1 415 555 0100" finds "whatsapp:+14155550100"); email matches the
-   * address inside a "Name <address>" sender too.
+   * recorded it on each run, and on each delivery of theirs that never
+   * became one. Phone-number channels match on the digits ("+1 415 555
+   * 0100" finds "whatsapp:+14155550100"); email matches the address inside
+   * a "Name <address>" sender too.
    */
   async forChannelSender(channel: VisitorChannel, type: string, senderId: string): Promise<VisitorFootprint> {
     const value = (senderId || '').trim();
     if (!value) return emptyFootprint(channel.organizationId, [channel.id]);
-    const digits = value.replace(/\D/g, '');
-    const address = value.toLowerCase();
     const runs = await this.runsWhere(channel.organizationId, (qb) =>
-      qb.andWhere("run.metadata->>'gatewayId' = :gatewayId", { gatewayId: channel.id }).andWhere(
-        new Brackets((w) => {
-          w.where("run.metadata->>'channelUserId' = :sender", { sender: value });
-          if (PHONE_CHANNELS.has(type) && digits.length >= 5 && !value.includes('@')) {
-            w.orWhere("regexp_replace(run.metadata->>'channelUserId', '[^0-9]', '', 'g') = :digits", { digits });
-          }
-          if (ADDRESS_CHANNELS.has(type) && value.includes('@')) {
-            w.orWhere("lower(run.metadata->>'channelUserId') = :address", { address }).orWhere(
-              "position(:bracketed in lower(run.metadata->>'channelUserId')) > 0",
-              { bracketed: `<${address}>` },
-            );
-          }
-        }),
-      ),
+      qb
+        .andWhere("run.metadata->>'gatewayId' = :gatewayId", { gatewayId: channel.id })
+        .andWhere(senderMatches("run.metadata->>'channelUserId'", type, value)),
     );
-    return this.complete(channel, runs);
+    const unanswered = await this.manager
+      .getRepository(ChannelEvent)
+      .createQueryBuilder('event')
+      .select('event.id')
+      .where('event.organizationId = :organizationId', { organizationId: channel.organizationId })
+      .andWhere('event.gatewayId = :gatewayId', { gatewayId: channel.id })
+      .andWhere("event.direction = 'inbound'")
+      .andWhere('event.runId IS NULL')
+      .andWhere(senderMatches('event.senderId', type, value))
+      .take(EXPORT_ROW_LIMIT)
+      .getMany();
+    return this.complete(channel, runs, { unansweredEventIds: unanswered.map((e) => e.id) });
   }
 
   /** An A2A caller: the credential the A2A channel stamped on each run it started for them. */
@@ -317,7 +333,7 @@ export class VisitorDataService {
   private async complete(
     channel: VisitorChannel,
     runs: Array<Pick<AgentRun, 'id' | 'conversationId'>>,
-    extra: Partial<Pick<VisitorFootprint, 'endUserIds' | 'conversationIds' | 'widgetThreads'>> = {},
+    extra: Partial<Pick<VisitorFootprint, 'endUserIds' | 'conversationIds' | 'widgetThreads' | 'unansweredEventIds'>> = {},
   ): Promise<VisitorFootprint> {
     const all = new Map(runs.map((r) => [r.id, r]));
     let frontier = runs.map((r) => r.id);
@@ -338,6 +354,7 @@ export class VisitorDataService {
       runIds: [...all.keys()],
       conversationIds: [...conversationIds],
       widgetThreads: extra.widgetThreads ?? [],
+      unansweredEventIds: extra.unansweredEventIds ?? [],
     };
   }
 
@@ -345,10 +362,11 @@ export class VisitorDataService {
 
   /** What is held, in counts and dates. */
   async summarize(footprint: VisitorFootprint): Promise<VisitorDataSummary> {
-    const [perConversation, memories, storedReplies, files, conversations] = await Promise.all([
+    const [perConversation, memories, storedReplies, unanswered, files, conversations] = await Promise.all([
       this.messageStats(footprint),
       this.memoriesOf(footprint).then((m) => m.length),
       this.storedRepliesQuery(footprint).getCount(),
+      this.unansweredQuery(footprint).getCount(),
       this.filesOf(footprint).then((f) => f.length),
       this.conversationsOf(footprint),
     ]);
@@ -367,7 +385,7 @@ export class VisitorDataService {
       .sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt)));
     const dates = recent.flatMap((c) => [c.firstAt, c.lastAt]).filter((d): d is string => !!d).sort();
     const found =
-      footprint.runIds.length + conversations.length + footprint.endUserIds.length + memories + storedReplies + files > 0;
+      footprint.runIds.length + conversations.length + footprint.endUserIds.length + memories + storedReplies + unanswered + files > 0;
     return {
       found,
       conversations: conversations.length,
@@ -377,6 +395,7 @@ export class VisitorDataService {
       memories,
       files,
       storedReplies,
+      unanswered,
       runs: footprint.runIds.length,
       recent: recent.slice(0, SUMMARY_RECENT),
     };
@@ -396,10 +415,11 @@ export class VisitorDataService {
   /** Everything held, for the person to keep. */
   async export(footprint: VisitorFootprint): Promise<VisitorDataExport> {
     const conversations = await this.conversationsOf(footprint);
-    const [byConversation, held, replies, runs] = await Promise.all([
+    const [byConversation, held, replies, unanswered, runs] = await Promise.all([
       this.transcripts(conversations.map((c) => c.id)),
       this.memoriesAndFiles(footprint),
       this.storedRepliesQuery(footprint).orderBy('event.createdAt', 'ASC').limit(EXPORT_ROW_LIMIT).getMany(),
+      this.unansweredQuery(footprint).orderBy('event.createdAt', 'ASC').limit(EXPORT_ROW_LIMIT).getMany(),
       footprint.runIds.length
         ? this.runRepository.find({
             where: { id: In(footprint.runIds), organizationId: footprint.organizationId },
@@ -425,6 +445,9 @@ export class VisitorDataService {
         direction: e.direction,
         ...(e.direction === 'outbound' && typeof e.payload?.message === 'string' ? { message: e.payload.message } : {}),
       })),
+      // The platform's raw delivery also carries the owner's workspace and
+      // bot ids, so these are listed by date and why, not reproduced.
+      unanswered: unanswered.map((e) => ({ receivedAt: e.createdAt, reason: e.errorMessage ?? null })),
       runs: runs.map((r) => ({ id: r.id, status: r.status, startedAt: r.createdAt, lastActiveAt: r.updatedAt })),
     };
   }
@@ -435,14 +458,16 @@ export class VisitorDataService {
    * conversations they already show.
    */
   async memoriesAndFiles(footprint: VisitorFootprint): Promise<Pick<VisitorDataExport, 'memories' | 'files'>> {
-    const [memories, files] = await Promise.all([this.memoriesOf(footprint), this.filesOf(footprint)]);
+    const [memories, files] = await Promise.all([this.memoriesOf(footprint, { readOutside: true }), this.filesOf(footprint)]);
     return {
-      // A memory in an outside service is listed by id and service: its
-      // text is kept by that service, not by almyty.
+      // A memory in an outside service is read from that service. When it
+      // cannot be (it is down, or has no way to read one memory back), the
+      // memory is listed by id and service with a note saying so.
       memories: memories.map((m) => ({
         id: m.id,
         keptIn: m.keptIn,
         ...(m.content !== null ? { content: m.content } : {}),
+        ...(m.note ? { note: m.note } : {}),
         createdAt: m.createdAt,
       })),
       files: files.map((f) => ({ id: f.id, name: f.name, mimeType: f.mimeType, size: f.size, createdAt: f.createdAt })),
@@ -473,6 +498,7 @@ export class VisitorDataService {
       memories: 0,
       files: 0,
       storedReplies: 0,
+      unanswered: 0,
       visitors: 0,
       memoriesPending: 0,
     };
@@ -499,6 +525,11 @@ export class VisitorDataService {
       if (replies.length) {
         const removed = await tx.getRepository(ChannelEvent).delete({ id: In(replies.map((r) => r.id)) });
         out.storedReplies = removed.affected ?? replies.length;
+      }
+      const unanswered = await this.unansweredQuery(footprint, tx).select('event.id').getMany();
+      if (unanswered.length) {
+        const removed = await tx.getRepository(ChannelEvent).delete({ id: In(unanswered.map((e) => e.id)) });
+        out.unanswered = removed.affected ?? unanswered.length;
       }
       if (runIds.length) {
         const calls = await tx.getRepository(ToolExecution).delete({ runId: In(runIds), organizationId });
@@ -599,7 +630,7 @@ export class VisitorDataService {
     );
   }
 
-  private async memoriesOf(footprint: VisitorFootprint): Promise<HeldMemory[]> {
+  private async memoriesOf(footprint: VisitorFootprint, opts: { readOutside?: boolean } = {}): Promise<HeldMemory[]> {
     const native = this.nativeMemoryFilter(footprint);
     const [own, outside] = await Promise.all([
       native
@@ -610,9 +641,23 @@ export class VisitorDataService {
         : Promise.resolve([] as Array<{ id: string; content: string; created_at: Date }>),
       this.outsideMemoryRows(footprint),
     ]);
+    const accounts = opts.readOutside && outside.length ? this.memoryAccounts() : null;
+    const read = accounts ? await accounts.read(footprint.organizationId, outside.map((m) => m.id)) : new Map<string, string | null>();
     return [
       ...own.map((m) => ({ id: m.id, content: m.content, createdAt: m.created_at, keptIn: memoryAccountName(NATIVE_MEMORY_ACCOUNT) })),
-      ...outside.map((m) => ({ id: m.memory_id, content: null, createdAt: m.created_at, keptIn: memoryAccountName(m.backend_id) })),
+      ...outside.map((m) => {
+        const content = read.get(m.id) ?? null;
+        const keptIn = memoryAccountName(m.backend_id);
+        return {
+          id: m.memory_id,
+          content,
+          createdAt: m.created_at,
+          keptIn,
+          ...(opts.readOutside && content === null
+            ? { note: `Kept in ${keptIn}, which could not give its text back just now. It is deleted with the rest when their data is deleted.` }
+            : {}),
+        };
+      }),
     ];
   }
 
@@ -687,7 +732,21 @@ export class VisitorDataService {
     );
   }
 
-  private memoryAccounts(): Pick<MemoryAccountsService, 'forget'> | null {
+  /** The person's inbound deliveries that never became a run, on the footprint's channels. */
+  private unansweredQuery(footprint: VisitorFootprint, manager: EntityManager = this.manager): SelectQueryBuilder<ChannelEvent> {
+    const qb = manager
+      .getRepository(ChannelEvent)
+      .createQueryBuilder('event')
+      .where('event.organizationId = :organizationId', { organizationId: footprint.organizationId })
+      .andWhere("event.direction = 'inbound'")
+      .andWhere('event.runId IS NULL');
+    if (!footprint.unansweredEventIds.length || !footprint.gatewayIds.length) return qb.andWhere('1 = 0');
+    return qb
+      .andWhere('event.gatewayId IN (:...gatewayIds)', { gatewayIds: footprint.gatewayIds })
+      .andWhere('event.id IN (:...unansweredIds)', { unansweredIds: footprint.unansweredEventIds });
+  }
+
+  private memoryAccounts(): Pick<MemoryAccountsService, 'forget' | 'read'> | null {
     if (!this.moduleRef) return null;
     try {
       return this.moduleRef.get(MemoryAccountsService, { strict: false });
@@ -703,4 +762,25 @@ function deletedCount(result: unknown): number {
     return result[1];
   }
   return Array.isArray(result) ? result.length : 0;
+}
+
+/**
+ * Whether the sender id in `column` is the one the owner typed, by the
+ * channel's rules: the exact id; on a phone channel, the same digits; on
+ * an address channel, the address with any case, or inside "Name <address>".
+ */
+export function senderMatches(column: string, type: string, value: string): Brackets {
+  const digits = value.replace(/\D/g, '');
+  const address = value.toLowerCase();
+  return new Brackets((w) => {
+    w.where(`${column} = :sender`, { sender: value });
+    if (PHONE_CHANNELS.has(type) && digits.length >= 5 && !value.includes('@')) {
+      w.orWhere(`regexp_replace(${column}, '[^0-9]', '', 'g') = :digits`, { digits });
+    }
+    if (ADDRESS_CHANNELS.has(type) && value.includes('@')) {
+      w.orWhere(`lower(${column}) = :address`, { address }).orWhere(`position(:bracketed in lower(${column})) > 0`, {
+        bracketed: `<${address}>`,
+      });
+    }
+  });
 }

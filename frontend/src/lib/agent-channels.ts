@@ -729,6 +729,8 @@ export interface VisitorDataSummary {
   memories: number
   files: number
   storedReplies: number
+  /** Messages they sent that the agent never answered (over a limit, refused). */
+  unanswered: number
   runs: number
   recent: Array<{ id: string; title: string | null; messages: number; firstAt: string | null; lastAt: string | null }>
   /** The channels they were found on. */
@@ -744,6 +746,8 @@ export interface VisitorErasure {
   memories: number
   files: number
   storedReplies: number
+  /** Messages they sent that the agent never answered. */
+  unanswered: number
   visitors: number
   /** Memories in an outside memory service it could not reach yet; retried every hour. */
   memoriesPending: number

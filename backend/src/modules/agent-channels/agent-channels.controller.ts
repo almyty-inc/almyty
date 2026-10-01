@@ -126,14 +126,17 @@ export class AgentChannelsController {
 
   // ─── Visitor data ────────────────────────────────────────────────────
   //
-  // An owner or admin answering one person's request for their data:
-  // look them up on the agent's channels, send them their copy, or erase
-  // it. POST throughout, so what identifies the person stays out of URLs
-  // and access logs.
+  // Answering one person's request for their data: look them up on the
+  // agent's channels, send them their copy, or erase it. Open to anyone
+  // who may manage the agent, the rule agent editing uses: an admin or
+  // owner of the organization, or a member who owns the agent (the
+  // service checks, so a member is refused for an agent not theirs).
+  // POST throughout, so what identifies the person stays out of URLs and
+  // access logs.
 
   @Post(':agentId/visitor-data/lookup')
   @HttpCode(200)
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: "What this agent's channels hold about one person, in counts and dates" })
   async lookupVisitorData(
     @Param('agentId', ParseUUIDPipe) agentId: string,
@@ -145,7 +148,7 @@ export class AgentChannelsController {
 
   @Post(':agentId/visitor-data/export')
   @HttpCode(200)
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: "Everything this agent's channels hold about one person, as a JSON file" })
   async exportVisitorData(
     @Param('agentId', ParseUUIDPipe) agentId: string,
@@ -160,7 +163,7 @@ export class AgentChannelsController {
 
   @Post(':agentId/visitor-data/erase')
   @HttpCode(200)
-  @Roles('admin', 'owner')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: "Erase everything this agent's channels hold about one person" })
   async eraseVisitorData(
     @Param('agentId', ParseUUIDPipe) agentId: string,

@@ -8,15 +8,15 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { WithAgent, channelKeys, channelsTabPath } from '@/components/channels/channel-page-loader'
 import { VisitorDataRequestPage } from '@/components/channels/visitor-data-request'
-import { useOrganizationRole } from '@/hooks/use-organization-role'
+import { useCanManageAgent } from '@/hooks/use-organization-role'
 import { agentChannelsApi } from '@/lib/agent-channels'
 import type { Agent } from '@/types'
 
 /**
  * /agents/:id/channels/visitor-data -- answering one person's request for
- * their data on the agent's channels. Owners and admins only; the server
- * refuses anyone else, so the page says so instead of offering a form
- * that cannot work.
+ * their data on the agent's channels. For whoever may manage the agent:
+ * an owner or admin, or the member who owns it. The server refuses anyone
+ * else, so the page says so instead of offering a form that cannot work.
  */
 export function AgentVisitorDataPage() {
   const { id = '' } = useParams<{ id: string }>()
@@ -24,7 +24,7 @@ export function AgentVisitorDataPage() {
 }
 
 function Loaded({ agent }: { agent: Agent }) {
-  const { canManage } = useOrganizationRole()
+  const canManage = useCanManageAgent(agent.createdBy)
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: channelKeys.list(agent.id),
     queryFn: () => agentChannelsApi.list(agent.id),
@@ -36,8 +36,8 @@ function Loaded({ agent }: { agent: Agent }) {
         <EmptyState
           variant="panel"
           icon={ShieldCheck}
-          title="Only owners and admins answer data requests"
-          description="Ask an owner or admin of your organization to look the person up."
+          title="Only the agent's owner, or an owner or admin, answers data requests"
+          description="Ask the person who owns this agent, or an owner or admin of your organization, to look the person up."
         />
       </FormPage>
     )

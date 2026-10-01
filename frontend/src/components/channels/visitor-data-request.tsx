@@ -54,6 +54,7 @@ export function heldLine(counts: Partial<Record<keyof VisitorErasure | keyof Vis
   add(counts.memories, 'memory', 'memories')
   add(counts.files, 'file')
   add(counts.storedReplies, 'saved reply', 'saved replies')
+  add(counts.unanswered, 'message not answered', 'messages not answered')
   add(counts.runs, 'run')
   return parts.length ? parts.join(', ') : 'nothing'
 }
@@ -263,12 +264,13 @@ export function VisitorDataRequestPage({ agent, channels }: VisitorDataRequestPa
               </Badge>
             ))}
           </div>
-          <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3" data-testid="visitor-data-summary">
+          <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4" data-testid="visitor-data-summary">
             <Held label="Conversations" value={shown.summary.conversations} />
             <Held label="Messages" value={shown.summary.messages} />
             <Held label="Memories" value={shown.summary.memories} />
             <Held label="Files" value={shown.summary.files} />
             <Held label="Saved replies" value={shown.summary.storedReplies} />
+            <Held label="Messages not answered" value={shown.summary.unanswered} />
             <Held label="Runs" value={shown.summary.runs} />
           </dl>
           {shown.summary.recent.length > 0 ? (

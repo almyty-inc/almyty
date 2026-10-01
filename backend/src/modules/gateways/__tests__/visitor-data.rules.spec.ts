@@ -43,7 +43,7 @@ describe('visitor data rules', () => {
   });
 
   it("merges one person's footprints on several channels, each id once, and drops another organization's", () => {
-    const web = { ...emptyFootprint('org-1', ['gw-web']), endUserIds: ['eu-1'], runIds: ['r1', 'r2'], conversationIds: ['c1'] };
+    const web = { ...emptyFootprint('org-1', ['gw-web']), endUserIds: ['eu-1'], runIds: ['r1', 'r2'], conversationIds: ['c1'], unansweredEventIds: ['ev-1'] };
     const widget = { ...emptyFootprint('org-1', ['gw-widget']), runIds: ['r2', 'r3'], widgetThreads: [{ gatewayId: 'gw-widget', threadId: 't' }] };
     const elsewhere = { ...emptyFootprint('org-2', ['gw-x']), runIds: ['r9'], conversationIds: ['c9'] };
     expect(mergeFootprints('org-1', [web, widget, widget, elsewhere])).toEqual({
@@ -53,6 +53,7 @@ describe('visitor data rules', () => {
       runIds: ['r1', 'r2', 'r3'],
       conversationIds: ['c1'],
       widgetThreads: [{ gatewayId: 'gw-widget', threadId: 't' }],
+      unansweredEventIds: ['ev-1'],
     });
   });
 
@@ -62,8 +63,12 @@ describe('visitor data rules', () => {
     expect(holdsVisitorData('tui')).toBe(false);
   });
 
-  it.each(['lookupVisitorData', 'exportVisitorData', 'eraseVisitorData'])('%s is for owners and admins only', (method) => {
-    const handler = (AgentChannelsController.prototype as any)[method];
-    expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual(['admin', 'owner']);
-  });
+  it.each(['lookupVisitorData', 'exportVisitorData', 'eraseVisitorData'])(
+    '%s lets a member through the role guard, for the service to decide whether they manage the agent',
+    (method) => {
+      const handler = (AgentChannelsController.prototype as any)[method];
+      // Viewers never; members only for an agent they own (visitor-data.integration.spec.ts).
+      expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual(['member', 'admin', 'owner']);
+    },
+  );
 });

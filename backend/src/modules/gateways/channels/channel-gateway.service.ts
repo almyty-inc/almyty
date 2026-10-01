@@ -303,6 +303,8 @@ export class ChannelGatewayService {
       null,
       undefined,
       deliveryId,
+      // The sender, so their data request finds this message even if it never becomes a run.
+      normalized.userId && normalized.userId !== 'unknown' ? normalized.userId : null,
     );
     if (!claim) {
       this.logger.log(
@@ -1124,6 +1126,8 @@ export class ChannelGatewayService {
     errorMessage?: string | null,
     runId?: string,
     deliveryId?: string | null,
+    // Who sent an inbound message, so a data request finds it (ChannelEvent.senderId).
+    senderId?: string | null,
   ): Promise<ChannelEventRef | null> {
     try {
       const saved = await this.eventRepository.save(this.eventRepository.create({
@@ -1136,6 +1140,7 @@ export class ChannelGatewayService {
         errorMessage: errorMessage ?? null,
         runId: runId ?? null,
         deliveryId: deliveryId ?? null,
+        senderId: senderId ? String(senderId).slice(0, 255) : null,
       }));
       return {
         eventId: (saved as any)?.id ?? null,

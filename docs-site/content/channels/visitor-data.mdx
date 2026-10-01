@@ -18,7 +18,7 @@ Both are on by default. You can switch them off under **Branding and visitor rul
 
 ## Answer a request
 
-Only owners and admins of your organization can answer a request, and only for assistants they manage.
+Requests are answered by whoever may change the assistant: an owner or admin of your organization, or the member who owns that assistant. Each can answer only for the assistants they may change.
 
 1. Open the assistant and go to its **Channels** tab.
 2. Click **Visitor data** (next to **Branding and visitor rules**).
@@ -40,8 +40,8 @@ Only owners and admins of your organization can answer a request, and only for a
 
 With **All channels**, each channel looks for what you typed the way it knows people: an email address is looked up on the web chat and by email, a phone number on WhatsApp and SMS, and so on.
 
-5. The page shows what the assistant keeps about them, in counts and dates: conversations, messages, memories, files, saved replies and runs, which channels they were found on, and their conversations in a table. Nothing kept means there is nothing to send or delete. Check how the channel writes the id first: a Slack member id is not a display name.
-6. **Download their data** gives you a file to send them: every conversation's messages, the memories, the files by name and date, and the replies saved for them.
+5. The page shows what the assistant keeps about them, in counts and dates: conversations, messages, memories, files, saved replies, messages it never answered and runs, which channels they were found on, and their conversations in a table. Nothing kept means there is nothing to send or delete. Check how the channel writes the id first: a Slack member id is not a display name.
+6. **Download their data** gives you a file to send them: every conversation's messages, the memories (including those kept in an outside memory service, read back from it; if that service cannot give one back just then, the file lists it with a note saying so), the files by name and date, the replies saved for them, and the messages it never answered, by date and why.
 7. **Delete their data**, after one confirmation, removes everything the assistant keeps about them on those channels. This cannot be undone.
 
 ![Visitor data, with what is kept about one person](/screenshots/visitor-data-request.png)
@@ -54,7 +54,7 @@ The same, whether the person does it themselves or you do it for them:
 - The runs behind those conversations (each time the assistant worked on a message), with the steps and tool calls it made, and the runs those started.
 - The files they sent, uploaded and not sent yet, or that the assistant made while answering them, and the stored copies of those files.
 - Their memories: what the assistant remembered about them in their own memory, and anything those conversations added to the assistant's other memory. Memories kept in an outside memory service (Mem0, Zep and the like) are deleted there too. If that service does not answer, almyty tries again every hour until it does, and the page tells you.
-- The replies saved for them, and the deliveries their messages arrived in.
+- The replies saved for them, the deliveries their messages arrived in, and the messages the assistant never answered (because they were over a message limit, the spend limit was reached, or the assistant could not take them).
 - On the web chat, their visitor record.
 
 Nothing of another person, another assistant or another organization is touched.
@@ -83,7 +83,11 @@ Without a request, visitor data is kept until your retention period removes it. 
 
 **Finding a person.** Web chat: `end_users` on that gateway by email (case-insensitive), sign-in id or visitor id. Widget: runs with `metadata.gatewayId` and `metadata.threadId`. Messaging channels: runs with `metadata.gatewayId` and `metadata.channelUserId`; SMS, WhatsApp, Signal and iMessage also match on the digits of a phone number, email and iMessage on an address inside `Name <address>`. A2A: runs stamped with `metadata.a2aCaller` (`key:<id>`, `oauth:<client>`, `jwt:<sub>`, `user:<id>`) by the A2A channel; a bare id matches any of them.
 
-**Owner API.** Owners and admins who may manage the agent; another organization's agent is a 404.
+**Owner API.** Anyone who may manage the agent, the rule agent editing uses (`manageableAgent`): an organization owner or admin, or the member who owns the agent. Viewers are refused by role; a member is refused for an agent they do not own; another organization's agent is a 404.
+
+**Outside memories in a download.** Each is read back from its service by the id the service knows it by (`MemoryRouter.getOn`, through the service's own client and its egress gate), five seconds each. One that cannot be read (service down, refused, slow, or no way to read one memory) is listed with its id, service and a `note`. A lookup counts them without asking the service.
+
+**Messages that never became a run.** A messaging channel writes the sender on every inbound delivery it accepts (`channel_events.senderId`, the same id it puts on a run as `channelUserId`). A delivery with no run (sender over the message limit, spend limit reached, run refused) is found by that sender with the same matching rules, counted as `unanswered`, exported by date and reason, and deleted with the rest. A delivery whose signature failed was never read, so it has no sender and is left to retention.
 
 ```
 POST /agents/:agentId/visitor-data/lookup   { "id": "+14155550100", "channelId": "<optional>" }

@@ -89,7 +89,7 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
   let expiries: Repository<MemoryExpiry>;
 
   let storage: { delete: jest.Mock; upload: jest.Mock };
-  let outside: { deleteOn: jest.Mock };
+  let outside: { deleteOn: jest.Mock; getOn: jest.Mock };
   let visitorData: VisitorDataService;
   let hosted: HostedChatService;
   let hostedChat: HostedChatController;
@@ -144,7 +144,7 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
     [ChannelType.A2A]: GatewayType.A2A,
   };
 
-  async function newAgent(org: Organization, types: ChannelType[]): Promise<Placed> {
+  async function newAgent(org: Organization, types: ChannelType[], createdBy?: string): Promise<Placed> {
     const agent = await agents.save(
       agents.create({
         name: `Front desk ${randomUUID().slice(0, 6)}`,
@@ -152,7 +152,7 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
         status: AgentStatus.ACTIVE,
         mode: 'autonomous',
         visibility: 'org',
-        createdBy: org.id === orgA.id ? user.adminA : user.adminB,
+        createdBy: createdBy ?? (org.id === orgA.id ? user.adminA : user.adminB),
         pipeline: { nodes: [], edges: [] },
         instructions: 'Help.',
         visitorRules: {
@@ -225,6 +225,22 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
     expect(runtime.startRun.mock.calls.length).toBe(before + 1);
     const [saved] = await runs.find({ where: { organizationId: gateway.organizationId }, order: { createdAt: 'DESC' }, take: 1 });
     return saved;
+  }
+  /**
+   * A message the channel took in that never became a run (the run was
+   * refused), as the delivery row the channel keeps; returns its id.
+   */
+  async function unansweredVisit(placed: Placed, type: ChannelType, from: string): Promise<string> {
+    const { gateway } = placed.channels[type];
+    runtime.startRun.mockRejectedValueOnce(new NotFoundException('not in scope'));
+    await channels.handleInboundMessage(gateway, { update_id: update++, text: 'is anyone there?', from, chat: `chat-${from}` }, {});
+    const [event] = await events.find({
+      where: { gatewayId: gateway.id, direction: 'inbound' as any, senderId: from },
+      order: { createdAt: 'DESC' },
+      take: 1,
+    });
+    expect(event?.runId ?? null).toBeNull();
+    return event.id;
   }
 
   async function a2aVisit(placed: Placed, org: Organization, keyId: string): Promise<AgentRun> {
@@ -495,7 +511,11 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
     };
 
     storage = { delete: jest.fn(async () => undefined), upload: jest.fn() };
-    outside = { deleteOn: jest.fn(async () => true) };
+    outside = {
+      deleteOn: jest.fn(async () => true),
+      // What the outside memory service holds, read by the id it knows a memory by.
+      getOn: jest.fn(async (_backend: string, nativeId: string) => ({ content: `What Mem0 holds for ${nativeId}` })),
+    };
     const filesService = new FilesService(files, storage as any, undefined as any, undefined as any);
     const memoryAccounts = new MemoryAccountsService(undefined as any, outside as any, undefined as any, expiries, undefined as any);
     visitorData = new VisitorDataService(runs, filesService, { get: () => memoryAccounts } as any);
@@ -637,7 +657,12 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
 
       expect(data.conversations).toHaveLength(1);
       expect(data.conversations[0].messages.map((m) => m.content)).toEqual(['hello there', 'Answer to: hello there']);
-      expect(data.memories.map((m) => m.content).filter(Boolean).sort()).toEqual(['gina asked about order 4411', 'gina prefers email']);
+      // The memories their runs wrote, and the one kept in Mem0, read back from it.
+      expect(data.memories.map((m) => m.content).filter(Boolean).sort()).toEqual([
+        expect.stringMatching(/^What Mem0 holds for mem0-gina/),
+        'gina asked about order 4411',
+        'gina prefers email',
+      ]);
       expect(data.memories.filter((m) => m.keptIn === 'Mem0')).toHaveLength(1);
       expect(data.files.map((f) => f.name)).toEqual(['gina.txt', 'gina.txt']);
       expect(data.storedReplies.map((r) => r.message)).toContain('Hello gina');
@@ -732,6 +757,75 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
       const still = await remaining(left);
       expect({ ...still, files: undefined, outsideMemory: undefined }).toEqual({ ...allThere(left), files: undefined, outsideMemory: undefined });
     });
+
+    it("lets the member who owns an agent answer for it, and not for anyone else's", async () => {
+      const own = await newAgent(orgA, [ChannelType.TELEGRAM], user.memberA);
+      const mine = await leaveTraces(await messagingVisit(own, ChannelType.TELEGRAM, 'tg-pia'), 'pia');
+      await leaveTraces(await messagingVisit(a, ChannelType.TELEGRAM, 'tg-pia'), 'pia-on-a');
+      const member = { id: user.memberA };
+
+      expect((await requests.lookup(orgA.id, own.agent.id, member, { id: 'tg-pia' })).found).toBe(true);
+      await requests.erase(orgA.id, own.agent.id, member, { id: 'tg-pia' });
+      expect(await remaining(mine)).toEqual(nothingLeft);
+
+      // An agent of the organization the member does not own.
+      const refused = await refusal(requests.lookup(orgA.id, a.agent.id, member, { id: 'tg-pia' }));
+      expect(refused instanceof ForbiddenException || refused instanceof NotFoundException).toBe(true);
+      expect((await requests.lookup(orgA.id, a.agent.id, owner(), { id: 'tg-pia' })).found).toBe(true);
+    });
+
+    it("reads outside memories back from their service for the download, and says so when it cannot", async () => {
+      const first = await messagingVisit(a, ChannelType.TELEGRAM, 'tg-quin');
+      await leaveTraces(first, 'quin');
+      // Finished, so their next message starts a run of its own.
+      await runs.update({ id: first.id }, { status: AgentRunStatus.COMPLETED });
+      await leaveTraces(await messagingVisit(a, ChannelType.TELEGRAM, 'tg-quin'), 'quin-again');
+
+      const data = await requests.export(orgA.id, a.agent.id, owner(), { id: 'tg-quin' });
+      const outsideMemories = data.memories.filter((m) => m.keptIn === 'Mem0');
+      expect(outsideMemories).toHaveLength(2);
+      for (const m of outsideMemories) {
+        expect(m.content).toMatch(/^What Mem0 holds for mem0-quin/);
+        expect(m.note).toBeUndefined();
+      }
+      // Read through the service by the id it knows each memory by.
+      expect(outside.getOn).toHaveBeenCalledWith('mem0', expect.stringMatching(/^mem0-quin/), expect.anything(), undefined);
+
+      // The service is down for one of them: that one is listed by id and service, with a note.
+      outside.getOn.mockRejectedValueOnce(new Error('mem0 is down'));
+      const again = await requests.export(orgA.id, a.agent.id, owner(), { id: 'tg-quin' });
+      const [missing] = again.memories.filter((m) => m.keptIn === 'Mem0' && m.content === undefined);
+      expect(missing).toMatchObject({ keptIn: 'Mem0' });
+      expect(missing.note).toMatch(/could not give its text back/);
+      expect(again.memories.filter((m) => m.keptIn === 'Mem0' && m.content)).toHaveLength(1);
+      // The lookup counts memories without asking the service.
+      outside.getOn.mockClear();
+      expect((await requests.lookup(orgA.id, a.agent.id, owner(), { id: 'tg-quin' })).memories).toBe(6);
+      expect(outside.getOn).not.toHaveBeenCalled();
+    });
+
+    it('finds and erases the messages of a sender that never became a run, and nobody else\'s', async () => {
+      const rays = [await unansweredVisit(a, ChannelType.SMS, '+14155550199'), await unansweredVisit(a, ChannelType.SMS, '+14155550199')];
+      const sams = await unansweredVisit(a, ChannelType.SMS, '+14155550188');
+      // The same number on another agent's channel.
+      const raysElsewhere = await unansweredVisit(sibling, ChannelType.TELEGRAM, '+14155550199');
+
+      const found = await requests.lookup(orgA.id, a.agent.id, owner(), { id: '+1 (415) 555-0199' });
+      expect(found).toMatchObject({ found: true, unanswered: 2, conversations: 0, runs: 0 });
+      expect(found.channels.map((c) => c.type)).toEqual(['sms']);
+
+      const data = await requests.export(orgA.id, a.agent.id, owner(), { id: '+1 (415) 555-0199' });
+      expect(data.unanswered).toHaveLength(2);
+      expect(data.unanswered[0].reason).toMatch(/run refused/);
+      expect(JSON.stringify(data)).not.toContain('0188');
+
+      const removed = await requests.erase(orgA.id, a.agent.id, owner(), { id: '+1 (415) 555-0199' });
+      expect(removed.unanswered).toBe(2);
+      expect(await events.countBy({ id: In(rays) })).toBe(0);
+      expect(await events.countBy({ id: sams })).toBe(1);
+      expect(await events.countBy({ id: raysElsewhere })).toBe(1);
+      expect((await requests.lookup(orgA.id, a.agent.id, owner(), { id: '+14155550199' })).found).toBe(false);
+    });
   });
 
   // -- A visitor's own data --------------------------------------------------
@@ -755,7 +849,12 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
       const mine: any = await hostedChat.exportMe(slug(), asVisitor(pat.cookie), res());
       expect(mine.visitor.id).toBe(pat.endUser.id);
       expect(mine.conversations).toHaveLength(1);
-      expect(mine.memories.map((m: any) => m.content).filter(Boolean).sort()).toEqual(['pat asked about order 4411', 'pat lives in Lisbon', 'pat prefers email']);
+      expect(mine.memories.map((m: any) => m.content).filter(Boolean).sort()).toEqual([
+        expect.stringMatching(/^What Mem0 holds for mem0-pat/),
+        'pat asked about order 4411',
+        'pat lives in Lisbon',
+        'pat prefers email',
+      ]);
       expect(mine.files).toHaveLength(3);
       expect(JSON.stringify(mine)).not.toContain('quinn');
     });

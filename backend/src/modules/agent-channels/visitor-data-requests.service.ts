@@ -54,9 +54,10 @@ export function holdsVisitorData(type: ChannelType | string): boolean {
  * or erases it. Same scope as the self-service paths, because it is the
  * same code (VisitorDataService).
  *
- * Only someone who may manage the agent, and only for that agent: the
- * agent is resolved through AgentChannelsService.manageableAgent, so
- * another organization's agent, or one the caller cannot manage, answers
+ * Only someone who may manage the agent, and only for that agent, by the
+ * rule agent editing uses (AgentChannelsService.manageableAgent): an
+ * admin or owner of the organization, or the member who owns the agent.
+ * Another organization's agent, or one the caller cannot manage, answers
  * as it does everywhere else. Every export and erasure is written to the
  * audit log with counts and a hashed reference to the person, never the
  * identifier or any content.
@@ -105,6 +106,7 @@ export class VisitorDataRequestsService {
           memories: data.memories.length,
           files: data.files.length,
           storedReplies: data.storedReplies.length,
+          unanswered: data.unanswered.length,
           runs: data.runs.length,
         },
       }),
@@ -172,7 +174,7 @@ export class VisitorDataRequestsService {
     for (const channel of searched) {
       const footprint = await this.onChannel(channel, { id: channel.gatewayId!, organizationId }, id);
       parts.push(footprint);
-      if (footprint.runIds.length || footprint.conversationIds.length || footprint.endUserIds.length) {
+      if (footprint.runIds.length || footprint.conversationIds.length || footprint.endUserIds.length || footprint.unansweredEventIds.length) {
         found.push({ id: channel.id, name: channel.name, type: channel.type });
       }
     }
