@@ -559,7 +559,8 @@
       "title": "Agents CLI 1.5.1 help",
       "path": "screenshots/cli/agents-help.png",
       "capturedAt": "2026-09-30T10:52:31.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "package.json moved to 1.5.2 in the lockstep bump for the runner and mcp-server changes; the help text may print the version. Recapture from the published 1.5.2 package.",
       "sha256": "1578889c2f3b9b1fcb73988bb6ae3469b4c333ad6d59cb7358d4f8a6c8282327",
       "source": {
         "kind": "published-cli",
@@ -578,7 +579,8 @@
       "title": "almyty CLI 1.5.1 help",
       "path": "screenshots/cli/almyty-help.png",
       "capturedAt": "2026-09-30T11:20:18.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "package.json moved to 1.5.2 in the lockstep bump for the runner and mcp-server changes; the help text may print the version. Recapture from the published 1.5.2 package.",
       "sha256": "3278b88ff5494fccafa6c18d3bf5b158daf21e015f8ecabcd0882dc412a9a967",
       "source": {
         "kind": "published-cli",
@@ -597,7 +599,8 @@
       "title": "Auth CLI 1.5.1 help",
       "path": "screenshots/cli/auth-help.png",
       "capturedAt": "2026-09-30T11:20:18.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "package.json moved to 1.5.2 in the lockstep bump for the runner and mcp-server changes; the help text may print the version. Recapture from the published 1.5.2 package.",
       "sha256": "430db54a548e53523c9505285049f8b4d2f44e18d16bc8ec88ffa326b64b46f5",
       "source": {
         "kind": "published-cli",
@@ -616,7 +619,8 @@
       "title": "Chat CLI 1.5.1 help",
       "path": "screenshots/cli/chat-help.png",
       "capturedAt": "2026-09-30T11:20:18.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "package.json moved to 1.5.2 in the lockstep bump for the runner and mcp-server changes; the help text may print the version. Recapture from the published 1.5.2 package.",
       "sha256": "268d27f6d268c40fa1b505d5225e59fdcd0b28e4a60e830685544edc282f8f12",
       "source": {
         "kind": "published-cli",
@@ -655,7 +659,8 @@
       "title": "Skills CLI 1.5.1 help",
       "path": "screenshots/cli/skills-help.png",
       "capturedAt": "2026-09-30T11:20:18.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "package.json moved to 1.5.2 in the lockstep bump for the runner and mcp-server changes; the help text may print the version. Recapture from the published 1.5.2 package.",
       "sha256": "bdb441c1b082288e9aeb66fe02f6a81611b17d576a2c32a53d02db0200356f53",
       "source": {
         "kind": "published-cli",
