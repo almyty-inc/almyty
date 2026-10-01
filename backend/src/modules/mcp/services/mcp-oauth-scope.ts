@@ -22,6 +22,9 @@ export function scopeForMcpMethod(method: string): string | null {
   if (method.startsWith('tools/')) return 'mcp:tools';
   if (method.startsWith('resources/')) return 'mcp:resources';
   if (method.startsWith('prompts/')) return 'mcp:prompts';
+  // A task is a tools/call that answered later (Tasks extension): reading,
+  // answering or cancelling it needs what the call needed.
+  if (method.startsWith('tasks/')) return 'mcp:tools';
   return null;
 }
 
