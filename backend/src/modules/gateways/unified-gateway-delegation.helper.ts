@@ -331,6 +331,20 @@ export class UnifiedGatewayDelegation {
   ) {
     const incomingSessionId = req.headers['mcp-session-id'] as string;
 
+    // Only POST carries MCP here. There is no server-to-client stream (GET)
+    // and no session to terminate (DELETE: the Mcp-Session-Id minted on
+    // initialize is never stored), so both are 405 Method Not Allowed, the
+    // answer the Streamable HTTP transport gives a server without them.
+    if (req.method === 'GET' || req.method === 'DELETE') {
+      recordMcpRequest(req, null, body, 'refused');
+      res.setHeader('Allow', 'POST');
+      return res.status(405).json({
+        jsonrpc: '2.0',
+        id: null,
+        error: { code: -32600, message: `${req.method} is not supported on this MCP endpoint; use POST` },
+      });
+    }
+
     // The protocol version this POST is served at: negotiated on
     // `initialize`, named by MCP-Protocol-Version otherwise, 2025-03-26 with
     // no header. An unsupported header, or a batch from 2025-06-18 on, is a
