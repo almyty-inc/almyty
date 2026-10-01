@@ -30,6 +30,7 @@ export interface ProtocolContext {
     clientName: string;
     clientVersion: string | null;
     outcome?: string;
+    trace?: { traceparent: string; tracestate?: string; baggage?: string };
   } | null;
 }
 

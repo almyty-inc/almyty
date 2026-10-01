@@ -38,6 +38,12 @@ export interface RequestContextStore {
   /** Queue name + job id, when the scope is a background job. */
   jobId?: string | null;
   queue?: string | null;
+  /**
+   * W3C trace context an MCP client sent with this request (2026-07-28
+   * `_meta`: traceparent, tracestate, baggage). Audit rows written in this
+   * scope carry it, so a client's trace can be followed into almyty.
+   */
+  trace?: { traceparent: string; tracestate?: string; baggage?: string } | null;
 }
 
 export const requestContext = new AsyncLocalStorage<RequestContextStore>();

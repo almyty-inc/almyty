@@ -80,16 +80,46 @@ const FIXTURES = [
   {
     name: 'json_schema_2020_12_tool',
     description: 'Tool with JSON Schema 2020-12 features (MCP conformance fixture).',
+    // The 2026-07-28 fixture: the 2025-11-25 one plus $anchor, allOf/anyOf
+    // and if/then/else (SEP-1613, SEP-2106).
     parameters: {
       $schema: 'https://json-schema.org/draft/2020-12/schema',
       type: 'object',
       $defs: {
-        address: { type: 'object', properties: { street: { type: 'string' }, city: { type: 'string' } } },
+        address: {
+          $anchor: 'addressDef',
+          type: 'object',
+          properties: { street: { type: 'string' }, city: { type: 'string' } },
+        },
       },
-      properties: { name: { type: 'string' }, address: { $ref: '#/$defs/address' } },
+      properties: {
+        name: { type: 'string' },
+        address: { $ref: '#/$defs/address' },
+        contactMethod: { type: 'string', enum: ['phone', 'email'] },
+        phone: { type: 'string' },
+        email: { type: 'string' },
+      },
+      allOf: [{ anyOf: [{ required: ['phone'] }, { required: ['email'] }] }],
+      if: { properties: { contactMethod: { const: 'phone' } }, required: ['contactMethod'] },
+      then: { required: ['phone'] },
+      else: { required: ['email'] },
       additionalProperties: false,
     },
     code: 'return { received: parameters }',
+  },
+  {
+    // A parameter mirrored into an Mcp-Param-Region header (x-mcp-header,
+    // 2026-07-28), so the server's header validation can be exercised.
+    name: 'test_region_header',
+    description: 'Echoes a region carried in an Mcp-Param header (MCP conformance fixture).',
+    parameters: {
+      type: 'object',
+      properties: {
+        region: { type: 'string', description: 'Region', 'x-mcp-header': 'Region' },
+      },
+      required: ['region'],
+    },
+    code: 'return { region: parameters.region }',
   },
 ]
 
@@ -101,6 +131,9 @@ async function fixtureTools(orgId) {
     if (!row) {
       row = await call('POST', `/organizations/${orgId}/tools`, { ...f, type: 'function', executionMethod: 'custom' })
       log('tool', f.name)
+    } else {
+      // Keep a rerun in step with the fixture definitions above.
+      row = await call('PUT', `/organizations/${orgId}/tools/${row.id}`, { parameters: f.parameters, code: f.code, description: f.description })
     }
     if (row.status !== 'active') await call('POST', `/organizations/${orgId}/tools/${row.id}/activate`)
     ids.push(row.id)
@@ -136,16 +169,29 @@ async function petstoreTools(orgId) {
   return tools.map((t) => t.id)
 }
 
-async function gateway(name, endpoint, toolIds) {
+async function gateway(name, endpoint, toolIds, { open = false } = {}) {
   const have = list(await call('GET', '/gateways'), 'gateways')
   let row = have.find((g) => g.name === name)
   if (!row) {
     row = await call('POST', '/gateways', { name, type: 'mcp', endpoint, configuration: { transport: 'http' }, toolIds, kind: 'tool', visibility: 'org' })
     log('gateway', name)
+  } else {
+    await call('POST', `/gateways/${row.id}/tools/bulk`, { toolIds }).catch(() => undefined)
   }
   if (!row.initialApiKey) {
     const key = await call('POST', `/gateways/${row.id}/auth/api-keys`, { name: `ci-${Date.now()}` })
     row.initialApiKey = key?.apiKey ?? key?.key ?? key?.plainKey
+  }
+  if (open) {
+    // The conformance runner builds some requests itself and drops the
+    // URL's query string, so the api_key there does not reach the server.
+    // This fixture gateway (test tools only, on a throwaway CI database)
+    // answers without credentials instead.
+    const auths = list(await call('GET', `/gateways/${row.id}/auth`), 'auths')
+    for (const a of auths) if (a.type !== 'none') await call('DELETE', `/gateways/${row.id}/auth/${a.id}`)
+    if (!auths.some((a) => a.type === 'none')) {
+      await call('POST', `/gateways/${row.id}/auth`, { type: 'none', isRequired: false, configuration: {} })
+    }
   }
   return row
 }
@@ -154,7 +200,7 @@ const db = new pg.Client({ connectionString: DATABASE_URL })
 await db.connect()
 try {
   const org = await signIn(db)
-  const conformance = await gateway('MCP conformance', '/conformance', await fixtureTools(org.id))
+  const conformance = await gateway('MCP conformance', '/conformance', await fixtureTools(org.id), { open: true })
   const petstore = await gateway('Petstore', '/petstore', await petstoreTools(org.id))
   const out = {
     MCP_ORG_SLUG: org.slug,

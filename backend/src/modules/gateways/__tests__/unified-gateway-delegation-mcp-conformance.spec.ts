@@ -152,4 +152,66 @@ describe('UnifiedGatewayDelegation — MCP wire conformance', () => {
       expect(res.status).toHaveBeenCalledWith(400);
     }
   });
+
+  describe('MCP 2026-07-28 requests', () => {
+    const V = '2026-07-28';
+    const modernBody = (method: string, params: Record<string, unknown> = {}) => ({
+      jsonrpc: '2.0',
+      id: 9,
+      method,
+      params: {
+        ...params,
+        _meta: {
+          'io.modelcontextprotocol/protocolVersion': V,
+          'io.modelcontextprotocol/clientCapabilities': {},
+          traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+        },
+      },
+    });
+    const send = async (body: any, headers: Record<string, string>) => {
+      const res = makeRes();
+      const req = { ...makeReq(body), headers };
+      await delegation.handleGatewayRequest(organization, gw(false), 'acme', 'mcp', req, res, body);
+      return res;
+    };
+
+    it('serves a request statelessly: what _meta declared reaches the service, no session id is minted or echoed', async () => {
+      const res = await send(modernBody('tools/list'), { 'mcp-protocol-version': V, 'mcp-method': 'tools/list', 'mcp-session-id': 'old' });
+      expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ method: 'tools/list' }),
+        'org-1',
+        'u-1',
+        'gw-mcp-1',
+        expect.objectContaining({
+          version: V,
+          era: 'modern',
+          trace: { traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' },
+        }),
+      );
+      expect(res.setHeader).not.toHaveBeenCalledWith('Mcp-Session-Id', expect.anything());
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('refuses a header mismatch with 400 before authenticating', async () => {
+      const resolver = (delegation as any).gatewayResolver.resolveAndAuthenticate as jest.Mock;
+      resolver.mockClear();
+      const res = await send(modernBody('tools/list'), { 'mcp-protocol-version': V, 'mcp-method': 'tools/call' });
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ id: 9, error: expect.objectContaining({ code: -32020 }) }));
+      expect(resolver).not.toHaveBeenCalled();
+      expect(mcpService.handleJsonRpcMessage).not.toHaveBeenCalled();
+    });
+
+    it('sends a method the modern era does not have as 404', async () => {
+      mcpService.handleJsonRpcMessage.mockResolvedValue({ jsonrpc: '2.0', id: 9, error: { code: -32601, message: 'Method not found: ping' } });
+      const res = await send(modernBody('ping'), { 'mcp-protocol-version': V, 'mcp-method': 'ping' });
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
+
+    it('still mints a session id for a legacy initialize', async () => {
+      const body = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'c', version: '1' } } };
+      const res = await send(body, {});
+      expect(res.setHeader).toHaveBeenCalledWith('Mcp-Session-Id', expect.any(String));
+    });
+  });
 });

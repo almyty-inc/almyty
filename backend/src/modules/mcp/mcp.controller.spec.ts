@@ -92,7 +92,7 @@ describe('McpController', () => {
       );
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json.mock.calls[0][0]).toMatchObject({ id: 4, error: { code: -32600 } });
+      expect(res.json.mock.calls[0][0]).toMatchObject({ id: 4, error: { code: -32022, data: { requested: '1999-01-01' } } });
       expect(mcpService.handleJsonRpcMessage).not.toHaveBeenCalled();
     });
 
@@ -165,8 +165,8 @@ describe('McpController', () => {
       const result = await controller.wellKnown();
 
       expect(result.protocol).toBe('mcp');
-      expect(result.version).toBe('2025-11-25');
-      expect(result.supportedVersions).toEqual(['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']);
+      expect(result.version).toBe('2026-07-28');
+      expect(result.supportedVersions).toEqual(['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']);
       expect(result.server.name).toBe('almyty');
       expect(result.transports.http).toContain('/mcp');
     });

@@ -30,6 +30,7 @@ import { normalizeOutputSchema } from '../core/json-schema-2020';
 import { mcpProtocolSettings } from '../core/mcp-settings';
 import { outputSchemaViolation } from '../core/output-schema-check';
 import { toolAnnotations, toolIcons, toolTitle } from '../core/tool-presentation';
+import { mcpParamHeaderMismatch } from '../core/mcp-param-headers';
 
 /** Errors this handler raised for an unknown tool: rethrown as protocol errors, never folded into isError. */
 const UNKNOWN_TOOL_ERRORS = new WeakSet<object>();
@@ -376,6 +377,8 @@ export class McpToolHandler {
     organizationId: string,
     userId?: string,
     gatewayId?: string,
+    /** Modern requests only: the Mcp-Param-* headers it carried, lower-cased names. */
+    paramHeaders?: Record<string, string>,
   ): Promise<McpCallToolResult> {
     if (!params.name) {
       throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'Tool name is required');
@@ -392,6 +395,17 @@ export class McpToolHandler {
       throw this.unknownTool(params.name);
     }
     const tool = gatewayId ? found : await this.withOutputSchema(found);
+
+    // 2026-07-28: a parameter the tool's schema mirrors into an
+    // Mcp-Param-* header must agree with that header (-32020, HTTP 400).
+    if (paramHeaders) {
+      const mismatch = mcpParamHeaderMismatch(tool.parameters, params.arguments ?? {}, paramHeaders);
+      if (mismatch) {
+        const error = this.createError(JsonRpcErrorCode.HEADER_MISMATCH, `Header mismatch: ${mismatch}`);
+        UNKNOWN_TOOL_ERRORS.add(error);
+        throw error;
+      }
+    }
 
     // Whose scope the call runs in. Through a gateway it is the gateway's --
     // a gateway serves only what its own visibility covers, re-checked on

@@ -4,12 +4,14 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { McpSource, McpSourceStatus, McpSourceAuthType } from '../../entities/mcp-source.entity';
 import { Tool, ToolType, ToolStatus } from '../../entities/tool.entity';
+import { McpChangeBus } from '../mcp-events/mcp-change-bus.service';
 import { CredentialType } from '../../entities/credential.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { CredentialRefResolver, type ResolveOptions } from '../credentials/credential-ref.resolver';
@@ -70,6 +72,9 @@ export class McpSourcesService {
     private readonly mcpClient: McpClientService,
     private readonly envelopeCrypto: EnvelopeCryptoService,
     private readonly credentialRefs: CredentialRefResolver,
+    // MCP listen streams of the gateways serving these tools. Optional for
+    // the positional spec harnesses.
+    @Optional() private readonly changeBus?: McpChangeBus,
   ) {}
 
   /**
@@ -293,6 +298,10 @@ export class McpSourcesService {
           removed++;
         }
       }
+
+      // The source's existing tools may have changed on every gateway that
+      // serves them (new tools are not attached anywhere yet).
+      await this.changeBus?.toolsChanged(mine.map((tool) => tool.id));
 
       source.status = McpSourceStatus.ACTIVE;
       source.lastSyncAt = new Date();

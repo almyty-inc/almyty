@@ -160,5 +160,35 @@ describe('MCP tool results (2025-06-18 / 2025-11-25)', () => {
         expect.objectContaining({ code: -32602, message: 'Tool not found: nope' }),
       );
     });
+
+    describe('Mcp-Param-* headers (2026-07-28)', () => {
+      const regional = () =>
+        tool({ name: 'list_pets', parameters: { type: 'object', properties: { region: { type: 'string', 'x-mcp-header': 'Region' } } } });
+
+      it('runs the tool when the header agrees with the argument', async () => {
+        rows = [regional()];
+        executor.executeTool.mockResolvedValue({ success: true, data: [] });
+        const result = await handler.handleToolCall({ name: 'list_pets', arguments: { region: 'eu' } }, 'org-1', 'u-1', 'gw-1', {
+          'mcp-param-region': 'eu',
+        });
+        expect(result.isError).toBeFalsy();
+        expect(executor.executeTool).toHaveBeenCalledTimes(1);
+      });
+
+      it('refuses a disagreeing header with -32020 before running anything', async () => {
+        rows = [regional()];
+        await expect(
+          handler.handleToolCall({ name: 'list_pets', arguments: { region: 'eu' } }, 'org-1', 'u-1', 'gw-1', { 'mcp-param-region': 'us' }),
+        ).rejects.toEqual(expect.objectContaining({ code: -32020 }));
+        expect(executor.executeTool).not.toHaveBeenCalled();
+      });
+
+      it('does not check headers for a legacy request', async () => {
+        rows = [regional()];
+        executor.executeTool.mockResolvedValue({ success: true, data: [] });
+        await handler.handleToolCall({ name: 'list_pets', arguments: { region: 'eu' } }, 'org-1', 'u-1', 'gw-1');
+        expect(executor.executeTool).toHaveBeenCalledTimes(1);
+      });
+    });
   });
 });

@@ -15,7 +15,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { McpService } from './mcp.service';
+import { serveSubscriptionListen } from './core/mcp-listen';
 import {
+  enterMcpRequest,
+  mcpHttpStatusOf,
   mcpOriginRefusal,
   mcpOutcomeOf,
   recordMcpRequest,
@@ -75,11 +78,26 @@ export class McpController {
       recordMcpRequest(req, null, body, 'refused');
       return res.status(resolution.refusal.status).json(resolution.refusal.body);
     }
+    enterMcpRequest(resolution.ctx);
+
+    // The org-wide surface has no tool-set channel, so a listen stream here
+    // acknowledges nothing and only keeps alive.
+    if (resolution.ctx.era === 'modern' && body?.method === 'subscriptions/listen' && body.id !== undefined) {
+      recordMcpRequest(req, resolution.ctx, body, 'ok');
+      serveSubscriptionListen({
+        res,
+        id: body.id,
+        params: body.params,
+        serverInfo: { name: 'almyty', version: '1.0.0' },
+        toolsGatewayId: null,
+      });
+      return res;
+    }
 
     const result = await this.mcpService.handleJsonRpcMessage(body, organizationId, userId, undefined, resolution.ctx);
     recordMcpRequest(req, resolution.ctx, body, mcpOutcomeOf(result));
     if (result === null) return res.status(202).end();
-    return res.json(result);
+    return res.status(mcpHttpStatusOf(resolution.ctx, result)).json(result);
   }
 
   // Health check for MCP service

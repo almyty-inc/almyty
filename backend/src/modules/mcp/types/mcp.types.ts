@@ -327,6 +327,11 @@ export enum JsonRpcErrorCode {
   RESOURCE_NOT_FOUND = -32001,
   TOOL_NOT_FOUND = -32002,
   UNAUTHORIZED = -32003,
+  // Defined by MCP 2026-07-28 ("Error Codes"), the -32020..-32099 range
+  // the specification reserves for itself.
+  HEADER_MISMATCH = -32020,
+  MISSING_REQUIRED_CLIENT_CAPABILITY = -32021,
+  UNSUPPORTED_PROTOCOL_VERSION = -32022,
 }
 
 // Transport Types

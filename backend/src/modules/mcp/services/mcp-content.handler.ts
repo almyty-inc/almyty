@@ -111,9 +111,13 @@ export class McpContentHandler {
     caller?: { id: string },
     gatewayId?: string,
   ): Promise<McpReadResourceResult> {
+    // A resource that does not exist is -32602 with the uri in `data` (MCP
+    // 2026-07-28, SEP-2164; the design doc applies it to every version). It
+    // used to be a custom -32001, a code the 2026 revision tells servers to
+    // stop using.
     const match = params.uri.match(/almyty:\/\/resources\/(.+)/);
     if (!match) {
-      throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, 'Invalid resource URI format');
+      throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'Resource not found', { uri: params.uri });
     }
 
     const resourceId = match[1];
@@ -134,7 +138,7 @@ export class McpContentHandler {
         ? (await this.apiIdsServedOnGateway(gatewayId)).has(resource.apiId)
         : (await this.visibleResourcesOffGateway(organizationId, caller, [resource])).length > 0);
     if (!resource || !published) {
-      throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, 'Resource not found');
+      throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'Resource not found', { uri: params.uri });
     }
 
     return {
@@ -232,7 +236,7 @@ export class McpContentHandler {
   ): Promise<McpGetPromptResult> {
     const isToolPrompt = params.name === 'list-available-tools' || params.name.startsWith('use-');
     if (!isToolPrompt) {
-      throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, `Prompt '${params.name}' not found`);
+      throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, `Prompt '${params.name}' not found`, { name: params.name });
     }
     const tools: Tool[] = await this.toolHandler.getToolsForScope(organizationId, gatewayId, caller);
 
@@ -260,7 +264,7 @@ export class McpContentHandler {
       ?? tools.find((t) => t.name === toolName);
 
     if (!tool) {
-      throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, `Tool '${toolName}' not found`);
+      throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, `Tool '${toolName}' not found`, { name: params.name });
     }
 
     const schema = tool.parameters as any;
@@ -392,10 +396,11 @@ export class McpContentHandler {
     return rows.filter((row) => row.organizationId === organizationId && (row.visibility ?? 'org') === 'org');
   }
 
-  private createError(code: JsonRpcErrorCode, message: string): any {
+  private createError(code: JsonRpcErrorCode, message: string, data?: unknown): any {
     const error = new Error() as any;
     error.code = code;
     error.message = message;
+    if (data !== undefined) error.data = data;
     return error;
   }
 }
