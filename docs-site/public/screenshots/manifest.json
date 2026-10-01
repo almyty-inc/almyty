@@ -76,7 +76,7 @@
       "title": "An agent's Channels tab",
       "path": "screenshots/agent-channels.png",
       "capturedAt": "2026-10-01T16:11:09.415Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "2d9e051b9f8ba2624e3ac368df45d7f0f341fc79926ba534e12a1fa50d7a6e35",
       "source": {
         "kind": "browser",
@@ -92,14 +92,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "91be8c898939c774b39ad0e675cbd38483029d9fd09f3e6c74c53129def00677",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "agent-constraints",
       "title": "Agent constraints",
       "path": "screenshots/agent-constraints.png",
       "capturedAt": "2026-10-01T16:11:12.061Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
       "source": {
         "kind": "browser",
@@ -114,14 +115,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "agent-detail-overview",
       "title": "Autonomous agent overview",
       "path": "screenshots/agent-detail-overview.png",
       "capturedAt": "2026-10-01T16:11:14.752Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
       "source": {
         "kind": "browser",
@@ -136,14 +138,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "agent-skill-viewer",
       "title": "Agent skills",
       "path": "screenshots/agent-skill-viewer.png",
       "capturedAt": "2026-10-01T16:11:17.331Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4a5001c21f8e0b27a887d60d6778cef722dfecf52e81bc70bf9f510dfcf41c79",
       "source": {
         "kind": "browser",
@@ -158,7 +161,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "agent-tool-mode",
@@ -973,7 +977,7 @@
       "title": "A question answered from the HR system",
       "path": "screenshots/guides/helpdesk-4-leave.png",
       "capturedAt": "2026-10-01T16:17:39.564Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d9d0a09b8219398ef56218d14c92d99c2b2a9b433d7a5d8f3acae5bd6f68d87a",
       "source": {
         "kind": "browser",
@@ -988,14 +992,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "guides-helpdesk-5-wifi",
       "title": "A question answered from the office guide",
       "path": "screenshots/guides/helpdesk-5-wifi.png",
       "capturedAt": "2026-10-01T16:17:41.630Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "2e9e9bb8edab7adc5451d646abc7bef0196101402a75300d01cc0f590edfe94e",
       "source": {
         "kind": "browser",
@@ -1010,7 +1015,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "guides-helpdesk-6-teams",
@@ -1085,7 +1091,7 @@
       "title": "An answer with its source",
       "path": "screenshots/guides/marketing-3-try.png",
       "capturedAt": "2026-10-01T16:16:17.531Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "cd4956a9113fd167e7cba6b370a729af40d908d6d2f1aee5cfab878b9a478701",
       "source": {
         "kind": "browser",
@@ -1100,7 +1106,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "guides-marketing-4-limits",
@@ -1219,7 +1226,7 @@
       "title": "A test run writes the report",
       "path": "screenshots/guides/ops-3-try.png",
       "capturedAt": "2026-10-01T16:16:58.252Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "deccf7602c3e27c09bcd71ec679784edd9ed82c8c83c3359754027269758bc10",
       "source": {
         "kind": "browser",
@@ -1234,7 +1241,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "guides-ops-4-slack",
@@ -1309,7 +1317,7 @@
       "title": "A report run, step by step",
       "path": "screenshots/guides/ops-7-report-run.png",
       "capturedAt": "2026-10-01T16:17:16.107Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5b302f0d1dd4bb16b7a2c77c4b2aa31867f2080cd419c0fa80900276a79df794",
       "source": {
         "kind": "browser",
@@ -1324,7 +1332,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "guides-sales-1-connect-crm",
@@ -1376,7 +1385,7 @@
       "title": "A brief before the call",
       "path": "screenshots/guides/sales-3-brief.png",
       "capturedAt": "2026-10-01T16:15:49.272Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "39aa4b3341bb29e6582d793feafecb4e0729894b57b38721a74f7a2c74b9dba1",
       "source": {
         "kind": "browser",
@@ -1391,14 +1400,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "guides-sales-4-notes",
       "title": "Meeting notes saved to the CRM",
       "path": "screenshots/guides/sales-4-notes.png",
       "capturedAt": "2026-10-01T16:15:51.336Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "bf7487eb77a32a0ee181e6fcb60b2a89a5f6aee2217df700b88afea11f845783",
       "source": {
         "kind": "browser",
@@ -1413,7 +1423,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "guides-sales-5-slack-keys",
@@ -1757,7 +1768,7 @@
       "title": "Save and turn the agent on",
       "path": "screenshots/guides/support-6-activate.png",
       "capturedAt": "2026-10-01T16:14:16.407Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b34c649d6910ac12373f4fc1bcc4b9fe3f244bdf34ed767a1ae523629f1acdb7",
       "source": {
         "kind": "browser",
@@ -1772,14 +1783,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "guides-support-7-try-order",
       "title": "Ask about an order",
       "path": "screenshots/guides/support-7-try-order.png",
       "capturedAt": "2026-10-01T16:14:18.504Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7bb2cbb9574765f96748d340cb6cc6758c5f4bb5eea79fcabe1a12ed34b05b85",
       "source": {
         "kind": "browser",
@@ -1794,7 +1806,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "guides-support-8-amount-rule",
@@ -2133,7 +2146,7 @@
       "title": "Schedule card",
       "path": "screenshots/schedule-config.png",
       "capturedAt": "2026-10-01T16:12:16.287Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "2c8b41462aa6c362ca3e818965a9e4556001439fb5906b2a9c732a5915e037c9",
       "source": {
         "kind": "browser",
@@ -2148,7 +2161,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "self-hosting-compose",
@@ -2386,7 +2400,7 @@
       "title": "Support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
       "capturedAt": "2026-10-01T16:12:18.902Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
       "source": {
         "kind": "browser",
@@ -2401,14 +2415,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "support-agent-overview",
       "title": "Support agent overview",
       "path": "screenshots/support-agent-overview.png",
       "capturedAt": "2026-10-01T16:12:21.560Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
       "source": {
         "kind": "browser",
@@ -2423,14 +2438,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "support-agent-runs",
       "title": "Support agent runs",
       "path": "screenshots/support-agent-runs.png",
       "capturedAt": "2026-10-01T16:12:24.190Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a0be00def5dc7bd3c7b5fa9ab1d9a45749dad44dc02854aa94d0d0056fbf98e1",
       "source": {
         "kind": "browser",
@@ -2445,14 +2461,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "tool-detail",
       "title": "Tool test",
       "path": "screenshots/tool-detail.png",
       "capturedAt": "2026-10-01T16:12:27.476Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7cffcfc9b1b5ddb6c954364a9bfb3c877b63f99838085eb867c78fa49bb0ef9b",
       "source": {
         "kind": "browser",
@@ -2467,7 +2484,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "41d65ed7612efab138849951a749901a01c1d78ca235117fd0b1c9be76724809",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "tool-side-effect",
@@ -2496,7 +2514,7 @@
       "title": "Tools list",
       "path": "screenshots/tools-list.png",
       "capturedAt": "2026-10-01T16:12:30.056Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6f4bf151392a561496ff79dec535046f4c46b41ad0fa3b5131f07b407c17ba11",
       "source": {
         "kind": "browser",
@@ -2511,14 +2529,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "e328a71a4d0825e4ee6bb7eaeb47639d030288710323db1a1209e0615c8af281",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "versioning-history",
       "title": "Change history",
       "path": "screenshots/versioning-history.png",
       "capturedAt": "2026-10-01T16:12:33.067Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1412a28e636399b379ef04c5ace5c821cf270a42504735ebd7d0dc589786d1c4",
       "source": {
         "kind": "browser",
@@ -2533,14 +2552,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "versioning",
       "title": "Pipeline versions",
       "path": "screenshots/versioning.png",
       "capturedAt": "2026-10-01T16:12:36.112Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "21972b07aeee8a95fe59f92283f13315116b9552678e4590d767464abccac52b",
       "source": {
         "kind": "browser",
@@ -2555,7 +2575,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "visitor-data-request",
@@ -2584,7 +2605,7 @@
       "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
       "capturedAt": "2026-10-01T16:12:39.461Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "2c8b41462aa6c362ca3e818965a9e4556001439fb5906b2a9c732a5915e037c9",
       "source": {
         "kind": "browser",
@@ -2599,7 +2620,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
     },
     {
       "id": "widget-builder",
