@@ -72,9 +72,9 @@
       "id": "agent-channels",
       "title": "An agent's Channels tab",
       "path": "screenshots/agent-channels.png",
-      "capturedAt": "2026-10-01T06:49:24.228Z",
-      "status": "needs-recapture",
-      "sha256": "6bb7266e5588f7bd9a77104eb95e4e3fd148ae86c54decce5f6668d19c7a18e0",
+      "capturedAt": "2026-10-01T16:11:09.415Z",
+      "status": "current",
+      "sha256": "2d9e051b9f8ba2624e3ac368df45d7f0f341fc79926ba534e12a1fa50d7a6e35",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -88,17 +88,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "833f2e1a2d6c3bde8dc2bb6ed93973fcfa69b702603fbc5b133b03a5263d58da",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "91be8c898939c774b39ad0e675cbd38483029d9fd09f3e6c74c53129def00677",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-constraints",
       "title": "Agent constraints",
       "path": "screenshots/agent-constraints.png",
-      "capturedAt": "2026-10-01T06:48:49.225Z",
-      "status": "needs-recapture",
-      "sha256": "72fbe1a4338ad0a6f1a16aab2650c7ff9b749009c05f0bbd1fbf268f9991798e",
+      "capturedAt": "2026-10-01T16:11:12.061Z",
+      "status": "current",
+      "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -111,17 +110,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent page's source changed: the Channels tab now gets the agent's owner so the Visitor data link also shows for the member who owns the agent, and the shared agent type gained its owner (createdBy). This view may look the same; recapture it to confirm."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-detail-overview",
       "title": "Autonomous agent overview",
       "path": "screenshots/agent-detail-overview.png",
-      "capturedAt": "2026-10-01T06:48:43.901Z",
-      "status": "needs-recapture",
-      "sha256": "9d60f8bbc04d9620e607b172e7376200cb02661647658dc0f96521d10bbb5d09",
+      "capturedAt": "2026-10-01T16:11:14.752Z",
+      "status": "current",
+      "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -134,17 +132,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent page's source changed: the Channels tab now gets the agent's owner so the Visitor data link also shows for the member who owns the agent, and the shared agent type gained its owner (createdBy). This view may look the same; recapture it to confirm."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-skill-viewer",
       "title": "Agent skills",
       "path": "screenshots/agent-skill-viewer.png",
-      "capturedAt": "2026-10-01T06:48:57.441Z",
-      "status": "needs-recapture",
-      "sha256": "07cb1f393d3f89e6265db90ec4dc0d2d1f3e8b2199295856b338a5c9d5f0a776",
+      "capturedAt": "2026-10-01T16:11:17.331Z",
+      "status": "current",
+      "sha256": "4a5001c21f8e0b27a887d60d6778cef722dfecf52e81bc70bf9f510dfcf41c79",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -157,9 +154,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent page's source changed: the Channels tab now gets the agent's owner so the Visitor data link also shows for the member who owns the agent, and the shared agent type gained its owner (createdBy). This view may look the same; recapture it to confirm."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-work-mode-panel",
@@ -209,9 +205,9 @@
       "id": "analytics-agents",
       "title": "Analytics: agents",
       "path": "screenshots/analytics-agents.png",
-      "capturedAt": "2026-10-01T06:50:55.853Z",
-      "status": "needs-recapture",
-      "sha256": "63d3c1aa8427205c04fe29c8e8df80eb48e819ec00deaee9461ed93b7693a70d",
+      "capturedAt": "2026-10-01T16:11:19.993Z",
+      "status": "current",
+      "sha256": "c76b798f222ef734b16382f4483601c14a6a7b0b3a75a66f693d637b43554a57",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -224,17 +220,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-audit",
       "title": "Audit trail",
       "path": "screenshots/analytics-audit.png",
-      "capturedAt": "2026-10-01T06:51:03.614Z",
-      "status": "needs-recapture",
-      "sha256": "aeb4fdddd3aebed54dce52f007b3ae444c91ed071e59904db41641848e330038",
+      "capturedAt": "2026-10-01T16:11:22.526Z",
+      "status": "current",
+      "sha256": "a7af888214f7a172480a7f2c58a301ed97b1ec43f30f9d7a6a0343a514b13d23",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -247,16 +242,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-chargeback-locked",
       "title": "Chargeback (Enterprise, locked)",
       "path": "screenshots/analytics-chargeback-locked.png",
-      "capturedAt": "2026-10-01T06:51:06.150Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T16:11:25.056Z",
+      "status": "current",
       "sha256": "f7ec69cb930d2b5eea3a339271cd2e9e326661421d1a821ca3305cd1cb214bd0",
       "source": {
         "kind": "browser",
@@ -270,16 +264,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-gateways",
       "title": "Analytics: gateways",
       "path": "screenshots/analytics-gateways.png",
-      "capturedAt": "2026-10-01T06:51:01.020Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T16:11:27.584Z",
+      "status": "current",
       "sha256": "88aa07490ff5133741a23fd2dfe69f586f9eabc30b941b17f47e334adb901cc3",
       "source": {
         "kind": "browser",
@@ -293,17 +286,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-overview",
       "title": "Analytics overview",
       "path": "screenshots/analytics-overview.png",
-      "capturedAt": "2026-10-01T06:50:53.167Z",
-      "status": "needs-recapture",
-      "sha256": "f6d944f80833e42b51e47e7a025316a7690adea2cb8bdf91fcf5e119100d9765",
+      "capturedAt": "2026-10-01T16:11:30.163Z",
+      "status": "current",
+      "sha256": "92d0924f996fdd498ed6ee5fb004d4dba1310a0485a8b71b04411284bc3911ef",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -316,17 +308,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-tools",
       "title": "Analytics: tools",
       "path": "screenshots/analytics-tools.png",
-      "capturedAt": "2026-10-01T06:50:58.451Z",
-      "status": "needs-recapture",
-      "sha256": "761ac7751c4dd9a3ad5bbe49294b0350fbbdda8c745b41f6d2e00d86d9deab76",
+      "capturedAt": "2026-10-01T16:11:32.674Z",
+      "status": "current",
+      "sha256": "9679040f9e76d6b855531f5dbc2dcc2e3f86e2de2582157c91555fe2674e003f",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -339,9 +330,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "apis-list",
@@ -443,8 +433,8 @@
       "id": "channel-branding-rules",
       "title": "Branding and visitor rules",
       "path": "screenshots/channel-branding-rules.png",
-      "capturedAt": "2026-10-01T06:49:26.864Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T16:11:35.294Z",
+      "status": "current",
       "sha256": "5fe3919689b49ac17afb25e0b3c21b321e1f2dd3f63d68cfec96dd7944aa8033",
       "source": {
         "kind": "browser",
@@ -458,17 +448,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "f9a25adb7545a123db6b319605369a5dd42b19ae18d2d0f82cdbfdb4d0777d2e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "efa026afef612c503df01efc731e583d89877dba429adadf9336eca3f3e6e605",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-slack-keys",
       "title": "Slack channel keys",
       "path": "screenshots/channel-slack-keys.png",
-      "capturedAt": "2026-10-01T06:49:32.209Z",
-      "status": "needs-recapture",
-      "sha256": "a1432ca8be33bf97efb4a599c922a74acd8641df7f66afdb379bf3f9f0178eb9",
+      "capturedAt": "2026-10-01T16:11:38.913Z",
+      "status": "current",
+      "sha256": "7d07d38b1fc8db0875a2be862d966c508e2cff6c3c2e7255bff18a234803f802",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -481,17 +470,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-slack-live",
       "title": "Published Slack channel",
       "path": "screenshots/channel-slack-live.png",
-      "capturedAt": "2026-10-01T06:49:35.331Z",
-      "status": "needs-recapture",
-      "sha256": "dd68ca412b2556b438148d1d454cfbf7c50b9487273edcb747ceb54c85c25762",
+      "capturedAt": "2026-10-01T16:11:41.968Z",
+      "status": "current",
+      "sha256": "c067e90b5f9ab9288449c8c2ded46b3927b365aaa676108c1857ecd9294d8847",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -504,16 +492,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-terminal-build",
       "title": "Terminal app channel",
       "path": "screenshots/channel-terminal-build.png",
-      "capturedAt": "2026-10-01T06:49:38.048Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T16:11:44.594Z",
+      "status": "current",
       "sha256": "81db9c8408d17de95edf28458b79f099a72aa46ea3d4d25fef2d76adeebb4067",
       "source": {
         "kind": "browser",
@@ -527,16 +514,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-web-published",
       "title": "Published web chat channel",
       "path": "screenshots/channel-web-published.png",
-      "capturedAt": "2026-10-01T06:49:29.551Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T16:11:47.211Z",
+      "status": "current",
       "sha256": "ed18f83d07bef8b1484cf0040a39442cbd0298d8f6e0b15af696079653326c7a",
       "source": {
         "kind": "browser",
@@ -550,9 +536,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "cli-agents-help",
@@ -717,9 +702,9 @@
       "id": "gateway-detail-tools",
       "title": "Gateway tool scoping",
       "path": "screenshots/gateway-detail-tools.png",
-      "capturedAt": "2026-10-01T06:50:12.402Z",
-      "status": "needs-recapture",
-      "sha256": "3e7a9a4d505b40e40611fa03560562c44b5e1f4f1682b77837585eaf8543e490",
+      "capturedAt": "2026-10-01T16:11:50.177Z",
+      "status": "current",
+      "sha256": "bc7642e76714994834ce736d634501bc37eac95aee6e46c6eaa9b5d280346ebb",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -732,17 +717,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
+      "sourceDigest": "4a4c888b2cd8f625d6e69dcb54c075d6005f9c6bf8ec80317c090d083b939923",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-detail",
       "title": "Gateway detail",
       "path": "screenshots/gateway-detail.png",
-      "capturedAt": "2026-10-01T06:50:09.333Z",
-      "status": "needs-recapture",
-      "sha256": "343e858c9e9877d81bd0b7c1604aedd076ec7ac792bd9ce08a264709eab8c2a8",
+      "capturedAt": "2026-10-01T16:11:52.758Z",
+      "status": "current",
+      "sha256": "ca491faa4d657e670cd1740e63665ff37ab0442a87fc470e5bca23e82ed81b23",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -755,17 +739,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
+      "sourceDigest": "4a4c888b2cd8f625d6e69dcb54c075d6005f9c6bf8ec80317c090d083b939923",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-petstore-config",
       "title": "Petstore gateway",
       "path": "screenshots/gateway-petstore-config.png",
-      "capturedAt": "2026-10-01T06:50:15.088Z",
-      "status": "needs-recapture",
-      "sha256": "94b5ad87d36caafc48925cb404ee3656cec454036be4fb198ff818ba69ca3d2f",
+      "capturedAt": "2026-10-01T16:11:55.333Z",
+      "status": "current",
+      "sha256": "49d1060c207f94f9b0f4acd8171d7b8296ad9feeed67f27408cb114159c7018c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -778,17 +761,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
+      "sourceDigest": "4a4c888b2cd8f625d6e69dcb54c075d6005f9c6bf8ec80317c090d083b939923",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-petstore-integration",
       "title": "Gateway integrations",
       "path": "screenshots/gateway-petstore-integration.png",
-      "capturedAt": "2026-10-01T06:50:20.834Z",
-      "status": "needs-recapture",
-      "sha256": "a73146de1379a4cd034095c3bd31501e4ba6b15a71d473e48a1b780deda95a02",
+      "capturedAt": "2026-10-01T16:11:58.299Z",
+      "status": "current",
+      "sha256": "659e05bf15339bbe6ee679ce67bfc9a42c832ef34693ca7850448bc5621ee3a8",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -801,9 +783,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
+      "sourceDigest": "4a4c888b2cd8f625d6e69dcb54c075d6005f9c6bf8ec80317c090d083b939923",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "guides-dev-1-gateway",
@@ -1898,8 +1879,8 @@
       "id": "interfaces-channel-config",
       "title": "Add channel",
       "path": "screenshots/interfaces-channel-config.png",
-      "capturedAt": "2026-10-01T06:49:40.689Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T16:12:00.860Z",
+      "status": "current",
       "sha256": "aa6a65aabbf701d494218a1311d013f4bc5cd7d662e8e8477d18684631b06957",
       "source": {
         "kind": "browser",
@@ -1913,17 +1894,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "ecf2b7366d37cabacb0295f4403c2ca234213a673a7dea0734f4e64b4724d5fb",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "a0a51d00e703c9516d8692b14905fbef867bf90baf3c8c74b73bbd63f706ab8e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "interfaces-channel-setup",
       "title": "Microsoft Teams channel",
       "path": "screenshots/interfaces-channel-setup.png",
-      "capturedAt": "2026-10-01T06:49:43.315Z",
-      "status": "needs-recapture",
-      "sha256": "525249d57fa91992ceb9e56a0e31b29447ad953dc6755722d4d28e85aa58ff04",
+      "capturedAt": "2026-10-01T16:12:03.499Z",
+      "status": "current",
+      "sha256": "5aa653839576d6ce4ea671e5f2fd701d0896c08f9fcf5b6acda1e22f9154355d",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1936,9 +1916,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "memory-write",
@@ -2032,9 +2011,9 @@
       "id": "quickstart-claude-config",
       "title": "Client setup",
       "path": "screenshots/quickstart-claude-config.png",
-      "capturedAt": "2026-10-01T06:50:26.869Z",
-      "status": "needs-recapture",
-      "sha256": "1c8b32d819ed1dabde66f6597199e8b93d74e82df34f26cb712c7148757e6f22",
+      "capturedAt": "2026-10-01T16:12:06.528Z",
+      "status": "current",
+      "sha256": "30a46bd1d71cdf9fb6c4c0911cdf2a6059b97611524da29dbfa9c2945edeff7f",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2047,17 +2026,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
+      "sourceDigest": "4a4c888b2cd8f625d6e69dcb54c075d6005f9c6bf8ec80317c090d083b939923",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-gateway-mcp",
       "title": "Petstore MCP gateway",
       "path": "screenshots/quickstart-gateway-mcp.png",
-      "capturedAt": "2026-10-01T06:50:17.807Z",
-      "status": "needs-recapture",
-      "sha256": "bb010649f6474ca214b8eeb41e972c52ec755e64312665db849350dcc7caedba",
+      "capturedAt": "2026-10-01T16:12:10.180Z",
+      "status": "current",
+      "sha256": "53a0b5bed7bcf63256f19d4c0ac6b3ef597559c62638f1380a9d208a13e4c9b2",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2070,17 +2048,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
+      "sourceDigest": "4a4c888b2cd8f625d6e69dcb54c075d6005f9c6bf8ec80317c090d083b939923",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-mcp-endpoints",
       "title": "MCP endpoints",
       "path": "screenshots/quickstart-mcp-endpoints.png",
-      "capturedAt": "2026-10-01T06:50:23.863Z",
-      "status": "needs-recapture",
-      "sha256": "40b6baaf71470610c1c7d08d8761e4a167c997ec31f2afe36346ed141f8f0247",
+      "capturedAt": "2026-10-01T16:12:13.169Z",
+      "status": "current",
+      "sha256": "b6152cf3ed7a686004c1e9c1b87ecc681058a01a5fee84579af6a5d9b4b1a445",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2093,9 +2070,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
+      "sourceDigest": "4a4c888b2cd8f625d6e69dcb54c075d6005f9c6bf8ec80317c090d083b939923",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "runner-detail",
@@ -2147,9 +2123,9 @@
       "id": "schedule-config",
       "title": "Schedule card",
       "path": "screenshots/schedule-config.png",
-      "capturedAt": "2026-10-01T06:49:11.919Z",
-      "status": "needs-recapture",
-      "sha256": "929931322f27d42b1e12407be532c1030d3c5bc2bf49f6a26b5c56239d78ea08",
+      "capturedAt": "2026-10-01T16:12:16.287Z",
+      "status": "current",
+      "sha256": "2c8b41462aa6c362ca3e818965a9e4556001439fb5906b2a9c732a5915e037c9",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2162,9 +2138,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent page's source changed: the Channels tab now gets the agent's owner so the Visitor data link also shows for the member who owns the agent, and the shared agent type gained its owner (createdBy). This view may look the same; recapture it to confirm."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "self-hosting-compose",
@@ -2401,9 +2376,9 @@
       "id": "support-agent-constraints",
       "title": "Support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
-      "capturedAt": "2026-10-01T06:48:51.913Z",
-      "status": "needs-recapture",
-      "sha256": "72fbe1a4338ad0a6f1a16aab2650c7ff9b749009c05f0bbd1fbf268f9991798e",
+      "capturedAt": "2026-10-01T16:12:18.902Z",
+      "status": "current",
+      "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2416,17 +2391,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent page's source changed: the Channels tab now gets the agent's owner so the Visitor data link also shows for the member who owns the agent, and the shared agent type gained its owner (createdBy). This view may look the same; recapture it to confirm."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-overview",
       "title": "Support agent overview",
       "path": "screenshots/support-agent-overview.png",
-      "capturedAt": "2026-10-01T06:48:46.565Z",
-      "status": "needs-recapture",
-      "sha256": "9d60f8bbc04d9620e607b172e7376200cb02661647658dc0f96521d10bbb5d09",
+      "capturedAt": "2026-10-01T16:12:21.560Z",
+      "status": "current",
+      "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2439,17 +2413,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent page's source changed: the Channels tab now gets the agent's owner so the Visitor data link also shows for the member who owns the agent, and the shared agent type gained its owner (createdBy). This view may look the same; recapture it to confirm."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-runs",
       "title": "Support agent runs",
       "path": "screenshots/support-agent-runs.png",
-      "capturedAt": "2026-10-01T06:48:54.767Z",
-      "status": "needs-recapture",
-      "sha256": "1081aa42342a0363ca5f5fcbad8ddce8a94d2165c5031be4b3c5fdaa3aa56935",
+      "capturedAt": "2026-10-01T16:12:24.190Z",
+      "status": "current",
+      "sha256": "a0be00def5dc7bd3c7b5fa9ab1d9a45749dad44dc02854aa94d0d0056fbf98e1",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2462,17 +2435,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent page's source changed: the Channels tab now gets the agent's owner so the Visitor data link also shows for the member who owns the agent, and the shared agent type gained its owner (createdBy). This view may look the same; recapture it to confirm."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "tool-detail",
       "title": "Tool test",
       "path": "screenshots/tool-detail.png",
-      "capturedAt": "2026-10-01T06:50:06.395Z",
-      "status": "needs-recapture",
-      "sha256": "6060c3bd3b88b8c7e8c0df729350b1e7514b99e51eebeb34a3114e8bba2e8840",
+      "capturedAt": "2026-10-01T16:12:27.476Z",
+      "status": "current",
+      "sha256": "7cffcfc9b1b5ddb6c954364a9bfb3c877b63f99838085eb867c78fa49bb0ef9b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2485,17 +2457,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c5bca9fa2a36ff2ea5ac6f62338fce3a5ccc3c66679d9f47f835f55a3e4d0c3c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "frontend/src/components/tools changed: the Add MCP server form's credential field now says token or sign-in. This page does not show that form; recapture to confirm and re-register."
+      "sourceDigest": "41d65ed7612efab138849951a749901a01c1d78ca235117fd0b1c9be76724809",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "tools-list",
       "title": "Tools list",
       "path": "screenshots/tools-list.png",
-      "capturedAt": "2026-10-01T06:50:03.016Z",
-      "status": "needs-recapture",
-      "sha256": "f323b7031bd76945b279271975cb4f058a96094dd05db95af16d6cd5be468d92",
+      "capturedAt": "2026-10-01T16:12:30.056Z",
+      "status": "current",
+      "sha256": "6f4bf151392a561496ff79dec535046f4c46b41ad0fa3b5131f07b407c17ba11",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2508,17 +2479,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "72534cd6c01c5404790be58231ca2915723ae9fd35ae60dd0b4831d53119b4e6",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "frontend/src/components/tools changed: the Add MCP server form's credential field now says token or sign-in. This page does not show that form; recapture to confirm and re-register."
+      "sourceDigest": "e328a71a4d0825e4ee6bb7eaeb47639d030288710323db1a1209e0615c8af281",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "versioning-history",
       "title": "Change history",
       "path": "screenshots/versioning-history.png",
-      "capturedAt": "2026-10-01T06:49:21.407Z",
-      "status": "needs-recapture",
-      "sha256": "09a40dd505781b51054852d00884c8bd47cb638f34cb7b83f66e82c79ec55393",
+      "capturedAt": "2026-10-01T16:12:33.067Z",
+      "status": "current",
+      "sha256": "1412a28e636399b379ef04c5ace5c821cf270a42504735ebd7d0dc589786d1c4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2531,17 +2501,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent page's source changed: the Channels tab now gets the agent's owner so the Visitor data link also shows for the member who owns the agent, and the shared agent type gained its owner (createdBy). This view may look the same; recapture it to confirm."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "versioning",
       "title": "Pipeline versions",
       "path": "screenshots/versioning.png",
-      "capturedAt": "2026-10-01T06:49:18.211Z",
-      "status": "needs-recapture",
-      "sha256": "ce5ea5ee2e749a042c1159e5d4088a9eec57b8d8161598de548431645d1dab51",
+      "capturedAt": "2026-10-01T16:12:36.112Z",
+      "status": "current",
+      "sha256": "21972b07aeee8a95fe59f92283f13315116b9552678e4590d767464abccac52b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2554,9 +2523,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent page's source changed: the Channels tab now gets the agent's owner so the Visitor data link also shows for the member who owns the agent, and the shared agent type gained its owner (createdBy). This view may look the same; recapture it to confirm."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "visitor-data-request",
@@ -2584,9 +2552,9 @@
       "id": "webhook-config",
       "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
-      "capturedAt": "2026-10-01T06:49:15.045Z",
-      "status": "needs-recapture",
-      "sha256": "929931322f27d42b1e12407be532c1030d3c5bc2bf49f6a26b5c56239d78ea08",
+      "capturedAt": "2026-10-01T16:12:39.461Z",
+      "status": "current",
+      "sha256": "2c8b41462aa6c362ca3e818965a9e4556001439fb5906b2a9c732a5915e037c9",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2599,16 +2567,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent page's source changed: the Channels tab now gets the agent's owner so the Visitor data link also shows for the member who owns the agent, and the shared agent type gained its owner (createdBy). This view may look the same; recapture it to confirm."
+      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "widget-builder",
       "title": "Website widget channel",
       "path": "screenshots/widget-builder.png",
-      "capturedAt": "2026-10-01T06:49:46.605Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T16:12:45.147Z",
+      "status": "current",
       "sha256": "ce07dc4f3fc8e51c2d82bc47d7635aaffe6d9650b203c971ec18665e5635fb21",
       "source": {
         "kind": "browser",
@@ -2623,9 +2590,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c816e6c0188a61adb7cba35ad385d732aed84525f2821cff92c85871f8ab95e7",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
+      "sourceDigest": "824cb7760d4a2a28193c3c1783ff5d184a319ce8d1c6b59d63370a5e3d798f25",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     }
   ]
 }
