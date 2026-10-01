@@ -124,6 +124,13 @@ export class UnifiedGatewayDelegation {
     res: Response,
     body: any,
   ) {
+    // A gateway whose agent was deleted answers like a missing one. Before
+    // deleting an agent took its gateways with it, such a gateway stayed
+    // active and a message to it ran against no agent: a 500.
+    if (Gateway.agentGone(gateway)) {
+      const what = UnifiedGatewayDelegation.CHANNEL_TYPES.has(gateway.type) ? 'This chat no longer exists' : 'Not found';
+      throw new HttpException(what, HttpStatus.NOT_FOUND);
+    }
     const afterGateway = req.path.replace(`/${orgSlug}/${resourceSlug}`, '');
     const action = afterGateway.replace(/^\//, '') || '';
 

@@ -23,7 +23,7 @@
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed; the Delete agent confirmation says its channels go too. Recapture against the current UI."
     },
     {
       "id": "agent-builder-node-palette",
@@ -46,7 +46,7 @@
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "agent-builder",
@@ -69,7 +69,7 @@
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "agent-channels",
@@ -93,7 +93,7 @@
       ],
       "sourceDigest": "4984f7a4169c68ac30b9c3fbea699b0f6f0b86d90132bff7788c6ba8ea5bb60d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "agent-constraints",
@@ -116,7 +116,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "agent-detail-overview",
@@ -139,7 +139,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "agent-skill-viewer",
@@ -162,7 +162,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "agent-work-mode-panel",
@@ -185,7 +185,7 @@
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "agents-list",
@@ -208,7 +208,7 @@
       ],
       "sourceDigest": "95e5fcadc2b793781f6186159b1fea52b955cb62daffa98a151fba314ee79456",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "analytics-agents",
@@ -392,7 +392,7 @@
       ],
       "sourceDigest": "8538813d7a49c12abe17bef395a8e2a9a0aba0b23dfdb8a299204825d05815cf",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The Approvals page now also lists tool calls held by an amount rule (no run), with its own wording. Recapture the changed view."
+      "reason": "Source changed after capture: the Approvals page names the agent (or \"Deleted agent\") instead of \"agent <id>\". Recapture against the current UI."
     },
     {
       "id": "approvals-pending",
@@ -415,7 +415,7 @@
       ],
       "sourceDigest": "8538813d7a49c12abe17bef395a8e2a9a0aba0b23dfdb8a299204825d05815cf",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The Approvals page now also lists tool calls held by an amount rule (no run), with its own wording. Recapture the changed view."
+      "reason": "Source changed after capture: the Approvals page names the agent (or \"Deleted agent\") instead of \"agent <id>\". Recapture against the current UI."
     },
     {
       "id": "apps-hosted-chat-routing-failure",
@@ -975,7 +975,7 @@
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-helpdesk-4-leave",
@@ -998,7 +998,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-helpdesk-5-wifi",
@@ -1021,7 +1021,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-helpdesk-6-teams",
@@ -1091,7 +1091,7 @@
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-marketing-3-try",
@@ -1114,7 +1114,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-marketing-4-limits",
@@ -1230,7 +1230,7 @@
       ],
       "sourceDigest": "e58414fb1f97cdb2151ddd39381a9747ac9ee8b05e2dd92831a8b9f145de0f1f",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "The Create tool form and tool detail page changed for GraphQL, SOAP and gRPC tools (PR #889). The captured HTTP/imported-tool states look the same, but the sources moved; recapture to confirm."
     },
     {
       "id": "guides-ops-3-agent",
@@ -1253,7 +1253,7 @@
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-ops-4-try",
@@ -1276,7 +1276,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-ops-5-heartbeat",
@@ -1299,7 +1299,7 @@
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-ops-6-report-run",
@@ -1322,7 +1322,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-sales-1-connect-crm",
@@ -1368,7 +1368,7 @@
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-sales-3-brief",
@@ -1391,7 +1391,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-sales-4-notes",
@@ -1414,7 +1414,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-sales-5-slack-keys",
@@ -1719,7 +1719,7 @@
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-support-5-model-and-tools",
@@ -1742,7 +1742,7 @@
       ],
       "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-support-6-activate",
@@ -1765,7 +1765,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-support-7-try-order",
@@ -1788,7 +1788,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "guides-support-8-refund-waits",
@@ -1810,7 +1810,7 @@
       ],
       "sourceDigest": "c7f2487bd278909887646363871e9764c3bdf55fe97445ff4a6b49364f316804",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the Approvals page names the agent (or \"Deleted agent\") instead of \"agent <id>\". Recapture against the current UI."
     },
     {
       "id": "guides-support-9-approve",
@@ -1832,7 +1832,7 @@
       ],
       "sourceDigest": "c7f2487bd278909887646363871e9764c3bdf55fe97445ff4a6b49364f316804",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the Approvals page names the agent (or \"Deleted agent\") instead of \"agent <id>\". Recapture against the current UI."
     },
     {
       "id": "hosted-chat-privacy",
@@ -1955,6 +1955,7 @@
       "path": "screenshots/memory.png",
       "capturedAt": "2026-09-30T16:32:49.148Z",
       "status": "needs-recapture",
+      "reason": "memories.tsx now lists each document once (its chunks hidden); no visible change expected on the seeded page, recapture to refresh the source digest.",
       "sha256": "16eae1d86f93fe323b45a65aefe4d718c0bc102269e900e44d0f9987d12c5795",
       "source": {
         "kind": "browser",
@@ -1969,8 +1970,7 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "61c844a2d9c8dbd21ed2f1ebac031ee67ed35fe18bad7e74868e1ab66242d0ee",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "models",
@@ -2156,7 +2156,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The schedule moved from an inline every-N-minutes card to its own page (a time of day on chosen days, once a month or every few minutes, in a time zone, with the next runs and where the result goes). This capture shows the old card."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "self-hosting-compose",
@@ -2420,7 +2420,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "support-agent-overview",
@@ -2443,7 +2443,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "support-agent-runs",
@@ -2466,7 +2466,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "tool-detail",
@@ -2489,7 +2489,7 @@
       ],
       "sourceDigest": "b2a8a7c1ebe0985e24dfa89609b6bee89deb199c29e3ce641683fdccb4cd00f7",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "The Create tool form and tool detail page changed for GraphQL, SOAP and gRPC tools (PR #889). The captured HTTP/imported-tool states look the same, but the sources moved; recapture to confirm."
     },
     {
       "id": "tools-list",
@@ -2512,7 +2512,7 @@
       ],
       "sourceDigest": "6e31b4943d1cf05db697d4ab45f519abaeae248d1dfa7ed0f78164f95fa8c471",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "reason": "The Create tool form and tool detail page changed for GraphQL, SOAP and gRPC tools (PR #889). The captured HTTP/imported-tool states look the same, but the sources moved; recapture to confirm."
     },
     {
       "id": "versioning-history",
@@ -2535,7 +2535,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "versioning",
@@ -2558,7 +2558,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "webhook-config",
@@ -2581,7 +2581,7 @@
       ],
       "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The agent pages' source changed: the overview's Schedule card now says the schedule in plain words with its next run and links to a schedule page of its own, Recent runs say whether a scheduled result was posted to its channel, and the shared agent types gained the schedule shapes. This view may look the same; recapture it to confirm."
+      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
     },
     {
       "id": "widget-builder",

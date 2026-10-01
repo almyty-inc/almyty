@@ -215,4 +215,39 @@ describe('AppBuildsService housekeeping', () => {
       expect(builds.rows[0].error).toBeUndefined();
     });
   });
+
+  /**
+   * A channel's build rows go with the channel (ON DELETE CASCADE), and
+   * the sweep finds files through those rows: a file not deleted before
+   * the channel goes stays in object storage with nothing pointing at it.
+   */
+  describe('removeArtifactsOf', () => {
+    it("deletes the stored files of the given channels' builds and nothing else", async () => {
+      const { service, deleted } = makeService([
+        { id: 'b-1', channelId: 'c-gone', status: BuildStatus.SUCCEEDED, artifactKey: 'app-builds/org/c-gone/b-1.zip' },
+        { id: 'b-2', channelId: 'c-gone', status: BuildStatus.FAILED, artifactKey: null },
+        { id: 'b-3', channelId: 'c-kept', status: BuildStatus.SUCCEEDED, artifactKey: 'app-builds/org/c-kept/b-3.zip' },
+      ]);
+
+      await expect(service.removeArtifactsOf(['c-gone'])).resolves.toBe(1);
+      expect(deleted).toEqual(['app-builds/org/c-gone/b-1.zip']);
+    });
+
+    it('carries on past a file that cannot be deleted', async () => {
+      const { service, storage } = makeService([
+        { id: 'b-1', channelId: 'c-gone', status: BuildStatus.SUCCEEDED, artifactKey: 'k-1' },
+        { id: 'b-2', channelId: 'c-gone', status: BuildStatus.SUCCEEDED, artifactKey: 'k-2' },
+      ]);
+      storage.delete.mockRejectedValueOnce(new Error('bucket down'));
+
+      await expect(service.removeArtifactsOf(['c-gone'])).resolves.toBe(1);
+      expect(storage.delete).toHaveBeenCalledTimes(2);
+    });
+
+    it('asks nothing for no channels', async () => {
+      const { service, storage } = makeService([]);
+      await expect(service.removeArtifactsOf([])).resolves.toBe(0);
+      expect(storage.delete).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -676,6 +676,71 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
     expect(oldParent).toBeNull();
   });
 
+  it('a whole document is kept as chunks that search finds, in its own scope only, until it is deleted', async () => {
+    const scope = { scope_type: 'workspace' as const, scope_id: 'wks_whole_doc' };
+    // Readable filler (not compressible, so anti-dump lets it through)
+    // pushes each fact into a chunk of its own.
+    const content = [
+      'Refund policy: customers may return hardware within thirty days.',
+      randomReadable(1500),
+      randomReadable(1500),
+      'Shipping to Norway takes nine business days.',
+    ].join('\n\n');
+
+    const parent = await service.put(
+      { mode: 'document', scope, content, source_uri: 'https://example.com/policy', source_version: 1, provenance: baseProvenance },
+      { user_id: 'u' },
+    );
+
+    const repo = ds.getRepository(CanonicalMemory);
+    const chunks = await repo.find({ where: { chunkOf: parent.id }, order: { chunkIndex: 'ASC' } });
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(parent.chunk_total).toBe(chunks.length);
+    const parentRow = await repo.findOne({ where: { id: parent.id } });
+    // The parent keeps the full text for reading and is not embedded itself.
+    expect(parentRow!.content).toBe(content);
+    expect(parentRow!.chunkTotal).toBe(chunks.length);
+    expect(parentRow!.embeddingStatus).toBe('skipped');
+    expect(chunks.every((c) => c.mode === 'document' && c.scopeId === scope.scope_id && c.sourceUri === 'https://example.com/policy')).toBe(true);
+    // One embedding job per chunk, none for the parent.
+    expect(enqueued.map((e) => e.data.memory_id).sort()).toEqual(chunks.map((c) => c.id).sort());
+
+    for (const c of chunks) await service.fillEmbedding(c.id);
+
+    const hybrid = await service.search({ scope, query: 'shipping to Norway business days', top_k: 10 });
+    expect(hybrid.length).toBeGreaterThan(0);
+    expect(hybrid.map((r) => r.item.id)).not.toContain(parent.id);
+    expect(hybrid.every((r) => r.item.chunk_of === parent.id)).toBe(true);
+    const fts = await service.search({ scope, query: 'Norway', top_k: 10, fts_only: true });
+    expect(fts.map((r) => r.item.id)).not.toContain(parent.id);
+    expect(fts[0].item.content).toContain('Norway');
+
+    // Another scope never sees it.
+    expect(await service.search({ scope: { scope_type: 'workspace', scope_id: 'wks_other' }, query: 'Norway', top_k: 10 })).toEqual([]);
+
+    // Listed once, whole.
+    const listed = await service.list({ scope, mode: 'document', hide_chunks: true });
+    expect(listed.items.map((i) => i.id)).toEqual([parent.id]);
+
+    // Deleting the document takes its chunks out of search too.
+    expect(await service.delete(parent.id, scope.scope_id, 'soft', { user_id: 'u' })).toBe(true);
+    expect(await service.search({ scope, query: 'Norway', top_k: 10 })).toEqual([]);
+    expect(await service.search({ scope, query: 'Norway', top_k: 10, fts_only: true })).toEqual([]);
+  });
+
+  it('a document import parent is never a search result; its chunks are', async () => {
+    const scope = { scope_type: 'workspace' as const, scope_id: 'wks_import_search' };
+    const res = await chunker.importSource({
+      scope, source_uri: 'almyty:file/handbook', content: `Holiday rules: the office closes on Midsummer.\n\n${randomReadable(1800)}`,
+      provenance: baseProvenance,
+    });
+    const rows = await ds.getRepository(CanonicalMemory).find({ where: { scopeId: scope.scope_id } });
+    for (const r of rows) await service.fillEmbedding(r.id);
+    const found = await service.search({ scope, query: 'handbook Midsummer', top_k: 10 });
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.map((r) => r.item.id)).not.toContain(res.parent_id);
+  });
+
   // ── consolidation (LLM stubbed; DB real) ────────────────────
 
   it('consolidation: extracts facts from short-tier rows, writes long-tier facts, supersedes sources', async () => {

@@ -13,7 +13,7 @@ Memory is different from an assistant's [rules](/agents/autonomous#constraints):
 1. Open **Memory** in the sidebar and click **Add memory**. To add one for a single assistant, open that assistant's **Memory** tab instead.
 2. Under **What should your agents remember?**, write it in a sentence.
 3. Optionally add **Tags** to group it, like `refunds` or `shipping`.
-4. Under **Advanced**, pick the **Kind**: a **Fact** (a short thing to remember) or a **Document** (a longer text, with **Where it came from** for a link to the original). For a fact, pick **How long to keep it**. An assistant looks up facts before it answers; documents are kept and listed here but are not what it looks up, so write what it should answer from as facts.
+4. Under **Advanced**, pick the **Kind**: a **Fact** (a short thing to remember) or a **Document** (a longer text, with **Where it came from** for a link to the original). For a fact, pick **How long to keep it**. An assistant looks up both before it answers: from a document it uses the passages that relate to the question, not the whole text. What you add here is read by assistants whose memory is **Shared by all agents**.
 5. Click **Save memory**.
 
 ![Writing a memory entry](/screenshots/memory-write.png)
@@ -85,7 +85,7 @@ Changing a memory does not overwrite it: the new version is saved and the old on
 
 **Tiers.** The API stores a tier on each memory: `short` (optional TTL, swept when it expires), `project`, `long` (no expiry) and `shared` (cross-agent workspace knowledge, no expiry). An hourly consolidation job distils ageing short-term rows into long-term facts with an LLM, and a TTL sweeper retires expired short rows.
 
-**Modes.** `memory` (facts, preferences and observations) and `document` (source documents, chunked and versioned for retrieval).
+**Modes.** `memory` (facts, preferences and observations) and `document` (source documents, chunked and versioned for retrieval). A document written in one piece is kept whole for reading and split into chunks that are embedded and searched; search returns the matching chunks, never the whole document, and deleting the document deletes its chunks. An agent's recall searches both modes in the scope its memory settings pick; with an outside memory account, facts come from that account and documents from almyty-native.
 
 **Retrieval** is hybrid search: vector similarity (pgvector, cosine) blended with Postgres full-text search, then filtered by scope, tier, tags and validity. Embeddings are made per scope with the organization's own providers (OpenAI `text-embedding-3-small` preferred, Mistral `mistral-embed` next, and a deterministic fallback when neither is configured), asynchronously. Each memory records the model that embedded it; vector search only compares vectors from the same model, and falls back to full-text search across models.
 

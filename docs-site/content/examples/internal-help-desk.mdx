@@ -87,7 +87,7 @@ Staff can now find the bot in Teams and message it directly, or add it to a team
 ## For developers
 
 - This walk-through is automated in `scripts/demo-seed/guides.mjs helpdesk` against the local demo stack, which serves a small fake intranet.
-- An autonomous agent looks up memories of the kind **Fact** before each answer. Memories you add as **Document** (under **Advanced → Kind**) are kept and listed on the Memory page but are not what an agent looks up before it answers; for text you want answered from, add it as facts, or connect the system it lives in as an API. See [Memory](/memory).
+- An autonomous agent looks up memories before each answer: facts, and memories you add as **Document** (under **Advanced → Kind**). A document is searched in passages, so the agent gets the parts that relate to the question. For text that changes often or lives in another system, connect that system as an API instead. See [Memory](/memory).
 - Teams channel details, including how incoming messages are verified: [Chat apps](/interfaces#microsoft-teams).
 
 ## Related

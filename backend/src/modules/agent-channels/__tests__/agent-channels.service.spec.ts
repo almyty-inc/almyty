@@ -466,6 +466,103 @@ describe('AgentChannelsService', () => {
     });
   });
 
+  /**
+   * Deleting an agent. Its channels used to stay behind: the channel rows
+   * went with the agent's foreign key, but their gateways stayed active,
+   * kept the web chat's address taken (the next web chat of that name got
+   * "-2") and answered a message with a 500.
+   */
+  describe('when the agent is deleted', () => {
+    /** Gateway rows that remember their configuration, so the address a web chat holds is real. */
+    const withRealGateways = () => {
+      gateways.upsertForChannel = jest.fn(async (dto: any, _org: string, _user: string, options: any) =>
+        gatewayRows.seed({
+          id: options.gatewayId ?? undefined,
+          organizationId: ORG,
+          agentId: 'agent-1',
+          type: dto.type,
+          endpoint: dto.endpoint,
+          status: 'inactive',
+          configuration: dto.configuration,
+        }),
+      );
+      gateways.deleteGatewayOfDeletedAgent = jest.fn(async (gateway: any) => {
+        await gatewayRows.delete({ id: gateway.id });
+      });
+      const service = build();
+      // freeSlug asks the gateways table which hosted chat holds an address.
+      (gatewayRows as any).createQueryBuilder = jest.fn(() => {
+        let slug = '';
+        const qb: any = {
+          where: (_sql: string, params: any) => ((slug = params.slug), qb),
+          andWhere: () => qb,
+          getCount: async () => gatewayRows.rows().filter((g: any) => g.configuration?.hostedChat?.slug === slug).length,
+        };
+        return qb;
+      });
+      return service;
+    };
+
+    it('deletes every channel of the agent with its gateway, and frees the web chat address', async () => {
+      slackCredential();
+      const service = withRealGateways();
+      const web = await service.add(ORG, 'agent-1', ME, { type: ChannelType.WEB });
+      await service.publish(ORG, 'agent-1', web.id, ME);
+      const slack = await service.add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, credentialId: 'cred-slack' });
+      await service.publish(ORG, 'agent-1', slack.id, ME);
+      expect(web.slug).toBe('support-agent');
+      expect(gatewayRows.rows()).toHaveLength(2);
+
+      const removed = await service.removeAllOf(ORG, 'agent-1', 'user-1');
+
+      expect(removed).toEqual({ channels: 2, gateways: 2 });
+      expect(channels.rows()).toHaveLength(0);
+      expect(gatewayRows.rows()).toHaveLength(0);
+      expect(gateways.deleteGatewayOfDeletedAgent).toHaveBeenCalledTimes(2);
+
+      // A new agent of the same name gets the address back, not "-2".
+      agents.seed(agent({ id: 'agent-new' }));
+      const again = await service.add(ORG, 'agent-new', ME, { type: ChannelType.WEB });
+      expect(again.slug).toBe('support-agent');
+    });
+
+    it('also deletes an agent gateway bound to it that no channel records', async () => {
+      const service = withRealGateways();
+      gatewayRows.seed({ id: 'gw-loose', organizationId: ORG, agentId: 'agent-1', type: 'a2a', status: 'active', configuration: {} });
+      gatewayRows.seed({ id: 'gw-other-agent', organizationId: ORG, agentId: 'agent-2', type: 'a2a', status: 'active', configuration: {} });
+
+      await service.removeAllOf(ORG, 'agent-1', 'user-1');
+
+      expect(gatewayRows.rows().map((g: any) => g.id)).toEqual(['gw-other-agent']);
+    });
+
+    it("never touches another organization's channels or gateways", async () => {
+      const service = withRealGateways();
+      channels.seed({ id: 'c-theirs', organizationId: 'org-2', agentId: 'agent-1', type: ChannelType.WEB, status: ChannelStatus.LIVE, gatewayId: 'gw-theirs' } as any);
+      gatewayRows.seed({ id: 'gw-theirs', organizationId: 'org-2', agentId: 'agent-1', type: 'hosted_chat', status: 'active', configuration: {} });
+
+      await service.removeAllOf(ORG, 'agent-1', 'user-1');
+
+      expect(channels.rows().map((c) => c.id)).toEqual(['c-theirs']);
+      expect(gatewayRows.rows().map((g: any) => g.id)).toEqual(['gw-theirs']);
+    });
+
+    it('deletes the stored files of its downloads', async () => {
+      const builds = { removeArtifactsOf: jest.fn(async () => 1) };
+      const service = new AgentChannelsService(
+        channels as any, agents as any, gatewayRows as any, gateways, accessPolicy,
+        undefined, undefined, undefined, undefined, builds as any,
+      );
+      gateways.deleteGatewayOfDeletedAgent = jest.fn(async () => undefined);
+      channels.seed({ id: 'c-tui', organizationId: ORG, agentId: 'agent-1', type: ChannelType.TUI, status: ChannelStatus.BUILT, gatewayId: null } as any);
+
+      await service.removeAllOf(ORG, 'agent-1', 'user-1');
+
+      expect(builds.removeArtifactsOf).toHaveBeenCalledWith(['c-tui']);
+      expect(channels.rows()).toHaveLength(0);
+    });
+  });
+
   describe("the agent's public settings", () => {
     it('reads what is stored and what it resolves to', async () => {
       const settings = await build().publicSettings(ORG, 'agent-1', ME);

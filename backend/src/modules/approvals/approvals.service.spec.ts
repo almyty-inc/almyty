@@ -237,6 +237,19 @@ describe('ApprovalsService', () => {
       expect(list.length).toBe(1);
       expect(list[0].status).toBe('pending');
     });
+
+    it('names the agent that asked, and null for one that has been deleted', async () => {
+      const { svc, approvals } = makeService();
+      approvals.agents.seed({ id: 'named', organizationId: 'o', name: 'Invoice helper', visibility: 'org' });
+      // Same id in another organization: its name must not leak across.
+      approvals.agents.seed({ id: 'elsewhere', organizationId: 'other', name: 'Not yours', visibility: 'org' });
+      await svc.create({ organizationId: 'o', teamId: null, runId: 'r1', agentId: 'named', reason: 'x' });
+      await svc.create({ organizationId: 'o', teamId: null, runId: 'r2', agentId: 'gone', reason: 'y' });
+      await svc.create({ organizationId: 'o', teamId: null, runId: 'r3', agentId: 'elsewhere', reason: 'z' });
+      const list = await svc.listPending({ organizationId: 'o', caller: { id: 'u' } });
+      const byAgent = Object.fromEntries(list.map((r) => [r.agentId, r.agentName]));
+      expect(byAgent).toEqual({ named: 'Invoice helper', gone: null, elsewhere: null });
+    });
   });
 });
 

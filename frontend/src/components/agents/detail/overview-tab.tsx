@@ -51,14 +51,14 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
-import { execStatusVariant, diffObjects, formatDiffValue } from './constants'
+import { execStatusVariant, runStatusVariant, diffObjects, formatDiffValue } from './constants'
 import { IntegrationSnippets } from './integration-snippets'
 import { AgentConfigPanel } from './agent-config-panel'
 import { ExecutionRouting } from './routing-attribution'
 import { DeliveryNote, HeldCallNote, ScheduleCard } from './schedule-card'
 import { modelsApi } from '@/lib/models-api'
 import { invokeAndSettle, runOutcome } from '@/lib/agent-run'
-import type { Agent, AgentExecution, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
+import type { Agent, AgentExecution, AgentRun, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
 
 interface OverviewTabProps {
   agent: Agent
@@ -69,6 +69,8 @@ interface OverviewTabProps {
    * be handed down. Without it the error state can only report, not recover.
    */
   onRetryExecutions?: () => void
+  /** Autonomous runs, listed under Recent runs with the executions. */
+  runs?: AgentRun[]
   versions: AgentVersionSnapshot[]
   entityVersions: Array<{
     id: number
@@ -84,11 +86,40 @@ interface OverviewTabProps {
   setWebhookUrl: (url: string) => void
 }
 
+type RecentRunRow =
+  | { kind: 'execution'; id: string; status: string; executionTime: number; totalCost: number; totalTokens: number; createdAt: string; exec: AgentExecution }
+  | { kind: 'run'; id: string; status: string; executionTime: number; totalCost: number; totalTokens: number; createdAt: string; run: AgentRun }
+
+const RECENT_RUNS_MAX = 20
+
+/** An agent's executions and autonomous runs as one list, newest first. */
+export function recentRunRows(executions: AgentExecution[], runs: AgentRun[]): RecentRunRow[] {
+  const rows: RecentRunRow[] = [
+    ...executions.map((exec) => ({
+      kind: 'execution' as const, id: exec.id, status: exec.status, executionTime: exec.executionTime,
+      totalCost: exec.totalCost, totalTokens: exec.totalTokens, createdAt: exec.createdAt, exec,
+    })),
+    ...runs.map((run) => ({
+      kind: 'run' as const, id: run.id, status: run.status, executionTime: run.executionTime,
+      totalCost: run.totalCost, totalTokens: run.totalTokens, createdAt: run.createdAt, run,
+    })),
+  ]
+  return rows
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, RECENT_RUNS_MAX)
+}
+
+/** The models that answered an autonomous run's calls, as its steps recorded them. */
+function runModels(run: AgentRun): string[] {
+  const models = (run.steps ?? []).map((s) => (s.output as any)?.model).filter((m): m is string => typeof m === 'string' && !!m)
+  return [...new Set(models)]
+}
 export function OverviewTab({
   agent,
   executions,
   executionsError,
   onRetryExecutions,
+  runs = [],
   versions,
   entityVersions,
   auditLog,
@@ -103,6 +134,9 @@ export function OverviewTab({
     for (const card of catalogCards ?? []) names[card.id] = card.name || card.vendorModelId
     return names
   }, [catalogCards])
+  // Recent runs: a workflow agent's executions and an autonomous agent's
+  // runs are kept apart, but both are this agent's runs. Newest first.
+  const recentRuns = React.useMemo(() => recentRunRows(executions, runs), [executions, runs])
   const { success, error: errorNotif } = useNotifications()
 
   const [testInput, setTestInput] = useState('')
@@ -275,7 +309,7 @@ export function OverviewTab({
             // The shared error state, so a failed read looks like a failed
             // read everywhere and carries a retry instead of a dead sentence.
             <QueryError error={executionsError} onRetry={onRetryExecutions} title="Couldn't load recent runs" />
-          ) : executions.length === 0 ? (
+          ) : recentRuns.length === 0 ? (
             <EmptyState
               icon={Play}
               title="No runs yet"
@@ -306,31 +340,35 @@ export function OverviewTab({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {executions.map((exec) => (
-                    <TableRow key={exec.id}>
+                  {recentRuns.map((row) => (
+                    <TableRow key={`${row.kind}-${row.id}`}>
                       <TableCell>
-                        <Badge variant={execStatusVariant[exec.status] || 'secondary'}>
-                          {exec.status === 'completed' && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                          {exec.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
-                          {exec.status}
+                        <Badge variant={(row.kind === 'run' ? runStatusVariant[row.status] : execStatusVariant[row.status]) || 'secondary'}>
+                          {row.status === 'completed' && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                          {row.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
+                          {row.status.replace('_', ' ')}
                         </Badge>
-                        <DeliveryNote outcome={exec.metadata?.channelDelivery} />
-                        <HeldCallNote execution={exec} />
+                        <DeliveryNote outcome={(row.kind === 'run' ? row.run.metadata : row.exec.metadata)?.channelDelivery} />
+                        {row.kind === 'execution' && <HeldCallNote execution={row.exec} />}
                       </TableCell>
                       <TableCell className="max-w-[320px]">
-                        <ExecutionRouting nodeResults={exec.nodeResults} cardNames={cardNames} />
+                        {row.kind === 'execution' ? (
+                          <ExecutionRouting nodeResults={row.exec.nodeResults} cardNames={cardNames} />
+                        ) : (
+                          <span className="text-sm">{runModels(row.run).join(', ') || '--'}</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {exec.executionTime ? `${(exec.executionTime / 1000).toFixed(2)}s` : '--'}
+                        {row.executionTime ? `${(row.executionTime / 1000).toFixed(2)}s` : '--'}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {exec.totalCost > 0 ? `$${exec.totalCost.toFixed(4)}` : '--'}
+                        {row.totalCost > 0 ? `$${row.totalCost.toFixed(4)}` : '--'}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {exec.totalTokens > 0 ? exec.totalTokens.toLocaleString() : '--'}
+                        {row.totalTokens > 0 ? row.totalTokens.toLocaleString() : '--'}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {formatDateTime(exec.createdAt)}
+                        {formatDateTime(row.createdAt)}
                       </TableCell>
                     </TableRow>
                   ))}

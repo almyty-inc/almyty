@@ -15,6 +15,7 @@ import {
 import { CanonicalMemoryService } from './canonical-memory.service';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
+import { chunkText } from './document-chunks.helper';
 
 export interface ImportSourceInput {
   scope: ScopeRef;
@@ -298,103 +299,9 @@ export class DocumentChunkerService {
 
 // ──────────────────────────────────────────────────────────────
 
-/**
- * Split `content` into chunks of approximately `tokens` tokens
- * each. We use a 4-chars-per-token rule of thumb (close enough for
- * English text + code; the backend doesn't see the exact tokenizer
- * any embedding model uses) plus a hard byte cap so a single chunk
- * never exceeds `LIMITS.CHUNK_HARD_CAP_BYTES`.
- *
- * Strategy:
- *  1. Split on paragraph (`\n\n`) boundaries first — keeps related
- *     sentences together.
- *  2. Greedily pack paragraphs into a chunk until the byte budget
- *     would be exceeded; flush and start a new chunk.
- *  3. A paragraph that on its own exceeds the budget is force-split
- *     on sentence boundaries; if it still exceeds, it's hard-split
- *     by character count.
- *  4. Apply `CHUNK_DEFAULT_OVERLAP_TOKENS` worth of trailing context
- *     from the previous chunk to the next, so retrieval over a
- *     boundary doesn't lose recall.
- */
-export function chunkText(content: string, targetTokens: number): string[] {
-  const targetBytes = Math.min(targetTokens * 4, LIMITS.CHUNK_HARD_CAP_BYTES);
-  const overlapBytes = LIMITS.CHUNK_DEFAULT_OVERLAP_TOKENS * 4;
-
-  if (!content || content.length === 0) return [];
-
-  // First split on blank lines.
-  const paragraphs = content.split(/\n\s*\n/).map((p) => p.trim()).filter((p) => p.length > 0);
-  if (paragraphs.length === 0) return [];
-
-  const chunks: string[] = [];
-  let buf = '';
-
-  const flush = () => {
-    if (buf.length > 0) {
-      chunks.push(buf);
-      buf = '';
-    }
-  };
-
-  for (const para of paragraphs) {
-    const paraBytes = Buffer.byteLength(para, 'utf8');
-    if (paraBytes > targetBytes) {
-      // Paragraph alone exceeds the budget — force-split.
-      flush();
-      const parts = splitOversized(para, targetBytes);
-      for (const part of parts) chunks.push(part);
-      continue;
-    }
-    if (Buffer.byteLength(buf, 'utf8') + 2 + paraBytes > targetBytes) {
-      flush();
-    }
-    buf = buf ? `${buf}\n\n${para}` : para;
-  }
-  flush();
-
-  // Apply overlap: prepend the last `overlapBytes` of chunk i-1 to chunk i.
-  if (overlapBytes > 0 && chunks.length > 1) {
-    for (let i = 1; i < chunks.length; i++) {
-      const prev = chunks[i - 1];
-      const tail = prev.slice(Math.max(0, prev.length - Math.floor(overlapBytes / 2)));
-      // Cut at a whitespace boundary so the overlap is readable.
-      const ws = tail.indexOf(' ');
-      const overlap = ws > 0 ? tail.slice(ws + 1) : tail;
-      if (overlap.length > 0) {
-        chunks[i] = `…${overlap}\n\n${chunks[i]}`;
-      }
-    }
-  }
-
-  return chunks;
-}
-
-function splitOversized(para: string, maxBytes: number): string[] {
-  // Try sentence boundaries first.
-  const sentences = para.split(/(?<=[.!?])\s+/);
-  const out: string[] = [];
-  let buf = '';
-  for (const s of sentences) {
-    if (Buffer.byteLength(buf, 'utf8') + 1 + Buffer.byteLength(s, 'utf8') > maxBytes) {
-      if (buf.length > 0) out.push(buf);
-      // If s alone is still too big, hard-split by chars.
-      if (Buffer.byteLength(s, 'utf8') > maxBytes) {
-        for (let i = 0; i < s.length; i += maxBytes) {
-          out.push(s.slice(i, i + maxBytes));
-        }
-        buf = '';
-      } else {
-        buf = s;
-      }
-    } else {
-      buf = buf ? `${buf} ${s}` : s;
-    }
-  }
-  if (buf.length > 0) out.push(buf);
-  return out;
-}
-
+// chunkText lives with the leaf builder that CanonicalMemoryService.put
+// uses for a whole document; re-exported for existing importers.
+export { chunkText };
 function sha256(s: string): string {
   return createHash('sha256').update(s, 'utf8').digest('hex');
 }

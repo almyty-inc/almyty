@@ -1,7 +1,7 @@
 import type { Agent } from '../../entities/agent.entity';
 import type { AgentRun } from '../../entities/agent-run.entity';
 import type { ChatRequest } from '../llm-providers/llm-providers.service';
-import { MemoryError, type Provenance, type RankedItem, type ScopeRef, type Tier } from '../memory/canonical/canonical.types';
+import { MemoryError, type MemoryItem, type Provenance, type RankedItem, type ScopeRef, type Tier } from '../memory/canonical/canonical.types';
 import type { PutInput } from '../memory/canonical/dto/canonical-memory.dto';
 import { legacyTypeToTier, type AgentRuntimeService } from './agent-runtime.service';
 import type { AutonomousStrategyRunner } from './autonomous-strategy.runner';
@@ -67,6 +67,20 @@ export function parseFacts(content: string): string[] {
   }
 }
 
+/** The most of one recalled memory put in front of the model. */
+export const RECALL_ITEM_MAX_CHARS = 2000;
+
+/** What kind of memory a recalled item is, as the model reads it: a document, or a fact's tier. */
+export function recallLabel(item: Pick<MemoryItem, 'mode' | 'tier'>): string {
+  return item.mode === 'document' ? 'document' : item.tier ?? 'memory';
+}
+
+/** A recalled item's text, cut at RECALL_ITEM_MAX_CHARS: a document copied in whole from another store is one long row. */
+export function recallText(item: Pick<MemoryItem, 'content'>): string {
+  const text = item.content ?? '';
+  return text.length > RECALL_ITEM_MAX_CHARS ? `${text.slice(0, RECALL_ITEM_MAX_CHARS)}…` : text;
+}
+
 /**
  * An autonomous agent's memory, as its Memory section says: whose memory a
  * run reads and writes (memoryScopeFor), the account it lives in, what is
@@ -95,7 +109,7 @@ export class AgentMemoryKeeper {
     try {
       const ranked = await this.search(agent, run, scope, query, 5);
       if (ranked.length === 0) return '';
-      return '\n\n## Relevant Memories\n' + ranked.map((r) => `- [${r.item.tier ?? 'memory'}] ${r.item.content}`).join('\n');
+      return '\n\n## Relevant Memories\n' + ranked.map((r) => `- [${recallLabel(r.item)}] ${recallText(r.item)}`).join('\n');
     } catch (err: any) {
       this.s.logger.warn(`Failed to recall memories for run ${run.id}: ${err?.message ?? err}`);
       return '';
@@ -111,7 +125,7 @@ export class AgentMemoryKeeper {
       if (ranked.length === 0) return { result: 'No relevant memories found.' };
       return {
         result: ranked
-          .map((r, i) => `${i + 1}. [${r.item.tier ?? 'memory'}] (score: ${r.score.toFixed(2)}) ${r.item.content}`)
+          .map((r, i) => `${i + 1}. [${recallLabel(r.item)}] (score: ${r.score.toFixed(2)}) ${recallText(r.item)}`)
           .join('\n'),
       };
     } catch (err: any) {
@@ -218,12 +232,39 @@ export class AgentMemoryKeeper {
     return s.credentialId ? { credentialId: s.credentialId, agentId: agent.id, principal: principalOfRun(run) } : {};
   }
 
-  private search(agent: Agent, run: AgentRun, scope: ScopeRef, query: string, topK: number): Promise<RankedItem[]> {
+  /**
+   * Facts and documents alike, in the run's scope. A document someone
+   * added on the Memory page lives in almyty's own store (outside memory
+   * services keep facts only), so an agent whose memories go to an
+   * outside account looks there for facts and here for documents.
+   */
+  private async search(agent: Agent, run: AgentRun, scope: ScopeRef, query: string, topK: number): Promise<RankedItem[]> {
     const s = this.settings(agent);
-    const q = { scope, query, mode: 'memory' as const, top_k: topK };
-    if (this.s.memoryAccounts) return this.s.memoryAccounts.search(run.organizationId, s.account, q, this.accountUse(agent, run, s));
-    if (s.account !== NATIVE_MEMORY_ACCOUNT) throw new Error(`The memory account "${s.account}" is not reachable here`);
-    return this.s.memoryService.search(q);
+    if (s.account === NATIVE_MEMORY_ACCOUNT) {
+      const q = { scope, query, top_k: topK };
+      if (this.s.memoryAccounts) return this.s.memoryAccounts.search(run.organizationId, s.account, q, this.accountUse(agent, run, s));
+      return this.s.memoryService.search(q);
+    }
+    if (!this.s.memoryAccounts) throw new Error(`The memory account "${s.account}" is not reachable here`);
+    const facts = await this.s.memoryAccounts.search(
+      run.organizationId,
+      s.account,
+      { scope, query, mode: 'memory' as const, top_k: topK },
+      this.accountUse(agent, run, s),
+    );
+    let documents: RankedItem[] = [];
+    try {
+      documents = await this.s.memoryService.search({ scope, query, mode: 'document' as const, top_k: topK });
+    } catch (err: any) {
+      this.s.logger.warn(`Failed to search documents for run ${run.id}: ${err?.message ?? err}`);
+    }
+    // Scores from two stores do not compare; take them in turn, best first.
+    const merged: RankedItem[] = [];
+    for (let i = 0; merged.length < topK && (i < facts.length || i < documents.length); i++) {
+      if (i < facts.length) merged.push(facts[i]);
+      if (i < documents.length && merged.length < topK) merged.push(documents[i]);
+    }
+    return merged;
   }
 
   private async put(

@@ -46,15 +46,23 @@ import { ApiType } from '@/types'
 import type { SdkMap } from '@/types'
 
 import { createToolSchema, type CreateToolForm } from './schema'
+import {
+  isProtocolMethod,
+  protocolConfigPayload,
+  protocolProblems,
+  type GraphqlFormState,
+  type GrpcFormState,
+  type SoapFormState,
+} from './protocol-config'
 
 export const EXECUTION_METHODS = ['http', 'graphql', 'soap', 'grpc', 'custom', 'llm', 'sdk'] as const
 export type ExecutionMethod = (typeof EXECUTION_METHODS)[number]
 
 const METHOD_HINTS: Record<ExecutionMethod, string> = {
   http: 'Make HTTP/REST requests to any API endpoint.',
-  graphql: 'Execute GraphQL queries and mutations.',
-  soap: 'Call SOAP web services.',
-  grpc: 'Invoke gRPC service methods.',
+  graphql: 'Run one GraphQL query or mutation against an endpoint.',
+  soap: 'Call one operation on a SOAP web service.',
+  grpc: 'Call one method on a gRPC service, described by its .proto.',
   custom: 'Write custom JavaScript code for transformations and logic.',
   llm: 'Prompt a model and return the response.',
   sdk: 'Call methods on an npm package class (from an SDK API).',
@@ -126,9 +134,11 @@ export function ToolForm() {
   })
   const [outputSchemaError, setOutputSchemaError] = useState<string | undefined>()
   const [httpConfig, setHttpConfig] = useState({ method: 'GET', url: '', body: '' })
-  const [graphqlConfig, setGraphqlConfig] = useState({ endpoint: '', query: '', variables: '' })
-  const [soapConfig, setSoapConfig] = useState({ wsdlUrl: '', operation: '' })
-  const [grpcConfig, setGrpcConfig] = useState({ serviceUrl: '', method: '', protoFile: '' })
+  const [graphqlConfig, setGraphqlConfig] = useState<GraphqlFormState>({ endpoint: '', query: '', variables: '' })
+  const [soapConfig, setSoapConfig] = useState<SoapFormState>({ endpoint: '', operation: '', namespace: '', soapAction: '' })
+  const [grpcConfig, setGrpcConfig] = useState<GrpcFormState>({ endpoint: '', serviceName: '', methodName: '', protoDefinition: '' })
+  // Per-field messages for the GraphQL/SOAP/gRPC sections, keyed by field id.
+  const [protocolErrors, setProtocolErrors] = useState<Record<string, string>>({})
   // How the tool signs its calls; the secret is always a credential it points at.
   const [authConfig, setAuthConfig] = useState<{ type: string; credentialId?: string }>({ type: 'none' })
 
@@ -181,51 +191,8 @@ export function ToolForm() {
 
   const createToolMutation = useMutation({
     mutationFn: (data: any) => {
-      let code: string | undefined = undefined
-
-      if (executionMethod === 'custom') {
-        // Custom JavaScript: user writes their own code, no auto-generation
-        code = toolCode
-      } else if (executionMethod === 'graphql') {
-        code = `
-// axios is available as a global — no require needed
-// Parameters available as variables
-const response = await axios.post('${graphqlConfig.endpoint}', {
-  query: \`${graphqlConfig.query}\`,
-  variables: parameters
-});
-return response;
-`
-      } else if (executionMethod === 'soap') {
-        code = `
-// soap is available as a global — no require needed
-const client = await soap.createClientAsync('${soapConfig.wsdlUrl}');
-// Parameters available as variables
-const result = await client.${soapConfig.operation}Async(parameters);
-return result;
-`
-      } else if (executionMethod === 'grpc') {
-        code = `
-const grpc = require('@grpc/grpc-js');
-const protoLoader = require('@grpc/proto-loader');
-
-// Load proto definition
-const packageDefinition = protoLoader.loadSync('${grpcConfig.protoFile}', {});
-const protoDescriptor = grpc.loadPackageDefinition(packageDefinition);
-
-// Create client
-const client = new protoDescriptor.${grpcConfig.method.split('/')[0]}('${grpcConfig.serviceUrl}', grpc.credentials.createInsecure());
-
-// Call method
-return new Promise((resolve, reject) => {
-  client.${grpcConfig.method.split('/')[1]}(parameters, (error, response) => {
-    if (error) reject(error);
-    else resolve(response);
-  });
-});
-`
-      }
-      // HTTP: no code generation — uses httpConfig instead
+      // Custom JavaScript: the user's own code, no generation.
+      const code: string | undefined = executionMethod === 'custom' ? toolCode : undefined
 
       // Auto-assign tool type based on execution method
       let type = 'function'
@@ -314,6 +281,11 @@ return new Promise((resolve, reject) => {
         payload.httpConfig = httpConfigPayload
       } else if (executionMethod === 'sdk') {
         payload.sdkConfig = sdkConfig
+      } else if (isProtocolMethod(executionMethod)) {
+        // A GraphQL, SOAP or gRPC tool is stored as its protocol's config,
+        // which the backend's protocol executor runs. Never as generated
+        // code: the sandbox has no GraphQL, SOAP or gRPC client to run it.
+        Object.assign(payload, protocolConfigPayload(executionMethod, { graphqlConfig, soapConfig, grpcConfig }))
       } else {
         payload.code = code
       }
@@ -340,6 +312,9 @@ return new Promise((resolve, reject) => {
       }
     }
     setOutputSchemaError(undefined)
+    const problems = protocolProblems(executionMethod, { graphqlConfig, soapConfig, grpcConfig })
+    setProtocolErrors(problems)
+    if (Object.keys(problems).length > 0) return
     // selectedApiId used to be local state whose only effects were the
     // field label and helper text, so a "linked" tool saved apiId null and
     // its relative path failed at execution. It is sent now.
@@ -347,7 +322,7 @@ return new Promise((resolve, reject) => {
       ...data,
       visibility: visibility.visibility,
       teamId: visibility.teamId,
-      apiId: linkedApi ? selectedApiId : undefined,
+      apiId: executionMethod === 'http' && linkedApi ? selectedApiId : undefined,
     })
   })
 
@@ -633,16 +608,33 @@ return new Promise((resolve, reject) => {
 
       {executionMethod === 'graphql' && (
         <FormSection title="GraphQL">
-          <Field id="graphql-endpoint" label="GraphQL endpoint">
+          <Field
+            id="graphql-endpoint"
+            label="GraphQL endpoint"
+            required
+            error={protocolErrors['graphql-endpoint']}
+            hint="The URL the query is posted to."
+          >
             <Input value={graphqlConfig.endpoint} onChange={(e) => setGraphqlConfig({ ...graphqlConfig, endpoint: e.target.value })} placeholder="https://api.example.com/graphql" />
           </Field>
           <div className="space-y-1.5">
-            <Label>Query/mutation</Label>
-            <CodeMirror theme={githubLight} value={graphqlConfig.query} height="150px" onChange={(value) => setGraphqlConfig({ ...graphqlConfig, query: value })} className="rounded-md border font-mono" />
+            <Label>Query or mutation</Label>
+            <CodeMirror
+              aria-label="GraphQL query"
+              theme={githubLight}
+              value={graphqlConfig.query}
+              height="150px"
+              onChange={(value) => setGraphqlConfig({ ...graphqlConfig, query: value })}
+              className="rounded-md border font-mono"
+            />
+            {protocolErrors['graphql-query'] && (
+              <p className="text-xs text-destructive">{protocolErrors['graphql-query']}</p>
+            )}
           </div>
           <div className="space-y-1.5">
-            <Label>Variables (JSON)</Label>
+            <Label>Variables (JSON, optional)</Label>
             <CodeMirror
+              aria-label="GraphQL variables"
               theme={githubLight}
               value={graphqlConfig.variables}
               height="80px"
@@ -650,39 +642,87 @@ return new Promise((resolve, reject) => {
               onChange={(value) => setGraphqlConfig({ ...graphqlConfig, variables: value })}
               className="rounded-md border"
             />
-            <p className="text-xs text-muted-foreground">
-              Use <code>{'{paramName}'}</code> to inject parameters.
-            </p>
+            {protocolErrors['graphql-variables'] ? (
+              <p className="text-xs text-destructive">{protocolErrors['graphql-variables']}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Map each query variable to a parameter, e.g. <code>{'{ "id": "{userId}" }'}</code>. Leave empty to send the
+                parameters as the variables.
+              </p>
+            )}
           </div>
         </FormSection>
       )}
 
       {executionMethod === 'soap' && (
         <FormSection title="SOAP">
+          <Field
+            id="soap-endpoint"
+            label="Service URL"
+            required
+            error={protocolErrors['soap-endpoint']}
+            hint="Where the request is posted: usually the WSDL address without ?wsdl."
+          >
+            <Input value={soapConfig.endpoint} onChange={(e) => setSoapConfig({ ...soapConfig, endpoint: e.target.value })} placeholder="https://api.example.com/TempConvert.asmx" />
+          </Field>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field id="soap-wsdl" label="WSDL URL">
-              <Input value={soapConfig.wsdlUrl} onChange={(e) => setSoapConfig({ ...soapConfig, wsdlUrl: e.target.value })} placeholder="https://api.example.com/service?wsdl" />
+            <Field id="soap-operation" label="Operation" required error={protocolErrors['soap-operation']}>
+              <Input value={soapConfig.operation} onChange={(e) => setSoapConfig({ ...soapConfig, operation: e.target.value })} placeholder="CelsiusToFahrenheit" />
             </Field>
-            <Field id="soap-operation" label="Operation name">
-              <Input value={soapConfig.operation} onChange={(e) => setSoapConfig({ ...soapConfig, operation: e.target.value })} placeholder="GetUserInfo" />
+            <Field id="soap-namespace" label="Namespace" hint="The service's targetNamespace, from the WSDL.">
+              <Input value={soapConfig.namespace} onChange={(e) => setSoapConfig({ ...soapConfig, namespace: e.target.value })} placeholder="https://www.w3schools.com/xml/" />
             </Field>
           </div>
+          <Field id="soap-action" label="SOAPAction (optional)" hint="Defaults to the namespace followed by the operation name.">
+            <Input value={soapConfig.soapAction} onChange={(e) => setSoapConfig({ ...soapConfig, soapAction: e.target.value })} />
+          </Field>
+          <p className="text-xs text-muted-foreground">
+            Each parameter below becomes an element inside the operation, so name them as the WSDL does.
+          </p>
         </FormSection>
       )}
 
       {executionMethod === 'grpc' && (
         <FormSection title="gRPC">
+          <Field
+            id="grpc-endpoint"
+            label="Server address"
+            required
+            error={protocolErrors['grpc-endpoint']}
+            hint="https:// for a TLS server, http:// for a plaintext one, with the port."
+          >
+            <Input value={grpcConfig.endpoint} onChange={(e) => setGrpcConfig({ ...grpcConfig, endpoint: e.target.value })} placeholder="https://api.example.com:443" />
+          </Field>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field id="grpc-url" label="Service URL">
-              <Input value={grpcConfig.serviceUrl} onChange={(e) => setGrpcConfig({ ...grpcConfig, serviceUrl: e.target.value })} placeholder="grpc://api.example.com:50051" />
+            <Field id="grpc-service" label="Service" required error={protocolErrors['grpc-service']}>
+              <Input value={grpcConfig.serviceName} onChange={(e) => setGrpcConfig({ ...grpcConfig, serviceName: e.target.value })} placeholder="UserService" />
             </Field>
-            <Field id="grpc-method" label="Method">
-              <Input value={grpcConfig.method} onChange={(e) => setGrpcConfig({ ...grpcConfig, method: e.target.value })} placeholder="UserService/GetUser" />
+            <Field id="grpc-method" label="Method" required error={protocolErrors['grpc-method']}>
+              <Input value={grpcConfig.methodName} onChange={(e) => setGrpcConfig({ ...grpcConfig, methodName: e.target.value })} placeholder="GetUser" />
             </Field>
           </div>
-          <Field id="grpc-proto" label="Proto definition">
-            <Textarea value={grpcConfig.protoFile} onChange={(e) => setGrpcConfig({ ...grpcConfig, protoFile: e.target.value })} placeholder="syntax = proto3; ..." className="font-mono text-xs" rows={6} />
+          <Field
+            id="grpc-proto"
+            label="Proto definition"
+            required
+            error={protocolErrors['grpc-proto']}
+            hint="Paste the .proto that defines the service, or upload the file. The tool keeps it and builds each call from it."
+          >
+            <Textarea value={grpcConfig.protoDefinition} onChange={(e) => setGrpcConfig({ ...grpcConfig, protoDefinition: e.target.value })} placeholder={'syntax = "proto3";\n\nservice UserService {\n  rpc GetUser (GetUserRequest) returns (User);\n}'} className="font-mono text-xs" rows={8} />
           </Field>
+          <Field id="grpc-proto-file" label="Upload a .proto file">
+            <Input
+              type="file"
+              accept=".proto,text/plain"
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (file) setGrpcConfig({ ...grpcConfig, protoDefinition: await file.text() })
+              }}
+            />
+          </Field>
+          <p className="text-xs text-muted-foreground">
+            The parameters below are the fields of the method's request message.
+          </p>
         </FormSection>
       )}
 
@@ -867,7 +907,7 @@ return new Promise((resolve, reject) => {
               onChange={(credential) => setAuthConfig({ ...authConfig, credentialId: credential?.id })}
               connectorKey={authConfig.type === 'basic' ? 'basic-auth' : OTHER_SERVICE_KEY}
               defaultName={createForm.watch('name') ? `${createForm.watch('name')} key` : undefined}
-              hint={authConfig.type === 'apiKey' ? 'Sent in the X-API-Key header.' : authConfig.type === 'bearer' ? 'Sent as a bearer token.' : 'Sent as basic auth.'}
+              hint={`${authConfig.type === 'apiKey' ? 'Sent in the X-API-Key header' : authConfig.type === 'bearer' ? 'Sent as a bearer token' : 'Sent as basic auth'}${executionMethod === 'grpc' ? ', as gRPC metadata' : ''}.`}
             />
           )}
         </FormSection>

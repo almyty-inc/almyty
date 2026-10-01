@@ -1,0 +1,68 @@
+# gRPC tools
+
+gRPC is a fast way for internal systems to talk to each other, often used between a company's own services. A gRPC service is described by a `.proto` file, which lists its *methods*, such as "get a user" or "reserve stock". Each method can be a tool your assistants use.
+
+## Connect a gRPC service
+
+1. Open **APIs** and click **Connect an API**.
+2. Pick **gRPC / proto**.
+3. Give almyty the service's `.proto` file: a link, a file or the text.
+4. Click **Connect API**. The next page asks only for what is missing, such as the server's address or a key. Every method becomes a tool, as a draft. Test the ones you want on **Test tool**, then activate them.
+
+## Make one by hand
+
+A hand-made gRPC tool needs the `.proto` too: it is what tells almyty how to talk to the method. Ask whoever runs the service for it.
+
+1. Open **Tools** and click **Create tool**.
+2. Under **Execution method**, pick **gRPC**.
+3. Give it a **Tool name** and a **Description** that says plainly what it does.
+4. Under **gRPC**:
+   - **Server address**: `https://` and the port for a server that uses TLS (most do), such as `https://users.example.com:443`; `http://` for one that does not.
+   - **Service** and **Method**: the names from the `.proto`, such as `UserService` and `GetUser`.
+   - **Proto definition**: paste the `.proto`, or pick the file under **Upload a .proto file**.
+5. Under **Authentication**, pick how it signs in and the key from [Credentials](/credentials). The key travels with each call.
+6. Under **Parameters**, add the fields of the method's request message (`id` for a `GetUserRequest { int32 id = 1; }`).
+7. Click **Create tool**, then try it on **Test tool**.
+
+almyty checks the `.proto` when you save: if the service or method is not in it, the page says so and lists what the file does define.
+
+## For developers
+
+### The tool definition
+
+A hand-made gRPC tool is stored as its `grpcConfig`, with the `.proto` source inside it. This is what **Create tool** sends to the [Tools API](/api-reference/tools-api):
+
+```json
+{
+  "name": "get_user",
+  "description": "Look up a user by id",
+  "type": "function",
+  "executionMethod": "grpc",
+  "parameters": {
+    "type": "object",
+    "properties": { "id": { "type": "integer" } },
+    "required": ["id"]
+  },
+  "grpcConfig": {
+    "endpoint": "https://users.example.com:443",
+    "serviceName": "UserService",
+    "methodName": "GetUser",
+    "protoDefinition": "syntax = \"proto3\";\npackage users;\nservice UserService { rpc GetUser (GetUserRequest) returns (User); }\nmessage GetUserRequest { int32 id = 1; }\nmessage User { int32 id = 1; string name = 2; }"
+  },
+  "authConfig": { "type": "bearer", "config": { "credentialId": "<credential id>" } }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `grpcConfig.endpoint` | string | `https://host:port` (TLS) or `http://host:port` (plaintext). Required unless the tool is linked to a gRPC API with `apiId` |
+| `grpcConfig.serviceName` | string | Service name, plain (`UserService`) or with its package (`users.UserService`). Required |
+| `grpcConfig.methodName` | string | Method name. Required |
+| `grpcConfig.protoDefinition` | string | The `.proto` source. Required unless the tool is linked to a gRPC API, whose imported proto is used. Imports of the well-known `google/protobuf/*` types resolve; other imports must be inlined |
+| `grpcConfig.requestMapping` | object | Optional map of request field to a template; a value that is exactly `{name}` passes the input unchanged. Without it, the inputs are the request message |
+| `grpcConfig.responseMapping.dataPath` | string | Dot path into the reply to return instead of the whole message |
+| `configuration.timeout` | number | Call deadline in milliseconds, default `30000` |
+
+The call is a real gRPC call (HTTP/2 and protobuf), made with the same client as tools from a connected proto. Whether the method streams is read from the proto: a server-streaming method returns the list of messages (at most 100), a client-streaming or bidirectional one takes a list of request messages. The credential is sent as call metadata (`authorization: Bearer ...` or the API key header, lower-cased).
+
+On save, the proto is parsed and must define the named service and method; otherwise the create is refused with a 400 that lists the services and methods it does define. A create with `executionMethod: "grpc"` and no `grpcConfig`, or with `code`, is refused too.

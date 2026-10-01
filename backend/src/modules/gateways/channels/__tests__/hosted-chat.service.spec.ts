@@ -144,6 +144,18 @@ describe('HostedChatService', () => {
       await expect(service.findBySlug('')).rejects.toThrow(NotFoundException);
       expect(gatewayRepository.createQueryBuilder).not.toHaveBeenCalled();
     });
+
+    // A web chat left behind by a deleted agent stayed live and answered a
+    // message with a 500. It is a clean 404 saying the chat is gone.
+    it('404s with "This chat no longer exists" for a surface whose agent was deleted', async () => {
+      surfaces = [surface({ agentId: null as any })];
+      await expect(service.findBySlug('acme')).rejects.toThrow(new NotFoundException('This chat no longer exists'));
+    });
+
+    it('serves the live surface when a deleted agent left an old claimant on the slug', async () => {
+      surfaces = [surface({ id: 'gw-orphan', agentId: null as any }), surface({ id: 'gw-live' })];
+      await expect(service.findBySlug('acme')).resolves.toMatchObject({ id: 'gw-live' });
+    });
   });
 
   describe('publicBranding', () => {
@@ -551,6 +563,11 @@ describe('HostedChatService', () => {
     it('returns null for an empty hostname without touching the database', async () => {
       await expect(service.findByCustomDomain('')).resolves.toBeNull();
       expect(gatewayRepository.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('serves a domain whose agent was deleted as unknown', async () => {
+      surfaces = [domain('chat.acme.com', 'active', { agentId: null as any })];
+      await expect(service.findByCustomDomain('chat.acme.com')).resolves.toBeNull();
     });
   });
 

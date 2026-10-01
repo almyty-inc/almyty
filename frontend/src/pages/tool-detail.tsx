@@ -351,25 +351,41 @@ export function ToolDetailPage() {
                   <span className="text-muted-foreground">Execution method</span>
                   <Badge>HTTP REST</Badge>
                 </div>
-                {tool.metadata?.httpConfig && (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <Badge>{tool.metadata.httpConfig.method}</Badge>
-                      <code className="text-xs">{tool.metadata.httpConfig.url}</code>
-                    </div>
-                  </>
+                {tool.httpConfig && (
+                  <div className="flex items-center gap-2">
+                    <Badge>{tool.httpConfig.method}</Badge>
+                    <code className="text-xs break-all">{tool.httpConfig.path}</code>
+                  </div>
                 )}
               </>
-            ) : tool.executionMethod === 'graphql' ? (
+            ) : tool.executionMethod === 'graphql' || tool.executionMethod === 'soap' || tool.executionMethod === 'grpc' ? (
               <>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">Execution method</span>
-                  <ApiTypeBadge type="graphql" />
+                  <ApiTypeBadge type={tool.executionMethod} />
                 </div>
-                {tool.metadata?.graphqlConfig && (
-                  <div className="text-xs">
-                    <span className="text-muted-foreground">Endpoint:</span>
-                    <code className="ml-2">{tool.metadata.graphqlConfig.endpoint}</code>
+                {tool.graphqlConfig && (
+                  <>
+                    <div className="text-xs">
+                      <span className="text-muted-foreground">Endpoint:</span>
+                      <code className="ml-2 break-all">{tool.graphqlConfig.endpoint}</code>
+                    </div>
+                    <CodeBlock value={tool.graphqlConfig.query} language="text" maxHeight="200px" />
+                  </>
+                )}
+                {tool.soapConfig && (
+                  <div className="space-y-1 text-xs">
+                    <div><span className="text-muted-foreground">Service URL:</span><code className="ml-2 break-all">{tool.soapConfig.endpoint}</code></div>
+                    <div><span className="text-muted-foreground">Operation:</span><code className="ml-2">{tool.soapConfig.operation}</code></div>
+                    {tool.soapConfig.namespace && (
+                      <div><span className="text-muted-foreground">Namespace:</span><code className="ml-2 break-all">{tool.soapConfig.namespace}</code></div>
+                    )}
+                  </div>
+                )}
+                {tool.grpcConfig && (
+                  <div className="space-y-1 text-xs">
+                    <div><span className="text-muted-foreground">Server:</span><code className="ml-2 break-all">{tool.grpcConfig.endpoint}</code></div>
+                    <div><span className="text-muted-foreground">Method:</span><code className="ml-2">{tool.grpcConfig.serviceName}/{tool.grpcConfig.methodName}</code></div>
                   </div>
                 )}
               </>

@@ -1037,6 +1037,8 @@ export const memoriesApi = {
     tags?: string[]
     include_superseded?: boolean
     include_deleted?: boolean
+    /** Leave out document chunks, so each document is listed once, whole. */
+    hide_chunks?: boolean
     limit?: number
     cursor?: string | null
   }) => apiPost('/memory/canonical/list', body),
