@@ -227,8 +227,12 @@ describeIfDb('MCP gateway resources, discover and search scope (real Postgres)',
   });
 
   it('answers a resource the gateway does not publish exactly like a nonexistent one', async () => {
-    const missing = errorShape(await rpc('resources/read', { uri: `almyty://resources/${randomUUID()}` }, g1.id));
-    expect(missing).toEqual({ code: -32001, message: 'Resource not found' });
+    const missingUri = `almyty://resources/${randomUUID()}`;
+    const missingRes = await rpc('resources/read', { uri: missingUri }, g1.id);
+    // -32602 with the uri asked for, on every protocol version (MCP 2026-07-28, SEP-2164).
+    expect(missingRes.error.data).toEqual({ uri: missingUri });
+    const missing = errorShape(missingRes);
+    expect(missing).toEqual({ code: -32602, message: 'Resource not found' });
     for (const key of ['other', 'inactiveRow', 'draft', 'priv', 'loose'] as const) {
       const read = errorShape(await rpc('resources/read', { uri: uri(resourceOf[key]) }, g1.id));
       expect({ key, ...read }).toEqual({ key, ...missing });
