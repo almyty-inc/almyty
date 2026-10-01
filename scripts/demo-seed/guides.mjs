@@ -120,7 +120,7 @@ function helpers(page) {
 // Each step: [shot name, title, sources, action]. The action does what the
 // guide's step says; the screenshot is taken when it returns.
 
-const SUPPORT_INSTRUCTIONS = 'You answer Northwind customers about their orders. Always look the order up before you answer. You may refund up to $500 yourself. For any refund over $500, ask for approval first and tell the customer a person will confirm within one business day.'
+const SUPPORT_INSTRUCTIONS = 'You answer Northwind customers about their orders. Always look the order up before you answer. You can issue refunds. When a refund waits for a manager, tell the customer a person will confirm it within one business day.'
 
 const SUPPORT = [
   ['support-1-connect-model', 'Connect an AI model', src('frontend/src/pages/models-connect.tsx', 'frontend/src/components/llm-providers', 'frontend/src/components/connect'), async (page, h) => {
@@ -177,7 +177,25 @@ const SUPPORT = [
     await page.getByRole('status').filter({ hasText: /NW-10428/ }).waitFor({ timeout: 60000 })
     await h.show('Try it')
   }],
-  ['support-8-refund-waits', 'A big refund waits for approval', src('frontend/src/pages/approvals.tsx'), async (page, h) => {
+  ['support-8-amount-rule', 'Ask before refunds over 500', src('frontend/src/pages/approval-rule.tsx', 'frontend/src/components/settings/approval-amount-rule.tsx', 'frontend/src/lib/approval-rules.ts'), async (page, h) => {
+    await h.link('Settings')
+    await h.click('Advanced', { role: 'tab' })
+    await h.click('New rule')
+    await page.locator('#rule-name').fill('Refunds over 500')
+    await page.locator('#rule-tool').click()
+    await page.getByRole('option', { name: /refund/i }).first().click()
+    await page.locator('#rule-argument').click()
+    await page.getByRole('option', { name: /amount/i }).first().click()
+    await page.locator('#rule-amount').fill('500')
+    await page.getByTestId('amount-rule-summary').waitFor({ timeout: 10000 })
+    await h.settle()
+    await h.top()
+  }],
+  ['support-9-refund-waits', 'A big refund waits for approval', src('frontend/src/pages/approvals.tsx'), async (page, h) => {
+    await h.click('Create rule')
+    await page.getByTestId('amount-rules').waitFor({ timeout: 15000 })
+    await h.link('Agents')
+    await h.link('Customer support assistant')
     await page.getByPlaceholder('Type a message to test this agent...').fill('Brightway Logistics wants a refund of $820 on order NW-44120, it arrived defective.')
     await h.click('Run test')
     await page.waitForTimeout(8000)
@@ -185,11 +203,11 @@ const SUPPORT = [
     await page.getByRole('button', { name: 'Approve' }).first().waitFor({ timeout: 30000 })
     await h.settle()
   }],
-  ['support-9-approve', 'Approve the refund', src('frontend/src/pages/approvals.tsx'), async (page, h) => {
+  ['support-10-approve', 'Approve the refund', src('frontend/src/pages/approvals.tsx'), async (page, h) => {
     await h.click('Approve')
     await page.getByLabel('Note (optional)').fill('Defective on arrival, confirmed with the carrier.')
   }],
-  ['support-10-add-channel', 'Pick where customers reach it', src('frontend/src/pages/agent-channel-new.tsx', 'frontend/src/components/channels'), async (page, h) => {
+  ['support-11-add-channel', 'Pick where customers reach it', src('frontend/src/pages/agent-channel-new.tsx', 'frontend/src/components/channels'), async (page, h) => {
     const form = page.getByRole('form', { name: 'Approve this action' })
     if (await form.count()) {
       await form.getByRole('button', { name: 'Approve' }).click()
@@ -200,13 +218,13 @@ const SUPPORT = [
     await h.click('Channels', { role: 'tab' })
     await h.click('Add channel')
   }],
-  ['support-11-web-chat', 'Publish the web chat', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels'), async (page, h) => {
+  ['support-12-web-chat', 'Publish the web chat', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels'), async (page, h) => {
     await page.getByRole('button', { name: /^Web chat/ }).click()
     await page.getByRole('button', { name: 'Publish', exact: true }).first().click()
     await page.getByRole('button', { name: 'Unpublish' }).waitFor({ timeout: 20000 })
     await h.top()
   }],
-  ['support-12-widget', 'Put the chat bubble on your website', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels', 'frontend/src/components/gateways/widget-builder.tsx'), async (page, h) => {
+  ['support-13-widget', 'Put the chat bubble on your website', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels', 'frontend/src/components/gateways/widget-builder.tsx'), async (page, h) => {
     await h.link('Agents')
     await h.link('Customer support assistant')
     await h.click('Channels', { role: 'tab' })
@@ -216,7 +234,7 @@ const SUPPORT = [
     await page.getByText('Add it to your site').waitFor({ timeout: 20000 })
     await h.show('Add it to your site')
   }],
-  ['support-13-whatsapp', 'Add WhatsApp with your Twilio keys', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels', 'frontend/src/components/connect'), async (page, h) => {
+  ['support-14-whatsapp', 'Add WhatsApp with your Twilio keys', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels', 'frontend/src/components/connect'), async (page, h) => {
     await h.link('Agents')
     await h.link('Customer support assistant')
     await h.click('Channels', { role: 'tab' })
@@ -226,7 +244,7 @@ const SUPPORT = [
     await h.click('Create one here')
     await h.show('Keys')
   }],
-  ['support-14-email', 'Add email with your Resend key', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels', 'frontend/src/components/connect'), async (page, h) => {
+  ['support-15-email', 'Add email with your Resend key', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels', 'frontend/src/components/connect'), async (page, h) => {
     await h.link('Agents')
     await h.link('Customer support assistant')
     await h.click('Channels', { role: 'tab' })
@@ -236,7 +254,7 @@ const SUPPORT = [
     await h.click('Create one here')
     await h.show('Keys')
   }],
-  ['support-15-branding', 'Name, greeting and limits', src('frontend/src/pages/agent-public-settings.tsx', 'frontend/src/components/channels'), async (page, h) => {
+  ['support-16-branding', 'Name, greeting and limits', src('frontend/src/pages/agent-public-settings.tsx', 'frontend/src/components/channels'), async (page, h) => {
     await h.link('Agents')
     await h.link('Customer support assistant')
     await h.click('Channels', { role: 'tab' })
@@ -248,7 +266,7 @@ const SUPPORT = [
     await page.locator('input#agent-daily-cap').fill('20')
     await h.show('What it may cost')
   }],
-  ['support-16-customer-view', 'What a customer sees', src('frontend/src/pages/hosted-chat.tsx', 'frontend/src/lib/hosted-chat.ts'), async (page, h) => {
+  ['support-17-customer-view', 'What a customer sees', src('frontend/src/pages/hosted-chat.tsx', 'frontend/src/lib/hosted-chat.ts'), async (page, h) => {
     const save = page.getByRole('button', { name: 'Save' }).last()
     if (await save.isEnabled()) { await save.click(); await page.waitForTimeout(1500) }
     await h.link('Agents')
@@ -421,7 +439,7 @@ const MARKETING = [
   }],
 ]
 
-const OPS_INSTRUCTIONS = 'Every night, check the health of every Northwind system. Then post one short report to Slack with post_to_slack: first what needs attention (anything degraded, failing or above 80% full) with the detail, then one line saying everything else is fine. If everything is fine, say so in one line. Do not post more than one message.'
+const OPS_INSTRUCTIONS = 'Check the health of every Northwind system and write one short report: first what needs attention (anything degraded, failing or above 80% full) with the detail, then one line saying everything else is fine. If everything is fine, say so in one line.'
 
 const OPERATIONS = [
   ['ops-1-connect-status', 'Connect the system you check', src('frontend/src/pages/api-detail.tsx', 'frontend/src/components/apis'), async (page, h) => {
@@ -435,25 +453,7 @@ const OPERATIONS = [
     await page.getByText('Check the health of every system').first().waitFor({ timeout: 30000 })
     await h.show('API operations')
   }],
-  ['ops-2-slack-tool', 'A tool that posts to Slack', src('frontend/src/pages/tool-new.tsx', 'frontend/src/components/tools'), async (page, h) => {
-    await h.link('Tools')
-    await h.click('Create tool')
-    await page.locator('#tool-name').fill('post_to_slack')
-    await page.locator('#tool-description').fill('Post a message to the #ops channel in Slack.')
-    await page.locator('#http-method').click()
-    await page.getByRole('option', { name: 'POST' }).click()
-    // The demo stack stands in for Slack; a real one starts https://hooks.slack.com/services/
-    await page.locator('#http-path').fill(`${FAKE}/slack/services/T0NORTHWND/B0OPSREPRT/demo`)
-    await h.click('Add first property')
-    await page.locator('#prop-property_1-name').fill('text')
-    await page.getByPlaceholder('Describe this parameter').fill('The message to post')
-    await page.getByRole('switch', { name: /required/i }).last().click().catch(async () => { await page.locator('[id$="-required"]').last().click() })
-    await page.getByRole('radio', { name: /^Everyone/ }).click()
-    await h.show('Parameters')
-  }],
-  ['ops-3-agent', 'The nightly check, with its two kinds of tools', src('frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents'), async (page, h) => {
-    await h.click('Create tool')
-    await page.waitForURL(/\/tools\/[0-9a-f-]{36}/, { timeout: 20000 })
+  ['ops-2-agent', 'The nightly check and its status tools', src('frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents'), async (page, h) => {
     await h.link('Agents')
     await h.click('Create agent')
     await h.click('Autonomous')
@@ -463,39 +463,62 @@ const OPERATIONS = [
     await page.getByLabel('Personality and style').fill('Plain and short. Lead with what needs attention.')
     await page.getByLabel('Instructions').fill(OPS_INSTRUCTIONS)
     await page.getByRole('checkbox', { name: /All tools of Northwind Status/ }).click()
-    await page.getByPlaceholder('Search tools').fill('post_to_slack')
-    await h.settle()
-    await page.getByRole('checkbox', { name: /post_to_slack/ }).first().click()
-    await page.getByPlaceholder('Search tools').fill('')
     await h.show('Capabilities')
   }],
-  ['ops-4-try', 'A test run posts the report', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents'), async (page, h) => {
+  ['ops-3-try', 'A test run writes the report', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents'), async (page, h) => {
     await h.click('Save')
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}\/edit/, { timeout: 20000 })
     await h.click('Back to agents')
     await h.link('Nightly systems check')
     await h.click('Activate')
-    await page.getByPlaceholder('Type a message to test this agent...').fill('Run the nightly check and post the report to Slack.')
+    await page.getByPlaceholder('Type a message to test this agent...').fill('Run the nightly check.')
     await h.click('Run test')
-    await page.getByRole('status').filter({ hasText: /Posted to Slack/ }).waitFor({ timeout: 60000 })
+    await page.getByRole('status').filter({ hasText: /4 of 5 systems/ }).waitFor({ timeout: 60000 })
     await page.waitForTimeout(4000)
     await h.show('Try it')
   }],
-  ['ops-5-heartbeat', 'Wake it up every night', src('frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents'), async (page, h) => {
+  ['ops-4-slack', 'Slack, published for the report', src('frontend/src/pages/agent-channel.tsx', 'frontend/src/components/channels', 'frontend/src/components/connect'), async (page, h) => {
+    await h.click('Channels', { role: 'tab' })
+    await h.click('Add channel')
+    await page.getByRole('button', { name: /^Slack/ }).click()
+    await h.settle(1500)
+    await h.click('Create one here')
+    // Placeholder Slack app keys, shaped like real ones; nothing is sent to Slack until someone installs it.
+    await page.getByLabel('Client ID').first().fill('4312876501.7719203348122')
+    await page.getByRole('textbox', { name: 'Client secret' }).first().fill('demo0client0secret0000001')
+    await page.getByRole('textbox', { name: 'Signing secret' }).first().fill('demo0signing0secret000001')
+    await page.getByRole('button', { name: 'Save', exact: true }).first().click()
+    await h.settle(1500)
+    await page.getByRole('button', { name: 'Save', exact: true }).last().click()
+    await h.settle(1500)
+    await page.getByRole('button', { name: 'Publish', exact: true }).first().click()
+    await page.getByRole('button', { name: 'Unpublish' }).waitFor({ timeout: 20000 })
+    await h.show('Add to Slack')
+  }],
+  ['ops-5-schedule', 'Every day at 6:00, to the Slack channel', src('frontend/src/pages/agent-schedule.tsx', 'frontend/src/lib/schedule.ts', 'frontend/src/components/settings/time-zone-select.tsx'), async (page, h) => {
     await h.link('Agents')
     await h.link('Nightly systems check')
-    await h.click('Edit')
-    const heartbeat = page.locator('#autonomous-heartbeat')
-    if ((await heartbeat.getAttribute('aria-checked')) !== 'true') await heartbeat.click()
-    await page.locator('#autonomous-interval').fill('1440')
-    await page.locator('#autonomous-heartbeat-prompt').fill('Run the nightly check and post the report to Slack.')
-    await h.show('Heartbeat')
+    await h.click(/^(Set up a schedule|Edit schedule)$/)
+    await page.locator('#schedule-days').click()
+    await page.getByRole('option', { name: 'Every day' }).click()
+    await page.locator('#schedule-time').fill('06:00')
+    await page.locator('#schedule-target').click()
+    await page.getByRole('option', { name: /^Slack/ }).first().click()
+    // The channel ID of #ops; the bot has to be invited there.
+    await page.locator('#schedule-destination-typed').fill('C07NWOPS01')
+    await page.locator('#schedule-message').fill('Run the nightly check.')
+    await h.settle()
+    await h.show('When it runs')
   }],
-  ['ops-6-report-run', 'A report run, step by step', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents'), async (page, h) => {
-    await h.click('Save')
-    await h.settle(1500)
-    await h.click('Back to agents')
-    await h.link('Nightly systems check')
+  ['ops-6-schedule-card', 'The schedule on the agent', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents/detail/schedule-card.tsx'), async (page, h) => {
+    await h.click('Save schedule')
+    await page.getByTestId('schedule-card-summary').waitFor({ timeout: 20000 })
+    await h.settle()
+    await page.getByTestId('schedule-card-summary').evaluate((e) => e.closest('.rounded-lg, [class*=card]')?.scrollIntoView({ block: 'center' }) ?? e.scrollIntoView({ block: 'center' }))
+    await page.waitForTimeout(400)
+  }],
+  ['ops-7-report-run', 'A report run, step by step', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents'), async (page, h) => {
+    await h.top()
     await h.click('Runs', { role: 'tab' })
     await h.settle(1500)
     await page.locator('tbody tr').first().click()
@@ -504,8 +527,8 @@ const OPERATIONS = [
   }],
 ]
 
-const HELPDESK_INSTRUCTIONS = 'You answer questions from Northwind staff about HR, IT and the office. Look things up before you answer: the staff handbook and policies, their leave balance (ask for their work email if you need it), and the office guide in shared memory. Say where the answer came from. If someone needs something done by IT, tell them how to open an IT request. Never share one person\'s details with another.'
-const OFFICE_GUIDE = 'Office guide, Leipzig office. Guest Wi-Fi: NW-Guest, the password changes every Monday and is on the card at reception. Staff laptops join NW-Staff automatically. The office is open 7:00 to 20:00; after hours, use your badge at the side door.'
+const HELPDESK_INSTRUCTIONS = 'You answer questions from Northwind staff about HR, IT and the office. Look things up before you answer: the staff handbook and policies, their leave balance (ask for their work email if you need it), and the office guide in memory. Say where the answer came from. If someone needs something done by IT, tell them how to open an IT request. Never share one person\'s details with another.'
+const OFFICE_GUIDE = 'Office guide, Leipzig office.\n\nWi-Fi: guests use NW-Guest; the password changes every Monday and is on the card at reception. Staff laptops join NW-Staff automatically.\n\nOpening hours: 7:00 to 20:00. After hours, use your badge at the side door.\n\nParking: the courtyard spaces are for visitors. Staff park in the garage on Lindenstrasse; ask reception for a card.\n\nKitchen: coffee and tea are free. Please empty the dishwasher if it is clean.'
 
 const HELPDESK = [
   ['helpdesk-1-connect-intranet', 'Connect your intranet', src('frontend/src/pages/api-detail.tsx', 'frontend/src/components/apis'), async (page, h) => {
@@ -519,15 +542,15 @@ const HELPDESK = [
     await page.getByText('Search the staff handbook and HR and IT policies').first().waitFor({ timeout: 30000 })
     await h.show('API operations')
   }],
-  ['helpdesk-2-shared-memory', 'Something every assistant should know', src('frontend/src/pages/memory-new.tsx', 'frontend/src/components/memory'), async (page, h) => {
+  ['helpdesk-2-office-guide', 'The office guide, added as a document', src('frontend/src/pages/memory-new.tsx', 'frontend/src/components/memory'), async (page, h) => {
     await h.link('Memory')
     await h.click('Add memory')
     await page.locator('#memory-content').fill(OFFICE_GUIDE)
     await page.locator('#memory-tags').fill('office, wifi')
     await h.click('Advanced')
-    // A fact kept for every agent: what an agent with shared memory looks up before it answers.
-    await page.locator('#memory-tier').click()
-    await page.getByRole('option', { name: 'Shared by all agents' }).click()
+    // A document in the organization's memory: what an agent with shared memory searches before it answers.
+    await page.locator('#memory-mode').click()
+    await page.getByRole('option', { name: 'Document' }).click()
     await h.settle()
   }],
   ['helpdesk-3-agent', 'The help desk assistant reads shared memory', src('frontend/src/pages/agent-builder.tsx', 'frontend/src/components/agents'), async (page, h) => {
