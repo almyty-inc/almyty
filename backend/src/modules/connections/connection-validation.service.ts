@@ -11,6 +11,7 @@ import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssr
 import { signAwsRequest } from '../model-deployments/aws-request';
 import { interpolate, readPath } from './connector-schema';
 import { ConnectorDefinition, HttpProbe, ValidationResult, ValidationSpec } from './connector.types';
+import { McpClientError, McpClientService } from '../mcp-sources/mcp-client.service';
 
 /** The outbound HTTP call used by every probe; specs bind a fixture here. */
 export type ConnectionsHttp = (url: string, init: RequestInit) => Promise<Response>;
@@ -97,14 +98,20 @@ export class ConnectionValidationService {
   private readonly logger = new Logger(ConnectionValidationService.name);
   private readonly http: ConnectionsHttp;
   private readonly s3Factory: S3ProbeClientFactory;
+  /** The MCP client mcp-sources use, so the check speaks to a server the way a source will. */
+  private readonly mcpClient: McpClientService;
 
   constructor(
     private readonly configService: ConfigService,
     @Optional() @Inject(CONNECTIONS_HTTP) http?: ConnectionsHttp,
     @Optional() @Inject(CONNECTIONS_S3_FACTORY) s3Factory?: S3ProbeClientFactory,
+    // Stateless; the connections module does not import mcp-sources, so
+    // without an injected one the check makes its own.
+    @Optional() mcpClient?: McpClientService,
   ) {
     this.http = http ?? defaultConnectionsHttp();
     this.s3Factory = s3Factory ?? defaultS3ProbeClientFactory();
+    this.mcpClient = mcpClient ?? new McpClientService();
   }
 
   /** The guarded outbound call, shared with the OAuth token exchange. */
@@ -394,31 +401,38 @@ export class ConnectionValidationService {
     return { ok: true, status: 'valid', accountLabel: `${bucket}@${where}` };
   }
 
+  /**
+   * An MCP server: connect the way an MCP source does (McpClientService:
+   * the 2026-07-28 server/discover probe, falling back to initialize), on
+   * this service's pinned transport. Valid when the server answers; the
+   * label is the name it gives itself.
+   */
   private async mcpInitialize(config: Record<string, any>): Promise<ValidationResult> {
     const url = String(config.serverUrl ?? '');
     const refused = this.guardUrl(url, 'MCP_ALLOW_PRIVATE_URLS');
     if (refused) return fail(`server URL refused: ${refused}`);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' };
+    const headers: Record<string, string> = {};
     if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`;
-    const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'almyty', version: '1' } } });
-    let res: Response;
     try {
-      res = await this.http(url, this.probeInit(url, { method: 'POST', headers, body }, 'MCP_ALLOW_PRIVATE_URLS'));
+      const info = await this.mcpClient.connect({
+        url,
+        headers,
+        timeoutMs: PROBE_TIMEOUT_MS,
+        fetch: (target, init) => this.http(target, this.probeInit(url, init, 'MCP_ALLOW_PRIVATE_URLS')),
+      });
+      const label = info.serverInfo?.title || info.serverInfo?.name;
+      return { ok: true, status: 'valid', accountLabel: typeof label === 'string' && label ? label : undefined };
     } catch (e: any) {
-      return fail(`could not reach ${new URL(url).host}: ${e?.message ?? e}`);
+      if (e instanceof McpClientError) {
+        if (e.code === 'MCP_HTTP_ERROR' && typeof e.data?.status === 'number') {
+          return statusToResult(e.data.status, shortBody(String(e.data.body ?? '')));
+        }
+        if (e.code === 'MCP_CONNECT_FAILED' || e.code === 'MCP_TIMEOUT') return fail(`could not reach ${new URL(url).host}: ${e.message}`);
+        if (e.code === 'MCP_URL_BLOCKED') return fail(`server URL refused: ${e.message}`);
+        return fail(e.message);
+      }
+      return fail(String(e?.message ?? e));
     }
-    const text = await res.text().catch(() => '');
-    if (!res.ok) return statusToResult(res.status, shortBody(text));
-    let label: string | undefined;
-    try {
-      const json = JSON.parse(text);
-      const name = readPath(json, 'result.serverInfo.name');
-      if (typeof name === 'string') label = name;
-    } catch {
-      const m = text.match(/"name"\s*:\s*"([^"]+)"/);
-      if (m) label = m[1];
-    }
-    return { ok: true, status: 'valid', accountLabel: label };
   }
 
   /** `<displayName> key ...abcd` when the provider names nothing. */
