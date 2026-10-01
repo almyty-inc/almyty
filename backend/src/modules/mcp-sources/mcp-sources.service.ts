@@ -18,6 +18,7 @@ import { JsonSchema, JsonSchemaType } from '../../entities/json-schema.entity';
 import { Message, MessageRole } from '../../entities/message.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { McpChangeBus } from '../mcp-events/mcp-change-bus.service';
+import { McpOAuthClientService } from '../connections/mcp-oauth/mcp-oauth-client.service';
 import { CredentialType } from '../../entities/credential.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { CredentialRefResolver, type ResolveOptions } from '../credentials/credential-ref.resolver';
@@ -120,6 +121,8 @@ export class McpSourcesService {
     @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
     // A call for an agent run watches the run, to cancel a remote task when the run ends.
     @Optional() @InjectRepository(AgentRun) private readonly runRepository?: Repository<AgentRun>,
+    // Signing in to OAuth-protected servers: refresh, and renew on a 401.
+    @Optional() private readonly mcpOAuth?: McpOAuthClientService,
   ) {}
 
   /**
@@ -257,8 +260,11 @@ export class McpSourcesService {
     try {
       // Discovery calls the server as the person who asked for it: a team
       // or private connection they may not use is not sent for them.
-      const { tools: remoteTools, init, rejected = [] } = await this.mcpClient.listTools(
-        await this.connectionConfig(source, { principal: userId ? { id: userId } : null }),
+      // Through withSignIn: a source signed in with OAuth renews on a 401.
+      const { tools: remoteTools, init, rejected = [] } = await this.withSignIn(
+        source,
+        { principal: userId ? { id: userId } : null },
+        (config) => this.mcpClient.listTools(config),
       );
 
       const mine = await this.findMaterializedTools(source);
@@ -491,11 +497,14 @@ export class McpSourcesService {
     const watch = this.watchRun(options.runId, options.signal);
     let called: Awaited<ReturnType<McpClientService['callToolOutcome']>>;
     try {
-      called = await this.mcpClient.callToolOutcome(
-        await this.connectionConfig(source, { ...options, signal: watch.signal }),
-        mcpConfig.remoteName,
-        callArgs,
-        { tool: { inputSchema: mcpConfig.inputSchema }, canElicit: canAsk, ...retry },
+      // Through withSignIn: a source signed in with OAuth renews on a 401.
+      called = await this.withSignIn(source, { ...options, signal: watch.signal }, (config) =>
+        this.mcpClient.callToolOutcome(
+          config,
+          mcpConfig.remoteName,
+          callArgs,
+          { tool: { inputSchema: mcpConfig.inputSchema }, canElicit: canAsk, ...retry },
+        ),
       );
     } finally {
       watch.stop();
@@ -516,7 +525,8 @@ export class McpSourcesService {
     }
     // Nobody to ask: a task that waits for input would wait forever.
     if (outcome.taskId) {
-      await this.mcpClient.cancelTask(await this.connectionConfig(source, options), outcome.taskId).catch(() => undefined);
+      const taskId = outcome.taskId;
+      await this.withSignIn(source, options, (config) => this.mcpClient.cancelTask(config, taskId)).catch(() => undefined);
     }
     const message = describeInputRequired(outcome.inputRequests);
     return { success: false, data: { inputRequired: questionsOf(outcome.inputRequests) }, error: message };
@@ -688,6 +698,24 @@ export class McpSourcesService {
   }
 
   /**
+   * One call to the source's server. A source signed in with OAuth
+   * (connections/mcp-oauth) whose server answers 401 gets one retry after
+   * the sign-in is renewed; when it cannot be renewed (or the server now
+   * signs in elsewhere), the error says to sign in again.
+   */
+  private async withSignIn<T>(source: McpSource, options: McpExecuteOptions, call: (config: McpConnectionConfig) => Promise<T>): Promise<T> {
+    try {
+      return await call(await this.connectionConfig(source, options));
+    } catch (err) {
+      if (!this.mcpOAuth || !source.credentialId || !(err instanceof McpClientError) || err.data?.status !== 401) throw err;
+      const renewed = await this.mcpOAuth.ensureFresh(source.organizationId, source.credentialId, { force: true });
+      if (renewed.status === 'reconnect') throw new McpClientError('MCP_HTTP_ERROR', renewed.error, err.data);
+      if (renewed.status !== 'refreshed') throw err;
+      return call(await this.connectionConfig(source, options));
+    }
+  }
+
+  /**
    * The credential a source was created with. A pasted token or header
    * map becomes a row this source manages; a credentialId points at a
    * shared connection (its type decides the auth shape).
@@ -743,6 +771,10 @@ export class McpSourcesService {
    */
   private async authHeaders(source: McpSource, principal: McpExecuteOptions['principal']): Promise<Record<string, string>> {
     if (source.credentialId) {
+      // A sign-in that has expired is renewed first (connections/mcp-oauth);
+      // one that cannot be renewed says to sign in again.
+      const fresh = await this.mcpOAuth?.ensureFresh(source.organizationId, source.credentialId);
+      if (fresh?.status === 'reconnect') throw new McpClientError('MCP_HTTP_ERROR', fresh.error);
       const resolved = await this.credentialRefs.resolve(source.organizationId, source.credentialId, {
         principal: principal ?? null,
         context: { purpose: 'mcp_call', resourceType: 'mcp_source', resourceId: source.id },

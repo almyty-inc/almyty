@@ -93,6 +93,8 @@ export interface JsonSchemaProperty {
   description?: string;
   /** Encrypted at rest, never returned by the API. */
   'x-secret'?: boolean;
+  /** Shown under Advanced on the connect form even when secret (an optional client secret). */
+  'x-advanced'?: boolean;
   format?: string;
   default?: unknown;
   enum?: unknown[];
@@ -142,6 +144,13 @@ export interface OAuth2Config {
   revocationUrl?: string;
   /** Provider prints the code on-screen when no callback URL is sent (headless / CLI mode). */
   headlessCode?: boolean;
+  /**
+   * `mcp`: the endpoints are not known in advance. They are discovered
+   * from the MCP server named in the form (`serverUrl`): its Protected
+   * Resource Metadata, then its authorization server's metadata
+   * (connections/mcp-oauth). `authorizeUrl` and `tokenUrl` stay empty.
+   */
+  discover?: 'mcp';
   /** Extra static query params for the authorize URL. */
   extraAuthorizeParams?: Record<string, string>;
 }

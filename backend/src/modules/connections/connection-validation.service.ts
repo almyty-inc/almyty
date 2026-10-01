@@ -412,7 +412,9 @@ export class ConnectionValidationService {
     const refused = this.guardUrl(url, 'MCP_ALLOW_PRIVATE_URLS');
     if (refused) return fail(`server URL refused: ${refused}`);
     const headers: Record<string, string> = {};
-    if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`;
+    // A pasted token (apiKey) or a sign-in's access token (accessToken).
+    const token = config.apiKey || config.accessToken;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     try {
       const info = await this.mcpClient.connect({
         url,

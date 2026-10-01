@@ -122,7 +122,13 @@ function methodViolations(method: ConnectMethod, where: string): string[] {
   errors.push(...schemaShapeViolations(method.schema, where));
   if (method.type === 'oauth2_pkce' || method.type === 'oauth2_code') {
     if (!method.oauth) errors.push(`${where}: ${method.type} needs oauth endpoints`);
-    else {
+    else if (method.oauth.discover !== undefined) {
+      // Endpoints discovered from the server at connect time: only MCP
+      // servers say where they sign in, and only with PKCE.
+      if (method.oauth.discover !== 'mcp') errors.push(`${where}: oauth.discover must be "mcp"`);
+      if (method.type !== 'oauth2_pkce' || method.oauth.pkce === false) errors.push(`${where}: oauth.discover needs oauth2_pkce`);
+      if (!method.schema?.properties?.serverUrl) errors.push(`${where}: oauth.discover needs a serverUrl field`);
+    } else {
       if (!isHttpsOrHttp(method.oauth.authorizeUrl)) errors.push(`${where}: oauth.authorizeUrl must be http(s)`);
       if (!isHttpsOrHttp(method.oauth.tokenUrl)) errors.push(`${where}: oauth.tokenUrl must be http(s)`);
       if (method.oauth.revocationUrl !== undefined && !isHttpsOrHttp(method.oauth.revocationUrl)) {

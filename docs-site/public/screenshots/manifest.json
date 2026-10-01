@@ -2472,7 +2472,7 @@
       "title": "Tool test",
       "path": "screenshots/tool-detail.png",
       "capturedAt": "2026-10-01T06:50:06.395Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6060c3bd3b88b8c7e8c0df729350b1e7514b99e51eebeb34a3114e8bba2e8840",
       "source": {
         "kind": "browser",
@@ -2487,14 +2487,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c5bca9fa2a36ff2ea5ac6f62338fce3a5ccc3c66679d9f47f835f55a3e4d0c3c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/tools changed: the Add MCP server form's credential field now says token or sign-in. This page does not show that form; recapture to confirm and re-register."
     },
     {
       "id": "tools-list",
       "title": "Tools list",
       "path": "screenshots/tools-list.png",
       "capturedAt": "2026-10-01T06:50:03.016Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f323b7031bd76945b279271975cb4f058a96094dd05db95af16d6cd5be468d92",
       "source": {
         "kind": "browser",
@@ -2509,7 +2510,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "72534cd6c01c5404790be58231ca2915723ae9fd35ae60dd0b4831d53119b4e6",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/tools changed: the Add MCP server form's credential field now says token or sign-in. This page does not show that form; recapture to confirm and re-register."
     },
     {
       "id": "versioning-history",
