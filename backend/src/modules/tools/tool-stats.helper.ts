@@ -74,6 +74,7 @@ export class ToolStatsHelper {
         organizationId: options.organizationId,
         gatewayId,
         runId,
+        codeExecutionId: options.codeExecutionId ?? null,
         parameters,
         result: result.data,
         success: result.success,
