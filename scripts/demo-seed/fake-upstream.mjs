@@ -217,7 +217,7 @@ function apiAnswer(method, path, url) {
       { at: '2026-09-25T17:40:00Z', status: 'Held at customs', location: 'Leipzig, DE' },
     ] }
   }
-  if ((m = path.match(/^\/orders\/v2\/orders\/([^/]+)\/refunds$/))) return { refundId: 'RF-2291', orderId: m[1], status: 'pending_approval' }
+  if ((m = path.match(/^\/orders\/v2\/orders\/([^/]+)\/refunds$/))) return { refundId: 'RF-2291', orderId: m[1], status: 'issued' }
   if ((m = path.match(/^\/orders\/v2\/orders\/([^/]+)$/))) return ORDERS[m[1]] || { ...ORDERS['NW-10428'], id: m[1] }
   if (path === '/orders/v2/orders') return Object.values(ORDERS)
   if (path.startsWith('/orders/v2/customers/')) return { id: path.split('/').pop(), name: 'Brightway Logistics', tier: 'enterprise', since: '2021-04-12' }
@@ -258,6 +258,8 @@ function sampleArgs(schema, question) {
     else if (/summary|text|body|note/i.test(name)) args[name] = question.slice(0, 280)
     else if (name === 'name') args[name] = (question.match(/Kestrel|Brightway/i) || ['Kestrel'])[0]
     else if (/customer/i.test(name)) args[name] = 'C-1182'
+    else if (/amount/i.test(name)) { const m = question.match(/\$\s?([\d,]+(?:\.\d+)?)/); args[name] = m ? Number(m[1].replace(/,/g, '')) : 7 }
+    else if (/reason/i.test(name)) args[name] = /defective/i.test(question) ? 'Arrived defective' : 'Customer request'
     else if (prop?.type === 'number' || prop?.type === 'integer') args[name] = 7
     else if (prop?.type === 'boolean') args[name] = false
     else args[name] = /query/i.test(name) ? question.slice(0, 60) : 'Northwind'
@@ -265,7 +267,11 @@ function sampleArgs(schema, question) {
   return args
 }
 
-function pickTool(tools, question) {
+// Told to ask for approval itself (the seed's support agent), the model calls the
+// built-in approval tool for a big refund; otherwise it calls the refund tool,
+// and an amount rule, if there is one, holds the call for a person.
+function pickTool(tools, question, convo = '') {
+  const askFirst = /ask (?:a person to approve|for approval)/i.test(convo)
   const q = question.toLowerCase()
   const score = (t) => {
     const n = `${t.name} ${t.description || ''}`.toLowerCase()
@@ -274,7 +280,7 @@ function pickTool(tools, question) {
     if (/order|nw-/.test(q) && /get.?order|getorder/.test(n)) s += 2
     if (/refund/.test(q) && /refund/.test(n)) s += 3
     // A refund over the limit goes to a person first: the built-in approval tool.
-    if (/refund/.test(q) && /\$\d{3,}|over|approv/.test(q) && n.startsWith('request_approval')) s += 5
+    if (askFirst && /refund/.test(q) && /\$\d{3,}|over|approv/.test(q) && n.startsWith('request_approval')) s += 5
     if (/ticket|triage/.test(q) && /ticket/.test(n)) s += 2
     if (/csat|satisfaction/.test(q) && /csat/.test(n)) s += 3
     if (/remember|recall|memory/.test(q) && /memory|recall/.test(n)) s += 2
@@ -301,6 +307,7 @@ const ANSWERS = [
   [/KB-118|power and voltage/i, 'Yes. The Brew 2 grinder runs on 100 to 240 V, so it works in the US, the EU and the UK with the plug that ships for your country. Source: "Brew 2 grinder: power and voltage" in the help center.'],
   [/"allowance"|section 6\.1/i, 'You have 12 vacation days left this year: 28 in your allowance, 16 taken. Unused days carry over until March 31 (staff handbook, section 6.1).'],
   [/HB-4\.2|Laptops and equipment/i, 'Laptops are replaced every three years, or sooner if broken (staff handbook, section 4.2). Yours is due, so ask IT through an IT request and mention the model you have now.'],
+  [/RF-2291/, 'Refund RF-2291 of $820 on order NW-44120 is issued, after a manager approved it. Brightway Logistics will see it on their card in 3 to 5 business days.'],
   [/refund|NW-44120/i, 'Brightway Logistics reported order NW-44120 ($820) arrived defective. Refunds over $500 need a human decision, so I have escalated it for approval and let the customer know we will confirm within one business day.'],
   [/delay|NW-10428|where is/i, 'Order NW-10428 for Harbor & Pine Outfitters is delayed: DHL Express is holding it at customs in Leipzig. The new delivery estimate is October 2. I drafted a reply apologising for the delay and offering free expedited shipping on the next order, per the delayed-shipment policy.'],
   [/csat|satisfaction|digest|report/i, 'Last 7 days: 214 CSAT responses, average 4.6 out of 5. Two themes in the low scores: customs delays on EU shipments and slow refund confirmations. No action is overdue.'],
@@ -335,11 +342,11 @@ function decide({ messages, tools, system }) {
   // desk guide adds the office Wi-Fi document there): answered from what the
   // agent was given, without a tool. Without the document it goes on as usual.
   if (/wi-?fi/i.test(question) && /NW-Guest/.test(convo)) {
-    const content = 'The guest Wi-Fi is NW-Guest. The password changes every Monday and is on the card at reception. Staff laptops join NW-Staff automatically. (From the office guide in shared memory.)'
+    const content = 'The guest Wi-Fi is NW-Guest. The password changes every Monday and is on the card at reception. Staff laptops join NW-Staff automatically. (From the office guide.)'
     return { content, promptTokens, completionTokens: Math.round(content.length / 4) }
   }
   if (tools?.length && !hasToolResult) {
-    const tool = pickTool(tools, question)
+    const tool = pickTool(tools, question, convo)
     return { toolCall: { name: tool.name, args: sampleArgs(tool.parameters, question) }, promptTokens, completionTokens: 42 }
   }
   const found = results.map((m) => text(m.content)).join(' ')

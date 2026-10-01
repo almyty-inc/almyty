@@ -18,19 +18,27 @@ almyty works out what it can do: search the handbook and policies, get an employ
 
 ![The intranet connected, with its three tools](/screenshots/guides/helpdesk-1-connect-intranet.png)
 
-## 2. Tell it what everyone should know
+## 2. Add your office guide
 
-Some answers are not in any system: the Wi-Fi, office hours, who to ask about parking. Write them down once in **Memory**.
+Some answers are not in any system: the Wi-Fi, office hours, where to park. If you already have them written down, for example in an office guide, add that text to **Memory** once.
 
-In the sidebar, open **Memory** and click **Add memory**. Under **What should your agents remember?**, paste the text, for example the office guide:
+In the sidebar, open **Memory** and click **Add memory**. Under **What should your agents remember?**, paste the whole guide, for example:
 
-> Office guide, Leipzig office. Guest Wi-Fi: NW-Guest, the password changes every Monday and is on the card at reception. Staff laptops join NW-Staff automatically. The office is open 7:00 to 20:00; after hours, use your badge at the side door.
+> Office guide, Leipzig office.
+>
+> Wi-Fi: guests use NW-Guest; the password changes every Monday and is on the card at reception. Staff laptops join NW-Staff automatically.
+>
+> Opening hours: 7:00 to 20:00. After hours, use your badge at the side door.
+>
+> Parking: the courtyard spaces are for visitors. Staff park in the garage on Lindenstrasse; ask reception for a card.
+>
+> Kitchen: coffee and tea are free. Please empty the dishwasher if it is clean.
 
-Add **Tags** if you like (`office, wifi`). Open **Advanced** and set **How long to keep it** to **Shared by all agents**, so every assistant in your organization can look it up. Click **Save memory**.
+Add **Tags** if you like (`office, wifi`). Open **Advanced** and set **Kind** to **Document**. A document can be as long as you like: for each question, the assistant reads only the parts that answer it. If the guide lives somewhere else too, paste its link into **Where it came from**. Click **Save memory**.
 
-![A note for every assistant, kept in shared memory](/screenshots/guides/helpdesk-2-shared-memory.png)
+![The office guide, added as a document](/screenshots/guides/helpdesk-2-office-guide.png)
 
-Add one memory per topic rather than one long page: the assistant looks up the ones that match each question.
+Everything you add on the **Memory** page is read by every assistant whose memory is shared, which is what you set up next.
 
 ## 3. Create the assistant
 
@@ -41,7 +49,7 @@ Open **Agents**, click **Create agent** and pick **Autonomous** at the top.
 - **Personality & style**: `Friendly and to the point, like a helpful colleague.`
 - **Instructions**:
 
-> You answer questions from Northwind staff about HR, IT and the office. Look things up before you answer: the staff handbook and policies, their leave balance (ask for their work email if you need it), and the office guide in shared memory. Say where the answer came from. If someone needs something done by IT, tell them how to open an IT request. Never share one person's details with another.
+> You answer questions from Northwind staff about HR, IT and the office. Look things up before you answer: the staff handbook and policies, their leave balance (ask for their work email if you need it), and the office guide in memory. Say where the answer came from. If someone needs something done by IT, tell them how to open an IT request. Never share one person's details with another.
 
 Further down, under **Memory**, turn on **Remember between conversations**, set **Whose memory** to **Shared by all agents** (so it reads what you added in step 2) and **What it saves** to **Only when asked** (so it does not fill your shared memory with chat). Under **Capabilities → Tools and APIs**, tick **All tools** next to your intranet.
 
@@ -55,9 +63,9 @@ On the **Overview** tab, under **Try it**, ask: `How many vacation days do I hav
 
 ![A leave balance from the HR system, with the handbook section](/screenshots/guides/helpdesk-4-leave.png)
 
-It looked the balance up in the intranet and answered with the numbers and the handbook section. Now ask something only your memory knows: `What is the guest Wi-Fi at the office?`
+It looked the balance up in the intranet and answered with the numbers and the handbook section. Now ask something only the office guide knows: `What is the guest Wi-Fi at the office?`
 
-![The Wi-Fi answer, taken from shared memory](/screenshots/guides/helpdesk-5-wifi.png)
+![The Wi-Fi answer, taken from the office guide](/screenshots/guides/helpdesk-5-wifi.png)
 
 ## 5. Put it in Microsoft Teams
 
@@ -81,7 +89,7 @@ Staff can now find the bot in Teams and message it directly, or add it to a team
 
 - **Only staff can reach it.** A Teams or Slack bot answers people in the organizations or workspaces where it is installed. In Teams, entering your own tenant ID keeps it inside your company.
 - **Private details stay private.** The instructions tell it never to share one person's details with another. For a firmer line, give it only the tools it needs, and remove any that could look up someone else's records.
-- **Keep answers current**: when something changes, delete the old memory on the **Memory** page and add the new one. The next answer uses it.
+- **Keep answers current**: when something changes, delete the old guide on the **Memory** page and add the new one. The next answer uses it.
 - **See what people ask**: every question is on the assistant's **Runs** tab. Recurring questions are a good sign that a handbook page needs rewriting.
 
 ## For developers
