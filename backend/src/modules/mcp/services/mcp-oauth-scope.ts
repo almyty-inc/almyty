@@ -25,6 +25,31 @@ export function scopeForMcpMethod(method: string): string | null {
   return null;
 }
 
+/**
+ * The scopes one MCP message needs. Most methods need the scope of their
+ * namespace (scopeForMcpMethod). `subscriptions/listen` (2026-07-28) needs
+ * the scope of every list type it opts in to: a token without `mcp:tools`
+ * does not get to hear that the tools changed. `server/discover` needs none,
+ * like `initialize`: capabilities differ per gateway, but saying what the
+ * gateway speaks is the connection itself.
+ */
+export function scopesForMcpMessage(message: unknown): string[] {
+  const method = (message as { method?: unknown } | null)?.method;
+  if (typeof method !== 'string') return [];
+  if (method === 'subscriptions/listen') {
+    const filter = (message as any)?.params?.notifications ?? {};
+    const needed: string[] = [];
+    if (filter.toolsListChanged === true) needed.push('mcp:tools');
+    if (filter.promptsListChanged === true) needed.push('mcp:prompts');
+    if (filter.resourcesListChanged === true || (Array.isArray(filter.resourceSubscriptions) && filter.resourceSubscriptions.length)) {
+      needed.push('mcp:resources');
+    }
+    return needed;
+  }
+  const scope = scopeForMcpMethod(method);
+  return scope ? [scope] : [];
+}
+
 interface ScopedAuth {
   scopes?: string[];
   metadata?: { authMethod?: string } | Record<string, any>;
@@ -45,10 +70,9 @@ export function missingOAuthScope(gatewayType: GatewayType | string, auth: Scope
 
   const messages = Array.isArray(body) ? body : [body];
   for (const message of messages) {
-    const method = (message as { method?: unknown } | null)?.method;
-    if (typeof method !== 'string') continue;
-    const needed = scopeForMcpMethod(method);
-    if (needed && !granted.has(needed)) return needed;
+    for (const needed of scopesForMcpMessage(message)) {
+      if (!granted.has(needed)) return needed;
+    }
   }
   return null;
 }

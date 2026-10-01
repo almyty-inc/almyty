@@ -79,7 +79,8 @@ describe('MCP HTTP binding', () => {
       const out: any = resolve({ 'mcp-protocol-version': 'next-tuesday' }, call);
       expect(out.refusal.status).toBe(400);
       expect(out.refusal.body.id).toBe(7);
-      expect(out.refusal.body.error.code).toBe(-32600);
+      // UnsupportedProtocolVersionError (2026-07-28), whatever era asked.
+      expect(out.refusal.body.error.code).toBe(-32022);
       expect(out.refusal.body.error.data.supported).toContain('2025-11-25');
     });
 

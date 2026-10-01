@@ -1,5 +1,5 @@
 import { McpSurface, handleMessage, handleSingleMessage } from '../mcp-protocol-core';
-import { KNOWN_PROTOCOL_VERSIONS, ProtocolVersion } from '../versions';
+import { KNOWN_PROTOCOL_VERSIONS, ProtocolVersion, isModernVersion } from '../versions';
 import { restoreEnv } from '../../../../test/env';
 
 /**
@@ -42,7 +42,9 @@ function fixtureSurface(overrides: Partial<McpSurface> = {}): McpSurface {
 const at = (version: ProtocolVersion) => ({ version, era: 'legacy' as const });
 
 describe('MCP protocol core', () => {
-  describe.each(KNOWN_PROTOCOL_VERSIONS.map((v) => [v]))('at %s', (version) => {
+  // The legacy (initialize-based) versions; 2026-07-28 has its own spec,
+  // mcp-modern.spec.ts.
+  describe.each(KNOWN_PROTOCOL_VERSIONS.filter((v) => !isModernVersion(v)).map((v) => [v]))('at %s', (version) => {
     const newer = (cutoff: string) => version >= cutoff;
 
     it('negotiates initialize to this version', async () => {

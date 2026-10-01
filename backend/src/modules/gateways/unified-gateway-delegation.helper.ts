@@ -31,11 +31,16 @@ import { ChannelPolicy, ChannelPolicyService, a2aCallerId, withA2ACaller } from 
 import { HostedChatService } from './channels/hosted-chat.service';
 import { trustedClientIp } from '../../common/security/client-ip';
 import {
+  enterMcpRequest,
+  mcpHttpStatusOf,
   mcpOriginRefusal,
   mcpOutcomeOf,
   recordMcpRequest,
   resolveMcpRequestVersion,
 } from '../mcp/core/mcp-http-binding';
+import { McpCallContext } from '../mcp/core/mcp-protocol-core';
+import { serveSubscriptionListen } from '../mcp/core/mcp-listen';
+import { McpChangeBus } from '../mcp-events/mcp-change-bus.service';
 
 /**
  * Per-protocol delegation for gateways exposed under
@@ -119,6 +124,9 @@ export class UnifiedGatewayDelegation {
     // visitor memory rule. Optional for the same reason; Nest always
     // injects it (channel-policy.guard.spec.ts).
     @Optional() private readonly channelPolicy?: ChannelPolicyService,
+    // Delivers tool-set changes to MCP subscriptions/listen streams.
+    // Optional for the positional unit tests; Nest always injects it.
+    @Optional() private readonly changeBus?: McpChangeBus,
   ) {}
 
   async handleGatewayRequest(
@@ -172,14 +180,26 @@ export class UnifiedGatewayDelegation {
       );
     }
 
-    // MCP Origin check, before authentication: a browser page on another
-    // origin (DNS rebinding included) must not reach the gateway with the
-    // visitor's network position or credentials. 403 for every version.
+    // MCP: Origin first (a browser page on another origin, DNS rebinding
+    // included, must not reach the gateway with the visitor's network
+    // position or credentials; 403 for every version), then the version and
+    // its headers (2026-07-28: header checks run before authorization scope
+    // checks and before dispatch). Both before authentication.
+    let mcpCtx: McpCallContext | undefined;
     if (gateway.type === GatewayType.MCP && !action.startsWith('.well-known/')) {
       const refusal = mcpOriginRefusal(req);
       if (refusal) {
         recordMcpRequest(req, null, body, 'refused');
         return res.status(refusal.status).json(refusal.body);
+      }
+      if (req.method === 'POST') {
+        const resolution = resolveMcpRequestVersion(req, body);
+        if ('refusal' in resolution) {
+          recordMcpRequest(req, null, body, 'refused');
+          return res.status(resolution.refusal.status).json(resolution.refusal.body);
+        }
+        mcpCtx = resolution.ctx;
+        enterMcpRequest(mcpCtx);
       }
     }
 
@@ -218,7 +238,7 @@ export class UnifiedGatewayDelegation {
     switch (gateway.type) {
       case GatewayType.MCP:
         // MCP bumps the gateway request counters inside McpService.
-        return this.delegateMcp(gateway, auth, body, req, res);
+        return this.delegateMcp(gateway, auth, body, req, res, mcpCtx);
       case GatewayType.UTCP: {
         const out = await this.delegateUtcp(gateway, organization, action, auth, req, res, body);
         this.bumpGatewayCounters(gateway.id, res.statusCode < 400);
@@ -328,13 +348,12 @@ export class UnifiedGatewayDelegation {
     body: any,
     req: Request,
     res: Response,
+    resolvedCtx?: McpCallContext,
   ) {
-    const incomingSessionId = req.headers['mcp-session-id'] as string;
-
     // Only POST carries MCP here. There is no server-to-client stream (GET)
-    // and no session to terminate (DELETE: the Mcp-Session-Id minted on
-    // initialize is never stored), so both are 405 Method Not Allowed, the
-    // answer the Streamable HTTP transport gives a server without them.
+    // and no session to terminate (DELETE), so both are 405 Method Not
+    // Allowed, as every revision since 2025-03-26 has a server without them
+    // answer.
     if (req.method === 'GET' || req.method === 'DELETE') {
       recordMcpRequest(req, null, body, 'refused');
       res.setHeader('Allow', 'POST');
@@ -345,17 +364,36 @@ export class UnifiedGatewayDelegation {
       });
     }
 
-    // The protocol version this POST is served at: negotiated on
-    // `initialize`, named by MCP-Protocol-Version otherwise, 2025-03-26 with
-    // no header. An unsupported header, or a batch from 2025-06-18 on, is a
-    // 400 before anything runs.
-    const resolution = resolveMcpRequestVersion(req, body);
-    if ('refusal' in resolution) {
-      recordMcpRequest(req, null, body, 'refused');
-      return res.status(resolution.refusal.status).json(resolution.refusal.body);
+    // The version this POST is served at: resolved before authentication in
+    // handleGatewayRequest (the header checks of 2026-07-28 run before
+    // anything else), or here for a caller that did not.
+    let ctx = resolvedCtx;
+    if (!ctx) {
+      const resolution = resolveMcpRequestVersion(req, body);
+      if ('refusal' in resolution) {
+        recordMcpRequest(req, null, body, 'refused');
+        return res.status(resolution.refusal.status).json(resolution.refusal.body);
+      }
+      ctx = resolution.ctx;
+      enterMcpRequest(ctx);
     }
-    const ctx = resolution.ctx;
 
+    // A modern client's change-notification stream. A tenant gateway can
+    // report changes to its tool set; the management gateway's tools never
+    // change, so its streams acknowledge nothing and only keep alive.
+    if (ctx.era === 'modern' && body?.method === 'subscriptions/listen' && body.id !== undefined) {
+      recordMcpRequest(req, ctx, body, 'ok');
+      return serveSubscriptionListen({
+        res,
+        id: body.id,
+        params: body.params,
+        serverInfo: { name: gateway.isSystem ? 'almyty' : gateway.name, version: '1.0.0' },
+        toolsGatewayId: gateway.isSystem ? null : gateway.id,
+        bus: this.changeBus,
+      });
+    }
+
+    let result: Awaited<ReturnType<McpService['handleJsonRpcMessage']>>;
     if (gateway.isSystem) {
       let userId = auth?.userId || (req as any).user?.sub || (req as any).user?.id;
       if (!userId) {
@@ -367,65 +405,37 @@ export class UnifiedGatewayDelegation {
           if (validation.valid) userId = validation.userId;
         }
       }
-      const result = await this.almytyMcpService.handleJsonRpc(
-        body,
-        gateway.organizationId,
-        userId,
-        ctx,
-      );
-      recordMcpRequest(req, ctx, body, mcpOutcomeOf(result));
-      // 202 Accepted, not 204: the Streamable HTTP revision names 202 for a
-      // POST that carries only notifications or responses, and the
-      // TypeScript SDK's StreamableHTTPClientTransport branches on
-      // `status === 202` to decide whether to open the server->client SSE
-      // stream after `notifications/initialized`. On a 204 it returns
-      // without error and never opens the stream, so a server-initiated
-      // notification could never be delivered.
-      if (result === null) {
-        return res.status(202).end();
-      }
-      // A batch response is an array; only a single response carries a
-      // session id to echo.
-      const single = Array.isArray(result) ? null : result;
-      if (single?.result?.sessionId || incomingSessionId) {
-        res.setHeader('Mcp-Session-Id', single?.result?.sessionId || incomingSessionId);
-      }
-      return res.json(result);
+      result = await this.almytyMcpService.handleJsonRpc(body, gateway.organizationId, userId, ctx);
+    } else {
+      // The caller the gateway's own auth identified (an API key's or OAuth
+      // token's user), as UTCP does. With no user, tools/call and tools/get
+      // treat the caller as nobody: another member's private tool -- and on
+      // a private gateway, which only its owner reaches, the owner's own --
+      // is refused rather than run on no one's behalf.
+      const callerId: string | undefined = auth?.userId || (req as any).user?.sub || (req as any).user?.id || undefined;
+      result = await this.mcpService.handleJsonRpcMessage(body, gateway.organizationId, callerId, gateway.id, ctx);
     }
-
-    // The caller the gateway's own auth identified (an API key's or OAuth
-    // token's user), as UTCP does. With no user, tools/call and tools/get
-    // treat the caller as nobody: another member's private tool -- and on
-    // a private gateway, which only its owner reaches, the owner's own --
-    // is refused rather than run on no one's behalf. Passing null here made
-    // a private gateway useless to its owner and ran every call unattributed.
-    const callerId: string | undefined = auth?.userId || (req as any).user?.sub || (req as any).user?.id || undefined;
-    const result = await this.mcpService.handleJsonRpcMessage(
-      body,
-      gateway.organizationId,
-      callerId,
-      gateway.id,
-      ctx,
-    );
     recordMcpRequest(req, ctx, body, mcpOutcomeOf(result));
 
-    // 202 Accepted for a notification-only POST — see the system-gateway
-    // branch above for why the SDK cares about the exact status.
+    // 202 Accepted, not 204, for a notification-only POST: the Streamable
+    // HTTP revisions name 202, and the TypeScript SDK branches on exactly
+    // that status.
     if (result === null) {
       return res.status(202).end();
     }
 
-    // The session id is minted on `initialize` only so clients that insist
-    // on one are satisfied; nothing stores or reads it (design doc, R3).
+    // A legacy `initialize` gets an Mcp-Session-Id so clients that insist
+    // on one are satisfied. Nothing stores or reads it, and a client's own
+    // Mcp-Session-Id is never echoed: modern requests carry no session at
+    // all (2026-07-28: "do not mint or echo session IDs").
     const single = Array.isArray(result) ? null : result;
-    if (body?.method === 'initialize' && single?.result) {
-      const sessionId = single.result.sessionId || crypto.randomUUID();
-      res.setHeader('Mcp-Session-Id', sessionId);
-    } else if (incomingSessionId) {
-      res.setHeader('Mcp-Session-Id', incomingSessionId);
+    if (ctx.era !== 'modern' && body?.method === 'initialize' && single?.result) {
+      res.setHeader('Mcp-Session-Id', crypto.randomUUID());
     }
 
-    return res.json(result);
+    // A modern request for a method this server does not serve is a 404
+    // with -32601, which is how a dual-era client tells modern from legacy.
+    return res.status(mcpHttpStatusOf(ctx, result)).json(result);
   }
 
   private async delegateA2A(

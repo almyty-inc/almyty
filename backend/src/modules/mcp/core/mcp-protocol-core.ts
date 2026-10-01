@@ -1,21 +1,26 @@
 /**
  * The MCP protocol core: one JSON-RPC dispatcher for every MCP surface.
  *
- * docs/design/mcp-2026-07-28.md, "Architecture: one protocol core". There
- * used to be a dispatcher per surface (McpService for tenant gateways and
- * the gateway-less org endpoint, AlmytyMcpService for the management
- * gateway), each with its own idea of batching, notifications, version
- * negotiation and error codes. Now a surface only answers "list tools",
- * "call a tool", and so on, and never sees a protocol version; this module
- * owns the envelope, the method table, version negotiation and the
- * per-version shaping of results (versions.ts).
+ * docs/design/mcp-2026-07-28.md, "Architecture: one protocol core". A
+ * surface only answers "list tools", "call a tool", and so on, and never
+ * sees a protocol version; this module owns the envelope, the method table,
+ * version negotiation and the per-version shaping of results (versions.ts).
  *
- * HTTP concerns (Origin, the MCP-Protocol-Version header, status codes)
- * are the binding's (mcp-http-binding.ts). This module is transport-free
- * so the legacy SSE transport and the in-process callers share it.
+ * Two eras are served side by side, chosen per request by the HTTP binding
+ * (mcp-http-binding.ts):
+ *  - legacy (2024-11-05 .. 2025-11-25): `initialize` negotiates, later
+ *    requests name their version in a header;
+ *  - modern (2026-07-28): every request carries its version, capabilities
+ *    and client in `_meta`; results carry `resultType` and the server's
+ *    identity; there is no handshake, no ping, no logging/setLevel, and
+ *    `server/discover` says what the server speaks.
+ *
+ * HTTP concerns (Origin, headers, status codes, streams) are the binding's.
+ * This module is transport-free so the legacy SSE transport and in-process
+ * callers share it.
  */
 import { JsonRpcErrorCode, JsonRpcResponse, McpCapabilities } from '../types/mcp.types';
-import { normalizeInputSchema, normalizeOutputSchema } from './json-schema-2020';
+import { normalizeInputSchema, normalizeJsonSchema, normalizeOutputSchema } from './json-schema-2020';
 import { mcpProtocolSettings } from './mcp-settings';
 import {
   ProtocolVersion,
@@ -26,16 +31,29 @@ import {
 
 /**
  * How the version of one request was decided:
- *  - `legacy`: an `initialize`, or a request carrying the
- *    `MCP-Protocol-Version` header (2025-06-18 and later clients);
+ *  - `modern`: the request carried `_meta["io.modelcontextprotocol/protocolVersion"]`;
+ *  - `legacy`: an `initialize`, or a request naming its version in the
+ *    `MCP-Protocol-Version` header (2025-06-18 .. 2025-11-25 clients);
  *  - `assumed`: no header, so 2025-03-26 per the spec.
- * (`modern`, the 2026-07-28 per-request `_meta`, arrives with P1.)
  */
-export type McpEra = 'legacy' | 'assumed';
+export type McpEra = 'modern' | 'legacy' | 'assumed';
+
+/** W3C trace context a modern request carried in `_meta`. */
+export interface McpTraceContext {
+  traceparent: string;
+  tracestate?: string;
+  baggage?: string;
+}
 
 export interface McpCallContext {
   version: ProtocolVersion;
   era: McpEra;
+  /** Modern requests: what the client declared for this request. */
+  clientCapabilities?: Record<string, unknown>;
+  clientInfo?: { name?: string; version?: string };
+  trace?: McpTraceContext;
+  /** Modern tools/call: the request's Mcp-Param-* headers, lower-cased names to raw values. */
+  paramHeaders?: Record<string, string>;
 }
 
 /** What a caller that knows nothing about the transport gets: the spec's no-header default. */
@@ -49,7 +67,7 @@ export interface McpServerInfo {
 
 export interface McpToolResult {
   content: any[];
-  structuredContent?: Record<string, unknown>;
+  structuredContent?: unknown;
   isError?: boolean;
   _meta?: Record<string, unknown>;
 }
@@ -64,15 +82,22 @@ export interface McpSurface {
   capabilities(): McpCapabilities;
   instructions?(): string | undefined;
   listTools(params: any): Promise<{ tools: any[]; nextCursor?: string }>;
-  callTool(params: any): Promise<McpToolResult>;
+  callTool(params: any, ctx?: McpCallContext): Promise<McpToolResult>;
   listResources?(params: any): Promise<any>;
   readResource?(params: any): Promise<any>;
   listResourceTemplates?(params: any): Promise<any>;
   listPrompts?(params: any): Promise<any>;
   getPrompt?(params: any): Promise<any>;
   complete?(params: any): Promise<any>;
-  /** Methods outside the spec this surface keeps for its own clients (owner decision 16). */
+  /** Methods outside the spec this surface keeps for its legacy clients (owner decision 16). */
   extraMethods?: Record<string, (params: any) => Promise<any>>;
+  /**
+   * The channel a change to this surface's tool set is published on, or
+   * null when its tool set never changes (management) or has no channel.
+   * A surface with one advertises `tools.listChanged` to modern clients and
+   * serves `toolsListChanged` on `subscriptions/listen`.
+   */
+  toolsChangedChannel?(): string | null;
   /** Called once per successful `initialize`, with its params. */
   onInitialize?(params: any, negotiated: ProtocolVersion): void | Promise<void>;
   /** Called after every answered request (not notifications), with whether it succeeded. */
@@ -108,6 +133,32 @@ const IGNORED_NOTIFICATIONS = new Set([
   'notifications/roots/list_changed',
 ]);
 
+/** The methods a modern (2026-07-28) request may name. Anything else is -32601 (HTTP 404). */
+export const MODERN_METHODS: ReadonlySet<string> = new Set([
+  'server/discover',
+  'tools/list',
+  'tools/call',
+  'resources/list',
+  'resources/read',
+  'resources/templates/list',
+  'prompts/list',
+  'prompts/get',
+  'completion/complete',
+  'subscriptions/listen',
+]);
+
+/** Results that carry caching hints in 2026-07-28 ("Caching", Cacheable Results). */
+const CACHEABLE_METHODS: ReadonlySet<string> = new Set([
+  'server/discover',
+  'tools/list',
+  'prompts/list',
+  'resources/list',
+  'resources/templates/list',
+  'resources/read',
+]);
+
+export const SERVER_INFO_META = 'io.modelcontextprotocol/serverInfo';
+
 /** The single error a refused batch is answered with. */
 export function batchRefusal(version: ProtocolVersion): JsonRpcResponse {
   return {
@@ -129,8 +180,12 @@ export function shapeToolForVersion(tool: any, version: ProtocolVersion): any {
   const features = featuresOf(version);
   const out: any = { ...tool, inputSchema: normalizeInputSchema(tool.inputSchema) };
   if (out.outputSchema !== undefined) {
-    const normalized = features.structuredContent ? normalizeOutputSchema(out.outputSchema) : null;
-    if (normalized) out.outputSchema = normalized;
+    const normalized = !features.structuredContent
+      ? null
+      : features.structuredAnyJson
+        ? normalizeJsonSchema(out.outputSchema)
+        : normalizeOutputSchema(out.outputSchema);
+    if (normalized && typeof normalized === 'object') out.outputSchema = normalized;
     else delete out.outputSchema;
   }
   if (!features.toolTitle) delete out.title;
@@ -139,11 +194,23 @@ export function shapeToolForVersion(tool: any, version: ProtocolVersion): any {
   return out;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
 /** Shape a tools/call result for a version. */
 export function shapeToolResultForVersion(result: McpToolResult, version: ProtocolVersion): McpToolResult {
   const features = featuresOf(version);
   const out: McpToolResult = { ...result, content: Array.isArray(result.content) ? result.content : [] };
-  if (!features.structuredContent) delete out.structuredContent;
+  // structuredContent is an object up to 2025-11-25, any JSON value from
+  // 2026-07-28 on, and absent before 2025-06-18.
+  if (
+    !features.structuredContent ||
+    out.structuredContent === undefined ||
+    (!features.structuredAnyJson && !isPlainObject(out.structuredContent))
+  ) {
+    delete out.structuredContent;
+  }
   if (!features.resourceLinks) {
     // A resource link is a 2025-06-18 block. Older clients get the same
     // pointer as text rather than a block type they do not know.
@@ -157,7 +224,34 @@ export function shapeToolResultForVersion(result: McpToolResult, version: Protoc
   return out;
 }
 
+/**
+ * The capabilities a version is told about. Modern clients learn of tool
+ * list changes through subscriptions/listen when the surface has a change
+ * channel; logging is not advertised to them (2026-07-28 Deprecated 1: no
+ * logging/setLevel). Legacy clients keep `listChanged: false`: telling them
+ * needs a server stream, which needs sessions (owner decision 13).
+ */
+export function capabilitiesForVersion(surface: McpSurface, version: ProtocolVersion): McpCapabilities {
+  const base = surface.capabilities();
+  if (!featuresOf(version).modern) return base;
+  const out: McpCapabilities = { ...base };
+  delete out.logging;
+  if (out.tools) out.tools = { ...out.tools, listChanged: !!surface.toolsChangedChannel?.() };
+  return out;
+}
+
+async function serverInfoFor(surface: McpSurface, version: ProtocolVersion): Promise<McpServerInfo> {
+  const info = await surface.serverInfo();
+  const out: McpServerInfo = { name: info.name, version: info.version };
+  if (info.title && featuresOf(version).toolTitle) out.title = info.title;
+  return out;
+}
+
 async function dispatch(method: string, params: any, surface: McpSurface, ctx: McpCallContext): Promise<any> {
+  const modern = featuresOf(ctx.version).modern;
+  if (modern && !MODERN_METHODS.has(method)) {
+    throw mcpError(JsonRpcErrorCode.METHOD_NOT_FOUND, `Method not found: ${method}`);
+  }
   switch (method) {
     case 'initialize': {
       if (!params || typeof params.protocolVersion !== 'string') {
@@ -166,13 +260,18 @@ async function dispatch(method: string, params: any, surface: McpSurface, ctx: M
       const negotiated = negotiateVersion(params.protocolVersion, mcpProtocolSettings().supportedVersions);
       await surface.onInitialize?.(params, negotiated);
       const instructions = surface.instructions?.();
-      const info = await surface.serverInfo();
-      const serverInfo: McpServerInfo = { name: info.name, version: info.version };
-      if (info.title && featuresOf(negotiated).toolTitle) serverInfo.title = info.title;
       return {
         protocolVersion: negotiated,
-        capabilities: surface.capabilities(),
-        serverInfo,
+        capabilities: capabilitiesForVersion(surface, negotiated),
+        serverInfo: await serverInfoFor(surface, negotiated),
+        ...(instructions ? { instructions } : {}),
+      };
+    }
+    case 'server/discover': {
+      const instructions = surface.instructions?.();
+      return {
+        supportedVersions: mcpProtocolSettings().supportedVersions,
+        capabilities: capabilitiesForVersion(surface, ctx.version),
         ...(instructions ? { instructions } : {}),
       };
     }
@@ -186,29 +285,35 @@ async function dispatch(method: string, params: any, surface: McpSurface, ctx: M
       if (!params || typeof params.name !== 'string' || !params.name) {
         throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, 'Tool name is required');
       }
-      return shapeToolResultForVersion(await surface.callTool(params), ctx.version);
+      return shapeToolResultForVersion(await surface.callTool(params, ctx), ctx.version);
     }
     case 'resources/list':
       return surface.listResources ? surface.listResources(params) : { resources: [] };
     case 'resources/read':
-      if (!surface.readResource) throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, 'Resource not found');
+      if (!surface.readResource) {
+        throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, 'Resource not found', { uri: params?.uri });
+      }
       return surface.readResource(params);
     case 'resources/templates/list':
       return surface.listResourceTemplates ? surface.listResourceTemplates(params) : { resourceTemplates: [] };
     case 'resources/subscribe':
     case 'resources/unsubscribe':
-      // No resource ever changes under a subscription here, so there is
-      // nothing to deliver; acknowledging is the honest answer.
+      // Legacy only. No resource ever changes under a subscription here, so
+      // there is nothing to deliver; acknowledging is the honest answer.
       return {};
     case 'prompts/list':
       return surface.listPrompts ? surface.listPrompts(params) : { prompts: [] };
     case 'prompts/get':
-      if (!surface.getPrompt) throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, 'Prompt not found');
+      if (!surface.getPrompt) throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, 'Prompt not found', { name: params?.name });
       return surface.getPrompt(params);
     case 'completion/complete':
       return surface.complete ? surface.complete(params) : { completion: { values: [] } };
     case 'logging/setLevel':
       return {};
+    case 'subscriptions/listen':
+      // A stream, not a result: the HTTP binding serves it before the core
+      // is reached. Arriving here means a transport that cannot stream.
+      throw mcpError(JsonRpcErrorCode.METHOD_NOT_FOUND, 'subscriptions/listen needs a streaming transport');
     default: {
       const extra = surface.extraMethods?.[method];
       if (extra) return extra(params);
@@ -218,6 +323,31 @@ async function dispatch(method: string, params: any, surface: McpSurface, ctx: M
       throw mcpError(JsonRpcErrorCode.METHOD_NOT_FOUND, `Method not found: ${method}`);
     }
   }
+}
+
+/**
+ * Modern results: `resultType`, the server's identity in `_meta`, and on
+ * cacheable results `ttlMs` (MCP_RESULT_TTL_MS) and `cacheScope`. The scope
+ * is always "private": every listing here depends on who asks (team and
+ * private tools, gateway auth), so no cache may share one across callers.
+ */
+async function decorateModernResult(
+  method: string,
+  result: any,
+  surface: McpSurface,
+  ctx: McpCallContext,
+): Promise<any> {
+  const out: any = isPlainObject(result) ? { ...result } : {};
+  out.resultType = out.resultType ?? 'complete';
+  out._meta = {
+    ...(isPlainObject(out._meta) ? out._meta : {}),
+    [SERVER_INFO_META]: await serverInfoFor(surface, ctx.version),
+  };
+  if (CACHEABLE_METHODS.has(method) && out.resultType === 'complete') {
+    out.ttlMs = mcpProtocolSettings().resultTtlMs;
+    out.cacheScope = 'private';
+  }
+  return out;
 }
 
 /** One JSON-RPC message. Returns null when nothing may be sent back (a notification). */
@@ -230,6 +360,7 @@ export async function handleSingleMessage(
   // and MUST NOT be answered, not even with an error.
   const isNotification = !!body && typeof body === 'object' && !Array.isArray(body) && body.id === undefined;
   const id = body && typeof body === 'object' && !Array.isArray(body) ? (body.id ?? null) : null;
+  const modern = featuresOf(ctx.version).modern;
 
   try {
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -239,10 +370,13 @@ export async function handleSingleMessage(
     if (!body.method || typeof body.method !== 'string') {
       throw mcpError(JsonRpcErrorCode.INVALID_REQUEST, 'Missing or invalid method');
     }
-    if (isNotification && IGNORED_NOTIFICATIONS.has(body.method)) return null;
+    // Modern clients send no notifications over HTTP; any that arrive are
+    // accepted and dropped like the legacy ones.
+    if (isNotification && (modern || IGNORED_NOTIFICATIONS.has(body.method))) return null;
 
-    const result = await dispatch(body.method, body.params, surface, ctx);
+    let result = await dispatch(body.method, body.params, surface, ctx);
     if (isNotification) return null;
+    if (modern) result = await decorateModernResult(body.method, result, surface, ctx);
     await surface.onOutcome?.(true);
     return { jsonrpc: '2.0', id, result };
   } catch (error) {

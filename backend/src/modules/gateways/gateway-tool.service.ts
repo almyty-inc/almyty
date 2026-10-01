@@ -15,6 +15,7 @@ import { GatewayToolStatsHelper } from './gateway-tool-stats.helper';
 import { GatewayToolQueriesHelper } from './gateway-tool-queries.helper';
 import { assertToolAttachable, gatewayServableTo } from './private-gateway';
 import { ExecutionAccessService } from '../../common/authorization/execution-access.service';
+import { McpChangeBus } from '../mcp-events/mcp-change-bus.service';
 
 export interface CreateGatewayToolDto {
   toolId: string;
@@ -151,6 +152,9 @@ export class GatewayToolService {
     // only to keep the positional spec harnesses' order; attaching a team
     // tool refuses without it.
     @Optional() private readonly executionAccess?: ExecutionAccessService,
+    // Tells the gateway's MCP listen streams (2026-07-28 subscriptions/listen)
+    // that its tool set changed. Optional for the positional spec harnesses.
+    @Optional() private readonly changeBus?: McpChangeBus,
   ) {}
 
   /**
@@ -169,6 +173,9 @@ export class GatewayToolService {
     } catch (err: any) {
       this.logger.warn(`Failed to invalidate UTCP manual cache for gw=${gatewayId}: ${err.message}`);
     }
+    // The same change, for MCP: cached tools/list pages dropped and every
+    // subscriptions/listen stream on this gateway told, on any pod.
+    await this.changeBus?.gatewayToolsChanged(gatewayId);
   }
 
   async associateTool(

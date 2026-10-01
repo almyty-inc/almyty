@@ -19,6 +19,7 @@ import {
   handleMessage,
   handleSingleMessage,
 } from './core/mcp-protocol-core';
+import { toolsChangedChannel } from '../mcp-events/mcp-change-bus.service';
 
 import { Gateway } from '../../entities/gateway.entity';
 import { Organization } from '../../entities/organization.entity';
@@ -103,7 +104,8 @@ export class McpService {
       serverInfo: async () => ({ name: await this.serverName(organizationId, gatewayId), version: '1.0.0' }),
       capabilities: () => this.capabilities(),
       listTools: (params) => tools.handleToolsList(params, organizationId, gatewayId, caller),
-      callTool: (params) => tools.handleToolCall(params as McpCallToolRequest, organizationId, userId, gatewayId),
+      callTool: (params, ctx) =>
+        tools.handleToolCall(params as McpCallToolRequest, organizationId, userId, gatewayId, ctx?.paramHeaders),
       complete: (params) => tools.handleCompletionComplete(params, organizationId, gatewayId),
       listResources: (params) => content.handleResourcesList(params, organizationId, gatewayId, caller),
       readResource: (params) =>
@@ -120,6 +122,9 @@ export class McpService {
         'skills/list': (params) => content.handleSkillsList(params, organizationId, gatewayId, caller),
         'skills/get': (params) => content.handleSkillGet(params, organizationId, caller, gatewayId),
       },
+      // A tenant gateway's tool set changes (assignments, activations,
+      // re-syncs); the org-wide surface has no channel of its own.
+      toolsChangedChannel: () => (gatewayId ? toolsChangedChannel(gatewayId) : null),
       onInitialize: (params) => this.recordInitialize(params as McpInitializeRequest, organizationId, userId, gatewayId),
       onOutcome: gatewayId ? (success) => this.bumpGatewayMetrics(gatewayId, organizationId, success) : undefined,
     };

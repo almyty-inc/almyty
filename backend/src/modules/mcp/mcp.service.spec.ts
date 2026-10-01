@@ -797,7 +797,7 @@ describe('McpService', () => {
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.error).toBeDefined();
-      expect(result.error.code).toBe(-32001); // RESOURCE_NOT_FOUND
+      expect(result.error.code).toBe(-32602); // not found is invalid params (SEP-2164)
     });
 
     it('should handle resource not found with error', async () => {
@@ -816,7 +816,7 @@ describe('McpService', () => {
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.error).toBeDefined();
-      expect(result.error.code).toBe(-32001); // RESOURCE_NOT_FOUND
+      expect(result.error.code).toBe(-32602); // not found is invalid params (SEP-2164)
     });
   });
 

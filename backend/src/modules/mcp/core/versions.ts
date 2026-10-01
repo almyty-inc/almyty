@@ -13,7 +13,7 @@
  */
 
 /** Every revision this code knows how to speak, newest first. */
-export const KNOWN_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'] as const;
+export const KNOWN_PROTOCOL_VERSIONS = ['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'] as const;
 
 export type ProtocolVersion = (typeof KNOWN_PROTOCOL_VERSIONS)[number];
 
@@ -22,7 +22,7 @@ export type ProtocolVersion = (typeof KNOWN_PROTOCOL_VERSIONS)[number];
  * against. The older two are still answered (owner decision 2: until the
  * request log shows no use) but are not claimed.
  */
-export const CLAIMED_PROTOCOL_VERSIONS: readonly ProtocolVersion[] = ['2025-11-25', '2025-06-18'];
+export const CLAIMED_PROTOCOL_VERSIONS: readonly ProtocolVersion[] = ['2026-07-28', '2025-11-25', '2025-06-18'];
 
 /**
  * The version a request without an `MCP-Protocol-Version` header is
@@ -33,6 +33,15 @@ export const CLAIMED_PROTOCOL_VERSIONS: readonly ProtocolVersion[] = ['2025-11-2
 export const VERSION_WITHOUT_HEADER: ProtocolVersion = '2025-03-26';
 
 export interface VersionFeatures {
+  /**
+   * Modern (2026-07-28 and later): no handshake, every request carries its
+   * version, capabilities and client in `_meta`, results carry `resultType`
+   * and serverInfo, and the server keeps no per-client state. Legacy
+   * versions negotiate with `initialize`.
+   */
+  modern: boolean;
+  /** `structuredContent` may be any JSON value and `outputSchema` any schema (2026-07-28 Minor 10). */
+  structuredAnyJson: boolean;
   /** JSON-RPC batches. Removed in 2025-06-18 (changelog Major 1). */
   batch: boolean;
   /** Tool `annotations`. Added in 2025-03-26. */
@@ -49,6 +58,8 @@ export interface VersionFeatures {
 
 export const VERSION_FEATURES: Record<ProtocolVersion, VersionFeatures> = {
   '2024-11-05': {
+    modern: false,
+    structuredAnyJson: false,
     batch: true,
     toolAnnotations: false,
     toolTitle: false,
@@ -57,6 +68,8 @@ export const VERSION_FEATURES: Record<ProtocolVersion, VersionFeatures> = {
     icons: false,
   },
   '2025-03-26': {
+    modern: false,
+    structuredAnyJson: false,
     batch: true,
     toolAnnotations: true,
     toolTitle: false,
@@ -65,6 +78,8 @@ export const VERSION_FEATURES: Record<ProtocolVersion, VersionFeatures> = {
     icons: false,
   },
   '2025-06-18': {
+    modern: false,
+    structuredAnyJson: false,
     batch: false,
     toolAnnotations: true,
     toolTitle: true,
@@ -73,6 +88,18 @@ export const VERSION_FEATURES: Record<ProtocolVersion, VersionFeatures> = {
     icons: false,
   },
   '2025-11-25': {
+    modern: false,
+    structuredAnyJson: false,
+    batch: false,
+    toolAnnotations: true,
+    toolTitle: true,
+    structuredContent: true,
+    resourceLinks: true,
+    icons: true,
+  },
+  '2026-07-28': {
+    modern: true,
+    structuredAnyJson: true,
     batch: false,
     toolAnnotations: true,
     toolTitle: true,
@@ -102,9 +129,16 @@ export function newestOf(versions: readonly ProtocolVersion[]): ProtocolVersion 
  * version MUST answer with it; otherwise it MUST answer with another
  * version it supports, and SHOULD pick its latest. A client that cannot
  * use the answer disconnects. So there is no error here: an unknown,
- * older or newer request gets our newest supported version.
+ * older or newer request gets our newest supported legacy version.
  */
 export function negotiateVersion(requested: unknown, supported: readonly ProtocolVersion[]): ProtocolVersion {
-  if (isKnownVersion(requested) && supported.includes(requested)) return requested;
-  return newestOf(supported);
+  // `initialize` is the legacy handshake: it negotiates among the legacy
+  // versions only. A modern version is never the answer to it.
+  const legacy = supported.filter((v) => !VERSION_FEATURES[v].modern);
+  if (isKnownVersion(requested) && legacy.includes(requested)) return requested;
+  return newestOf(legacy.length ? legacy : (['2025-11-25'] as ProtocolVersion[]));
+}
+
+export function isModernVersion(version: string): boolean {
+  return isKnownVersion(version) && VERSION_FEATURES[version].modern;
 }
