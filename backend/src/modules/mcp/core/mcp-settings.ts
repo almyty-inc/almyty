@@ -15,6 +15,13 @@
  *   MCP_RESULT_TTL_MS                ttlMs on cacheable 2026-07-28 results (default 60000)
  *   MCP_LISTEN_KEEPALIVE_MS          keep-alive on subscriptions/listen streams (default 15000)
  *   MCP_LISTEN_MAX_SECONDS           longest a listen stream stays open (default 3600)
+ *   MCP_TASK_POLL_INTERVAL_MS        pollIntervalMs on an agent run served as a task (default 2000)
+ *   MCP_INVOKE_WAIT_MS               how long invoke_agent waits for a run that may ask
+ *                                    a question, without tasks (default 25000; 0 = never)
+ *   MCP_HELD_CALL_WAIT_MS            how long a just-approved held call is waited for
+ *                                    before the caller is told to come back (default 5000)
+ *   MCP_REQUEST_STATE_TTL_SECONDS    how long an input_required requestState stays valid
+ *                                    (default 900)
  *   MCP_CIMD_ENABLED                 accept Client ID Metadata Documents (default true)
  *   MCP_CIMD_FETCH_TIMEOUT_MS        total deadline per metadata fetch (default 5000)
  *   MCP_CIMD_MAX_BYTES               metadata document size cap (default 65536)
@@ -66,6 +73,14 @@ export interface McpProtocolSettings {
   listenKeepaliveMs: number;
   /** A listen stream is closed gracefully after this long; the client re-listens. */
   listenMaxSeconds: number;
+  /** pollIntervalMs on an agent run served as a task (Tasks extension). */
+  taskPollIntervalMs: number;
+  /** invoke_agent without tasks: how long it waits for a run before answering with the run id. 0 = never. */
+  invokeWaitMs: number;
+  /** A held call approved through input_required: how long its result is waited for. */
+  heldCallWaitMs: number;
+  /** Lifetime of a sealed requestState handed out with input_required. */
+  requestStateTtlSeconds: number;
 }
 
 export function mcpProtocolSettings(env: Env = process.env): McpProtocolSettings {
@@ -83,6 +98,10 @@ export function mcpProtocolSettings(env: Env = process.env): McpProtocolSettings
     resultTtlMs: intSetting(env, 'MCP_RESULT_TTL_MS', 60_000, 0, 86_400_000),
     listenKeepaliveMs: intSetting(env, 'MCP_LISTEN_KEEPALIVE_MS', 15_000, 1_000, 300_000),
     listenMaxSeconds: intSetting(env, 'MCP_LISTEN_MAX_SECONDS', 3_600, 10, 86_400),
+    taskPollIntervalMs: intSetting(env, 'MCP_TASK_POLL_INTERVAL_MS', 2_000, 100, 600_000),
+    invokeWaitMs: intSetting(env, 'MCP_INVOKE_WAIT_MS', 25_000, 0, 120_000),
+    heldCallWaitMs: intSetting(env, 'MCP_HELD_CALL_WAIT_MS', 5_000, 0, 60_000),
+    requestStateTtlSeconds: intSetting(env, 'MCP_REQUEST_STATE_TTL_SECONDS', 900, 30, 86_400),
   };
 }
 

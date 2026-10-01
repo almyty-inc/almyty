@@ -157,6 +157,8 @@ The HTTP headers must mirror the body; any disagreement is `-32020` with `400`. 
 
 The gateway page shows no separate discovery address: MCP defines none, and a client asks the endpoint itself with `server/discover`.
 
+A call that an approval rule holds can be approved inside the call by a 2026-07-28 client that declared `elicitation`, when its user could approve it on the Approvals page: `tools/call` answers `resultType: "input_required"` with an approve-or-reject form and a sealed `requestState`, and the retry returns the call's result. Everyone else gets the "waiting for approval" answer with an `_approvalId`, as before. See [Approvals](/approvals). Long agent runs (tasks, `get_run`) are on the management server: see [Control almyty via MCP](/control-via-mcp).
+
 ### Origin
 
 A request that carries an `Origin` header must come from the dashboard, the API's own origin, or an origin in `MCP_ALLOWED_ORIGINS` (comma list); anything else gets `403` with an id-less JSON-RPC error, before authentication. Requests without `Origin` (Claude Code, Cursor, curl, the stdio proxy) are not affected. Outside production, MCP Inspector's local origin (`http://localhost:6274`) is allowed.

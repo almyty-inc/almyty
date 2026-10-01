@@ -44,16 +44,31 @@ export function world(opts: WorldOptions = {}) {
 
   const routes: FixtureRoute[] = [
     {
+      // A legacy (2025-era) MCP server behind the sign-in: it answers the
+      // dual-era client's server/discover probe as a legacy server does
+      // (-32601), and initialize with the id it was asked under.
       method: 'POST',
       url: exact(SERVER),
       handle: (_url, init) => {
-        const auth = String((init.headers as Record<string, string>)?.Authorization ?? '');
-        if (accessTokens.has(auth.replace(/^Bearer /, ''))) {
-          return json(200, { jsonrpc: '2.0', id: 1, result: { protocolVersion: '2025-06-18', capabilities: {}, serverInfo: { name: 'Docs MCP', version: '1' } } });
+        const raw = init.headers as Record<string, string> | Headers | undefined;
+        const auth = String((raw instanceof Headers ? raw.get('authorization') : raw?.Authorization ?? raw?.authorization) ?? '');
+        if (!accessTokens.has(auth.replace(/^Bearer /, ''))) {
+          return json(401, { error: 'unauthorized' }, opts.challenge === false ? {} : {
+            'WWW-Authenticate': `Bearer error="invalid_token", resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp", scope="files:read"`,
+          });
         }
-        return json(401, { error: 'unauthorized' }, opts.challenge === false ? {} : {
-          'WWW-Authenticate': `Bearer error="invalid_token", resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp", scope="files:read"`,
-        });
+        let message: any = {};
+        try {
+          message = JSON.parse(String(init.body ?? '{}'));
+        } catch {
+          return json(400, { error: 'not JSON' });
+        }
+        if (message.id === undefined) return { status: 202 };
+        if (message.method === 'initialize') {
+          return json(200, { jsonrpc: '2.0', id: message.id, result: { protocolVersion: '2025-06-18', capabilities: {}, serverInfo: { name: 'Docs MCP', version: '1' } } });
+        }
+        if (message.method === 'tools/list') return json(200, { jsonrpc: '2.0', id: message.id, result: { tools: [] } });
+        return json(200, { jsonrpc: '2.0', id: message.id, error: { code: -32601, message: `Method not found: ${message.method}` } });
       },
     },
     {

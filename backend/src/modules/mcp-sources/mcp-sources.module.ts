@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { McpSource } from '../../entities/mcp-source.entity';
 import { Tool } from '../../entities/tool.entity';
+import { Message } from '../../entities/message.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
 import { McpClientService } from './mcp-client.service';
 import { McpSourcesService } from './mcp-sources.service';
 import { McpSourcesController } from './mcp-sources.controller';
@@ -15,7 +17,7 @@ import { McpOAuthClientModule } from '../connections/mcp-oauth/mcp-oauth-client.
  * is bridged from ToolExecutorService via McpSourcesService.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([McpSource, Tool]), McpOAuthClientModule],
+  imports: [TypeOrmModule.forFeature([McpSource, Tool, Message, AgentRun]), McpOAuthClientModule],
   providers: [McpClientService, McpSourcesService],
   controllers: [McpSourcesController],
   exports: [McpClientService, McpSourcesService],
