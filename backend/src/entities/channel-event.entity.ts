@@ -7,6 +7,12 @@ import {
 } from 'typeorm';
 
 export type ChannelDirection = 'inbound' | 'outbound';
+
+/** What an inbound message said: its text and the names of its files. */
+export interface InboundMessageRecord {
+  text: string;
+  attachments?: string[];
+}
 export type ChannelEventStatus = 'received' | 'processed' | 'failed';
 
 /**
@@ -82,6 +88,17 @@ export class ChannelEvent {
    */
   @Column({ type: 'varchar', length: 255, nullable: true })
   senderId: string | null;
+
+  /**
+   * What an inbound message said, as the channel normalized it: its text
+   * and the names of the files sent with it. Nothing else of the platform's
+   * delivery (never the owner's workspace or bot ids), so a person's
+   * download can give them the words of a message that never became a run.
+   * Erased with the row, and swept with it by the channel's retention.
+   * NULL on outbound rows and on deliveries whose signature failed.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  message: InboundMessageRecord | null;
 
   /**
    * The platform's own id for the delivery that produced this event,

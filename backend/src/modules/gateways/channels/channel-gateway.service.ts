@@ -16,7 +16,7 @@ import { isUniqueViolation } from '../../../common/utils/unique-violation';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRun } from '../../../entities/agent-run.entity';
-import { ChannelEvent, ChannelEventStatus } from '../../../entities/channel-event.entity';
+import { ChannelEvent, ChannelEventStatus, InboundMessageRecord } from '../../../entities/channel-event.entity';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { AdapterResponse, BaseAdapter, NormalizedMessage } from './adapters/base.adapter';
 import { ChatWidgetAdapter } from './adapters/chat-widget.adapter';
@@ -305,6 +305,8 @@ export class ChannelGatewayService {
       deliveryId,
       // The sender, so their data request finds this message even if it never becomes a run.
       normalized.userId && normalized.userId !== 'unknown' ? normalized.userId : null,
+      // What it said, so their download has the words even if it never becomes a run.
+      inboundMessageRecord(normalized),
     );
     if (!claim) {
       this.logger.log(
@@ -1128,6 +1130,8 @@ export class ChannelGatewayService {
     deliveryId?: string | null,
     // Who sent an inbound message, so a data request finds it (ChannelEvent.senderId).
     senderId?: string | null,
+    // What an inbound message said: its text and file names only (ChannelEvent.message).
+    message?: InboundMessageRecord | null,
   ): Promise<ChannelEventRef | null> {
     try {
       const saved = await this.eventRepository.save(this.eventRepository.create({
@@ -1141,6 +1145,7 @@ export class ChannelGatewayService {
         runId: runId ?? null,
         deliveryId: deliveryId ?? null,
         senderId: senderId ? String(senderId).slice(0, 255) : null,
+        message: message ?? null,
       }));
       return {
         eventId: (saved as any)?.id ?? null,
@@ -1468,4 +1473,24 @@ export class ChannelGatewayService {
       return { ok: false, detail: err?.message ?? String(err) };
     }
   }
+}
+
+/** Longest message text kept on an inbound delivery. */
+const INBOUND_TEXT_LIMIT = 20_000;
+/** Most file names kept on an inbound delivery. */
+const INBOUND_ATTACHMENT_NAMES = 20;
+
+/**
+ * What an inbound message said, for the person's own download: the
+ * normalized text and the names of its files, and nothing else of the
+ * platform's delivery. Null when it said nothing.
+ */
+export function inboundMessageRecord(normalized: Pick<NormalizedMessage, 'text' | 'attachments'>): InboundMessageRecord | null {
+  const text = typeof normalized.text === 'string' ? normalized.text.slice(0, INBOUND_TEXT_LIMIT) : '';
+  const attachments = (normalized.attachments ?? [])
+    .map((a) => (typeof a?.name === 'string' ? a.name.slice(0, 255) : ''))
+    .filter(Boolean)
+    .slice(0, INBOUND_ATTACHMENT_NAMES);
+  if (!text && !attachments.length) return null;
+  return { text, ...(attachments.length ? { attachments } : {}) };
 }

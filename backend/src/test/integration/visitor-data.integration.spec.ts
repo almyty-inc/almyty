@@ -230,10 +230,12 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
    * A message the channel took in that never became a run (the run was
    * refused), as the delivery row the channel keeps; returns its id.
    */
-  async function unansweredVisit(placed: Placed, type: ChannelType, from: string): Promise<string> {
+  async function unansweredVisit(placed: Placed, type: ChannelType, from: string, files?: Array<{ name: string; type: string; url: string }>): Promise<string> {
     const { gateway } = placed.channels[type];
     runtime.startRun.mockRejectedValueOnce(new NotFoundException('not in scope'));
-    await channels.handleInboundMessage(gateway, { update_id: update++, text: 'is anyone there?', from, chat: `chat-${from}` }, {});
+    // A delivery carries the owner's workspace and bot ids too; only the words and file names are kept for the person.
+    const body = { update_id: update++, text: 'is anyone there?', from, chat: `chat-${from}`, workspace: 'workspace-T0', bot: 'bot-B0', ...(files ? { files } : {}) };
+    await channels.handleInboundMessage(gateway, body, {});
     const [event] = await events.find({
       where: { gatewayId: gateway.id, direction: 'inbound' as any, senderId: from },
       order: { createdAt: 'DESC' },
@@ -530,7 +532,13 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
       verifyWebhook: async () => true,
       carriesMessage: () => true,
       deliveryId: (body: any) => String(body.update_id),
-      normalizeInbound: (body: any) => ({ text: body.text, userId: body.from, threadId: body.chat, metadata: { chatId: body.chat } }),
+      normalizeInbound: (body: any) => ({
+        text: body.text,
+        userId: body.from,
+        threadId: body.chat,
+        ...(body.files ? { attachments: body.files } : {}),
+        metadata: { chatId: body.chat, workspaceId: body.workspace, botId: body.bot },
+      }),
       formatOutbound: ({ text }: { text: string }) => ({ text }),
       sendResponse: jest.fn(async () => undefined),
     });
@@ -805,7 +813,12 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
     });
 
     it('finds and erases the messages of a sender that never became a run, and nobody else\'s', async () => {
-      const rays = [await unansweredVisit(a, ChannelType.SMS, '+14155550199'), await unansweredVisit(a, ChannelType.SMS, '+14155550199')];
+      const rays = [
+        await unansweredVisit(a, ChannelType.SMS, '+14155550199'),
+        await unansweredVisit(a, ChannelType.SMS, '+14155550199', [{ name: 'receipt.pdf', type: 'application/pdf', url: 'https://files.example/r.pdf' }]),
+      ];
+      // The row keeps the words and the file names, nothing else of the delivery.
+      expect((await events.findOneByOrFail({ id: rays[1] })).message).toEqual({ text: 'is anyone there?', attachments: ['receipt.pdf'] });
       const sams = await unansweredVisit(a, ChannelType.SMS, '+14155550188');
       // The same number on another agent's channel.
       const raysElsewhere = await unansweredVisit(sibling, ChannelType.TELEGRAM, '+14155550199');
@@ -817,6 +830,10 @@ run('visitor data: self-service and owner data requests (real Postgres)', () => 
       const data = await requests.export(orgA.id, a.agent.id, owner(), { id: '+1 (415) 555-0199' });
       expect(data.unanswered).toHaveLength(2);
       expect(data.unanswered[0].reason).toMatch(/run refused/);
+      // What they wrote, and the names of the files they sent, and nothing of the platform's delivery.
+      expect(data.unanswered.map((u) => u.text)).toEqual(['is anyone there?', 'is anyone there?']);
+      expect(data.unanswered[1].attachments).toEqual(['receipt.pdf']);
+      expect(JSON.stringify(data.unanswered)).not.toMatch(/workspace-T0|bot-B0|chat-\+1415/);
       expect(JSON.stringify(data)).not.toContain('0188');
 
       const removed = await requests.erase(orgA.id, a.agent.id, owner(), { id: '+1 (415) 555-0199' });
