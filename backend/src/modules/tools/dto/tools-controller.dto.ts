@@ -391,3 +391,17 @@ export class ToolSearchQueryDto {
   @IsEnum(['ASC', 'DESC'])
   sortOrder?: 'ASC' | 'DESC';
 }
+
+/** POST /organizations/:organizationId/tools/search */
+export class SearchToolsBodyDto {
+  @IsString()
+  @MaxLength(500)
+  query!: string;
+
+  /** At most TOOL_SEARCH_MAX_LIMIT (default 50); TOOL_SEARCH_DEFAULT_LIMIT (default 10) when omitted. */
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(500)
+  limit?: number;
+}

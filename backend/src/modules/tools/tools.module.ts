@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { ToolDiscoveryModule } from '../tool-discovery/tool-discovery.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Tool } from '../../entities/tool.entity';
@@ -71,6 +72,7 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     RunnerModule,
     McpSourcesModule,
     forwardRef(() => MemoryModule),
+    forwardRef(() => ToolDiscoveryModule),
     AuthorizationModule,
   ],
   providers: [

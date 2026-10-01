@@ -123,6 +123,9 @@ export class ToolsOperationHelper {
           method: operationWithApi.method,
           // The class reads it (tools/tool-side-effect.ts): a GraphQL query is read.
           type: operationWithApi.type,
+          // What search_tools finds it by and what code mode calls it (tool-discovery).
+          operationId: operationWithApi.operationId ?? null,
+          tags: operationWithApi.tags ?? [],
           endpoint: operationWithApi.endpoint,
         },
         sourceApi: {
@@ -203,6 +206,9 @@ export class ToolsOperationHelper {
         method: operationWithApi.method,
         // The class reads it (tools/tool-side-effect.ts): a GraphQL query is read.
         type: operationWithApi.type,
+        // What search_tools finds it by and what code mode calls it (tool-discovery).
+        operationId: operationWithApi.operationId ?? null,
+        tags: operationWithApi.tags ?? [],
         endpoint: operationWithApi.endpoint,
       },
       sourceApi: {

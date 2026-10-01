@@ -33,6 +33,7 @@ import { assertNoSharedDependents, narrowsScope } from '../../common/authorizati
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { precheckToolQuota, withToolQuota } from './tool-quota';
 import { computeToolHash, verifyToolIntegrity } from '../../common/security/tool-integrity';
+import { allPagesOfTools } from './tool-pages';
 export type { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats };
 
 @Injectable()
@@ -574,6 +575,11 @@ export class ToolsService {
       limit,
       totalPages,
     };
+  }
+
+  /** Every tool the filters cover (allPagesOfTools), not one page of them. */
+  async getAllTools(filters: Omit<ToolSearchFilters, 'page' | 'limit'>): Promise<Tool[]> {
+    return allPagesOfTools(this, filters);
   }
 
   async activateTool(
