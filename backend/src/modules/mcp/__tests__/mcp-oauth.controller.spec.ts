@@ -1162,8 +1162,11 @@ describe('McpOAuthController', () => {
 
       expect(res.json).toHaveBeenCalledWith({
         clientName: 'Acme',
+        clientHost: null,
         gatewayName: mockGateway.name,
         scopes: ['mcp:tools'],
+        // RFC 9207: the issuer the consent page sends back as `iss`.
+        issuer: expect.stringMatching(new RegExp(`/${orgSlug}/${gatewaySlug}$`)),
       });
     });
 

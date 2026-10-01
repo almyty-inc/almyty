@@ -8,6 +8,7 @@ import { Organization } from '../../../entities/organization.entity';
 import { getBaseUrl } from '../../../common/config/base-url';
 import { isPrivateGateway } from '../../gateways/private-gateway';
 import { MCP_OAUTH_SCOPES } from '../services/mcp-oauth.service';
+import { authorizationServerMetadata } from './mcp-oauth-metadata';
 
 /**
  * Root-level OAuth discovery routes per RFC 8414 Section 3 and RFC 9728.
@@ -39,23 +40,8 @@ export class McpOAuthDiscoveryController {
     @Param('orgSlug') orgSlug: string,
     @Param('gatewaySlug') gatewaySlug: string,
   ) {
-    await this.resolveOrgAndGateway(orgSlug, gatewaySlug);
-    const base = getBaseUrl(this.configService);
-    const prefix = `${base}/${orgSlug}/${gatewaySlug}`;
-
-    return {
-      issuer: prefix,
-      authorization_endpoint: `${prefix}/authorize`,
-      token_endpoint: `${prefix}/token`,
-      registration_endpoint: `${prefix}/register`,
-      revocation_endpoint: `${prefix}/revoke`,
-      response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token'],
-      token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
-      code_challenge_methods_supported: ['S256'],
-      scopes_supported: MCP_OAUTH_SCOPES,
-      service_documentation: `${base}/docs`,
-    };
+    const gateway = await this.resolveOrgAndGateway(orgSlug, gatewaySlug);
+    return authorizationServerMetadata(getBaseUrl(this.configService), orgSlug, gatewaySlug, gateway);
   }
 
   @Get('oauth-protected-resource/:orgSlug/:gatewaySlug')
@@ -79,7 +65,7 @@ export class McpOAuthDiscoveryController {
     };
   }
 
-  private async resolveOrgAndGateway(orgSlug: string, gatewaySlug: string): Promise<void> {
+  private async resolveOrgAndGateway(orgSlug: string, gatewaySlug: string): Promise<Gateway> {
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgSlug);
     const org = await this.organizationRepository.findOne({
       where: isUUID ? [{ slug: orgSlug }, { id: orgSlug }] : { slug: orgSlug },
@@ -97,5 +83,6 @@ export class McpOAuthDiscoveryController {
     if (!gateway || isPrivateGateway(gateway)) {
       throw new HttpException('Gateway not found', HttpStatus.NOT_FOUND);
     }
+    return gateway;
   }
 }

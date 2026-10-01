@@ -57,6 +57,9 @@ describe('tenant-supplied outbound URLs are gated at every call site', () => {
     ['modules/llm-providers/endpoint-provider.helper.ts', 'deployment endpoint url', /decideEgress\(/],
     // The one consumer of that column that did not re-gate at request time
     ['modules/provider-usage/provider-usage.service.ts', 'provider apiUrl', /safeFetch\(/],
+    // MCP OAuth: an https client_id is a URL an anonymous authorize request
+    // names; the server fetches the client's metadata from it.
+    ['modules/mcp/services/mcp-oauth-cimd.service.ts', 'client_id (Client ID Metadata Document URL)', /safeFetch\(/],
   ];
 
   it.each(GATED)('%s (%s) is gated', (file, _field, gate) => {

@@ -14,6 +14,7 @@ import { UtcpService } from './utcp.service';
 import { GatewayResolverService } from './services/gateway-resolver.service';
 import { McpOAuthService } from './services/mcp-oauth.service';
 import { McpOAuthTokensHelper } from './services/mcp-oauth-tokens.helper';
+import { McpOAuthCimdService } from './services/mcp-oauth-cimd.service';
 import { McpOAuthResolveHelper } from './controllers/mcp-oauth-resolve.helper';
 import { McpToolHandler } from './services/mcp-tool.handler';
 import { McpContentHandler } from './services/mcp-content.handler';
@@ -87,6 +88,7 @@ import { jwtSecretOrDevFallback } from '../auth/dev-jwt-secret';
     GatewayResolverService,
     McpOAuthService,
     McpOAuthTokensHelper,
+    McpOAuthCimdService,
     McpOAuthResolveHelper,
     SseTransport,
     StreamableHttpTransport,

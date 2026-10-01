@@ -13,7 +13,7 @@ import { OAuthAccessToken } from '../../../entities/oauth-access-token.entity';
 import { OAuthClient } from '../../../entities/oauth-client.entity';
 import { User } from '../../../entities/user.entity';
 import { hasEffectiveMembership } from '../../../common/authorization/membership';
-import { hashValue, verifyClientAuth } from './mcp-oauth-helpers.helper';
+import { findGatewayClient, hashValue, verifyClientAuth } from './mcp-oauth-helpers.helper';
 
 const ACCESS_TOKEN_LIFETIME_SECONDS = 3600;
 const REFRESH_TOKEN_LIFETIME_SECONDS = 30 * 24 * 3600;
@@ -88,9 +88,7 @@ export class McpOAuthTokensHelper {
     clientSecret?: string,
     resource?: string,
   ): Promise<TokenResponse> {
-    const client = await this.oauthClientRepository.findOne({
-      where: { clientId, gatewayId, isActive: true },
-    });
+    const client = await findGatewayClient(this.oauthClientRepository, clientId, gatewayId);
     if (!client) {
       throw new UnauthorizedException('Invalid client');
     }
@@ -216,9 +214,7 @@ export class McpOAuthTokensHelper {
     gatewayId: string,
     clientSecret?: string,
   ): Promise<TokenResponse> {
-    const client = await this.oauthClientRepository.findOne({
-      where: { clientId, gatewayId, isActive: true },
-    });
+    const client = await findGatewayClient(this.oauthClientRepository, clientId, gatewayId);
     if (!client) {
       throw new UnauthorizedException('Invalid client');
     }
@@ -315,9 +311,7 @@ export class McpOAuthTokensHelper {
     gatewayId: string,
     clientSecret?: string,
   ): Promise<void> {
-    const client = await this.oauthClientRepository.findOne({
-      where: { clientId, gatewayId, isActive: true },
-    });
+    const client = await findGatewayClient(this.oauthClientRepository, clientId, gatewayId);
     if (!client) {
       return;
     }
