@@ -2491,6 +2491,28 @@
       "reason": "frontend/src/components/tools changed: the Add MCP server form's credential field now says token or sign-in. This page does not show that form; recapture to confirm and re-register."
     },
     {
+      "id": "tool-side-effect",
+      "title": "What a tool does to your data",
+      "path": "screenshots/tool-side-effect.png",
+      "capturedAt": "2026-10-01T14:50:12.083Z",
+      "status": "current",
+      "sha256": "d879f066a568174a1d64df6bdb1518882c4a593da71aa2ddad655035f6fc94ac",
+      "source": {
+        "kind": "browser",
+        "environment": "local",
+        "route": "/tools/:id?tab=details"
+      },
+      "sources": [
+        "frontend/src/pages/tool-detail.tsx",
+        "frontend/src/components/tools",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "24cd1039c596709f5e0600482da7cc55df49d64e5dc68a30317e24683672fb60",
+      "notes": "Local stack with the MCP conformance seed (Petstore import), local test user only; not staging or production data."
+    },
+    {
       "id": "tools-list",
       "title": "Tools list",
       "path": "screenshots/tools-list.png",
