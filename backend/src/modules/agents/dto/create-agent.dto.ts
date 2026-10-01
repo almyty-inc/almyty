@@ -98,6 +98,10 @@ export class CreateAgentDto {
     maxTemporaryAgentsAlive?: number;
     /** Machine label requirements, as `gpu=yes, os=mac` or an object; see Agent.agentConfig. */
     runnerLabels?: Record<string, string> | string;
+    /** How the model sees its tools (agent-tool-mode.ts); checked by toolModeProblems. */
+    toolMode?: 'direct' | 'discover' | 'auto';
+    toolModeThresholdTokens?: number;
+    pinnedToolIds?: string[];
   };
 
   // Shape checked in AgentsService (collaborationProblems) so a bad

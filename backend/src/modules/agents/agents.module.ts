@@ -66,6 +66,7 @@ import { OrchestratorService } from './strategies/orchestrator.service';
 import { Strategy } from '../../entities/strategy.entity';
 import { AgentConstraintsModule } from '../agent-constraints/agent-constraints.module';
 import { ToolsModule } from '../tools/tools.module';
+import { ToolDiscoveryModule } from '../tool-discovery/tool-discovery.module';
 import { MemoryModule } from '../memory/memory.module';
 import { A2AModule } from '../a2a/a2a.module';
 import { ApprovalsModule } from '../approvals/approvals.module';
@@ -103,6 +104,9 @@ import { BudgetsModule } from '../budgets/budgets.module';
     // that looked like a missing license rather than a missing import.
     forwardRef(() => ModelCatalogModule),
     forwardRef(() => ToolsModule),
+    // ToolDiscoveryService answers search_tools and get_tool for agents in
+    // discover mode (agent-tool-mode.ts); without it they rank by keywords only.
+    forwardRef(() => ToolDiscoveryModule),
     forwardRef(() => MemoryModule),
     forwardRef(() => A2AModule),
     forwardRef(() => ApprovalsModule),

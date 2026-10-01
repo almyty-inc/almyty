@@ -1,4 +1,4 @@
-import { Inject, Injectable, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, Optional, forwardRef } from '@nestjs/common';
 import { In, Not } from 'typeorm';
 
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
@@ -16,7 +16,7 @@ import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 import { decideEscalation, nextRoutingPolicy, planPosition } from '../model-catalog/routing/verify-escalation';
 import { AgentMemoryKeeper } from './agent-memory.keeper';
 import { agentApiIds, callsAgents, mayCallAgent } from './agent-capabilities';
-import { ToolStatus } from '../../entities/tool.entity';
+import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { emitStreamChunk } from './llm-stream-events';
 import { answerCallMessages, composesFinalAnswer } from './final-answer';
 import { AgentRoleCall, ModelRoleCall, Team, TeamRole, stampOf, teamOf, teammateToolName } from './autonomous-team';
@@ -47,6 +47,11 @@ import { NamedTool, readableToolName } from '../tools/tool-readable-name';
 import { capPersistedPayload } from './persist-cap';
 import { canReference } from '../../common/authorization/private-visibility';
 import { describePrincipal, principalOfRun } from '../../common/authorization/execution-access.service';
+import { Model } from '../../entities/model.entity';
+import { Api } from '../../entities/api.entity';
+import { ToolDiscoveryService } from '../tool-discovery/tool-discovery.service';
+import { CALL_TOOL, GET_TOOL, META_TOOL_DEFINITIONS, SEARCH_TOOLS } from '../tool-discovery/meta-tools';
+import { ToolModeDecision, decideToolMode } from './agent-tool-mode';
 /**
  * A run in one of these is finished and no worker may write it back to
  * running — the same list `AgentRun.isDone()` answers with.
@@ -159,7 +164,13 @@ export class AgentStepProcessor {
     private readonly verifier: AgentVerifierHelper,
     private readonly compactor: AgentContextCompactor,
     private readonly constraints: AgentConstraintsService,
-  ) {}
+    @Optional() discovery?: ToolDiscoveryService,
+  ) {
+    this.discovery = discovery ?? new ToolDiscoveryService();
+  }
+
+  /** search_tools and get_tool for discover mode; keyword-only when embeddings are not wired. */
+  private readonly discovery: ToolDiscoveryService;
 
   /**
    * Tool sets resolved for (organizationId, toolIds), with the capped payload
@@ -296,6 +307,15 @@ export class AgentStepProcessor {
       const team = teamOf(agent, run);
       const runner = new AutonomousStrategyRunner(this.s, this.verifier);
 
+      // Direct or discover (agent-tool-mode.ts), decided once per run. In
+      // discover mode the model sees the three meta-tools plus the pinned
+      // tools; every other tool is found with search_tools and run with
+      // call_tool, and stays exactly as callable as in direct mode.
+      const toolMode = await this.toolModeFor(run, agent, team, tools);
+      const discover = toolMode.mode === 'discover';
+      const pinned = new Set(Array.isArray(agent.agentConfig?.pinnedToolIds) ? agent.agentConfig.pinnedToolIds : []);
+      const offeredTools = discover ? tools.filter((t) => pinned.has(t.id)) : tools;
+
       // Explore, extract, patch opens with its explorers and the brief, as
       // a step of its own, before the main role's first call.
       if (team.strategy === 'explore_extract_patch' && !run.workingMemory?.brief) {
@@ -342,7 +362,7 @@ export class AgentStepProcessor {
       }
 
       // Build messages for the LLM, reusing the organization loaded above.
-      let messages = await this.s.builders.buildMessages(agent, run, tools, memoryContext, organization);
+      let messages = await this.s.builders.buildMessages(agent, run, offeredTools, memoryContext, organization, { discover });
 
       // Compact long-running context (off unless the agent opts in). Folds the
       // old prefix into a summary so per-step token cost doesn't grow unbounded.
@@ -361,7 +381,7 @@ export class AgentStepProcessor {
       }
 
       // Build tool definitions for the LLM (user tools + built-in tools)
-      const llmTools = this.s.builders.buildToolDefinitions(tools, agent);
+      const llmTools = [...(discover ? META_TOOL_DEFINITIONS : []), ...this.s.builders.buildToolDefinitions(offeredTools, agent)];
 
       // Resolve sub-agent tools: exactly the agents its Capabilities section
       // lets it call (agent-capabilities.ts), and of those only the ones
@@ -757,32 +777,72 @@ export class AgentStepProcessor {
             continue;
           }
 
+          // Discover mode (agent-tool-mode.ts): search_tools and get_tool are
+          // answered here, over this run's own tools (the set it could call
+          // directly, after filterExecutable). call_tool names a tool of the
+          // same set and runs exactly like a direct call below.
+          let callName = toolCall.name;
+          let callParams: Record<string, any> = toolCall.parameters || {};
+          if (toolMode.mode === 'discover' && (toolCall.name === SEARCH_TOOLS || toolCall.name === GET_TOOL)) {
+            const answer = await this.answerDiscovery(toolCall.name, callParams, tools, run.organizationId);
+            toolCall.result = answer.result;
+            toolCall.error = answer.error;
+            toolCall.executionTime = Date.now() - toolExecStart;
+            this.s.emitEvent(runId, 'tool.result', {
+              step: run.currentStep,
+              toolCallId: toolCall.id,
+              tool: toolCall.name,
+              success: !answer.error,
+              executionTime: toolCall.executionTime,
+            });
+            if (run.conversationId) {
+              const content = answer.error ? `Error: ${answer.error}` : JSON.stringify(answer.result);
+              const msg = Message.createToolResultMessage(run.conversationId, toolCall.id, content, answer.error);
+              msg.runId = run.id;
+              await this.s.messageRepository.save(msg);
+            }
+            run.steps.push({
+              type: 'tool_call',
+              input: { tool: toolCall.name, parameters: callParams },
+              output: answer.result,
+              duration: toolCall.executionTime,
+              timestamp: new Date().toISOString(),
+              error: answer.error,
+            });
+            continue;
+          }
+          if (toolMode.mode === 'discover' && toolCall.name === CALL_TOOL) {
+            callName = typeof callParams.name === 'string' ? callParams.name : '';
+            const inner = callParams.arguments;
+            callParams = inner && typeof inner === 'object' && !Array.isArray(inner) ? inner : {};
+          }
+
           // Regular tool execution via ToolExecutorService
           const matchingTool = tools.find(
-            t => t.name.replace(/[^a-zA-Z0-9_-]/g, '_') === toolCall.name || t.name === toolCall.name,
+            t => t.name.replace(/[^a-zA-Z0-9_-]/g, '_') === callName || t.name === callName,
           );
 
           if (!matchingTool) {
-            toolCall.error = `Tool '${toolCall.name}' not found`;
+            toolCall.error = `Tool '${callName}' not found`;
             toolCall.executionTime = Date.now() - toolExecStart;
 
             this.s.emitEvent(runId, 'tool.result', {
               step: run.currentStep,
               toolCallId: toolCall.id,
-              tool: toolCall.name,
+              tool: callName,
               success: false,
               executionTime: toolCall.executionTime,
             });
 
             if (run.conversationId) {
-              const errMsg = Message.createToolResultMessage(run.conversationId, toolCall.id, `Error: Tool '${toolCall.name}' not found`, toolCall.error);
+              const errMsg = Message.createToolResultMessage(run.conversationId, toolCall.id, `Error: Tool '${callName}' not found`, toolCall.error);
               errMsg.runId = run.id;
               await this.s.messageRepository.save(errMsg);
             }
 
             run.steps.push({
               type: 'tool_call',
-              input: { tool: toolCall.name, parameters: toolCall.parameters },
+              input: { tool: callName, parameters: callParams },
               error: toolCall.error,
               duration: Date.now() - toolExecStart,
               timestamp: new Date().toISOString(),
@@ -823,14 +883,14 @@ export class AgentStepProcessor {
 
             const toolResult: ToolExecutionResult = await this.s.toolExecutorService.executeTool(
               matchingTool.id,
-              toolCall.parameters || {},
+              callParams,
               execOptions,
             );
 
             // Held by an approval policy's amount rule: the call did not
             // run. Ask a person, and run it once they approve.
             if (toolResult.approvalRequired) {
-              const held = await this.holdForApproval(run, agent, matchingTool, toolCall, toolResult.approvalRequired);
+              const held = await this.holdForApproval(run, agent, matchingTool, { id: toolCall.id, parameters: callParams }, toolResult.approvalRequired);
               gated.push(held);
               toolCall.executionTime = Date.now() - toolExecStart;
               this.s.emitEvent(runId, 'tool.result', {
@@ -843,7 +903,7 @@ export class AgentStepProcessor {
               });
               run.steps.push({
                 type: 'tool_call',
-                input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: toolCall.parameters },
+                input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: callParams },
                 output: { status: 'waiting_approval', rule: held.rule, approvalId: held.approvalId },
                 duration: toolCall.executionTime,
                 timestamp: new Date().toISOString(),
@@ -878,7 +938,7 @@ export class AgentStepProcessor {
 
             run.steps.push({
               type: 'tool_call',
-              input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: toolCall.parameters },
+              input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: callParams },
               output: toolResult.data,
               cost: toolResult.metadata?.cost || 0,
               duration: toolResult.executionTime,
@@ -905,7 +965,7 @@ export class AgentStepProcessor {
 
             run.steps.push({
               type: 'tool_call',
-              input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: toolCall.parameters },
+              input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: callParams },
               error: err.message,
               duration: Date.now() - toolExecStart,
               timestamp: new Date().toISOString(),
@@ -1639,6 +1699,75 @@ export class AgentStepProcessor {
     this.s.emitEvent(run.id, 'explore.completed', { step: run.currentStep, brief });
     this.s.emitEvent(run.id, 'step.completed', { step: run.currentStep, status: 'explored' });
     return 'continue';
+  }
+
+  /**
+   * How this run shows the model its tools (agent-tool-mode.ts), decided on
+   * the first step and kept in working memory: the tools array then stays
+   * the same for the whole run, so a provider's prefix cache holds. `auto`
+   * compares the definitions' size with a share of the main model's context
+   * window (its model card), or with the agent's own threshold.
+   */
+  private async toolModeFor(run: AgentRun, agent: Agent, team: Team, tools: Tool[]): Promise<ToolModeDecision> {
+    const kept = run.workingMemory?.toolMode;
+    if (kept && (kept.mode === 'direct' || kept.mode === 'discover')) return kept as ToolModeDecision;
+    const definitions = this.s.builders.buildToolDefinitions(tools, agent).slice(0, tools.length);
+    let contextLength: number | null = null;
+    const main = team.main;
+    if (main.kind === 'model' && main.providerId && main.model && !main.routing) {
+      try {
+        const card = await this.s.toolRepository.manager.getRepository(Model).findOne({
+          where: { organizationId: run.organizationId, providerId: main.providerId, vendorModelId: main.model },
+          select: { id: true, contextLength: true },
+        });
+        contextLength = card?.contextLength ?? null;
+      } catch (err) {
+        this.s.logger.warn(`No model card for the tool-mode threshold on run ${run.id}: ${err.message}`);
+      }
+    }
+    const decision = decideToolMode({
+      configured: agent.agentConfig?.toolMode,
+      definitions,
+      contextLength,
+      overrideTokens: agent.agentConfig?.toolModeThresholdTokens,
+    });
+    run.workingMemory = { ...(run.workingMemory || {}), toolMode: decision };
+    return decision;
+  }
+
+  /**
+   * search_tools and get_tool for an agent in discover mode, over the tools
+   * this run may call. Names are the ones the model calls (sanitised, as in
+   * the tools array), so call_tool takes what search_tools returned.
+   */
+  private async answerDiscovery(
+    name: string,
+    params: Record<string, any>,
+    tools: Tool[],
+    organizationId: string,
+  ): Promise<{ result?: unknown; error?: string }> {
+    const nameOf = (t: Tool) => t.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    if (name === SEARCH_TOOLS) {
+      const query = typeof params.query === 'string' ? params.query.trim() : '';
+      if (!query) return { error: 'search_tools needs a query' };
+      const limit = Number.isInteger(params.limit) && params.limit > 0 ? params.limit : undefined;
+      const { results, total } = await this.discovery.search(tools, query, { organizationId, limit, nameOf });
+      return { result: { tools: results, total } };
+    }
+    const toolName = typeof params.name === 'string' ? params.name : '';
+    const tool = toolName ? this.discovery.resolve(tools, toolName, nameOf) : null;
+    if (!tool) return { error: `Tool '${toolName}' not found. Use search_tools to find it.` };
+    const detail = params.detail === 'name' || params.detail === 'description' ? params.detail : 'full';
+    return { result: this.discovery.describe(await this.withApiNames(tools), tool, detail, nameOf) };
+  }
+
+  /** The tools with their API's name attached (the code namespace), without loading the APIs' schemas. */
+  private async withApiNames(tools: Tool[]): Promise<Tool[]> {
+    const ids = [...new Set(tools.filter((t) => t.apiId && !t.api).map((t) => t.apiId as string))];
+    if (!ids.length) return tools;
+    const apis = await this.s.toolRepository.manager.getRepository(Api).find({ where: { id: In(ids) }, select: { id: true, name: true } });
+    const byId = new Map(apis.map((a) => [a.id, a]));
+    return tools.map((t) => (t.apiId && !t.api && byId.has(t.apiId) ? ({ ...t, api: byId.get(t.apiId) } as Tool) : t));
   }
 
   /**
