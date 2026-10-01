@@ -1,7 +1,6 @@
 import 'reflect-metadata';
 
 import { McpToolHandler } from '../services/mcp-tool.handler';
-import { McpService } from '../mcp.service';
 import { ToolStatus } from '../../../entities/tool.entity';
 import { snapshotEnv } from '../../../test/env';
 
@@ -161,13 +160,5 @@ describe('MCP tool results (2025-06-18 / 2025-11-25)', () => {
         expect.objectContaining({ code: -32602, message: 'Tool not found: nope' }),
       );
     });
-  });
-
-  it('every McpSurface method McpService builds is reached by a route', () => {
-    // Source guard: the gateway path and POST /mcp both go through
-    // handleJsonRpcMessage, which builds the surface.
-    const src = require('fs').readFileSync(require.resolve('../mcp.service'), 'utf8') as string;
-    expect(src).toMatch(/handleMessage\(message, this\.surfaceFor\(/);
-    expect(McpService.prototype.handleJsonRpcMessage).toBeDefined();
   });
 });

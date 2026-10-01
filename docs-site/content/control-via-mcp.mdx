@@ -79,6 +79,8 @@ Or in a client config file:
 
 Authenticate once with `npx @almyty/auth login`; the server announces itself as `almyty`.
 
+The management server speaks the same MCP versions as every gateway: **2025-11-25** and **2025-06-18**, plus 2025-03-26 and 2024-11-05 for older clients (see [MCP gateway, Protocol versions](/gateways/mcp#protocol-versions)). Its tools carry titles and annotations (`list_*` and `get_*` only read, `delete_*` destructive), and a tool that returns a record also returns it as `structuredContent`. An unknown tool name is a `-32602` error.
+
 The tools, by area:
 
 | Area | Tools |
