@@ -35,6 +35,8 @@ import { mcpParamHeaderMismatch } from '../core/mcp-param-headers';
 import { McpCallContext, McpPolymorphicResult } from '../core/mcp-protocol-core';
 import { ApprovalsService } from '../../approvals/approvals.service';
 import { HeldCallApprovals, heldCallInputRequired, heldCallRetry } from './mcp-held-call';
+import { ToolDiscoveryService } from '../../tool-discovery/tool-discovery.service';
+import { allPagesOfTools } from '../../tools/tool-pages';
 
 /** Errors this handler raised for an unknown tool: rethrown as protocol errors, never folded into isError. */
 const UNKNOWN_TOOL_ERRORS = new WeakSet<object>();
@@ -42,6 +44,7 @@ const UNKNOWN_TOOL_ERRORS = new WeakSet<object>();
 @Injectable()
 export class McpToolHandler {
   private readonly logger = new Logger(McpToolHandler.name);
+  private fallbackDiscovery?: ToolDiscoveryService;
 
   constructor(
     @InjectRepository(Tool)
@@ -60,6 +63,8 @@ export class McpToolHandler {
     // agents module, which imports this one. Absent in unit tests, and then
     // a held call keeps its legacy answer.
     @Optional() private readonly moduleRef?: ModuleRef,
+    // search_tools / get_tool ranking and descriptions (tool-discovery).
+    @Optional() private readonly discovery?: ToolDiscoveryService,
   ) {}
 
   private approvalsService(): HeldCallApprovals | null {
@@ -284,6 +289,31 @@ export class McpToolHandler {
     };
   }
 
+  /**
+   * The tools search_tools and get_tool may name: exactly the set tools/list
+   * serves. Through a gateway, its servable set (servableToolsOnGateway, the
+   * function tools/list and tools/call read); without one, the caller's view
+   * of the organization (the same listScope filter tools/list applies),
+   * every page of it. `tool-discovery-scope.guard.spec.ts` holds this.
+   */
+  async discoveryScope(organizationId: string, gatewayId?: string, caller?: { id: string }): Promise<Tool[]> {
+    if (gatewayId) {
+      return servableToolsOnGateway(this.gatewayToolRepository, gatewayId, { operation: true, outputSchema: true, api: true, categories: true });
+    }
+    return allPagesOfTools(this.toolsService, { organizationId, status: ToolStatus.ACTIVE, ...this.listScope(gatewayId, caller) });
+  }
+
+  private get toolDiscovery(): ToolDiscoveryService {
+    // Without the module (positional unit-test harnesses), keyword ranking alone.
+    this.fallbackDiscovery ??= this.discovery ?? new ToolDiscoveryService();
+    return this.fallbackDiscovery;
+  }
+
+  /**
+   * tools/search: the search_tools ranking (keywords and embeddings, over the
+   * tools/list set), in the shape this method has always answered with,
+   * plus each hit's side-effect class and score.
+   */
   async handleToolsSearch(
     params: any,
     organizationId: string,
@@ -291,57 +321,45 @@ export class McpToolHandler {
     caller?: { id: string },
   ): Promise<any> {
     const query = params?.query as string;
-    const limit = Math.min(params?.limit || 20, 100);
-    const page = params?.page || 1;
+    const limit = Math.min(Math.max(Number(params?.limit) || 20, 1), 100);
+    const page = Math.max(Number(params?.page) || 1, 1);
 
     if (!query) {
       throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'Missing required parameter: query');
     }
 
-    let tools: Tool[];
-    let total: number;
-    if (gatewayId) {
-      // Search inside what the gateway serves, never around it: match, count
-      // and page over the servable set (the tools/list set). Searching the
-      // org and filtering the page afterwards leaked the org-wide `total`
-      // and `hasMore`, and dropped servable hits that fell on another page.
-      const needle = query.toLowerCase();
-      const matches = withoutOthersPrivate(
-        await servableToolsOnGateway(this.gatewayToolRepository, gatewayId),
-        caller?.id,
-      )
-        .filter((t) => t.name?.toLowerCase().includes(needle) || t.description?.toLowerCase().includes(needle))
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      tools = matches.slice((page - 1) * limit, page * limit);
-      total = matches.length;
-    } else {
-      const result = await this.toolsService.getTools({
-        organizationId,
-        search: query,
-        status: ToolStatus.ACTIVE,
-        page,
-        limit,
-        ...this.listScope(gatewayId, caller),
-      });
-      tools = withoutOthersPrivate(result.tools, caller?.id);
-      total = result.total;
-    }
+    const scope = await this.discoveryScope(organizationId, gatewayId, caller);
+    const nameOf = (t: Tool) => this.sanitizeToolName(t.name);
+    const { results, total } = await this.toolDiscovery.search(scope, query, { organizationId, limit: page * limit, nameOf, uncapped: true });
+    const byName = new Map(scope.map((t) => [nameOf(t), t]));
+    const pageHits = results.slice((page - 1) * limit, page * limit);
 
     return {
-      tools: tools.map(tool => ({
-        name: this.sanitizeToolName(tool.name),
-        description: tool.description,
-        inputSchema: tool.parameters || { type: 'object', properties: {} },
-        type: tool.type,
-        usageCount: tool.usageCount || 0,
-        successRate: tool.successRate || 0,
-      })),
+      tools: pageHits.map((hit) => {
+        const tool = byName.get(hit.name)!;
+        return {
+          name: hit.name,
+          description: tool.description,
+          inputSchema: tool.parameters || { type: 'object', properties: {} },
+          type: tool.type,
+          sideEffect: tool.sideEffect,
+          score: hit.score,
+          usageCount: tool.usageCount || 0,
+          successRate: tool.successRate || 0,
+        };
+      }),
       total,
       page,
       hasMore: page * limit < total,
     };
   }
 
+  /**
+   * tools/get: one tool from the tools/list set, with get_tool's full detail
+   * (side-effect class, code name and signature) next to the fields this
+   * method has always answered with. A tool outside the set is unknown
+   * (-32602), like on tools/call.
+   */
   async handleToolGet(params: any, organizationId: string, userId?: string, gatewayId?: string): Promise<any> {
     const toolName = params?.name as string;
 
@@ -349,29 +367,29 @@ export class McpToolHandler {
       throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'Missing required parameter: name');
     }
 
-    // Through a gateway, only the tools that gateway serves: describing an
-    // org tool the gateway never published would be a listing by other means.
-    const allTools = gatewayId
-      ? await servableToolsOnGateway(this.gatewayToolRepository, gatewayId, { categories: true, operation: true })
-      : await this.toolRepository.find({
-          where: { status: ToolStatus.ACTIVE, organizationId },
-          relations: { categories: true, operation: true },
-        });
-
-    // Another member's private tool is "not found".
-    const tool = withoutOthersPrivate(allTools, userId).find(t => this.sanitizeToolName(t.name) === toolName);
-
-    if (!tool) {
-      throw this.createError(JsonRpcErrorCode.INTERNAL_ERROR, `Tool not found: ${toolName}`);
-    }
+    const scope = await this.discoveryScope(organizationId, gatewayId, userId ? { id: userId } : undefined);
+    const nameOf = (t: Tool) => this.sanitizeToolName(t.name);
+    const found = this.toolDiscovery.resolve(scope, toolName, nameOf);
+    if (!found) throw this.unknownTool(toolName);
+    // The off-gateway listing does not join output schemas; the one tool described does.
+    const tool = found.outputSchema !== undefined
+      ? found
+      : Object.assign(found, { outputSchema: (await this.toolRepository.findOne({ where: { id: found.id }, relations: { outputSchema: true } }))?.outputSchema ?? null });
+    const full = this.toolDiscovery.describe(scope, tool, 'full', nameOf);
 
     return {
-      name: this.sanitizeToolName(tool.name),
+      name: nameOf(tool),
       description: tool.description,
       inputSchema: tool.parameters || { type: 'object', properties: {} },
+      ...(full.outputSchema ? { outputSchema: full.outputSchema } : {}),
       type: tool.type,
       version: tool.version,
       status: tool.status,
+      sideEffect: tool.sideEffect,
+      openWorld: tool.openWorld,
+      code: full.code,
+      signature: full.signature,
+      example: full.example,
       categories: tool.categories?.map(c => ({ name: c.name, slug: c.slug })) || [],
       metadata: {
         operationMethod: tool.operation?.method,
@@ -617,8 +635,8 @@ export class McpToolHandler {
       // The gateway's own set: what tools/list shows and tools/call runs.
       return servableToolsOnGateway(this.gatewayToolRepository, gatewayId, { categories: true });
     }
-    const result = await this.toolsService.getTools({ organizationId, status: ToolStatus.ACTIVE, ...this.listScope(gatewayId, caller) });
-    return result.tools;
+    // Every page: a first page alone (20 tools) hid the rest from prompts.
+    return allPagesOfTools(this.toolsService, { organizationId, status: ToolStatus.ACTIVE, ...this.listScope(gatewayId, caller) });
   }
 
   private async getToolsForGateway(organizationId: string, gatewayId?: string, userId?: string): Promise<Tool[]> {
