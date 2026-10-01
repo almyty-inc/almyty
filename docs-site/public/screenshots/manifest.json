@@ -635,7 +635,8 @@
       "title": "MCP server CLI 1.5.1 help",
       "path": "screenshots/cli/mcp-server-help.png",
       "capturedAt": "2026-09-30T11:20:18.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The help text gained ALMYTY_MCP_PROTOCOL, ALMYTY_DISCOVERY_WAIT_MS and a line on MCP versions (SDK 2.x migration). Recapture from the next published @almyty/mcp-server.",
       "sha256": "f58f6dd30e468f315f81ab71a3b91bc5672d8ed9e4bb23a01af2d71af2e21f91",
       "source": {
         "kind": "published-cli",

@@ -47,7 +47,9 @@ Set `ALMYTY_MODE`:
 - **`skill-first`** (default) — the two tools above plus skills as prompts.
 - **`full`** — every gateway tool registered individually, traditional MCP.
   Higher context cost. The list is read once at startup, and the client is
-  notified when it arrives.
+  notified when it arrives. Each tool keeps its title, full input schema,
+  output schema and annotations as the gateway gives them, and a call returns
+  the gateway's structured result next to the text.
 
 ## Management tools
 
@@ -84,6 +86,16 @@ throughout.
 
 Every call is bounded: 15 seconds for discovery, 120 for a tool execution.
 A hung backend fails the call rather than hanging your editor.
+
+## MCP versions
+
+The server speaks MCP 2026-07-28 and the earlier versions (2024-11-05 to
+2025-11-25) alike: the client's first message decides. A client that opens with
+`initialize` (Claude Desktop, Cursor and most editors today) gets the earlier
+protocol, and no notification before it has sent `notifications/initialized`.
+A client that opens with a 2026-07-28 request is served statelessly and hears
+about tool and prompt changes only on a `subscriptions/listen` stream it
+opened.
 
 ## stdio discipline
 
@@ -156,6 +168,8 @@ args = ["-y", "@almyty/mcp-server"]
 | `ALMYTY_TOKEN` | Token; otherwise read from `~/.almyty/credentials.json` |
 | `ALMYTY_GATEWAY_ID` | Gateway as `orgSlug/gatewaySlug` (alternative to the positional argument) |
 | `ALMYTY_MODE` | `skill-first` (default) or `full` |
+| `ALMYTY_MCP_PROTOCOL` | How this server talks to almyty: `auto` (default: MCP 2026-07-28, falling back to the earlier protocol for an older almyty), `modern` or `legacy` |
+| `ALMYTY_DISCOVERY_WAIT_MS` | How long the client's first message waits for the gateway's tool list, so the first list is complete (default 5000; `0` never waits and announces the tools once they arrive) |
 
 ## Authentication
 

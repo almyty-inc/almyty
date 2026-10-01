@@ -1,121 +1,91 @@
 /**
  * The MCP lifecycle: until the client has sent `notifications/initialized`,
  * the server may answer requests but must not send notifications of its
- * own. Discovery runs right after the transport connects, and when it fails
- * fast (backend down, connection refused) the prompt registration that
- * follows used to emit `notifications/prompts/list_changed` before the
- * client had even sent `initialize`. A strict client drops the server for
- * that.
+ * own (#875). What discovery found is registered late when discovery is
+ * slower than the client, and every late registration makes the SDK send a
+ * list_changed notification; those are held until the client is ready.
  *
- * This drives the real entry point over stdio against a port nothing
- * listens on, waits until discovery has failed, and only then starts the
- * handshake.
+ * And the other side of it: discovery that has finished by the client's
+ * first message (waited for up to ALMYTY_DISCOVERY_WAIT_MS) is registered
+ * before the handshake, so the first tools/list is complete and nothing has
+ * to be announced. Claude Code's `-p` mode lists tools once and never
+ * re-reads them.
+ *
+ * These drive the real entry point over stdio against a local stand-in for
+ * the almyty backend.
  */
 
-import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
-import { mkdtempSync, rmSync } from 'fs';
-import { createServer } from 'net';
-import { tmpdir } from 'os';
-import { join } from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { closedPort, fakeAlmyty, pause, startServer, waitFor, type FakeAlmyty, type StdioServer } from './stdio-harness';
 
-type Message = { jsonrpc: '2.0'; id?: number; method?: string; result?: unknown };
+let server: StdioServer | undefined;
+let almyty: FakeAlmyty | undefined;
 
-const packageDir = join(import.meta.dirname, '..', '..');
+afterEach(async () => {
+  server?.stop();
+  server = undefined;
+  await almyty?.close();
+  almyty = undefined;
+});
 
-/** A port that was free a moment ago, so a connect to it is refused at once. */
-async function closedPort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const srv = createServer();
-    srv.once('error', reject);
-    srv.listen(0, '127.0.0.1', () => {
-      const address = srv.address();
-      const port = typeof address === 'object' && address ? address.port : 0;
-      srv.close(() => resolve(port));
-    });
-  });
-}
-
-function waitFor(check: () => boolean, what: string, timeoutMs = 15_000): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const started = Date.now();
-    const tick = () => {
-      if (check()) return resolve();
-      if (Date.now() - started > timeoutMs) return reject(new Error(`timed out waiting for ${what}`));
-      setTimeout(tick, 20);
-    };
-    tick();
-  });
-}
-
-const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-let child: ChildProcessWithoutNullStreams | undefined;
-let home: string | undefined;
-
-afterEach(() => {
-  child?.kill();
-  child = undefined;
-  if (home) rmSync(home, { recursive: true, force: true });
-  home = undefined;
+const initialize = (id = 1) => ({
+  id,
+  method: 'initialize',
+  params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'spec', version: '0' } },
 });
 
 describe('startup handshake', () => {
-  it('sends no notification before the client has finished initializing, even when discovery fails fast', async () => {
-    home = mkdtempSync(join(tmpdir(), 'almyty-mcp-handshake-'));
-    const port = await closedPort();
+  it('sends no notification before the client has finished initializing, even when discovery completes first', async () => {
+    // Discovery answers after 1.5 s; the handshake does not wait for it.
+    almyty = await fakeAlmyty({ toolsListDelayMs: 1_500 });
+    server = startServer({ ALMYTY_URL: almyty.url, ALMYTY_MODE: 'full', ALMYTY_DISCOVERY_WAIT_MS: '0' });
 
-    child = spawn(process.execPath, ['--import', 'tsx', join('src', 'index.ts'), 'acme/petstore'], {
-      cwd: packageDir,
-      env: {
-        ...process.env,
-        HOME: home,
-        USERPROFILE: home,
-        ALMYTY_TOKEN: 'test-token',
-        ALMYTY_URL: `http://127.0.0.1:${port}`,
-        ALMYTY_MODE: 'skill-first',
-      },
-    });
-
-    const messages: Message[] = [];
-    let stderr = '';
-    let buffered = '';
-    child.stdout.setEncoding('utf-8');
-    child.stdout.on('data', (chunk: string) => {
-      buffered += chunk;
-      let newline: number;
-      while ((newline = buffered.indexOf('\n')) >= 0) {
-        const line = buffered.slice(0, newline).trim();
-        buffered = buffered.slice(newline + 1);
-        if (line) messages.push(JSON.parse(line));
-      }
-    });
-    child.stderr.setEncoding('utf-8');
-    child.stderr.on('data', (chunk: string) => { stderr += chunk; });
-
-    const send = (message: Record<string, unknown>) =>
-      child!.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
-
-    // Discovery has failed, and whatever follows it has had time to run.
-    await waitFor(() => stderr.includes('gateway discovery failed'), 'discovery to fail');
+    server.send(initialize());
+    await server.response(1);
+    // Discovery finishes and its registrations run while the client has
+    // not yet said it is ready.
+    await waitFor(() => server!.stderr().includes('gateway tools'), 'discovery to finish');
     await pause(300);
-    expect(messages).toEqual([]);
-
-    send({
-      id: 1,
-      method: 'initialize',
-      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'spec', version: '0' } },
-    });
-    await waitFor(() => messages.some((m) => m.id === 1), 'the initialize response');
-    await pause(300);
-    expect(messages.map((m) => m.method ?? `response:${m.id}`)).toEqual(['response:1']);
+    expect(server.messages.map((m) => m.method ?? `response:${m.id}`)).toEqual(['response:1']);
 
     // Once the client says it is ready, the late registrations are announced.
-    send({ method: 'notifications/initialized' });
+    server.send({ method: 'notifications/initialized' });
     await waitFor(
-      () => messages.some((m) => m.method === 'notifications/prompts/list_changed'),
-      'prompts/list_changed after initialized',
+      () => server!.messages.some((m) => m.method === 'notifications/tools/list_changed'),
+      'tools/list_changed after initialized',
     );
-    expect(messages[0].id).toBe(1);
+    expect(server.messages[0].id).toBe(1);
+  }, 30_000);
+
+  it('has the gateway tools in the first tools/list when discovery finished first, and announces nothing', async () => {
+    almyty = await fakeAlmyty();
+    server = startServer({ ALMYTY_URL: almyty.url, ALMYTY_MODE: 'full' });
+    await waitFor(() => server!.stderr().includes('gateway tools'), 'discovery to finish');
+
+    server.send(initialize());
+    await server.response(1);
+    server.send({ method: 'notifications/initialized' });
+    server.send({ id: 2, method: 'tools/list', params: {} });
+    expect((await server.response(2)).result.tools.map((t: any) => t.name)).toContain('orders_get_order');
+    await pause(300);
+    expect(server.messages.filter((m) => m.method)).toEqual([]);
+  }, 30_000);
+
+  it('waits a little for discovery still under way at the first message', async () => {
+    almyty = await fakeAlmyty({ toolsListDelayMs: 800 });
+    server = startServer({ ALMYTY_URL: almyty.url, ALMYTY_MODE: 'full', ALMYTY_DISCOVERY_WAIT_MS: '5000' });
+    server.send(initialize());
+    await server.response(1);
+    server.send({ method: 'notifications/initialized' });
+    server.send({ id: 2, method: 'tools/list', params: {} });
+    expect((await server.response(2)).result.tools.map((t: any) => t.name)).toContain('orders_get_order');
+  }, 30_000);
+
+  it('does not hold the handshake for a backend that is down', async () => {
+    server = startServer({ ALMYTY_URL: `http://127.0.0.1:${await closedPort()}`, ALMYTY_MODE: 'skill-first' });
+    const started = Date.now();
+    server.send(initialize());
+    await server.response(1);
+    expect(Date.now() - started).toBeLessThan(4_000);
   }, 30_000);
 });
