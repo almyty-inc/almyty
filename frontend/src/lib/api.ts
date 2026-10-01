@@ -7,6 +7,7 @@ import {
   recoverFromStaleOrganizationContext,
 } from '@/store/organization-selection'
 import type { ApiKeyView, ConnectApiInput, ConnectApiResult, SetApiKeyInput } from '@/types/api-connect'
+import type { DeliveryOptions, SchedulePreview, ScheduleRequest, ScheduleView } from '@/lib/schedule'
 
 const API_BASE_URL = import.meta.env.ALMYTY_API_BASE_URL || ''
 
@@ -320,6 +321,12 @@ export const authApi = {
 
   createApiKey: (data: { name: string; scopes?: string[]; expiresAt?: string }) =>
     apiPost('/auth/api-keys', data),
+
+  /** Your own API keys, newest first; only the first characters of each. */
+  listApiKeys: () => apiGet('/auth/api-keys'),
+
+  /** Revoke one of your own keys; it stops working right away. */
+  revokeApiKey: (keyId: string) => apiDel(`/auth/api-keys/${encodeURIComponent(keyId)}`),
 
   resendVerification: () => apiPost('/auth/resend-verification'),
   // Unauthenticated resend, keyed off the email — used by the login page
@@ -925,9 +932,11 @@ export const agentsApi = {
   importAgent: (data: any) => apiPost('/agents/import', data),
   // Audit log
   getAuditLog: (id: string) => apiGet(`/agents/${id}/audit-log`),
-  // Scheduling
-  schedule: (id: string, intervalMinutes: number, input?: any) =>
-    apiPost(`/agents/${id}/schedule`, { intervalMinutes, input }),
+  // Scheduling (lib/schedule.ts has the shapes)
+  getSchedule: (id: string) => apiGet<ScheduleView>(`/agents/${id}/schedule`),
+  schedule: (id: string, body: ScheduleRequest) => apiPost(`/agents/${id}/schedule`, body),
+  previewSchedule: (id: string, body: ScheduleRequest) => apiPost<SchedulePreview>(`/agents/${id}/schedule/preview`, body),
+  scheduleDestinations: (id: string) => apiGet<DeliveryOptions>(`/agents/${id}/schedule/destinations`),
   unschedule: (id: string) => apiDel(`/agents/${id}/schedule`),
   setHeartbeat: (id: string, body: { enabled: boolean; intervalMinutes?: number; prompt?: string }) =>
     apiPatch(`/agents/${id}/heartbeat`, body),
@@ -1028,6 +1037,8 @@ export const memoriesApi = {
     tags?: string[]
     include_superseded?: boolean
     include_deleted?: boolean
+    /** Leave out document chunks, so each document is listed once, whole. */
+    hide_chunks?: boolean
     limit?: number
     cursor?: string | null
   }) => apiPost('/memory/canonical/list', body),
@@ -1069,7 +1080,6 @@ export const memoriesApi = {
   listBackends: () => apiGet('/memory/canonical/backends'),
   /** almyty's own memory and every outside memory account the organization has set up. */
   listAccounts: () => apiGet('/memory/canonical/accounts'),
-  backendsHealth: () => apiGet('/memory/canonical/backends/health'),
   // Workspace config (per-scope routing + softcap behavior + credentials wiring)
   getConfig: (scope_type: MemoryScopeType, scope_id: string) =>
     apiGet(`/memory/canonical/config?scope_type=${encodeURIComponent(scope_type)}&scope_id=${encodeURIComponent(scope_id)}`),
@@ -1082,20 +1092,86 @@ export const memoriesApi = {
     softcap_behavior?: 'reject' | 'warn_log' | 'silent'
     overrides?: Record<string, unknown>
   }) => apiPost('/memory/canonical/config', body),
-  transfer: (body: {
-    scope_type: MemoryScopeType
-    scope_id: string
-    source: string
-    target: string
-    mode?: MemoryMode
-    dry_run?: boolean
-  }) => apiPost('/memory/canonical/transfer', body),
   // Audit: soft-cap warnings list
   listSoftcapWarnings: (scope_type: MemoryScopeType, scope_id: string, limit = 50) =>
     apiGet(`/memory/canonical/warnings/softcap?scope_type=${encodeURIComponent(scope_type)}&scope_id=${encodeURIComponent(scope_id)}&limit=${limit}`),
   // Consolidation: trigger now (returns ConsolidationResult).
   consolidate: (body: { scope_type: MemoryScopeType; scope_id: string; force?: boolean }) =>
     apiPost('/memory/canonical/consolidate', body),
+  // Memory accounts (almyty's own and each memory connection) with health, and moving memories between them.
+  accountsOverview: () => apiGet<MemoryAccountsOverview>('/memory/canonical/accounts/overview'),
+  listMoves: () => apiGet<MemoryMove[]>('/memory/canonical/moves'),
+  getMove: (id: string) => apiGet<MemoryMove>(`/memory/canonical/moves/${encodeURIComponent(id)}`),
+  /** `source` and `target` are account ids: almyty-native, or a memory connection's id. */
+  startMove: (body: { source: string; target: string; scope_type: MemoryScopeType; scope_id: string; mode?: MemoryMode; switch_agents?: boolean }) =>
+    apiPost<MemoryMove>('/memory/canonical/moves', body),
+  previewMove: (body: { source: string; target: string; scope_type: MemoryScopeType; scope_id: string; mode?: MemoryMode }) =>
+    apiPost<MemoryMovePreview>('/memory/canonical/moves', { ...body, dry_run: true }),
+  resumeMove: (id: string) => apiPost<MemoryMove>(`/memory/canonical/moves/${encodeURIComponent(id)}/resume`),
+  /** The agents that keep their memories in an account, and whether the caller may switch each. */
+  moveAgents: (params: { source: string; scope_type: MemoryScopeType; scope_id: string }) =>
+    apiGet<MemoryAgentUse[]>(`/memory/canonical/moves/agents?${new URLSearchParams(params).toString()}`),
+}
+
+/** One memory account as the Memory page lists it. */
+export interface MemoryAccountRow {
+  /** almyty-native, or the memory connection's id. */
+  id: string
+  service: string
+  serviceName: string
+  name: string
+  accountLabel: string | null
+  owner: string
+  health: { status: 'valid' | 'failed' | 'expired' | 'revoked' | 'quota' | 'unknown'; checkedAt: string | null; error: string | null }
+  isDefault: boolean
+  canMoveFrom: boolean
+  canMoveTo: boolean
+}
+
+export interface MemoryAccountsOverview {
+  accounts: MemoryAccountRow[]
+  /** Every outside memory service, with how many accounts it has; 0 means not set up. */
+  services: Array<{ id: string; name: string; accounts: number }>
+}
+
+export type MemoryMoveStatus = 'queued' | 'running' | 'completed' | 'failed'
+
+export interface MemoryMove {
+  id: string
+  sourceService: string
+  sourceCredentialId: string | null
+  targetService: string
+  targetCredentialId: string | null
+  scopeType: MemoryScopeType
+  scopeId: string
+  mode: MemoryMode
+  status: MemoryMoveStatus
+  moved: number
+  failed: number
+  total: number | null
+  lastError: string | null
+  warnings: Array<{ capability: string; field: string; count: number }>
+  createdAt: string
+  updatedAt: string
+  finishedAt: string | null
+  switchAgents?: boolean
+  /** The agents pointed at the target when the move finished. */
+  agentsSwitched?: Array<{ id: string; name: string }> | null
+  /** The agents that used the source and were left alone, with why. */
+  agentsNotSwitched?: Array<{ id: string; name: string; reason: string }> | null
+}
+
+export interface MemoryAgentUse {
+  id: string
+  name: string
+  canSwitch: boolean
+  reason?: string
+}
+
+export interface MemoryMovePreview {
+  total: number
+  more: boolean
+  warnings: Array<{ capability: string; field: string; count: number }>
 }
 
 // Files API
@@ -1104,12 +1180,14 @@ export const filesApi = {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
     return apiGet(`/files${qs}`)
   },
-  upload: (file: File, agentId?: string, runId?: string) => {
+  /** `purpose: 'app_icon'` marks a branding page's icon, cleared a day later if never saved. */
+  upload: (file: File, agentId?: string, runId?: string, purpose?: 'app_icon') => {
     const formData = new FormData()
     formData.append('file', file)
     const params = new URLSearchParams()
     if (agentId) params.set('agentId', agentId)
     if (runId) params.set('runId', runId)
+    if (purpose) params.set('purpose', purpose)
     const qs = params.toString() ? `?${params.toString()}` : ''
     return apiPost(`/files/upload${qs}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -1245,6 +1323,20 @@ export interface ApprovalStep {
   minApprovals: number
 }
 
+/**
+ * An approval policy's amount rule: ask before `toolId` runs when the
+ * numeric input `argument` is over (gt) or at or over (gte) `amount`.
+ * Mirrors ApprovalToolAmountTrigger on the backend entity.
+ */
+export interface ApprovalToolAmountTrigger {
+  kind: 'tool_amount'
+  toolId: string
+  toolName?: string
+  argument: string
+  op: 'gt' | 'gte'
+  amount: number
+}
+
 export interface ApprovalPolicy {
   id: string
   organizationId: string
@@ -1255,6 +1347,8 @@ export interface ApprovalPolicy {
   steps: ApprovalStep[]
   priority: number
   enabled: boolean
+  /** Set: the policy asks on its own when the tool is called over the amount. */
+  trigger?: ApprovalToolAmountTrigger | null
   createdAt: string
   updatedAt: string
 }
@@ -1267,6 +1361,7 @@ export interface UpsertApprovalPolicy {
   steps?: ApprovalStep[]
   priority?: number
   enabled?: boolean
+  trigger?: ApprovalToolAmountTrigger | null
 }
 
 export const approvalPoliciesApi = {
@@ -1279,6 +1374,25 @@ export const approvalPoliciesApi = {
   delete: (id: string) => apiDel(`/approval-policies/${id}`),
 }
 
+/** An amount rule as the free rules endpoints take it (backend AmountRulesService). */
+export interface UpsertAmountRule {
+  name?: string
+  description?: string | null
+  teamId?: string | null
+  enabled?: boolean
+  trigger?: ApprovalToolAmountTrigger
+  /** Business plan only; without it one approval decides. */
+  steps?: ApprovalStep[]
+}
+
+/** Amount rules ("ask before refunds over 500"): free for every organization. */
+export const approvalRulesApi = {
+  list: () => apiGet<ApprovalPolicy[]>('/approval-rules'),
+  getById: (id: string) => apiGet<ApprovalPolicy>(`/approval-rules/${id}`),
+  create: (data: UpsertAmountRule) => apiPost<ApprovalPolicy>('/approval-rules', data),
+  update: (id: string, data: UpsertAmountRule) => apiPatch<ApprovalPolicy>(`/approval-rules/${id}`, data),
+  delete: (id: string) => apiDel(`/approval-rules/${id}`),
+}
 /**
  * Mirrors backend/src/modules/onboarding/dto/onboarding.dto.ts. Every step
  * is computed server-side from what exists in the org, never from a box

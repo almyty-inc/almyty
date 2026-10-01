@@ -436,6 +436,8 @@ export class LlmChatHelper {
         request = { ...request, model: await this.defaultModels.resolve(provider) };
       }
       assertModelAllowed(provider, request.model);
+      // The files a message refers to, as this model can read them.
+      request = await this.runner.resolveAttachments(organizationId, provider, request);
       let response: ChatResponse;
 
 

@@ -37,17 +37,6 @@ Frontend was rolled manually from the already-pushed tag so this pass could run.
 
 ## Screenshots
 
-Dropped into `docs-site/public/screenshots/`:
-
-| File | Shows |
-|---|---|
-| `apps-list.png` | Apps list |
-| `apps-canvas.png` / `apps-detail.png` | Detail page, Distributions tab, Slack+Web Live |
-| `apps-empty.png` | Fresh app empty state |
-| `apps-agents.png` | Agents tab |
-| `apps-settings.png` | Settings tab with cost cap + rate limits |
-| `apps-slack-credentials.png` | Slack dialog credential fields |
-| `apps-slack-live.png` | Slack published, Take it down |
-| `apps-build-capabilities.png` | Terminal bun refusal |
+The captures of the Apps page taken for this report were removed from `docs-site/public/screenshots/` when that page was replaced by the agent's Channels tab; Git history keeps them.
 
 `docs/agent-factory.md` canvas paragraph replaced with the detail-page description.

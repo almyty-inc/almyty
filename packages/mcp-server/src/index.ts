@@ -155,7 +155,7 @@ async function main() {
     },
     {
       name: 'almyty_list_gateways',
-      description: 'List all gateways in your organization.',
+      description: 'List the gateways in your organization: MCP, UTCP and Skills gateways serving tools. An agent\'s channels (web chat, messaging, A2A) are not gateways.',
       shape: {},
       run: () => proxy.listGateways(),
     },
@@ -305,6 +305,21 @@ async function main() {
   // This order is the point: the client gets its handshake even when the
   // backend is unreachable, so the editor shows a server that explains the
   // problem instead of one that died.
+  //
+  // Discovery starts at once, but what it found is registered only after
+  // the client has sent `notifications/initialized`. Every registration and
+  // update below makes the SDK send a list_changed notification, and the
+  // MCP lifecycle forbids those before initialization completes. A
+  // discovery that failed fast used to announce its prompts before the
+  // client had even sent `initialize`.
+  const lowLevel = server.server;
+  const clientReady = new Promise<void>((resolve) => {
+    const previous = lowLevel.oninitialized;
+    lowLevel.oninitialized = () => {
+      previous?.();
+      resolve();
+    };
+  });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -317,6 +332,8 @@ async function main() {
   } else {
     log(`${catalog.tools.length} gateway tools, ${catalog.skills.length} skills`);
   }
+
+  await clientReady;
 
   // Skills as prompts, loaded on demand rather than held in context.
   promptNames = uniquePromptNames(catalog.skills.map((s) => s.name));
@@ -356,12 +373,12 @@ async function main() {
   // Feature-detected rather than called outright: these notifications are
   // a courtesy, and nothing here depends on one arriving or on a particular
   // SDK version carrying them.
-  const lowLevel = (server as unknown as { server?: Record<string, unknown> }).server;
+  const notifier = lowLevel as unknown as Record<string, unknown>;
   const notify = (method: string) => {
-    const fn = lowLevel?.[method];
+    const fn = notifier[method];
     if (typeof fn !== 'function') return;
     try {
-      (fn as () => void).call(lowLevel);
+      (fn as () => void).call(notifier);
     } catch {
       // A client that refuses the notification changes nothing.
     }

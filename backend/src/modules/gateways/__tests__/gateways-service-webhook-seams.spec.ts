@@ -128,4 +128,82 @@ describe('GatewaysService — channel webhook registration seams', () => {
       status: GatewayStatus.ACTIVE,
     });
   });
+
+  /**
+   * The platform call that takes a webhook down (Sendblue, Telegram,
+   * Twilio) reads the keys through the channel's managed credential.
+   * Releasing that credential first deleted the keys the unregister
+   * needed, so the webhook stayed registered at the platform.
+   */
+  describe('the order a gateway is taken down in', () => {
+    const makeWithCredentials = (order: string[]) => {
+      registrar.remove.mockImplementation(async () => {
+        order.push('unregister');
+      });
+      gatewayRepository.remove.mockImplementation(async (g: Gateway) => {
+        order.push('delete row');
+        return g;
+      });
+      const channelCredentials = {
+        release: jest.fn(async () => {
+          order.push('release credential');
+        }),
+      };
+      return new GatewaysService(
+        gatewayRepository,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        auditLogService,
+        {} as any,
+        {} as any,
+        accessPolicy,
+        discordTransport as any,
+        registrar as any,
+        undefined,
+        undefined,
+        channelCredentials as any,
+      );
+    };
+
+    it('deleteGateway unregisters the webhook before the credential is released and the row deleted', async () => {
+      const order: string[] = [];
+      gatewayRepository.findOne.mockResolvedValue(gateway({ type: GatewayType.IMESSAGE_SENDBLUE, status: GatewayStatus.ACTIVE }));
+
+      await makeWithCredentials(order).deleteGateway('gw-1', 'org-1', 'user-1');
+
+      expect(order).toEqual(['unregister', 'release credential', 'delete row']);
+    });
+
+    it('a rejecting registrar does not stop the gateway being deleted', async () => {
+      gatewayRepository.findOne.mockResolvedValue(gateway({ status: GatewayStatus.ACTIVE }));
+      registrar.remove.mockRejectedValue(new Error('sendblue down'));
+
+      await expect(makeService().deleteGateway('gw-1', 'org-1', 'user-1')).resolves.toBeUndefined();
+      expect(gatewayRepository.remove).toHaveBeenCalledTimes(1);
+    });
+
+    it('deleteGatewayOfDeletedAgent takes the gateway down in the same order, without a permission check of its own', async () => {
+      const order: string[] = [];
+      accessPolicy.canAccess.mockResolvedValue({ allowed: false });
+
+      await makeWithCredentials(order).deleteGatewayOfDeletedAgent(
+        gateway({ type: GatewayType.IMESSAGE_SENDBLUE, status: GatewayStatus.ACTIVE }),
+        'user-1',
+      );
+
+      expect(order).toEqual(['unregister', 'release credential', 'delete row']);
+      expect(accessPolicy.canAccess).not.toHaveBeenCalled();
+      expect(auditLogService.logDelete).toHaveBeenCalledWith('org-1', 'user-1', expect.anything(), 'gw-1', 'tg-bot');
+    });
+
+    it('deleteGatewayOfDeletedAgent never deletes a system gateway', async () => {
+      await makeService().deleteGatewayOfDeletedAgent(gateway({ isSystem: true } as any), 'user-1');
+
+      expect(gatewayRepository.remove).not.toHaveBeenCalled();
+      expect(registrar.remove).not.toHaveBeenCalled();
+    });
+  });
 });

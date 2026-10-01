@@ -53,13 +53,29 @@ export interface FunctionCall {
   error?: string;
 }
 
+/**
+ * One part of a message's content.
+ *
+ * `file` is a file someone sent, by reference: the stored file's id
+ * (files table), its type and name, and `text`, what a model that cannot
+ * take the file natively reads in its place (its extracted text, when it
+ * has any). It is what a message keeps. When the message goes to a model
+ * the reference is resolved (llm-providers/message-attachments.resolver.ts)
+ * into an `image` or `document` part carrying the bytes as base64 in
+ * `data`, when the model's card says it takes that kind of file, or into
+ * text otherwise. `data` is built for the request on the wire and never
+ * stored.
+ */
 export interface MessageContent {
-  type: 'text' | 'image' | 'audio';
+  type: 'text' | 'image' | 'audio' | 'document' | 'file';
   text?: string;
   imageUrl?: string;
   audioUrl?: string;
   mimeType?: string;
   size?: number;
+  fileId?: string;
+  name?: string;
+  data?: string;
 }
 
 @Entity('messages')

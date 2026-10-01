@@ -1,15 +1,18 @@
 import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
-import { Logger } from '@nestjs/common';
+import { Logger, Optional } from '@nestjs/common';
 import { Job, Queue } from 'bull';
 import { InjectQueue } from '@nestjs/bull';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Workspace } from '../../entities/workspace.entity';
+import { releaseRunWorkspaces } from '../workspace/run-end-release';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { Agent } from '../../entities/agent.entity';
 import { AgentMode, AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { runWithRequestContext } from '../../common/request-context';
 import { agentOwnerUserId } from './agent-owner';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
+import { AgentSchedulerService } from './agent-scheduler.service';
 
 /**
  * A run in one of these is finished; a late queue failure must not
@@ -34,6 +37,14 @@ export class AgentRuntimeProcessor {
     private readonly agentRepository: Repository<Agent>,
     @InjectRepository(AgentRun)
     private readonly runRepository: Repository<AgentRun>,
+    // A finished run's runner workspaces are released at once.
+    @Optional()
+    @InjectRepository(Workspace)
+    private readonly workspaceRepository?: Repository<Workspace>,
+    // Hands a finished scheduled run's result to its channel or webhook.
+    // Optional for the positional unit tests.
+    @Optional()
+    private readonly scheduler?: AgentSchedulerService,
   ) {}
 
   @Process('next-step')
@@ -83,6 +94,11 @@ export class AgentRuntimeProcessor {
             this.logger.log(`Run ${runId} is waiting (sleeping or awaiting user input)`);
           } else {
             this.logger.log(`Run ${runId} completed`);
+            // Finished (completed, failed, cancelled or timed out): its
+            // runner workspaces are released now, freeing the runner.
+            await releaseRunWorkspaces(this.workspaceRepository, runId, this.runRepository);
+            // A scheduled run's result goes where its schedule said.
+            await this.scheduler?.deliverScheduledRun(runId);
           }
         } catch (error) {
           this.logger.error(`Step processing failed for run ${runId}: ${error.message}`, error.stack);
@@ -169,7 +185,11 @@ export class AgentRuntimeProcessor {
 
     try {
       // This will be checked in processStep via checkLimits
-      await this.runtimeService.processStep(runId);
+      const result = await this.runtimeService.processStep(runId);
+      if (result === 'done') {
+        await releaseRunWorkspaces(this.workspaceRepository, runId, this.runRepository);
+        await this.scheduler?.deliverScheduledRun(runId);
+      }
     } catch (error) {
       // Rethrow. Swallowing this made a failing timeout check disappear
       // entirely: no retry, no failed job, and the run left in whatever
@@ -270,6 +290,8 @@ export class AgentRuntimeProcessor {
       return;
     }
 
+    await releaseRunWorkspaces(this.workspaceRepository, runId, this.runRepository);
+    await this.scheduler?.deliverScheduledRun(runId);
     this.logger.error(`Run ${runId} marked FAILED after exhausted retries: ${error?.message}`);
   }
 }

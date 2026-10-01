@@ -7,7 +7,7 @@
  * Mirrors backend/src/entities/connection-policy.entity.ts and
  * backend/ee/modules/connections-governance/*. Dates travel as ISO strings.
  */
-import type { ConnectionHealthStatus, ConnectionOwner, GrantPrincipalType } from './connections'
+import type { ConnectionHealthStatus, GrantPrincipalType } from './connections'
 
 export type ConnectionPolicyKind =
   | 'connector_allowlist'
@@ -56,11 +56,12 @@ export const SCOPE_PRINCIPAL_KIND_LABELS: Record<ScopePrincipalKind, string> = {
 
 /**
  * `connector_allowlist` and `connector_denylist`. `owners` absent means both org and user connects.
- * Policies speak of who holds the key, so a private connection counts as 'user'.
+ * Policies speak of who holds the key, so a private connection counts as 'user'
+ * and a team one as 'org'.
  */
 export interface ConnectorListRule {
   connectorKeys: string[]
-  owners?: Array<Exclude<ConnectionOwner, 'private'>>
+  owners?: Array<'org' | 'user'>
 }
 
 /** `scope_rule`. `requireOwner` is always `org`; `environments` absent means everywhere. */

@@ -18,6 +18,7 @@ import {
   upstreamErrorText,
 } from '../catalog';
 import { ZodLike, buildZodShape, zodTypeFor } from '../schema';
+import { AlmytyProxy } from '../proxy';
 
 function source(overrides: Partial<DiscoverySource> = {}): DiscoverySource {
   return {
@@ -349,5 +350,20 @@ describe('startup order', () => {
     const firstToolAt = source.indexOf('server.tool(');
     expect(firstToolAt).toBeGreaterThan(0);
     expect(firstToolAt).toBeLessThan(connectAt);
+  });
+});
+
+// Gateways are MCP, UTCP and Skills. An agent's channels (web chat,
+// messaging, A2A) stand up gateways of their own, which are not listed.
+describe('almyty_list_gateways', () => {
+  it('asks for tool gateways only', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: { gateways: [] } }), text: async () => '{}' }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await new AlmytyProxy('https://api.example.com', 't').listGateways();
+      expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/gateways?kind=tool');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

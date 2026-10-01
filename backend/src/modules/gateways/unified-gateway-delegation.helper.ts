@@ -23,8 +23,6 @@ import { UtcpService } from '../mcp/utcp.service';
 import { GatewayResolverService } from '../mcp/services/gateway-resolver.service';
 import { A2AServerService, A2A_RUN_METHODS } from '../a2a/a2a-server.service';
 import { A2AAgentCardService } from '../a2a/a2a-agent-card.service';
-import { AcpServerService } from '../acp/acp-server.service';
-import { AcpDiscoveryService } from '../acp/acp-discovery.service';
 import { isPrivateGateway } from './private-gateway';
 import { findServableGatewayAgent } from './gateway-servable';
 import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
@@ -37,7 +35,7 @@ import { trustedClientIp } from '../../common/security/client-ip';
  * Per-protocol delegation for gateways exposed under
  * `/:orgSlug/:resourceSlug`. The unified controller dispatches
  * to `handleGatewayRequest`, which fans out to the correct
- * MCP / UTCP / A2A / ACP / channel service based on `gateway.type`.
+ * MCP / UTCP / A2A / channel service based on `gateway.type`.
  */
 @Injectable()
 export class UnifiedGatewayDelegation {
@@ -79,6 +77,8 @@ export class UnifiedGatewayDelegation {
     GatewayType.WHATSAPP,
     GatewayType.WHATSAPP_CLOUD,
     GatewayType.SMS,
+    GatewayType.IMESSAGE_SENDBLUE,
+    GatewayType.IMESSAGE_LOOPMESSAGE,
     GatewayType.EMAIL,
     GatewayType.WEBHOOK,
     GatewayType.GOOGLE_CHAT,
@@ -100,8 +100,6 @@ export class UnifiedGatewayDelegation {
     private readonly gatewayResolver: GatewayResolverService,
     private readonly a2aServerService: A2AServerService,
     private readonly a2aAgentCardService: A2AAgentCardService,
-    private readonly acpServerService: AcpServerService,
-    private readonly acpDiscoveryService: AcpDiscoveryService,
     private readonly configService: ConfigService,
     private readonly gatewayRateLimit: GatewayRateLimitService,
     private readonly channelGatewayService: ChannelGatewayService,
@@ -126,6 +124,13 @@ export class UnifiedGatewayDelegation {
     res: Response,
     body: any,
   ) {
+    // A gateway whose agent was deleted answers like a missing one. Before
+    // deleting an agent took its gateways with it, such a gateway stayed
+    // active and a message to it ran against no agent: a 500.
+    if (Gateway.agentGone(gateway)) {
+      const what = UnifiedGatewayDelegation.CHANNEL_TYPES.has(gateway.type) ? 'This chat no longer exists' : 'Not found';
+      throw new HttpException(what, HttpStatus.NOT_FOUND);
+    }
     const afterGateway = req.path.replace(`/${orgSlug}/${resourceSlug}`, '');
     const action = afterGateway.replace(/^\//, '') || '';
 
@@ -163,7 +168,7 @@ export class UnifiedGatewayDelegation {
 
     const isDiscovery =
       action.startsWith('.well-known/') ||
-      (action === '' && req.method === 'GET' && [GatewayType.A2A, GatewayType.ACP].includes(gateway.type));
+      (action === '' && req.method === 'GET' && gateway.type === GatewayType.A2A);
 
     // Channel platform webhooks authenticate via platform signature
     // (verified by the adapter), not via almyty API keys — Slack or
@@ -204,11 +209,6 @@ export class UnifiedGatewayDelegation {
       }
       case GatewayType.A2A: {
         const out = await this.delegateA2A(gateway, organization, action, req, res, body, auth);
-        this.bumpGatewayCounters(gateway.id, res.statusCode < 400);
-        return out;
-      }
-      case GatewayType.ACP: {
-        const out = await this.delegateACP(gateway, organization, action, req, res, body);
         this.bumpGatewayCounters(gateway.id, res.statusCode < 400);
         return out;
       }
@@ -470,47 +470,6 @@ export class UnifiedGatewayDelegation {
     return this.channelPolicy ? this.channelPolicy.admit(gateway) : null;
   }
 
-  private async delegateACP(
-    gateway: Gateway,
-    organization: Organization,
-    action: string,
-    req: Request,
-    res: Response,
-    body: any,
-  ) {
-    if (action === '.well-known/acp') {
-      // Only an active agent this gateway may serve has a discovery
-      // document; anything else is the not-found a missing agent gets.
-      const agent = organization.id === gateway.organizationId
-        ? await findServableGatewayAgent(this.agentRepository, gateway)
-        : null;
-      if (!agent) {
-        throw new HttpException('Agent not found for this ACP gateway', HttpStatus.NOT_FOUND);
-      }
-      const baseUrl =
-        this.configService.get<string>('BASE_URL') || `${req.protocol}://${req.get('host')}`;
-      const doc = this.acpDiscoveryService.buildDiscoveryDocument(gateway, agent, organization, baseUrl);
-      res.setHeader('Cache-Control', 'public, max-age=300');
-      return res.json(doc);
-    }
-
-    if (req.method !== 'POST') {
-      throw new HttpException('ACP gateways only accept POST for JSON-RPC', HttpStatus.METHOD_NOT_ALLOWED);
-    }
-
-    // Every session method runs or reads the gateway's agent, so it answers
-    // only for an agent this gateway may serve -- the rule the discovery
-    // document above follows. Anything else is the not-found a missing
-    // agent gets.
-    const agent = organization.id === gateway.organizationId
-      ? await findServableGatewayAgent(this.agentRepository, gateway)
-      : null;
-    if (!agent) {
-      throw new HttpException('Agent not found for this ACP gateway', HttpStatus.NOT_FOUND);
-    }
-    await this.acpServerService.handleJsonRpc(gateway, req, body, res);
-  }
-
   private async delegateUtcp(
     gateway: Gateway,
     organization: Organization,
@@ -580,7 +539,7 @@ export class UnifiedGatewayDelegation {
 
   /**
    * Bump the per-gateway request counters shown on the gateway list page.
-   * MCP traffic already does this in McpService; UTCP / A2A / ACP used to
+   * MCP traffic already does this in McpService; UTCP / A2A used to
    * skip it, so those gateways permanently showed "0 requests".
    * Fire-and-forget — counter loss is preferable to slowing the response.
    */

@@ -1,10 +1,23 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import {
+  BaseAdapter,
+  NormalizedMessage,
+  AdapterResponse,
+  AttachmentFetchLimits,
+  FetchedAttachment,
+  InboundAttachment,
+} from './base.adapter';
+import { isImage, textWithMedia } from '../reply-media';
 
 @Injectable()
 export class DiscordAdapter extends BaseAdapter {
   private readonly logger = new Logger(DiscordAdapter.name);
   readonly type = 'discord';
+
+  /** Discord's attachment CDN. A link elsewhere in a payload is not fetched. */
+  static readonly FILE_HOSTS = ['cdn.discordapp.com', 'media.discordapp.net'];
+  /** Embeds one message carries. */
+  static readonly MAX_EMBEDS = 10;
 
   /**
    * Discord inbound never arrives as an HTTP webhook: the bot holds an
@@ -15,12 +28,37 @@ export class DiscordAdapter extends BaseAdapter {
   protected readonly inboundIsUnauthenticatedByDesign = true;
 
   normalizeInbound(rawPayload: any): NormalizedMessage {
+    const attachments: InboundAttachment[] = (Array.isArray(rawPayload.attachments) ? rawPayload.attachments : [])
+      .filter((a: any) => a && typeof a.url === 'string')
+      .map((a: any) => ({
+        url: a.url,
+        type: a.content_type || 'application/octet-stream',
+        name: a.filename || 'attachment',
+        ...(typeof a.size === 'number' ? { size: a.size } : {}),
+      }));
+    const author = rawPayload.author;
     return {
       text: rawPayload.content || '',
       userId: rawPayload.author?.id || 'unknown',
       threadId: rawPayload.channel_id,
+      ...(attachments.length ? { attachments } : {}),
+      ...(author?.id
+        ? { sender: { id: author.id, name: rawPayload.member?.nick || author.global_name || author.username || undefined } }
+        : {}),
+      // A server channel has its members in it; a direct message has one.
+      group: !!rawPayload.guild_id,
       metadata: { guildId: rawPayload.guild_id, channelId: rawPayload.channel_id, source: 'discord' },
     };
+  }
+
+  /** Discord's CDN links are signed and public; fetched with no token, and only from the CDN. */
+  async fetchAttachment(
+    attachment: InboundAttachment,
+    _config: Record<string, any>,
+    limits: AttachmentFetchLimits,
+  ): Promise<FetchedAttachment | null> {
+    if (!BaseAdapter.onHost(attachment.url, DiscordAdapter.FILE_HOSTS)) return null;
+    return this.fetchBytes(attachment.url!, limits);
   }
 
   /**
@@ -33,8 +71,11 @@ export class DiscordAdapter extends BaseAdapter {
     return rawPayload?.id ? `discord:${rawPayload.id}` : undefined;
   }
 
+  /** Images go as embeds Discord shows under the text; other files stay links. */
   formatOutbound(response: AdapterResponse): any {
-    return { content: response.text.substring(0, 2000) }; // Discord 2000 char limit
+    const images = (response.attachments ?? []).filter(isImage).slice(0, DiscordAdapter.MAX_EMBEDS);
+    const content = textWithMedia(response, images).substring(0, 2000); // Discord 2000 char limit
+    return images.length ? { content, embeds: images.map((image) => ({ image: { url: image.url } })) } : { content };
   }
 
   /**

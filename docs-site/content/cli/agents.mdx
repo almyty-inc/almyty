@@ -1,6 +1,6 @@
 # Agents CLI
 
-The Agents CLI lets you list, inspect, and run almyty agents from your terminal. Use it for quick invocations, scripting, and CI pipelines.
+The Agents CLI lets you list, inspect and run your almyty agents from a terminal or a script. Use it when a person isn't the one starting the work: for example, a nightly script that runs your "invoice-pipeline" agent and saves the result, or a CI pipeline (the automated checks that run when code changes) that asks an agent for a release summary. In the app, the same things live on **Agents**; see [Agents](/agents).
 
 ![@almyty/agents CLI help](/screenshots/cli/agents-help.png)
 
@@ -60,7 +60,7 @@ Both name and UUID lookups work for every command that accepts an agent referenc
 
 ### Workflow mode
 
-Workflow agents execute a fixed DAG of nodes (input, LLM calls, tool calls, conditions, transforms) and return a result. Each invocation is a single run:
+Workflow agents follow the fixed steps you drew on the canvas (a DAG, or directed graph: each step runs after the ones pointing into it), such as input, model calls, tool calls, conditions and transforms, and return a result. Each invocation is a single run:
 
 ```bash
 $ npx @almyty/agents run invoice-pipeline --input '{"file_url": "https://example.com/invoice.pdf"}'
@@ -91,7 +91,7 @@ $ npx @almyty/agents run invoice-pipeline \
 
 ### Autonomous mode
 
-Autonomous agents run continuously, making decisions about which tools to call. Use `--watch` to stream execution steps in real time:
+Autonomous agents decide for themselves which tools to call, step by step, until the job is done. Use `--watch` to stream the steps as they happen:
 
 ```bash
 $ npx @almyty/agents run research-bot --input '{"topic": "quantum computing trends"}' --watch

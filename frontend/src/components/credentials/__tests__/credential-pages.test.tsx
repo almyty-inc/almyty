@@ -31,6 +31,7 @@ vi.mock('../../../lib/connections-api', async () => {
       validate: vi.fn(),
       rotate: vi.fn(),
       remove: vi.fn(),
+      setSharing: vi.fn(),
       listGrants: vi.fn().mockResolvedValue([]),
       addGrant: vi.fn(),
       removeGrant: vi.fn(),
@@ -247,7 +248,7 @@ describe('/credentials/new', () => {
     expect(form.querySelectorAll('input')).toHaveLength(1)
     expect(within(form).queryByLabelText(/^Type/)).not.toBeInTheDocument()
     expect(within(form).queryByLabelText(/^Name/)).not.toBeInTheDocument()
-    expect(within(form).getByTestId('who-can-use')).toHaveTextContent('everyone in your organization')
+    expect(within(form).getByTestId('who-can-use')).toHaveTextContent('Everyone')
 
     fireEvent.change(within(form).getByLabelText('Token'), { target: { value: 'ghp_123' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
@@ -345,8 +346,8 @@ describe('/credentials/:id', () => {
     expect(screen.getByText('octocat')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /Used by/ })).toBeInTheDocument()
-    expect(screen.getByTestId('who-can-use')).toHaveTextContent('everyone in your organization')
-    expect(screen.getByRole('link', { name: 'Change' })).toHaveAttribute('href', '/credentials/advanced?credential=conn-1')
+    expect(screen.getByTestId('who-can-use')).toHaveTextContent('Everyone')
+    expect(screen.getByRole('link', { name: 'Advanced' })).toHaveAttribute('href', '/credentials/advanced?credential=conn-1')
   })
 
   it('checks again and says the answer', async () => {
@@ -378,11 +379,37 @@ describe('/credentials/:id', () => {
     expect(await screen.findByText('at /credentials')).toBeInTheDocument()
   })
 
-  it('offers no change of who can use a private credential', async () => {
+  it('changes who can use a private credential in place, as on a provider connection', async () => {
+    vi.mocked(connectionsApi.setSharing).mockResolvedValue(connection({ id: 'conn-2', owner: 'org' }))
     at('conn-2')
     expect(await screen.findByRole('heading', { name: 'Acme CRM' })).toBeInTheDocument()
-    expect(screen.getByTestId('who-can-use')).toHaveTextContent('only you')
+    const line = screen.getByTestId('who-can-use')
+    expect(line).toHaveTextContent('Only you')
+    fireEvent.click(within(line).getByRole('button', { name: 'Change' }))
+    for (const name of [/^Only you/, /^Everyone/]) expect(screen.getByRole('radio', { name })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('radio', { name: /^Everyone/ }))
+    await waitFor(() => expect(connectionsApi.setSharing).toHaveBeenCalledWith('conn-2', { owner: 'org' }))
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    // The grants editor is its own link, not a second "Change".
     expect(screen.queryByRole('link', { name: 'Change' })).not.toBeInTheDocument()
+  })
+
+  it('shares it with one team, sending the team', async () => {
+    vi.mocked(organizationsApi.getTeams).mockResolvedValue([{ id: 'team-1', name: 'Support', isDefault: false }])
+    vi.mocked(connectionsApi.setSharing).mockResolvedValue(connection({ id: 'conn-2', owner: 'team', teamId: 'team-1' }))
+    at('conn-2')
+    fireEvent.click(within(await screen.findByTestId('who-can-use')).getByRole('button', { name: 'Change' }))
+    await waitFor(() => expect(screen.getByRole('radio', { name: /^One team/ })).toBeEnabled())
+    fireEvent.click(screen.getByRole('radio', { name: /^One team/ }))
+    await waitFor(() => expect(connectionsApi.setSharing).toHaveBeenCalledWith('conn-2', { owner: 'team', teamId: 'team-1' }))
+    vi.mocked(organizationsApi.getTeams).mockResolvedValue([])
+  })
+
+  it('leaves the key a provider connection keeps to that connection', async () => {
+    vi.mocked(connectionsApi.list).mockResolvedValue([connection({ providerId: 'p1' })])
+    at()
+    const line = await screen.findByTestId('who-can-use')
+    expect(within(line).queryByRole('button', { name: 'Change' })).not.toBeInTheDocument()
   })
 
   it('shows a key a single API keeps, and where it is changed', async () => {

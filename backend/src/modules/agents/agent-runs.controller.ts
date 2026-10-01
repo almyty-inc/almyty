@@ -1,7 +1,7 @@
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AgentExecution } from '../../entities/agent-execution.entity';
-import { traceFor } from './strategies/run-trace';
+import { traceFor, traceForRun } from './strategies/run-trace';
 import {
   Controller,
   Optional,
@@ -17,6 +17,7 @@ import {
   HttpStatus,
   HttpException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -70,26 +71,25 @@ export class AgentRunsController {
       );
     }
 
-    if (!this.executions) {
-      throw new HttpException(
-        { success: false, message: 'Run traces are not available here', error: 'TRACE_UNAVAILABLE' },
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
-
     // Scoped by agent as well as organization: without the agentId any
     // execution in the caller's org would resolve through any agent's URL.
-    const execution = await this.executions.findOne({
-      where: { id: executionId, organizationId, agentId: id },
-    });
-    if (!execution) {
-      throw new HttpException(
-        { success: false, message: 'Run not found', error: 'RUN_NOT_FOUND' },
-        HttpStatus.NOT_FOUND,
-      );
-    }
+    const execution = this.executions
+      ? await this.executions.findOne({ where: { id: executionId, organizationId, agentId: id } })
+      : null;
+    if (execution) return { success: true, data: traceFor(execution) };
 
-    return { success: true, data: traceFor(execution) };
+    // An autonomous run is an agent run, not an execution: its calls are
+    // steps, and each records its routing. Same scoping (org and agent).
+    const run = await this.runtimeService.getRun(executionId, organizationId, id).catch((err) => {
+      if (err instanceof NotFoundException) return null;
+      throw err;
+    });
+    if (run) return { success: true, data: traceForRun(run) };
+
+    throw new HttpException(
+      { success: false, message: 'Run not found', error: 'RUN_NOT_FOUND' },
+      HttpStatus.NOT_FOUND,
+    );
   }
 
   // ── Autonomous Agent Runs ──

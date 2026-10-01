@@ -433,6 +433,24 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
     ),
   }),
 
+  // A provider refused a connection's key, and the connection was turned off.
+  'connections.inactive': (p) => ({
+    subject: sanitizeSubject(`${p.connectionName || 'A connection'} is inactive: its key was refused`),
+    html: renderBaseLayout({
+      heading: 'Connection inactive',
+      bodyHtml:
+        para(`The provider refused the key of <strong>${esc(p.connectionName || 'a connection')}</strong>, so it was turned off. Its models are not offered until the key works.`) +
+        (p.reason ? para(`The provider said: ${esc(p.reason)}`) : '') +
+        para('Replace the key, then Check again: a passing check turns it back on.'),
+      button: p.url ? { label: 'Open the connection', url: p.url } : undefined,
+      footerNote: 'You get this because you own the connection or run the organization. Turn these emails off under Settings, Your account, Notifications.',
+      orgName: p.organizationName,
+    }),
+    text: flattenText(
+      `The provider refused the key of ${p.connectionName || 'a connection'}, so it was turned off.${p.reason ? ` The provider said: ${p.reason}` : ''} Replace the key, then Check again to turn it back on.${p.url ? ` ${p.url}` : ''}`,
+    ),
+  }),
+
   'connections.rotation_due': (p) => ({
     subject: sanitizeSubject(`Rotation due: ${p.connectorName || p.connectorKey || 'a credential'}`),
     html: renderBaseLayout({

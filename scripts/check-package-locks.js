@@ -28,13 +28,7 @@ const packagesDir = path.join(repoRoot, 'packages');
 // repo. A ratchet, not an excuse: shrink it, never grow it. A name here
 // that has started passing is itself an error, so the list cannot quietly
 // become a place for the next rot to hide.
-//
-// almyty-cli depends on @almyty/credentials, which is not on the registry
-// until its first publish: npm answers 404 and `npm install
-// --package-lock-only` produces nothing. Publish @almyty/credentials, run
-// that in packages/almyty-cli, and the stale-entry check below fails until
-// this entry is removed.
-const CANNOT_REGENERATE = new Set(['almyty-cli']);
+const CANNOT_REGENERATE = new Set([]);
 
 const problems = [];
 const stale = [];

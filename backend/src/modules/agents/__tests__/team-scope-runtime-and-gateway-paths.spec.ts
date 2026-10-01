@@ -22,6 +22,8 @@ import { MicrosoftTeamsAdapter } from '../../gateways/channels/adapters/microsof
 import { SignalAdapter } from '../../gateways/channels/adapters/signal.adapter';
 import { MatrixAdapter } from '../../gateways/channels/adapters/matrix.adapter';
 import { IrcAdapter } from '../../gateways/channels/adapters/irc.adapter';
+import { IMessageSendblueAdapter } from '../../gateways/channels/adapters/imessage-sendblue.adapter';
+import { IMessageLoopMessageAdapter } from '../../gateways/channels/adapters/imessage-loopmessage.adapter';
 import { McpToolHandler } from '../../mcp/services/mcp-tool.handler';
 import { JsonRpcErrorCode } from '../../mcp/types/mcp.types';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
@@ -424,7 +426,7 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
         runtime,
         new ChatWidgetAdapter(null as any), new SlackAdapter(), new DiscordAdapter(), new TelegramAdapter(),
         new WhatsAppAdapter(), new WhatsAppCloudAdapter(), new SmsAdapter(), new EmailAdapter(), new WebhookAdapter(),
-        new GoogleChatAdapter(), new MicrosoftTeamsAdapter(), new SignalAdapter(), new MatrixAdapter(), new IrcAdapter(),
+        new GoogleChatAdapter(), new MicrosoftTeamsAdapter(), new SignalAdapter(), new MatrixAdapter(), new IrcAdapter(), new IMessageSendblueAdapter(), new IMessageLoopMessageAdapter(),
       );
       const body = { text: 'hello', deliveryId };
       const raw = JSON.stringify(body);

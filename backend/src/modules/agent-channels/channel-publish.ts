@@ -23,6 +23,8 @@ export const GATEWAY_TYPE_FOR_CHANNEL: Record<string, GatewayType | null> = Obje
   [ChannelType.WHATSAPP]: GatewayType.WHATSAPP,
   [ChannelType.WHATSAPP_CLOUD]: GatewayType.WHATSAPP_CLOUD,
   [ChannelType.SMS]: GatewayType.SMS,
+  [ChannelType.IMESSAGE_SENDBLUE]: GatewayType.IMESSAGE_SENDBLUE,
+  [ChannelType.IMESSAGE_LOOPMESSAGE]: GatewayType.IMESSAGE_LOOPMESSAGE,
   [ChannelType.EMAIL]: GatewayType.EMAIL,
   [ChannelType.WEBHOOK]: GatewayType.WEBHOOK,
   [ChannelType.GOOGLE_CHAT]: GatewayType.GOOGLE_CHAT,
@@ -61,6 +63,11 @@ export const REQUIRED_CREDENTIALS: Record<string, readonly string[]> = Object.fr
   [ChannelType.WHATSAPP]: ['twilio_account_sid', 'twilio_auth_token', 'phone_number'],
   [ChannelType.WHATSAPP_CLOUD]: ['access_token', 'phone_number_id', 'app_secret', 'verify_token'],
   [ChannelType.SMS]: ['twilio_account_sid', 'twilio_auth_token', 'phone_number'],
+  // The relays authenticate their webhooks with a shared value in a header,
+  // not a signature, so that value is required: without it every inbound
+  // delivery is refused (fail closed) and the channel could never answer.
+  [ChannelType.IMESSAGE_SENDBLUE]: ['api_key_id', 'api_secret_key', 'phone_number', 'signing_secret'],
+  [ChannelType.IMESSAGE_LOOPMESSAGE]: ['api_key', 'inbound_token'],
   [ChannelType.EMAIL]: ['resend_api_key', 'inbound_address', 'reply_from'],
   [ChannelType.WEBHOOK]: ['callback_url', 'secret'],
   [ChannelType.GOOGLE_CHAT]: ['webhook_url', 'verification_token'],

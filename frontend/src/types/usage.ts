@@ -1,6 +1,7 @@
 import type { Gateway, Tool, LlmProvider, User, Organization, ApiAuthType } from './index';
 import type { RouteAttribution, RoutingPolicy } from './models';
 import type { AgentMemoryConfig, AgentModels } from './agent-models';
+import type { AgentSchedule } from '@/lib/schedule';
 // Usage Metrics Types
 export interface UsageMetric {
   id: string
@@ -273,10 +274,8 @@ export interface Agent {
     maxParallelNodes?: number
     budgetLimit?: number
     enableStreaming?: boolean
-    schedule?: {
-      enabled: boolean
-      intervalMinutes: number
-      input: Record<string, any>
+    /** lib/schedule.ts has the timing kinds and where a result goes. */
+    schedule?: AgentSchedule & {
       /** Set by the backend when it paused the schedule on its own. */
       pausedReason?: AgentModelIssue | AgentPauseReason
     }

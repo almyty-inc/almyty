@@ -254,6 +254,9 @@ export class ListMemoryDto {
   @IsOptional()
   include_deleted?: boolean;
 
+  @ApiPropertyOptional({ description: 'Leave out document chunks, so each document is listed once, whole' })
+  @IsOptional()
+  hide_chunks?: boolean;
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()

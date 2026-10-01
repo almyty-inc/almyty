@@ -14,7 +14,6 @@ import {
   History,
   Clock,
   Webhook,
-  Timer,
   Save,
   RotateCcw,
   ChevronDown,
@@ -26,8 +25,6 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import { CodeEditor } from '@/components/ui/code-editor'
-import { Switch } from '@/components/ui/switch'
 import {
   Table,
   TableBody,
@@ -53,14 +50,15 @@ import { QueryError } from '@/components/ui/query-error'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
-import { formatDateTime, formatRelativeTime, pluralized } from '@/lib/utils'
-import { execStatusVariant, diffObjects, formatDiffValue } from './constants'
+import { formatDateTime, formatRelativeTime } from '@/lib/utils'
+import { execStatusVariant, runStatusVariant, diffObjects, formatDiffValue } from './constants'
 import { IntegrationSnippets } from './integration-snippets'
 import { AgentConfigPanel } from './agent-config-panel'
 import { ExecutionRouting } from './routing-attribution'
+import { DeliveryNote, HeldCallNote, ScheduleCard } from './schedule-card'
 import { modelsApi } from '@/lib/models-api'
 import { invokeAndSettle, runOutcome } from '@/lib/agent-run'
-import type { Agent, AgentExecution, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
+import type { Agent, AgentExecution, AgentRun, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
 
 interface OverviewTabProps {
   agent: Agent
@@ -71,6 +69,8 @@ interface OverviewTabProps {
    * be handed down. Without it the error state can only report, not recover.
    */
   onRetryExecutions?: () => void
+  /** Autonomous runs, listed under Recent runs with the executions. */
+  runs?: AgentRun[]
   versions: AgentVersionSnapshot[]
   entityVersions: Array<{
     id: number
@@ -84,30 +84,47 @@ interface OverviewTabProps {
   auditLog: AgentAuditEntry[]
   webhookUrl: string
   setWebhookUrl: (url: string) => void
-  scheduleEnabled: boolean
-  setScheduleEnabled: (enabled: boolean) => void
-  scheduleInterval: number
-  setScheduleInterval: (interval: number) => void
-  scheduleInput: string
-  setScheduleInput: (input: string) => void
 }
 
+type RecentRunRow =
+  | { kind: 'execution'; id: string; status: string; executionTime: number; totalCost: number; totalTokens: number; createdAt: string; exec: AgentExecution }
+  | { kind: 'run'; id: string; status: string; executionTime: number; totalCost: number; totalTokens: number; createdAt: string; run: AgentRun }
+
+const RECENT_RUNS_MAX = 20
+
+/** An agent's executions and autonomous runs as one list, newest first. */
+export function recentRunRows(executions: AgentExecution[], runs: AgentRun[]): RecentRunRow[] {
+  const rows: RecentRunRow[] = [
+    ...executions.map((exec) => ({
+      kind: 'execution' as const, id: exec.id, status: exec.status, executionTime: exec.executionTime,
+      totalCost: exec.totalCost, totalTokens: exec.totalTokens, createdAt: exec.createdAt, exec,
+    })),
+    ...runs.map((run) => ({
+      kind: 'run' as const, id: run.id, status: run.status, executionTime: run.executionTime,
+      totalCost: run.totalCost, totalTokens: run.totalTokens, createdAt: run.createdAt, run,
+    })),
+  ]
+  return rows
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, RECENT_RUNS_MAX)
+}
+
+/** The models that answered an autonomous run's calls, as its steps recorded them. */
+function runModels(run: AgentRun): string[] {
+  const models = (run.steps ?? []).map((s) => (s.output as any)?.model).filter((m): m is string => typeof m === 'string' && !!m)
+  return [...new Set(models)]
+}
 export function OverviewTab({
   agent,
   executions,
   executionsError,
   onRetryExecutions,
+  runs = [],
   versions,
   entityVersions,
   auditLog,
   webhookUrl,
   setWebhookUrl,
-  scheduleEnabled,
-  setScheduleEnabled,
-  scheduleInterval,
-  setScheduleInterval,
-  scheduleInput,
-  setScheduleInput,
 }: OverviewTabProps) {
   const queryClient = useQueryClient()
   // Card names for the routing column: attribution carries card ids only.
@@ -117,6 +134,9 @@ export function OverviewTab({
     for (const card of catalogCards ?? []) names[card.id] = card.name || card.vendorModelId
     return names
   }, [catalogCards])
+  // Recent runs: a workflow agent's executions and an autonomous agent's
+  // runs are kept apart, but both are this agent's runs. Newest first.
+  const recentRuns = React.useMemo(() => recentRunRows(executions, runs), [executions, runs])
   const { success, error: errorNotif } = useNotifications()
 
   const [testInput, setTestInput] = useState('')
@@ -124,22 +144,14 @@ export function OverviewTab({
   const [testError, setTestError] = useState<string | null>(null)
   const [testLoading, setTestLoading] = useState(false)
   const [webhookSaving, setWebhookSaving] = useState(false)
-  const [scheduleSaving, setScheduleSaving] = useState(false)
   const [rollbackIndex, setRollbackIndex] = useState<number | null>(null)
   const [expandedVersionId, setExpandedVersionId] = useState<number | null>(null)
 
-  // A webhook URL or schedule edited but not saved asks before a navigation
-  // throws it away. Saving refetches the agent, which brings the fields and
-  // the saved values back in line.
-  const savedSchedule = agent.settings?.schedule
+  // A webhook URL edited but not saved asks before a navigation throws it
+  // away. Saving refetches the agent, which brings the field and the saved
+  // value back in line. The schedule is edited on its own page.
   const webhookDirty = !webhookSaving && webhookUrl !== (agent.webhookUrl || '')
-  const scheduleDirty =
-    !scheduleSaving &&
-    scheduleEnabled &&
-    (!savedSchedule?.enabled ||
-      scheduleInterval !== (savedSchedule.intervalMinutes || 60) ||
-      scheduleInput !== JSON.stringify(savedSchedule.input || {}, null, 2))
-  const guard = useLeaveGuard(webhookDirty || scheduleDirty)
+  const guard = useLeaveGuard(webhookDirty)
   // The Recent Runs empty state sends the user to Try It rather than telling
   // them to go find it; the input is the only way to start a run from here.
   const testInputRef = React.useRef<HTMLInputElement>(null)
@@ -284,100 +296,7 @@ export function OverviewTab({
         </Card>
 
         {/* Schedule */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <Timer className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Schedule</CardTitle>
-            </div>
-            <CardDescription className="text-xs">
-              Run this agent automatically at a fixed interval
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="schedule-toggle">Enable schedule</Label>
-                <Switch
-                  id="schedule-toggle"
-                  checked={scheduleEnabled}
-                  onCheckedChange={async (checked: boolean) => {
-                    setScheduleEnabled(checked)
-                    if (!checked) {
-                      setScheduleSaving(true)
-                      try {
-                        await agentsApi.unschedule(agent.id)
-                        queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
-                        success('Unscheduled', 'Agent schedule removed.')
-                      } catch (err: any) {
-                        errorNotif('Failed', getApiErrorMessage(err, 'Failed to unschedule'))
-                        setScheduleEnabled(true)
-                      } finally {
-                        setScheduleSaving(false)
-                      }
-                    }
-                  }}
-                />
-              </div>
-              {scheduleEnabled && (
-                <>
-                  <div>
-                    <Label htmlFor="schedule-interval">Interval (minutes)</Label>
-                    <Input
-                      id="schedule-interval"
-                      type="number"
-                      min={1}
-                      value={scheduleInterval}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScheduleInterval(parseInt(e.target.value) || 1)}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="schedule-input">Input JSON</Label>
-                    <CodeEditor
-                      value={scheduleInput}
-                      onChange={(value) => setScheduleInput(value)}
-                      language="json"
-                      height="80px"
-                    />
-                  </div>
-                  <Button
-                    size="sm"
-                    disabled={scheduleSaving}
-                    onClick={async () => {
-                      setScheduleSaving(true)
-                      try {
-                        let parsedInput: any = {}
-                        try {
-                          parsedInput = JSON.parse(scheduleInput)
-                        } catch {
-                          errorNotif('Invalid JSON', 'Schedule input must be valid JSON')
-                          setScheduleSaving(false)
-                          return
-                        }
-                        await agentsApi.schedule(agent.id, scheduleInterval, parsedInput)
-                        queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
-                        success('Scheduled', `Agent will run every ${pluralized(Number(scheduleInterval), 'minute')}.`)
-                      } catch (err: any) {
-                        errorNotif('Failed', getApiErrorMessage(err, 'Failed to schedule'))
-                      } finally {
-                        setScheduleSaving(false)
-                      }
-                    }}
-                  >
-                    {scheduleSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                    Save schedule
-                  </Button>
-                  {agent.settings?.schedule?.enabled && (
-                    <p className="text-xs text-muted-foreground">
-                      Next run in ~{pluralized(agent.settings.schedule.intervalMinutes, 'minute')} from last execution
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <ScheduleCard agent={agent} />
       </div>
 
       {/* Recent Runs */}
@@ -390,7 +309,7 @@ export function OverviewTab({
             // The shared error state, so a failed read looks like a failed
             // read everywhere and carries a retry instead of a dead sentence.
             <QueryError error={executionsError} onRetry={onRetryExecutions} title="Couldn't load recent runs" />
-          ) : executions.length === 0 ? (
+          ) : recentRuns.length === 0 ? (
             <EmptyState
               icon={Play}
               title="No runs yet"
@@ -421,29 +340,35 @@ export function OverviewTab({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {executions.map((exec) => (
-                    <TableRow key={exec.id}>
+                  {recentRuns.map((row) => (
+                    <TableRow key={`${row.kind}-${row.id}`}>
                       <TableCell>
-                        <Badge variant={execStatusVariant[exec.status] || 'secondary'}>
-                          {exec.status === 'completed' && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                          {exec.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
-                          {exec.status}
+                        <Badge variant={(row.kind === 'run' ? runStatusVariant[row.status] : execStatusVariant[row.status]) || 'secondary'}>
+                          {row.status === 'completed' && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                          {row.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
+                          {row.status.replace('_', ' ')}
                         </Badge>
+                        <DeliveryNote outcome={(row.kind === 'run' ? row.run.metadata : row.exec.metadata)?.channelDelivery} />
+                        {row.kind === 'execution' && <HeldCallNote execution={row.exec} />}
                       </TableCell>
                       <TableCell className="max-w-[320px]">
-                        <ExecutionRouting nodeResults={exec.nodeResults} cardNames={cardNames} />
+                        {row.kind === 'execution' ? (
+                          <ExecutionRouting nodeResults={row.exec.nodeResults} cardNames={cardNames} />
+                        ) : (
+                          <span className="text-sm">{runModels(row.run).join(', ') || '--'}</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {exec.executionTime ? `${(exec.executionTime / 1000).toFixed(2)}s` : '--'}
+                        {row.executionTime ? `${(row.executionTime / 1000).toFixed(2)}s` : '--'}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {exec.totalCost > 0 ? `$${exec.totalCost.toFixed(4)}` : '--'}
+                        {row.totalCost > 0 ? `$${row.totalCost.toFixed(4)}` : '--'}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {exec.totalTokens > 0 ? exec.totalTokens.toLocaleString() : '--'}
+                        {row.totalTokens > 0 ? row.totalTokens.toLocaleString() : '--'}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {formatDateTime(exec.createdAt)}
+                        {formatDateTime(row.createdAt)}
                       </TableCell>
                     </TableRow>
                   ))}

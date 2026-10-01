@@ -155,6 +155,38 @@ export class CliGeneratorService {
     ];
   }
 
+  /**
+   * Bash helper that prints a response, pretty-printed when python3 can
+   * parse it. PYTHON_COLORS/NO_COLOR keep Python 3.14+ from writing ANSI
+   * colour codes into the output when FORCE_COLOR is set in the caller's
+   * environment, which would break `cli | jq`. The response is buffered so
+   * the raw fallback never reads the terminal's stdin.
+   */
+  private bashPrintJsonFunction(): string[] {
+    return [
+      'print_json() {',
+      '  if command -v python3 >/dev/null 2>&1 \\',
+      '    && printf \'%s\\n\' "$1" | PYTHON_COLORS=0 NO_COLOR=1 python3 -m json.tool 2>/dev/null; then',
+      '    return 0',
+      '  fi',
+      '  printf \'%s\\n\' "$1"',
+      '}',
+    ];
+  }
+
+  /** The request tail both bash generators end with; `url` is a quoted bash word. */
+  private bashRequestLines(url: string): string[] {
+    return [
+      'RESPONSE="$(curl -s -X POST \\',
+      `  ${url} \\`,
+      '  -H "Content-Type: application/json" \\',
+      '  -H "Authorization: Bearer ${TOKEN}" \\',
+      '  -d "$JSON_BODY")"',
+      'print_json "$RESPONSE"',
+      '',
+    ];
+  }
+
   private renderBashScript(tool: Tool): string {
     const params = this.cliParams(tool);
 
@@ -172,7 +204,7 @@ export class CliGeneratorService {
     lines.push('BASE_URL="${ALMYTY_BASE_URL:-http://localhost:4000}"');
     lines.push('TOKEN="${ALMYTY_TOKEN:-}"');
     lines.push('');
-    lines.push(...this.bashJsonStringFunction());
+    lines.push(...this.bashJsonStringFunction(), ...this.bashPrintJsonFunction());
     lines.push('');
 
     // Usage function
@@ -232,11 +264,7 @@ export class CliGeneratorService {
 
     // Execute via almyty UTCP endpoint
     lines.push('# Execute tool via almyty');
-    lines.push(`curl -s -X POST \\`);
-    lines.push(`  "\${BASE_URL}/utcp/tools/${this.slugify(tool.name)}/execute" \\`);
-    lines.push('  -H "Content-Type: application/json" \\');
-    lines.push('  -H "Authorization: Bearer ${TOKEN}" \\');
-    lines.push('  -d "$JSON_BODY" | python3 -m json.tool 2>/dev/null || cat');
+    lines.push(...this.bashRequestLines(`"\${BASE_URL}/utcp/tools/${this.slugify(tool.name)}/execute"`));
     lines.push('');
 
     return lines.join('\n');
@@ -254,7 +282,7 @@ export class CliGeneratorService {
     lines.push('BASE_URL="${ALMYTY_BASE_URL:-http://localhost:4000}"');
     lines.push('TOKEN="${ALMYTY_TOKEN:-}"');
     lines.push('');
-    lines.push(...this.bashJsonStringFunction());
+    lines.push(...this.bashJsonStringFunction(), ...this.bashPrintJsonFunction());
     lines.push('');
 
     // List available commands
@@ -289,11 +317,7 @@ export class CliGeneratorService {
     lines.push('');
 
     // Execute
-    lines.push('curl -s -X POST \\');
-    lines.push('  "${BASE_URL}/utcp/tools/${COMMAND}/execute" \\');
-    lines.push('  -H "Content-Type: application/json" \\');
-    lines.push('  -H "Authorization: Bearer ${TOKEN}" \\');
-    lines.push('  -d "$JSON_BODY" | python3 -m json.tool 2>/dev/null || cat');
+    lines.push(...this.bashRequestLines('"${BASE_URL}/utcp/tools/${COMMAND}/execute"'));
     lines.push('');
 
     return lines.join('\n');

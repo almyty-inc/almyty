@@ -1,26 +1,26 @@
-# Role-based access for a multi-team org
+# Keep each team's assistants to that team
 
-**Stack**: `Org: teams + members` · `Roles: per-resource permissions` · `Isolation: agents, tools, gateways, credentials` · `Output: least-privilege by default`
+For an organization where support, finance and IT all use almyty but shouldn't all touch the same things. Each team gets its own assistants, APIs, gateways and keys, and the people in other teams can't use them. A support agent can't reach the finance team's refund tools, and nobody has more access than they need.
 
-**Who it's for**: an org where support, finance, and platform teams share almyty but shouldn't share everything.
-**What it does**: gives each team its own agents, tools, gateways, and credentials, with role-based access controlling who can view, edit, run, or approve, so a support engineer can't touch the finance agent's refund tools, and no one has more than they need.
+## What you need
 
-## Build it
+- Owner or admin access to your organization.
+- The Business plan, only if you want custom roles beyond the built-in ones (step 5).
 
-1. **Create teams** for your org units, Support, Finance, Platform, under one organization.
-2. **Assign roles** per resource: viewer, editor, operator, admin. A role governs whether someone can see a resource, change it, run it, or approve its actions.
-3. **Scope resources to teams**: the support agent, its tools, and its gateway belong to Support; finance's refund tools stay in Finance.
-4. **Keep credentials isolated**: each team's [vault](/credentials) entries are theirs; a shared key never leaks across team lines.
-5. **Combine with approval policies** so a sensitive action requires an approver from the owning team, not just anyone.
+## How to build it
 
-## Make it yours
+1. **Create the teams.** Open **Settings**, then **Members and teams**. Under **Create team**, add one per group: Support, Finance, IT.
+2. **Put people in them.** Add members to each team as **Member** or **Lead**. A team's lead can approve the requests of that team's assistants.
+3. **Set organization roles.** Everyone also has an organization role: **Owner**, **Admin**, **Member** or **Viewer**. Keep Owner and Admin for the few people who run almyty for everyone.
+4. **Give each thing an owner.** When you create an assistant, an API, a gateway, a runner or a key, choose **Who can use it**: **Only you**, **One team** (pick the team) or **Everyone**. Finance's refund tools and keys stay **Team: Finance**.
+5. **Go finer if you need to.** With the Business plan, **Settings**, **Roles** adds custom roles (for example "can run agents but not edit them") and access rules that allow or deny specific actions.
 
-- Give consultants a scoped, time-boxed role on one team's resources.
-- Pair with [SSO/SCIM](/examples/sso-scim-onboarding) so roles map to directory groups and deprovision automatically.
-- Every access decision is in the [audit trail](/examples/audit-to-siem).
+## Ideas
 
-**Uses**: `Enterprise` · `RBAC` · `Multi-tenant`
+- Approval rules per team, so a finance request needs a finance approver: see [Approval rules](/examples/approval-policies).
+- With [single sign-on](/examples/sso-scim-onboarding), teams follow the groups in your company directory.
+- Every access change is in the [audit trail](/examples/audit-to-siem).
 
 ## Related
 
-- [Advanced RBAC](/enterprise/advanced-rbac) · [Organizations](/organizations) · [Credentials](/credentials) · [Approval policies](/examples/approval-policies)
+- [Advanced RBAC](/enterprise/advanced-rbac) · [Organizations](/organizations) · [Credentials](/credentials) · [Approval rules](/examples/approval-policies)

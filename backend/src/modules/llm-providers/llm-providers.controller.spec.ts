@@ -248,6 +248,8 @@ describe('LlmProvidersController', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResult);
+      // Check again may turn a connection that is off back on, as the caller.
+      expect(llmProvidersService.performHealthCheck).toHaveBeenCalledWith('provider-1', 'org-1', { reactivateFor: 'user-1' });
     });
   });
 

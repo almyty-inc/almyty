@@ -121,4 +121,24 @@ describe('Add channel', () => {
     expect(screen.queryByTestId('desktop-needs-web-chat')).toBeNull()
     expect(agentChannelsApi.add).not.toHaveBeenCalled()
   })
+
+  // iMessage has no public API, so it is reached through a relay. Both
+  // relays are offered, as two tiles that read "iMessage" with the relay
+  // underneath, and the one picked is the channel's type.
+  it.each([
+    ['imessage_sendblue', 'Via Sendblue'],
+    ['imessage_loopmessage', 'Via LoopMessage'],
+  ] as const)('offers iMessage %s and adds that relay when picked', async (type, hint) => {
+    vi.mocked(agentChannelsApi.add).mockReset()
+    vi.mocked(agentChannelsApi.list).mockResolvedValue([])
+    vi.mocked(agentChannelsApi.add).mockResolvedValue({ id: 'c-imsg', type, name: 'iMessage' } as any)
+    const router = open()
+    const tile = await screen.findByTestId(`channel-${type}`)
+    expect(tile).toHaveTextContent('iMessage')
+    expect(tile).toHaveTextContent(hint)
+
+    fireEvent.click(tile)
+    await waitFor(() => expect(agentChannelsApi.add).toHaveBeenCalledWith('agent-1', { type }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/agents/agent-1/channels/c-imsg'))
+  })
 })

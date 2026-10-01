@@ -1,127 +1,142 @@
 # Hosted chat app
 
-Publish an agent as a branded, full-page chat at `https://<slug>.almyty.app`. There is no widget to embed and no separate frontend to deploy.
+Give your assistant a chat page of its own, with your name and colours, at an address like `https://northwind-help.almyty.app`. Share the link in an email, a QR code or a campaign page, and anyone who opens it can chat with the assistant. There is nothing to install and no website to build.
 
-![A branded hosted chat app on its own address](/screenshots/apps-hosted-chat.png)
+![A branded hosted chat app on its own address](/screenshots/hosted-chat.png)
 
-The page carries the name, colour, greeting and AI disclosure set on the agent. Visitors get streaming replies and conversation history without seeing the almyty dashboard.
+The page shows the name, colour, greeting and AI disclosure you set on the assistant. Visitors see answers appear as they are written and can come back to earlier conversations, without ever seeing the almyty dashboard.
 
 ## Publish a web chat
 
-The hosted chat is the **Web chat** channel of an agent, set up on the agent's **Channels** tab and nowhere else.
+The hosted chat is the **Web chat** channel of an assistant, set up on the assistant's **Channels** tab.
 
-1. Open an autonomous agent, shared with the organization, and go to **Channels**.
-2. Open **Branding and visitor rules** and set the look visitors see once: name, colour, theme, greeting, suggested prompts and AI disclosure. Limits and visitor-data choices wait under **Advanced**, with their current values in one line.
-3. Select **Add channel**, then choose **Web chat**.
-4. Select **Publish**. The link appears straight away: the address is made from the agent's name.
+1. Open an autonomous assistant that is shared with your organization, and go to **Channels**.
+2. Open **Branding and visitor rules** and set what visitors see: name, colour, theme, greeting, suggested prompts and AI disclosure. Limits and visitor-data choices wait under **Advanced**, with their current values in one line.
+3. Click **Add channel**, then choose **Web chat**.
+4. Click **Publish**. The link appears straight away.
 
-The channel changes to **Live** when the hosted chat is answering. Open `https://<slug>.almyty.app` to test it as a visitor.
+The channel shows **Live** when the chat is answering. Open the link to try it as a visitor would.
 
-![The web chat channel after publishing](/screenshots/apps-web-published.png)
+![The web chat channel after publishing](/screenshots/channel-web-published.png)
 
-The address is made from the agent's name, and you can change it under **Address** on the web chat's page. It is a web address every organization shares, so it has to be free across almyty; the page says so when another web chat has it. It must be 3 to 63 characters, using lowercase letters, numbers, and hyphens without a hyphen at either end. Reserved service names cannot be used.
+The address is made from the assistant's name; change it under **Address** on the web chat's page. Every web chat on almyty shares one address space, so yours has to be free; the page tells you when another web chat already has it. It must be 3 to 63 characters of lowercase letters, numbers and hyphens, with no hyphen at either end, and a few service names are reserved.
 
-### On the web chat page
+### More on the web chat page
 
-Everything else about the web chat is on the same page, saved with its one **Save**:
+Everything else is on the same page, saved with one **Save**:
 
-- **Sign-in provider**, when people sign in with a provider: Google, Microsoft and GitHub first; **Other** asks for a discovery URL, and hand-entered endpoints, keys and scopes wait under **Advanced**.
-- **Custom domain**: enter a hostname you own and save, publish the two DNS records shown, then select **Check DNS**.
-- **Allowed sites**: the websites whose pages may call the chat from the browser.
+- **Sign-in provider**, when visitors must sign in with an account they already have: Google, Microsoft and GitHub first; **Other** asks for the provider's details.
+- **Custom domain**: use an address of your own, such as `help.northwind.com`. Enter it and save, add the two DNS records shown (your IT team or domain provider knows where), then click **Check DNS**.
+- **Allowed sites**: the websites whose pages may show the chat.
 
-Who can use it (anyone with the link, email verification, sign in with a provider, your SSO) is set with the rest of the agent's visitor rules, and the web chat can set its own under **Branding and visitor rules** on its page.
-
-A published web chat is served by a gateway, and that gateway's page says which agent's channel it is, with a link back here, rather than carrying a second set of these settings. The hosted chat reads its look from the agent and the channel on every request, so a change shows without publishing again.
+Who can use the chat (anyone with the link, email verification, sign-in with a provider, or your company's SSO) is set with the rest of the assistant's visitor rules, and the web chat can have its own under **Branding and visitor rules** on its page. Changes to the look show right away, without publishing again.
 
 ## What a visitor gets
 
-A visitor can start a chat, receive a streaming reply, and reopen earlier conversations. Public-link visitors do not need an almyty account. An anonymous visitor still has a separate record, keyed by a cookie scoped to that chat's host, so one visitor cannot read another visitor's conversations.
+A visitor can start a chat, watch the answer appear, and reopen earlier conversations. Visitors on a public link need no almyty account. Each visitor is still kept apart, so nobody can read someone else's conversations.
 
-Unpublishing turns the chat off without deleting its address or settings. Publishing it again restores the same channel.
+**Unpublish** turns the chat off without losing its address or settings. Publishing again brings it back as it was.
 
-### Give the answering agent its product context
+### Teach the assistant about your product
 
-The name and greeting are presentation settings; they do not teach the agent about your product. Configure the agent's instructions with its product scope, relevant policies, and how to handle missing information. Attach the tools or knowledge it needs before promising account-specific help.
+The name and greeting only change how the chat looks; they do not teach the assistant anything. Write the assistant's instructions with what it should help with, your policies, and what to do when it doesn't know. Give it the tools or knowledge it needs before it promises account-specific help.
 
-Test ordinary visitor questions as well as connectivity: “What product do you support?”, a typical support request, and a request at the edge of the intended scope. A generic support-demo instruction can produce vague answers or unnecessary refusals even when chat delivery works correctly.
+Then test it like a visitor would, not just whether it answers: "What do you help with?", a typical request, and a question at the edge of what it should do. Vague instructions give vague answers or needless refusals, even when the chat itself works perfectly.
 
-## What almyty stores about a visitor
+## What almyty keeps about a visitor
 
-A visitor on `{slug}.almyty.app` (or your own domain) is your user, not almyty's. So is someone who talks to the agent through the widget on your website, one of its messaging channels, or its A2A endpoint. This is exactly what the platform keeps, where it goes, who can read it, and for how long. It applies to every channel an agent answers on.
+Someone who chats on your web chat (or your own domain), the widget on your website, a messaging app or your A2A channel is your user, not almyty's. This is exactly what is kept, where it goes, who can read it and for how long. It applies to every channel an assistant answers on.
 
-**What is stored**
+**What is kept**
 
 - **Who the visitor is**, as each channel knows them:
-  - Web chat: a visitor record with a random session key in a cookie scoped to that host, a truncated hash of the client IP (used only for rate limits; the address itself is not stored), and the time last seen. If the channel requires sign-in, the record also holds the identity the sign-in returned: the provider, its subject id, the email and display name.
-  - Website widget: a random conversation id, kept in the visitor's browser storage on your site. No cookie of ours and no record of the visitor beyond their conversation.
-  - Messaging channel: the platform's own id for the sender (a Slack user id, a phone number, an email address), on each run.
-  - A2A: nothing about a person. The caller is the credential it used (an API key or OAuth client), which counts only for rate limits.
-- **Conversations and messages**: every visitor turn and every assistant reply in full, with the model used, token counts and cost, and any tool calls the agent made with their arguments and results. Each conversation is filed under the channel it came from.
-- **Runs**: the agent run behind each reply, with its input, steps, output and error, and the channel it answered for (that is what the spend limits count).
-- **Widget replies**: the widget picks up its replies from a stored copy of each one, kept with the conversation id.
-- **Nothing enters the agent's shared memory by default**, from any channel. Visitor runs are not summarised into shared memory unless the agent's owner switches on **Include visitor conversations in memory**. When it is on, summaries may influence answers to other visitors.
-- **Transient**: rate-limit counters (one hour at most) and the live event stream of a reply (minutes) in Redis.
+  - Web chat: a visitor record with a random code kept in a cookie for that chat's address, a shortened scrambled form of their internet address (used only for message limits; the address itself is not kept), and when they were last seen. If visitors must sign in, the record also holds what the sign-in returned: the provider, the account id, the email and the display name.
+  - Website widget: a random conversation code kept in the visitor's browser on your site. No cookie of almyty's, and nothing about the visitor beyond the conversation.
+  - Messaging app: the app's own id for the sender (a Slack user id, a phone number, an email address), on each run.
+  - A2A: nothing about a person. The caller is the key it used, which counts only for message limits.
+- **Conversations**: every visitor message and every reply in full, with the AI model used, what it cost, and any tools the assistant used with what went in and came out. Each conversation is filed under the channel it came from.
+- **Runs**: the work behind each reply, with what went in, the steps, what came out and any error, and the channel it answered on (that is what the spend limits count).
+- **Widget replies**: the widget picks up its replies from a stored copy of each, kept with the conversation.
+- **Nothing goes into the assistant's shared memory by default**, from any channel. Visitor conversations are only summarized into shared memory if the owner switches on **Include visitor conversations in memory**. When that is on, what one visitor said may influence answers to others.
+- **Short-lived**: message-limit counters (an hour at most) and the live stream of a reply (minutes).
 
 **Where it goes**
 
-- To the model provider you configured, under your API key, as the prompt. What that provider retains is governed by your agreement with them.
-- To any tool the agent calls, as arguments.
-- Nowhere else. Tenant chat hosts and the widget load none of almyty's product analytics or error reporting; those run only on the dashboard.
+- To the AI provider you connected, under your own account, as the question. What that provider keeps is governed by your agreement with them.
+- To any tool the assistant uses, as the details it passes.
+- Nowhere else. Chat pages and the widget load none of almyty's own analytics or error reporting; those run only on the dashboard.
 
 **Who can read it**
 
-- Members of your organization whose role can open the agent: the runs tab shows each run with its input and output.
-- Whoever operates the almyty deployment has database access to everything above. On almyty's hosted service that is almyty; on a self-hosted installation it is you.
-- No one else. Another visitor cannot see it, and an unpublished channel keeps its data but stops serving it.
+- Members of your organization whose role lets them open the assistant: its **Runs** tab shows each run with what went in and came out.
+- Whoever operates the almyty installation can reach everything above. On almyty's hosted service that is almyty; on your own installation it is you.
+- No one else. Another visitor cannot see it, and an unpublished channel keeps its data but stops showing it.
 
 **How long**
 
-- Until you delete it, or until a retention period sweeps it. Settings, Organization, Data Retention sets independent periods for conversations and runs for the whole organization; the hourly sweep deletes records past the period and records what it removed in the audit log. With no policy set, records are kept indefinitely.
-- An agent can shorten that for its own visitors (see below), and a channel can set its own. The agent's period covers conversations from every channel that does not.
-- Individual conversations and runs can be deleted per record from the dashboard.
+- Until you delete it, or until a retention period removes it. Retention is how long records are kept before they are deleted automatically. On **Settings**, under **Organization**, the **Data retention** card sets separate periods for conversations and runs for the whole organization; the hourly clean-up deletes records past the period and notes what it removed in the audit log. With no period set, records are kept until you delete them.
+- An assistant can shorten that for its own visitors (see below), and a channel can set its own.
+- Single conversations and runs can be deleted from the dashboard.
 
-**What you control, per agent**
+**What you control, per assistant**
 
-Every agent carries these settings under **Branding and visitor rules** on its Channels tab, under **Advanced**, with defaults that need no attention. A channel can set its own:
+These settings are under **Branding and visitor rules** on the Channels tab, under **Advanced**. The defaults need no attention, and a channel can set its own:
 
-- **Let visitors delete their data** (on by default). In the web chat the menu offers *Delete this conversation* and *Delete everything about me*; deleting everything removes the visitor record, every conversation and the runs behind them, then reloads the page with a new private visitor identity. The widget on your website offers *Delete my chat*, pressed twice, which removes that conversation, its runs and its stored replies.
-- **Let visitors download their data** (on by default). The web chat's *Download my data* is a JSON file with the visitor record and every conversation; the widget offers *Download my chat*, the conversation as JSON.
-- **Include visitor conversations in memory** (off by default): only switch it on for an agent whose memory is meant to learn from the public.
-- **Delete visitor data after** a number of days (empty by default, meaning the organization policy applies). A value only ever shortens the organization policy; the hourly sweep removes older conversations, their messages and runs.
+- **Let visitors delete their data** (on by default). In the web chat the menu offers *Delete this conversation* and *Delete everything about me*; deleting everything removes the visitor record, every conversation and the work behind them, then starts the visitor afresh. The widget offers *Delete my chat*, pressed twice, which removes that conversation and everything stored with it.
+- **Let visitors download their data** (on by default). The web chat offers *Download my data*, a file with the visitor record and every conversation; the widget offers *Download my chat*.
+- **Include visitor conversations in memory** (off by default). Only switch it on for an assistant whose memory is meant to learn from the public.
+- **Delete visitor data after** a number of days (empty by default, so the organization's period applies). A value can only shorten the organization's period.
 
-![The hosted chat privacy menu with export and deletion controls](/screenshots/apps-hosted-chat-privacy.png)
+![The hosted chat privacy menu with export and deletion controls](/screenshots/hosted-chat-privacy.png)
 
-Switching a right off returns a plain refusal to the visitor with a stable code (`VISITOR_RIGHT_DISABLED`), and the widget stops offering the button; nothing is deleted or exported behind their back. Messaging channels and A2A have no self-service: someone who asks you through one of those to delete or export what they said is handled from the dashboard.
-
+When you switch one of these off, a visitor who asks gets a plain refusal and the widget stops offering the button; nothing is deleted or downloaded behind their back. Messaging apps and A2A have no self-service buttons: if someone asks you through one of those to delete or export what they said, handle it from the dashboard.
 
 ## Protect model spend
 
-Every channel an agent answers on (web chat, website widget, each messaging channel, A2A) applies these limits, read from the agent and the channel on every message:
+Every channel an assistant answers on applies these limits on every message:
 
-- **Spend limit per run**: a run that would cost more is stopped rather than billed. Starts at 0.50.
-- **Messages per visitor, per hour**, counted for each visitor on their own: the web chat visitor, each widget conversation, each messaging-channel sender, each A2A credential. Starts at 60. A burst limit of a fifth of that per minute (at least 3) stops an hour's share going in seconds.
-- **Messages per IP address, per hour**, for the channels that see the visitor's address (web chat, widget, A2A). Starts at 120. A messaging channel's webhooks come from the platform, not the visitor, so channels are limited per sender only.
-- **Spend limit per day** and **per month** for the whole agent: every channel and every visitor together. A channel that sets its own daily or monthly limit spends from an allowance of its own instead. An agent open to anyone starts at 5 a day and 50 a month; one only your directory can reach (SSO) starts with none. Days and months start at midnight UTC.
+- **Spend limit per run**: an answer that would cost more is stopped rather than paid for. Starts at 0.50.
+- **Messages per visitor, per hour**, counted separately for each visitor: each web chat visitor, each widget conversation, each messaging-app sender, each A2A key. Starts at 60. A burst limit of a fifth of that per minute (at least 3) stops someone using the whole hour's share in seconds.
+- **Messages per IP address, per hour** (an IP address is a device's internet address), for the channels that can see it: web chat, widget and A2A. Starts at 120. Messaging apps are limited per sender only, because their messages arrive from the app, not the visitor.
+- **Spend limit per day** and **per month** for the whole assistant: every channel and every visitor together. A channel with its own daily or monthly limit has an allowance of its own instead. An assistant open to anyone starts at 5 a day and 50 a month; one only your company's sign-in (SSO) can reach starts with none. Days and months start at midnight UTC.
 
-These are rate and cost limits for each visitor and for the agent, never one shared bucket built from a per-visitor number.
+Limits are per visitor and per assistant; one visitor's allowance is never shared with everyone.
 
-When the agent reaches its daily or monthly spend limit, no channel sharing it answers a new message until the limit resets or you raise it. Visitors are told, in plain words, **This chat has reached its limit for today** (or *for this month*): the web chat and the widget show it in place of a reply, a messaging channel sends it as the answer, and an A2A caller gets it with the code `CHANNEL_SPEND_CAP_REACHED`. The agent's Channels tab says the same thing with what it spent, and owners and admins get a notification once per period.
+When the assistant reaches its daily or monthly spend limit, no channel sharing it answers a new message until the limit resets or you raise it. Visitors are told plainly: **This chat has reached its limit for today** (or *for this month*). The Channels tab says the same with what was spent, and owners and admins get one notification per period.
 
-The spend limit counts the cost its channels' runs have recorded. A conversation already under way when the limit is reached finishes under its own per-run limit, so the agent can go over by at most one run's limit per conversation running at that moment. A conversation that stays open across midnight counts in full on each day it is active.
+The limit counts what runs have already cost. A conversation already under way when the limit is reached finishes under its own per-run limit, so spending can go over by at most one run's limit per conversation running at that moment. A conversation open across midnight counts in full on each day it is active.
 
-A channel open to anyone (anyone with the link, email verification, or OAuth) cannot be published until the per-run limit and both rate limits are set. The channel's page names each missing setting before it can go live, so a public URL cannot spend against your model keys without a ceiling.
+A channel open to anyone (anyone with the link, email verification or sign-in with a provider) cannot be published until the per-run limit and both message limits are set. The page names each missing setting, so a public link can never spend against your AI provider account without a ceiling.
 
-Email verification and OAuth still let anyone with an inbox or an account in, so they keep every limit above. Only SSO, where your own directory vouches for everyone, is gated; it requires a commercial entitlement.
+Email verification and sign-in with a provider still let in anyone with an inbox or an account, so they keep every limit. Only SSO, where your own company directory vouches for everyone, is treated as closed; it needs the Business or Enterprise plan.
 
 ## AI disclosure
 
-Every hosted chat shows an AI disclosure under the composer by default. You can change the wording under **Branding and visitor rules**. Removing it requires the white-label entitlement, and the removal is recorded.
+Every hosted chat shows an AI disclosure under the message box by default. Change the wording under **Branding and visitor rules**. Each channel's page has an **AI disclosure** switch, on by default; turning it off (or blanking the wording) needs the white-label option (Enterprise plan), and publishing refuses it otherwise.
 
-See [Compliance](/compliance) for the full EU AI Act mapping.
+See [Compliance](/compliance) for how this maps to the EU AI Act.
 
-## Addresses in each environment
+## What needs a paid plan
 
-Hosted chats and the dashboard use separate domains:
+- Removing the almyty mark (white-label, Enterprise plan).
+- Using SSO as who can use a channel (Business and Enterprise plans).
+
+Public links, email verification and sign-in with a provider are included in every edition.
+
+## Related
+
+- [Channels](/channels): put an assistant where people are
+- [Publishing a channel](/channels/messaging): the web chat, Slack and other channels
+- [Chat interfaces](/interfaces): the website widget and messaging apps
+- [Run limits](/run-limits): stop runs at clear ceilings
+
+## For developers
+
+**Visitor identity.** The web chat's visitor record is keyed by a random session key in a cookie scoped to that chat's host; the IP is stored only as a truncated hash. The widget keeps a random conversation id in the browser storage of your site. Rate-limit counters and the live event stream of a reply are held in Redis. The web chat download is a JSON file; the widget's is the conversation as JSON. A switched-off visitor right returns the stable code `VISITOR_RIGHT_DISABLED`; an A2A caller over the spend limit gets `CHANNEL_SPEND_CAP_REACHED`.
+
+**Sign-in provider.** **Other** asks for a discovery URL; hand-entered endpoints, keys and scopes wait under **Advanced**.
+
+**Addresses in each environment.** Hosted chats and the dashboard use separate domains, so the visitor cookie stays scoped to the chat:
 
 | Environment | Dashboard | Hosted chat |
 |---|---|---|
@@ -129,37 +144,17 @@ Hosted chats and the dashboard use separate domains:
 | Staging | `app.staging.almyty.com` | `<slug>.staging.almyty.app` |
 | Development | your development dashboard | `<slug>.dev.almyty.app` |
 
-Keeping the chat on its own host lets the visitor cookie stay scoped to that chat instead of the dashboard or API.
+A published web chat is served by a gateway; that gateway's page says which assistant's channel it is and links back. The chat reads its look from the assistant and the channel on every request.
 
-## Self-hosting
+### Self-hosting
 
 Hosted chat is part of the Apache-licensed core. To serve hosted chats on a domain you control:
 
 1. Point a wildcard DNS record at your deployment, for example `*.chat.acme.com`.
-2. Set `HOSTED_CHAT_BASE_DOMAIN=chat.acme.com` on both the API and frontend containers. The frontend reads it at runtime, so the same image can be used in every environment.
+2. Set `HOSTED_CHAT_BASE_DOMAIN=chat.acme.com` on both the API and frontend containers. The frontend reads it at runtime, so the same image works in every environment.
 3. Route `/api` on every tenant host to the API and strip the `/api` prefix. Route every other path to the frontend. Keeping these calls same-origin is what keeps the anonymous visitor cookie on the tenant host.
 4. Issue a wildcard certificate for the domain and attach it to the tenant-host ingress.
 
 A web chat with the slug `support` is then available at `https://support.chat.acme.com`.
 
-### Wildcard certificates need DNS-01
-
-Let's Encrypt does not issue wildcard certificates through an HTTP-01 challenge. Use DNS-01, which means your certificate controller needs permission to create TXT records in the zone. If your issuer has no solver for that DNS provider, move the zone or delegate `_acme-challenge` to one it can update.
-
-A certificate per tenant also works, but Let's Encrypt limits issuance to 50 certificates per registered domain each week.
-
-## What is commercial
-
-Two options require a commercial entitlement:
-
-- removing the almyty mark with white-label mode; and
-- using SSO as who can use a channel.
-
-Public links, email verification, and OAuth remain in the core edition.
-
-## Related
-
-- [Channels](/channels): put an agent where people are
-- [Publishing a channel](/channels/messaging): the web, Slack, and other channels
-- [Chat interfaces](/interfaces): embed a widget or connect a messaging platform
-- [Run limits](/run-limits): stop runs at explicit ceilings
+Let's Encrypt does not issue wildcard certificates through an HTTP-01 challenge. Use DNS-01, which means your certificate controller needs permission to create TXT records in the zone. If your issuer has no solver for that DNS provider, move the zone or delegate `_acme-challenge` to one it can update. A certificate per tenant also works, but Let's Encrypt limits issuance to 50 certificates per registered domain each week.

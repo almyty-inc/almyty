@@ -160,10 +160,13 @@ describe('EmailAdapter', () => {
       const r = adapter.normalizeInbound(mime);
       // The text body still wins even with a trailing attachment part.
       expect(r.text).toBe('nested plain body');
-      // Attachment metadata surfaces on the normalized message.
+      // The attachment surfaces on the normalized message with its bytes:
+      // an email carries its files, nothing is fetched.
       expect(r.attachments).toEqual([
-        { url: '', type: 'application/pdf', name: 'doc.pdf' },
+        { type: 'application/pdf', name: 'doc.pdf', size: 8, data: Buffer.from('%PDF-1.4') },
       ]);
+      // The bytes do not ride in metadata, which travels with the reply.
+      expect(r.metadata?.attachments[0].content).toBeUndefined();
       // Richer per-part detail (size, disposition) rides in metadata.
       expect(r.metadata?.attachments).toHaveLength(1);
       const att = r.metadata?.attachments[0];
@@ -208,7 +211,7 @@ describe('EmailAdapter', () => {
       ].join('\r\n');
       const r = adapter.normalizeInbound(mime);
       expect(r.attachments).toEqual([
-        { url: '', type: 'image/png', name: 'logo.png' },
+        { type: 'image/png', name: 'logo.png', size: 8, data: Buffer.from('iVBORw0KGgo=', 'base64') },
       ]);
       const att = r.metadata?.attachments[0];
       expect(att.contentType).toBe('image/png');

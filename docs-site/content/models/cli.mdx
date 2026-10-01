@@ -1,6 +1,8 @@
 # Models CLI
 
-`@almyty/models` manages your models from the terminal: list them and say why one cannot be picked, adjust them, run a model on your own cloud account, and watch what it costs. It shares the login of every other almyty CLI.
+This page is for developers who prefer the terminal. The everyday tasks (connecting providers, choosing which models a connection offers, starting a model on your cloud account) are also on the **Models** and **Credentials** pages in the dashboard; see [Models](/models).
+
+`@almyty/models` is a command-line tool that manages your models: list them and say why one cannot be picked, adjust them, run a model on your own cloud account, and watch what it costs. It shares the login of every other almyty command-line tool.
 
 ```bash
 $ npx @almyty/auth login
@@ -18,7 +20,7 @@ $ npx @almyty/models list
 Claude Sonnet  [claude-sonnet-5]  public  $3/$15 per M (feed:litellm)
     9b0d...  selectable
 Qwen3 32B on our vLLM  [qwen3-32b]  private_cloud/eu-central  unpriced
-    4f2a...  not selectable: waiting for its provider's key check (check the provider on the Models page)
+    4f2a...  not selectable: waiting for its provider's key check (check its connection under Credentials)
 
 $ npx @almyty/models list --selectable
 ```

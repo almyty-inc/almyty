@@ -24,8 +24,11 @@ interface ApprovalRequest {
   organizationId: string
   teamId: string | null
   visibility: 'org' | 'team' | 'private'
-  runId: string
-  agentId: string
+  /** Null for a held tool call from a caller that could not wait (a workflow, a gateway, the Test button). */
+  runId: string | null
+  agentId: string | null
+  /** The agent's name; null once the agent has been deleted. */
+  agentName?: string | null
   toolCallId: string | null
   reason: string
   payload: Record<string, any> | null
@@ -93,7 +96,7 @@ export function ApprovalsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Approvals"
-        description={query.isLoading ? 'Agent runs paused for human approval.' : `${rows.length} pending · agent runs paused for human approval`}
+        description={query.isLoading ? 'Agent runs and tool calls waiting for a person.' : `${rows.length} pending · agent runs and tool calls waiting for a person`}
       />
 
       {query.isLoading ? (
@@ -120,9 +123,16 @@ export function ApprovalsPage() {
                   <div className="flex-1 min-w-0">
                     <CardTitle className="text-base flex items-center gap-2">
                       <Bot className="h-4 w-4 text-muted-foreground" />
-                      <Link to={`/agents/${row.agentId}`} className="font-mono hover:underline truncate">
-                        agent {row.agentId.slice(0, 8)}
-                      </Link>
+                      {!row.agentId ? (
+                        // A held tool call no agent made.
+                        <span className="truncate">{row.payload?.tool ? `Tool call: ${row.payload.tool}` : 'Tool call'}</span>
+                      ) : row.agentName ? (
+                        <Link to={`/agents/${row.agentId}`} className="hover:underline truncate">
+                          {row.agentName}
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground truncate">Deleted agent</span>
+                      )}
                       <Badge variant="outline" className="text-amber-600 border-amber-300 dark:border-amber-800 dark:text-amber-400">
                         <Clock className="h-3 w-3 mr-1" />
                         pending
@@ -155,8 +165,18 @@ export function ApprovalsPage() {
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground space-y-1">
                 <div>
-                  Run: <Link to={`/agents/${row.agentId}/runs/${row.runId}`} className="font-mono hover:underline">{row.runId.slice(0, 12)}</Link>
-                  {' · '}
+                  {row.runId ? (
+                    <>
+                      Run:{' '}
+                      <Link to={`/agents/${row.agentId}/runs/${row.runId}`} className="font-mono hover:underline">
+                        {row.runId.slice(0, 12)}
+                      </Link>
+                      {' · '}
+                    </>
+                  ) : (
+                    // A held tool call: it runs, exactly as asked, once approved.
+                    <>The call runs once approved · </>
+                  )}
                   requested {formatRelativeTime(row.createdAt)}
                   {row.expiresAt && (
                     <> · expires {formatRelativeTime(row.expiresAt)}</>

@@ -10,13 +10,16 @@ import {
   ApprovalPolicy,
   ApprovalStep,
   ApprovalMatchCondition,
+  ApprovalToolAmountTrigger,
 } from '../../../src/entities/approval-policy.entity';
+import { Tool } from '../../../src/entities/tool.entity';
 import {
   ApprovalContext,
   ApprovalPolicyEvaluator,
   CollectedApproval,
   PolicyProgress,
 } from './approval-policy.evaluator';
+import { checkAmountRule } from '../../../src/modules/approvals/amount-rules.service';
 
 export interface CreateApprovalPolicyInput {
   organizationId: string;
@@ -27,6 +30,8 @@ export interface CreateApprovalPolicyInput {
   steps?: ApprovalStep[];
   priority?: number;
   enabled?: boolean;
+  /** An amount rule: the policy asks on its own when the tool is called over the amount. Null clears it. */
+  trigger?: ApprovalToolAmountTrigger | null;
 }
 
 /**
@@ -41,11 +46,14 @@ export class ApprovalPolicyService {
     @InjectRepository(ApprovalPolicy)
     private readonly policies: Repository<ApprovalPolicy>,
     private readonly evaluator: ApprovalPolicyEvaluator,
+    @InjectRepository(Tool)
+    private readonly tools: Repository<Tool>,
   ) {}
 
   async create(input: CreateApprovalPolicyInput): Promise<ApprovalPolicy> {
     if (!input.name?.trim()) throw new BadRequestException('policy name is required');
     this.validateSteps(input.steps ?? []);
+    const trigger = await this.checkTrigger(input.organizationId, input.trigger);
     const row = this.policies.create({
       organizationId: input.organizationId,
       name: input.name.trim(),
@@ -55,6 +63,7 @@ export class ApprovalPolicyService {
       steps: input.steps ?? [],
       priority: input.priority ?? 0,
       enabled: input.enabled ?? true,
+      trigger,
     });
     return this.policies.save(row);
   }
@@ -88,6 +97,7 @@ export class ApprovalPolicyService {
     if (patch.match !== undefined) row.match = patch.match;
     if (patch.priority !== undefined) row.priority = patch.priority;
     if (patch.enabled !== undefined) row.enabled = patch.enabled;
+    if (patch.trigger !== undefined) row.trigger = await this.checkTrigger(organizationId, patch.trigger);
     return this.policies.save(row);
   }
 
@@ -115,6 +125,13 @@ export class ApprovalPolicyService {
     return this.evaluator.progress(policy, approvals);
   }
 
+  /** An amount rule in its stored shape, or null (the shared check in the free rules module). */
+  private checkTrigger(
+    organizationId: string,
+    trigger: ApprovalToolAmountTrigger | null | undefined,
+  ): Promise<ApprovalToolAmountTrigger | null> {
+    return checkAmountRule(this.tools, organizationId, trigger);
+  }
   private validateSteps(steps: ApprovalStep[]): void {
     if (!Array.isArray(steps)) throw new BadRequestException('steps must be an array');
     for (const step of steps) {

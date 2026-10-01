@@ -1,59 +1,45 @@
-# Triage support tickets and draft replies
+# Sort support tickets and draft replies
 
-**Stack**: `Trigger: agent API / Slack` · `Models: GPT-4o primary + GPT-4o & Gemini 1.5 Pro verifier panel` · `Tools: order-lookup` · `Mode: verify + approval` · `Memory: on`
+For support teams with too many routine tickets and no room for a wrong answer. The assistant reads a ticket, looks up the order, and drafts a reply in your voice. A second AI model checks the draft against what the tools actually returned before it goes anywhere, and refunds over your limit go to a person.
 
-**Who it's for**: support teams drowning in L1 tickets who can't let an agent send a wrong answer.
+For a full walk-through with screenshots, see [Customer support assistant](/examples/customer-support-assistant).
 
-This recipe uses a **seeded demo agent**, the *Customer Support Orchestrator*.
-The screenshots show its current configuration and recorded test-run history,
-not a connected customer support account or a production reliability benchmark.
+The screenshots here show the demo organization's Customer Support Orchestrator on almyty's local demo setup, with made-up orders and test runs, not a real support account.
 
-![The Customer Support Orchestrator: primary GPT-4o plus a cross-vendor verifier panel](/screenshots/support-agent-overview.png)
+![The Customer Support Orchestrator: its models and reviewers](/screenshots/support-agent-overview.png)
 
-## What it actually does
+## What it does
 
-It reads a ticket, looks up the order, drafts a reply, and a **cross-vendor verifier panel**
-checks the draft before it ships. Two real runs from its history:
+- *"Where is order NW-10428? The customer says it is late."* It tracks the shipment, finds the parcel held at customs in Leipzig, and drafts an apology with the new delivery date and your delayed-shipment offer.
+- *"Triage ticket T-5521 and draft a reply."* It sets the priority, routes the ticket and drafts a reply from your saved replies.
+- *"Brightway Logistics wants a refund of $820 on NW-44120."* That is over the $500 limit, so it asks for approval and waits for a person.
 
-- *"Where is my order NW-10428?"* → it called the **Lookup Order Status** tool, and the
-  verifier caught a delivery-date inconsistency (the ETA didn't match the carrier's speed) and
-  forced **1 revision** before the reply passed. 3 steps, 6,463 tokens, $0.0121.
-- *"URGENT ticket TKT-6190 from Brightway Logistics (enterprise customer)…"* → it hit the
-  refund-escalation rule and stopped at **`waiting approval`** for a human, instead of
-  promising something it shouldn't.
+![The demo assistant's runs](/screenshots/support-agent-runs.png)
 
-![Seeded demo run history with completed, cancelled, and failed outcomes](/screenshots/support-agent-runs.png)
+## What you need
 
-## Build it
+- Your order system and your help desk, connected as APIs.
 
-1. **Create the agent** (*Agents → Create → Autonomous*) with a primary model, this one uses
-   **GPT-4o at temp 0.3**: and instructions to triage the ticket, look up the order, and draft
-   a reply in your voice.
-2. **Attach the tools** it needs, here an **order-lookup** tool generated from a connected
-   orders API. (Connect yours in *APIs → Connect an API*: pick its kind, give the spec link, click **Connect API**.)
-3. **Add a verifier panel** (*Models & Verification → Configure*): add reviewers from more than
-   one vendor, this agent runs **GPT-4o + Gemini 1.5 Pro** with `any_fail_blocks` and up to
-   **2 revisions**, triggered `on_final_output`. The primary drafts, the reviewers try to
-   refute, and it revises before anything ships.
-4. **Set constraints**: always-on rules it can't argue past. This agent's include *"Never
-   promise a refund over $500 without escalating to a human first"* and *"Do not invent order
-   numbers or account details that are not in the ticket"*, plus one it **learned** from a
-   failed run ("Avoid the failure encountered previously: LLM provider is not healthy").
+## How to build it
 
-   ![The agent's four constraints, including a learned one](/screenshots/support-agent-constraints.png)
+1. **Connect your systems.** Open **APIs**, click **Connect an API**, pick its kind, give the description link and click **Connect API**. Do this for the order system and the help desk; each operation, such as "track shipment" or "reply to ticket", becomes a tool.
+2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write the job: "Look orders up before answering, never promise a date the carrier hasn't given, and ask a person to approve any refund over $500." Under **Tools and APIs**, pick the two APIs.
+3. **Choose how it works.** In **Work mode**, the demo uses **Cascade**: a cheaper model drafts, a checker model looks for mistakes, and the main model steps in only when the checker rejects the draft.
+4. **Add reviewers.** On its **Overview** tab, under **Models & verification**, click **Configure verification**, turn on **Enable verification** and add reviewers from different AI companies. The demo has an "Accuracy" reviewer (every order fact must match the tool results) and a "Policy" reviewer (refunds over $500 go to approval), both must pass, with up to two revisions.
+5. **Add firm rules.** On its **Constraints** tab, the demo has three: never quote a delivery date the carrier hasn't confirmed, refunds over $500 need a person first, and look the order up before answering.
 
-5. **Turn on memory** so it carries context between runs, and gate refunds with
-   `request_approval`, that's what paused the Brightway Logistics ticket above.
-6. **Wire the trigger**: call the agent's API when a ticket arrives (its endpoint is on the
-   Overview → Integration panel), or publish it on Slack.
+   ![The demo assistant's constraints](/screenshots/support-agent-constraints.png)
 
-## Make it yours
+6. **Put it where tickets arrive.** On its **Channels** tab, add Slack, a web chat or email. Or have your help desk send tickets to it (see below).
 
-- Swap the orders API for Zendesk/Intercom, same *Connect an API* step.
-- Tighten or loosen the refund threshold in the constraint.
-- Promote a good run to a **skill** (button on any completed run) so other agents reuse the flow.
+## Ideas
 
-**Uses**: `Support` · `Verification` · `Approvals` · `Memory`
+- Turn a good run into a reusable skill with **Promote to skill** on that run.
+- Change the refund limit in the instructions and the constraint together.
+
+## For developers
+
+The address to call and sample code are in the **Integration** card on the assistant's **Overview** tab. See the [OpenAI-compatible API](/api-reference/openai-compatible).
 
 ## Related
 

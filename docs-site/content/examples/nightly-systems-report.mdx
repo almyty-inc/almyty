@@ -1,0 +1,106 @@
+# Nightly systems report
+
+Set up an assistant that checks your systems every night and posts a short report to your team's Slack channel: what needs attention first, then one line saying everything else is fine. Nobody has to open five dashboards in the morning.
+
+This guide builds it for Northwind's operations team. It takes about 20 minutes and there is no code in it, but one step (making a tool that posts to Slack) has a few more fields than the others.
+
+**What you need**
+
+- An almyty account with an AI model connected. If you have not done that yet, follow step 1 of the [customer support guide](/examples/customer-support-assistant#1-connect-an-ai-model).
+- A system that can report on the others: a monitoring or status tool with an API (a way for software to ask it questions) and a description of that API, often called "OpenAPI" or "Swagger". Northwind's is called Northwind Status and checks the website, checkout, payments, backups and storage.
+- A Slack channel for the report, and permission to add an app to your Slack workspace.
+
+## 1. Connect what you want checked
+
+In the sidebar, open **APIs** and click **Connect an API**. Pick **OpenAPI / Swagger**, paste the link to your status tool's description on **Link** (or pick **File** and upload it), and click **Connect API**.
+
+almyty works out what it can do. Here: check the health of every system, and list the background jobs that failed in the last day.
+
+![The status system connected, with its two checks](/screenshots/guides/ops-1-connect-status.png)
+
+You can connect more than one system, for example your monitoring tool and your backup service. The assistant can use them all.
+
+## 2. Get a Slack address for the report
+
+**In Slack**, go to api.slack.com/apps, click **Create New App** (from scratch), name it "Nightly report" and pick your workspace. Open **Incoming Webhooks**, turn them on, click **Add New Webhook to Workspace** and pick the channel, for example #ops. Slack gives you an address that starts with `https://hooks.slack.com/services/`. Anything sent to it appears in that channel. Copy it.
+
+## 3. Make a tool that posts to Slack
+
+A tool is one thing your assistant can do. The status system gave you tools for checking; now make one for posting.
+
+In the sidebar, open **Tools** and click **Create tool**. Leave **Execution method** on **HTTP REST API** and fill in:
+
+- **Tool name**: `post_to_slack`
+- **Description**: `Post a message to the #ops channel in Slack.` The assistant reads this to know what the tool is for.
+- **Method**: **POST**
+- **URL**: the Slack address you copied.
+- Under **Parameters**, click **Add first property**. Name it `text`, leave the type on **String**, describe it as `The message to post` and turn on **Required**. Slack takes the message from a field called `text`, so the name matters.
+- Under **Who can use it**, keep **Everyone** so your organization's assistants can use it.
+
+![The post_to_slack tool, with its one text field](/screenshots/guides/ops-2-slack-tool.png)
+
+Click **Create tool**. (In the screenshot the address points at the demo's stand-in for Slack; yours will start with `https://hooks.slack.com/`.)
+
+## 4. Create the assistant
+
+Open **Agents**, click **Create agent** and pick **Autonomous** at the top.
+
+- Click the name **New agent** and call it `Nightly systems check`.
+- **Work mode**, the first section: open **Model** and pick one; a low-cost model such as **gpt-4o-mini** is plenty for a daily summary.
+- **Personality & style**: `Plain and short. Lead with what needs attention.`
+- **Instructions**:
+
+> Every night, check the health of every Northwind system. Then post one short report to Slack with post_to_slack: first what needs attention (anything degraded, failing or above 80% full) with the detail, then one line saying everything else is fine. If everything is fine, say so in one line. Do not post more than one message.
+
+Then scroll to **Capabilities → Tools and APIs** and tick **All tools** next to your status system, then type `post_to_slack` in **Search tools** and tick it too.
+
+![The nightly check with the status tools and the Slack tool](/screenshots/guides/ops-3-agent.png)
+
+Click **Save**, go back to **Agents**, open **Nightly systems check** and click **Activate**.
+
+## 5. Try it once
+
+On the **Overview** tab, under **Try it**, type `Run the nightly check and post the report to Slack.` and press Enter.
+
+![The test run checked the systems and posted the report](/screenshots/guides/ops-4-try.png)
+
+The assistant ran the health checks, wrote the report and posted it: your Slack channel now has a message like "Nightly check, September 30: 4 of 5 systems healthy. Needs attention: payment webhooks had 3 failed deliveries since 02:10 UTC (retrying), and the reporting database disk is 81% full."
+
+## 6. Make it run every night
+
+Click **Edit** at the top of the assistant and scroll to **Heartbeat** at the bottom. Turn on **Wake up on a schedule**, and fill in:
+
+- **Interval (minutes)**: `1440`, which is once a day. The runs line up with the clock: a daily interval runs at midnight UTC, an hourly one (`60`) on the hour.
+- **Heartbeat prompt**: what it should do each time, `Run the nightly check and post the report to Slack.`
+
+![The heartbeat, set to once a day](/screenshots/guides/ops-5-heartbeat.png)
+
+Click **Save**. From now on it wakes up every night on its own.
+
+## 7. See what it did
+
+Every run is kept on the assistant's **Runs** tab. Open one to see each step: the health check it ran and what came back, the message it posted to Slack, and what the run cost.
+
+![One report run, step by step](/screenshots/guides/ops-6-report-run.png)
+
+If a run fails, you get a notification in almyty, and the run shows what went wrong.
+
+## Ideas
+
+- **Only speak up when something is wrong**: change the instructions to "If everything is fine, do not post anything."
+- **More systems**: connect your backup service or cloud provider and tick their tools too; the one report covers them all.
+- **Send it by email instead**: make the tool call your email service's API instead of Slack. A developer can set that up in a few minutes (see below).
+- **A second opinion**: under **Work mode**, pick **Cascade** so a second model checks the report before it goes out. See [Autonomous agents](/agents/autonomous).
+
+## For developers
+
+- This walk-through is automated in `scripts/demo-seed/guides.mjs operations` on the local demo stack, which stands in for the status system and for Slack's incoming webhook.
+- The `post_to_slack` tool sends its parameters as the JSON body (`{"text": "..."}`) because it has no body template. For an email service, point a POST tool at its send endpoint, add its key under **Authentication**, and either name the parameters after its fields or write a **Body template** with `{paramName}` placeholders. See [HTTP tools](/tools/http-tools).
+- The heartbeat runs the agent with its prompt through the same runtime as a chat message, so it can use its tools and ask for approval. The **Schedule** card on the **Overview** tab works for this agent too, and can run it at a set time and post the report to a channel; see [Scheduling](/agents/scheduling).
+- The agent's **Webhook** sends almyty's own run summary as JSON to a URL you give it; Slack's incoming webhooks do not accept that format, which is why this guide uses a tool.
+
+## Related
+
+- [Post a nightly data-quality digest](/examples/nightly-data-quality-digest)
+- [A scheduled monitoring agent](/examples/scheduled-monitoring-agent)
+- [Summarize on-call alerts](/examples/oncall-alert-triage)

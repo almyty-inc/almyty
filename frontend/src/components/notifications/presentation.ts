@@ -101,6 +101,12 @@ const PRESENTATION: Record<string, NotificationPresentation> = {
     label: 'Credential expired',
     description: 'A credential has expired and who may use it was paused.',
   },
+  'connections.inactive': {
+    icon: KeyRound,
+    accentClass: 'text-red-500',
+    label: 'Connection inactive',
+    description: 'A provider refused a connection’s key, so it was turned off. Replace the key and check again to turn it back on.',
+  },
   'connections.rotation_due': {
     icon: KeyRound,
     accentClass: 'text-cyan-500',

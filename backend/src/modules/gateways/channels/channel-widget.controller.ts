@@ -13,6 +13,9 @@ import {
   Res,
   Optional,
   Req,
+  NotFoundException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Request, Response } from 'express';
@@ -26,6 +29,10 @@ import { ChannelPolicyService } from '../channel-policy.service';
 import { ChannelGatewayService } from './channel-gateway.service';
 import { buildWidgetScript, widgetConfigFor } from './widget-script';
 import { trustedClientIp } from '../../../common/security/client-ip';
+import { ChannelAttachmentReader, attachmentIdsFrom, type ReadAttachments } from './channel-attachments.service';
+import { FilesService } from '../../files/files.service';
+import { TempFileInterceptor } from '../../files/temp-upload';
+import { readFile } from 'fs/promises';
 
 /**
  * Public (unauthenticated) surface for the embedded chat widget — the
@@ -61,6 +68,10 @@ export class ChannelWidgetController {
     // The agent's cost and spend caps and memory rule. Optional for the same
     // reason; Nest always injects it (channel-policy.guard.spec.ts).
     @Optional() private readonly channelPolicy?: ChannelPolicyService,
+    // Files a visitor sends with a message: stored, checked, and handed to
+    // the agent by reference. Optional for the same reason.
+    @Optional() private readonly attachments?: ChannelAttachmentReader,
+    @Optional() private readonly files?: FilesService,
   ) {}
 
   @Get(':id/widget.js')
@@ -103,62 +114,75 @@ export class ChannelWidgetController {
     return { success: true, data: widgetConfigFor(gateway.configuration, channel ? ownerOf(channel) : null) };
   }
 
+  /**
+   * Upload a file to send with the next widget message: an image, a PDF or
+   * a text file. Multipart: `file`, and `threadId`, the thread the message
+   * will name (the widget makes one up before its first message when it has
+   * none yet). The site's and the visitor's message limits apply. The file
+   * waits for the message that names it (`attachmentIds`); one never sent
+   * is removed a day later, and with the thread when the visitor erases it.
+   */
+  @Post(':id/widget/attachments')
+  @ApiOperation({ summary: 'Upload a file to send with the next widget message' })
+  // ChannelAttachmentReader.MAX_BYTES, written out: the upload guard reads the cap as a literal.
+  @UseInterceptors(TempFileInterceptor('file', 10 * 1024 * 1024))
+  async uploadAttachment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: any,
+    @Body() body: { threadId?: string },
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (!this.attachments) throw new NotFoundException('Attachments are not available here.');
+    if (!file?.path) throw new BadRequestException('file is required');
+    const threadId = typeof body?.threadId === 'string' ? body.threadId.trim() : '';
+    if (!threadId || threadId.length > 200) throw new BadRequestException('threadId is required');
+
+    const gateway = await this.channelGatewayService.findWidgetGateway(id);
+    await this.checkLimits(gateway, threadId, req, res);
+
+    // At most the multer cap, already on disk (files/temp-upload.ts).
+    const bytes = await readFile(file.path);
+    const stored = await this.attachments.storeUpload(
+      bytes,
+      file.originalname,
+      file.mimetype,
+      { organizationId: gateway.organizationId, agentId: gateway.agentId ?? null, gatewayId: gateway.id, threadId },
+      'widget_upload',
+    );
+    if ('refused' in stored) throw new BadRequestException(stored.refused);
+    return { success: true, data: stored };
+  }
+
   @Post(':id/widget/messages')
   @ApiOperation({ summary: 'Send a message from the chat widget' })
   async postMessage(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { message?: string; sessionId?: string; threadId?: string },
+    @Body() body: { message?: string; sessionId?: string; threadId?: string; attachmentIds?: unknown },
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const message = typeof body?.message === 'string' ? body.message.trim() : '';
+    const attachmentIds = attachmentIdsFrom(body?.attachmentIds);
 
-    if (!message) throw new BadRequestException('message is required');
+    if (!message && !attachmentIds.length) throw new BadRequestException('message is required');
     if (message.length > 4000) throw new BadRequestException('message too long (max 4000 chars)');
 
     const gateway = await this.channelGatewayService.findWidgetGateway(id);
 
-    const rate = await this.gatewayRateLimit.check(gateway);
-    if (rate.limited) {
-      if (rate.retryAfterSeconds) {
-        res.setHeader('Retry-After', String(rate.retryAfterSeconds));
-      }
-      throw new HttpException(
-        rate.message ?? 'Gateway rate limit exceeded',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
+    // The widget script identifies a browser by threadId (sessionId is the
+    // older name some embeds still send); either is the visitor.
+    await this.checkLimits(
+      gateway,
+      (typeof body?.sessionId === 'string' && body.sessionId) || (typeof body?.threadId === 'string' && body.threadId) || null,
+      req,
+      res,
+    );
 
-    // Each widget session (and each address) gets its own share, so one
-    // browser cannot use up the whole site's allowance.
-    //
-    // Both halves used to be values the caller chose. `endUserId` still
-    // is — the widget runs on a third-party page with no session of
-    // ours, so the only browser identity available is the threadId it
-    // echoes back, and a caller who wants a fresh bucket can simply
-    // invent one. It is kept because it keeps an honest browser honest,
-    // but it is not the control. The control is the address, and that
-    // was forgeable too: it came from the leftmost X-Forwarded-For hop,
-    // the one entry in the header the caller writes. trustedClientIp
-    // counts from the right, so the key is now the address our ingress
-    // actually saw.
-    const own = await this.gatewayRateLimit.checkVisitor(gateway, {
-      // The widget script identifies a browser by threadId (sessionId is
-      // the older name some embeds still send); either is the visitor.
-      endUserId:
-        (typeof body?.sessionId === 'string' && body.sessionId) ||
-        (typeof body?.threadId === 'string' && body.threadId) ||
-        null,
-
-      clientHash: HostedChatService.hashClient(trustedClientIp(req as any)),
-    });
-    if (own.limited) {
-      if (own.retryAfterSeconds) res.setHeader('Retry-After', String(own.retryAfterSeconds));
-      throw new HttpException(
-        { code: own.code ?? 'VISITOR_RATE_LIMITED', message: own.message ?? 'Too many messages. Please wait a moment.' },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
+    // The files this message names: uploads to this widget under the same
+    // thread, not sent yet. Checked before a run starts, so a bad id costs
+    // nothing.
+    const sent = await this.uploadedFiles(gateway, typeof body?.threadId === 'string' ? body.threadId : '', attachmentIds);
 
     // The spend allowance this channel draws on, and the per-run cost cap
     // and memory rule for the run this message starts.
@@ -172,8 +196,62 @@ export class ChannelWidgetController {
         threadId: body?.threadId,
       },
       policy,
+      sent,
     );
     return { success: true, data: result };
+  }
+
+  /**
+   * The site's allowance, then this visitor's share of it.
+   *
+   * Each widget session (and each address) gets its own share, so one
+   * browser cannot use up the whole site's allowance.
+   *
+   * Both halves used to be values the caller chose. `endUserId` still
+   * is — the widget runs on a third-party page with no session of
+   * ours, so the only browser identity available is the threadId it
+   * echoes back, and a caller who wants a fresh bucket can simply
+   * invent one. It is kept because it keeps an honest browser honest,
+   * but it is not the control. The control is the address, and that
+   * was forgeable too: it came from the leftmost X-Forwarded-For hop,
+   * the one entry in the header the caller writes. trustedClientIp
+   * counts from the right, so the key is now the address our ingress
+   * actually saw.
+   */
+  private async checkLimits(gateway: Gateway, visitor: string | null, req: Request, res: Response): Promise<void> {
+    const rate = await this.gatewayRateLimit.check(gateway);
+    if (rate.limited) {
+      if (rate.retryAfterSeconds) {
+        res.setHeader('Retry-After', String(rate.retryAfterSeconds));
+      }
+      throw new HttpException(
+        rate.message ?? 'Gateway rate limit exceeded',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const own = await this.gatewayRateLimit.checkVisitor(gateway, {
+      endUserId: visitor,
+      clientHash: HostedChatService.hashClient(trustedClientIp(req as any)),
+    });
+    if (own.limited) {
+      if (own.retryAfterSeconds) res.setHeader('Retry-After', String(own.retryAfterSeconds));
+      throw new HttpException(
+        { code: own.code ?? 'VISITOR_RATE_LIMITED', message: own.message ?? 'Too many messages. Please wait a moment.' },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
+  /** The thread's unsent uploads a message names, as the agent gets them; 400 when any is not the thread's. */
+  private async uploadedFiles(gateway: Gateway, threadId: string, ids: string[]): Promise<ReadAttachments> {
+    if (!ids.length) return { lines: [], parts: [], fileIds: [] };
+    const files =
+      this.files && threadId
+        ? await this.files.findUnsentUploads(gateway.organizationId, ids, { gatewayId: gateway.id, threadId })
+        : null;
+    if (!files) throw new BadRequestException('An attachment was not found. Upload it again.');
+    return ChannelAttachmentReader.fromFiles(files);
   }
 
   @Get(':id/widget/messages')

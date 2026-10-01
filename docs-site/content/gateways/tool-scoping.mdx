@@ -1,77 +1,63 @@
-# Tool Scoping
+# Tool scoping
 
-Decide exactly which tools each gateway exposes. A gateway starts empty and you assign tools into it, so every gateway has a focused, purpose-built surface: a read-only public one, a full-access internal one, one per team. Nothing is exposed until you choose it.
+Tool scoping decides which tools a gateway offers. Each gateway offers only the tools you picked, so you can give each audience exactly what it needs: a partner gets "look up an order" but not "issue a refund", while your own support team's gateway has both. Nothing is offered until you choose it.
+
+You pick a gateway's tools when you create it, and change them any time on its **Tool scoping** tab.
 
 ![Assigning tools on the gateway Tool scoping tab](/screenshots/gateway-detail-tools.png)
 
-## Assign tools in the UI
+## Choose the tools
 
-1. Open the gateway detail page and click the **Tool scoping** tab.
-2. Search the available tools, grouped by API, and click **Assign** beside a tool. Inactive tools must be activated on the Tools page first.
-3. Use an API group's checkbox or the preset buttons for bulk assignment (see below).
-4. Click **Remove** to stop exposing an assigned tool.
-5. Use an assigned tool's shield button to expand its inline **Security policy** form.
+1. Open the gateway and click the **Tool scoping** tab. The tab shows how many tools it offers out of how many you have.
+2. Search the tools (they are grouped by the API they came from) and click **Assign** next to each one to offer. A draft or inactive tool has to be activated on **Tools** first. A tool private to you can only be offered through a gateway private to you, and a team's tool only through a gateway scoped to that team.
+3. To take a whole API at once, tick the box on its group.
+4. Click **Remove** to stop offering a tool.
 
-Only tools accessible to the gateway can be assigned; Private tools are not available for public gateway exposure.
+The buttons at the top pick tools by their names, as a quick start. Check the result before relying on it:
 
-## Presets
+| Button | What it assigns |
+|--------|-----------------|
+| **Read only** | Tools that use the GET method or have "get" in their name |
+| **Admin tools** | Tools with "admin", "delete" or "update" in their name |
+| **Public API** | Every tool except those with "delete" or "admin" in their name |
+| **All tools** | Every tool |
+| **Remove all** | Removes every tool from the gateway |
 
-| Preset | Description |
-|--------|-------------|
-| **All tools** | Assign every available tool |
-| **Remove all** | Remove all assignments |
-| **Read only** | Assign only GET/query operations |
-| **Admin tools** | Assign all CRUD operations |
-| **Public API** | Assign tools suitable for public access |
+## Limit where a tool may reach
 
-## Per-gateway tool configuration
+Each assigned tool has a shield button that opens its **Security policy** on this gateway. Use it to narrow what the tool may do when called through this gateway:
 
-Each assignment can carry gateway-specific overrides. Edit the security policy from the **Tool scoping** tab; use the API for other assignment fields such as `rateLimit`. The stored config looks like this:
+- **Allowed domains** and **Blocked domains**: which web addresses the tool may call.
+- **Allowed HTTP methods**: for example only `GET`, so the tool can read but not change anything.
+- **Max response size (bytes)**: cut off very large answers.
+- **Require HTTPS**: refuse unencrypted calls.
+
+Click **Save policy**. The same tool can be locked down on a partner gateway and unrestricted on your internal one, because the policy belongs to the tool's place on that gateway, not to the tool.
+
+## Common setups
+
+- **For a partner:** only the read tools they need, an API key per partner, and a security policy allowing only `GET`.
+- **For your own team:** all the tools, signed in with OAuth.
+- **Per team:** a separate gateway per team (support gets the order tools, finance the billing tools), each with its own keys.
+
+See [Gateway authentication](/gateways/authentication) for keys and sign-in.
+
+## For developers
+
+An assignment's settings are stored on the gateway-tool link. The security policy looks like this:
 
 ```json
 {
-  "enabled": true,
-  "rateLimit": 100,
   "securityPolicy": {
-    "requireAuth": true,
-    "allowedScopes": ["tools:execute"]
+    "allowedDomains": ["api.northwind.example"],
+    "blockedDomains": [],
+    "allowedHttpMethods": ["GET"],
+    "maxResponseSizeBytes": 1048576,
+    "requireHttps": true
   }
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `enabled` | boolean | Whether the tool is active on this gateway |
-| `rateLimit` | number | Max requests per minute for this tool |
-| `securityPolicy` | object | Gateway-specific security overrides |
+A request the policy refuses returns a failed tool result with the reason. The link also carries `isActive`, and optional `transformations.inputMapping` and `transformations.outputMapping` that rename a tool's input and output fields on this gateway only.
 
-The same tool can be read-only on a public gateway and rate-limited differently on an internal one. Overrides live on the assignment, not the tool itself.
-
-## Usage statistics
-
-Each gateway tracks per-tool usage so you can see what is actually being called. The stats include call counts, success rate, and latency:
-
-```json
-{
-  "stats": [
-    {
-      "toolId": "tool-1",
-      "toolName": "get_users",
-      "totalCalls": 1250,
-      "successRate": 98.4,
-      "avgDuration": 234,
-      "lastCalledAt": "2026-03-23T10:30:00Z"
-    }
-  ]
-}
-```
-
-## Common patterns
-
-**Read-only public gateway:** assign only GET/query tools, enable API key auth, set per-tool rate limits.
-
-**Internal admin gateway:** assign all tools, require Bearer token auth, no rate limits.
-
-**Per-team gateways:** create separate gateways per team (marketing gets analytics tools, engineering gets deployment tools), each with its own keys and scopes.
-
-See [Gateway Authentication](/gateways/authentication) for the auth and scope options referenced above.
+**Usage.** `GET /gateways/:gatewayId/tools/stats` returns the gateway's tool counts (`totalTools`, `activeTools`, `inactiveTools`), its `totalUsage`, and its `mostUsedTools` and `recentlyUsedTools`.

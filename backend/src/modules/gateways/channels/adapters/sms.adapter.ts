@@ -1,7 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import {
+  BaseAdapter,
+  NormalizedMessage,
+  AdapterResponse,
+  AttachmentFetchLimits,
+  FetchedAttachment,
+  InboundAttachment,
+} from './base.adapter';
 import { verifyTwilioSignature } from './twilio-signature.helper';
 import { twilioSendFailure } from './twilio-response.helper';
+import { TWILIO_MEDIA_HOSTS, twilioAuthHeader, twilioInboundMedia } from './twilio-media.helper';
 
 /**
  * Plain SMS via Twilio. Same credential shape as the Twilio-backed
@@ -25,13 +33,30 @@ export class SmsAdapter extends BaseAdapter {
   static readonly MAX_BODY_CHARS = 1600;
 
   normalizeInbound(rawPayload: any): NormalizedMessage {
-    // Twilio SMS webhook format (form-encoded)
+    // Twilio SMS webhook format (form-encoded); an MMS carries media too.
+    const attachments = twilioInboundMedia(rawPayload);
     return {
       text: rawPayload.Body || '',
       userId: rawPayload.From || 'unknown',
       threadId: rawPayload.From, // Use phone number as thread
+      ...(attachments.length ? { attachments } : {}),
       metadata: { from: rawPayload.From, to: rawPayload.To, messageSid: rawPayload.MessageSid, source: 'sms' },
     };
+  }
+
+  /**
+   * MMS media, read with the account's credentials on Twilio's own host
+   * only. Replies stay text: whether a number can send MMS depends on the
+   * number and the country, so a file the agent links to stays a link.
+   */
+  async fetchAttachment(
+    attachment: InboundAttachment,
+    config: Record<string, any>,
+    limits: AttachmentFetchLimits,
+  ): Promise<FetchedAttachment | null> {
+    const auth = twilioAuthHeader(config);
+    if (!auth || !BaseAdapter.onHost(attachment.url, TWILIO_MEDIA_HOSTS)) return null;
+    return this.fetchBytes(attachment.url!, limits, { Authorization: auth });
   }
 
   /** Twilio's MessageSid, unchanged across Twilio's own retries. */

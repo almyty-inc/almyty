@@ -3,7 +3,6 @@
 import { useEffect } from 'react'
 
 import { AddMemoryForm } from '@/components/memory/add-memory-form'
-import { TransferMemoryForm } from '@/components/memory/transfer-memory-form'
 
 function useTitle(title: string) {
   useEffect(() => {
@@ -17,9 +16,4 @@ function useTitle(title: string) {
 export function MemoryNewPage() {
   useTitle('Add memory')
   return <AddMemoryForm />
-}
-
-export function MemoryTransferPage() {
-  useTitle('Transfer memory')
-  return <TransferMemoryForm />
 }

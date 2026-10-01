@@ -285,6 +285,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
       type: 'telegram',
       extractTenantId: () => null,
       verifyWebhook: async () => true,
+      carriesMessage: () => true,
       deliveryId: (body: any) => String(body.update_id),
       normalizeInbound: (body: any) => ({
         text: body.text,
@@ -302,7 +303,7 @@ run('channel limits and visitor rights (real Postgres)', () => {
       events,
       runtime as any,
       new ChatWidgetAdapter(events),
-      stub, stub, telegram, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub,
+      stub, stub, telegram, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub, stub,
       undefined,
       undefined,
       rateLimit,
@@ -324,8 +325,6 @@ run('channel limits and visitor rights (real Postgres)', () => {
       // The caller's credential, as the gateway auth layer resolves it.
       { resolveAndAuthenticate: async (_o: string, _e: string, r: any) => ({ auth: r.__auth }) } as any,
       a2a,
-      unused,
-      unused,
       unused,
       { get: () => 'https://api.example.test' } as any,
       rateLimit,

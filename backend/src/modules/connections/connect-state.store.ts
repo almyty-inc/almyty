@@ -11,8 +11,10 @@ export interface PendingConnect {
   organizationId: string;
   userId: string;
   ownerUserId: string | null;
-  /** 'private' when the connection being made is its owner's alone. */
-  visibility?: 'org' | 'private';
+  /** 'private' when the connection being made is its owner's alone, 'team' when it is one team's. */
+  visibility?: 'org' | 'team' | 'private';
+  /** The team, for a 'team' connection. */
+  teamId?: string | null;
   connectorKey: string;
   methodType: string;
   codeVerifier: string | null;

@@ -5,6 +5,7 @@ import { MessageRole } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse } from '../llm-providers.service';
 import { callLlmProviderHttp, llmCallOptionsFor } from './safe-request';
+import { contentAsText, toGeminiParts } from '../content-parts';
 import { requireModel } from '../model-errors';
 
 
@@ -26,7 +27,7 @@ export async function callGoogle(
   const googleRequest: Record<string, unknown> = {
     contents: request.messages.map(msg => ({
       role: msg.role === MessageRole.USER ? 'user' : 'model',
-      parts: [{ text: msg.content }],
+      parts: toGeminiParts(msg.content),
     })),
     generationConfig: {
       maxOutputTokens: request.maxTokens || conversation.context?.maxTokens,
@@ -134,21 +135,21 @@ export async function callCustomProvider(
   if (requestFormat === 'openai') {
     requestData = {
       model: request.model || provider.configuration.model,
-      messages: request.messages,
+      messages: request.messages.map((m) => ({ ...m, content: contentAsText(m.content) })),
       max_tokens: request.maxTokens || conversation.context?.maxTokens,
       temperature: request.temperature ?? conversation.context?.temperature,
     };
   } else if (requestFormat === 'anthropic') {
     requestData = {
       model: request.model || provider.configuration.model,
-      messages: request.messages,
+      messages: request.messages.map((m) => ({ ...m, content: contentAsText(m.content) })),
       max_tokens: request.maxTokens || conversation.context?.maxTokens,
       temperature: request.temperature ?? conversation.context?.temperature,
     };
   } else {
     // Custom format
     requestData = {
-      prompt: request.messages.map(m => m.content).join('\n'),
+      prompt: request.messages.map((m) => contentAsText(m.content)).join('\n'),
       max_tokens: request.maxTokens || conversation.context?.maxTokens,
       temperature: request.temperature ?? conversation.context?.temperature,
     };

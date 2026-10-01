@@ -113,8 +113,6 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
       gatewayResolver as any,
       {} as any, // a2a server
       {} as any, // a2a agent card
-      {} as any, // acp server
-      {} as any, // acp discovery
       { get: jest.fn().mockReturnValue(null) } as any, // config
       { check: jest.fn().mockResolvedValue({ limited: false }) } as any, // rate limit
       channelGatewayService as any,
@@ -123,6 +121,27 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
 
   const handle = (gateway: Gateway, req: any, res: any, body: any) =>
     delegation.handleGatewayRequest(organization, gateway, 'acme', 'slack-bot', req, res, body);
+
+  // A channel gateway left behind by a deleted agent ran the message
+  // against no agent: a 500. It answers like a missing address.
+  it('404s "This chat no longer exists" for a channel whose agent was deleted, and runs nothing', async () => {
+    const orphan = { ...slackGateway(), agentId: null } as unknown as Gateway;
+    await expect(handle(orphan, makeReq({ body: {} }), makeRes(), {})).rejects.toMatchObject({
+      message: 'This chat no longer exists',
+      status: 404,
+    });
+    expect(channelGatewayService.handleInboundMessage).not.toHaveBeenCalled();
+    expect(gatewayResolver.resolveAndAuthenticate).not.toHaveBeenCalled();
+  });
+
+  it('leaves a tool gateway, which never has an agent, alone', async () => {
+    await handle(mcpGateway(), makeReq({ body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } }), makeRes(), {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/list',
+    });
+    expect(gatewayResolver.resolveAndAuthenticate).toHaveBeenCalled();
+  });
 
   it('routes a signed slack event into the channel inbound pipeline', async () => {
     const body = {

@@ -1,6 +1,6 @@
 # Chat
 
-Talk to your agents from the terminal. No browser, no setup past one login.
+Talk to your agents from a terminal, the same way you would in the app's chat. It is handy for developers who live in the terminal: for example, asking your support assistant "Where is order NW-10428?" without opening a browser, or handing a coding task to a machine you connected. Everyone else can use the chat in the app or on the agent's [channels](/channels).
 
 ```bash
 npx @almyty/chat acme/support-bot
@@ -87,13 +87,13 @@ Chat reads the shared `~/.almyty/credentials.json`. Log in once, or pass a token
 
 ```bash
 npx @almyty/auth login
-ALMYTY_TOKEN=ak_live_... npx @almyty/chat research-bot
+ALMYTY_TOKEN=almyty_... npx @almyty/chat research-bot
 ```
 
 ## Troubleshooting
 
-**No agents found.** Your org has no agents yet, or your token is for another org. Create one under **Agents → Create Agent**.
+**No agents found.** Your org has no agents yet, or your token is for another org. Create one under **Agents → Create agent**.
 
 **A run seems to hang.** Autonomous runs can take minutes and stream as they go. If the connection drops the run continues server-side; check it with `npx @almyty/agents runs <agent>`.
 
-**Context feels lost between messages.** Workflow agents are stateless by design. Use an autonomous agent, or give the workflow memory nodes, if you need context to carry.
+**Context feels lost between messages.** Workflow agents are stateless by design. Use an autonomous agent if you need context to carry from one message to the next.

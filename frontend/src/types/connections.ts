@@ -117,13 +117,14 @@ export interface CreateConnectorBody {
 /**
  * 'user' is Personal: your key, but admins who manage connections can still
  * see and revoke it. 'private' is yours alone: nobody else sees, uses or
- * shares it, admins included.
+ * shares it, admins included. 'team' is the organization's, for one team.
  */
-export type ConnectionOwner = 'org' | 'user' | 'private'
+export type ConnectionOwner = 'org' | 'team' | 'user' | 'private'
 
 /** Lowercase, for inline use ("OpenAI as acme (personal)"). */
 export const CONNECTION_OWNER_LABELS: Record<ConnectionOwner, string> = {
   org: 'organization',
+  team: 'team',
   user: 'personal',
   private: 'private',
 }
@@ -131,6 +132,7 @@ export const CONNECTION_OWNER_LABELS: Record<ConnectionOwner, string> = {
 /** The one-line difference between the tiers, shown under the owner picker. */
 export const CONNECTION_OWNER_HINTS: Record<ConnectionOwner, string> = {
   org: 'Anyone you grant access can use it.',
+  team: 'Only members of one team can use it.',
   user: 'Your key. You can share it, and admins who manage connections can still see and revoke it.',
   private: 'Only you. Nobody else can see, use or revoke it, admins included, and it can’t be shared.',
 }
@@ -157,6 +159,8 @@ export interface Connection {
   kind: ConnectorKind | null
   owner: ConnectionOwner
   ownerUserId?: string | null
+  /** The team a 'team' connection is for. */
+  teamId?: string | null
   method?: ConnectMethodType | null
   /** The account on the other side, e.g. the workspace or email. */
   accountLabel?: string | null
@@ -174,6 +178,8 @@ export interface Connection {
 export interface ConnectBody {
   method?: ConnectMethodType
   owner?: ConnectionOwner
+  /** The team, when owner is 'team'. */
+  teamId?: string
   /** headless: the provider prints the code and the user pastes it. */
   mode?: 'browser' | 'headless'
   input?: Record<string, unknown>

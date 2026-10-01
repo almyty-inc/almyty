@@ -28,6 +28,8 @@ describe('every channel gateway belongs to an agent channel', () => {
         GatewayType.WHATSAPP,
         GatewayType.WHATSAPP_CLOUD,
         GatewayType.SMS,
+        GatewayType.IMESSAGE_SENDBLUE,
+        GatewayType.IMESSAGE_LOOPMESSAGE,
         GatewayType.EMAIL,
         GatewayType.WEBHOOK,
         GatewayType.GOOGLE_CHAT,
@@ -37,7 +39,7 @@ describe('every channel gateway belongs to an agent channel', () => {
         GatewayType.IRC,
       ].sort(),
     );
-    for (const type of [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS, GatewayType.ACP, GatewayType.OPENAI_CHAT]) {
+    for (const type of [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS]) {
       expect(isChannelGatewayType(type)).toBe(false);
     }
   });

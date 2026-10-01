@@ -1,4 +1,5 @@
 import { AgentExecution } from '../../../entities/agent-execution.entity';
+import type { AgentRun } from '../../../entities/agent-run.entity';
 import { ourHop, providerHop, summariseTrace, type RouteHop } from './route-trace';
 
 /**
@@ -112,4 +113,29 @@ export function traceFor(execution: Pick<AgentExecution, 'id' | 'nodeResults' | 
     steps,
     summary: summariseTrace(allHops),
   };
+}
+
+/**
+ * An autonomous run's trace. Its model calls are steps rather than node
+ * results, and each step records the routing of the call it made
+ * (`output.routing`), so the same hop rules apply to them. Steps are named
+ * by their order and the role that made them.
+ */
+export function traceForRun(
+  run: Pick<AgentRun, 'id' | 'steps' | 'metadata'>,
+): RunTrace {
+  const nodeResults: Record<string, any> = {};
+  (run.steps ?? []).forEach((step: any, idx: number) => {
+    const at = step?.timestamp ? Date.parse(step.timestamp) : NaN;
+    const role = step?.role?.name ? ` (${step.role.name})` : '';
+    nodeResults[`step ${idx + 1}${role}`] = {
+      routing: step?.output?.routing,
+      executionTime: step?.duration,
+      cost: step?.cost,
+      node: { type: step?.type },
+      ...(Number.isFinite(at) ? { startedAt: at, completedAt: at } : {}),
+      ...(step?.error ? { error: step.error } : {}),
+    };
+  });
+  return traceFor({ id: run.id, nodeResults, metadata: (run.metadata ?? {}) as any });
 }

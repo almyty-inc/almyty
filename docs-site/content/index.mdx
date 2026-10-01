@@ -1,44 +1,54 @@
 # Get started
 
-almyty turns any API into tools your AI agents can call, served over MCP, A2A, UTCP, and Agent Skills. This page takes you from an empty account to your own API running inside Claude Code (or Cursor, or any MCP client) in a few minutes.
+almyty turns the software your company already runs into AI assistants that do real work, and puts them wherever your staff and customers already talk.
 
-Do every step in the UI or from the CLI. Start on the [hosted platform](https://app.almyty.com) (no card required), or [self-host](/self-hosting) with one container.
+For example: a support assistant that looks up an order in your order system and answers a customer on WhatsApp, a sales assistant in Slack that pulls up an account from your CRM before a call, or a nightly check that posts a short report to your team. You build them yourself, on screen, without writing code.
 
-In the app, open **Guide** in the sidebar footer (`/guide`). It groups the setup into four jobs: give an AI your API, build an agent, publish an app, or connect your own machine. Progress comes from the resources and successful calls in your organization, so work done through the CLI counts too. You can hide the dashboard guide card or page introductions without losing access to the guide.
+Start on the [hosted platform](https://app.almyty.com) (no card required), or [run it on your own servers](/self-hosting).
 
-```bash
-npm install -g @almyty/cli
-almyty login
-```
+## How it works, in three steps
 
-## 1. Turn an API into tools
+**1. Connect the systems you already use.** Under **APIs**, give almyty the description of a system: your order system, CRM, help center or intranet. (An API is the way one piece of software talks to another; most business software has one.) almyty works out what the system can do, such as "look up an order" or "issue a refund", and turns each into a tool an assistant can use.
 
-Open **APIs → Connect an API** (`/apis/new`) and pick what kind of API it is: **OpenAPI / Swagger**, **GraphQL**, **SOAP / WSDL**, **gRPC / proto**, **SDK / npm** or **Manual HTTP**. Each opens its own form. For a description, give it the way that kind comes: a link, a file or the text itself (a GraphQL endpoint's own URL works too), then click **Connect API**. almyty reads the name, address and sign-in scheme from it, and refuses a description of another kind in plain words. The import runs in the background, and the next page asks only for what is missing: usually the key, which you pick from [Credentials](/credentials) or create right there, and the address when the description has none. **Advanced** lets you set the name, address, sign-in type and who can use it yourself.
+![A connected system, with what it can do](/screenshots/quickstart-api-imported.png)
 
-To replace the description later, open the API and click **Update the description**. **Manual HTTP** is an address with tools you add by hand; for a single HTTP call, create a [tool](/tools/http-tools) instead.
+**2. Build an assistant.** Under **Agents**, describe the job in plain words, pick the AI model it runs on and tick the tools it may use. You can run it on almost any AI model and switch whenever you like, without starting over. If you prefer to lay out every step yourself, draw it on the canvas instead.
 
-Every operation in the schema becomes a typed, validated tool. No code.
+![An assistant, with its models and checks](/screenshots/agent-detail-overview.png)
 
-![Tools generated from the schema](/screenshots/quickstart-api-imported.png)
+**3. Put it where people already are.** On the assistant's **Channels** tab, publish it as a web chat with its own link, a chat bubble on your website, in Slack, Microsoft Teams, WhatsApp, email, text messages or iMessage, as a desktop or terminal app, or for other AI tools to call.
 
-## 2. Publish a gateway
+## What keeps it safe
 
-Tools reach your AI through a gateway. Open **Gateways → Create gateway** (`/gateways/new`), pick **MCP**, pick the API you just imported, and click **Create gateway**.
+- **Keys stay locked away.** The keys to your systems are stored under **Credentials**, and are never shown to the people using your assistants.
+- **You decide who may use what.** Each assistant, tool and key is private, shared with a team, or open to the whole organization.
+- **Spending caps and visitor limits.** Set how much an assistant may spend per answer, per day and per month, and how many messages one visitor may send.
+- **A person approves what cannot be undone.** An assistant can stop and ask before a big refund, a payment or an email to a customer.
+- **A record of every action.** Every answer, every tool it used and every change to it is kept, with its cost.
 
-![A gateway with tools assigned](/screenshots/gateway-detail-tools.png)
+## Your first assistant
 
-Each gateway speaks the protocol you pick:
+The quickest way in is one of the step-by-step guides. Each builds a complete assistant with a screenshot for every step:
 
-| Protocol | For |
-|----------|-----|
-| **MCP** | Claude Code, Cursor, Windsurf, and other MCP clients |
-| **UTCP** | Universal Tool Call Protocol |
-| **Agent Skills** | 30+ AI coding agents via SKILL.md |
+- [Customer support assistant](/examples/customer-support-assistant) on your website, WhatsApp and email
+- [Sales assistant in Slack](/examples/sales-assistant-slack) that works with your CRM
+- [Product chat for your website](/examples/website-product-chat) that answers from your docs
+- [Nightly systems report](/examples/nightly-systems-report) posted to Slack
+- [Internal help desk](/examples/internal-help-desk) in Teams or Slack
+- [For developers](/examples/developers-apis-and-machines): your APIs in coding assistants, and jobs on your own machines
 
-An agent you build reaches other agents over **A2A** (Google's Agent-to-Agent protocol) as a channel on the agent: see [A2A](/gateways/a2a).
-## 3. Call it from your AI (the payoff)
+Inside the app, **Guide** at the bottom of the sidebar shows the same path as a checklist: give an AI your API, build an agent, put it where people are, and run it on your machines. It ticks steps off as you do them.
 
-Point your assistant at the gateway and your API is live inside it. Grab the endpoint from the gateway's **Integrations** tab (it looks like `https://api.almyty.com/your-org/petstore`) and a key from its **Authentication** panel. Then, in Claude Code:
+## For developers: your API inside your coding assistant
+
+The same tools can go straight into Claude Code, Cursor or any other client that speaks MCP (Model Context Protocol, the common way AI assistants plug in outside tools). You publish them through a gateway: one address that serves a set of tools.
+
+1. Under **APIs**, click **Connect an API**, pick the kind (**OpenAPI / Swagger**, **GraphQL**, **SOAP / WSDL**, **gRPC / proto**, **SDK / npm** or **Manual HTTP**), give it the description as a link, a file or pasted text, and click **Connect API**. Every operation becomes a typed tool.
+2. Under **Gateways**, click **Create gateway**, pick **MCP**, pick the API and click **Create gateway**.
+
+![A gateway with its tools](/screenshots/gateway-detail-tools.png)
+
+3. The gateway page shows its access key once, next to a ready-made setup for Claude Code, Cursor and Claude Desktop. For Claude Code:
 
 ```bash
 claude mcp add petstore --transport http \
@@ -46,34 +56,24 @@ claude mcp add petstore --transport http \
   https://api.almyty.com/your-org/petstore
 ```
 
-![Your API's tools inside Claude Code](/screenshots/quickstart-claude-config.png)
+![The client setup on the gateway page](/screenshots/quickstart-claude-config.png)
 
-Ask Claude to do something and it calls your API directly:
+Ask Claude to do something and it calls your API through the gateway:
 
 ![Claude calling the gateway](/screenshots/quickstart-gateway-mcp.png)
 
-If your client only speaks stdio, run the gateway as a local proxy instead:
+A client that only speaks stdio can use the gateway through a local proxy: `npx @almyty/mcp-server your-org/petstore`. Everything in the app can also be done from the CLI:
 
 ```bash
-npx @almyty/mcp-server your-org/petstore
+npm install -g @almyty/cli
+almyty login
 ```
 
-That's the whole loop: **API → tools → gateway → your AI calling it.**
-
-## Build an agent (optional)
-
-Instead of handing tools to someone else's AI, build your own agent on top of them. Compose LLM calls, tool calls, conditions, and loops on a visual canvas, or run an autonomous agent that figures out the steps itself, with cross-vendor verification, memory, and human approvals built in.
-
-![An agent built on your tools](/screenshots/agent-detail-overview.png)
-
-Agents serve over the same protocols and an OpenAI-compatible endpoint, so anything that talks to OpenAI talks to your agent.
+An assistant you build also has an OpenAI-compatible endpoint, so anything that talks to OpenAI can talk to it. See the [API reference](/api-reference/authentication), the [CLI](/cli) and [Control almyty via MCP](/control-via-mcp).
 
 ## Where to next
 
-- [Connect a provider](/llm-providers): bring your own keys, mix vendors
-- [Drive almyty from the CLI](/cli): agents, chat, skills, runners, one login
-- [Build agents](/agents): the visual builder and autonomous mode
-- [Gateways in depth](/gateways/mcp): auth, scoping, every protocol
-- [Examples](/examples): end-to-end builds you can copy
-
-Prefer to run almyty from your AI tools directly? almyty is itself an MCP server: see [Control almyty via MCP](/control-via-mcp).
+- [What you can do](/examples): guides and examples
+- [Connect a provider](/llm-providers): bring your own AI model keys, mix model makers
+- [Agents](/agents): building assistants, by goal or step by step
+- [Channels](/channels): every place an assistant can answer

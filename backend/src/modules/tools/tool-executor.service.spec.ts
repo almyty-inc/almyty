@@ -27,6 +27,9 @@ import { SdkCodeAssemblerService } from './node-sandbox/sdk-code-assembler.servi
 import { GrpcCallerService } from './executors/grpc-caller.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { RunnerCallService } from '../runner/runner-call.service';
+import { RunWorkspaceService } from '../runner/run-workspace.service';
+import { RunnerCallError, RUNNER_CALL_ERRORS } from '../runner/runner-call.service';
+import { runWithRequestContext } from '../../common/request-context';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
 import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
 import { McpClientError } from '../mcp-sources/mcp-client.service';
@@ -204,6 +207,10 @@ describe('ToolExecutorService', () => {
             dispatch: jest.fn().mockResolvedValue({ ok: true, result: null }),
             getPendingCount: jest.fn().mockReturnValue(0),
           },
+        },
+        {
+          provide: RunWorkspaceService,
+          useValue: { acquire: jest.fn().mockResolvedValue({ id: 'ws-auto', runnerId: 'runner-1' }) },
         },
         {
           provide: CanonicalMemoryService,
@@ -563,6 +570,103 @@ describe('ToolExecutorService', () => {
         undefined,
         expect.objectContaining({ labels: { gpu: 'yes' }, organizationId: 'org-1' }),
       );
+    });
+  });
+
+  // A runner method that works inside a workspace, called by an agent run
+  // with no workspaceId, runs in a workspace the run is given on the spot
+  // (RunWorkspaceService). Outside a run it still says a workspace is needed.
+  describe('runner dispatch that needs a workspace', () => {
+    const workspaceTool = () => ({
+      id: 'tool-runner-ws',
+      name: 'runner.laptop.shell.exec',
+      status: ToolStatus.ACTIVE,
+      type: ToolType.FUNCTION,
+      organizationId: 'org-1',
+      operation: null,
+      configuration: { timeout: 5000 },
+      runnerConfig: { runnerId: 'runner-1', method: 'shell.exec', requiresWorkspace: true },
+    } as any);
+
+    beforeEach(() => {
+      toolRepository.findOne.mockResolvedValue(workspaceTool());
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        hasPermissionInOrganization: jest.fn().mockReturnValue(true),
+      } as any);
+      jest.spyOn((service as any).stats, 'validateParameters').mockResolvedValue({ isValid: true, errors: [] });
+    });
+
+    it('gives an agent run a workspace and dispatches into it', async () => {
+      const runWorkspaces = (service as any).runWorkspaces;
+      const runnerCalls = (service as any).runnerCalls;
+
+      const result = await service.executeTool('tool-runner-ws', { command: 'ls' }, {
+        userId: 'user-1',
+        organizationId: 'org-1',
+        runId: 'run-1',
+        agentId: 'agent-1',
+        runnerLabels: { os: 'mac' },
+      });
+
+      expect(result.success).toBe(true);
+      expect(runWorkspaces.acquire).toHaveBeenCalledWith(expect.objectContaining({
+        runnerId: 'runner-1',
+        organizationId: 'org-1',
+        runId: 'run-1',
+        agentId: 'agent-1',
+        callerUserId: 'user-1',
+        labels: { os: 'mac' },
+      }));
+      expect(runnerCalls.dispatch).toHaveBeenCalledWith('runner-1', 'shell.exec', { command: 'ls' }, 'ws-auto', expect.any(Object));
+    });
+
+    it('takes the run and agent from the correlation scope (workflow tool_call nodes)', async () => {
+      const runWorkspaces = (service as any).runWorkspaces;
+      await runWithRequestContext({ runId: 'exec-9', agentId: 'agent-9' }, () =>
+        service.executeTool('tool-runner-ws', { command: 'ls' }, { userId: 'user-1', organizationId: 'org-1' }),
+      );
+      expect(runWorkspaces.acquire).toHaveBeenCalledWith(expect.objectContaining({ runId: 'exec-9', agentId: 'agent-9' }));
+    });
+
+    it('a workflow sub-agent\'s call works in its top-level run\'s workspace (one job, one folder)', async () => {
+      const runWorkspaces = (service as any).runWorkspaces;
+      await runWithRequestContext({ runId: 'exec-child', workspaceRunId: 'exec-root', agentId: 'agent-sub' }, () =>
+        service.executeTool('tool-runner-ws', { command: 'ls' }, { userId: 'user-1', organizationId: 'org-1' }),
+      );
+      expect(runWorkspaces.acquire).toHaveBeenCalledWith(expect.objectContaining({ runId: 'exec-root' }));
+    });
+
+    it('uses a workspace the caller named instead of making one', async () => {
+      const runWorkspaces = (service as any).runWorkspaces;
+      const runnerCalls = (service as any).runnerCalls;
+      await service.executeTool('tool-runner-ws', { command: 'ls', workspaceId: 'ws-mine' }, {
+        userId: 'user-1', organizationId: 'org-1', runId: 'run-1',
+      });
+      expect(runWorkspaces.acquire).not.toHaveBeenCalled();
+      expect(runnerCalls.dispatch).toHaveBeenCalledWith('runner-1', 'shell.exec', { command: 'ls' }, 'ws-mine', expect.any(Object));
+    });
+
+    it('outside an agent run, still says a workspaceId is needed', async () => {
+      const runWorkspaces = (service as any).runWorkspaces;
+      const result = await service.executeTool('tool-runner-ws', { command: 'ls' }, { userId: 'user-1', organizationId: 'org-1' });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('requires a workspaceId');
+      expect(runWorkspaces.acquire).not.toHaveBeenCalled();
+    });
+
+    it('a workspace that cannot be made is the call\'s error, and nothing is dispatched', async () => {
+      const runWorkspaces = (service as any).runWorkspaces;
+      const runnerCalls = (service as any).runnerCalls;
+      runWorkspaces.acquire.mockRejectedValueOnce(
+        new RunnerCallError(RUNNER_CALL_ERRORS.RUNNER_AT_CAPACITY, 'runner laptop already has 4 active workspace(s)'),
+      );
+      const result = await service.executeTool('tool-runner-ws', { command: 'ls' }, {
+        userId: 'user-1', organizationId: 'org-1', runId: 'run-1', retries: 0,
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('runner_at_capacity: runner laptop already has 4 active workspace(s)');
+      expect(runnerCalls.dispatch).not.toHaveBeenCalled();
     });
   });
 

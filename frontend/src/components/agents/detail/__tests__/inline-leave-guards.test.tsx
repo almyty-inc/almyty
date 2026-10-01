@@ -204,9 +204,7 @@ describe('webhook and schedule on the overview', () => {
   } as unknown as Agent
   const overview = (webhookUrl: string) => (
     <OverviewTab agent={agent} executions={[]} versions={[]} entityVersions={[]} auditLog={[]}
-      webhookUrl={webhookUrl} setWebhookUrl={vi.fn()} scheduleEnabled={false}
-      setScheduleEnabled={vi.fn()} scheduleInterval={60} setScheduleInterval={vi.fn()}
-      scheduleInput="{}" setScheduleInput={vi.fn()} />
+      webhookUrl={webhookUrl} setWebhookUrl={vi.fn()} />
   )
 
   it('asks while the webhook URL differs from the saved one', async () => {

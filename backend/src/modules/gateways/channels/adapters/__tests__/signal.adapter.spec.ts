@@ -54,7 +54,8 @@ describe('SignalAdapter', () => {
         },
       };
       const r = adapter.normalizeInbound(withAtt);
-      expect(r.attachments).toEqual([{ url: 'att-1', type: 'image/png', name: 'pic.png' }]);
+      // By id: the bridge serves it under /v1/attachments/<id> (fetchAttachment).
+      expect(r.attachments).toEqual([{ ref: 'att-1', type: 'image/png', name: 'pic.png', size: 10 }]);
     });
     it('falls back to sourceNumber/sourceUuid for userId', () => {
       const r = adapter.normalizeInbound({ envelope: { sourceUuid: 'uuid-1', dataMessage: { message: 'x' } } });

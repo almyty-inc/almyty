@@ -158,15 +158,15 @@ describe('the autonomous agent page', () => {
     if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = vi.fn()
   })
 
-  it('shows the work mode first, then memory and capabilities, and nothing in a dialog', async () => {
+  it('shows the work mode first, above personality and instructions, then memory and capabilities, and nothing in a dialog', async () => {
     openAgent({ strategy: 'single', roles: [MAIN] })
     const headings = await screen.findAllByText(/^(Personality & style|Instructions|Work mode|Memory|Capabilities|Run limits|Heartbeat)$/, {
       selector: '.text-base',
     })
     expect(headings.map((h) => h.textContent)).toEqual([
+      'Work mode',
       'Personality & style',
       'Instructions',
-      'Work mode',
       'Memory',
       'Capabilities',
       'Run limits',

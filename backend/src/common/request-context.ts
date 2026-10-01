@@ -26,6 +26,13 @@ export interface RequestContextStore {
   gatewayId?: string | null;
   /** Set for the duration of an agent run, so its tool calls inherit it. */
   runId?: string | null;
+  /** The agent whose run this is, set with runId. */
+  agentId?: string | null;
+  /**
+   * The run whose runner workspaces this one works in: the run itself, or
+   * for a workflow sub-agent the top-level run (RunWorkspaceService).
+   */
+  workspaceRunId?: string | null;
   /** Set for the duration of a pipeline node's execution. */
   nodeId?: string | null;
   /** Queue name + job id, when the scope is a background job. */

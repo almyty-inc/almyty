@@ -37,6 +37,7 @@ import { InputSchemaViolation, schemaConstrainsAnything, schemaProblems } from '
 import { describeLimitTrip } from './run-limits';
 import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 import { bestOfNJudgePrompt, consensusJudgePrompt, parseBestOfNPick, parseConsensus } from './strategies/judging';
+import { inputAttachments } from './attached-files';
 import {
   looksLikeMethodCall,
   matchComparison,
@@ -98,6 +99,8 @@ export interface NodeExecutionOptions {
   principal?: ExecutionPrincipal;
   nestingDepth?: number;
   maxNestingDepth?: number;
+  /** The run whose runner workspaces this run's work shares (EngineInternalOptions). */
+  workspaceRunId?: string;
   edges?: AgentPipelineEdge[];
   /**
    * Cancellation signal from the owning agent execution. Flows
@@ -517,7 +520,11 @@ export class AgentNodeExecutor {
     if (systemPrompt) {
       messages.push({ role: 'system' as any, content: systemPrompt });
     }
-    messages.push({ role: 'user' as any, content: userPrompt });
+    // Files the run was invoked with (input.attachments) go to every llm_call
+    // whose prompt reads the input, after its text; the model call resolves
+    // them for the model that answers (attached-files.ts).
+    const files = /\{\{\s*input\b/.test(String(promptTemplate)) ? inputAttachments(context.input) : [];
+    messages.push({ role: 'user' as any, content: files.length ? [{ type: 'text', text: userPrompt }, ...files] : userPrompt });
 
     return this.callModelForNode(node, config, messages, organizationId, userId, options);
   }
@@ -757,7 +764,11 @@ export class AgentNodeExecutor {
       // The resolved parameters ride on the error so a failed tool call's
       // input is persisted too, not just its message.
       throw Object.assign(new Error(result.error || 'Tool execution failed'), {
-        resolvedInput: { toolId, parameters: resolvedParams },
+        resolvedInput: { toolId, parameters: resolvedParams, ...(result.approvalId ? { approvalId: result.approvalId } : {}) },
+        // A call an approval policy held: it waits in Approvals and runs
+        // once a person approves it. A workflow cannot pause, so the run
+        // stops here and says so (the run history shows it as waiting).
+        ...(result.approvalRequired && result.approvalStatus === 'pending' ? { code: 'AWAITING_APPROVAL' } : {}),
       });
     }
 

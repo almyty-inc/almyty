@@ -169,6 +169,7 @@ describe('streaming reaches a real implementation for every type it claims to st
       {
         prepareTools: jest.fn().mockResolvedValue([]),
         resolveProviderSecrets: jest.fn().mockResolvedValue(undefined),
+        resolveAttachments: jest.fn(async (_org: unknown, _provider: unknown, request: unknown) => request),
         recordRoute: jest.fn(),
         // The non-streaming fallback runs through the real dispatch, which
         // is exactly what we want to observe for a type that does not

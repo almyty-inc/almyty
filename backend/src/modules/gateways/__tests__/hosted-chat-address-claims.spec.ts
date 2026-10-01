@@ -237,6 +237,7 @@ describe('hosted-chat address claims', () => {
         id: 'gw-1',
         type: GatewayType.HOSTED_CHAT,
         status: GatewayStatus.ACTIVE,
+        agentId: 'agent-1',
         customDomain: { hostname: 'chat.acme.com', status: 'active' },
         isActive: () => true,
         ...over,

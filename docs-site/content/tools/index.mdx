@@ -1,74 +1,67 @@
 # Tools
 
-Point almyty at an API and every operation becomes a typed tool your agents can
-call: validated inputs, a description the model reads to decide when to use it,
-and a source it traces back to. Import a schema and you get a tool per operation.
-Need custom logic instead? Write one by hand from HTTP, GraphQL, JavaScript, an
-LLM prompt, or an npm SDK.
+A **tool** is one thing an assistant can do in one of your systems: "look up an order", "track a shipment", "issue a refund". You don't have to write tools one by one. Connect an API your company already has, and almyty makes a tool for every action it offers.
+
+For example, connecting the Northwind Orders API gives you tools such as *Get an order by number*, *Track the shipment for an order* and *Issue a refund for an order*. An assistant reads each tool's description to decide when to use it.
 
 ![Tools list filtered to active tools on the current page, with names, source labels, and status](/screenshots/tools-list.png)
 
 ## Two ways to get tools
 
-**Import an API.** Open **APIs → Connect an API**, pick what kind it is, give its description (a link, a file or the text), and click **Connect API**. Or pick one of the **Ready-made provider APIs** (OpenAI, Mistral, Hugging Face Hub): almyty reads the description the provider publishes and calls it with the key you keep for that provider. almyty creates a
-tool for each operation, with parameters, types, and validation already filled in:
+**Connect an API (the usual way).** Open **APIs** and click **Connect an API**. Pick what kind of API it is (**OpenAPI / Swagger**, **GraphQL**, **SOAP / WSDL**, **gRPC / proto**, **SDK / npm** or **Manual HTTP**), give almyty its description as a link, a file or the text, and click **Connect API**. almyty reads the description and creates one tool per action, with its inputs already filled in. You can also pick one of the **Ready-made provider APIs** (OpenAI, Mistral, Hugging Face Hub), which uses the key you already keep for that provider on **Credentials**.
 
-| Schema | What becomes a tool |
-|--------|---------------------|
-| OpenAPI | Each path plus method |
+An API description (sometimes called a schema) is the file that lists everything an API can do. Most APIs publish one; ask whoever runs the system if you can't find it.
+
+| Kind of API | What becomes a tool |
+|------|---------------------|
+| OpenAPI / Swagger | Each action (an address plus a method) |
 | GraphQL | Each query and mutation |
-| SOAP | Each WSDL operation |
-| Protobuf | Each RPC method |
+| SOAP / WSDL | Each operation |
+| gRPC / proto | Each method |
+| SDK / npm | Each function you map |
 
-**Create one by hand.** Click **Create tool** to open `/tools/new` and pick an execution method. Give
-it a name and description (the description is what agents see when deciding
-whether to call it), define input parameters with the JSON Schema builder, then
-configure the method.
+**Create one by hand.** On **Tools**, click **Create tool**. Pick an **Execution method** (how the tool does its work), give it a **Tool name** and a **Description** (what assistants read to decide when to use it), describe its inputs under **Parameters**, and click **Create tool**.
 
-## Tool types
+## Kinds of tool
 
-| Type | Use it to | Docs |
+| Kind | Use it to | Page |
 |------|-----------|------|
-| HTTP | Call any REST endpoint with method, URL, headers, and body | [HTTP tools](/tools/http-tools) |
-| GraphQL | Run a query or mutation against a GraphQL endpoint | [GraphQL tools](/tools/graphql-tools) |
-| JavaScript | Run sandboxed JS/TS with npm packages for logic and transforms | [JavaScript tools](/tools/javascript-tools) |
-| LLM | Generate output from a prompt template using a configured model | [LLM tools](/tools/llm-tools) |
-| SDK | Import an npm package and generate tools from its exported functions | [SDK tools](/tools/sdk-tools) |
-| MCP | Consume any remote MCP server; its tools become native almyty tools | [MCP tools](/tools/mcp-tools) |
+| HTTP REST API | Call one address of a web API | [HTTP tools](/tools/http-tools) |
+| GraphQL | Use the queries and changes of a GraphQL API | [GraphQL tools](/tools/graphql-tools) |
+| SOAP | Call an operation of an older SOAP web service | [SOAP tools](/tools/soap-tools) |
+| gRPC | Call a method of an internal gRPC service, from its `.proto` | [gRPC tools](/tools/grpc-tools) |
+| Custom JavaScript | Run a small piece of code, for a calculation or to reshape data | [JavaScript tools](/tools/javascript-tools) |
+| Model prompt | Have an AI model summarize, classify, extract or translate | [LLM tools](/tools/llm-tools) |
+| SDK / npm package | Use a function from a JavaScript library | [SDK tools](/tools/sdk-tools) |
+| MCP server | Use the tools another MCP server already offers (MCP is a common standard AI apps use to call tools) | [MCP tools](/tools/mcp-tools) |
 
-Open a tool to configure it and run it against real inputs in the tool tester
-before an agent ever touches it.
+## Try a tool before anyone uses it
 
-![Generated weather tool with its parameter schema and Test Tool tab](/screenshots/tool-detail.png)
+Open a tool and go to **Test tool**. Fill in sample inputs, click **Execute Tool** and see exactly what the system answers. Do this before you hand the tool to an assistant.
 
-## Put tools in front of an LLM
+![Generated weather tool with its parameter schema and Test tool tab](/screenshots/tool-detail.png)
 
-Assign tools to a gateway, then expose that gateway over MCP from your terminal.
-Any MCP-compatible client (Claude, an IDE, your own agent) sees them as native
-tools:
+A tool's page also has **Details**, **Exports** (how to use it through each gateway it is in), **Gateways** (which gateways offer it) and **Stats** (how often it ran and how that went).
+
+## Drafts and active tools
+
+Tools made from an API description start as **drafts**, so nothing is offered until you decide. On **Tools**, click **Select the drafts**, untick any you don't want, and click **Activate selected**. Only active tools are offered to assistants and AI apps.
+
+## Give tools to an AI app
+
+Your own almyty [agents](/agents) use tools directly. To offer tools to an outside AI app (Claude Code, Cursor, Claude Desktop), put them in a [gateway](/gateways): one address that offers a set of tools you choose.
+
+## For developers
+
+Serve a gateway's tools to any MCP client from a terminal:
 
 ```bash
 $ npx @almyty/auth login
 $ npx @almyty/mcp-server acme/petstore
 ```
 
-See the [MCP server CLI](/cli/mcp-server) for gateway setup and client config.
+See the [MCP server CLI](/cli/mcp-server) for client configuration.
 
-## Tool lifecycle
+**Statuses.** A tool's `status` is `draft`, `active`, `inactive`, `deprecated` or `deleted`. Gateways serve only `active` tools.
 
-| Status | Meaning |
-|--------|---------|
-| `active` | Available for execution and gateway assignment |
-| `inactive` | Exists but cannot be executed |
-| `deprecated` | Marked for removal, still functional |
-| `error` | Has a configuration issue that needs attention |
-
-## Export formats
-
-Any tool exports to:
-
-- **SKILL.md** for Agent Skills injection
-- **CLI** as a Bash or Node.js script
-- **SDK** as generated code for programmatic use
-
-See the individual tool type pages for method-specific configuration.
+**Exports.** Besides the per-gateway instructions on the **Exports** tab, the API exports any tool as a SKILL.md file (`GET /organizations/:organizationId/tools/:toolId/skill`), a command-line script (`GET /organizations/:organizationId/tools/:toolId/cli?format=bash` or `format=node`) and generated client code (`GET /organizations/:organizationId/tools/:toolId/sdk`). See the [Tools API](/api-reference/tools-api).

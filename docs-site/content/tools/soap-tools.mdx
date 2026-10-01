@@ -1,0 +1,76 @@
+# SOAP tools
+
+SOAP is an older way systems offer their services, common in banking, insurance, logistics and government. Each thing a SOAP service can do is an *operation*, such as "convert a temperature" or "look up a policy". Each operation can be a tool your assistants use, without anyone writing XML.
+
+## Connect a SOAP service
+
+1. Open **APIs** and click **Connect an API**.
+2. Pick **SOAP / WSDL**.
+3. Give almyty the service's WSDL (the file that describes it): a link, usually the service address ending in `?wsdl`, a file or the text.
+4. Click **Connect API**. Every operation becomes a tool, as a draft. Test the ones you want on **Test tool**, then activate them.
+
+## Make one by hand
+
+When you only need one operation, create the tool yourself.
+
+1. Open **Tools** and click **Create tool**.
+2. Under **Execution method**, pick **SOAP**.
+3. Give it a **Tool name** and a **Description** that says plainly what it does.
+4. Under **SOAP**:
+   - **Service URL**: where requests are sent. It is usually the WSDL address without `?wsdl`, for example `https://www.w3schools.com/xml/tempconvert.asmx`.
+   - **Operation**: the operation's name, exactly as the WSDL spells it, such as `CelsiusToFahrenheit`.
+   - **Namespace**: the service's `targetNamespace`, found near the top of the WSDL, such as `https://www.w3schools.com/xml/`.
+   - **SOAPAction (optional)**: leave it empty unless the service documents a different one.
+5. Under **Authentication**, pick how it signs in and the key from [Credentials](/credentials).
+6. Under **Parameters**, add one input per field the operation takes, named as the WSDL names them (`Celsius` in the example).
+7. Click **Create tool**, then try it on **Test tool**.
+
+The tool builds the SOAP request from the inputs and answers with the service's reply. A SOAP fault comes back to the assistant as a failed call with the fault's text.
+
+## For developers
+
+### The tool definition
+
+A hand-made SOAP tool is stored as its `soapConfig`, which is what **Create tool** sends to the [Tools API](/api-reference/tools-api):
+
+```json
+{
+  "name": "celsius_to_fahrenheit",
+  "description": "Convert a temperature from Celsius to Fahrenheit",
+  "type": "function",
+  "executionMethod": "soap",
+  "parameters": {
+    "type": "object",
+    "properties": { "Celsius": { "type": "number" } },
+    "required": ["Celsius"]
+  },
+  "soapConfig": {
+    "endpoint": "https://www.w3schools.com/xml/tempconvert.asmx",
+    "operation": "CelsiusToFahrenheit",
+    "namespace": "https://www.w3schools.com/xml/"
+  }
+}
+```
+
+The request body is one element named after the operation, in the target namespace, with one child element per input (nested objects become nested elements, values are XML-escaped):
+
+```xml
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <CelsiusToFahrenheit xmlns="https://www.w3schools.com/xml/"><Celsius>25</Celsius></CelsiusToFahrenheit>
+  </soap:Body>
+</soap:Envelope>
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `soapConfig.endpoint` | string | Service URL (`https://` or `http://`). Required unless the tool is linked to an API with `apiId` |
+| `soapConfig.operation` | string | Operation name. Required |
+| `soapConfig.namespace` | string | Target namespace of the operation element |
+| `soapConfig.soapAction` | string | `SOAPAction` header; defaults to the namespace followed by the operation name, sent without quotes |
+| `soapConfig.bodyTemplate` | string | Your own XML for the inside of `soap:Body`, with `{name}` placeholders (XML-escaped). Replaces the generated element |
+| `soapConfig.headers` | object | Extra HTTP headers |
+| `soapConfig.responseMapping.dataPath` | string | Dot path to return instead of the whole reply |
+| `configuration.timeout` | number | Timeout in milliseconds, default `30000` |
+
+The result is the service's reply as XML text. The tool signs in with `authConfig`, or with the linked API's key when it has an `apiId`. A create with `executionMethod: "soap"` and no `soapConfig`, or with `code`, is refused with a 400.

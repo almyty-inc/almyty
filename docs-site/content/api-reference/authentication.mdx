@@ -1,14 +1,14 @@
 # Authentication
 
-> This is the HTTP API reference. For UI walkthroughs, see [Getting Started](/) and the feature guides above.
+This page is for developers writing their own programs against almyty's HTTP API (the web addresses programs call to do what the app does, such as listing agents or starting a run). Every call has to prove who is making it, and this page explains how: sign in for a short-lived token, or use an API key (a long secret string that works like a password for programs). For example, a script that runs your nightly report agent sends an API key with each call. If you only use the app, you can skip this section; you sign in as usual.
 
 
 The almyty API uses JWT (JSON Web Tokens) for authentication. The web UI
 receives its token as an `httpOnly` `SameSite=lax` cookie so JavaScript
 running in the page can't read it, cross-site scripting and compromised
 npm packages can't steal the session. Programmatic clients and CLIs use
-a Bearer `Authorization` header with an API key they can mint from
-Settings → API Keys (or via the CLI login flow).
+a Bearer `Authorization` header with an API key, minted by the CLI login
+flow or with `POST /auth/api-keys`.
 
 Every token carries `iss: "almyty"` + `aud: "almyty-api"` claims and is
 signed with HS256. Both claims are enforced on verification, tokens
@@ -122,7 +122,7 @@ curl -X POST https://api.almyty.com/auth/token \
 }
 ```
 
-## Using the Token
+## Using the token
 
 Include the access token in the `Authorization` header of API requests:
 
@@ -131,7 +131,7 @@ curl https://api.almyty.com/apis \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
-## Token Expiration
+## Token expiration
 
 Access tokens expire after 24 hours. A client that signed in with
 `/auth/token` redeems its refresh token at `POST /auth/refresh` for a new
@@ -139,40 +139,41 @@ pair; each refresh token works once, and presenting a spent one ends the
 session. Like `/auth/token`, `/auth/refresh` refuses browser pages. For
 long-lived programmatic access, use API keys instead.
 
-## API Keys
+## API keys
 
-API keys are long-lived tokens for scripts, CI pipelines, and CLI tools. They don't expire (unless revoked) and carry the same permissions as your user account.
+API keys are long-lived tokens for scripts, CI pipelines, and CLI tools. They expire only when created with an `expiresAt`, stop working when revoked, and act with the full permissions of the user who minted them. Keys scoped to one gateway are separate: see [Gateway authentication](/gateways/authentication).
 
 ### Getting an API key
 
-![Credentials vault](/screenshots/credentials-vault.png)
+The simplest way is `npx @almyty/auth login`: it opens your browser, mints a key named after the machine and date, and stores it at `~/.almyty/credentials.json` so every CLI picks it up.
 
-1. Go to **Credentials** in the sidebar
-2. Open the **Access Keys** tab
-3. Click **Generate Key**
-4. Pick a name, select the gateway or agent to scope it to, and choose permissions
-5. **Copy the key immediately**: it's shown only once
-
-The key looks like `ak_live_abc123...`. Use it anywhere a Bearer token is expected:
+From a script, with a session cookie or an existing key:
 
 ```bash
-curl /apis -H "Authorization: Bearer ak_live_abc123..."
+curl -X POST https://api.almyty.com/auth/api-keys \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "CI pipeline" }'
 ```
 
-For CLI tools, run `npx @almyty/auth login` instead, it opens your browser, authenticates, and stores the key at `~/.almyty/credentials.json` so every CLI picks it up automatically.
+`name` is required; `expiresAt` (an ISO date) and `organizationId` are optional. The response carries `apiKey`, the full key, once. The key looks like `almyty_3f9c...`. Use it anywhere a Bearer token is expected:
 
-To revoke: **Credentials** → **Access Keys** → menu → **Revoke**.
+```bash
+curl https://api.almyty.com/apis -H "Authorization: Bearer almyty_3f9c..."
+```
+
+`GET /auth/api-keys` lists your keys (name, prefix, last use, expiry, whether active); `DELETE /auth/api-keys/:keyId` revokes one.
 
 ## Profile
 
-### Get Profile
+### Get profile
 
 ```bash
 curl https://api.almyty.com/auth/profile \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### Update Profile
+### Update profile
 
 ```bash
 curl -X PATCH https://api.almyty.com/auth/profile \
@@ -186,7 +187,7 @@ curl -X PATCH https://api.almyty.com/auth/profile \
 
 `timezone` is an IANA time zone name (`null` clears it back to UTC). Emails that wait for the morning, such as the daily model digest, go out at 08:00 in it.
 
-### Change Password
+### Change password
 
 ```bash
 curl -X PATCH https://api.almyty.com/auth/change-password \
@@ -198,7 +199,7 @@ curl -X PATCH https://api.almyty.com/auth/change-password \
   }'
 ```
 
-## Organization Context
+## Organization context
 
 Most API endpoints are scoped to an organization. How the backend picks
 the current organization depends on how many memberships the caller has:

@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
-import { FilesService } from './files.service';
+import { FILE_PURPOSES, FilesService, type FilePurpose } from './files.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -76,6 +76,8 @@ export class FilesController {
     @Query('agentId', new ParseUUIDPipe({ optional: true })) agentId: string,
     @Query('runId', new ParseUUIDPipe({ optional: true })) runId: string,
     @Request() req: any,
+    /** What the upload is for (app_icon: the branding page's icon, cleared a day later if never saved). */
+    @Query('purpose') purpose?: string,
   ) {
     try {
       if (!file) {
@@ -96,7 +98,10 @@ export class FilesController {
       }
       const organizationId = this.getOrgId(req);
       const userId = req.user.sub || req.user.id;
-      const result = await this.filesService.upload(organizationId, { ...file, mimetype }, { agentId, runId, uploadedBy: userId });
+      if (purpose !== undefined && !(FILE_PURPOSES as readonly string[]).includes(purpose)) {
+        throw new HttpException({ success: false, message: `purpose must be one of: ${FILE_PURPOSES.join(', ')}`, error: 'BAD_PURPOSE' }, HttpStatus.BAD_REQUEST);
+      }
+      const result = await this.filesService.upload(organizationId, { ...file, mimetype }, { agentId, runId, uploadedBy: userId, purpose: purpose as FilePurpose | undefined });
       return { success: true, data: result, message: 'File uploaded successfully' };
     } catch (error) {
       throw new HttpException({ success: false, message: error.message, error: 'FILE_UPLOAD_FAILED' }, error.status || HttpStatus.BAD_REQUEST);

@@ -43,9 +43,7 @@ function renderOverview(executionsError: Error | null, onRetryExecutions?: () =>
   renderWithProviders(
     <OverviewTab agent={agent} executions={[]} executionsError={executionsError}
       onRetryExecutions={onRetryExecutions} versions={[]}
-      entityVersions={[]} auditLog={[]} webhookUrl="" setWebhookUrl={vi.fn()} scheduleEnabled={false}
-      setScheduleEnabled={vi.fn()} scheduleInterval={60} setScheduleInterval={vi.fn()}
-      scheduleInput="{}" setScheduleInput={vi.fn()} />,
+      entityVersions={[]} auditLog={[]} webhookUrl="" setWebhookUrl={vi.fn()} />,
   )
 }
 

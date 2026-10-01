@@ -770,19 +770,53 @@ describe('AgentNodeExecutor', () => {
     // length and shape are not the author's. The regexes that read it took
     // ten seconds on 100 KB of spaces for a comparison and did not finish
     // for a method call.
-    it.each([
-      ['a method call with a spaced argument', `a.includes(${' '.repeat(100_000)}x`],
-      ['a spaced receiver', `!${' '.repeat(100_000)}x)`],
-      ['a line of spaces', `${' '.repeat(100_000)}\n`],
-      ['spaces before an operator', `a${' '.repeat(100_000)}=`],
-      ['repeated calls', '.a('.repeat(33_000)],
-    ])('reads upstream output with %s in linear time', async (_label, text) => {
-      const started = Date.now();
+    //
+    // Linear is asserted as growth, not as a wall-clock budget a slow CI
+    // runner blows: sixteen times the input may take at most 64 times as
+    // long. Linear is about 16x, quadratic about 256x (cubic 4096x), so a GC
+    // pause or a busy runner has 4x of room either way. Each size is timed as
+    // the median of five runs after a warm-up, and below a few milliseconds
+    // the clock is noise, not growth, so the small time counts as at least
+    // 5ms. The large input is 100 KB, except for the method call, whose old
+    // regex was cubic and would not finish one run at that size; 4 KB
+    // already takes it seconds.
+    const RUNS = 5;
+    const GROWTH = 16;
+    const MAX_RATIO = 64;
+    const NOISE_FLOOR_MS = 5;
+    const conditionTime = async (text: string): Promise<number> => {
+      const started = performance.now();
       await executor
         .execute(node('condition', { expression: '{{input.text}}' }), buildContext({ input: { text } }), 'org-1')
         .catch(() => undefined);
-      expect(Date.now() - started).toBeLessThan(250);
-    });
+      return performance.now() - started;
+    };
+    const median = (runs: number[]) => [...runs].sort((a, b) => a - b)[Math.floor(runs.length / 2)];
+
+    it.each([
+      ['a method call with a spaced argument', 250, (n: number) => `a.includes(${' '.repeat(n)}x`],
+      ['a spaced receiver', 6_250, (n: number) => `!${' '.repeat(n)}x)`],
+      ['a line of spaces', 6_250, (n: number) => `${' '.repeat(n)}\n`],
+      ['spaces before an operator', 6_250, (n: number) => `a${' '.repeat(n)}=`],
+      ['repeated calls', 6_250, (n: number) => '.a('.repeat(Math.floor(n / 3))],
+    ] as const)('reads upstream output with %s in linear time', async (_label, size, make) => {
+      const smallInput = make(size);
+      const largeInput = make(size * GROWTH);
+      await conditionTime(smallInput); // warm-up: JIT and first-call costs are not growth
+      const smallRuns: number[] = [];
+      for (let i = 0; i < RUNS; i++) smallRuns.push(await conditionTime(smallInput));
+      const budget = Math.max(median(smallRuns), NOISE_FLOOR_MS) * MAX_RATIO;
+
+      // Once most runs are over budget the median is too, so stop there
+      // rather than sit through the rest of a superlinear reader.
+      const largeRuns: number[] = [];
+      while (largeRuns.length < RUNS && largeRuns.filter((t) => t >= budget).length <= RUNS / 2) {
+        largeRuns.push(await conditionTime(largeInput));
+      }
+      expect(median(largeRuns)).toBeLessThan(budget);
+      // Generous: a green run takes milliseconds; this only lets a
+      // superlinear reader reach the assertion instead of the test timeout.
+    }, 180_000);
   });
 
   // ==========================================================================

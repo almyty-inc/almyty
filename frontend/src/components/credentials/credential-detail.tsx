@@ -23,8 +23,9 @@ import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { ServiceIcon } from '@/components/connect/service-tiles'
 import { StatusLabel } from '@/components/connect/status-label'
 import { WhoCanUse, WhoCanUseLine } from '@/components/connect/who-can-use'
-import { ConnectServiceForm, connectorIcon, useConnectors } from '@/components/connections/connect-flow'
+import { ConnectServiceForm, connectorIcon, useConnectOwners, useConnectors } from '@/components/connections/connect-flow'
 import { connectionCheck, connectionWho } from '@/components/connections/connection-status'
+import type { Visibility, VisibilityValue } from '@/components/ui/visibility-field'
 import { useOrganizationRole } from '@/hooks/use-organization-role'
 import { credentialsApi } from '@/lib/api'
 import { connectionsApi, errorMessage } from '@/lib/connections-api'
@@ -161,6 +162,21 @@ export function CredentialDetail({ connection, connector, onDeleted }: Credentia
     onError: (error: unknown) => notifications.error('Could not delete', errorMessage(error, 'The credential was not deleted.')),
   })
 
+
+  // Who can use it, changed here like a provider connection's. The key a
+  // provider connection keeps for itself is changed on that connection.
+  const owners = useConnectOwners()
+  const who = connectionWho(connection)
+  const shareOptions: Visibility[] = connection.providerId ? [who] : [who, ...owners.options.filter((o) => o !== who)]
+  const share = useMutation({
+    mutationFn: (next: VisibilityValue) =>
+      connectionsApi.setSharing(connection.id, { owner: next.visibility, ...(next.visibility === 'team' && next.teamId ? { teamId: next.teamId } : {}) }),
+    onSuccess: () => {
+      invalidate()
+      notifications.success('Saved', 'Who can use it changed.')
+    },
+    onError: (error: unknown) => notifications.error('Could not change who can use it', errorMessage(error, 'Nothing was changed.')),
+  })
   const status = connectionCheck(connection, connector)
   const uses: CredentialUse[] = (connection.usedBy ?? []).map((u) => ({ label: u.name }))
   const service = connector?.displayName ?? connection.connectorDisplayName ?? connection.connectorKey
@@ -238,10 +254,19 @@ export function CredentialDetail({ connection, connector, onDeleted }: Credentia
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <WhoCanUse value={{ visibility: connectionWho(connection), teamId: null }} onChange={() => {}} options={[connectionWho(connection)]} />
-                {canManage && connection.owner === 'org' && (
+                <WhoCanUse
+                  value={{ visibility: who, teamId: connection.teamId ?? null }}
+                  onChange={(next) => {
+                    if (next.visibility === 'team' && !next.teamId) return
+                    share.mutate(next)
+                  }}
+                  disabled={share.isPending}
+                  noun="this credential"
+                  options={shareOptions}
+                />
+                {canManage && (connection.owner === 'org' || connection.owner === 'team') && (
                   <Link to={credentialAccessPath(connection.id)} className="text-sm text-primary hover:underline">
-                    Change
+                    Advanced
                   </Link>
                 )}
               </div>
@@ -294,7 +319,7 @@ export function StoredCredentialDetail({ credential, onDeleted }: { credential: 
                   </Link>
                 )}
               </p>
-              <WhoCanUseLine summary={row.who === 'Only you' ? 'only you' : row.who === 'One team' ? 'one team' : 'everyone in your organization'} />
+              <WhoCanUseLine summary={row.who} />
             </CardContent>
           </Card>
           <DeleteSection name={credential.name} uses={row.uses.length} pending={remove.isPending} onDelete={() => remove.mutate()} />
