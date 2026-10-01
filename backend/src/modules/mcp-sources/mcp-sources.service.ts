@@ -12,6 +12,7 @@ import { Repository } from 'typeorm';
 import { McpSource, McpSourceStatus, McpSourceAuthType } from '../../entities/mcp-source.entity';
 import { Tool, ToolType, ToolStatus } from '../../entities/tool.entity';
 import { McpChangeBus } from '../mcp-events/mcp-change-bus.service';
+import { McpOAuthClientService } from '../connections/mcp-oauth/mcp-oauth-client.service';
 import { CredentialType } from '../../entities/credential.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { CredentialRefResolver, type ResolveOptions } from '../credentials/credential-ref.resolver';
@@ -75,6 +76,8 @@ export class McpSourcesService {
     // MCP listen streams of the gateways serving these tools. Optional for
     // the positional spec harnesses.
     @Optional() private readonly changeBus?: McpChangeBus,
+    // Signing in to OAuth-protected servers: refresh, and renew on a 401.
+    @Optional() private readonly mcpOAuth?: McpOAuthClientService,
   ) {}
 
   /**
@@ -212,8 +215,8 @@ export class McpSourcesService {
     try {
       // Discovery calls the server as the person who asked for it: a team
       // or private connection they may not use is not sent for them.
-      const { tools: remoteTools, init } = await this.mcpClient.listTools(
-        await this.connectionConfig(source, { principal: userId ? { id: userId } : null }),
+      const { tools: remoteTools, init } = await this.withSignIn(source, { principal: userId ? { id: userId } : null }, (config) =>
+        this.mcpClient.listTools(config),
       );
 
       const mine = await this.findMaterializedTools(source);
@@ -349,10 +352,8 @@ export class McpSourcesService {
       );
     }
 
-    const result = await this.mcpClient.callTool(
-      await this.connectionConfig(source, options),
-      mcpConfig.remoteName,
-      args ?? {},
+    const result = await this.withSignIn(source, options, (config) =>
+      this.mcpClient.callTool(config, mcpConfig.remoteName, args ?? {}),
     );
     return this.mapCallResult(result);
   }
@@ -424,6 +425,24 @@ export class McpSourcesService {
   }
 
   /**
+   * One call to the source's server. A source signed in with OAuth
+   * (connections/mcp-oauth) whose server answers 401 gets one retry after
+   * the sign-in is renewed; when it cannot be renewed (or the server now
+   * signs in elsewhere), the error says to sign in again.
+   */
+  private async withSignIn<T>(source: McpSource, options: McpExecuteOptions, call: (config: McpConnectionConfig) => Promise<T>): Promise<T> {
+    try {
+      return await call(await this.connectionConfig(source, options));
+    } catch (err) {
+      if (!this.mcpOAuth || !source.credentialId || !(err instanceof McpClientError) || err.data?.status !== 401) throw err;
+      const renewed = await this.mcpOAuth.ensureFresh(source.organizationId, source.credentialId, { force: true });
+      if (renewed.status === 'reconnect') throw new McpClientError('MCP_HTTP_ERROR', renewed.error, err.data);
+      if (renewed.status !== 'refreshed') throw err;
+      return call(await this.connectionConfig(source, options));
+    }
+  }
+
+  /**
    * The credential a source was created with. A pasted token or header
    * map becomes a row this source manages; a credentialId points at a
    * shared connection (its type decides the auth shape).
@@ -479,6 +498,10 @@ export class McpSourcesService {
    */
   private async authHeaders(source: McpSource, principal: McpExecuteOptions['principal']): Promise<Record<string, string>> {
     if (source.credentialId) {
+      // A sign-in that has expired is renewed first (connections/mcp-oauth);
+      // one that cannot be renewed says to sign in again.
+      const fresh = await this.mcpOAuth?.ensureFresh(source.organizationId, source.credentialId);
+      if (fresh?.status === 'reconnect') throw new McpClientError('MCP_HTTP_ERROR', fresh.error);
       const resolved = await this.credentialRefs.resolve(source.organizationId, source.credentialId, {
         principal: principal ?? null,
         context: { purpose: 'mcp_call', resourceType: 'mcp_source', resourceId: source.id },
