@@ -71,6 +71,13 @@ updates:
       # the hour. Moves with the same ESM migration as Nest 12.
       - dependency-name: "@apidevtools/swagger-parser"
         update-types: ["version-update:semver-major"]
+      # The schedule page's next-run times must come from the cron-parser
+      # Bull fires repeatable jobs with, and bull 4 depends on ^4.9.0.
+      # v5 also throws "loop limit exceeded" for a daily 03:00 in
+      # Australia/Lord_Howe across its half-hour DST change, where v4
+      # answers. Moves only together with the queue's own parser.
+      - dependency-name: "cron-parser"
+        update-types: ["version-update:semver-major"]
     groups:
       backend-minor-and-patch:
         applies-to: version-updates
