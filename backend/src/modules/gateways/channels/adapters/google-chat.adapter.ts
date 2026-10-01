@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import { isImage, textWithMedia } from '../reply-media';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -7,12 +8,27 @@ export class GoogleChatAdapter extends BaseAdapter {
   private readonly logger = new Logger(GoogleChatAdapter.name);
   readonly type = 'google_chat';
 
+  /** Images one reply shows. */
+  static readonly MAX_IMAGES = 5;
+
   normalizeInbound(rawPayload: any): NormalizedMessage {
     const message = rawPayload.message || rawPayload;
+    const space = rawPayload.space || message.space;
+    // Files sent to the app are named, not read: Chat serves their bytes
+    // only through its media API, which needs a service account or a
+    // user's authorization, and this channel holds a webhook and a token.
+    const attachments = (Array.isArray(message.attachment) ? message.attachment : [])
+      .filter((a: any) => a && (a.contentName || a.name))
+      .map((a: any) => ({ type: a.contentType || 'application/octet-stream', name: a.contentName || 'attachment' }));
+    const senderId = message.sender?.name;
     return {
       text: message.text || message.argumentText || '',
       userId: message.sender?.name || message.sender?.displayName || 'unknown',
       threadId: message.thread?.name || undefined,
+      ...(attachments.length ? { attachments } : {}),
+      ...(senderId ? { sender: { id: senderId, name: message.sender?.displayName || undefined } } : {}),
+      // A space or a group chat has several people in it; a direct message has one.
+      group: GoogleChatAdapter.isGroupSpace(space),
       metadata: {
         spaceId: rawPayload.space?.name,
         spaceName: rawPayload.space?.displayName,
@@ -20,6 +36,13 @@ export class GoogleChatAdapter extends BaseAdapter {
         source: 'google_chat',
       },
     };
+  }
+
+  static isGroupSpace(space: any): boolean {
+    if (!space) return false;
+    if (space.singleUserBotDm === true) return false;
+    if (typeof space.spaceType === 'string') return space.spaceType !== 'DIRECT_MESSAGE';
+    return space.type === 'ROOM';
   }
 
   /**
@@ -31,8 +54,23 @@ export class GoogleChatAdapter extends BaseAdapter {
     return message?.name ? `google_chat:${message.name}` : undefined;
   }
 
+  /**
+   * Images go as a card of image widgets under the text, which Chat
+   * fetches from their links; other files stay links.
+   */
   formatOutbound(response: AdapterResponse): any {
-    return { text: response.text };
+    const images = (response.attachments ?? []).filter(isImage).slice(0, GoogleChatAdapter.MAX_IMAGES);
+    const text = textWithMedia(response, images);
+    if (!images.length) return { text };
+    return {
+      text,
+      cardsV2: [
+        {
+          cardId: 'reply-images',
+          card: { sections: [{ widgets: images.map((image) => ({ image: { imageUrl: image.url, altText: image.name } })) }] },
+        },
+      ],
+    };
   }
 
   /**
@@ -53,6 +91,7 @@ export class GoogleChatAdapter extends BaseAdapter {
     }
 
     const body: any = { text: formattedResponse.text };
+    if (Array.isArray(formattedResponse.cardsV2)) body.cardsV2 = formattedResponse.cardsV2;
     if (threadContext?.threadId) {
       body.thread = { name: threadContext.threadId };
     }

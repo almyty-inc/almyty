@@ -1,11 +1,13 @@
-# MCP Server
+# MCP server
 
-The `@almyty/mcp-server` package connects an almyty **gateway** to any MCP-compatible LLM client. You create a gateway in the almyty UI, assign tools to it, then point this server at that gateway. The LLM sees your tools as native MCP tools.
+MCP (Model Context Protocol) is the common way AI assistants such as Claude Desktop, Claude Code and Cursor pick up extra tools. The `@almyty/mcp-server` package plugs one of your almyty **gateways** (a published set of tools, for example "look up an order" and "issue a refund") into any of those assistants, so they can use your company's systems. It is for developers and for people setting up their own AI assistant; most assistants can also connect straight to the gateway's address, shown on the gateway's page in the app (see [MCP gateways](/gateways/mcp)).
+
+You create a gateway in the almyty app, assign tools to it, then point this server at that gateway. The assistant sees your tools as its own.
 
 ![@almyty/mcp-server CLI help](/screenshots/cli/mcp-server-help.png)
 
 **Prerequisites:**
-1. Create a gateway in the UI (type: MCP, A2A, UTCP, or Skills, the MCP server works with all types)
+1. Create a gateway in the app (type MCP, UTCP or Skills; the MCP server works with each)
 2. Assign tools to the gateway
 3. Authenticate: `npx @almyty/auth login`
 4. Run the server with your gateway ID
@@ -22,7 +24,7 @@ The MCP server fetches tools from your almyty gateway and registers them as MCP 
 
 ### Skill-first mode (default)
 
-Instead of registering every tool as a separate MCP tool (which consumes context window tokens on every turn), skill-first mode registers only two tools:
+Instead of registering every tool as a separate MCP tool (each tool description is sent to the model on every turn, which uses up tokens: the units models read and bill by), skill-first mode registers only two tools:
 
 | Tool | Purpose |
 |------|---------|

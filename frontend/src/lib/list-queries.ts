@@ -33,9 +33,15 @@ export const toolsQuery = (organizationId: string | undefined) => ({
   queryFn: async (): Promise<ListPage> => toListPage(await toolsApi.getAll(organizationId), 'tools'),
 })
 
+/**
+ * The Gateways list: MCP, UTCP and Skills gateways only (`kind=tool`). A
+ * web chat, widget, messaging platform or A2A endpoint is a channel on an
+ * agent and is reached from that agent's Channels tab, so it is filtered
+ * out by the server, which keeps the total and the pages right as well.
+ */
 export const gatewaysQuery = (organizationId: string | undefined) => ({
   queryKey: ['gateways', organizationId] as const,
-  queryFn: async (): Promise<ListPage> => toListPage(await gatewaysApi.getAll(), 'gateways'),
+  queryFn: async (): Promise<ListPage> => toListPage(await gatewaysApi.getAll({ kind: 'tool' }), 'gateways'),
 })
 
 /** GET /agents answers a bare array; kept as one so every reader agrees. */

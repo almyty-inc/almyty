@@ -129,7 +129,8 @@ export class AlmytyClient {
   }
 
   async listGateways(): Promise<GatewayInfo[]> {
-    const data: any = await this.request('/gateways');
+    // Gateways are MCP, UTCP and Skills; an agent's channels are not listed.
+    const data: any = await this.request('/gateways?kind=tool');
     const gateways = data?.data?.gateways || data?.data?.data || data?.data || [];
     return (Array.isArray(gateways) ? gateways : []).map((gw: any) => ({
       id: gw.id,

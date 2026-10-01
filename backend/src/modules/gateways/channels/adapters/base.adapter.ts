@@ -6,25 +6,89 @@
 import {
   assertOutboundUrlAllowed,
   readCappedText,
+  safeFetch,
   ssrfSafeDispatcher,
 } from '../../../../common/security/safe-fetch';
+import { parseMediaType } from '../../../files/media-type';
 
 /** A platform's answer to a send is a status document; anything bigger is not read. */
 const MAX_REPLY_BYTES = 1024 * 1024;
 /** A send to a configured URL, start to finish. */
 const SEND_TIMEOUT_MS = 30_000;
+
+/**
+ * One file someone sent, as the adapter found it in the delivery.
+ *
+ * How to get the bytes differs per platform, so the adapter records
+ * whatever it has and its own `fetchAttachment` knows what to do with it:
+ * a link (`url`, https only), a platform handle to look up first (`ref`:
+ * a Telegram file_id, a WhatsApp media id, a Matrix mxc:// URI, a Signal
+ * attachment id), or the bytes themselves when they came in the delivery
+ * (`data`: an email's MIME part). `type`, `name` and `size` are what the
+ * sender's side claims and are checked against the bytes before use.
+ */
+export interface InboundAttachment {
+  url?: string;
+  ref?: string;
+  data?: Buffer;
+  type: string;
+  name: string;
+  size?: number;
+}
+
+/** Who wrote a message, as the platform names them. */
+export interface MessageSender {
+  /** The platform's own id for the sender (the same value as `userId`). */
+  id: string;
+  /** Their display name on the platform, when the delivery carries one. */
+  name?: string;
+}
+
 export interface NormalizedMessage {
   text: string;
   userId: string;
   threadId?: string;
-  attachments?: Array<{ url: string; type: string; name: string }>;
+  attachments?: InboundAttachment[];
+  /**
+   * The person who wrote, for a conversation that has several: the agent
+   * reads each message there as "Name: text" (channel-speaker.ts).
+   */
+  sender?: MessageSender;
+  /** The conversation has several people in it (a group, a channel, a room). */
+  group?: boolean;
   metadata?: Record<string, any>;
+}
+
+/** A file to send with a reply: a public https link, its type and its name. */
+export interface OutboundAttachment {
+  url: string;
+  type: string;
+  name: string;
 }
 
 export interface AdapterResponse {
   text: string;
-  attachments?: Array<{ url: string; type: string; name: string }>;
+  attachments?: OutboundAttachment[];
+  /**
+   * The text with the media it links to taken out (reply-media.ts). An
+   * adapter that sends `attachments` as media sends this instead of `text`,
+   * so the person does not get the picture and the link to it; one that
+   * sends text only keeps `text`, links and all.
+   */
+  textWithoutMedia?: string;
   metadata?: Record<string, any>;
+}
+
+/** The bytes of one fetched attachment and the type the platform served them as. */
+export interface FetchedAttachment {
+  bytes: Buffer;
+  type?: string;
+}
+
+/** How much one attachment fetch may read, and for how long. */
+export interface AttachmentFetchLimits {
+  maxBytes: number;
+  timeoutMs: number;
 }
 
 /**
@@ -162,6 +226,98 @@ export abstract class BaseAdapter {
    */
   deliveryId(_rawPayload: any, _headers?: Record<string, string>): string | undefined {
     return undefined;
+  }
+
+  /**
+   * Whether this delivery is a message a person sent, to be answered.
+   *
+   * Most platforms post only messages to a channel webhook, and the
+   * default says yes. The iMessage relays post everything to the one URL:
+   * our own outbound echoes, delivery statuses and reactions. Answering
+   * one of those would at best waste a run and at worst have the agent
+   * reply to itself, so those adapters say no and the pipeline
+   * acknowledges the delivery without starting anything.
+   * Asked only after the delivery has been verified.
+   */
+  carriesMessage(_rawPayload: any): boolean {
+    return true;
+  }
+
+  /**
+   * The sender's display name, for the "Name: text" a group conversation
+   * shows the agent (channel-speaker.ts). The default is what the delivery
+   * carried; an adapter whose deliveries leave the name out, and whose API
+   * can say it, looks it up. Asked only for a message in a group.
+   */
+  async senderName(normalized: NormalizedMessage, _config: Record<string, any>): Promise<string | undefined> {
+    return normalized.sender?.name;
+  }
+  /**
+   * The bytes of one file someone sent, fetched the way this platform
+   * wants (channel-attachments.service.ts calls this, with its limits).
+   *
+   * The default takes a public https link and fetches it like any URL
+   * someone else chose: through the egress guard, no credentials of ours,
+   * a deadline and a size cap. An adapter whose files need its bot token,
+   * or a lookup from a handle to a link first, overrides this; one whose
+   * platform delivers no files never reaches it. Null means there is
+   * nothing this adapter can fetch for that attachment.
+   *
+   * The link is never logged or put in an error: a signed CDN link is a
+   * credential for the file, and a Telegram file link carries the bot token.
+   */
+  async fetchAttachment(
+    attachment: InboundAttachment,
+    _config: Record<string, any>,
+    limits: AttachmentFetchLimits,
+  ): Promise<FetchedAttachment | null> {
+    if (!attachment.url || !/^https:\/\//i.test(attachment.url)) return null;
+    return this.fetchBytes(attachment.url, limits);
+  }
+
+  /**
+   * GET a file through the egress guard: https only, the address pinned at
+   * connect, each redirect hop re-checked (and any Authorization header
+   * dropped when a hop leaves the origin), a deadline for the whole
+   * exchange and a cap on the body. Throws on a refusal or a non-2xx.
+   */
+  protected async fetchBytes(
+    url: string,
+    limits: AttachmentFetchLimits,
+    headers?: Record<string, string>,
+  ): Promise<FetchedAttachment> {
+    const res = await safeFetch(url, {
+      method: 'GET',
+      ...(headers ? { headers } : {}),
+      maxBytes: limits.maxBytes,
+      timeoutMs: limits.timeoutMs,
+      maxRedirects: 3,
+    });
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => undefined);
+      throw new Error(`the file host answered HTTP ${res.status}`);
+    }
+    return {
+      bytes: Buffer.from(await res.arrayBuffer()),
+      type: parseMediaType(res.headers.get('content-type')) ?? undefined,
+    };
+  }
+
+  /**
+   * Whether a link a delivery handed over points at one of the platform's
+   * own hosts. Checked before a credential goes with the request: the link
+   * is in the payload, and only the platform's host gets the bot token.
+   */
+  protected static onHost(url: string | undefined, hosts: string[]): boolean {
+    if (!url) return false;
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'https:') return false;
+      const host = parsed.hostname.toLowerCase();
+      return hosts.some((h) => host === h || (h.startsWith('.') && host.endsWith(h)));
+    } catch {
+      return false;
+    }
   }
 
   // ---------------------------------------------------------------------

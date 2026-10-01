@@ -70,8 +70,8 @@ describe('organization store stays in sync with the server', () => {
     render(<SettingsPage />)
     const sections = screen.getByRole('tablist', { name: 'Settings sections' })
     expect(sections).toHaveClass('flex-wrap')
-    expect(within(sections).getAllByRole('tab')).toHaveLength(5)
-    for (const name of ['Organization', 'Your account', 'People and access', 'Billing', 'Advanced']) {
+    expect(within(sections).getAllByRole('tab')).toHaveLength(6)
+    for (const name of ['Organization', 'Your account', 'API keys', 'People and access', 'Billing', 'Advanced']) {
       expect(within(sections).getByRole('tab', { name, exact: true })).toBeEnabled()
     }
     await screen.findByText('Old Name')

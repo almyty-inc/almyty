@@ -4,23 +4,20 @@
  *
  * A table of the agent's channels (row click opens the channel's page),
  * "Add channel" to add another, and the branding and visitor rules every
- * channel uses unless it sets its own. Gateways that serve the agent
- * without being a channel (ACP, an OpenAI-compatible endpoint) are listed
- * after it, linking to their own pages.
+ * channel uses unless it sets its own. Every gateway that serves an agent
+ * is one of its channels, so there is nothing else to list.
  */
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { ChevronRight, MessagesSquare, Plus, Router } from 'lucide-react'
+import { ChevronRight, MessagesSquare, Plus } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { DataTable } from '@/components/ui/data-table'
 import { EmptyState } from '@/components/ui/empty-state'
-import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { QueryError } from '@/components/ui/query-error'
-import { gatewaysApi } from '@/lib/api'
 import {
   AUTH_MODE_SUMMARY,
   CHANNEL_LABELS,
@@ -29,7 +26,6 @@ import {
   webChatUrl,
   type AgentChannel,
 } from '@/lib/agent-channels'
-import type { Gateway } from '@/types'
 import { ChannelIcon, CHANNEL_STATUS } from './channel-meta'
 import { channelKeys } from './channel-page-loader'
 
@@ -37,9 +33,6 @@ interface ChannelsTabProps {
   agentId: string
   agentName?: string
 }
-
-/** A gateway a channel stood up names its channel; those are listed as channels. */
-const isChannelGateway = (gateway: Gateway) => !!(gateway as any)?.configuration?.channelId
 
 /** Where a channel is, in one short line. */
 function whereLine(channel: AgentChannel): string {
@@ -64,18 +57,8 @@ export function ChannelsTab({ agentId, agentName }: ChannelsTabProps) {
     queryFn: () => agentChannelsApi.publicSettings(agentId),
     enabled: !!agentId,
   })
-  const gatewaysQuery = useQuery({
-    queryKey: ['agent-gateways', agentId],
-    queryFn: () => gatewaysApi.getAll({ kind: 'agent', agentId }),
-    enabled: !!agentId,
-  })
 
   const channels = channelsQuery.data ?? []
-  const gateways: Gateway[] = (() => {
-    const data: any = gatewaysQuery.data
-    const raw = data?.gateways || (Array.isArray(data) ? data : [])
-    return Array.isArray(raw) ? raw.filter((g: Gateway) => !isChannelGateway(g)) : []
-  })()
 
   const addPath = `/agents/${agentId}/channels/new`
   const channelPath = (channel: AgentChannel) => `/agents/${agentId}/channels/${channel.id}`
@@ -176,24 +159,6 @@ export function ChannelsTab({ agentId, agentName }: ChannelsTabProps) {
             />
           }
         />
-      )}
-
-      {gateways.length > 0 && (
-        <section className="space-y-2" aria-labelledby="gateways-heading">
-          <h3 id="gateways-heading" className="text-sm font-medium text-muted-foreground">
-            Also served by gateways
-          </h3>
-          <Card className="divide-y">
-            {gateways.map((gateway) => (
-              <Link key={gateway.id} to={`/gateways/${gateway.id}`} className="flex items-center gap-2 px-4 py-3 text-sm hover:bg-muted/50">
-                <Router className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                <span className="font-medium">{gateway.name}</span>
-                {gateway.type && <ProtocolBadge protocol={gateway.type} />}
-                <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" aria-hidden="true" />
-              </Link>
-            ))}
-          </Card>
-        </section>
       )}
     </div>
   )

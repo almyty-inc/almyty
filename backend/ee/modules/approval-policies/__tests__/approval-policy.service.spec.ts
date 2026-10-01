@@ -29,7 +29,7 @@ class FakeRepo {
 
 function makeService() {
   const repo = new FakeRepo();
-  const svc = new ApprovalPolicyService(repo as any, new ApprovalPolicyEvaluator());
+  const svc = new ApprovalPolicyService(repo as any, new ApprovalPolicyEvaluator(), {} as any);
   return { svc, repo };
 }
 

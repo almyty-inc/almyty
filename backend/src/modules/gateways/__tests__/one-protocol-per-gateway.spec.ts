@@ -318,8 +318,6 @@ describe('each gateway serves one protocol', () => {
       resolver,
       {} as any,
       {} as any,
-      {} as any,
-      {} as any,
       { get: jest.fn().mockReturnValue(null) } as any,
       { check: jest.fn().mockResolvedValue({ limited: false }) } as any,
       { getAdapter: jest.fn(), handleInboundMessage: jest.fn() } as any,

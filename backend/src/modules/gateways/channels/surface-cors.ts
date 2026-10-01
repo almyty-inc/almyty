@@ -36,7 +36,7 @@ export function publicSurfaceFor(rawPath: string | undefined): SurfaceRef | null
   if (!rawPath) return null;
   const path = rawPath.split('?')[0].replace(/^\/api(?=\/)/, '');
 
-  const widget = /^\/gateways\/([^/]+)\/(widget\.js|widget-config|widget\/messages)\/?$/.exec(path);
+  const widget = /^\/gateways\/([^/]+)\/(widget\.js|widget-config|widget\/messages|widget\/attachments)\/?$/.exec(path);
   if (widget) return { kind: 'chat_widget', gatewayId: widget[1] };
 
   const hosted = /^\/public\/chat\/([^/]+)(?:\/.*)?$/.exec(path);

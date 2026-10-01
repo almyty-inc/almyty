@@ -434,7 +434,7 @@ export function AgentsPage() {
                               onClick={async () => {
                                 const ok = await confirm({
                                   title: 'Delete agent?',
-                                  description: `This will permanently delete "${agent.name}" and all its execution history. This action cannot be undone.`,
+                                  description: `This permanently deletes "${agent.name}", its run history and its channels. Its web chat, widget and messaging channels stop answering, and their addresses are freed. This cannot be undone.`,
                                   confirmLabel: 'Delete agent',
                                   destructive: true,
                                 })

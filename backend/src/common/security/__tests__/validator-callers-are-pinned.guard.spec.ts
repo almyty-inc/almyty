@@ -60,8 +60,12 @@ const PINS_DNS = /ssrfSafeHttpsAgent|ssrfSafeDispatcher|agentsExempting\(|dispat
  */
 const LIMITS_REDIRECTS = /maxRedirects: 0|pinnedRedirects\(|egressAxiosConfig\(|redirect: '(error|manual)'|pinDns: true|requestHandler: \{ httpAgent: ssrfSafeHttpAgent/;
 
-/** A string gate call, not the import of one. */
-const CALLS_THE_GATE = /\b(validateUrl|validateUrlAllowingPrivate|assertOutboundUrlAllowed)\(/;
+/**
+ * A string gate call, not the import of one. `decideToolEgress` is the tool
+ * executors' wrapper around validateUrl (plus the organization allowlist),
+ * so a file that calls it is held to the same rule.
+ */
+const CALLS_THE_GATE = /\b(validateUrl|validateUrlAllowingPrivate|assertOutboundUrlAllowed|decideToolEgress)\(/;
 
 /**
  * Transports this guard recognises. `fetch(` is word-bounded, so

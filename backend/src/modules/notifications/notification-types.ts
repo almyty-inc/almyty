@@ -17,6 +17,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   'connections.expiring',
   'connections.expired',
   'connections.rotation_due',
+  'connections.inactive',
   'domains.unverified',
   'models.new',
   'models.unavailable',
@@ -53,6 +54,9 @@ export const NOTIFICATION_DEFAULTS: Record<NotificationEventType, ChannelPrefs> 
   'connections.expiring': { inApp: true, email: true },
   'connections.expired': { inApp: true, email: true },
   'connections.rotation_due': { inApp: true, email: false },
+  // A provider refused a connection's key and it was turned off: in the
+  // app for its owner and the admins, and by email unless they turn it off.
+  'connections.inactive': { inApp: true, email: true },
   'domains.unverified': { inApp: true, email: true },
   // A model appearing or going away on a provider connection: always in
   // the app; the email (at once for a model an agent uses, else in the

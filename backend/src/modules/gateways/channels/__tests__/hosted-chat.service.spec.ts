@@ -144,6 +144,18 @@ describe('HostedChatService', () => {
       await expect(service.findBySlug('')).rejects.toThrow(NotFoundException);
       expect(gatewayRepository.createQueryBuilder).not.toHaveBeenCalled();
     });
+
+    // A web chat left behind by a deleted agent stayed live and answered a
+    // message with a 500. It is a clean 404 saying the chat is gone.
+    it('404s with "This chat no longer exists" for a surface whose agent was deleted', async () => {
+      surfaces = [surface({ agentId: null as any })];
+      await expect(service.findBySlug('acme')).rejects.toThrow(new NotFoundException('This chat no longer exists'));
+    });
+
+    it('serves the live surface when a deleted agent left an old claimant on the slug', async () => {
+      surfaces = [surface({ id: 'gw-orphan', agentId: null as any }), surface({ id: 'gw-live' })];
+      await expect(service.findBySlug('acme')).resolves.toMatchObject({ id: 'gw-live' });
+    });
   });
 
   describe('publicBranding', () => {
@@ -224,6 +236,31 @@ describe('HostedChatService', () => {
 
       expect(runRepository.delete).toHaveBeenCalledWith({ endUserId: 'eu-1' });
       expect(endUserRepository.delete).toHaveBeenCalledWith({ id: 'eu-1', gatewayId: 'gw-1' });
+    });
+
+    it('erases the files the visitor sent with them: in their conversations, and uploaded but not sent', async () => {
+      const files = { removeForConversations: jest.fn(async () => 2), removeUnsentUploads: jest.fn(async () => 1) };
+      const withFiles = new HostedChatService(
+        gatewayRepository, endUserRepository, conversationRepository, messageRepository, runRepository,
+        auditLogService as any, undefined, undefined, files as any,
+      );
+      conversationRepository.find.mockResolvedValue([{ id: 'c1' }, { id: 'c2' }]);
+      runRepository.delete = jest.fn(async () => ({ affected: 0 }));
+      endUserRepository.delete = jest.fn(async () => ({ affected: 1 }));
+
+      await withFiles.deleteVisitor(gateway(), visitor);
+
+      expect(conversationRepository.find).toHaveBeenCalledWith({ where: { endUserId: 'eu-1' }, select: { id: true } });
+      expect(files.removeForConversations).toHaveBeenCalledWith('org-1', ['c1', 'c2']);
+      expect(files.removeUnsentUploads).toHaveBeenCalledWith('org-1', { gatewayId: 'gw-1', endUserId: 'eu-1' });
+      // Before the cascade takes the conversations that name them.
+      expect(files.removeForConversations.mock.invocationCallOrder[0]).toBeLessThan(endUserRepository.delete.mock.invocationCallOrder[0]);
+
+      conversationRepository.findOne.mockResolvedValue({ id: 'c1', organizationId: 'org-1', endUserId: 'eu-1' });
+      messageRepository.delete = jest.fn(async () => ({ affected: 1 }));
+      conversationRepository.delete = jest.fn(async () => ({ affected: 1 }));
+      await withFiles.deleteConversation(visitor, 'c1');
+      expect(files.removeForConversations).toHaveBeenLastCalledWith('org-1', ['c1']);
     });
 
     it('exports the visitor record and every conversation with its messages', async () => {
@@ -526,6 +563,11 @@ describe('HostedChatService', () => {
     it('returns null for an empty hostname without touching the database', async () => {
       await expect(service.findByCustomDomain('')).resolves.toBeNull();
       expect(gatewayRepository.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('serves a domain whose agent was deleted as unknown', async () => {
+      surfaces = [domain('chat.acme.com', 'active', { agentId: null as any })];
+      await expect(service.findByCustomDomain('chat.acme.com')).resolves.toBeNull();
     });
   });
 

@@ -2,6 +2,8 @@ import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common'
 import { findModelNotFound } from '../llm-providers/model-errors';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
+import { Workspace } from '../../entities/workspace.entity';
+import { releaseRunWorkspaces } from '../workspace/run-end-release';
 
 import { Agent, AgentPipelineNode } from '../../entities/agent.entity';
 import { AgentExecution, AgentExecutionStatus, TERMINAL_EXECUTION_STATUSES } from '../../entities/agent-execution.entity';
@@ -70,6 +72,8 @@ export interface ExecuteAgentOptions {
 export interface EngineInternalOptions {
   nestingDepth?: number;
   maxNestingDepth?: number;
+  /** A sub-agent's run: the top-level run whose runner workspaces it shares. */
+  workspaceRunId?: string;
 }
 
 /**
@@ -161,6 +165,11 @@ export class AgentExecutionEngine {
     // without it. AgentsModule imports AuthorizationModule, which provides it.
     @Optional()
     private readonly executionAccess?: ExecutionAccessService,
+    // Released when the run ends (releaseRunWorkspaces). @Optional() for the
+    // positional harnesses; without it the workspace tick releases them.
+    @Optional()
+    @InjectRepository(Workspace)
+    private readonly workspaceRepository?: Repository<Workspace>,
   ) {}
 
   /**
@@ -242,7 +251,11 @@ export class AgentExecutionEngine {
     // of the run, and every row written under it (a tool execution, a
     // model_routed audit row), picks the run up from here instead of
     // having it threaded through each signature in between.
-    updateRequestContext({ runId: execution.id, organizationId });
+    //
+    // workspaceRunId is the run whose runner workspaces this one works in:
+    // its own, or for a sub-agent the top-level run's (one job, one folder).
+    const workspaceRunId = internalOptions?.workspaceRunId ?? execution.id;
+    updateRequestContext({ runId: execution.id, agentId: agent.id, organizationId, workspaceRunId });
 
     // Emit execution started
     this.state.emitEvent(onEvent, {
@@ -605,6 +618,7 @@ export class AgentExecutionEngine {
                     principal,
                     edges: pipeline.edges,
                     nestingDepth: internalOptions?.nestingDepth,
+                    workspaceRunId,
                     // A nested run inherits the ceiling its parent was
                     // given; a top-level run gets the one resolved for it.
                     // Without the fallback the sub-agent executor reached
@@ -1129,6 +1143,10 @@ export class AgentExecutionEngine {
       // leaked entries would both grow without bound and let a cancel abort
       // a controller nothing is listening to.
       this.cancellations?.release(execution.id);
+      // The run's runner workspaces go too, freeing the runner now. A
+      // sub-agent's run owns none (it works in its parent's), so this only
+      // ever releases the job's own when its top-level run ends.
+      await releaseRunWorkspaces(this.workspaceRepository, execution.id);
     }
   }
 

@@ -1,6 +1,6 @@
 # Builder image topology
 
-Agent-app builds need compilers, packagers, signing tools, temporary credentials, and outbound access to pinned runtime artifacts. The request API needs none of those. Production should therefore run builds in a dedicated worker image rather than adding the build toolchain to the API image.
+Channel builds (an agent's desktop and terminal apps) need compilers, packagers, signing tools, temporary credentials, and outbound access to pinned runtime artifacts. The request API needs none of those. Production should therefore run builds in a dedicated worker image rather than adding the build toolchain to the API image.
 
 ## Decision
 
@@ -40,7 +40,7 @@ The queue payload should contain identifiers, not decrypted credentials or custo
 
 The API image keeps only the application runtime and production dependencies. The builder image adds:
 
-- Bun for `tui` and `binary` compilation.
+- Bun for `tui` (terminal app) compilation.
 - Node and `npx`, plus the pinned Electron and `electron-builder` dependencies, for desktop artifacts.
 - `rcodesign` for macOS signing and notarization.
 - `osslsigncode` for Windows signing.
@@ -79,7 +79,7 @@ The code supports running builds in the API pod or on a dedicated worker, chosen
 | `worker` | the dedicated worker | the full set in `backend/Dockerfile.builder` | the worker deployment in production |
 | `off` | nobody in this process | none | the API pods once a worker exists, so they do not grab jobs they cannot fully run |
 
-In the default `in-api` mode a terminal app, a standalone binary, and macOS signing build in the API pod; a Windows-signing or desktop build reports a clear "not available on this deployment". That is enough for small self-hosters and for staging.
+In the default `in-api` mode a terminal app and macOS signing build in the API pod; a Windows-signing or desktop build reports a clear "not available on this deployment". That is enough for small self-hosters and for staging.
 
 For the full toolchain, deploy `backend/Dockerfile.builder` (glibc base with bun, rcodesign, osslsigncode, and electron-builder) with `APP_BUILD_MODE=worker`, and set `APP_BUILD_MODE=off` on the API pods. The worker consumes the same build queue; the API keeps validation, authorization, queueing, status, and downloads. When builds run on the worker, the capabilities endpoint reports the worker toolchain rather than probing the API pod, so the UI does not wrongly claim a target cannot be built.
 

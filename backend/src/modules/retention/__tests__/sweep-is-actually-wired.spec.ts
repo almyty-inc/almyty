@@ -40,6 +40,11 @@ describe('every retention data class is actually wired', () => {
     expect(missing).toEqual([]);
   });
 
+  it('reaches the files module, so a swept conversation takes the files sent in it along', () => {
+    expect(sweepSource).toMatch(/private readonly files\?: FilesService/);
+    expect(moduleSource).toMatch(/imports: \[[\s\S]*\bFilesModule\b[\s\S]*\]/);
+  });
+
   it('lets an admin set every day-count the sweep reads', () => {
     // Each `policy.<x>Days` the sweep branches on must be settable, or
     // its clause is dead.

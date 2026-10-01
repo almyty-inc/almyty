@@ -3,8 +3,6 @@ import * as crypto from 'crypto';
 import { A2AServerService } from '../../a2a/a2a-server.service';
 import { A2AAgentCardService } from '../../a2a/a2a-agent-card.service';
 import { A2A_ERROR_CODES } from '../../a2a/types/a2a-spec.types';
-import { AcpServerService } from '../../acp/acp-server.service';
-import { ACP_ERROR_CODES } from '../../acp/types/acp.types';
 import { UnifiedAgentHelper } from '../unified-agent.helper';
 import { Agent, AgentStatus } from '../../../entities/agent.entity';
 import { UnifiedEndpointController } from '../unified-endpoint.controller';
@@ -15,26 +13,25 @@ import { fakeManager, fakeRepository } from '../../../test/fake-repository';
 import { membershipFixture } from '../../../test/execution-access.fixture';
 
 /**
- * An A2A or ACP gateway serves one agent. Every run a client names -- a
- * task id, a session id, a context or conversation id -- has to be a run of
- * THAT agent; anything else is the same not-found an unknown id gets.
+ * An A2A gateway serves one agent. Every run a client names -- a task id,
+ * a context or conversation id -- has to be a run of THAT agent; anything
+ * else is the same not-found an unknown id gets.
  *
  * These lookups used to be scoped to the organization only, so a client of
- * one agent's gateway could read another agent's conversation (tasks/get,
- * session/get), cancel its run (tasks/cancel, session/cancel), stream it
- * (tasks/resubscribe), or feed input into another agent's waiting run
- * (message/send with its contextId, session/prompt with its sessionId) --
- * executing an agent the gateway never published. The unified endpoint had
- * the same gap one level up: a gateway's API key ran any agent of the
- * organization through /:org/:agent, and the root A2A endpoint served
- * whichever agent-bearing gateway a key matched, hosted chat included.
+ * one agent's gateway could read another agent's conversation (tasks/get),
+ * cancel its run (tasks/cancel), stream it (tasks/resubscribe), or feed
+ * input into another agent's waiting run (message/send with its
+ * contextId) -- executing an agent the gateway never published. The
+ * unified endpoint had the same gap one level up: a gateway's API key ran
+ * any agent of the organization through /:org/:agent, and the root A2A
+ * endpoint served whichever agent-bearing gateway a key matched, hosted
+ * chat included.
  *
- * Real A2AServerService, AcpServerService, UnifiedAgentHelper and
- * UnifiedEndpointController; tables are truthful fakes; the runtime double
- * records what it was asked to do and writes the runs it starts into the
- * same table.
+ * Real A2AServerService, UnifiedAgentHelper and UnifiedEndpointController;
+ * tables are truthful fakes; the runtime double records what it was asked
+ * to do and writes the runs it starts into the same table.
  */
-describe('an agent gateway serves only its own agent (A2A, ACP, the unified endpoint)', () => {
+describe('an agent gateway serves only its own agent (A2A, the unified endpoint)', () => {
   const ORG = 'org-1';
   const PUBLISHED = 'agent-published';
   const OTHER = 'agent-other';
@@ -57,7 +54,6 @@ describe('an agent gateway serves only its own agent (A2A, ACP, the unified endp
     getRunEmitter: jest.Mock;
   };
   let a2a: A2AServerService;
-  let acp: AcpServerService;
 
   const response = () => {
     const res: any = { body: undefined };
@@ -103,7 +99,6 @@ describe('an agent gateway serves only its own agent (A2A, ACP, the unified endp
     };
     const messages = fakeRepository<any>([]);
     a2a = new A2AServerService(runtime as any, new A2AAgentCardService(), runs as any, fakeRepository<any>([]) as any, messages as any);
-    acp = new AcpServerService(runtime as any, runs as any, messages as any);
   });
 
   const a2aCall = async (method: string, params: any) => {
@@ -111,14 +106,8 @@ describe('an agent gateway serves only its own agent (A2A, ACP, the unified endp
     await a2a.handleJsonRpc(gateway, req, { jsonrpc: '2.0', id: 1, method, params }, res);
     return res.body;
   };
-  const acpCall = async (method: string, params: any) => {
-    const res = response();
-    await acp.handleJsonRpc(gateway, req, { jsonrpc: '2.0', id: 1, method, params }, res);
-    return res.body;
-  };
   const errorOf = (body: any) => body?.error && { code: body.error.code, message: body.error.message };
   const text = (t: string) => ({ parts: [{ kind: 'text', text: t }], role: 'user', messageId: 'm-1' });
-  const acpText = (t: string) => ({ parts: [{ type: 'text', text: t }] });
 
   describe('A2A', () => {
     it.each([['tasks/get'], ['tasks/cancel']])('%s on another agent\'s run is the not-found an unknown id gets', async (method) => {
@@ -169,43 +158,6 @@ describe('an agent gateway serves only its own agent (A2A, ACP, the unified endp
       await a2a.handleJsonRpc(gateway, req, { jsonrpc: '2.0', id: 1, method: 'message/stream', params: { contextId: FOREIGN_CONV, message: text('x') } }, res);
       expect(runtime.sendInput).not.toHaveBeenCalled();
       expect(runtime.startRun.mock.calls[0][0]).toBe(PUBLISHED);
-    });
-  });
-
-  describe('ACP', () => {
-    it.each([['session/get'], ['session/cancel']])('%s on another agent\'s run is the not-found an unknown id gets', async (method) => {
-      const unknown = errorOf(await acpCall(method, { sessionId: UNKNOWN }));
-      expect(unknown).toMatchObject({ code: ACP_ERROR_CODES.SESSION_NOT_FOUND });
-      expect(errorOf(await acpCall(method, { sessionId: FOREIGN_RUNNING }))).toEqual(unknown);
-      expect(runtime.cancelRun).not.toHaveBeenCalled();
-      expect(runs.row(FOREIGN_RUNNING)!.status).toBe(AgentRunStatus.RUNNING);
-    });
-
-    it('session/get and session/cancel still work on the gateway\'s own agent', async () => {
-      expect((await acpCall('session/get', { sessionId: OWN_WAITING })).result).toMatchObject({ sessionId: OWN_WAITING });
-      expect((await acpCall('session/cancel', { sessionId: OWN_WAITING })).error).toBeUndefined();
-      expect(runtime.cancelRun).toHaveBeenCalledWith(OWN_WAITING, ORG);
-    });
-
-    it.each([
-      ['by run id', FOREIGN_WAITING],
-      ['by conversation id', FOREIGN_CONV],
-    ])('session/prompt naming another agent\'s waiting run %s never feeds it', async (_l, sessionId) => {
-      await acpCall('session/prompt', { sessionId, message: acpText('take this') });
-      expect(runtime.sendInput).not.toHaveBeenCalled();
-      expect(runtime.startRun).toHaveBeenCalledTimes(1);
-      expect(runtime.startRun.mock.calls[0][0]).toBe(PUBLISHED);
-    });
-
-    it('session/stream naming another agent\'s waiting run never feeds it', async () => {
-      await acpCall('session/stream', { sessionId: FOREIGN_WAITING, message: acpText('x') });
-      expect(runtime.sendInput).not.toHaveBeenCalled();
-      expect(runtime.startRun.mock.calls[0][0]).toBe(PUBLISHED);
-    });
-
-    it('session/prompt on its own waiting run still resumes it', async () => {
-      await acpCall('session/prompt', { sessionId: OWN_WAITING, message: acpText('go on') });
-      expect(runtime.sendInput).toHaveBeenCalledWith(OWN_WAITING, ORG, 'go on');
     });
   });
 

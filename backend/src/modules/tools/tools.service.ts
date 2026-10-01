@@ -18,6 +18,7 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats } from './dto/tools.dto';
 import { ToolsOperationHelper } from './tools-operation.helper';
 import { assertToolAuthHoldsNoSecret } from './tool-auth-config';
+import { assertProtocolToolShape, impliedExecutionMethod } from './protocol-tool-config';
 import { ToolsStatsHelper } from './tools-stats.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import {
@@ -148,9 +149,16 @@ export class ToolsService {
         assertAttachable({ visibility: scope.visibility, ownerId: userId, noun: 'tool' }, [api], 'API');
       }
 
+      // A GraphQL, SOAP or gRPC tool is stored as its protocol's config,
+      // never as code; see protocol-tool-config.ts.
+      assertProtocolToolShape(createToolDto as any);
+      const protocolMethod = impliedExecutionMethod(createToolDto as any);
+
       // Create the tool
-      // Custom tools (with code or httpConfig) are ACTIVE by default, auto-generated are DRAFT
-      const isCustomTool = (!!createToolDto.code || !!createToolDto.httpConfig) && !createToolDto.operationId;
+      // Hand-made tools (code, an HTTP request or a GraphQL/SOAP/gRPC call)
+      // are ACTIVE by default; auto-generated ones are DRAFT.
+      const isCustomTool =
+        (!!createToolDto.code || !!createToolDto.httpConfig || !!protocolMethod) && !createToolDto.operationId;
       const isHttpTool = !!createToolDto.httpConfig;
       const tool = this.toolRepository.create({
         ...createToolDto,
@@ -167,6 +175,9 @@ export class ToolsService {
           httpConfig: createToolDto.httpConfig,
           code: null,
         } : {}),
+        ...(!isHttpTool && protocolMethod && !createToolDto.executionMethod
+          ? { executionMethod: protocolMethod }
+          : {}),
         ...(createToolDto.apiId ? { apiId: createToolDto.apiId } : {}),
         metadata: {
           ...createToolDto.metadata,
@@ -268,6 +279,9 @@ export class ToolsService {
       if (updateToolDto.parameters !== undefined) {
         tool.parameters = updateToolDto.parameters;
       }
+
+      // A GraphQL/SOAP/gRPC tool stays in its one runnable shape.
+      assertProtocolToolShape(updateToolDto as any, tool as any);
 
       if (updateToolDto.code !== undefined) {
         tool.code = updateToolDto.code;

@@ -21,7 +21,8 @@ import { Readable } from 'stream';
 import { NotFoundException } from '@nestjs/common';
 
 import { LlmProvider, LlmProviderStatus, LlmProviderType } from '../../../entities/llm-provider.entity';
-import { Message } from '../../../entities/message.entity';
+import { Message, MessageContent } from '../../../entities/message.entity';
+import { MessageAttachmentResolver } from '../../llm-providers/message-attachments.resolver';
 import { Conversation } from '../../../entities/conversation.entity';
 import { AgentRun, AgentRunStatus } from '../../../entities/agent-run.entity';
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
@@ -135,6 +136,14 @@ export async function runAgent(opts: {
   tools?: Array<Record<string, any>>;
   /** The tool executor's executeTool, when a case needs to see its options. */
   executeTool?: jest.Mock;
+  /** The run's first user message, when a case sends files with it (parts, attached-files.ts). */
+  userMessage?: string | MessageContent[];
+  /** The files resolver the model calls go through (message-attachments.resolver.ts). */
+  attachmentResolver?: MessageAttachmentResolver;
+  /** The approvals service double (its create), for a case whose tool calls an approval rule holds. */
+  approvals?: { create: jest.Mock };
+  /** More members of the organization, besides u-1 (a scheduled run acts as the agent's owner). */
+  members?: string[];
 }) {
   const bodies: Array<{ model: string; body: any }> = [];
   const queues: Streams = JSON.parse(JSON.stringify(opts.streams));
@@ -154,7 +163,7 @@ export async function runAgent(opts: {
     if (!entity.createdAt) entity.createdAt = new Date(clock++);
     return storeMessage(entity);
   });
-  await messageRepository.save(Message.createUserMessage('conv-1', 'Where is my order 4411?'));
+  await messageRepository.save(Message.createUserMessage('conv-1', opts.userMessage ?? 'Where is my order 4411?'));
 
   const agent = {
     id: 'agent-1',
@@ -231,6 +240,10 @@ export async function runAgent(opts: {
     { bumpSessionStats: async () => undefined, bumpProviderStats: async () => undefined } as any,
     {
       resolveProviderSecrets: async () => undefined,
+      // The real resolver when a case hands one in (files a message refers
+      // to), else the request as it is.
+      resolveAttachments: async (org: string | undefined, p: any, request: any) =>
+        opts.attachmentResolver ? opts.attachmentResolver.resolve(org, p, request) : request,
       planRouteHead: async (_org: string, request: any) => {
         const route = opts.routes?.[request.routing?.objective];
         if (!route) throw new UnmodelledQueryError('no route is modelled for this policy');
@@ -281,6 +294,7 @@ export async function runAgent(opts: {
   // The run's starter is a member of the org: every step re-checks it.
   const access = membershipFixture();
   access.member('org-1', 'u-1');
+  for (const member of opts.members ?? []) access.member('org-1', member);
   const s: any = {
     logger: { log: () => undefined, warn: () => undefined, debug: () => undefined, error: () => undefined },
     runRepository,
@@ -308,6 +322,8 @@ export async function runAgent(opts: {
     // double a memory case hands in, or nothing.
     memoryAccounts: opts.memoryAccounts,
     toolExecutorService,
+    // The approvals service, for a case whose tool calls an approval rule holds.
+    approvals: opts.approvals,
     llmProvidersService,
     processStep: (runId: string) => processor.processStep(runId),
     startRun: async (agentId: string, organizationId: string, _userId: string, input: string, options: any) => {
@@ -392,6 +408,8 @@ export async function runAgent(opts: {
     tokens,
     leftover: Object.fromEntries(Object.entries(queues).filter(([, q]) => q.length > 0)),
     runRepository,
+    /** Drive the run again, after the case decided what it was waiting for (an approval). */
+    drive: () => drive('run-1'),
   };
 }
 

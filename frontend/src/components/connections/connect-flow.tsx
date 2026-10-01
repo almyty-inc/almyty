@@ -70,6 +70,8 @@ export const CONNECTORS_QUERY_KEY = ['connectors'] as const
 /** The catalog's "Other service": a name and one secret box. */
 export const OTHER_SERVICE_KEY = 'other'
 
+const TEAM_MISSING = 'Pick the team that can use it.'
+
 const KIND_ICONS: Record<ConnectorKind, typeof Plug> = {
   inference: Brain,
   deployment: Server,
@@ -119,10 +121,12 @@ export function useConnectors() {
 
 /**
  * Who may keep what. Organization connections need an admin; "only you"
- * needs the organization to allow personal keys. A role that is not known
- * yet offers both and lets the server decide, as it always does.
+ * needs the organization to allow personal keys; "one team" needs a team
+ * to pick (the server then checks the caller may use that team, as it
+ * does for a provider connection). A role that is not known yet offers
+ * the organization and lets the server decide, as it always does.
  */
-export function useConnectOwners(): { options: Array<'org' | 'private'>; loading: boolean } {
+export function useConnectOwners(): { options: Array<'org' | 'team' | 'private'>; loading: boolean; firstTeamId: string | null } {
   const { currentOrganization } = useOrganizationStore()
   const { role, canManage } = useOrganizationRole()
   const orgQuery = useQuery({
@@ -130,10 +134,18 @@ export function useConnectOwners(): { options: Array<'org' | 'private'>; loading
     queryFn: () => organizationsApi.getById(currentOrganization!.id),
     enabled: !!currentOrganization?.id,
   })
-  const options: Array<'org' | 'private'> = []
+  // The key VisibilityField reads the same teams under.
+  const teamsQuery = useQuery<Array<{ id: string }>>({
+    queryKey: ['organization-teams', currentOrganization?.id],
+    queryFn: () => organizationsApi.getTeams(currentOrganization!.id),
+    enabled: !!currentOrganization?.id,
+  })
+  const teams = Array.isArray(teamsQuery.data) ? teamsQuery.data : []
+  const options: Array<'org' | 'team' | 'private'> = []
   if (role === null || canManage) options.push('org')
   if (allowUserScopedConnections(orgQuery.data)) options.push('private')
-  return { options, loading: orgQuery.isLoading }
+  if (teams.length > 0) options.push('team')
+  return { options, loading: orgQuery.isLoading || teamsQuery.isLoading, firstTeamId: teams[0]?.id ?? null }
 }
 
 export interface ConnectFlowProps {
@@ -362,7 +374,9 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
 
   // Whoever cannot keep an organization connection keeps a private one.
   useEffect(() => {
-    if (owners.options.length > 0 && !owners.options.includes(who.visibility as 'org' | 'private')) setWho({ visibility: owners.options[0], teamId: null })
+    if (owners.options.length > 0 && !owners.options.includes(who.visibility)) {
+      setWho(owners.options[0] === 'team' ? { visibility: 'team', teamId: owners.firstTeamId } : { visibility: owners.options[0], teamId: null })
+    }
   }, [owners.options.join(','), who.visibility])
 
   useEffect(() => {
@@ -417,14 +431,16 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
     if (result?.connection) finish(result.connection)
   }
 
-  const owner: ConnectionOwner = who.visibility === 'private' ? 'private' : 'org'
+  const owner: ConnectionOwner = who.visibility === 'private' ? 'private' : who.visibility === 'team' ? 'team' : 'org'
+  // "One team" names the team; a new credential without one is not sent.
+  const teamMissing = !rotateConnection && owner === 'team' && !who.teamId
   const connect = useMutation({
     mutationFn: (input?: Record<string, unknown>) => {
       // A key the service refused was kept as a failed connection: the next
       // try replaces its key rather than leaving a second, broken one behind.
       const existing = rotateConnection ?? failure?.connection ?? null
       if (existing) return connectionsApi.rotate(existing.id, input ? { input } : {})
-      return connectionsApi.connect(connector.key, { method: method?.type, owner, ...(isOther ? { name: name.trim() } : {}), ...(input ? { input } : {}) })
+      return connectionsApi.connect(connector.key, { method: method?.type, owner, ...(owner === 'team' && who.teamId ? { teamId: who.teamId } : {}), ...(isOther ? { name: name.trim() } : {}), ...(input ? { input } : {}) })
     },
     onSuccess: handleResult,
     onError: (error: unknown) => setFailure((prev) => {
@@ -451,10 +467,18 @@ export function ConnectServiceForm({ connector, onConnected, embedded = false, r
     if (!check.ok) Object.assign(errors, check.errors)
     setFieldErrors(errors)
     if (Object.keys(errors).length > 0) return
+    if (teamMissing) {
+      setFailure({ message: TEAM_MISSING })
+      return
+    }
     connect.mutate(check.value)
   }
 
   const startSignIn = () => {
+    if (teamMissing) {
+      setFailure({ message: TEAM_MISSING })
+      return
+    }
     setFailure(null)
     connect.mutate(undefined)
   }

@@ -1,18 +1,42 @@
-# Compliance Pack
+# Compliance pack
 
-Requires the `compliance_pack` entitlement (Business or Enterprise on the hosted platform). Make the guardrails mandatory across the whole org, and get a posture report you can hand to an auditor. The open-source platform ships the guardrail plugins (**pii-filter** and **security-scanner**), but each agent opts in individually. The compliance pack turns them into **org policy**: a central declaration of which guardrails are required and how strict they are.
+Make safety filters mandatory for every agent in your organization, and get a report you can hand to an auditor. For example: every agent must hide credit card numbers and email addresses before they reach a model, and any risky request is blocked, not just logged.
 
-![An agent's guardrail constraints, which the org policy makes mandatory platform-wide](/screenshots/agent-constraints.png)
+almyty has two built-in safety filters that any agent can use:
 
-This is the operational half of the story told on the [Compliance](/compliance) page: Art. 9 risk management wants demonstrable, organization-wide controls, not per-agent good intentions.
+- **PII filter**: hides personal data (PII, personally identifiable information) such as email addresses, phone numbers, credit card numbers and social security numbers.
+- **Security scanner**: checks requests, responses and tool inputs for attack patterns (such as attempts to inject database commands or scripts) and acts on what it finds above a severity you choose.
 
-## The org policy
+Without the compliance pack each agent opts in on its own. The compliance pack, on the **Business** and **Enterprise** plans, turns them into an organization-wide rule. It is the practical side of the [Compliance](/compliance) page: regulators want controls that apply everywhere, not good intentions agent by agent.
 
-With the entitlement enabled, **Settings → Advanced → Compliance** shows the effective policy and posture report. This demo organization is using the secure default policy, not a custom configuration.
+![An agent's constraints, which the organization policy makes mandatory for every agent](/screenshots/agent-constraints.png)
 
-![Enabled compliance settings showing the default policy and posture report](/screenshots/settings-compliance-enabled.png)
+## Set the organization policy
 
-Set the policy under **Settings → Advanced → Compliance** (admin/owner only). It declares which built-in guardrails are enforced org-wide and how they behave:
+Owners and admins do this under **Settings → Advanced → Compliance**.
+
+![Compliance settings showing the default policy and posture report](/screenshots/settings-compliance-enabled.png)
+
+1. Turn **Enforce PII filter** and **Enforce security scanner** on or off.
+2. Under **PII categories to mask**, pick which kinds of personal data to hide. Picking none hides all of them.
+3. Choose the **Severity threshold** at which the security scanner acts.
+4. Turn on **Block on violation** to stop the offending call, or off to only record it.
+5. Click **Save compliance policy**.
+
+**Safe by default.** Until an admin saves a policy, both filters are enforced, at medium severity, and violations are blocked. Saving a policy can only relax that, and does so on purpose. The page always shows the policy in effect and whether it is the default.
+
+## The posture report
+
+The same page shows a report you can attach to a compliance file. Pick **Last 7 days**, **Last 30 days** or **Last 90 days** and click **Download JSON** to save it. It contains:
+
+- **The policy in effect** for that period.
+- **Enforced controls**: for each filter, whether it is enforced and its settings.
+- **Activity** from the audit log: total events, events by action, how many could be scanned, and how often credentials were accessed.
+- **Posture score** (0 to 100): a blunt summary. 40 points for each enforced filter and 20 for blocking. Full marks means both filters are enforced and violations are blocked, not merely logged.
+
+## For developers
+
+The policy:
 
 ```json
 {
@@ -26,23 +50,14 @@ Set the policy under **Settings → Advanced → Compliance** (admin/owner only)
 | Field | Values | Meaning |
 |---|---|---|
 | `enforcedPlugins` | `pii-filter`, `security-scanner` | which built-in guardrails are mandatory org-wide |
-| `securityThreshold` | `low` \| `medium` \| `high` \| `critical` | severity at which the security-scanner acts |
-| `blockOnViolation` | boolean | block the offending call vs. log-and-continue |
-| `piiCategories` | string[] | PII categories to filter; empty = all |
+| `securityThreshold` | `low` \| `medium` \| `high` \| `critical` | severity at which the security scanner acts |
+| `blockOnViolation` | boolean | block the offending call, or log and continue |
+| `piiCategories` | string[] | PII categories to filter; empty means all |
 
-**Secure by default**: until an admin configures a policy, the effective policy enforces both plugins with `securityThreshold: medium` and `blockOnViolation: true`. Configuring can only relax from there, deliberately. Reading the policy back returns the effective policy, including whether it is the default or configured.
-
-## The posture report
-
-The report is designed to attach to a conformity file as-is (defaults to the last 30 days; the endpoint and its date range are in the [API reference](/api-reference)):
-
-- **Effective policy** for the window.
-- **Enforced controls**: per plugin, enforced or not, and the effective settings (threshold, blocking, categories).
-- **Activity**: audit-log-derived counts (total events, breakdown by action, how many were scannable executions, and credential-access events).
-- **Posture score** (0 to 100): a blunt summary. 40 points per enforced guardrail plugin, 20 for blocking mode. Full marks means both guardrails enforced and violations blocked, not merely logged.
+Reading the policy back returns the effective policy and whether it is the default or configured. The report defaults to the last 30 days; the endpoint and its date range are in the [API reference](/api-reference/authentication).
 
 ## Related
 
-- [Compliance](/compliance) is the regulatory mapping this pack supports
-- [Approval policies](/enterprise/approval-policies) are human oversight for consequential actions
-- [Audit export](/enterprise/audit-export) gets the evidence trail into your SIEM
+- [Compliance](/compliance): what the regulations ask and what almyty provides
+- [Approval policies](/enterprise/approval-policies): human sign-off for consequential actions
+- [Audit export](/enterprise/audit-export): get the evidence trail into your security tools

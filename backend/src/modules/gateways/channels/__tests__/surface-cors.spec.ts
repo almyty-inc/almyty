@@ -54,10 +54,13 @@ async function appWith(lists: Record<string, string[]>, opts: { failLookup?: boo
 describe('publicSurfaceFor', () => {
   it.each([
     [`/gateways/${WIDGET}/widget/messages`, { kind: 'chat_widget', gatewayId: WIDGET }],
+    // The embed uploads a file from the customer's page before sending it.
+    [`/gateways/${WIDGET}/widget/attachments`, { kind: 'chat_widget', gatewayId: WIDGET }],
     [`/gateways/${WIDGET}/widget-config`, { kind: 'chat_widget', gatewayId: WIDGET }],
     [`/gateways/${WIDGET}/widget.js`, { kind: 'chat_widget', gatewayId: WIDGET }],
     [`/api/gateways/${WIDGET}/widget/messages?threadId=x`, { kind: 'chat_widget', gatewayId: WIDGET }],
     ['/public/chat/acme/messages', { kind: 'hosted_chat', slug: 'acme' }],
+    ['/public/chat/acme/attachments', { kind: 'hosted_chat', slug: 'acme' }],
     ['/public/chat/Acme', { kind: 'hosted_chat', slug: 'acme' }],
     ['/public/chat/by-host', { kind: 'hosted_chat', slug: null }],
   ])('%s is a public surface', (path, ref) => {

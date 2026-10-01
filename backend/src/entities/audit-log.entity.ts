@@ -47,6 +47,8 @@ export enum AuditAction {
   MEMORY_SYNC = 'memory_sync',
   MEMORY_DENIED = 'memory_denied',
   MEMORY_SOFTCAP_WARNING = 'memory_softcap_warning',
+  /** Memories moved from one memory account to another (MemoryMoveService): started, and finished. */
+  MEMORY_MOVE = 'memory_move',
   // File
   FILE_UPLOAD = 'file_upload',
   FILE_DOWNLOAD = 'file_download',
@@ -89,14 +91,18 @@ export enum AuditAction {
   CONNECTION_RESOLVE = 'connection_resolve',
   CONNECTION_GRANT = 'connection_grant',
   CONNECTION_REVOKE_GRANT = 'connection_revoke_grant',
+  CONNECTION_SHARE = 'connection_share',
   CONNECTOR_CREATE = 'connector_create',
 
   // Governance: a departed member's private resources handed to someone
   // else, and a deleted team's resources widened to the organization.
   OWNERSHIP_TRANSFER = 'ownership_transfer',
   VISIBILITY_CHANGE = 'visibility_change',
-}
 
+  // A tool call held for a person's approval by an approval policy's
+  // amount rule (ToolApprovalGate): asked, or refused where nobody can be asked.
+  APPROVAL_GATE = 'approval_gate',
+}
 
 export enum AuditResource {
   AGENT = 'agent',

@@ -200,6 +200,7 @@ export default defineConfig({
       '/rbac': { target: apiTarget, changeOrigin: true },
       '/compliance': { target: apiTarget, changeOrigin: true },
       '/approval-policies': { target: apiTarget, changeOrigin: true },
+      '/approval-rules': { target: apiTarget, changeOrigin: true },
       '/audit-export': { target: apiTarget, changeOrigin: true },
       '/chargeback': { target: apiTarget, changeOrigin: true },
       '/billing': { target: apiTarget, changeOrigin: true },

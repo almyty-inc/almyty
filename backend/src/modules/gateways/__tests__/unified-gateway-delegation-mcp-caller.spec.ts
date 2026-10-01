@@ -54,8 +54,6 @@ describe('UnifiedGatewayDelegation — MCP caller on tenant gateways', () => {
       { resolveAndAuthenticate: jest.fn().mockResolvedValue({ auth }) } as any,
       {} as any,
       {} as any,
-      {} as any,
-      {} as any,
       { get: jest.fn().mockReturnValue(null) } as any,
       { check: jest.fn().mockResolvedValue({ limited: false }) } as any,
       { getAdapter: jest.fn(), handleInboundMessage: jest.fn() } as any,

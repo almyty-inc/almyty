@@ -1,5 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import {
+  BaseAdapter,
+  NormalizedMessage,
+  AdapterResponse,
+  AttachmentFetchLimits,
+  FetchedAttachment,
+  InboundAttachment,
+} from './base.adapter';
+import { isImage, textWithMedia } from '../reply-media';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -7,14 +15,119 @@ export class SlackAdapter extends BaseAdapter {
   private readonly logger = new Logger(SlackAdapter.name);
   readonly type = 'slack';
 
+  /** Where Slack serves a file's bytes; only this host is sent the bot token. */
+  static readonly FILE_HOSTS = ['files.slack.com'];
+  /** Slack renders at most this many image blocks usefully in one message. */
+  static readonly MAX_IMAGES = 5;
+  /** A section block's text limit. */
+  static readonly SECTION_CHARS = 3000;
+
+  /** Display names looked up with users.info, per bot token and user, for an hour. */
+  private readonly names = new Map<string, { name: string | undefined; at: number }>();
+  private static readonly NAME_TTL_MS = 60 * 60 * 1000;
+  private static readonly NAME_CACHE_MAX = 2000;
+
   normalizeInbound(rawPayload: any): NormalizedMessage {
     const event = rawPayload.event || rawPayload;
+    // A file shared into the conversation: its private download link, which
+    // needs the bot token (and the files:read scope) to read.
+    const files: InboundAttachment[] = (Array.isArray(event.files) ? event.files : [])
+      .filter((f: any) => f && (f.url_private_download || f.url_private))
+      .map((f: any) => ({
+        url: f.url_private_download || f.url_private,
+        type: typeof f.mimetype === 'string' ? f.mimetype : 'application/octet-stream',
+        name: f.name || f.title || 'attachment',
+        ...(typeof f.size === 'number' ? { size: f.size } : {}),
+      }));
+    const profile = event.user_profile;
     return {
       text: event.text || '',
       userId: event.user || 'unknown',
       threadId: event.thread_ts || event.ts,
+      ...(files.length ? { attachments: files } : {}),
+      ...(event.user
+        ? { sender: { id: event.user, name: profile?.display_name || profile?.real_name || undefined } }
+        : {}),
+      group: SlackAdapter.isGroupConversation(event),
       metadata: { channel: event.channel, ts: event.ts, source: 'slack' },
     };
+  }
+
+  /**
+   * A channel, a private channel or a group DM has several people in it; a
+   * direct message has one. `channel_type` says so on message events; an
+   * app_mention carries none, and its channel id's first letter does (D is
+   * a direct message).
+   */
+  static isGroupConversation(event: any): boolean {
+    if (typeof event?.channel_type === 'string') return event.channel_type !== 'im';
+    return typeof event?.channel === 'string' && !event.channel.startsWith('D');
+  }
+
+  /** Slack's private file links take the bot token, and only on Slack's file host. */
+  async fetchAttachment(
+    attachment: InboundAttachment,
+    config: Record<string, any>,
+    limits: AttachmentFetchLimits,
+  ): Promise<FetchedAttachment | null> {
+    if (!config.bot_token || !BaseAdapter.onHost(attachment.url, SlackAdapter.FILE_HOSTS)) return null;
+    return this.fetchBytes(attachment.url!, limits, { Authorization: `Bearer ${config.bot_token}` });
+  }
+
+  /**
+   * The sender's display name when the event did not carry their profile:
+   * users.info, with the bot token (users:read scope). Nothing when Slack
+   * will not say; the message is then prefixed with a short id instead.
+   */
+  async senderName(normalized: NormalizedMessage, config: Record<string, any>): Promise<string | undefined> {
+    const id = normalized.sender?.id;
+    if (normalized.sender?.name || !id || !config.bot_token) return normalized.sender?.name;
+    const key = `${crypto.createHash('sha256').update(String(config.bot_token)).digest('hex').slice(0, 16)}:${id}`;
+    const cached = this.names.get(key);
+    if (cached && Date.now() - cached.at < SlackAdapter.NAME_TTL_MS) return cached.name;
+    let name: string | undefined;
+    try {
+      const fetch = globalThis.fetch || (await import('node-fetch')).default;
+      const res = await (fetch as any)(`https://slack.com/api/users.info?user=${encodeURIComponent(id)}`, {
+        headers: { Authorization: `Bearer ${config.bot_token}` },
+        signal: AbortSignal.timeout(5_000),
+      });
+      const body = await this.readJsonBody(res);
+      if (body?.ok === true) {
+        const profile = body.user?.profile;
+        name = profile?.display_name || profile?.real_name || body.user?.real_name || body.user?.name || undefined;
+      }
+    } catch {
+      // A name is a nicety; the short id stands in.
+    }
+    if (this.names.size >= SlackAdapter.NAME_CACHE_MAX) this.names.clear();
+    this.names.set(key, { name, at: Date.now() });
+    return name;
+  }
+
+  /**
+   * The channels the bot is in, for picking where a scheduled result goes:
+   * conversations.list with the bot token (channels:read, and groups:read
+   * for private channels). Empty when Slack will not say -- a missing
+   * scope, a revoked token -- and the page then offers the channels the
+   * bot has been written to in, and a box to type an ID.
+   */
+  async listChannels(config: Record<string, any>): Promise<Array<{ id: string; name: string }>> {
+    if (!config.bot_token) return [];
+    try {
+      const fetch = globalThis.fetch || (await import('node-fetch')).default;
+      const res = await (fetch as any)(
+        'https://slack.com/api/conversations.list?types=public_channel,private_channel&exclude_archived=true&limit=200',
+        { headers: { Authorization: `Bearer ${config.bot_token}` }, signal: AbortSignal.timeout(5_000) },
+      );
+      const body = await this.readJsonBody(res);
+      if (body?.ok !== true || !Array.isArray(body.channels)) return [];
+      return body.channels
+        .filter((c: any) => c && typeof c.id === 'string' && c.is_member !== false)
+        .map((c: any) => ({ id: c.id, name: typeof c.name === 'string' ? c.name : c.id }));
+    } catch {
+      return [];
+    }
   }
 
   /**
@@ -30,8 +143,26 @@ export class SlackAdapter extends BaseAdapter {
     return undefined;
   }
 
+  /**
+   * Images in the reply go as image blocks under the text, which Slack
+   * fetches from their links; a PDF or other file stays a link, since Slack
+   * takes those only as an upload.
+   */
   formatOutbound(response: AdapterResponse): any {
-    return { text: response.text };
+    const images = (response.attachments ?? []).filter(isImage).slice(0, SlackAdapter.MAX_IMAGES);
+    const text = textWithMedia(response, images);
+    if (!images.length) return { text };
+    const sections: any[] = [];
+    for (let i = 0; i < text.length; i += SlackAdapter.SECTION_CHARS) {
+      sections.push({ type: 'section', text: { type: 'mrkdwn', text: text.slice(i, i + SlackAdapter.SECTION_CHARS) } });
+    }
+    return {
+      text,
+      blocks: [
+        ...sections,
+        ...images.map((image) => ({ type: 'image', image_url: image.url, alt_text: (image.name || 'image').slice(0, 2000) })),
+      ],
+    };
   }
 
   /**
@@ -56,6 +187,8 @@ export class SlackAdapter extends BaseAdapter {
         channel: threadContext?.channel,
         text: formattedResponse.text,
         thread_ts: threadContext?.threadId,
+        // Images the reply carries, as image blocks (formatOutbound).
+        ...(Array.isArray(formattedResponse.blocks) ? { blocks: formattedResponse.blocks } : {}),
       }),
     });
 

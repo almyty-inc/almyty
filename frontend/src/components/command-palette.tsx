@@ -82,8 +82,8 @@ export function CommandPalette() {
   const navigationEntries: Entry[] = [
     { id: 'nav-dashboard', label: 'Dashboard', icon: LayoutDashboard, action: () => go('/dashboard'), keywords: ['home'] },
     { id: 'nav-guide', label: 'Guide', icon: Compass, action: () => go('/guide'), keywords: ['getting started', 'onboarding', 'setup', 'help', 'tour'] },
-    { id: 'nav-agents', label: 'Agents', icon: Bot, action: () => go('/agents'), keywords: ['pipeline', 'workflow'] },
-    { id: 'nav-gateways', label: 'Gateways', icon: Zap, action: () => go('/gateways'), keywords: ['mcp', 'a2a', 'utcp', 'skills'] },
+    { id: 'nav-agents', label: 'Agents', icon: Bot, action: () => go('/agents'), keywords: ['pipeline', 'workflow', 'channels', 'a2a'] },
+    { id: 'nav-gateways', label: 'Gateways', icon: Zap, action: () => go('/gateways'), keywords: ['mcp', 'utcp', 'skills'] },
     { id: 'nav-tools', label: 'Tools', icon: Wrench, action: () => go('/tools'), keywords: ['http', 'javascript', 'graphql', 'llm', 'sdk'] },
     { id: 'nav-tool-hub', label: 'Tool Hub', icon: Store, action: () => go('/tool-hub'), keywords: ['templates', 'catalog'] },
     { id: 'nav-apis', label: 'APIs', icon: Globe, action: () => go('/apis'), keywords: ['openapi', 'graphql', 'soap', 'protobuf', 'sdk'] },
@@ -116,8 +116,10 @@ export function CommandPalette() {
     { id: 'act-new-custom-connector', label: 'Add a custom service', hint: 'Any service that takes a key or a sign-in', icon: Plus, action: () => go('/credentials/custom/new') },
     { id: 'act-new-credential-policy', label: 'Add a credential rule', hint: 'Govern who may use which credential', icon: Plus, action: () => go('/credentials/policies/new') },
     { id: 'act-new-approval-policy', label: 'Add approval policy', hint: 'Require a human to approve an action', icon: Plus, action: () => go('/settings/approvals/policies/new') },
+    { id: 'act-new-approval-rule', label: 'Ask before a large amount', hint: 'A person approves a tool call over an amount', icon: Plus, action: () => go('/settings/approvals/rules/new') },
     { id: 'act-new-memory', label: 'Add memory', hint: 'A fact or preference agents can recall', icon: Plus, action: () => go('/memories/new') },
-    { id: 'act-transfer-memory', label: 'Transfer memory', hint: 'Move memories between backends', icon: Plus, action: () => go('/memories/transfer') },
+    { id: 'act-move-memories', label: 'Move memories', hint: 'From one memory account to another', icon: Plus, action: () => go('/memories/move') },
+    { id: 'act-new-memory-account', label: 'Add memory account', hint: 'An account at Mem0, Zep or another memory service', icon: Plus, action: () => go('/memories/accounts/new') },
     { id: 'act-new-budget', label: 'Add spend budget', hint: 'Cap what a team or agent can spend', icon: Plus, action: () => go('/analytics/budgets/new') },
     { id: 'act-new-organization', label: 'Create organization', hint: 'A separate workspace with its own members', icon: Plus, action: () => go('/organizations/new') },
   ]

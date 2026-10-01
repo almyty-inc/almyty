@@ -62,7 +62,47 @@ describe('a runner\'s Workspaces tab', () => {
     vi.mocked(workspacesApi.getAll).mockResolvedValue([])
     renderAtRoute(<RunnerWorkspacesTab runnerId="r1" poll={false} />, { path: '/runners/r1' })
     expect(await screen.findByText('No workspaces yet')).toBeInTheDocument()
+    expect(screen.getByText(/gets one here automatically/)).toBeInTheDocument()
     expect(screen.getByText(/You don't create them by hand/)).toBeInTheDocument()
+  })
+
+  it('names the agent and run a workspace was made for, linking to the agent\'s runs', async () => {
+    vi.mocked(workspacesApi.getAll).mockResolvedValue([
+      workspace({ id: 'ws-auto', cwd: '/home/me/.almyty/workspaces/support-bot-aaaabbbb', agentId: 'agent-1', runId: 'aaaabbbb-1111-4111-8111-111111111111', agent: { id: 'agent-1', name: 'Support Bot' } }),
+      workspace({ id: 'ws-api', cwd: '/api-made' }),
+      workspace({ id: 'ws-orphan', cwd: '/orphan', agentId: null, runId: 'ccccdddd-2222-4222-8222-222222222222', agent: null }),
+    ])
+    renderAtRoute(<RunnerWorkspacesTab runnerId="r1" poll={false} />, { path: '/runners/r1' })
+    const table = await screen.findByTestId('runner-workspaces')
+    const link = await within(table).findByRole('link', { name: 'Support Bot' })
+    expect(link).toHaveAttribute('href', '/agents/agent-1?tab=runs')
+    const autoRow = link.closest('tr')!
+    expect(autoRow).toHaveTextContent('run aaaabbbb')
+    expect(within(table).getByText('/api-made').closest('tr')).toHaveTextContent('API')
+    expect(within(table).getByText('/orphan').closest('tr')).toHaveTextContent('deleted agent')
+  })
+
+  it('releases an active workspace from its row after confirming, without opening it', async () => {
+    vi.mocked(workspacesApi.getAll).mockResolvedValue([
+      workspace({ id: 'ws-live', cwd: '/active' }),
+      workspace({ id: 'ws-done', cwd: '/released', status: 'released', closeReason: { kind: 'released', detail: '' } }),
+    ])
+    vi.mocked(workspacesApi.release).mockResolvedValue({ id: 'ws-live', status: 'released' } as any)
+    const { router } = renderAtRoute(<RunnerWorkspacesTab runnerId="r1" poll={false} />, { path: '/runners/r1', paths: ['/runners/:runnerId/workspaces/:id'] })
+    const table = await screen.findByTestId('runner-workspaces')
+    await within(table).findByText('/active')
+
+    // Only the active one can be released.
+    const buttons = within(table).getAllByRole('button', { name: 'Release' })
+    expect(buttons).toHaveLength(1)
+    expect(within(table).getByText('/active').closest('tr')).toContainElement(buttons[0])
+
+    fireEvent.click(buttons[0])
+    expect(workspacesApi.release).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByRole('button', { name: 'Release workspace' }))
+
+    await waitFor(() => expect(workspacesApi.release).toHaveBeenCalledWith('ws-live'))
+    expect(router.state.location.pathname).toBe('/runners/r1')
   })
 })
 

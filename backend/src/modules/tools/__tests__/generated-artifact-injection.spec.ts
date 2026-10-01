@@ -164,7 +164,48 @@ describe('generated bash CLI', () => {
     expect(existsSync(marker)).toBe(false);
   });
 
-  it('still sends the flags it was given as a JSON body', async () => {
+  // The generated CLI is what users download, so it runs under whatever
+  // bash they have: /bin/bash is 3.2 on macOS, the PATH bash is usually 5.
+  const BASHES = [...new Set(['bash', ...(existsSync('/bin/bash') ? ['/bin/bash'] : [])])];
+
+  /**
+   * Run a generated script with a fake curl (echoes the -d body, or
+   * `response` when given) and a fake python3 that colours its output the
+   * way Python 3.14's json.tool does under FORCE_COLOR unless PYTHON_COLORS=0
+   * or NO_COLOR is set. The fake keeps the check deterministic on runners
+   * with an older python3.
+   */
+  function runCli(shell: string, script: string, args: string[], opts: { response?: string; input?: string } = {}) {
+    const file = join(workDir, 'cli.sh');
+    writeFileSync(file, script);
+    const bin = join(workDir, 'bin');
+    spawnSync('mkdir', ['-p', bin]);
+    const curl = opts.response !== undefined
+      ? `#!/bin/sh\nprintf '%s' '${opts.response}'\n`
+      : '#!/bin/sh\nwhile [ $# -gt 0 ]; do if [ "$1" = "-d" ]; then printf "%s" "$2"; fi; shift; done\n';
+    writeFileSync(join(bin, 'curl'), curl);
+    chmodSync(join(bin, 'curl'), 0o755);
+    writeFileSync(
+      join(bin, 'python3'),
+      [
+        '#!/bin/sh',
+        'body=$(cat)',
+        'case "$body" in "{"*) ;; *) exit 1 ;; esac',
+        'if [ -n "${FORCE_COLOR:-}" ] && [ "${PYTHON_COLORS:-}" != 0 ] && [ -z "${NO_COLOR:-}" ]; then printf "\\033[1m"; fi',
+        'printf "%s\\n" "$body"',
+        '',
+      ].join('\n'),
+    );
+    chmodSync(join(bin, 'python3'), 0o755);
+    return spawnSync(shell, [file, ...args], {
+      env: { ...env(), FORCE_COLOR: '1', PATH: `${bin}:${process.env.PATH}` },
+      input: opts.input ?? '',
+      encoding: 'utf-8',
+      timeout: 10_000,
+    });
+  }
+
+  it.each(BASHES)('still sends the flags it was given as a JSON body (%s)', async (shell) => {
     const t = tool({
       parameters: {
         type: 'object',
@@ -173,18 +214,51 @@ describe('generated bash CLI', () => {
       },
     });
     const out = await cliFor(t).generateToolCli('tool-1', 'bash', 'org-1');
-    const file = join(workDir, 'cli.sh');
-    writeFileSync(file, out.content);
-    const bin = join(workDir, 'bin');
-    spawnSync('mkdir', ['-p', bin]);
-    // Fake curl: print the -d argument.
-    writeFileSync(join(bin, 'curl'), '#!/bin/sh\nwhile [ $# -gt 0 ]; do if [ "$1" = "-d" ]; then printf "%s" "$2"; fi; shift; done\n');
-    chmodSync(join(bin, 'curl'), 0o755);
-    const res = spawnSync('bash', [file, '--pet-id', '5', '--note', 'say "hi"\\'], {
-      env: { ...env(), PATH: `${bin}:${process.env.PATH}` },
-      encoding: 'utf-8',
+    const note = 'say "hi"\\\n\ttab';
+    const res = runCli(shell, out.content, ['--pet-id', '5', '--note', note]);
+    expect(res.stderr).toBe('');
+    expect(JSON.parse(res.stdout)).toEqual({ petId: '5', note });
+  });
+
+  it.each(BASHES)('the gateway bundle sends its --key value pairs as a JSON body (%s)', async (shell) => {
+    const out = await cliFor(tool(), gateway).generateGatewayCliBunde('gw-1', 'bash', 'org-1');
+    const res = runCli(shell, out.content, ['listpets', '--limit', '3', '--q', 'a"b']);
+    expect(res.stderr).toBe('');
+    expect(JSON.parse(res.stdout)).toEqual({ limit: '3', q: 'a"b' });
+  });
+
+  it('prints a non-JSON response as is and never reads stdin', async () => {
+    const out = await cliFor(tool()).generateToolCli('tool-1', 'bash', 'org-1');
+    const res = runCli('bash', out.content, [], { response: 'Bad Gateway', input: 'TERMINAL-INPUT' });
+    expect(res.stdout).toBe('Bad Gateway\n');
+  });
+
+  it.each(['tool', 'bundle'])('the %s script sticks to bash 3.2 and POSIX tools', async (kind) => {
+    const t = tool({
+      parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
     });
-    expect(JSON.parse(res.stdout)).toEqual({ petId: '5', note: 'say "hi"\\' });
+    const out = kind === 'tool'
+      ? await cliFor(t).generateToolCli('tool-1', 'bash', 'org-1')
+      : await cliFor(t, gateway).generateGatewayCliBunde('gw-1', 'bash', 'org-1');
+    const code = out.content.split('\n').filter((l) => !l.trimStart().startsWith('#')).join('\n');
+    const nonPortable: [string, RegExp][] = [
+      ['associative array (bash 4)', /\bdeclare\s+-[a-zA-Z]*A/],
+      ['readarray/mapfile (bash 4)', /\b(readarray|mapfile)\b/],
+      ['case modification (bash 4)', /\$\{[^}]*(,,|\^\^)/],
+      ['nameref (bash 4.3)', /\b(local|declare)\s+-n\b/],
+      ['coproc (bash 4)', /\bcoproc\b/],
+      ['|& or &>> (bash 4)', /\|&|&>>/],
+      ['GNU sed -r / -i without suffix', /\bsed\s+(-[a-zA-Z]*r|-i\s)/],
+      ['GNU base64 -w', /\bbase64\s+-w/],
+      ['GNU date -d', /\bdate\s+-d/],
+      ['GNU readlink -f', /\breadlink\s+-f/],
+      ['GNU grep -P', /\bgrep\s+-[a-zA-Z]*P/],
+      ['|| cat fallback that reads stdin', /\|\|\s*cat\s*$/m],
+      ['json.tool without colour off', /^(?!.*PYTHON_COLORS=0).*json\.tool/m],
+    ];
+    for (const [what, re] of nonPortable) {
+      expect({ what, match: re.test(code) }).toEqual({ what, match: false });
+    }
   });
 
   it('the gateway bundle does not evaluate tool descriptions', async () => {

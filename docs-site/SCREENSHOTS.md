@@ -87,11 +87,12 @@ the underlying browser failure.
 
 ## Enabled-feature evidence still needed
 
-The remaining `*-locked.png` captures record a Pro organization's entitlement
-gates during the earlier capture pass; they also need recapturing after the UI
-refresh. They do **not** verify the enabled feature, its editor, or a successful
-configuration. The following views still need captures or end-to-end evidence
-from an authorized, seeded organization with the corresponding entitlements:
+The `*-locked.png` captures record the entitlement gates of an organization
+without that entitlement (the local demo stack runs a Business license, so the
+Enterprise pages stay locked). They do **not** verify the enabled feature, its
+editor, or a successful configuration. The following views still need captures
+or end-to-end evidence from an authorized, seeded organization with the
+corresponding entitlements:
 
 - Audit export controls and a downloaded evidence file
 - Credentials governance controls
@@ -99,14 +100,49 @@ from an authorized, seeded organization with the corresponding entitlements:
 - Chargeback report
 - White-label surface controls
 
-No entitled staging fixture was available during the September 23 capture pass.
-An authorized Business-plan demo fixture is available for the September 24 pass;
-Enterprise-only features still require an authorized fixture. Do not change
-billing, mint a license, or bypass a gate to obtain these images. Keep a referenced
+Enterprise-only features still require an authorized fixture. On staging, do not
+change billing, mint a license, or bypass a gate to obtain these images; the
+local demo stack's throwaway license never leaves the machine. Keep a referenced
 locked-state image distinct from evidence of the enabled feature.
 
-Runner list/detail also need a publishable demo fixture without private hostnames.
-The runner label-description correction (#717, fixed in #718) is merged.
-Recapture the referenced runner views after verifying the revised staging UI;
-do not publish the old routing claims as current documentation. Unreferenced
-dashboard captures have been retired rather than added to the recapture backlog.
+The runner list and detail are captured with a runner that is registered but
+has never connected, because a connected runner publishes its machine's hostname.
+A capture of an online runner still needs a machine whose hostname can be
+published.
+
+## Local demo stack captures
+
+The browser captures are taken from a local, seeded stack instead of staging,
+so they can be retaken after any UI change without a shared account:
+
+```sh
+scripts/demo-seed/stack.sh up            # Postgres, Redis, the commercial API build, vite, fake upstream
+node scripts/demo-seed/seed.mjs          # the Northwind AI organization, its agents, channels and runs
+node scripts/demo-seed/capture.mjs       # every shot, into /tmp/almyty-demo/shots for review
+node scripts/demo-seed/capture.mjs --register name...   # register the reviewed ones
+node scripts/demo-seed/guides.mjs        # walk the use-case guides, one shot per step
+scripts/demo-seed/stack.sh down
+```
+
+The use-case guides under `docs-site/content/examples` are walked through the
+UI, step by step as their text says, by `scripts/demo-seed/guides.mjs` on the
+same stack, in an organization of their own (Sam Rivera's "Northwind"), so
+each guide starts where a new customer starts. It takes one screenshot per
+step into `$SHOT_DIR/guides`; a step that cannot be done as written fails the
+walk, and the guide text is fixed, not the walk. Register the reviewed shots
+with `node scripts/demo-seed/guides.mjs --register`; they are published under
+`screenshots/guides/`. Walk the guides once per fresh stack: they create what
+they describe, so a second run meets its own leftovers.
+
+`self-hosting-compose.png` stays `needs-recapture`: it is a terminal capture
+of `docker compose up` from a clean checkout, which needs the compose stack's
+own ports (4000, 3002, 5432, 6379) free on the capturing machine.
+
+Nothing leaves the machine: the three model vendors and the Northwind Orders and
+Helpdesk APIs are `scripts/demo-seed/fake-upstream.mjs`, the password is a local
+test credential, and the Business license is signed by a throwaway key made on
+the spot. Registered entries record `source.environment: local-demo`. Addresses
+in these captures read `localhost`, which is what the local stack serves; the
+product shows the deployment's own API host. Enterprise-only pages (chargeback,
+customer-managed keys) stay locked under the Business license, which is what
+their `*-locked.png` captures show.

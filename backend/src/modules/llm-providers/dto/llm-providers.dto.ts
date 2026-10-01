@@ -78,6 +78,8 @@ export interface UpdateLlmProviderDto extends ModelAccessInput {
   metadata?: Partial<LlmProvider['metadata']>;
   visibility?: ResourceVisibility;
   teamId?: string | null;
+  /** Turned off (inactive) or back on (active) by a person. */
+  status?: LlmProviderStatus;
 }
 
 export interface ChatRequest {

@@ -9,8 +9,8 @@ export default {
   'llm-providers-api': 'Providers API',
   'models-api': 'Models API',
   'credentials-api': 'Credentials API',
-  'openai-compatible': 'OpenAI-Compatible API',
-  'anthropic-compatible': 'Anthropic-Compatible API',
-  'rate-limits': 'Rate Limits',
-  'error-codes': 'Error Codes',
+  'openai-compatible': 'OpenAI-compatible API',
+  'anthropic-compatible': 'Anthropic-compatible API',
+  'rate-limits': 'Rate limits',
+  'error-codes': 'Error codes',
 }

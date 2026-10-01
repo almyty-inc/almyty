@@ -1,6 +1,6 @@
 # ACP server
 
-Serve any almyty agent over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP), so editors and clients that speak ACP can talk to it directly. Zed and JetBrains, among others, are ACP clients.
+Some code editors can talk to an AI agent directly from inside the editor, using the [Agent Client Protocol](https://agentclientprotocol.com) (ACP), a shared standard for how editors and agents talk. This package makes any almyty agent one of those agents: for example, your team's code review agent shows up in the editor's agent panel next to the built-in one. Zed and JetBrains, among others, are ACP clients. This page is for developers; nothing here is needed to use agents in the app.
 
 ```bash
 npx @almyty/acp-server acme/my-agent
@@ -15,7 +15,7 @@ almyty-acp my-agent
 almyty-acp acme/my-agent
 ```
 
-The server speaks ACP over stdio (newline-delimited JSON), which is how ACP clients launch and connect to it.
+The server speaks ACP over stdio (standard input and output: the editor starts the program and exchanges newline-delimited JSON with it directly, no network address needed), which is how ACP clients launch and connect to it.
 
 ## Connect from an editor
 

@@ -1,57 +1,69 @@
-# Examples
+# What you can do
 
-Real jobs, built end to end with almyty. Each recipe starts from the outcome, names its
-stack (trigger, models, tools, mode), and walks the concrete steps. Find the one closest
-to what you want, follow it, and swap in your own APIs and channels.
+almyty turns the software your company already runs into AI assistants that do real work, and puts them where your staff and customers already talk. Here is what that looks like in practice.
 
-![Agents built from these recipes, running in the dashboard](/screenshots/agents-list.png)
+The six step-by-step guides below build a complete assistant each, with a screenshot for every step. They are written for anyone: you do not need to write code. The shorter examples after them show more ideas, in fewer words.
 
-Every recipe is assembled from the same pieces: [tools](/tools) (any API or npm package
-you connect), [gateways](/gateways) (how agents and clients reach them),
-[agents](/agents/autonomous), [memory](/memory), and the [runner](/runner). A name like
-"CRM API" means an API you connect, not a built-in connector.
+![Assistants built from these guides, on the Agents page](/screenshots/agents-list.png)
 
-## Give your AI access to APIs and data
+## Step-by-step guides
 
-Turn the systems you already run into tools an agent can call.
+- **[Customer support assistant](/examples/customer-support-assistant)**: one assistant on your website, WhatsApp and email. It looks up orders in your order system, refunds small amounts itself and asks a manager before a big refund.
+- **[Sales assistant in Slack](/examples/sales-assistant-slack)**: before a call, a short brief on the account from your CRM; after the call, your notes saved back to it.
+- **[Product chat for your website](/examples/website-product-chat)**: a chat on your website and campaign pages that answers product questions from your documentation, with a daily spending cap.
+- **[Nightly systems report](/examples/nightly-systems-report)**: an assistant that checks your systems every night and posts a short report to Slack.
+- **[Internal help desk](/examples/internal-help-desk)**: an assistant in Microsoft Teams or Slack that answers staff questions about HR, IT and the office.
+- **[For developers](/examples/developers-apis-and-machines)**: your company's APIs as tools in coding assistants, and agents that run jobs on your own machines.
 
-- **[Give Claude Code your own API](/examples/give-claude-your-api)**: import a schema, publish an MCP gateway, call it from Claude in one line.
-- **[Modernize a legacy SOAP service](/examples/modernize-legacy-soap)**: wrap a WSDL as modern MCP tools, source untouched.
-- **[Turn an npm package into tools](/examples/npm-package-tools)**: point almyty at a package like `stripe` and get typed tools.
-- **[Connect Google Drive and SharePoint](/examples/connect-google-sharepoint)**: search and summarize your docs, then write back.
-- **[Query your database in plain English](/examples/nl-query-your-database)**: the agent writes and runs read-only SQL, and shows the query it used.
-- **[Give an agent a machine to work on](/examples/expose-any-machine)**: expose a laptop, build server, or VPC box through the runner.
+## How every guide works
 
-## Automate real work
+Each assistant is built from the same few pieces:
 
-Put an agent on a recurring job, a channel, or a webhook and let it do the task.
+1. **Connect your systems.** Under **APIs**, give almyty the description of a system you already use (an order system, a CRM, a help center). It works out what that system can do, such as "look up an order" or "issue a refund", and turns each into a tool an assistant can use.
+2. **Build the assistant.** Under **Agents**, write what it should do in plain words, pick the AI model it runs on (you can switch any time) and tick the tools it may use.
+3. **Put it where people are.** On its **Channels** tab, publish it as a web chat, a chat bubble on your website, in Slack, Teams, WhatsApp, email, text messages, iMessage, as a desktop or terminal app, or for other AI tools.
 
-- **[Triage support tickets and draft replies](/examples/support-ticket-triage)**: looks up the order, drafts a reply, escalates refunds to a human.
-- **[Deflect L1 questions from your docs](/examples/docs-deflection-bot)**: answers in-channel with a cited page, opens a ticket only when it cannot.
-- **[Enrich and route inbound leads](/examples/lead-enrichment-routing)**: scores against your ICP, writes back to the CRM, pings the right rep.
-- **[Turn call notes into CRM updates](/examples/meeting-notes-to-crm)**: extracts next steps, updates the opportunity, drafts a follow-up.
-- **[Triage and label GitHub issues](/examples/github-issue-triage)**: labels, links duplicates, routes, and requests repros.
-- **[Review pull requests](/examples/pr-review-bot)**: flags bugs, missing tests, and policy violations inline, and never approves.
-- **[Summarize on-call alerts](/examples/oncall-alert-triage)**: gathers metrics and logs, correlates with past incidents, posts a summary.
-- **[Run a multi-vendor coding fleet](/examples/multi-vendor-coding-fleet)**: one planner driving Claude Code, Codex, and aider on a single repo.
-- **[Post a nightly data-quality digest](/examples/nightly-data-quality-digest)**: checks freshness and anomalies on a schedule, reports only what is wrong.
-- **[Reconcile Stripe payouts](/examples/stripe-payout-reconciliation)**: matches Stripe against the ledger daily and reports only the exceptions.
-- **[Run a cross-vendor contract review](/examples/cross-vendor-contract-review)**: several models argue the risks, a judge writes the memo.
+Around all of it: your keys are stored safely under **Credentials**, you decide who may use what, spending caps and visitor limits keep costs in check, anything that cannot be undone can wait for a person's approval, and every action is recorded.
 
-## Govern and secure agents
+## More examples
 
-Add constraints, budgets, approvals, and access control before an agent touches production.
+**Support and sales**
 
-- **[Run a governed refund agent](/examples/governed-refund-agent)**: constraints, cross-vendor verify, human approval, and a full audit trail.
-- **[Govern AI spend across teams](/examples/govern-ai-spend)**: per-team budgets with soft and hard caps, enforced at run start.
-- **[Enforce approval policies org-wide](/examples/approval-policies)**: map action plus threshold to a required approver across every agent.
-- **[Role-based access for a multi-team org](/examples/multi-team-rbac)**: teams, per-resource roles, least privilege by default.
-- **[Onboard with SSO and SCIM](/examples/sso-scim-onboarding)**: SAML or OIDC sign-in, SCIM provisioning, groups mapped to roles.
-- **[Stream your audit trail to a SIEM](/examples/audit-to-siem)**: every action to Splunk or Datadog, searchable and alertable.
+- [Sort support tickets and draft replies](/examples/support-ticket-triage)
+- [Answer common questions from your docs](/examples/docs-deflection-bot)
+- [A refund assistant with safeguards](/examples/governed-refund-agent)
+- [Score and route new leads](/examples/lead-enrichment-routing)
+- [Turn call notes into CRM updates](/examples/meeting-notes-to-crm)
+- [An assistant that remembers](/examples/agent-that-remembers)
 
-## Self-host and comply
+**Operations, data and finance**
 
-Keep data in your network and meet regulatory requirements.
+- [An assistant that checks and reports on a schedule](/examples/scheduled-monitoring-agent)
+- [A nightly check on your data](/examples/nightly-data-quality-digest)
+- [Ask your database questions in plain English](/examples/nl-query-your-database)
+- [Match Stripe payouts against your books](/examples/stripe-payout-reconciliation)
+- [Contract review by several AI models](/examples/cross-vendor-contract-review)
+- [Put your Google Drive or SharePoint to work](/examples/connect-google-sharepoint)
 
-- **[Air-gapped, self-hosted agents](/examples/air-gapped-self-host)**: local models, data residency, nothing leaves your network.
-- **[Ship EU AI Act-compliant agents](/examples/eu-ai-act-compliance)**: AI disclosure on every channel plus an Annex IV technical-doc export.
+**Control and compliance**
+
+- [Put a ceiling on AI spending](/examples/govern-ai-spend)
+- [Decide who signs off, once, for every assistant](/examples/approval-policies)
+- [Keep each team's assistants to that team](/examples/multi-team-rbac)
+- [Sign in with your company accounts](/examples/sso-scim-onboarding)
+- [Send your audit trail to your security team's tools](/examples/audit-to-siem)
+- [Get ready for the EU AI Act](/examples/eu-ai-act-compliance)
+- [Run everything inside your own network](/examples/air-gapped-self-host)
+
+**Engineering**
+
+- [Give your coding assistant your own API](/examples/give-claude-your-api)
+- [Give an old SOAP service a modern front door](/examples/modernize-legacy-soap)
+- [Turn a code library into tools](/examples/npm-package-tools)
+- [Let an assistant work on one of your machines](/examples/expose-any-machine)
+- [Sort and label GitHub issues](/examples/github-issue-triage)
+- [A first pass on pull requests](/examples/pr-review-bot)
+- [Summarize on-call alerts](/examples/oncall-alert-triage)
+- [Several coding assistants on one task](/examples/multi-vendor-coding-fleet)
+
+A name like "CRM API" in these examples means a system of yours that you connect under **APIs**, not something built in.

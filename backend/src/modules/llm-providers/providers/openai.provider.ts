@@ -7,6 +7,7 @@ import { ChatRequest, ChatResponse, StreamChunk } from '../llm-providers.service
 import { stepKindSignal } from '../dto/llm-providers.dto';
 import { callLlmProviderHttp, callLlmProviderHttpStream, llmCallOptionsFor } from './safe-request';
 import { requireModel } from '../model-errors';
+import { toOpenAIContent } from '../content-parts';
 import { customChatUrl } from './google.provider';
 
 
@@ -64,7 +65,7 @@ export async function callOpenAI(
     messages: request.messages.map(msg => {
       const openaiMsg: Record<string, unknown> = {
         role: msg.role,
-        content: msg.content,
+        content: toOpenAIContent(msg.content),
       };
 
       if (msg.toolCalls?.length > 0) {
@@ -189,7 +190,7 @@ function buildOpenAIRequestBody(
     messages: request.messages.map(msg => {
       const openaiMsg: Record<string, unknown> = {
         role: msg.role,
-        content: msg.content,
+        content: toOpenAIContent(msg.content),
       };
 
       if (msg.toolCalls?.length > 0) {

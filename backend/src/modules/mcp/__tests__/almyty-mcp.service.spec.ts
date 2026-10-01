@@ -487,9 +487,10 @@ describe('AlmytyMcpService', () => {
       expect(parsed.status).toBe('queued');
     });
 
-    it('list_gateways calls GatewaysService.getGateways', async () => {
+    // Gateways are MCP, UTCP and Skills; channels are listed by list_channels.
+    it('list_gateways asks GatewaysService for tool gateways only', async () => {
       await call('tools/call', { name: 'list_gateways', arguments: {} });
-      expect(mockGatewaysService.getGateways).toHaveBeenCalledWith({ organizationId: 'org-1', limit: 50, caller: { id: 'user-1' } });
+      expect(mockGatewaysService.getGateways).toHaveBeenCalledWith({ organizationId: 'org-1', limit: 50, kind: 'tool', caller: { id: 'user-1' } });
     });
 
     it('create_agent calls AgentsService.createAgent with correct args', async () => {

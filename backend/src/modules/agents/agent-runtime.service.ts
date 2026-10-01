@@ -1,6 +1,8 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, Inject, Optional, forwardRef, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Workspace } from '../../entities/workspace.entity';
+import { releaseRunWorkspaces } from '../workspace/run-end-release';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -18,7 +20,8 @@ import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.ser
 import { MemoryAccountsService } from '../memory/canonical/memory-accounts.service';
 import { Tier } from '../memory/canonical/canonical.types';
 import { Conversation } from '../../entities/conversation.entity';
-import { Message } from '../../entities/message.entity';
+import { Message, MessageContent } from '../../entities/message.entity';
+import { withAttachedFiles } from './attached-files';
 import { AgentRuntimeBuilders } from './agent-runtime-builders';
 import { AgentCollaborationHelper } from './agent-collaboration.helper';
 import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
@@ -205,6 +208,11 @@ export class AgentRuntimeService implements OnModuleInit {
     // its retention, and the organization's accounts (AgentMemoryKeeper).
     @Optional()
     readonly memoryAccounts?: MemoryAccountsService,
+    // A cancelled run's runner workspaces are released at once
+    // (releaseRunWorkspaces); without it the workspace tick does it.
+    @Optional()
+    @InjectRepository(Workspace)
+    readonly workspaceRepository?: Repository<Workspace>,
   ) {}
 
   /**
@@ -240,6 +248,13 @@ export class AgentRuntimeService implements OnModuleInit {
       gatewayId?: string | null;
       /** Extra run metadata the surface wants the runtime to see (e.g. visitorMemory). */
       metadata?: Record<string, any>;
+      /**
+       * Files that came with the input, as references to stored files
+       * (`{type: 'file', fileId, mimeType, name, text}`). They are kept on the
+       * user message and resolved per model when the run calls one
+       * (llm-providers/message-attachments.resolver.ts).
+       */
+      attachments?: MessageContent[];
       /**
        * Whose scope the run executes in. A top-level run is its starter's
        * (session, API key, the owner at a heartbeat) or its gateway's; a
@@ -384,7 +399,7 @@ export class AgentRuntimeService implements OnModuleInit {
     // Persist initial user message
     const userMessage = Message.createUserMessage(
       savedConversation.id,
-      typeof input === 'string' ? input : JSON.stringify(input),
+      withAttachedFiles(typeof input === 'string' ? input : JSON.stringify(input), options?.attachments),
     );
     await this.messageRepository.save(userMessage);
 
@@ -532,6 +547,7 @@ export class AgentRuntimeService implements OnModuleInit {
     }
     run.status = AgentRunStatus.CANCELLED;
     await this.runRepository.save(run);
+    await releaseRunWorkspaces(this.workspaceRepository, run.id, this.runRepository);
     this.emitEvent(runId, 'run.cancelled', {});
 
     // RUN_CANCEL was declared on AuditAction and emitted by nothing.
@@ -564,7 +580,14 @@ export class AgentRuntimeService implements OnModuleInit {
    * Send input to a waiting run (human-in-the-loop). Same optional
    * agentId assertion as cancelRun.
    */
-  async sendInput(runId: string, organizationId: string, input: string, agentId?: string): Promise<AgentRun> {
+  async sendInput(
+    runId: string,
+    organizationId: string,
+    input: string,
+    agentId?: string,
+    /** Files that came with the message, as references (see startRun's `attachments`). */
+    attachments?: MessageContent[],
+  ): Promise<AgentRun> {
     const run = await this.getRun(runId, organizationId, agentId);
     if (run.status !== AgentRunStatus.WAITING_INPUT) {
       throw new BadRequestException('Run is not waiting for input');
@@ -572,7 +595,7 @@ export class AgentRuntimeService implements OnModuleInit {
 
     // Persist user message
     if (run.conversationId) {
-      const userMsg = Message.createUserMessage(run.conversationId, input);
+      const userMsg = Message.createUserMessage(run.conversationId, withAttachedFiles(input, attachments));
       userMsg.runId = run.id;
       await this.messageRepository.save(userMsg);
     }
@@ -658,11 +681,13 @@ export class AgentRuntimeService implements OnModuleInit {
    * /'expired' the run is cancelled with the decision_reason.
    */
   private async handleApprovalDecided(approval: {
-    runId: string;
+    runId: string | null;
     status: 'approved' | 'rejected' | 'expired';
     decisionReason: string | null;
     toolCallId: string | null;
   }): Promise<void> {
+    // A held tool call has no run: ToolApprovalGateService runs it.
+    if (!approval.runId) return;
     const run = await this.runRepository.findOne({ where: { id: approval.runId } });
     if (!run) return;
     if (run.status !== AgentRunStatus.WAITING_APPROVAL) return;
@@ -692,6 +717,7 @@ export class AgentRuntimeService implements OnModuleInit {
         ? 'approval expired'
         : `approval rejected${approval.decisionReason ? `: ${approval.decisionReason}` : ''}`;
       await this.runRepository.save(run);
+      await releaseRunWorkspaces(this.workspaceRepository, run.id, this.runRepository);
       this.logger.log(`run ${run.id} cancelled after approval ${approval.status}`);
     }
   }

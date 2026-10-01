@@ -1,27 +1,28 @@
-# Reconcile Stripe payouts and flag anomalies
+# Match Stripe payouts against your books
 
-**Stack**: `Trigger: schedule (interval)` · `Models: your choice` · `Tools: stripe (npm SDK), ledger/query API` · `Mode: single agent + constraints` · `Output: Slack exceptions report`
+For finance teams who check Stripe against the ledger by hand every morning. Each day the assistant pulls yesterday's Stripe payouts and charges, matches them against your accounting records, and reports only the exceptions: amounts that don't match, missing entries, unexpected refunds. A person looks at the three that matter, not the three thousand that match.
 
-**Who it's for**: finance ops who reconcile Stripe against the ledger by hand every morning.
-**What it does**: each day it pulls Stripe payouts and charges, matches them against your internal ledger, and posts only the exceptions, mismatched amounts, missing entries, unexpected refunds, so a human looks at the 3 that matter, not the 3,000 that reconcile fine.
+## What you need
 
-## Build it
+- A Stripe restricted key that may only read (payouts, charges, refunds).
+- Read access to your ledger through an API: for example a small read-only query service in front of your accounting database.
+- Somewhere for the report to go: a Slack or email tool, or an address of yours that receives it.
 
-1. **Add Stripe as tools.** Add the `stripe` npm package as an [SDK tool](/tools/sdk-tools) (Tools → Create → SDK → `stripe` → *Discover*), you get typed tools for payouts, charges, and refunds without writing wrappers.
-2. **Connect your ledger** via *Connect an API* (a read-only query endpoint over your accounting DB; pick **OpenAPI / Swagger**, give its spec link and click **Connect API**), or as an [HTTP tool](/tools/http-tools) if it is a single call.
-3. **Store the Stripe key** in the [Credentials](/credentials) vault; the SDK tool reads it at run time, never in a prompt.
-4. **Create the agent** with: *pull yesterday's payouts and charges, match to the ledger by amount and reference, and report only unmatched or anomalous items.*
-5. **Constrain it**: *read-only; never issue or modify a charge or refund*, reconciliation observes, it doesn't act.
-6. **Schedule it** daily and publish the exceptions report to `#finance` on Slack.
+## How to build it
 
-## Make it yours
+1. **Add Stripe.** Open **APIs**, click **Connect an API**, pick **SDK / npm** and add the `stripe` package. Then, under **Tools**, **Create tool**, **SDK / npm package**, make tools for listing payouts, charges and refunds (see [Turn a code library into tools](/examples/npm-package-tools)).
+2. **Keep the key safe.** Save the Stripe key in [Credentials](/credentials); the tools read it when they run, never in a prompt.
+3. **Connect the ledger.** Open **APIs**, click **Connect an API**, pick **OpenAPI / Swagger**, give its description link and click **Connect API**. If it is a single call, create an [HTTP tool](/tools/http-tools) instead.
+4. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write: "Get yesterday's payouts and charges, match them to the ledger by amount and reference, and report only what doesn't match." Pick the tools under **Tools and APIs**.
+5. **Keep it read-only.** On its **Constraints** tab, add "Never create or change a charge or refund". The read-only Stripe key is what makes sure of it.
+6. **Run it daily.** On its **Overview** tab, turn on **Schedule** with an interval of 1440 minutes, and have it send the report with a Slack or email tool, or to your own address through the **Webhook** card.
 
-- Let it *propose* a correcting ledger entry and route it through [`request_approval`](/approvals), proposal, not execution.
-- Add a second-vendor [verify](/agents/autonomous#verification) pass on flagged anomalies to cut false positives.
-- Swap Stripe for Adyen or Braintree, connect their API the same way.
+## Ideas
 
-**Uses**: `Finance` · `Stripe` · `Scheduled` · `Constraints`
+- Let it propose a correcting ledger entry and ask a person to approve it first (see [Approvals](/approvals)).
+- Turn on verification so a second model checks each flagged exception.
+- The same works for other payment providers with an API or an npm package.
 
 ## Related
 
-- [SDK tools](/tools/sdk-tools) · [Credentials](/credentials) · [Approvals](/approvals)
+- [SDK tools](/tools/sdk-tools) · [Credentials](/credentials) · [Approvals](/approvals) · [Scheduling](/agents/scheduling)

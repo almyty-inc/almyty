@@ -32,6 +32,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { formatDate, getInitials } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
+import { GATEWAY_PROTOCOLS } from '@/lib/gateway-connect'
 import { Organization, OrganizationMembership, OrganizationRole } from '@/types'
 
 const ROLE_OPTIONS: Array<{ value: OrganizationRole; label: string }> = [
@@ -110,15 +111,25 @@ export function OrganizationDetailPage() {
   )
 }
 
+/**
+ * The gateways the plan counts: MCP, UTCP and Skills, made on Gateways.
+ * A web chat, widget, messaging channel or A2A endpoint is an agent's
+ * channel and does not count, nor does the platform's system gateway.
+ */
+export function planGatewayCount(org: Pick<Organization, 'gateways'>): number {
+  return (org.gateways ?? []).filter((g: any) => !g.isSystem && (GATEWAY_PROTOCOLS as readonly string[]).includes(g.type)).length
+}
+
 function OverviewTab({ org }: { org: Organization }) {
+  const gateways = planGatewayCount(org)
   const stats = [
     { label: 'Members', value: org.memberCount ?? org.members?.length ?? 0 },
     { label: 'Plan', value: org.plan ? String(org.plan).charAt(0).toUpperCase() + String(org.plan).slice(1) : 'Free' },
-    { label: 'Gateways', value: org.gateways?.length || 0 },
+    { label: 'Gateways', value: gateways },
     { label: 'Tools', value: org.tools?.length || 0 },
   ]
   const limits = [
-    { label: 'Gateways', used: org.gateways?.length || 0, max: org.settings?.maxGateways || 10 },
+    { label: 'Gateways', used: gateways, max: org.settings?.maxGateways || 10 },
     { label: 'APIs', used: org.apis?.length || 0, max: org.settings?.maxApis || 50 },
     { label: 'Tools', used: org.tools?.length || 0, max: org.settings?.maxTools || 100 },
   ]

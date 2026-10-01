@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { Building, Users, User, CreditCard, SlidersHorizontal } from 'lucide-react'
+import { Building, Users, User, CreditCard, KeyRound, SlidersHorizontal } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -24,6 +24,7 @@ import { KmsSettings } from '@/components/settings/kms-settings'
 import { ReferralsTab } from '@/components/settings/referrals-tab'
 import { DataRetentionCard } from '@/components/settings/data-retention-card'
 import { NotificationPreferences } from '@/components/settings/notification-preferences'
+import { ApiKeysSettings } from '@/components/settings/api-keys-settings'
 import { DEFAULT_TIME_ZONE, TimeZoneSelect } from '@/components/settings/time-zone-select'
 import { BillingTab } from '@/components/BillingTab'
 import { PageHeader } from '@/components/layout/page-header'
@@ -58,6 +59,13 @@ export const SETTINGS_SECTIONS = [
       { key: 'security', label: 'Password and sign-in' },
       { key: 'notifications', label: 'Notifications' },
     ],
+  },
+  {
+    key: 'api-keys',
+    label: 'API keys',
+    icon: KeyRound,
+    description: 'Your own keys, for the CLI, scripts and anything else that calls almyty as you.',
+    pages: [{ key: 'api-keys', label: 'API keys' }],
   },
   {
     key: 'people',
@@ -190,6 +198,7 @@ export function SettingsPage() {
         {settingsTab === 'profile' && <ProfileTab />}
         {settingsTab === 'notifications' && <NotificationPreferences />}
         {settingsTab === 'security' && <SecurityTab />}
+        {settingsTab === 'api-keys' && <ApiKeysSettings />}
         {settingsTab === 'sso' && <SsoSettings />}
         {settingsTab === 'rbac' && <RbacSettings />}
         {settingsTab === 'approvals' && <ApprovalPoliciesSettings />}

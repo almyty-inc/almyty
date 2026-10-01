@@ -1,49 +1,49 @@
-# Give Claude Code your own API
+# Give your coding assistant your own API
 
-**Stack**: `Trigger: Claude Code / any MCP client` · `Tools: your API (any schema)` · `Gateway: MCP (+ A2A, UTCP)` · `Auth: x-api-key` · `Output: Claude calls your API`
+Let Claude Code, Cursor, Claude Desktop or another AI tool use an API your company already runs. You connect the API to almyty once, and every operation in it becomes a tool the AI can call. Ask "look up pet 2 and show its status", and it calls your API to find out.
 
-**Who it's for**: anyone who wants Claude Code, Cursor, or Claude Desktop to call an API they already run.
+This works through MCP, the Model Context Protocol: a common way for AI tools to discover and call outside tools. In almyty, a **gateway** is the address your AI tool connects to, with a key and a chosen set of tools behind it.
 
-This recipe is **real**: the *Petstore MCP* gateway below is live in the demo org, serving 19
-Swagger Petstore tools over MCP with 14 real requests logged.
+For the full developer walk-through, see [For developers: APIs and machines](/examples/developers-apis-and-machines).
 
-## Build it
+## What you need
 
-1. **Connect the API.** Go to *APIs → Connect an API*, pick its kind (OpenAPI / Swagger, GraphQL,
-   SOAP / WSDL or gRPC / proto), give the link or the file, and click **Connect API**. Add your key when
-   asked. almyty makes a typed tool for every operation. (The demo imported Swagger Petstore:
-   19 operations → 19 tools.)
+- An API with a description file (OpenAPI/Swagger, GraphQL, SOAP/WSDL or a gRPC .proto file), and its key if it needs one.
+- An AI tool that supports MCP, such as Claude Code, Cursor or Claude Desktop.
 
-   ![The imported Swagger Petstore, 19 operations turned into tools](/screenshots/quickstart-api-imported.png)
+## How to build it
 
-2. **Publish an MCP gateway.** Group the tools to expose and publish them as an **MCP** gateway,
-   then generate an `x-api-key` on its Authentication panel. Scope exactly which tools it serves , 
-   here, 19 of 55 available tools.
+1. **Connect the API.** Open **APIs**, click **Connect an API**, pick its kind, give the link or the file, and click **Connect API**. Add the key when asked. almyty turns every operation into a tool. The demo uses the public Swagger Petstore:
 
-   ![The Petstore MCP gateway, endpoint, API keys, and tool scoping](/screenshots/gateway-petstore-config.png)
+   ![An imported API, its operations turned into tools](/screenshots/quickstart-api-imported.png)
 
-3. **Grab the endpoint.** The gateway's **Integrations** tab gives you the live MCP endpoint
-   (`https://api.almyty.com/{org}/{gateway}`), plus SSE and discovery URLs:
+2. **Create a gateway.** Open **Gateways** and click **Create gateway**. Pick **MCP**, pick the API (or single tools), and click **Create gateway**. Its access key is shown once, next to ready-made setup for Claude Code, Cursor and Claude Desktop, so copy it then. The **Tool scoping** tab changes exactly which tools it offers.
 
-   ![The gateway's MCP endpoint, SSE, and discovery URLs](/screenshots/gateway-petstore-integration.png)
+   ![The Petstore gateway, with its keys and tool scoping](/screenshots/gateway-petstore-config.png)
 
-4. **Add it to your client** and use it:
-   ```bash
-   claude mcp add petstore --transport http https://api.almyty.com/northwind-ai/petstore
-   # clients send: x-api-key: <your gateway key>
-   ```
-   ```text
-   > look up pet #2 and show its status
-     Claude calls getPetById via almyty → "Rosie", available
-   ```
+3. **Copy the address.** The gateway's **Integrations** tab shows its address and the setup for each AI tool.
 
-## Make it yours
+   ![The gateway's address on the Integrations tab](/screenshots/gateway-petstore-integration.png)
 
-- The same gateway also speaks **A2A** and **UTCP**, so other agents and clients reach identical tools.
-- Rotate or revoke keys per client from the Authentication panel (the demo has three: a default key, a quickstart key, and a docs key).
-- Front a [legacy SOAP service](/examples/modernize-legacy-soap) the same way.
+4. **Add it to your AI tool** and ask it to do something with your API.
 
-**Uses**: `Platform` · `MCP` · `Claude Code`
+## Ideas
+
+- A gateway speaks one protocol. For the same tools as Agent Skills (instruction files coding assistants read) or over UTCP, create another gateway of that kind with the same API.
+- Give each person or tool its own key from the gateway's **Authentication** section, so you can take one back without affecting the others.
+- Old SOAP services work the same way: see [Give an old SOAP service a modern front door](/examples/modernize-legacy-soap).
+
+## For developers
+
+In Claude Code:
+
+```bash
+claude mcp add petstore --transport http \
+  --header "x-api-key: <your gateway key>" \
+  https://api.almyty.com/<your-org>/petstore
+```
+
+For an AI tool that only runs local MCP servers, use the local proxy: `npx @almyty/mcp-server <your-org>/petstore`.
 
 ## Related
 

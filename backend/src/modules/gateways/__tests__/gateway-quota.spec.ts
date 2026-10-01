@@ -1,10 +1,16 @@
 import { BadRequestException } from '@nestjs/common';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { In } from 'typeorm';
 
+import { GatewayType } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { QuotaLockRequiresTransactionError } from '../../../common/quota/org-quota-lock';
 import {
   GatewayQuotaExceededException,
+  QUOTA_GATEWAY_TYPES,
   assertGatewayQuota,
+  countsTowardGatewayQuota,
   withGatewayQuota,
 } from '../gateway-quota';
 
@@ -37,8 +43,29 @@ describe('gateway quota', () => {
     expect(org.gateways).toBeUndefined();
     await expect(assertGatewayQuota(tx, ORG)).rejects.toBeInstanceOf(GatewayQuotaExceededException);
     await expect(assertGatewayQuota(tx, ORG)).rejects.toBeInstanceOf(BadRequestException);
-    // The platform's own system gateway is not the organization's.
-    expect(count).toHaveBeenCalledWith({ where: { organizationId: ORG, isSystem: false } });
+    // The platform's own system gateway is not the organization's, and
+    // channels (web chat, widget, messaging, A2A) are the agents'.
+    expect(count).toHaveBeenCalledWith({ where: { organizationId: ORG, isSystem: false, type: In(['mcp', 'utcp', 'skills']) } });
+  });
+
+  it('counts MCP, UTCP and Skills gateways toward the plan, and no channel', () => {
+    expect(QUOTA_GATEWAY_TYPES).toEqual([GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS]);
+    for (const type of [GatewayType.MCP, GatewayType.UTCP, GatewayType.SKILLS]) expect(countsTowardGatewayQuota(type)).toBe(true);
+    for (const type of [GatewayType.A2A, GatewayType.SLACK, GatewayType.CHAT_WIDGET, GatewayType.HOSTED_CHAT, GatewayType.EMAIL]) {
+      expect(countsTowardGatewayQuota(type)).toBe(false);
+    }
+  });
+
+  it('lets a channel gateway in at the limit: creating one adds nothing to the count', async () => {
+    const full = quotaManager({ maxGateways: 3, current: 3 });
+    const insert = jest.fn(async () => 'saved');
+    await expect(withGatewayQuota(full.manager, ORG, 0, insert)).resolves.toBe('saved');
+    expect(full.count).not.toHaveBeenCalled();
+  });
+
+  it('is asked with nothing to add when the gateway being made is a channel', () => {
+    const src = readFileSync(join(__dirname, '..', 'gateways.service.ts'), 'utf8');
+    expect(src).toMatch(/withGatewayQuota\([\s\S]{0,300}countsTowardGatewayQuota\(createGatewayDto\.type\) \? 1 : 0/);
   });
 
   it('lets a gateway in while there is room', async () => {

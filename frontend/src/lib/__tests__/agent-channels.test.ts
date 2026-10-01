@@ -75,6 +75,8 @@ describe('the channels offered', () => {
       'Slack',
       'WhatsApp (Twilio)',
       'WhatsApp (Meta Cloud)',
+      'iMessage (Sendblue)',
+      'iMessage (LoopMessage)',
       'Microsoft Teams',
       'Telegram',
       'Discord',
@@ -95,5 +97,7 @@ describe('the channels offered', () => {
     expect(channelConnectorKey('slack')).toBe('channel-slack')
     expect(channelConnectorKey('whatsapp_cloud')).toBe('channel-whatsapp-cloud')
     expect(channelConnectorKey('microsoft_teams')).toBe('channel-microsoft-teams')
+    expect(channelConnectorKey('imessage_sendblue')).toBe('channel-imessage-sendblue')
+    expect(channelConnectorKey('imessage_loopmessage')).toBe('channel-imessage-loopmessage')
   })
 })

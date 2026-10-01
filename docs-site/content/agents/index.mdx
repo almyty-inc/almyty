@@ -1,88 +1,69 @@
 # Agents
 
-Build an agent from the tools you already have. Draw the steps as a visual
-workflow when a task must run the same way every time, or go autonomous and let
-the model decide what to call. Either way, the result can be checked by a second
-model from a different vendor before it returns.
+An agent is an AI assistant that does a job for you using the systems you have connected. Ask it "where is order NW-10428?" and it looks the order up, checks the shipment and answers in a sentence. Ask it for a refund and it can issue one, or stop and ask a person first.
 
-![Agent builder canvas with typed nodes wired into a pipeline](/screenshots/agent-builder.png)
-
-## Two modes
-
-| Mode | Best for | How it works |
-|------|----------|--------------|
-| **Workflow** | A task that must run the same way every time | A visual graph of typed nodes connected by edges. See the [Builder](/agents/builder). |
-| **Autonomous** | Open-ended reasoning | Instructions, tools, memory, and a verifier panel; the model drives. See [Autonomous agents](/agents/autonomous). |
-
-Both modes share the same building blocks: tools, LLM providers, memory,
-verification, scheduling, and the OpenAI-compatible endpoint. Pick per agent
-without giving anything up.
-
-Which model does the work is set separately from what the agent does, on the
-Execution tab. See [Roles and strategies](/agents/execution), which is also
-where activation sends you when an agent is not ready.
-
-### Visual builder
-
-The canvas opens with a default Input to LLM to Output pipeline. Drag nodes from
-the palette, connect them, and configure each in the side panel. Nodes cover
-input, LLM calls, tool calls, conditions, transforms, and output. See the
-[node types](/agents/node-types) reference for the full set.
-
-### Autonomous
-
-Enter instructions, attach tools, enable memory, add constraints, and configure
-the verifier panel. The model plans its own steps, calls tools, and revises when
-a checker fails. Good runs become reusable skills.
-
-![Autonomous agent configuration with instructions, tools, and the verifier panel](/screenshots/agent-builder-autonomous.png)
-
-## Cross-vendor verification
-
-Before an autonomous agent returns, the verifier panel runs the output past one
-or more checker models. Point the primary model at one vendor and the checkers at
-another, so a mistake from one provider does not sail through unquestioned. A
-failed check sends the agent back to revise. Details in
-[Autonomous agents](/agents/autonomous#verification).
-
-![Agent detail overview showing configuration, tools, and recent runs](/screenshots/agent-detail-overview.png)
-
-## Create and run
-
-In the UI: **Agents to Create Agent**, then pick **Workflow** or **Autonomous**.
-From the list you can activate, deactivate, duplicate, import from JSON, or delete
-an agent.
+On this page: the two kinds of agent, how to create one, and where to go next.
 
 ![Agents list with mode, status, and last run](/screenshots/agents-list.png)
 
-From the terminal, list and run agents with the CLI:
+## Two ways to build an agent
+
+| Kind | Pick it when | What you do |
+|------|--------------|-------------|
+| **Autonomous** | The work changes from one request to the next, like answering customers | Write instructions in plain words and say what it may use. The AI works out the steps itself. See [Autonomous agents](/agents/autonomous). |
+| **Workflow** | The same steps must run the same way every time, like a nightly report | Draw the steps on a canvas and connect them. See the [visual builder](/agents/builder). |
+
+Both kinds use the same pieces: the tools and APIs you connected, the AI models you connected, memory, checks by a second model, schedules and webhooks. You choose per agent and give nothing up either way.
+
+Which AI model does the work is set separately from what the agent does, so you can switch models at any time. An autonomous agent picks its [work mode](/agents/autonomous#work-mode-how-it-works-and-which-models-do-it) and a model for each part on its edit page. A workflow agent picks its models on its **Execution** tab; see [Roles and strategies](/agents/execution).
+
+![Autonomous agent configuration: instructions, work mode, memory and capabilities](/screenshots/agent-builder-autonomous.png)
+
+## Create an agent
+
+1. Open **Agents** in the sidebar and click **Create agent**.
+2. At the top of the builder, pick **Autonomous** or **Workflow**.
+3. For an autonomous agent, write its personality and instructions, pick a work mode and its models, then tick what it may use under **Capabilities**. For a workflow, the canvas opens with a simple Input, AI call, Output flow for you to extend.
+4. Save, then activate it. An agent answers only while it is active.
+
+From the agents list you can also activate, pause, duplicate or delete an agent. Deleting an agent also deletes its channels, so its web chat, website bubble and messaging channels stop answering. **Import** brings in an agent saved as a file (**Import from JSON**) or an agent that runs somewhere else (**Import external A2A agent**; A2A is a standard way for agents to talk to each other).
+
+![Agent builder canvas with typed nodes wired into a pipeline](/screenshots/agent-builder.png)
+
+## A second opinion before it answers
+
+An autonomous agent can have its answer checked before anyone sees it. One or more checker models each try to find something wrong with the answer. If one does, the agent fixes the answer and tries again. Use a checker from a different AI vendor than the main model, so one vendor's mistake does not slip through. Set this up on the agent's **Overview** tab; details in [Autonomous agents](/agents/autonomous#verification).
+
+![Agent detail overview showing configuration, tools, and recent runs](/screenshots/agent-detail-overview.png)
+
+## An agent's status
+
+| Status | What it means |
+|--------|---------------|
+| Draft | Still being built; nobody can run it yet |
+| Active | Live and answering |
+| Inactive | Paused; requests are turned away |
+| Error | Something in its setup needs fixing |
+
+## Where to next
+
+- [Autonomous agents](/agents/autonomous): checks, rules, skills, memory
+- [Visual builder](/agents/builder): draw a workflow step by step
+- [Step types](/agents/node-types): every step the builder offers
+- [Scheduling](/agents/scheduling) and [Webhooks](/agents/webhooks): run an agent on a timer, or tell another system when it finishes
+- [Versioning](/agents/versioning): look back at changes and undo them
+
+## For developers
+
+List and run agents from the terminal with the CLI:
 
 ```bash
 $ npx @almyty/agents list
 $ npx @almyty/agents run invoice-pipeline --input '{"file_url": "https://example.com/invoice.pdf"}'
 ```
 
-Autonomous runs stream their steps with `--watch` and take safety limits like
-`--max-steps` and `--max-cost-cents`. Full command reference in the
-[Agents CLI](/cli/agents).
+Autonomous runs stream their steps with `--watch` and take safety limits like `--max-steps` and `--max-cost-cents`. Full command reference in the [Agents CLI](/cli/agents).
 
-Every agent, whichever mode, also answers on the
-[OpenAI-compatible API](/api-reference/openai-compatible), so an existing OpenAI
-SDK can call it by changing the base URL.
+Every agent, whichever mode, also answers on the [OpenAI-compatible API](/api-reference/openai-compatible), so an existing OpenAI SDK can call it by changing the base URL.
 
-## Lifecycle
-
-| Status | Description |
-|--------|-------------|
-| `draft` | Being built, not yet invokable |
-| `active` | Live and accepting invocations |
-| `inactive` | Paused; invocations are rejected |
-| `error` | Has a configuration issue |
-
-## Related
-
-- [Autonomous agents](/agents/autonomous): verification, constraints, skills, memory
-- [Workflow builder](/agents/builder): the visual graph and how to wire it
-- [Node types](/agents/node-types): every node the builder offers
-- [Scheduling](/agents/scheduling) and [Webhooks](/agents/webhooks): run agents on a timer or an event
-- [Versioning](/agents/versioning): snapshot and roll back an agent
+The status values in the API are `draft`, `active`, `inactive` and `error`.

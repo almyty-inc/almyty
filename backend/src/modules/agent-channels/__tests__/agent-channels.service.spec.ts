@@ -412,11 +412,14 @@ describe('AgentChannelsService', () => {
       await expect(service.publish(ORG, 'agent-open', view.id, ME)).rejects.toThrow(/spend limit per run/);
     });
 
-    it('checks SSO against the organization licence', async () => {
+    // Visitor sign-in (SSO) on a channel is the sso entitlement's, not
+    // white label's: white label removes the almyty mark and nothing else.
+    it('checks SSO against the organization licence: sso unlocks it, white label does not', async () => {
       agents.seed(agent({ id: 'agent-sso', visitorRules: { authMode: VisitorAuthMode.SSO } }));
       const unlicensed = build();
       const view = await unlicensed.add(ORG, 'agent-sso', ME, { type: ChannelType.WEB, slug: 'sso-chat' });
       await expect(unlicensed.publish(ORG, 'agent-sso', view.id, ME)).rejects.toThrow(/commercial licence/);
+      await expect(build({ licensed: ['white_label'] }).publish(ORG, 'agent-sso', view.id, ME)).rejects.toThrow(/commercial licence/);
       await expect(build({ licensed: ['sso'] }).publish(ORG, 'agent-sso', view.id, ME)).resolves.toMatchObject({ status: 'live' });
     });
 
@@ -460,6 +463,103 @@ describe('AgentChannelsService', () => {
       const view = await service.add(ORG, 'agent-1', ME, { type: ChannelType.TELEGRAM, credentialId: 'cred-shared' });
       await service.remove(ORG, 'agent-1', view.id, ME);
       expect(credentials.row('cred-shared')).toBeDefined();
+    });
+  });
+
+  /**
+   * Deleting an agent. Its channels used to stay behind: the channel rows
+   * went with the agent's foreign key, but their gateways stayed active,
+   * kept the web chat's address taken (the next web chat of that name got
+   * "-2") and answered a message with a 500.
+   */
+  describe('when the agent is deleted', () => {
+    /** Gateway rows that remember their configuration, so the address a web chat holds is real. */
+    const withRealGateways = () => {
+      gateways.upsertForChannel = jest.fn(async (dto: any, _org: string, _user: string, options: any) =>
+        gatewayRows.seed({
+          id: options.gatewayId ?? undefined,
+          organizationId: ORG,
+          agentId: 'agent-1',
+          type: dto.type,
+          endpoint: dto.endpoint,
+          status: 'inactive',
+          configuration: dto.configuration,
+        }),
+      );
+      gateways.deleteGatewayOfDeletedAgent = jest.fn(async (gateway: any) => {
+        await gatewayRows.delete({ id: gateway.id });
+      });
+      const service = build();
+      // freeSlug asks the gateways table which hosted chat holds an address.
+      (gatewayRows as any).createQueryBuilder = jest.fn(() => {
+        let slug = '';
+        const qb: any = {
+          where: (_sql: string, params: any) => ((slug = params.slug), qb),
+          andWhere: () => qb,
+          getCount: async () => gatewayRows.rows().filter((g: any) => g.configuration?.hostedChat?.slug === slug).length,
+        };
+        return qb;
+      });
+      return service;
+    };
+
+    it('deletes every channel of the agent with its gateway, and frees the web chat address', async () => {
+      slackCredential();
+      const service = withRealGateways();
+      const web = await service.add(ORG, 'agent-1', ME, { type: ChannelType.WEB });
+      await service.publish(ORG, 'agent-1', web.id, ME);
+      const slack = await service.add(ORG, 'agent-1', ME, { type: ChannelType.SLACK, credentialId: 'cred-slack' });
+      await service.publish(ORG, 'agent-1', slack.id, ME);
+      expect(web.slug).toBe('support-agent');
+      expect(gatewayRows.rows()).toHaveLength(2);
+
+      const removed = await service.removeAllOf(ORG, 'agent-1', 'user-1');
+
+      expect(removed).toEqual({ channels: 2, gateways: 2 });
+      expect(channels.rows()).toHaveLength(0);
+      expect(gatewayRows.rows()).toHaveLength(0);
+      expect(gateways.deleteGatewayOfDeletedAgent).toHaveBeenCalledTimes(2);
+
+      // A new agent of the same name gets the address back, not "-2".
+      agents.seed(agent({ id: 'agent-new' }));
+      const again = await service.add(ORG, 'agent-new', ME, { type: ChannelType.WEB });
+      expect(again.slug).toBe('support-agent');
+    });
+
+    it('also deletes an agent gateway bound to it that no channel records', async () => {
+      const service = withRealGateways();
+      gatewayRows.seed({ id: 'gw-loose', organizationId: ORG, agentId: 'agent-1', type: 'a2a', status: 'active', configuration: {} });
+      gatewayRows.seed({ id: 'gw-other-agent', organizationId: ORG, agentId: 'agent-2', type: 'a2a', status: 'active', configuration: {} });
+
+      await service.removeAllOf(ORG, 'agent-1', 'user-1');
+
+      expect(gatewayRows.rows().map((g: any) => g.id)).toEqual(['gw-other-agent']);
+    });
+
+    it("never touches another organization's channels or gateways", async () => {
+      const service = withRealGateways();
+      channels.seed({ id: 'c-theirs', organizationId: 'org-2', agentId: 'agent-1', type: ChannelType.WEB, status: ChannelStatus.LIVE, gatewayId: 'gw-theirs' } as any);
+      gatewayRows.seed({ id: 'gw-theirs', organizationId: 'org-2', agentId: 'agent-1', type: 'hosted_chat', status: 'active', configuration: {} });
+
+      await service.removeAllOf(ORG, 'agent-1', 'user-1');
+
+      expect(channels.rows().map((c) => c.id)).toEqual(['c-theirs']);
+      expect(gatewayRows.rows().map((g: any) => g.id)).toEqual(['gw-theirs']);
+    });
+
+    it('deletes the stored files of its downloads', async () => {
+      const builds = { removeArtifactsOf: jest.fn(async () => 1) };
+      const service = new AgentChannelsService(
+        channels as any, agents as any, gatewayRows as any, gateways, accessPolicy,
+        undefined, undefined, undefined, undefined, builds as any,
+      );
+      gateways.deleteGatewayOfDeletedAgent = jest.fn(async () => undefined);
+      channels.seed({ id: 'c-tui', organizationId: ORG, agentId: 'agent-1', type: ChannelType.TUI, status: ChannelStatus.BUILT, gatewayId: null } as any);
+
+      await service.removeAllOf(ORG, 'agent-1', 'user-1');
+
+      expect(builds.removeArtifactsOf).toHaveBeenCalledWith(['c-tui']);
+      expect(channels.rows()).toHaveLength(0);
     });
   });
 
@@ -533,6 +633,55 @@ describe('AgentChannelsService', () => {
         cleared: ['twilio_auth_token'],
         publicConfig: { phone_number: '+1' },
       });
+    });
+  });
+
+  // Sendblue's webhook is registered when the channel is published
+  // (channel-webhook-registrar.service.ts). What that last did is on the
+  // gateway row; the channel page reads it here, so a failure is said
+  // where the operator is looking rather than only in a log.
+  describe('webhook registration on the channel page', () => {
+    const seedLive = (type: ChannelType, gatewayId: string) =>
+      channels.seed({ id: `c-${gatewayId}`, organizationId: ORG, agentId: 'agent-1', type, name: type, status: ChannelStatus.LIVE, gatewayId, configuration: {} } as any);
+
+    it('shows the last registration outcome of a Sendblue channel, error included', async () => {
+      gatewayRows.seed({
+        id: 'gw-sb',
+        organizationId: ORG,
+        metadata: {
+          webhookRegistration: {
+            action: 'register',
+            status: 'failed',
+            url: 'https://api.almyty.example/acme/channels/c-gw-sb',
+            error: 'Sendblue refused adding the webhook: Invalid API credentials',
+            at: '2026-09-30T10:00:00.000Z',
+          },
+        },
+      });
+      seedLive(ChannelType.IMESSAGE_SENDBLUE, 'gw-sb');
+
+      const view = await build().get(ORG, 'agent-1', 'c-gw-sb', ME);
+      expect(view.webhookRegistration).toEqual({
+        action: 'register',
+        status: 'failed',
+        error: 'Sendblue refused adding the webhook: Invalid API credentials',
+        at: '2026-09-30T10:00:00.000Z',
+      });
+    });
+
+    it('is null for a channel whose webhook is pasted by hand, and for one not published yet', async () => {
+      gatewayRows.seed({ id: 'gw-loop', organizationId: ORG, metadata: { webhookRegistration: { status: 'failed', error: 'x' } } });
+      seedLive(ChannelType.IMESSAGE_LOOPMESSAGE, 'gw-loop');
+      const draft = await build().add(ORG, 'agent-1', ME, { type: ChannelType.IMESSAGE_SENDBLUE });
+
+      expect((await build().get(ORG, 'agent-1', 'c-gw-loop', ME)).webhookRegistration).toBeNull();
+      expect(draft.webhookRegistration).toBeNull();
+    });
+
+    it("never reads another organization's gateway", async () => {
+      gatewayRows.seed({ id: 'gw-theirs', organizationId: 'org-2', metadata: { webhookRegistration: { status: 'registered' } } });
+      seedLive(ChannelType.IMESSAGE_SENDBLUE, 'gw-theirs');
+      expect((await build().get(ORG, 'agent-1', 'c-gw-theirs', ME)).webhookRegistration).toBeNull();
     });
   });
 });

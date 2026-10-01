@@ -5,12 +5,16 @@ import { Runner } from '../../entities/runner.entity';
 import { RunnerSession } from '../../entities/runner-session.entity';
 import { Workspace } from '../../entities/workspace.entity';
 import { Tool } from '../../entities/tool.entity';
+import { Agent } from '../../entities/agent.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
+import { AgentExecution } from '../../entities/agent-execution.entity';
 
 import { RunnerService } from './runner.service';
 import { RunnerController } from './runner.controller';
 import { RunnerCallService } from './runner-call.service';
 import { RunnerCapabilityPublisher } from './runner-capability.publisher';
 import { CodingRelayService } from './coding-relay.service';
+import { RunWorkspaceService } from './run-workspace.service';
 import { McpModule } from '../mcp/mcp.module';
 import { WorkspaceModule } from '../workspace/workspace.module';
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
@@ -41,13 +45,13 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Runner, RunnerSession, Workspace, Tool]),
+    TypeOrmModule.forFeature([Runner, RunnerSession, Workspace, Tool, Agent, AgentRun, AgentExecution]),
     forwardRef(() => McpModule),
     forwardRef(() => WorkspaceModule),
     AuthorizationModule,
   ],
-  providers: [RunnerService, RunnerCallService, RunnerCapabilityPublisher, CodingRelayService],
+  providers: [RunnerService, RunnerCallService, RunnerCapabilityPublisher, CodingRelayService, RunWorkspaceService],
   controllers: [RunnerController],
-  exports: [RunnerService, RunnerCallService, RunnerCapabilityPublisher, CodingRelayService],
+  exports: [RunnerService, RunnerCallService, RunnerCapabilityPublisher, CodingRelayService, RunWorkspaceService],
 })
 export class RunnerModule {}

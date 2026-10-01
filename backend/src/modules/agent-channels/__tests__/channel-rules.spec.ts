@@ -198,6 +198,33 @@ describe('checkChannel', () => {
     );
     expect(kept.ok).toBe(true);
   });
+
+  // LoopMessage sends every reply from a sender name, set on the channel.
+  // Without one the relay refuses every reply, so publishing is refused
+  // first, in words that say what to enter.
+  it('will not publish a LoopMessage channel without a sender name, and says so plainly', () => {
+    const keys = { credentialId: 'c-loop', credentialKeys: ['api_key', 'inbound_token'] };
+    const unnamed = checkChannel(channel({ type: ChannelType.IMESSAGE_LOOPMESSAGE, slug: null, configuration: keys }));
+    expect(codes(unnamed)).toEqual(['SENDER_NAME_REQUIRED']);
+    expect(unnamed.refusals[0].message).toBe(CHANNEL_REFUSALS.SENDER_NAME_REQUIRED);
+    expect(unnamed.refusals[0].message).toMatch(/sender name/);
+
+    const blank = checkChannel(channel({ type: ChannelType.IMESSAGE_LOOPMESSAGE, slug: null, configuration: { ...keys, sender_name: '   ' } }));
+    expect(codes(blank)).toContain('SENDER_NAME_REQUIRED');
+
+    const named = checkChannel(channel({ type: ChannelType.IMESSAGE_LOOPMESSAGE, slug: null, configuration: { ...keys, sender_name: 'northwind' } }));
+    expect(named.ok).toBe(true);
+
+    // Sendblue replies from its line, which the credential holds.
+    const sendblue = checkChannel(
+      channel({
+        type: ChannelType.IMESSAGE_SENDBLUE,
+        slug: null,
+        configuration: { phone_number: '+15122164639', credentialId: 'c-sb', credentialKeys: ['api_key_id', 'api_secret_key', 'signing_secret'] },
+      }),
+    );
+    expect(codes(sendblue)).not.toContain('SENDER_NAME_REQUIRED');
+  });
 });
 
 describe('isOpenToAnyone', () => {

@@ -213,6 +213,7 @@ jobs:
         package:
           - acp-server
           - agents-cli
+          - almyty-cli
           - auth-cli
           - chat-cli
           - client
@@ -222,11 +223,6 @@ jobs:
           - models-cli
           - runner
           - skills-cli
-        # almyty-cli is deliberately absent: it depends on
-        # @almyty/credentials, which is not on the registry until its first
-        # publish, so `npm ci` there has nothing to resolve. Publish
-        # @almyty/credentials, regenerate packages/almyty-cli/package-lock.json
-        # (scripts/check-package-locks.js names this too) and add the leg.
 
     steps:
       - name: Checkout
@@ -243,8 +239,7 @@ jobs:
       # `npm install` because two lockfiles had rotted against their
       # package.json and `npm ci` refuses those outright: models-cli's lock
       # still said 0.1.0 against a package.json at 1.2.0, and almyty-cli's
-      # was missing two dependencies. models-cli's is regenerated;
-      # almyty-cli is not in this matrix (see the note above it). Every
+      # was missing two dependencies. Both are regenerated. Every
       # package listed here now passes `npm ci --dry-run`, and
       # scripts/check-package-locks.js fails the build if a lock drifts from
       # its manifest again — so this line does not have to drift back.

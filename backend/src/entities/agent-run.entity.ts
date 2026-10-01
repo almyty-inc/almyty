@@ -148,6 +148,14 @@ export class AgentRun {
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;
 
+  /**
+   * When a scheduled run's result was handed on to the channel or webhook
+   * its schedule named (AgentSchedulerService.deliverScheduledRun). Claimed
+   * before the post, so a run finished twice is posted once.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  deliveredAt: Date | null;
+
   @Column({ type: 'json', nullable: true })
   limits: {
     maxSteps?: number;

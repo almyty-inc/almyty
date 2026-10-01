@@ -4,6 +4,7 @@ import * as pgvector from 'pgvector';
 
 import { RankedItem, SearchQuery } from './canonical.types';
 import { entityToItem, rowToEntity } from './canonical-memory.service';
+import { documentContainerSql } from './document-chunks.helper';
 
 @Injectable()
 export class CanonicalSearchHelper {
@@ -40,7 +41,8 @@ export class CanonicalSearchHelper {
       topK,
       queryEmbeddingModel,
     ];
-    let where = `m.scope_type = $1 AND m.scope_id = $2 AND m.deleted_at IS NULL AND m.valid_until IS NULL AND m.embedding IS NOT NULL AND m.embedding_model = $6`;
+    // A document is found by its chunks; its container row never is.
+    let where = `m.scope_type = $1 AND m.scope_id = $2 AND m.deleted_at IS NULL AND m.valid_until IS NULL AND m.embedding IS NOT NULL AND m.embedding_model = $6 AND NOT ${documentContainerSql('m')}`;
     if (query.mode) {
       params.push(query.mode);
       where += ` AND m.mode = $${params.length}`;
@@ -103,7 +105,7 @@ export class CanonicalSearchHelper {
    */
   async ftsSearch(query: SearchQuery, topK: number): Promise<RankedItem[]> {
     const params: any[] = [query.scope.scope_type, query.scope.scope_id, query.query, topK];
-    let where = `m.scope_type = $1 AND m.scope_id = $2 AND m.deleted_at IS NULL AND m.valid_until IS NULL AND m.content_tsv @@ plainto_tsquery('english', $3)`;
+    let where = `m.scope_type = $1 AND m.scope_id = $2 AND m.deleted_at IS NULL AND m.valid_until IS NULL AND NOT ${documentContainerSql('m')} AND m.content_tsv @@ plainto_tsquery('english', $3)`;
     if (query.mode) {
       params.push(query.mode);
       where += ` AND m.mode = $${params.length}`;

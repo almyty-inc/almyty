@@ -1,26 +1,28 @@
-# Review pull requests for bugs and policy
+# A first pass on pull requests
 
-**Stack**: `Trigger: GitHub webhook → agent API / schedule` · `Models: Claude 4.8 + GPT-4o (cross-check)` · `Tools: GitHub API` · `Mode: verify panel + constraints` · `Output: inline PR review comments`
+For teams where code review is the bottleneck. The assistant reads the changes in a pull request, points out likely bugs, missing tests and broken rules (a committed password, a dependency you don't allow), and leaves comments on the lines concerned. Your reviewers start from a sorted list instead of a blank page.
 
-**Who it's for**: teams where reviews are the bottleneck and the easy stuff eats reviewer time.
-**What it does**: reads a PR diff, flags likely bugs, missing tests, and policy violations (secrets, banned dependencies), and leaves inline comments, so a human reviewer starts from a triaged list instead of a blank diff.
+## What you need
 
-## Build it
+- Your GitHub repository and a GitHub token that may read pull requests and comment, and nothing more. The token is what really limits the assistant: with no permission to approve or merge, it can't.
+- Two AI providers from different companies, for the double check in step 4.
 
-1. **Connect GitHub** (REST/GraphQL via *Connect an API*, or `@octokit/rest` as an SDK tool) for PR, diff, and review-comment access.
-2. **Create the agent** with the instruction: *review this diff for correctness, test coverage, and policy; comment inline; do not approve or merge.*
-3. **Encode policy as constraints**: *flag any committed secret; block new dependencies outside the allowlist; require tests for new endpoints.*
-4. **Add a verify panel**: a second-vendor model re-checks each flagged issue so the bot doesn't spam false positives; only findings both models keep get posted.
-5. **Post the review**: the agent leaves inline comments and a summary via the GitHub tools; it never approves.
-6. **Trigger it**: a GitHub webhook calls the agent API on `pull_request.opened`/`synchronize`, or run it on a schedule over open PRs.
+## How to build it
 
-## Make it yours
+1. **Connect GitHub.** Open **APIs**, click **Connect an API**, pick **SDK / npm** and add `@octokit/rest`. Then, under **Tools**, **Create tool**, **SDK / npm package**, make tools for "read a pull request's changes" and "comment on a pull request". Keep the token in [Credentials](/credentials).
+2. **Create the assistant.** Open **Agents**, click **Create agent** and switch to **Autonomous**. In **Instructions**, write: "Review the changes for correctness, test coverage and our rules. Comment on the lines concerned. Never approve or merge." Pick the GitHub tools under **Tools and APIs**.
+3. **Write your rules as constraints.** On its **Constraints** tab: "Flag any committed password or key", "Flag new dependencies not on our list", "Ask for tests for every new endpoint".
+4. **Cut the false alarms.** On its **Overview** tab, click **Configure verification**, turn on **Enable verification** and add a reviewer from a different AI company. The second model checks the assistant's final summary and sends it back for revision when a finding doesn't hold up. Comments it already posted during the run are not held back, so for checked comments only, have it write the review as its final answer and post that (see For developers).
+5. **Run it.** On its **Overview** tab, turn on **Schedule** to go through open pull requests regularly.
 
-- Add a repo-context tool so it reasons about the surrounding code, not just the diff.
-- Gate merges by requiring the bot's summary to show zero policy violations.
-- Run the [multi-vendor coding fleet](/examples/multi-vendor-coding-fleet) to *fix* what the review finds.
+## Ideas
 
-**Uses**: `DevOps` · `GitHub` · `Verification` · `Constraints`
+- Give it a tool that reads the surrounding code, so it judges more than the changed lines.
+- Have [several coding assistants](/examples/multi-vendor-coding-fleet) fix what the review finds.
+
+## For developers
+
+To review each pull request as soon as it opens, have a GitHub Action call the agent's endpoint from the **Integration** card on its **Overview** tab, and post the answer it gets back as the review comment. The answer has passed verification by then. See the [OpenAI-compatible API](/api-reference/openai-compatible).
 
 ## Related
 

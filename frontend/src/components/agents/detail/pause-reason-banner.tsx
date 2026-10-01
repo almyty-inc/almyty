@@ -6,6 +6,7 @@ import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import type { Agent, AgentPauseReason } from '@/types'
 import { formatDateTime } from '@/lib/utils'
+import { requestFromStored } from '@/lib/schedule'
 
 type Kind = 'schedule' | 'heartbeat'
 
@@ -77,8 +78,8 @@ function PausedNotice({ agent, kind, reason }: { agent: Agent; kind: Kind; reaso
   const resume = useMutation({
     mutationFn: () => {
       if (kind === 'schedule') {
-        const s = agent.settings!.schedule!
-        return agentsApi.schedule(agent.id, s.intervalMinutes, s.input ?? {})
+        // The whole stored schedule, so a time-of-day one resumes as it was.
+        return agentsApi.schedule(agent.id, requestFromStored(agent.settings!.schedule!))
       }
       const h = agent.heartbeat!
       return agentsApi.setHeartbeat(agent.id, { enabled: true, intervalMinutes: h.intervalMinutes, prompt: h.prompt })

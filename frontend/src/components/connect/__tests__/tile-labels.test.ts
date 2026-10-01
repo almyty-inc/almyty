@@ -29,6 +29,8 @@ describe('tile labels', () => {
     }
     expect([channelTileLabel('whatsapp'), CHANNEL_HINTS.whatsapp]).toEqual(['WhatsApp', 'Via Twilio'])
     expect([channelTileLabel('whatsapp_cloud'), CHANNEL_HINTS.whatsapp_cloud]).toEqual(['WhatsApp', 'Via Meta Cloud'])
+    expect([channelTileLabel('imessage_sendblue'), CHANNEL_HINTS.imessage_sendblue]).toEqual(['iMessage', 'Via Sendblue'])
+    expect([channelTileLabel('imessage_loopmessage'), CHANNEL_HINTS.imessage_loopmessage]).toEqual(['iMessage', 'Via LoopMessage'])
     expect([channelTileLabel('a2a'), CHANNEL_HINTS.a2a]).toEqual(['Other agents', 'Over A2A'])
   })
 

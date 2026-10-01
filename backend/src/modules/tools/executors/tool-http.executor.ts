@@ -22,15 +22,15 @@
  */
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
-import { agentsExempting, ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Organization } from '../../../entities/organization.entity';
-import { decideEgress } from '../../connections/egress-policy';
+import { decideToolEgress, ToolEgress } from './tool-egress';
 import { Tool } from '../../../entities/tool.entity';
 import { Api } from '../../../entities/api.entity';
 import { Operation } from '../../../entities/operation.entity';
-import { validateUrl, sanitizeHeaders } from '../../../common/security/url-validator';
+import { sanitizeHeaders } from '../../../common/security/url-validator';
 import {
   decideToolRequest,
   effectiveMaxResponseBytes,
@@ -73,29 +73,11 @@ export class ToolHttpExecutor {
   ) {}
 
   /**
-   * May this tool call go to `url`, and through which agents?
-   *
-   * A public URL passes `validateUrl` and goes through the DNS-pinning
-   * agents. A private, loopback or link-local one is refused unless its
-   * host is on the organization's egress allowlist (settings
-   * .egressAllowlist), the same allowlist a model provider's URL is judged
-   * by: an API on the organization's own network is reachable once an
-   * admin says that host is theirs. Then the pinning lookup makes an
-   * exception for that one name and nothing else. See
-   * connections/egress-policy.ts and docs/connections.md.
+   * May this tool call go to `url`, and through which agents? The rule is
+   * shared with the GraphQL, SOAP and gRPC executors: see decideToolEgress.
    */
-  private async egressFor(
-    url: string,
-    organizationId: string | null | undefined,
-  ): Promise<{ error: string | null; httpAgent?: AxiosRequestConfig['httpAgent']; httpsAgent?: AxiosRequestConfig['httpsAgent'] }> {
-    const strict = validateUrl(url);
-    if (strict.valid) return { error: null, httpAgent: ssrfSafeHttpAgent, httpsAgent: ssrfSafeHttpsAgent };
-    const refused = { error: strict.error ?? 'The URL is not allowed' };
-    if (!organizationId || !this.organizations) return refused;
-    const organization = await this.organizations.findOne({ where: { id: organizationId } });
-    const decision = decideEgress(url, { allowlist: organization?.settings?.egressAllowlist ?? [] });
-    if (!decision.allowed || !decision.viaAllowlist) return refused;
-    return { error: null, ...agentsExempting(new URL(url).hostname) };
+  private egressFor(url: string, organizationId: string | null | undefined): Promise<ToolEgress> {
+    return decideToolEgress(url, organizationId, this.organizations);
   }
 
   // ─── Structured httpConfig path ────────────────────────────────

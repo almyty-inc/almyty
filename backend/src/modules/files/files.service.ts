@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { isUUID } from 'class-validator';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsSelect, Repository } from 'typeorm';
+import { FindOptionsSelect, In, Repository } from 'typeorm';
 import { AgentFile } from '../../entities/file.entity';
 import { StorageService } from './storage.service';
 import { TextExtractorService } from './text-extractor.service';
@@ -9,6 +9,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { Readable } from 'stream';
+
+/**
+ * What an upload is for, when the uploader says. Only an app icon has one
+ * today: an icon chosen on the branding page and never saved is cleared by
+ * a sweep a day later.
+ */
+export const FILE_PURPOSES = ['app_icon'] as const;
+export type FilePurpose = (typeof FILE_PURPOSES)[number];
 
 /** Every file column a list returns: all of them but `extractedText`. */
 const FILE_LIST_COLUMNS: FindOptionsSelect<AgentFile> = {
@@ -22,10 +30,14 @@ const FILE_LIST_COLUMNS: FindOptionsSelect<AgentFile> = {
   storageKey: true,
   storageUrl: true,
   memoryId: true,
+  conversationId: true,
   uploadedBy: true,
   metadata: true,
   createdAt: true,
 };
+
+/** What removing a file needs: which row, and which stored object. */
+const STORED_OBJECT_COLUMNS: FindOptionsSelect<AgentFile> = { id: true, storageKey: true };
 
 @Injectable()
 export class FilesService {
@@ -42,7 +54,7 @@ export class FilesService {
   async upload(
     organizationId: string,
     file: { path: string; originalname: string; mimetype: string; size: number },
-    options?: { agentId?: string; runId?: string; uploadedBy?: string; extractText?: boolean },
+    options?: { agentId?: string; runId?: string; uploadedBy?: string; extractText?: boolean; purpose?: FilePurpose },
   ): Promise<AgentFile> {
     // agentId becomes a storage-key segment. Unchecked, `../<other org>/x`
     // normalizes to a key under another org's prefix, which the key guard
@@ -84,6 +96,7 @@ export class FilesService {
       storageUrl,
       extractedText,
       uploadedBy: options?.uploadedBy || null,
+      metadata: options?.purpose ? { purpose: options.purpose } : null,
     });
 
     let saved: AgentFile;
@@ -139,6 +152,21 @@ export class FilesService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
+  /**
+   * Files uploaded for `purpose` before `before`, in every organization,
+   * oldest first: for the sweeps that clear uploads nothing came to use
+   * (an app icon chosen on the branding page and never saved).
+   */
+  async findForPurposeBefore(purpose: FilePurpose, before: Date, limit = 500): Promise<AgentFile[]> {
+    return this.fileRepository
+      .createQueryBuilder('f')
+      .where(`f.metadata ->> 'purpose' = :purpose`, { purpose })
+      .andWhere('f.createdAt < :before', { before })
+      .orderBy('f.createdAt', 'ASC')
+      .take(limit)
+      .getMany();
+  }
+
   async findById(id: string, organizationId: string): Promise<AgentFile> {
     const file = await this.fileRepository.findOne({ where: { id, organizationId } });
     if (!file) throw new NotFoundException('File not found');
@@ -182,6 +210,179 @@ export class FilesService {
     this.auditLogService.log({ organizationId, action: AuditAction.FILE_DOWNLOAD, resourceType: AuditResource.FILE, resourceId: file.id, resourceName: file.name });
 
     return { stream, file };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Files someone sent in a conversation (channel and web chat attachments)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Store the bytes of a file someone sent in chat: a channel attachment
+   * fetched from the platform, or a web chat upload. Unlike `upload`, the
+   * bytes are already in memory (bounded by the caller's cap) and the file
+   * belongs to a conversation rather than to a dashboard user, so it is
+   * found and erased with that conversation (`removeForConversations`).
+   * `conversationId` may follow later, once the run that reads the file has
+   * one (`attachToConversation`).
+   */
+  async storeBytes(
+    organizationId: string,
+    bytes: Buffer,
+    file: { name: string; mimeType: string },
+    options: {
+      agentId?: string | null;
+      conversationId?: string | null;
+      extractedText?: string | null;
+      metadata?: Record<string, any>;
+    } = {},
+  ): Promise<AgentFile> {
+    if (options.agentId && !isUUID(options.agentId)) throw new BadRequestException('agentId must be a UUID');
+    const fileId = uuidv4();
+    const storageKey = `${organizationId}/${options.agentId || 'general'}/${fileId}/${this.sanitizeStoredFilename(file.name)}`;
+    const storageUrl = await this.storageService.upload(storageKey, bytes, file.mimeType);
+    const row = this.fileRepository.create({
+      id: fileId,
+      organizationId,
+      agentId: options.agentId || null,
+      conversationId: options.conversationId ?? null,
+      name: file.name,
+      mimeType: file.mimeType,
+      size: bytes.length,
+      storageKey,
+      storageUrl,
+      extractedText: options.extractedText ?? null,
+      uploadedBy: null,
+      metadata: options.metadata ?? null,
+    });
+    try {
+      return await this.fileRepository.save(row);
+    } catch (error) {
+      await this.storageService.delete(storageKey).catch((cleanupError) =>
+        this.logger.warn(`Could not remove orphaned attachment ${storageKey}: ${cleanupError.message}`),
+      );
+      throw error;
+    }
+  }
+
+  /** File the attachments of one message under the conversation (and run) that read them. */
+  async attachToConversation(
+    organizationId: string,
+    fileIds: string[],
+    conversationId: string,
+    runId?: string | null,
+  ): Promise<void> {
+    const ids = fileIds.filter((id) => isUUID(id));
+    if (!ids.length) return;
+    await this.fileRepository.update(
+      { id: In(ids), organizationId },
+      { conversationId, ...(runId ? { runId } : {}) },
+    );
+  }
+
+  /**
+   * Remove files and their stored objects, by id. For attachments stored
+   * for a message that never reached a conversation (the run was refused).
+   */
+  async removeMany(organizationId: string, fileIds: string[]): Promise<number> {
+    const ids = fileIds.filter((id) => isUUID(id));
+    if (!ids.length) return 0;
+    return this.removeRows(await this.fileRepository.find({ where: { id: In(ids), organizationId }, select: STORED_OBJECT_COLUMNS }));
+  }
+
+  /**
+   * Remove every file filed under these conversations, stored object first.
+   * Called by each path that erases conversations (the retention sweep,
+   * visitor erasure, a widget thread's erasure) before it deletes them: the
+   * foreign key would cascade the rows on its own, but not the objects.
+   */
+  async removeForConversations(organizationId: string, conversationIds: string[]): Promise<number> {
+    if (!conversationIds.length) return 0;
+    let removed = 0;
+    for (let i = 0; i < conversationIds.length; i += 500) {
+      const batch = conversationIds.slice(i, i + 500);
+      removed += await this.removeRows(
+        await this.fileRepository.find({ where: { conversationId: In(batch), organizationId }, select: STORED_OBJECT_COLUMNS }),
+      );
+    }
+    return removed;
+  }
+
+  /** Where a conversation attachment came from (`metadata.source`). */
+  static readonly ATTACHMENT_SOURCES = ['channel_attachment', 'web_chat_upload', 'widget_upload'] as const;
+
+  /**
+   * Attachments a visitor uploaded and has not sent yet: no conversation,
+   * this gateway, this visitor (a web chat end user, or a widget thread).
+   * Returned only when every id is theirs; one that is not refuses the lot.
+   */
+  async findUnsentUploads(
+    organizationId: string,
+    fileIds: string[],
+    owner: { gatewayId: string; endUserId?: string; threadId?: string },
+  ): Promise<AgentFile[] | null> {
+    const ids = [...new Set(fileIds)].filter((id) => isUUID(id));
+    if (!ids.length || ids.length !== fileIds.length) return null;
+    const qb = this.fileRepository
+      .createQueryBuilder('file')
+      .where('file.id IN (:...ids)', { ids })
+      .andWhere('file.organizationId = :organizationId', { organizationId })
+      .andWhere('file.conversationId IS NULL')
+      .andWhere(`file.metadata->>'gatewayId' = :gatewayId`, { gatewayId: owner.gatewayId });
+    if (owner.endUserId) qb.andWhere(`file.metadata->>'endUserId' = :endUserId`, { endUserId: owner.endUserId });
+    else if (owner.threadId) qb.andWhere(`file.metadata->>'threadId' = :threadId`, { threadId: owner.threadId });
+    else return null;
+    const rows = await qb.getMany();
+    return rows.length === ids.length ? rows : null;
+  }
+
+  /**
+   * Remove a visitor's unsent uploads on a gateway: part of erasing what a
+   * surface holds about them.
+   */
+  async removeUnsentUploads(
+    organizationId: string,
+    owner: { gatewayId: string; endUserId?: string; threadId?: string },
+  ): Promise<number> {
+    if (!owner.endUserId && !owner.threadId) return 0;
+    const qb = this.fileRepository
+      .createQueryBuilder('file')
+      .select(['file.id', 'file.storageKey'])
+      .where('file.organizationId = :organizationId', { organizationId })
+      .andWhere('file.conversationId IS NULL')
+      .andWhere(`file.metadata->>'gatewayId' = :gatewayId`, { gatewayId: owner.gatewayId });
+    if (owner.endUserId) qb.andWhere(`file.metadata->>'endUserId' = :endUserId`, { endUserId: owner.endUserId });
+    else qb.andWhere(`file.metadata->>'threadId' = :threadId`, { threadId: owner.threadId });
+    return this.removeRows(await qb.take(500).getMany());
+  }
+
+  /**
+   * Remove conversation attachments that never reached a conversation
+   * (uploaded and not sent, or stored for a message whose run was never
+   * linked) once they are older than `cutoff`. Deployment-wide; the
+   * retention sweep runs it on its hourly tick.
+   */
+  async removeUnsentAttachments(cutoff: Date, batch = 500): Promise<number> {
+    const rows = await this.fileRepository
+      .createQueryBuilder('file')
+      .select(['file.id', 'file.storageKey'])
+      .where('file.conversationId IS NULL')
+      .andWhere(`file.metadata->>'source' IN (:...sources)`, { sources: [...FilesService.ATTACHMENT_SOURCES] })
+      .andWhere('file.createdAt < :cutoff', { cutoff })
+      .take(batch)
+      .getMany();
+    return this.removeRows(rows);
+  }
+
+  private async removeRows(rows: Array<Pick<AgentFile, 'id' | 'storageKey'>>): Promise<number> {
+    if (!rows.length) return 0;
+    for (const row of rows) {
+      // An object that is already gone is not a reason to keep the row.
+      await this.storageService.delete(row.storageKey).catch((err) =>
+        this.logger.warn(`Could not remove stored object for file ${row.id}: ${err?.message ?? err}`),
+      );
+    }
+    const result = await this.fileRepository.delete({ id: In(rows.map((r) => r.id)) });
+    return result.affected ?? rows.length;
   }
 
   async remove(id: string, organizationId: string): Promise<void> {

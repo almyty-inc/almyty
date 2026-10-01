@@ -87,6 +87,22 @@ describe('ApprovalsPage', () => {
     expect(screen.queryByText('org')).not.toBeInTheDocument()
   })
 
+  it("names the agent that asked, and says so when the agent was deleted", async () => {
+    const base = {
+      organizationId: 'org-1', teamId: null, visibility: 'org', toolCallId: null, payload: null, status: 'pending',
+      decidedBy: null, decidedAt: null, decisionReason: null, expiresAt: null, createdAt: new Date().toISOString(),
+    }
+    ;(approvalsApi.list as any).mockResolvedValue([
+      { ...base, id: 'a-n', runId: 'run-n', agentId: 'agent-named-1234', agentName: 'Invoice helper', reason: 'Send the invoice' },
+      { ...base, id: 'a-d', runId: 'run-d', agentId: 'agent-gone-5678', agentName: null, reason: 'Close the account' },
+    ])
+    render(<ApprovalsPage />)
+    await screen.findByText('Send the invoice')
+    expect(screen.getByRole('link', { name: 'Invoice helper' })).toHaveAttribute('href', '/agents/agent-named-1234')
+    expect(screen.getByText('Deleted agent')).toBeInTheDocument()
+    expect(screen.queryByText(/^agent agent-/)).not.toBeInTheDocument()
+  })
+
   it('shows the empty state when the list is empty', async () => {
     ;(approvalsApi.list as any).mockResolvedValue([])
     render(<ApprovalsPage />)

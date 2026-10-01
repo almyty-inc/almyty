@@ -1,6 +1,6 @@
 # Tools API
 
-> This is the HTTP API reference. For UI walkthroughs, see [Getting Started](/) and the feature guides above.
+This page is for developers who want to list, create and run tools from their own code. A tool is one thing an assistant can do in one of your systems, such as "look up an order" or "issue a refund". For example, a test script can run the "track shipment" tool against a known order to check your order system still answers. In the app, tools live under **Tools**; see [Tools](/tools).
 
 ![Tools in the UI](/screenshots/tools-list.png)
 
@@ -18,7 +18,7 @@ REST API reference for managing tools.
 | `DELETE` | `/tools/:id` | Delete a tool |
 | `POST` | `/organizations/{orgId}/tools/:id/execute` | Execute a tool |
 
-## List Tools
+## List tools
 
 ```bash
 curl https://api.almyty.com/organizations/{orgId}/tools \
@@ -50,7 +50,7 @@ curl https://api.almyty.com/organizations/{orgId}/tools \
 }
 ```
 
-## Create a Tool
+## Create a tool
 
 ```bash
 curl -X POST https://api.almyty.com/organizations/{orgId}/tools \
@@ -59,7 +59,8 @@ curl -X POST https://api.almyty.com/organizations/{orgId}/tools \
   -d '{
     "name": "calculate_total",
     "description": "Calculate order total with tax",
-    "type": "javascript",
+    "type": "function",
+    "executionMethod": "custom",
     "parameters": {
       "type": "object",
       "properties": {
@@ -73,16 +74,23 @@ curl -X POST https://api.almyty.com/organizations/{orgId}/tools \
   }'
 ```
 
-### Tool Types
+### Execution methods
 
-| Type | Required Fields |
-|------|----------------|
-| `http` | `executionConfig.method`, `executionConfig.url` |
-| `javascript` | `code` |
-| `graphql` | `executionConfig.endpoint`, `executionConfig.query` |
-| `llm` | `executionConfig.providerId`, `executionConfig.promptTemplate` |
+`executionMethod` says how the tool runs, and each method keeps its definition in its own field.
 
-## Execute a Tool
+| `executionMethod` | Required fields | Page |
+|------|----------------|------|
+| `http` | `httpConfig.method`, `httpConfig.path` | [HTTP tools](/tools/http-tools) |
+| `custom` | `code` | [JavaScript tools](/tools/javascript-tools) |
+| `graphql` | `graphqlConfig.endpoint`, `graphqlConfig.query` | [GraphQL tools](/tools/graphql-tools) |
+| `soap` | `soapConfig.endpoint`, `soapConfig.operation` | [SOAP tools](/tools/soap-tools) |
+| `grpc` | `grpcConfig.endpoint`, `grpcConfig.serviceName`, `grpcConfig.methodName`, `grpcConfig.protoDefinition` | [gRPC tools](/tools/grpc-tools) |
+| `llm` | `llmConfig.providerId`, `llmConfig.promptTemplate` | [LLM tools](/tools/llm-tools) |
+| `sdk` | `sdkConfig` | [SDK tools](/tools/sdk-tools) |
+
+For `graphql`, `soap` and `grpc`, a create without the matching config, or with `code`, is refused with a 400. The endpoint (and for `grpc` the proto) may be left out when the tool is linked to a connected API with `apiId`.
+
+## Execute a tool
 
 ```bash
 curl -X POST https://api.almyty.com/organizations/{orgId}/tools/{id}/execute \

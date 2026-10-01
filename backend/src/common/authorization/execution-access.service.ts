@@ -46,7 +46,7 @@ export interface UserPrincipal {
 }
 
 /**
- * A published surface: MCP, A2A, UTCP, Skills, ACP, OpenAI-chat, a chat
+ * A published surface: MCP, A2A, UTCP, Skills, a chat
  * channel, hosted chat. A gateway is reached by whoever its own auth
  * admits, not by a user this policy can check, so what it may run is
  * decided by the gateway's own scope (see canGatewayExecute).

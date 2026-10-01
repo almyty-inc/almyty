@@ -53,6 +53,25 @@ describe('ApprovalsService', () => {
       expect(events.length).toBe(1);
     });
 
+    it('holds a tool call no run can wait on: no run is paused, and it is scoped to the gateway it came through', async () => {
+      const { svc, runs } = makeService();
+      const events: any[] = [];
+      svc.on('approval.requested', (a) => events.push(a));
+      const orgWide = await svc.create({
+        organizationId: 'org-1', teamId: null, runId: null, agentId: null, toolId: 'tool-refund', fingerprint: 'f1',
+        reason: 'Ask before issue_refund when amount is over 500. On this call amount is 820.',
+      });
+      expect(orgWide).toMatchObject({ runId: null, agentId: null, toolId: 'tool-refund', fingerprint: 'f1', visibility: 'org', status: 'pending' });
+      expect(runs.row('r1')!.status).toBe(AgentRunStatus.RUNNING);
+      expect(events).toHaveLength(1);
+
+      const throughTeamGateway = await svc.create({
+        organizationId: 'org-1', teamId: null, runId: null, agentId: null, toolId: 'tool-refund', fingerprint: 'f2', reason: 'x',
+        principal: { kind: 'gateway', gatewayId: 'gw-1', organizationId: 'org-1', visibility: 'team', teamId: 'team-1', ownerUserId: null },
+      });
+      expect(throughTeamGateway).toMatchObject({ visibility: 'team', teamId: 'team-1' });
+    });
+
     it('a private agent\'s request is private to the agent\'s owner, whatever team the caller passes', async () => {
       const { svc, approvals } = makeService();
       approvals.agents.seed({ id: 'pa', organizationId: 'org-1', visibility: 'private', createdBy: 'owner-1' });
@@ -217,6 +236,19 @@ describe('ApprovalsService', () => {
       const list = await svc.listPending({ organizationId: 'o', caller: { id: 'u' } });
       expect(list.length).toBe(1);
       expect(list[0].status).toBe('pending');
+    });
+
+    it('names the agent that asked, and null for one that has been deleted', async () => {
+      const { svc, approvals } = makeService();
+      approvals.agents.seed({ id: 'named', organizationId: 'o', name: 'Invoice helper', visibility: 'org' });
+      // Same id in another organization: its name must not leak across.
+      approvals.agents.seed({ id: 'elsewhere', organizationId: 'other', name: 'Not yours', visibility: 'org' });
+      await svc.create({ organizationId: 'o', teamId: null, runId: 'r1', agentId: 'named', reason: 'x' });
+      await svc.create({ organizationId: 'o', teamId: null, runId: 'r2', agentId: 'gone', reason: 'y' });
+      await svc.create({ organizationId: 'o', teamId: null, runId: 'r3', agentId: 'elsewhere', reason: 'z' });
+      const list = await svc.listPending({ organizationId: 'o', caller: { id: 'u' } });
+      const byAgent = Object.fromEntries(list.map((r) => [r.agentId, r.agentName]));
+      expect(byAgent).toEqual({ named: 'Invoice helper', gone: null, elsewhere: null });
     });
   });
 });

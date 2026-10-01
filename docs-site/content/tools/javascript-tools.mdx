@@ -1,76 +1,69 @@
-# JavaScript Tools
+# JavaScript tools
 
-A JavaScript tool runs your own JS or TypeScript in a hardened Node.js worker
-sandbox. Reach for it when you need data transformation, computation, or a
-service that has no ready-made HTTP or GraphQL wrapper. You can pull in any npm
-package, and the sandbox keeps adversarial code away from the host.
+A JavaScript tool runs a short piece of code you write. Use it for work no API does for you: work out a discount, tidy up a messy list before an assistant reads it, or call a service through its JavaScript library. For example, a `calculate_discount` tool can take a price, a quantity and a customer tier and return the total.
 
-## Create one in the UI
+The code runs in a locked-down space (a sandbox) on almyty's servers: it cannot read the server's files, start programs or reach private networks.
 
-1. Open **Tools → Create tool** (`/tools/new`) and select **Custom JavaScript**.
-2. Give it a **name** and **description**.
-3. Define **input parameters** in the JSON Schema builder. These arrive as `parameters` in your code.
-4. Write your code. `parameters`, `credentials`, `require`, and optionally `tools` are available in the closure.
-5. Choose the tool's visibility and click **Create tool**.
-6. On the tool's detail page, use **Test tool** with sample inputs to check the output.
+## Create one
 
-### What you can do in the code editor
+1. Open **Tools** and click **Create tool**.
+2. Under **Execution method**, pick **Custom JavaScript**.
+3. Give it a **Tool name** and a **Description** that says when to use it.
+4. Under **Parameters**, list the inputs, such as `price`, `quantity` and `tier`.
+5. Write the code under **JavaScript code**. Read inputs as `parameters.price`, `parameters.tier` and so on, and `return` the result.
+6. Choose who can use it under **Visibility** and click **Create tool**.
+7. Open the tool, go to **Test tool**, fill in sample inputs and click **Execute Tool** to check the answer.
 
-- Read input values via `parameters.fieldName`
-- Load npm packages via `require('package-name')`
-- Use vault credentials via `credentials.key`
-- Call other tools via `tools.invoke('tool_name', { ... })` when nested invocation is enabled
-- Return any JSON-serializable value (object, array, string, number, or `null`)
+A small example:
 
-## The tool definition
+```javascript
+const discounts = { bronze: 0.05, silver: 0.10, gold: 0.20 }
+const subtotal = parameters.price * parameters.quantity
+const discount = subtotal * (discounts[parameters.tier] || 0)
+return { subtotal, discount, total: subtotal - discount }
+```
 
-For code-based tools, the `code` field is the tool. A discount calculator
-declares its inputs and its body inline:
+To report a problem, `throw new Error('...')`: the message comes back to the assistant as a failed call.
+
+## For developers
+
+### What the code can use
+
+The code is the body of an async function with four arguments:
+
+| Argument | Description |
+|----------|-------------|
+| `parameters` | The tool's inputs |
+| `credentials` | Values of the credential the tool, or its linked API, uses |
+| `require` | Loads npm packages and an allowlist of Node built-ins |
+| `tools` | `tools.invoke('tool_id', { ... })` calls another tool, when nested invocation is available |
+
+Return any JSON-serializable value.
+
+### The tool definition
 
 ```json
 {
   "name": "calculate_discount",
   "description": "Calculate discount price based on tier and quantity",
-  "type": "javascript",
+  "type": "function",
+  "executionMethod": "custom",
   "parameters": {
     "type": "object",
     "properties": {
       "price": { "type": "number", "description": "Original price" },
       "quantity": { "type": "integer", "description": "Number of items" },
-      "tier": {
-        "type": "string",
-        "enum": ["bronze", "silver", "gold"],
-        "description": "Customer tier"
-      }
+      "tier": { "type": "string", "enum": ["bronze", "silver", "gold"], "description": "Customer tier" }
     },
     "required": ["price", "quantity", "tier"]
   },
-  "code": "const discounts = { bronze: 0.05, silver: 0.10, gold: 0.20 };\nconst discount = discounts[parameters.tier] || 0;\nconst subtotal = parameters.price * parameters.quantity;\nconst discountAmount = subtotal * discount;\nreturn { subtotal, discount: discountAmount, total: subtotal - discountAmount };"
+  "code": "const discounts = { bronze: 0.05, silver: 0.10, gold: 0.20 };\nconst subtotal = parameters.price * parameters.quantity;\nconst discount = subtotal * (discounts[parameters.tier] || 0);\nreturn { subtotal, discount, total: subtotal - discount };"
 }
 ```
 
-## Sandbox architecture
+### npm packages
 
-Every execution runs in a dedicated Node.js Worker thread with the stable
-permission model (`--permission`) and a network guard installed before any user
-code loads. The threat model assumes adversarial code: a compromised tool cannot
-reach the host filesystem, spawn subprocesses, read environment variables, or
-make network calls to internal addresses.
-
-### Injected closure arguments
-
-| Argument | Type | Description |
-|----------|------|-------------|
-| `parameters` | object | Input parameters passed to the tool |
-| `credentials` | object | Decrypted credential values from the tool's `authConfig` or linked API credential |
-| `require` | function | Allowlisted CommonJS loader (see below) |
-| `tools` | object / undefined | Nested-invocation shim (only present when the executor wires up a callback) |
-
-### npm package support
-
-Add dependencies to the tool's `dependencies` field (name to version). almyty
-installs them into a per-tool cache on first execution and reuses the cache on
-later runs. Load them with the standard `require()` pattern:
+List packages in the tool's `dependencies` field (name to version). They are installed into a per-tool cache on first run and reused afterwards:
 
 ```javascript
 // Tool declares: { "dependencies": { "pg": "^8.20.0" } }
@@ -82,124 +75,64 @@ const client = new Client({
   database: credentials.database,
 })
 await client.connect()
-const { rows } = await client.query(
-  'SELECT * FROM orders WHERE user_id = $1',
-  [parameters.userId]
-)
+const { rows } = await client.query('SELECT * FROM orders WHERE user_id = $1', [parameters.userId])
 await client.end()
 return rows
 ```
 
-Transitive requires from installed packages use the worker's native `require`
-(so a package that internally uses `http` or `net` still works), but every
-outbound connection flows through the network guard.
+Packages' own internal requires use the worker's native `require`, so a package that uses `http` or `net` still works; every outbound connection still goes through the network guard.
 
-### Built-in module allowlist
+### Built-in modules
 
-`require()` of Node built-ins follows an explicit allowlist:
+`require()` of Node built-ins follows an allowlist:
 
 `crypto`, `buffer`, `util`, `url`, `querystring`, `string_decoder`,
 `punycode`, `events`, `stream`, `stream/web`, `stream/promises`, `timers`,
 `timers/promises`, `zlib`, `assert`, `path`, `async_hooks`
 
-Anything not listed is refused at `require()` time with a clear error. `fs`,
-`http`, `https`, `net`, `tls`, `dgram`, `dns`, `child_process`,
-`worker_threads`, `vm`, `inspector`, `os`, `module`, and every other built-in
-that could touch host state are off-limits. If your code needs HTTP, use an
-installed dependency like `axios`, `got`, `undici`, or the global `fetch()`.
-All of them go through the network guard.
+Anything else (`fs`, `http`, `https`, `net`, `tls`, `dgram`, `dns`, `child_process`, `worker_threads`, `vm`, `inspector`, `os`, `module` and the rest) is refused at `require()` time. For HTTP, use the global `fetch()` or an installed package such as `axios`, `got` or `undici`.
 
-### Filesystem isolation
+### Sandbox
 
-The worker starts with `--permission --allow-fs-read=<tool-deps-dir>
---allow-fs-read=<worker-script-dir>` and nothing else.
+Each run gets its own Node.js worker thread under the permission model (`--permission`), with a network guard installed before any user code loads. The threat model assumes adversarial code.
 
-| Operation | Allowed |
-|-----------|---------|
-| Read the tool's installed dependencies | Yes |
-| Read the worker bootstrap script | Yes |
-| Read `/etc/passwd`, `/proc`, `/root`, etc. | No (`ERR_ACCESS_DENIED`) |
-| Write to `/tmp`, `/var`, `/app`, anywhere | No (`ERR_ACCESS_DENIED`) |
-| Spawn a child process | No (`ERR_ACCESS_DENIED`) |
-| Launch a nested Worker thread | No (`ERR_ACCESS_DENIED`) |
-| Load a native `.node` addon | No (`ERR_ACCESS_DENIED`) |
+**Files.** The worker may read only the tool's installed dependencies and its own bootstrap script. Reading `/etc/passwd`, `/proc` or `/root`, writing anywhere, spawning a child process, launching a nested worker and loading a native `.node` addon all fail with `ERR_ACCESS_DENIED`.
 
-### Network egress filtering (SSRF guard)
-
-Outbound connections are intercepted by a network guard that patches
-`dns.lookup`, `net.Socket.prototype.connect`, and
-`dgram.Socket.prototype.send` before user code runs. Every connection attempt,
-whether from your code, an installed npm package, or a transitive dependency, is
-classified against the ban list:
+**Network.** The guard patches `dns.lookup`, `net.Socket.prototype.connect` and `dgram.Socket.prototype.send` before user code runs, and classifies every connection, whether from your code or a dependency:
 
 | Category | Blocked |
 |----------|---------|
 | IPv4 RFC 1918 private ranges (10/8, 172.16/12, 192.168/16) | Yes |
 | CGNAT 100.64/10 | Yes |
 | Loopback 127/8 | Yes |
-| Link-local 169.254/16 (includes AWS/GCP/Azure IMDS) | Yes |
+| Link-local 169.254/16 (includes cloud metadata services) | Yes |
 | IPv6 loopback, unspecified, link-local, ULA | Yes |
 | Metadata hostnames (`metadata.google.internal`, etc.) | Yes |
 | Unix domain sockets | Yes |
-| Public unicast IPv4 + IPv6 (Stripe, OpenAI, RDS, MongoDB Atlas, etc.) | Allowed |
+| Public unicast IPv4 and IPv6 | Allowed |
 
-Refused connections surface as an `Error` with `code: ERR_SANDBOX_NET_REFUSED`.
+A refused connection throws an `Error` with `code: ERR_SANDBOX_NET_REFUSED`.
 
-### Environment isolation
+**Environment.** `process.env` is emptied before your code runs. Secrets come through `credentials`.
 
-`process.env` is scrubbed to an empty object before your code runs. Anything
-your code legitimately needs should come through the `credentials` closure
-argument, populated from the tool's encrypted credential store.
-
-### Nested tool invocation
-
-When the `tools` argument is present, you can invoke other tools by ID without
-opening an HTTP connection to the backend:
+**Nested calls.** `tools.invoke` calls another tool without an HTTP round trip. Each nested call runs in a fresh worker with the same organization, network and file guards.
 
 ```javascript
-const priceResult = await tools.invoke('lookup_price', {
-  sku: parameters.sku,
-})
-const discountResult = await tools.invoke('calculate_discount', {
-  price: priceResult.price,
-  tier: parameters.tier,
-  quantity: parameters.quantity,
-})
-return discountResult
+const price = await tools.invoke('lookup_price', { sku: parameters.sku })
+return tools.invoke('calculate_discount', { price: price.price, tier: parameters.tier, quantity: parameters.quantity })
 ```
 
-Each nested call runs in a fresh worker with the same tenant context and the
-same SSRF and filesystem guards.
+### Limits
 
-### Resource limits
+| Limit | Value |
+|-------|-------|
+| Run time | 30 s by default (`configuration.timeout`, in milliseconds), at most 300 s |
+| Memory | 128 MB heap |
+| Concurrent workers | 4 per install (`SANDBOX_MAX_WORKERS`), half of them for one organization (`SANDBOX_MAX_WORKERS_PER_ORG`) |
+| Waiting runs | 100 (`SANDBOX_MAX_QUEUE_SIZE`) |
 
-| Limit | Default | Configurable |
-|-------|---------|--------------|
-| CPU timeout | 10 s | Yes (`tool.configuration.timeout`) |
-| Memory heap | 128 MB | Yes (`tool.configuration.memoryLimitMb`) |
-| Worker script size | 5 MB | No |
-| Concurrent workers | 4 | No (queue backlog capped at 100) |
+Running out of time or memory stops the worker and returns `success: false`, with an out-of-memory flag in the memory case.
 
-Exceeding CPU timeout or heap limit terminates the worker and returns a
-`success: false` result, with an OOM flag for the memory case.
+### Errors and cancellation
 
-## Error handling
-
-Throw errors to signal failures:
-
-```javascript
-if (!parameters.email.includes('@')) {
-  throw new Error('Invalid email address')
-}
-```
-
-Unhandled exceptions are caught and returned as error responses with the error
-message. Sandbox-level refusals (permission-denied, SSRF-refused,
-require-not-allowed) propagate the same way.
-
-## Cancellation
-
-Tool execution honors the caller's `AbortSignal`. If the outer request is
-cancelled (HTTP client disconnect, parent agent run cancelled, queue timeout),
-the worker is terminated mid-execution and the result is `success: false` with
-`error: 'Sandbox execution cancelled'`.
+Thrown errors, and sandbox refusals (permission denied, network refused, module not allowed), come back as a failed result with the message. If the caller goes away (the client disconnects, the agent run is cancelled, a queue times out), the worker is stopped and the result is `success: false` with `error: 'Sandbox execution cancelled'`.
