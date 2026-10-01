@@ -36,7 +36,7 @@
   "author": "almyty",
   "license": "Apache-2.0",
   "dependencies": {
-    "@almyty/client": "^1.5.1",
+    "@almyty/client": "^1.5.2",
     "@modelcontextprotocol/server": "^2.2.0",
     "zod": "^4.6.5"
   },

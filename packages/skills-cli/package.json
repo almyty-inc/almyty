@@ -35,7 +35,7 @@
   "author": "almyty",
   "license": "Apache-2.0",
   "dependencies": {
-    "@almyty/client": "^1.5.1",
+    "@almyty/client": "^1.5.2",
     "@clack/prompts": "^1.2.0"
   },
   "devDependencies": {
