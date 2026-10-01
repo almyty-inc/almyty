@@ -101,6 +101,11 @@ updates:
       # major-only ignore would not hold it. Unpin only together with a
       # diagnosis of the 30.1 change; the app itself never runs on jsdom.
       - dependency-name: "jsdom"
+      # typescript-eslint (through 8.71) caps its typescript peer at <6.1,
+      # so TS 7 makes `npm ci` fail with ERESOLVE (#911). Moves when
+      # typescript-eslint supports the TS 7 compiler.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       frontend-minor-and-patch:
         applies-to: version-updates
