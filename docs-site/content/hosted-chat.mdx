@@ -82,14 +82,14 @@ Someone who chats on your web chat (or your own domain), the widget on your webs
 
 These settings are under **Branding and visitor rules** on the Channels tab, under **Advanced**. The defaults need no attention, and a channel can set its own:
 
-- **Let visitors delete their data** (on by default). In the web chat the menu offers *Delete this conversation* and *Delete everything about me*; deleting everything removes the visitor record, every conversation and the work behind them, then starts the visitor afresh. The widget offers *Delete my chat*, pressed twice, which removes that conversation and everything stored with it.
-- **Let visitors download their data** (on by default). The web chat offers *Download my data*, a file with the visitor record and every conversation; the widget offers *Download my chat*.
+- **Let visitors delete their data** (on by default). In the web chat the menu offers *Delete this conversation* and *Delete everything about me*; deleting everything removes the visitor record, every conversation and the work behind them, the files they sent and the memories kept from their conversations, then starts the visitor afresh. The widget offers *Delete my chat*, pressed twice, which removes that conversation and everything stored with it. Each deletion is noted in the audit log, without what was deleted.
+- **Let visitors download their data** (on by default). The web chat offers *Download my data*, a file with the visitor record, every conversation, the memories kept from them and a list of the files they sent; the widget offers *Download my chat*, the same for that conversation.
 - **Include visitor conversations in memory** (off by default). Only switch it on for an assistant whose memory is meant to learn from the public.
 - **Delete visitor data after** a number of days (empty by default, so the organization's period applies). A value can only shorten the organization's period.
 
 ![The hosted chat privacy menu with export and deletion controls](/screenshots/hosted-chat-privacy.png)
 
-When you switch one of these off, a visitor who asks gets a plain refusal and the widget stops offering the button; nothing is deleted or downloaded behind their back. Messaging apps and A2A have no self-service buttons: if someone asks you through one of those to delete or export what they said, handle it from the dashboard.
+When you switch one of these off, a visitor who asks gets a plain refusal and the widget stops offering the button; nothing is deleted or downloaded behind their back. Messaging apps and A2A have no self-service buttons: someone who asks you through one of those, or a visitor whose right you switched off, is answered from the assistant's **Channels** tab under **Visitor data**. See [Visitor data requests](/channels/visitor-data).
 
 ## Protect model spend
 

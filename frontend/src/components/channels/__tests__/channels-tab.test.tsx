@@ -15,6 +15,13 @@ vi.mock('@/lib/agent-channels', async () => {
   const actual = await vi.importActual<typeof import('@/lib/agent-channels')>('@/lib/agent-channels')
   return { ...actual, agentChannelsApi: { list: vi.fn(), publicSettings: vi.fn() } }
 })
+// The signed-in person's role; an admin unless a test says otherwise. Who
+// may manage an agent is the hook's own (use-organization-role.test.ts).
+const role = vi.hoisted(() => ({ canManage: true, userId: 'u-me' }))
+vi.mock('@/hooks/use-organization-role', () => ({
+  useOrganizationRole: () => ({ role: role.canManage ? 'admin' : 'member', canManage: role.canManage, isOwner: false }),
+  useCanManageAgent: (ownerId?: string | null) => role.canManage || (!!ownerId && ownerId === role.userId),
+}))
 
 import { gatewaysApi } from '@/lib/api'
 import { agentChannelsApi } from '@/lib/agent-channels'
@@ -46,6 +53,7 @@ const channel = (over: Partial<AgentChannel>): AgentChannel =>
   }) as AgentChannel
 
 beforeEach(() => {
+  role.canManage = true
   vi.mocked(gatewaysApi.getAll).mockResolvedValue({ gateways: [] } as any)
   vi.mocked(agentChannelsApi.publicSettings).mockResolvedValue({ branding: null, visitorRules: null, effective })
 })
@@ -100,6 +108,30 @@ describe('ChannelsTab', () => {
       'href',
       '/agents/agent-1/channels/settings',
     )
+  })
+
+  it('offers owners and admins the visitor data page', async () => {
+    vi.mocked(agentChannelsApi.list).mockResolvedValue([])
+    render(<ChannelsTab agentId="agent-1" agentName="Support" />)
+    const summary = await screen.findByTestId('public-settings-summary')
+    expect(within(summary).getByRole('link', { name: /Visitor data/ })).toHaveAttribute('href', '/agents/agent-1/channels/visitor-data')
+  })
+
+  it('does not offer a member the visitor data page for an agent they do not own', async () => {
+    role.canManage = false
+    vi.mocked(agentChannelsApi.list).mockResolvedValue([])
+    render(<ChannelsTab agentId="agent-1" agentName="Support" agentOwnerId="u-someone-else" />)
+    const summary = await screen.findByTestId('public-settings-summary')
+    expect(within(summary).queryByRole('link', { name: /Visitor data/ })).toBeNull()
+    expect(within(summary).getByRole('link', { name: /Branding and visitor rules/ })).toBeInTheDocument()
+  })
+
+  it('offers it to the member who owns the agent', async () => {
+    role.canManage = false
+    vi.mocked(agentChannelsApi.list).mockResolvedValue([])
+    render(<ChannelsTab agentId="agent-1" agentName="Support" agentOwnerId={role.userId} />)
+    const summary = await screen.findByTestId('public-settings-summary')
+    expect(within(summary).getByRole('link', { name: /Visitor data/ })).toHaveAttribute('href', '/agents/agent-1/channels/visitor-data')
   })
 
   it('lists channels only: every gateway that serves an agent is one of its channels', async () => {

@@ -27,7 +27,7 @@ import { isPrivateGateway } from './private-gateway';
 import { findServableGatewayAgent } from './gateway-servable';
 import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
 import { assertOAuthScope } from '../mcp/services/mcp-oauth-scope';
-import { ChannelPolicy, ChannelPolicyService, a2aCallerId } from './channel-policy.service';
+import { ChannelPolicy, ChannelPolicyService, a2aCallerId, withA2ACaller } from './channel-policy.service';
 import { HostedChatService } from './channels/hosted-chat.service';
 import { trustedClientIp } from '../../common/security/client-ip';
 
@@ -467,7 +467,10 @@ export class UnifiedGatewayDelegation {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-    return this.channelPolicy ? this.channelPolicy.admit(gateway) : null;
+    if (!this.channelPolicy) return null;
+    // Each run is filed under the caller's credential, so the owner can
+    // answer that caller's data request (VisitorDataService.forA2ACaller).
+    return withA2ACaller(await this.channelPolicy.admit(gateway), gateway.id, a2aCallerId(auth));
   }
 
   private async delegateUtcp(

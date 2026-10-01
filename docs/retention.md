@@ -52,6 +52,10 @@ wins.
 
 A file a web chat or widget visitor uploads waits, with no conversation, for the message that names it; a channel attachment is stored before its run starts and filed under the run's conversation once it has one. An attachment that never reached a conversation (uploaded and not sent, or stored for a run that was refused) belongs to no policy, so it is removed deployment-wide a day after it was stored, on the same hourly tick. Erasing a web chat visitor or a widget thread removes that visitor's unsent uploads at once.
 
+## Erasure on request
+
+Retention is the schedule; a person can also ask for their data to go now. The web chat and widget offer it to their visitors, and whoever may manage the agent (an organization owner or admin, or the member who owns it) answers anyone else from the agent's Channels tab (`/agents/:id/channels/visitor-data`). Either way `VisitorDataService.erase` removes the person's conversations, messages, runs with their tool executions, files (stored objects included), memories in almyty's store and in an outside memory service, channel events and visitor rows at once, whatever the retention periods say, and records a `visitor_data_erase` audit entry with counts only. See `docs/channels.md` (Visitor data).
+
 ## Entity snapshots
 
 `version` holds a full serialized copy of an entity on every update of a

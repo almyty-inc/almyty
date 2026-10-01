@@ -287,6 +287,8 @@ export function AuditTab() {
             <option value="login">Login</option>
             <option value="ownership_transfer">Ownership transfer</option>
             <option value="visibility_change">Visibility change</option>
+            <option value="visitor_data_export">Visitor data sent</option>
+            <option value="visitor_data_erase">Visitor data deleted</option>
           </select>
         </div>
         {(auditResourceFilter || auditActionFilter) && (
