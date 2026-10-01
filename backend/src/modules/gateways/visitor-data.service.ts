@@ -91,8 +91,8 @@ export interface VisitorDataExport {
   memories: Array<{ id: string; keptIn: string; content?: string; note?: string; createdAt: Date | string }>;
   files: Array<{ id: string; name: string; mimeType: string; size: number; createdAt: Date }>;
   storedReplies: Array<{ createdAt: Date; direction: string; message?: string }>;
-  /** Messages they sent that the agent never answered, by date and why. */
-  unanswered: Array<{ receivedAt: Date; reason: string | null }>;
+  /** Messages they sent that the agent never answered: when, why, and what they said. */
+  unanswered: Array<{ receivedAt: Date; reason: string | null; text?: string; attachments?: string[] }>;
   runs: Array<{ id: string; status: string; startedAt: Date; lastActiveAt: Date }>;
 }
 
@@ -445,9 +445,14 @@ export class VisitorDataService {
         direction: e.direction,
         ...(e.direction === 'outbound' && typeof e.payload?.message === 'string' ? { message: e.payload.message } : {}),
       })),
-      // The platform's raw delivery also carries the owner's workspace and
-      // bot ids, so these are listed by date and why, not reproduced.
-      unanswered: unanswered.map((e) => ({ receivedAt: e.createdAt, reason: e.errorMessage ?? null })),
+      // What they wrote, as the channel normalized it when the message came
+      // in (ChannelEvent.message), never the platform's raw delivery, which
+      // also carries the owner's workspace and bot ids.
+      unanswered: unanswered.map((e) => ({
+        receivedAt: e.createdAt,
+        reason: e.errorMessage ?? null,
+        ...(e.message ? { text: e.message.text, ...(e.message.attachments?.length ? { attachments: e.message.attachments } : {}) } : {}),
+      })),
       runs: runs.map((r) => ({ id: r.id, status: r.status, startedAt: r.createdAt, lastActiveAt: r.updatedAt })),
     };
   }

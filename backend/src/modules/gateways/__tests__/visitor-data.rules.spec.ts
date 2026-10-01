@@ -4,6 +4,7 @@ import { ROLES_KEY } from '../../auth/decorators/roles.decorator';
 import { a2aCallerCandidates, emptyFootprint, mergeFootprints } from '../visitor-data.service';
 import { subjectRef, visitorDataAudit } from '../visitor-data-audit';
 import { AuditAction } from '../../../entities/audit-log.entity';
+import { inboundMessageRecord } from '../channels/channel-gateway.service';
 
 /**
  * The small rules a data request stands on: how a person is referred to in
@@ -57,6 +58,19 @@ describe('visitor data rules', () => {
     });
   });
 
+  it('keeps of an inbound message its words and file names, bounded, and nothing else', () => {
+    const record = inboundMessageRecord({
+      text: 'Where is my order?',
+      attachments: [{ name: 'receipt.pdf', type: 'application/pdf', url: 'https://files.example/r.pdf', data: Buffer.from('x') }],
+      ...({ metadata: { team_id: 'T0', bot_id: 'B0' }, userId: 'U1' } as any),
+    });
+    expect(record).toEqual({ text: 'Where is my order?', attachments: ['receipt.pdf'] });
+    expect(inboundMessageRecord({ text: 'hi' })).toEqual({ text: 'hi' });
+    expect(inboundMessageRecord({ text: '' })).toBeNull();
+    expect(inboundMessageRecord({ text: 'x'.repeat(30_000) })!.text).toHaveLength(20_000);
+    const many = Array.from({ length: 30 }, (_, i) => ({ name: `f${i}.txt`, type: 'text/plain' }));
+    expect(inboundMessageRecord({ text: '', attachments: many })!.attachments).toHaveLength(20);
+  });
   it('looks people up only on channels people talk to', () => {
     expect(['web', 'widget', 'a2a', 'telegram', 'sms', 'email', 'slack'].every(holdsVisitorData)).toBe(true);
     expect(holdsVisitorData('desktop')).toBe(false);
