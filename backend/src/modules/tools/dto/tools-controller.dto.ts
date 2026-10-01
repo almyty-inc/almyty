@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsArray, IsObject, IsNumber, Min, Max, MaxLength, ValidateBy } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsArray, IsObject, IsNumber, IsIn, Min, Max, MaxLength, ValidateBy } from 'class-validator';
 import { RESOURCE_VISIBILITIES, ResourceVisibility } from '../../../common/authorization/access-policy.service';
 import { Transform, Type } from 'class-transformer';
 
@@ -273,6 +273,16 @@ export class UpdateToolBodyDto {
   @IsOptional()
   @IsString()
   teamId?: string | null;
+
+  /**
+   * What calling the tool does to data, set by a person: `read`, `write` or
+   * `destructive` overrides the class derived from the tool's definition
+   * and survives re-import; `auto` drops the override
+   * (docs/design/code-mode.md, part A). Audited with the update.
+   */
+  @IsOptional()
+  @IsIn(['read', 'write', 'destructive', 'auto'])
+  sideEffect?: 'read' | 'write' | 'destructive' | 'auto';
 }
 
 export class GenerateToolsFromApiDto {

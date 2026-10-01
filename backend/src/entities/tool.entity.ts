@@ -10,6 +10,8 @@ import {
   JoinColumn,
   JoinTable,
   Index,
+  BeforeInsert,
+  BeforeUpdate,
 } from 'typeorm';
 import { VersionedEntity } from 'typeorm-versions';
 import { Operation } from './operation.entity';
@@ -19,6 +21,7 @@ import { ToolCategory } from './tool-category.entity';
 import { GatewayTool } from './gateway-tool.entity';
 import { Organization } from './organization.entity';
 import { Api } from './api.entity';
+import { CLASS_INPUT_COLUMNS, SideEffect, SideEffectSource, toolClass } from '../modules/tools/tool-side-effect';
 
 export interface HttpConfig {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -302,6 +305,40 @@ export class Tool {
 
   @Column({ type: 'varchar', length: 64, nullable: true })
   definitionHash: string | null; // SHA-256 hash of tool definition for integrity verification
+
+  /**
+   * What calling this tool does to data: read, write or destructive
+   * (docs/design/code-mode.md, part A; modules/tools/tool-side-effect.ts).
+   * Computed when the tool is written (classify() below), or set by a person
+   * (sideEffectSource 'override'). Part of the integrity hash.
+   */
+  @Column({ type: 'varchar', length: 16, default: 'write' })
+  sideEffect: SideEffect;
+
+  /** Whether the tool reaches a third party (false for LLM tools). */
+  @Column({ type: 'boolean', default: true })
+  openWorld: boolean;
+
+  /** Where the class came from: override, annotation, http_method, graphql or default. */
+  @Column({ type: 'varchar', length: 16, default: 'default' })
+  sideEffectSource: SideEffectSource;
+
+  /**
+   * Classify on every insert and save. A write that did not load every
+   * column the class is computed from (a partial select) leaves the class
+   * as it is rather than computing it from half a tool; an override is
+   * never recomputed away.
+   */
+  @BeforeInsert()
+  @BeforeUpdate()
+  classify(): void {
+    const isInsert = this.id === undefined;
+    if (!isInsert && CLASS_INPUT_COLUMNS.some((column) => (this as any)[column] === undefined)) return;
+    const next = toolClass(this);
+    this.sideEffect = next.sideEffect;
+    this.openWorld = next.openWorld;
+    this.sideEffectSource = next.sideEffectSource;
+  }
 
   @Column({ default: 0 })
   usageCount: number;
