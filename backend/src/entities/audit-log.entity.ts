@@ -102,6 +102,12 @@ export enum AuditAction {
   // A tool call held for a person's approval by an approval policy's
   // amount rule (ToolApprovalGate): asked, or refused where nobody can be asked.
   APPROVAL_GATE = 'approval_gate',
+
+  // A person's data on an agent's channels: their copy sent to them, or
+  // everything held about them erased, by the visitor themselves or by an
+  // owner answering their request. Counts and a hashed reference only.
+  VISITOR_DATA_EXPORT = 'visitor_data_export',
+  VISITOR_DATA_ERASE = 'visitor_data_erase',
 }
 
 export enum AuditResource {

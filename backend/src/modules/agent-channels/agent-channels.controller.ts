@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -10,6 +11,7 @@ import {
   Post,
   Request,
   Res,
+  ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
@@ -28,10 +30,12 @@ import {
   RecordBuildBodyDto,
   RequestBuildBodyDto,
   UpdateChannelBodyDto,
+  VisitorDataRequestBodyDto,
 } from './dto/agent-channels-controller.dto';
 import { platformsFor, signingRequirementFor } from './build-targets';
 import { downloadedFilename, handoffFor } from './build-handoff';
 import { effectiveBranding } from './channel-rules';
+import { VisitorDataRequestsService } from './visitor-data-requests.service';
 
 /**
  * A channel as the API shows it. Its configuration may still hold a
@@ -72,6 +76,9 @@ export class AgentChannelsController {
   constructor(
     private readonly channels: AgentChannelsService,
     private readonly builds: AppBuildsService,
+    // Required: Nest always injects it. Typed optional only so positional
+    // unit specs that never answer a data request can leave it out.
+    private readonly visitorRequests?: VisitorDataRequestsService,
   ) {}
 
   private org(req: any): string {
@@ -80,6 +87,11 @@ export class AgentChannelsController {
 
   private caller(req: any): Caller {
     return { id: req.user.id };
+  }
+
+  private requests(): VisitorDataRequestsService {
+    if (!this.visitorRequests) throw new ServiceUnavailableException('Data requests are not available here.');
+    return this.visitorRequests;
   }
 
   // ─── Public settings ─────────────────────────────────────────────────
@@ -110,6 +122,52 @@ export class AgentChannelsController {
   @ApiOperation({ summary: "What this agent's channels have spent against their spend limits" })
   async spend(@Param('agentId', ParseUUIDPipe) agentId: string, @Request() req: any) {
     return { success: true, data: await this.channels.spend(this.org(req), agentId, this.caller(req)) };
+  }
+
+  // ─── Visitor data ────────────────────────────────────────────────────
+  //
+  // An owner or admin answering one person's request for their data:
+  // look them up on the agent's channels, send them their copy, or erase
+  // it. POST throughout, so what identifies the person stays out of URLs
+  // and access logs.
+
+  @Post(':agentId/visitor-data/lookup')
+  @HttpCode(200)
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: "What this agent's channels hold about one person, in counts and dates" })
+  async lookupVisitorData(
+    @Param('agentId', ParseUUIDPipe) agentId: string,
+    @Body() body: VisitorDataRequestBodyDto,
+    @Request() req: any,
+  ) {
+    return { success: true, data: await this.requests().lookup(this.org(req), agentId, this.caller(req), body) };
+  }
+
+  @Post(':agentId/visitor-data/export')
+  @HttpCode(200)
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: "Everything this agent's channels hold about one person, as a JSON file" })
+  async exportVisitorData(
+    @Param('agentId', ParseUUIDPipe) agentId: string,
+    @Body() body: VisitorDataRequestBodyDto,
+    @Request() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const data = await this.requests().export(this.org(req), agentId, this.caller(req), body);
+    res.setHeader('Content-Disposition', 'attachment; filename="data-request.json"');
+    return data;
+  }
+
+  @Post(':agentId/visitor-data/erase')
+  @HttpCode(200)
+  @Roles('admin', 'owner')
+  @ApiOperation({ summary: "Erase everything this agent's channels hold about one person" })
+  async eraseVisitorData(
+    @Param('agentId', ParseUUIDPipe) agentId: string,
+    @Body() body: VisitorDataRequestBodyDto,
+    @Request() req: any,
+  ) {
+    return { success: true, data: await this.requests().erase(this.org(req), agentId, this.caller(req), body) };
   }
 
   // ─── Channels ────────────────────────────────────────────────────────

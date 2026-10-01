@@ -96,9 +96,9 @@ describe("an agent's memory settings at run time", () => {
         tier: 'long',
         tags: ['auto-saved', 'fact'],
         actor: { user_id: 'u-1' },
-        opts: { agentId: 'agent-1', expiresInSeconds: 30 * 86400 },
+        opts: { agentId: 'agent-1', runId: 'run-1', expiresInSeconds: 30 * 86400 },
       }),
-      expect.objectContaining({ content: 'Dana prefers email', opts: { agentId: 'agent-1', expiresInSeconds: 30 * 86400 } }),
+      expect.objectContaining({ content: 'Dana prefers email', opts: { agentId: 'agent-1', runId: 'run-1', expiresInSeconds: 30 * 86400 } }),
     ]);
     // Read from the same memory it writes.
     expect((seen.memoryAccounts.search.mock.calls[0] as any[])[1]).toBe('mem0');
@@ -128,7 +128,7 @@ describe("an agent's memory settings at run time", () => {
         content: screened,
         tier: 'project',
         tags: ['auto-saved', 'conversation'],
-        opts: { agentId: 'agent-1', expiresInSeconds: null },
+        opts: { agentId: 'agent-1', runId: 'run-1', expiresInSeconds: null },
       }),
     ]);
   });
@@ -214,7 +214,7 @@ describe("an agent's memory settings at run time", () => {
     const use = { credentialId: 'cred-own', agentId: 'agent-1', principal: expect.objectContaining({ kind: 'user' }) };
     expect((seen.memoryAccounts.search.mock.calls[0] as any[])[3]).toEqual(use);
     expect(saves(seen.memoryAccounts)).toEqual([
-      expect.objectContaining({ account: 'mem0', opts: { agentId: 'agent-1', expiresInSeconds: null, ...use } }),
+      expect.objectContaining({ account: 'mem0', opts: { agentId: 'agent-1', runId: 'run-1', expiresInSeconds: null, ...use } }),
     ]);
   });
 });

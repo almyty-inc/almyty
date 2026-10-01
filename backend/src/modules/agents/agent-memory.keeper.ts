@@ -301,6 +301,7 @@ export class AgentMemoryKeeper {
     if (this.s.memoryAccounts) {
       return this.s.memoryAccounts.put(run.organizationId, s.account, input, actor, {
         agentId: agent.id,
+        runId: run.id,
         expiresInSeconds: ttl,
         ...this.accountUse(agent, run, s),
       });

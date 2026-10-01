@@ -232,11 +232,19 @@ describe('files and names through the channel pipeline', () => {
     expect(files.attachToConversation).toHaveBeenCalledWith('org-1', ['up-1'], 'conv-1', 'run-1');
   });
 
-  it('erasing a widget thread erases the files sent in it and the uploads not sent yet', async () => {
+  it('erasing a widget thread goes through the shared visitor-data scope, found by that thread', async () => {
+    // What the scope reaches (files sent in the thread, uploads not sent,
+    // memories, runs) is proven against Postgres in
+    // test/integration/visitor-data.integration.spec.ts.
     const service = build();
-    runs.push({ id: 'run-9', agentId: 'a', organizationId: 'org-1', conversationId: 'conv-9', metadata: { gatewayId: 'gw-widget', threadId: 'wt-9' } });
+    const footprint = { organizationId: 'org-1', gatewayIds: ['gw-widget'], endUserIds: [], runIds: ['run-9'], conversationIds: ['conv-9'], widgetThreads: [{ gatewayId: 'gw-widget', threadId: 'wt-9' }] };
+    const visitorData = {
+      forWidgetThread: jest.fn(async () => footprint),
+      erase: jest.fn(async () => ({ runs: 1 })),
+    };
+    (service as any).visitorData = visitorData;
     await service.deleteWidgetThread(widgetGateway(), 'wt-9');
-    expect(files.removeForConversations).toHaveBeenCalledWith('org-1', ['conv-9']);
-    expect(files.removeUnsentUploads).toHaveBeenCalledWith('org-1', { gatewayId: 'gw-widget', threadId: 'wt-9' });
+    expect(visitorData.forWidgetThread).toHaveBeenCalledWith(expect.objectContaining({ id: 'gw-widget' }), 'wt-9');
+    expect(visitorData.erase).toHaveBeenCalledWith(footprint, expect.any(Function));
   });
 });
