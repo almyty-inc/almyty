@@ -9,11 +9,17 @@ import { JsonRpcErrorCode, JsonRpcResponse } from './types/mcp.types';
 import {
   DEFAULT_CALL_CONTEXT,
   McpCallContext,
+  McpPolymorphicResult,
   McpSurface,
   McpToolResult,
+  declaresElicitation,
+  declaresTasks,
   handleMessage,
   mcpError,
 } from './core/mcp-protocol-core';
+import { McpAgentRuns } from './services/mcp-agent-runs';
+import { AgentRun } from '../../entities/agent-run.entity';
+import { RetentionPolicy } from '../../entities/retention-policy.entity';
 import { ApisService } from '../apis/apis.service';
 import { ToolsService } from '../tools/tools.service';
 import { GatewaysService } from '../gateways/gateways.service';
@@ -169,6 +175,8 @@ const TOOLS = [
   { name: 'activate_agent', description: 'Activate an agent so it can be invoked. Workflow agents are pipeline-validated first and the call is refused if the graph is incomplete. An agent must be active before invoke_agent will run it.', inputSchema: { type: 'object', properties: { agentId: { type: 'string' } }, required: ['agentId'] } },
   { name: 'deactivate_agent', description: 'Deactivate an agent (status -> inactive). Keeps the agent and its graph; it just stops answering.', inputSchema: { type: 'object', properties: { agentId: { type: 'string' } }, required: ['agentId'] } },
   { name: 'invoke_agent', description: 'Run an agent and return the result. Workflow agents execute their pipeline synchronously and return the execution id plus output; autonomous agents start a run and return the run id. Requires an ACTIVE agent — call activate_agent first.', inputSchema: { type: 'object', properties: { agentId: { type: 'string' }, input: { type: 'object', description: 'Run input. Workflow agents read it in their input node; autonomous agents typically take {message: "..."}.', additionalProperties: true }, variables: { type: 'object', description: 'Workflow mode: overrides the agent\'s default variables for this run.', additionalProperties: true }, metadata: { type: 'object', description: 'Stamped onto the execution record.', additionalProperties: true } }, required: ['agentId'] } },
+  { name: 'get_run', description: 'Where an autonomous agent run stands: its status, its output once finished, and what it waits for (a question for you, or an approval). invoke_agent returns the run id; follow it with this.', inputSchema: { type: 'object', properties: { runId: { type: 'string' } }, required: ['runId'] } },
+  { name: 'answer_run', description: 'Answer the question an autonomous agent run asked (get_run shows it as waitingFor.question). The run continues with the answer.', inputSchema: { type: 'object', properties: { runId: { type: 'string' }, answer: { type: 'string', description: 'Your answer, in plain words.' } }, required: ['runId', 'answer'] } },
   { name: 'list_providers', description: 'List providers', inputSchema: { type: 'object', properties: {} } },
   { name: 'add_provider', description: 'Add a provider', inputSchema: { type: 'object', properties: { name: { type: 'string' }, type: { type: 'string' }, apiKey: { type: 'string' } }, required: ['name', 'type', 'apiKey'] } },
   // -- Channels on an agent: where people (or other agents) reach it --
@@ -308,24 +316,163 @@ export class AlmytyMcpService {
       instructions: () =>
         'Manage this almyty organization: connect APIs, generate and activate tools, publish gateways, build and run agents.',
       listTools: async () => ({ tools: MANAGEMENT_TOOLS }),
-      callTool: (params) => this.callTool(params?.name, params?.arguments || {}, organizationId, userId),
+      callTool: (params, ctx) => this.callTool(params?.name, params?.arguments || {}, organizationId, userId, ctx, params),
+      // invoke_agent's autonomous runs, followed as tasks (Tasks extension).
+      tasks: {
+        get: (params, ctx) => this.agentRuns().getTask(params.taskId, organizationId, userId, ctx),
+        update: (params) => this.agentRuns().updateTask(params.taskId, params.inputResponses as Record<string, unknown>, organizationId, userId),
+        cancel: (params) => this.agentRuns().cancelTask(params.taskId, organizationId, userId),
+      },
     };
   }
 
-  private async callTool(name: string, args: any, orgId: string, userId: string): Promise<McpToolResult> {
+  /** Autonomous runs over MCP: tasks, input_required, get_run (mcp-agent-runs.ts). */
+  private agentRuns(): McpAgentRuns {
+    const runtime = this.moduleRef.get(AgentRuntimeService, { strict: false });
+    const approvals = this.moduleRef.get(ApprovalsService, { strict: false });
+    return new McpAgentRuns({
+      runs: runtime.runRepository,
+      runtime,
+      approvals,
+      runRetentionDays: async (organizationId) => {
+        const policy = await runtime.runRepository.manager
+          .getRepository(RetentionPolicy)
+          .findOne({ where: { organizationId }, select: { id: true, agentRunsDays: true } });
+        return policy?.agentRunsDays ?? null;
+      },
+    });
+  }
+
+  /**
+   * A run the caller may read and answer through get_run and answer_run:
+   * one in this organization whose agent they may run (the same gate
+   * invoke_agent applies), else not found.
+   */
+  private async readableRun(runId: string, orgId: string, userId: string): Promise<AgentRun> {
+    const runtime = this.moduleRef.get(AgentRuntimeService, { strict: false });
+    const run = await runtime.getRun(runId, orgId);
+    // A run of an agent the caller may not run reads like one that does not exist.
+    await runtime.executionAccess
+      .assertCanExecute(userPrincipal(userId, 'system_gateway'), run.agent, 'Agent')
+      .catch(() => {
+        throw new Error('Run not found');
+      });
+    return run;
+  }
+
+  /**
+   * invoke_agent up to the point the run or execution exists. Same two
+   * service methods the HTTP endpoint calls (agents/agent-execution.controller.ts
+   * POST /:id/invoke), including the ACTIVE gate and the autonomous split:
+   * routing an autonomous agent through the pipeline engine returns an
+   * empty "completed" run with zero node results.
+   */
+  private async startInvocation(
+    args: any,
+    orgId: string,
+    userId: string,
+    runMetadata?: Record<string, unknown>,
+  ): Promise<{ kind: 'autonomous'; run: AgentRun } | { kind: 'workflow'; payload: Record<string, unknown> }> {
+    const get = <T>(cls: new (...a: any[]) => T): T => this.moduleRef.get(cls, { strict: false });
+    const agent = await get(AgentsService).getAgent(String(args.agentId), orgId);
+    // The org's own MCP endpoint acts as its caller: a team agent runs
+    // only for its team (and org owners/admins), a private one only for
+    // its owner -- refused as not found before its status is told.
+    const principal = userPrincipal(userId, 'system_gateway');
+    await get(AgentRuntimeService).executionAccess.assertCanExecute(principal, agent, 'Agent');
+    if (!agentIsInvokable(agent)) {
+      // The shared refusal already says to activate it; over MCP,
+      // name the tool that does it rather than repeating the advice.
+      throw new Error(
+        `This agent is ${agent.status}, and only an active agent can be invoked. ` +
+          'Call activate_agent first.',
+      );
+    }
+    if (runsOnAutonomousRuntime(agent)) {
+      const run = await get(AgentRuntimeService).startRun(agent.id, orgId, userId, args.input, {
+        principal,
+        ...(runMetadata ? { metadata: runMetadata } : {}),
+      });
+      return { kind: 'autonomous', run };
+    }
+    const execution: any = await get(AgentExecutionEngine).execute(
+      agent,
+      orgId,
+      userId,
+      { input: args.input, variables: args.variables, metadata: args.metadata, principal },
+    );
+    return {
+      kind: 'workflow',
+      payload: {
+        mode: 'workflow',
+        agentId: agent.id,
+        executionId: execution.id,
+        status: execution.status,
+        success: execution.status === 'completed',
+        output: execution.output ?? null,
+        error: execution.error ?? null,
+        nodeResults: execution.nodeResults ?? null,
+        executionTimeMs: execution.executionTime ?? null,
+        totalCost: execution.totalCost ?? null,
+        totalTokens: execution.totalTokens ?? null,
+      },
+    };
+  }
+
+  /**
+   * invoke_agent for a 2026-07-28 request. A client that declared the Tasks
+   * extension gets the run as a task; one that declared elicitation gets the
+   * run's result, or its question as `input_required`, within
+   * MCP_INVOKE_WAIT_MS; its retry carries the answer (requestState). Anyone
+   * else gets the run id, as legacy clients do.
+   */
+  private async invokeAgentModern(
+    args: any,
+    orgId: string,
+    userId: string,
+    ctx: McpCallContext,
+    params: any,
+  ): Promise<McpToolResult | McpPolymorphicResult> {
+    const runs = this.agentRuns();
+    if (params?.requestState !== undefined) {
+      const { runId, result } = await runs.resumeFromRetry(params, orgId, userId, ctx, 'tools/call');
+      if (result) return result;
+      const run = await this.moduleRef.get(AgentRuntimeService, { strict: false }).getRun(runId, orgId);
+      return asToolResult(autonomousSummary(run));
+    }
+    const asTask = declaresTasks(ctx) && !!userId;
+    const started = await this.startInvocation(args, orgId, userId, asTask ? McpAgentRuns.taskMetadata(userId) : undefined);
+    if (started.kind === 'workflow') return asToolResult(started.payload);
+    if (asTask) return runs.createTaskResult(started.run);
+    if (userId && declaresElicitation(ctx)) {
+      const waited = await runs.waitForRun(started.run.id, orgId, userId, ctx, { method: 'tools/call', params });
+      if (waited) return waited;
+    }
+    return asToolResult(autonomousSummary(started.run));
+  }
+
+  private async callTool(
+    name: string,
+    args: any,
+    orgId: string,
+    userId: string,
+    ctx: McpCallContext = DEFAULT_CALL_CONTEXT,
+    params?: any,
+  ): Promise<McpToolResult | McpPolymorphicResult> {
     // An unknown tool is a protocol error (-32602), as on every other
     // surface; a known tool that fails is a tool error the model can read.
     if (!MANAGEMENT_TOOL_NAMES.has(name)) {
       throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, `Tool not found: ${name}`);
     }
     try {
-      const result = await this.exec(name, args, orgId, userId);
-      const structured = result && typeof result === 'object' && !Array.isArray(result) ? result : undefined;
-      return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-        ...(structured ? { structuredContent: structured } : {}),
-      };
+      if (name === 'invoke_agent' && ctx.era === 'modern') {
+        return await this.invokeAgentModern(args, orgId, userId, ctx, params);
+      }
+      return asToolResult(await this.exec(name, args, orgId, userId));
     } catch (err: any) {
+      // A protocol error (a refused requestState, bad inputResponses) is the
+      // request's, not the tool's.
+      if (isMcpProtocolError(err)) throw err;
       return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
     }
   }
@@ -608,60 +755,21 @@ export class AlmytyMcpService {
         return { id: agent.id, name: agent.name, mode: agent.mode, status: agent.status };
       }
       case 'invoke_agent': {
-        // Same two service methods the HTTP endpoint calls
-        // (agents/agent-execution.controller.ts POST /:id/invoke), including
-        // the ACTIVE gate and the autonomous split: routing an autonomous
-        // agent through the pipeline engine returns an empty "completed"
-        // run with zero node results.
-        const agent = await get(AgentsService).getAgent(String(args.agentId), orgId);
-        // The org's own MCP endpoint acts as its caller: a team agent runs
-        // only for its team (and org owners/admins), a private one only for
-        // its owner -- refused as not found before its status is told.
-        const principal = userPrincipal(userId, 'system_gateway');
-        await get(AgentRuntimeService).executionAccess.assertCanExecute(principal, agent, 'Agent');
-        if (!agentIsInvokable(agent)) {
-          // The shared refusal already says to activate it; over MCP,
-          // name the tool that does it rather than repeating the advice.
-          throw new Error(
-            `This agent is ${agent.status}, and only an active agent can be invoked. ` +
-              'Call activate_agent first.',
-          );
+        const started = await this.startInvocation(args, orgId, userId);
+        return started.kind === 'workflow' ? started.payload : autonomousSummary(started.run);
+      }
+      case 'get_run': {
+        const run = await this.readableRun(String(args.runId), orgId, userId);
+        return this.agentRuns().describeRun(run, userId);
+      }
+      case 'answer_run': {
+        const run = await this.readableRun(String(args.runId), orgId, userId);
+        if (run.status !== 'waiting_input') {
+          throw new Error(`This run is ${run.status}, not waiting for an answer. Call get_run to see what it waits for.`);
         }
-        if (runsOnAutonomousRuntime(agent)) {
-          const run: any = await get(AgentRuntimeService).startRun(
-            agent.id,
-            orgId,
-            userId,
-            args.input,
-            { principal },
-          );
-          return {
-            mode: 'autonomous',
-            agentId: agent.id,
-            runId: run.id,
-            executionId: run.id,
-            status: run.status,
-          };
-        }
-        const execution: any = await get(AgentExecutionEngine).execute(
-          agent,
-          orgId,
-          userId,
-          { input: args.input, variables: args.variables, metadata: args.metadata, principal },
-        );
-        return {
-          mode: 'workflow',
-          agentId: agent.id,
-          executionId: execution.id,
-          status: execution.status,
-          success: execution.status === 'completed',
-          output: execution.output ?? null,
-          error: execution.error ?? null,
-          nodeResults: execution.nodeResults ?? null,
-          executionTimeMs: execution.executionTime ?? null,
-          totalCost: execution.totalCost ?? null,
-          totalTokens: execution.totalTokens ?? null,
-        };
+        if (typeof args.answer !== 'string' || !args.answer.trim()) throw new Error('answer_run requires a non-empty answer');
+        await get(AgentRuntimeService).sendInput(run.id, orgId, String(args.answer));
+        return { runId: run.id, status: 'running', next: 'The run continues with your answer. Call get_run to follow it.' };
       }
       case 'list_providers': return get(LlmProvidersService).getProviders({ organizationId: orgId, caller: { id: userId } });
       case 'add_provider': return get(LlmProvidersService).createProvider({ name: args.name, type: args.type, configuration: { apiKey: args.apiKey } }, orgId, userId);
@@ -1261,4 +1369,31 @@ function modelCardView(card: any) {
     selectable: typeof card.isSelectable === 'function' ? card.isSelectable() : false,
     effectivePricing: typeof card.effectivePricing === 'function' ? card.effectivePricing() : null,
   };
+}
+
+/** A management tool's answer as a tool result: JSON text, and the object as structured content. */
+function asToolResult(result: unknown): McpToolResult {
+  const structured = result && typeof result === 'object' && !Array.isArray(result) ? result : undefined;
+  return {
+    content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+    ...(structured ? { structuredContent: structured } : {}),
+  };
+}
+
+/** What invoke_agent answers for an autonomous run it does not wait for: the run id, and how to follow it. */
+function autonomousSummary(run: AgentRun): Record<string, unknown> {
+  return {
+    mode: 'autonomous',
+    agentId: run.agentId,
+    runId: run.id,
+    executionId: run.id,
+    status: run.status,
+    next: 'Follow the run with get_run; if it asks a question, answer with answer_run.',
+  };
+}
+
+/** The `{code, message}` an MCP handler throws for a protocol error (never an Error instance). */
+function isMcpProtocolError(err: unknown): boolean {
+  return !!err && typeof err === 'object' && !(err instanceof Error)
+    && typeof (err as any).code === 'number' && typeof (err as any).message === 'string';
 }

@@ -33,7 +33,7 @@ const initResult = (id: number, sessionHeaders: Record<string, string> = {}) =>
     sessionHeaders,
   );
 
-describe('McpClientService', () => {
+describe('McpClientService (legacy era)', () => {
   let service: McpClientService;
   let fetchMock: jest.Mock;
   const realFetch = global.fetch;
@@ -43,11 +43,15 @@ describe('McpClientService', () => {
     fetchMock = jest.fn();
     (global as any).fetch = fetchMock;
     delete process.env.MCP_ALLOW_PRIVATE_URLS;
+    // These cases describe the legacy (initialize) flow; the era probe has
+    // its own spec (mcp-client-eras.spec.ts).
+    process.env.MCP_CLIENT_ERA = 'legacy';
   });
 
   afterEach(() => {
     (global as any).fetch = realFetch;
     delete process.env.MCP_ALLOW_PRIVATE_URLS;
+    delete process.env.MCP_CLIENT_ERA;
   });
 
   /** id of the nth JSON-RPC request fetch saw (skipping notifications). */

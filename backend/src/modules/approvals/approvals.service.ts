@@ -521,6 +521,28 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     return roles;
   }
 
+  /**
+   * Whether the caller could decide this request in Approvals: it is still
+   * pending, they can see it and they may manage it. The same rule decide()
+   * enforces, as a yes or no, for a surface that offers the decision
+   * somewhere else (MCP input_required, owner decision 6). Anyone else is
+   * told the request is waiting, and it is decided in Approvals.
+   */
+  async canDecide(row: ApprovalRequest, caller: { id: string } | null | undefined): Promise<boolean> {
+    if (!caller?.id || row.status !== 'pending') return false;
+    try {
+      await assertManageable(this.accessPolicy, caller.id, row, 'approval request');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** One request by id in an organization, without a caller check (the caller checks with canDecide). */
+  async findInOrganization(id: string, organizationId: string): Promise<ApprovalRequest | null> {
+    return this.approvals.findOne({ where: { id, organizationId } });
+  }
+
   async findOne(id: string, caller: { id: string }, organizationId: string): Promise<ApprovalRequest> {
     const row = await this.approvals.findOne({ where: { id, organizationId } });
     if (!row) throw new NotFoundException('approval request not found');

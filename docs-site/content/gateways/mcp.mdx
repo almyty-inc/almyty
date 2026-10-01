@@ -159,6 +159,8 @@ The HTTP headers must mirror the body; any disagreement is `-32020` with `400`. 
 
 The gateway page shows no separate discovery address: MCP defines none, and a client asks the endpoint itself with `server/discover`.
 
+A call that an approval rule holds can be approved inside the call by a 2026-07-28 client that declared `elicitation`, when its user could approve it on the Approvals page: `tools/call` answers `resultType: "input_required"` with an approve-or-reject form and a sealed `requestState`, and the retry returns the call's result. Everyone else gets the "waiting for approval" answer with an `_approvalId`, as before. See [Approvals](/approvals). Long agent runs (tasks, `get_run`) are on the management server: see [Control almyty via MCP](/control-via-mcp).
+
 ### Legacy SSE transport
 
 The HTTP+SSE transport of MCP 2024-11-05 (a long-lived `GET` stream plus a separate address to `POST` messages to) is deprecated in MCP 2026-07-28 (SEP-2596). Gateways never served it. almyty's organization endpoint still does, for clients that have not moved to Streamable HTTP:
