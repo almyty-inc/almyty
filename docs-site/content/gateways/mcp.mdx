@@ -202,7 +202,7 @@ A request that carries an `Origin` header must come from the dashboard, the API'
 | `outputSchema` | 2025-06-18 | when the tool has an object-shaped output schema (`MCP_EMIT_OUTPUT_SCHEMA=false` turns this off) |
 | `icons` | 2025-11-25 | the tool's or its API's icon, when one is set (https only) |
 
-Annotations come from what the tool calls: `GET`, `HEAD` and `OPTIONS` read; `DELETE` is destructive; `POST`, `PUT` and `PATCH` write; a GraphQL query reads and a mutation writes; an LLM tool reads and does not reach outside; anything without a signal is a write. A tool's `metadata.sideEffect` (`read`, `write`, `destructive`) overrides this.
+Annotations come from the tool's stored side-effect class (see [Tools, for developers](/tools#for-developers)): `readOnlyHint` for a tool that reads, `destructiveHint` for one that deletes, `openWorldHint` unless it is an LLM tool, and `idempotentHint` where the HTTP method is idempotent. A person can set the class on the tool's page; a tool from an MCP source keeps the annotations its server declared.
 
 `tools/call` returns the result as a text block and also as `structuredContent`: for a 2025-06-18 or 2025-11-25 client when the result is a JSON object, for a 2026-07-28 client whatever JSON it is. When the tool declares an `outputSchema`, the result is checked against it first; a result that does not match comes back as a tool error that carries the data, so the client does not reject it. Invalid arguments, a failing upstream API and a refused call are tool errors (`isError: true`) the model can read and act on. An unknown tool is a protocol error, `-32602`.
 
