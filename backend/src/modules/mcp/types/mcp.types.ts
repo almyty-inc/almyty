@@ -41,6 +41,8 @@ export interface McpCapabilities {
   tools?: {
     listChanged?: boolean;
   };
+  /** 2026-07-28: extensions this server supports, keyed by identifier (e.g. io.modelcontextprotocol/tasks). */
+  extensions?: Record<string, Record<string, unknown>>;
 }
 
 // MCP Initialization

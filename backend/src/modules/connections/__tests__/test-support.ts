@@ -7,6 +7,7 @@ import { ConnectionValidationService, ConnectionsHttp, S3ProbeClientFactory } fr
 import { ConnectionsService } from '../connections.service';
 import { ConnectorCatalogService } from '../connector-catalog.service';
 import { ConnectionPrincipal } from '../connections.permissions';
+import { McpOAuthClientService } from '../mcp-oauth/mcp-oauth-client.service';
 
 /** In-memory stand-in for a TypeORM repository: enough of find/findOne/save/remove for the service. */
 export function fakeRepo<T extends { id?: string }>(factory: () => T = () => ({} as T)) {
@@ -82,6 +83,7 @@ export interface Harness {
   store: MemoryConnectStateStore;
   audit: any;
   http: ReturnType<typeof fixtureHttp>;
+  mcpOAuth: McpOAuthClientService;
 }
 
 export function buildHarness(opts: { routes?: FixtureRoute[]; env?: Record<string, string>; s3Factory?: S3ProbeClientFactory; now?: () => number; adapters?: any; org?: Record<string, unknown>; grants?: any; rotation?: any } = {}): Harness {
@@ -95,6 +97,8 @@ export function buildHarness(opts: { routes?: FixtureRoute[]; env?: Record<strin
   const config = fakeConfig({ PUBLIC_API_URL: 'https://api.test.almyty.com', ...(opts.env ?? {}) });
   const validation = new ConnectionValidationService(config, http.http, opts.s3Factory);
   const store = new MemoryConnectStateStore(opts.now);
-  const service = new ConnectionsService(credentials as any, organizations as any, catalog, validation, fakeEnvelope, audit, config, { create: () => store } as any, store, opts.grants, opts.rotation);
-  return { credentials, organizations, customConnectors, catalog, validation, service, store, audit, http };
+  // Signing in to MCP servers, over the same fixture HTTP.
+  const mcpOAuth = new McpOAuthClientService(credentials as any, fakeEnvelope, http.http);
+  const service = new ConnectionsService(credentials as any, organizations as any, catalog, validation, fakeEnvelope, audit, config, { create: () => store } as any, store, opts.grants, opts.rotation, undefined, mcpOAuth);
+  return { credentials, organizations, customConnectors, catalog, validation, service, store, audit, http, mcpOAuth };
 }

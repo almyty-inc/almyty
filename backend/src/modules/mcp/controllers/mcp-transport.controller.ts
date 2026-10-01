@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { SseTransport } from '../transports/sse.transport';
+import { setLegacySseDeprecationHeaders } from '../core/legacy-sse-deprecation';
 import { McpService } from '../mcp.service';
 import { JsonRpcRequest } from '../types/mcp.types';
 
@@ -33,7 +34,10 @@ export class McpTransportController {
   // (runner/transport/worker-stream.controller.ts, which keeps that path
   // for envelopes for one runner release). MCP itself is served statelessly
   // by gateways and POST /mcp.
-  // Server-Sent Events endpoint
+  // Server-Sent Events endpoint: the legacy HTTP+SSE transport (2024-11-05),
+  // deprecated in MCP 2026-07-28 (SEP-2596). Still served, and every response
+  // on these three routes carries Deprecation and Link headers (RFC 9745,
+  // core/legacy-sse-deprecation.ts). It goes once the request log shows no use.
   @Get('/sse')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('member', 'admin', 'owner')
@@ -45,6 +49,7 @@ export class McpTransportController {
       throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
     }
 
+    setLegacySseDeprecationHeaders(res);
     // Establish SSE connection
     await this.sseTransport.handleSseConnection(res, organizationId, userId, serverId);
   }
@@ -57,6 +62,7 @@ export class McpTransportController {
     @Param('connectionId') connectionId: string,
     @Body() message: JsonRpcRequest,
     @Request() req,
+    @Response({ passthrough: true }) res,
   ): Promise<any> {
     const organizationId = req.user?.currentOrganizationId;
 
@@ -64,6 +70,7 @@ export class McpTransportController {
       throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
     }
 
+    setLegacySseDeprecationHeaders(res);
     return this.sseTransport.handleSseMessage(connectionId, message, organizationId, req.user?.id);
   }
 
@@ -83,6 +90,7 @@ export class McpTransportController {
       throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
     }
 
+    setLegacySseDeprecationHeaders(res);
     // Establish SSE connection for specific server
     await this.sseTransport.handleSseConnection(res, organizationId, userId, serverId);
   }
@@ -116,6 +124,9 @@ export class McpTransportController {
         name: 'almyty',
         version: '1.0.0',
         supportedTransports: ['http', 'sse'],
+        // HTTP+SSE (2024-11-05) is deprecated in MCP 2026-07-28 and goes
+        // once the request log shows nobody uses it.
+        deprecatedTransports: ['sse'],
       },
     };
   }

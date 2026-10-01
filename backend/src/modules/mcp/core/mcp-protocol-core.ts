@@ -72,6 +72,58 @@ export interface McpToolResult {
   _meta?: Record<string, unknown>;
 }
 
+/** The Tasks extension's identifier (modelcontextprotocol/ext-tasks, 2026-07-28). */
+export const TASKS_EXTENSION = 'io.modelcontextprotocol/tasks';
+
+/**
+ * A tools/call answer other than a finished result (2026-07-28): a task
+ * handle (Tasks extension, `resultType: "task"`) or a request for input
+ * (multi round-trip requests, `resultType: "input_required"`). The core
+ * passes it through unshaped, and only to a modern request that may get it:
+ * a task only when the request declared the extension, an input request only
+ * of a kind the client declared.
+ */
+export interface McpPolymorphicResult {
+  resultType: 'task' | 'input_required';
+  [key: string]: unknown;
+}
+
+/** The Tasks extension's methods, for a surface that serves tasks. */
+export interface McpTaskHandlers {
+  get(params: { taskId: string }, ctx: McpCallContext): Promise<Record<string, unknown>>;
+  update(params: { taskId: string; inputResponses?: unknown }, ctx: McpCallContext): Promise<Record<string, unknown>>;
+  cancel(params: { taskId: string }, ctx: McpCallContext): Promise<Record<string, unknown>>;
+}
+
+function plainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Whether this modern request declared the Tasks extension. */
+export function declaresTasks(ctx?: McpCallContext): boolean {
+  if (!ctx || ctx.era !== 'modern') return false;
+  const extensions = ctx.clientCapabilities?.extensions;
+  return plainObject(extensions) && plainObject(extensions[TASKS_EXTENSION]);
+}
+
+/**
+ * Whether this modern request declared form elicitation: `elicitation: {}`
+ * means form (the spec's "form only, implicit"), and an explicit `form` key
+ * says so too. URL-only elicitation cannot carry our forms.
+ */
+export function declaresElicitation(ctx?: McpCallContext): boolean {
+  if (!ctx || ctx.era !== 'modern') return false;
+  const elicitation = ctx.clientCapabilities?.elicitation;
+  if (!plainObject(elicitation)) return false;
+  const keys = Object.keys(elicitation);
+  return keys.length === 0 || plainObject(elicitation.form);
+}
+
+/** The -32021 a request gets for a method or answer it did not declare support for. */
+export function missingCapability(required: Record<string, unknown>, message = 'Missing required client capability'): McpProtocolError {
+  return mcpError(JsonRpcErrorCode.MISSING_REQUIRED_CLIENT_CAPABILITY, message, { requiredCapabilities: required });
+}
+
 /**
  * One MCP server as the core sees it. Only `listTools` and `callTool` are
  * required; every other method has the answer an empty server gives.
@@ -82,7 +134,7 @@ export interface McpSurface {
   capabilities(): McpCapabilities;
   instructions?(): string | undefined;
   listTools(params: any): Promise<{ tools: any[]; nextCursor?: string }>;
-  callTool(params: any, ctx?: McpCallContext): Promise<McpToolResult>;
+  callTool(params: any, ctx?: McpCallContext): Promise<McpToolResult | McpPolymorphicResult>;
   listResources?(params: any): Promise<any>;
   readResource?(params: any): Promise<any>;
   listResourceTemplates?(params: any): Promise<any>;
@@ -91,6 +143,8 @@ export interface McpSurface {
   complete?(params: any): Promise<any>;
   /** Methods outside the spec this surface keeps for its legacy clients (owner decision 16). */
   extraMethods?: Record<string, (params: any) => Promise<any>>;
+  /** Serves the Tasks extension (tasks/get, tasks/update, tasks/cancel) and advertises it. */
+  tasks?: McpTaskHandlers;
   /**
    * The channel a change to this surface's tool set is published on, or
    * null when its tool set never changes (management) or has no channel.
@@ -145,6 +199,11 @@ export const MODERN_METHODS: ReadonlySet<string> = new Set([
   'prompts/get',
   'completion/complete',
   'subscriptions/listen',
+  // Tasks extension: answered only for a surface that serves tasks, and
+  // only to a request that declared the extension (else -32021).
+  'tasks/get',
+  'tasks/update',
+  'tasks/cancel',
 ]);
 
 /** Results that carry caching hints in 2026-07-28 ("Caching", Cacheable Results). */
@@ -229,7 +288,8 @@ export function shapeToolResultForVersion(result: McpToolResult, version: Protoc
  * list changes through subscriptions/listen when the surface has a change
  * channel; logging is not advertised to them (2026-07-28 Deprecated 1: no
  * logging/setLevel). Legacy clients keep `listChanged: false`: telling them
- * needs a server stream, which needs sessions (owner decision 13).
+ * needs a server stream, which needs sessions (owner decision 13). A surface
+ * that serves tasks says so in `extensions` (modern only).
  */
 export function capabilitiesForVersion(surface: McpSurface, version: ProtocolVersion): McpCapabilities {
   const base = surface.capabilities();
@@ -237,7 +297,43 @@ export function capabilitiesForVersion(surface: McpSurface, version: ProtocolVer
   const out: McpCapabilities = { ...base };
   delete out.logging;
   if (out.tools) out.tools = { ...out.tools, listChanged: !!surface.toolsChangedChannel?.() };
+  if (surface.tasks) out.extensions = { ...(out.extensions ?? {}), [TASKS_EXTENSION]: {} };
   return out;
+}
+
+function isPolymorphic(result: unknown): result is McpPolymorphicResult {
+  return plainObject(result) && (result.resultType === 'task' || result.resultType === 'input_required');
+}
+
+/**
+ * An input request a client did not declare support for must never be sent
+ * (MRTR, server requirement 6). A surface checks before it asks; this is the
+ * backstop, so a bug is an internal error rather than a protocol violation.
+ */
+function assertDeclaredInputRequests(inputRequests: unknown, ctx: McpCallContext): void {
+  if (!plainObject(inputRequests)) return;
+  for (const request of Object.values(inputRequests)) {
+    const method = plainObject(request) ? request.method : undefined;
+    if (method === 'elicitation/create' && declaresElicitation(ctx)) continue;
+    throw mcpError(JsonRpcErrorCode.INTERNAL_ERROR, `An input request (${String(method)}) the client did not declare`);
+  }
+}
+
+/** A task or input request, passed through only to a request that may get it. */
+function checkedPolymorphic(result: McpPolymorphicResult, ctx: McpCallContext): McpPolymorphicResult {
+  if (ctx.era !== 'modern') {
+    throw mcpError(JsonRpcErrorCode.INTERNAL_ERROR, `A ${result.resultType} result for a ${ctx.version} request`);
+  }
+  if (result.resultType === 'task' && !declaresTasks(ctx)) {
+    throw mcpError(JsonRpcErrorCode.INTERNAL_ERROR, 'A task for a request that did not declare the Tasks extension');
+  }
+  if (result.resultType === 'input_required') {
+    if (!plainObject(result.inputRequests) && typeof result.requestState !== 'string') {
+      throw mcpError(JsonRpcErrorCode.INTERNAL_ERROR, 'An input_required result with neither inputRequests nor requestState');
+    }
+    assertDeclaredInputRequests(result.inputRequests, ctx);
+  }
+  return result;
 }
 
 async function serverInfoFor(surface: McpSurface, version: ProtocolVersion): Promise<McpServerInfo> {
@@ -285,7 +381,40 @@ async function dispatch(method: string, params: any, surface: McpSurface, ctx: M
       if (!params || typeof params.name !== 'string' || !params.name) {
         throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, 'Tool name is required');
       }
-      return shapeToolResultForVersion(await surface.callTool(params, ctx), ctx.version);
+      const result = await surface.callTool(params, ctx);
+      if (isPolymorphic(result)) return checkedPolymorphic(result, ctx);
+      return shapeToolResultForVersion(result as McpToolResult, ctx.version);
+    }
+    case 'tasks/get':
+    case 'tasks/update':
+    case 'tasks/cancel': {
+      // Only a modern request reaches here (the legacy era never had these
+      // methods in this form); a surface without tasks does not know them.
+      if (!modern || !surface.tasks) throw mcpError(JsonRpcErrorCode.METHOD_NOT_FOUND, `Method not found: ${method}`);
+      if (!declaresTasks(ctx)) throw missingCapability({ extensions: { [TASKS_EXTENSION]: {} } });
+      if (!params || typeof params.taskId !== 'string' || !params.taskId) {
+        throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, 'taskId is required');
+      }
+      if (method === 'tasks/get') {
+        const task = await surface.tasks.get(params, ctx);
+        // A finished task carries the CallToolResult the call would have
+        // returned, shaped like any other and marked `resultType: "complete"`
+        // as a 2026-07-28 tools/call result is (the ext-tasks client
+        // refuses one without it).
+        if (task.status === 'completed' && plainObject(task.result)) {
+          const result = shapeToolResultForVersion(task.result as unknown as McpToolResult, ctx.version);
+          return { ...task, result: { ...result, resultType: 'complete' } };
+        }
+        if (task.status === 'input_required') assertDeclaredInputRequests(task.inputRequests, ctx);
+        return task;
+      }
+      if (method === 'tasks/update') {
+        if (!plainObject(params.inputResponses)) {
+          throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, 'inputResponses must be an object');
+        }
+        return surface.tasks.update(params, ctx);
+      }
+      return surface.tasks.cancel(params, ctx);
     }
     case 'resources/list':
       return surface.listResources ? surface.listResources(params) : { resources: [] };

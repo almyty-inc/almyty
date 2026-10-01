@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { ToolDiscoveryModule } from '../tool-discovery/tool-discovery.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -59,6 +60,7 @@ import { jwtSecretOrDevFallback } from '../auth/dev-jwt-secret';
       OAuthAccessToken,
     ]),
     forwardRef(() => ToolsModule),
+    ToolDiscoveryModule,
     forwardRef(() => GatewaysModule),
     PromotedSkillsModule,
     AuthorizationModule,

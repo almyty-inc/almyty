@@ -715,6 +715,23 @@ describe('ToolExecutorService', () => {
       );
     });
 
+    it('lets a remote ask a person only from the autonomous runtime, which can ask and call again', async () => {
+      const tool = mcpTool();
+      toolRepository.findOne.mockResolvedValue(tool);
+      allow();
+      const mcpSources = (service as any).mcpSources;
+      mcpSources.executeToolCall.mockResolvedValue({ success: true, data: null });
+
+      await service.executeTool('tool-mcp-1', {}, { userId: 'user-1', organizationId: 'org-1', runId: 'run-1', holdForApproval: 'caller' });
+      expect(mcpSources.executeToolCall.mock.calls[0][3]).toMatchObject({ runId: 'run-1', canAskPerson: true });
+
+      // A workflow step, the Test button, a gateway call: nobody to ask.
+      await service.executeTool('tool-mcp-1', {}, { userId: 'user-1', organizationId: 'org-1', runId: 'run-1' });
+      await service.executeTool('tool-mcp-1', {}, { userId: 'user-1', organizationId: 'org-1' });
+      expect(mcpSources.executeToolCall.mock.calls[1][3]).toMatchObject({ canAskPerson: false });
+      expect(mcpSources.executeToolCall.mock.calls[2][3]).toMatchObject({ runId: null, canAskPerson: false });
+    });
+
     it('maps a remote tool error onto a failed result without throwing', async () => {
       const tool = mcpTool();
       toolRepository.findOne.mockResolvedValue(tool);

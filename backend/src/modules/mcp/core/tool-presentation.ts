@@ -2,32 +2,26 @@
  * How a tool presents itself in an MCP `tools/list`: its readable title,
  * its behaviour hints (annotations) and its icons.
  *
- * Annotations follow the side-effect mapping of docs/design/code-mode.md,
- * part A, which this module applies at listing time until that design
- * stores the class on the tool:
- *
- *   | Source                              | Class                          |
- *   |-------------------------------------|--------------------------------|
- *   | manual override (metadata.sideEffect)| wins                           |
- *   | remote MCP annotations              | copied                         |
- *   | HTTP GET / HEAD / OPTIONS           | read                           |
- *   | HTTP DELETE                         | destructive                    |
- *   | HTTP POST / PUT / PATCH             | write                          |
- *   | GraphQL query / subscription        | read; mutation: write          |
- *   | LLM tool                            | read, closed world             |
- *   | anything else                       | write (code-mode decision 4)   |
+ * Annotations come from the tool's side-effect class
+ * (docs/design/code-mode.md, part A), stored on the tool by
+ * modules/tools/tool-side-effect.ts: `readOnlyHint` for read,
+ * `destructiveHint` for destructive, `openWorldHint` from `openWorld`. A
+ * remote MCP tool whose class came from its own annotations keeps them as
+ * its server declared them. A row without the stored class (the
+ * management tools, plain objects in tests) is classified on the spot by
+ * the same function.
  *
  * `idempotentHint` is set where the method says so (GET, HEAD, OPTIONS,
- * PUT, DELETE). `openWorldHint` is true for anything that calls out to a
- * third party, false for LLM tools.
+ * PUT, DELETE).
  *
  * Annotations are hints. Clients must not make security decisions on them
  * (2025-06-18 tools, "Tool Annotations"), and neither does this server:
  * approval policies and gateway security policies are enforced by the
  * executor regardless.
  */
+import { ClassifiableTool, SideEffect, ToolClass, isSideEffect, toolClass } from '../../tools/tool-side-effect';
 
-export type SideEffect = 'read' | 'write' | 'destructive';
+export type { SideEffect };
 
 export interface ToolAnnotations {
   readOnlyHint?: boolean;
@@ -45,45 +39,38 @@ export interface ToolIcon {
 }
 
 /** The parts of a Tool entity this module reads. Loose on purpose: callers pass entities or plain rows. */
-export interface PresentableTool {
+export interface PresentableTool extends ClassifiableTool {
   name: string;
   description?: string | null;
-  executionMethod?: string | null;
   type?: string | null;
-  metadata?: Record<string, any> | null;
-  configuration?: Record<string, any> | null;
-  httpConfig?: { method?: string } | null;
-  graphqlConfig?: { query?: string } | null;
-  llmConfig?: unknown;
+  openWorld?: boolean | null;
   operation?: { method?: string | null; type?: string | null } | null;
   api?: { metadata?: Record<string, any> | null } | null;
 }
 
-const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
-
-function isSideEffect(value: unknown): value is SideEffect {
-  return value === 'read' || value === 'write' || value === 'destructive';
-}
-
-function graphqlKind(query: string | undefined): 'query' | 'mutation' | 'subscription' | null {
-  const match = /^\s*(?:#[^\n]*\n\s*)*(query|mutation|subscription)\b/i.exec(query ?? '');
-  if (match) return match[1].toLowerCase() as 'query' | 'mutation' | 'subscription';
-  // A bare selection set (`{ users { id } }`) is a query.
-  return /^\s*\{/.test(query ?? '') ? 'query' : null;
-}
 
 /** The HTTP method a tool's calls use, when it has one. */
 function httpMethodOf(tool: PresentableTool): string | null {
-  const method = tool.operation?.method ?? tool.httpConfig?.method ?? null;
+  const method = tool.operation?.method ?? tool.metadata?.sourceOperation?.method ?? tool.httpConfig?.method ?? null;
   return method ? String(method).toUpperCase() : null;
 }
 
-/** Annotations, or null when the tool carries none and none can be derived. */
+/** The class stored on the tool, or computed from its definition when the row carries none. */
+export function classOf(tool: PresentableTool): ToolClass {
+  if (isSideEffect(tool.sideEffect) && typeof tool.sideEffectSource === 'string') {
+    return { sideEffect: tool.sideEffect, openWorld: tool.openWorld !== false, sideEffectSource: tool.sideEffectSource as ToolClass['sideEffectSource'] };
+  }
+  return toolClass(tool);
+}
+
+/** The tool's annotations, from its side-effect class. */
 export function toolAnnotations(tool: PresentableTool): ToolAnnotations {
+  const cls = classOf(tool);
+
   // A remote MCP tool's own annotations, as its server declared them.
   const remote = tool.configuration?.mcp?.annotations;
-  if (remote && typeof remote === 'object') {
+  if (cls.sideEffectSource === 'annotation' && remote && typeof remote === 'object') {
     const copied: ToolAnnotations = {};
     for (const key of ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'] as const) {
       if (typeof remote[key] === 'boolean') copied[key] = remote[key];
@@ -91,38 +78,14 @@ export function toolAnnotations(tool: PresentableTool): ToolAnnotations {
     if (Object.keys(copied).length) return copied;
   }
 
-  const isLlm = tool.executionMethod === 'llm' || !!tool.llmConfig;
-  const openWorldHint = !isLlm;
   const method = httpMethodOf(tool);
-
-  let sideEffect: SideEffect = 'write';
-  const override = tool.metadata?.sideEffect;
-  if (isSideEffect(override)) {
-    sideEffect = override;
-  } else if (isLlm) {
-    sideEffect = 'read';
-  } else if (method) {
-    sideEffect = READ_METHODS.has(method) ? 'read' : method === 'DELETE' ? 'destructive' : 'write';
-  } else {
-    const kind =
-      graphqlKind(tool.graphqlConfig?.query) ??
-      (tool.operation?.type === 'query' || tool.operation?.type === 'subscription'
-        ? 'query'
-        : tool.operation?.type === 'mutation'
-          ? 'mutation'
-          : null);
-    if (kind === 'query' || kind === 'subscription') sideEffect = 'read';
-  }
-
   const annotations: ToolAnnotations = {
-    readOnlyHint: sideEffect === 'read',
-    openWorldHint,
+    readOnlyHint: cls.sideEffect === 'read',
+    openWorldHint: cls.openWorld,
   };
-  // destructiveHint and idempotentHint are meaningful only when
-  // readOnlyHint is false (2025-06-18 schema).
-  if (sideEffect !== 'read') annotations.destructiveHint = sideEffect === 'destructive';
-  if (sideEffect !== 'read' && method && IDEMPOTENT_METHODS.has(method)) annotations.idempotentHint = true;
-  if (sideEffect === 'read' && method && IDEMPOTENT_METHODS.has(method)) annotations.idempotentHint = true;
+  // destructiveHint is meaningful only when readOnlyHint is false (2025-06-18 schema).
+  if (cls.sideEffect !== 'read') annotations.destructiveHint = cls.sideEffect === 'destructive';
+  if (method && IDEMPOTENT_METHODS.has(method)) annotations.idempotentHint = true;
   return annotations;
 }
 

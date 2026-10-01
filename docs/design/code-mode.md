@@ -1,7 +1,9 @@
 # Code mode and tool discovery
 
-Status: design, for review. Nothing here is built yet. Recon taken on
-`development` at `b0281c1a` (after #886, #889, #892).
+Status: accepted (all 15 recommendations in "Decisions for Frane"). Being built phase
+by phase. Done: part A, the stored side-effect class (#915); part B, search_tools and get_tool
+with embeddings (`feat/code-mode-p1-discovery`). Recon
+taken on `development` at `b0281c1a` (after #886, #889, #892).
 
 ## In plain words
 
