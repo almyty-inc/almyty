@@ -28,6 +28,7 @@ import {
 } from '@/lib/agent-channels'
 import { ChannelIcon, CHANNEL_STATUS } from './channel-meta'
 import { channelKeys } from './channel-page-loader'
+import { useOrganizationRole } from '@/hooks/use-organization-role'
 
 interface ChannelsTabProps {
   agentId: string
@@ -45,6 +46,9 @@ const hasOwnSettings = (channel: AgentChannel) => !!channel.branding || !!channe
 
 export function ChannelsTab({ agentId, agentName }: ChannelsTabProps) {
   const navigate = useNavigate()
+  // Answering a person's data request is for owners and admins; the server
+  // refuses anyone else, so the link is not offered to them.
+  const { canManage } = useOrganizationRole()
   const name = agentName || 'this agent'
 
   const channelsQuery = useQuery({
@@ -125,13 +129,24 @@ export function ChannelsTab({ agentId, agentName }: ChannelsTabProps) {
           <span className="text-muted-foreground">·</span>
           <span className="text-muted-foreground">Who can use it:</span>
           <span>{AUTH_MODE_SUMMARY[settings.visitorRules.authMode]}</span>
-          <Link
-            to={`/agents/${agentId}/channels/settings`}
-            className="ml-auto inline-flex items-center gap-1 text-primary hover:underline"
-          >
-            Branding and visitor rules
-            <ChevronRight className="h-4 w-4" aria-hidden="true" />
-          </Link>
+          <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1">
+            {canManage && (
+              <Link
+                to={`/agents/${agentId}/channels/visitor-data`}
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                Visitor data
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            )}
+            <Link
+              to={`/agents/${agentId}/channels/settings`}
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              Branding and visitor rules
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </span>
         </Card>
       )}
 

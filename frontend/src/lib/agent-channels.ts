@@ -643,6 +643,124 @@ export const agentChannelsApi = {
     ),
 }
 
+// -- Visitor data ----------------------------------------------------------
+//
+// An owner or admin answering one person's request for their data: look
+// them up on the agent's channels, send them a copy, or delete it.
+
+/** Channels people talk to the agent on, where a data request can find them. */
+export function holdsVisitorData(type: ChannelType): boolean {
+  return type === 'web' || type === 'widget' || type === 'a2a' || isMessagingChannel(type)
+}
+
+/** What identifies a person on a channel, in the words an owner knows it by. */
+export interface PersonIdentifierHint {
+  label: string
+  placeholder: string
+  hint: string
+}
+
+const PHONE_HINT: PersonIdentifierHint = {
+  label: 'Their phone number',
+  placeholder: '+1 415 555 0100',
+  hint: 'With the country code. Spaces and dashes do not matter.',
+}
+
+const SENDER_HINT: PersonIdentifierHint = {
+  label: 'How the channel knows them',
+  placeholder: 'user-123',
+  hint: 'The id the platform sends with their messages.',
+}
+
+/** Looking on every channel at once. */
+export const ANY_CHANNEL_HINT: PersonIdentifierHint = {
+  label: 'Their email address, phone number or id',
+  placeholder: 'name@example.com',
+  hint: 'Each channel looks for it the way it knows people: an email on the web chat, a phone number on SMS, a member id on Slack.',
+}
+
+export const PERSON_IDENTIFIER_HINTS: Partial<Record<ChannelType, PersonIdentifierHint>> = {
+  web: {
+    label: 'Their email address',
+    placeholder: 'name@example.com',
+    hint: 'The email they signed in with, or the visitor id in the file they downloaded from the chat.',
+  },
+  widget: {
+    label: 'Their conversation id',
+    placeholder: 'The threadId in their download',
+    hint: 'The chat bubble has no sign-in, so the conversation is the person. The id is in the file they download from it.',
+  },
+  a2a: {
+    label: 'The key or client id of the calling agent',
+    placeholder: 'key id or OAuth client id',
+    hint: 'The API key id or OAuth client the other agent used to call this one.',
+  },
+  slack: { label: 'Their Slack member id', placeholder: 'U012ABCDEF', hint: 'In Slack: their profile, then More, then Copy member ID.' },
+  discord: { label: 'Their Discord user id', placeholder: '80351110224678912', hint: 'With developer mode on: right-click them, then Copy User ID.' },
+  telegram: { label: 'Their Telegram user id', placeholder: '123456789', hint: 'The number Telegram gives their account, not their @name.' },
+  whatsapp: PHONE_HINT,
+  whatsapp_cloud: PHONE_HINT,
+  sms: PHONE_HINT,
+  signal: PHONE_HINT,
+  imessage_sendblue: { ...PHONE_HINT, label: 'Their phone number or email', hint: 'The number or Apple ID email they wrote from.' },
+  imessage_loopmessage: { ...PHONE_HINT, label: 'Their phone number or email', hint: 'The number or Apple ID email they wrote from.' },
+  email: { label: 'Their email address', placeholder: 'name@example.com', hint: 'The address they wrote from.' },
+  microsoft_teams: { label: 'Their Teams user id', placeholder: '29:1abc…', hint: 'The id Teams sends for them.' },
+  google_chat: { label: 'Their Google Chat user', placeholder: 'users/1234567890', hint: 'The users/… name Google Chat sends for them.' },
+  matrix: { label: 'Their Matrix id', placeholder: '@name:example.org', hint: 'Their full Matrix id.' },
+  irc: { label: 'Their nick', placeholder: 'nick', hint: 'The nick they used.' },
+  webhook: SENDER_HINT,
+}
+
+/** One person, as the owner knows them, on one channel or all of them. */
+export interface VisitorDataRequest {
+  /** Every channel people talk to when left out. */
+  channelId?: string
+  id: string
+}
+
+/** What the agent keeps about them, in counts and dates. */
+export interface VisitorDataSummary {
+  found: boolean
+  conversations: number
+  messages: number
+  firstAt: string | null
+  lastAt: string | null
+  memories: number
+  files: number
+  storedReplies: number
+  runs: number
+  recent: Array<{ id: string; title: string | null; messages: number; firstAt: string | null; lastAt: string | null }>
+  /** The channels they were found on. */
+  channels: Array<{ id: string; name: string; type: ChannelType }>
+}
+
+/** What a deletion removed. */
+export interface VisitorErasure {
+  conversations: number
+  messages: number
+  runs: number
+  toolCalls: number
+  memories: number
+  files: number
+  storedReplies: number
+  visitors: number
+  /** Memories in an outside memory service it could not reach yet; retried every hour. */
+  memoriesPending: number
+}
+
+export const visitorDataApi = {
+  lookup: (agentId: string, request: VisitorDataRequest) =>
+    apiPost(`/agents/${agentId}/visitor-data/lookup`, request).then((r) => unwrap<VisitorDataSummary>(r)),
+
+  /** Everything kept about them, as the JSON file they are sent. */
+  export: (agentId: string, request: VisitorDataRequest) =>
+    apiPost<Record<string, unknown>>(`/agents/${agentId}/visitor-data/export`, request),
+
+  erase: (agentId: string, request: VisitorDataRequest) =>
+    apiPost(`/agents/${agentId}/visitor-data/erase`, request).then((r) => unwrap<VisitorErasure>(r)),
+}
+
 /** The agent channel a gateway answers for, as the gateway page shows it. */
 export interface GatewayManagedBy {
   agent: { id: string; name: string }

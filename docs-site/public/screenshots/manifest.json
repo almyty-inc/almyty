@@ -73,7 +73,7 @@
       "title": "An agent's Channels tab",
       "path": "screenshots/agent-channels.png",
       "capturedAt": "2026-10-01T06:49:24.228Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6bb7266e5588f7bd9a77104eb95e4e3fd148ae86c54decce5f6668d19c7a18e0",
       "source": {
         "kind": "browser",
@@ -89,7 +89,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "833f2e1a2d6c3bde8dc2bb6ed93973fcfa69b702603fbc5b133b03a5263d58da",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "agent-constraints",
@@ -206,7 +207,7 @@
       "title": "Analytics: agents",
       "path": "screenshots/analytics-agents.png",
       "capturedAt": "2026-10-01T06:50:55.853Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "63d3c1aa8427205c04fe29c8e8df80eb48e819ec00deaee9461ed93b7693a70d",
       "source": {
         "kind": "browser",
@@ -221,14 +222,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "analytics-audit",
       "title": "Audit trail",
       "path": "screenshots/analytics-audit.png",
       "capturedAt": "2026-10-01T06:51:03.614Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "aeb4fdddd3aebed54dce52f007b3ae444c91ed071e59904db41641848e330038",
       "source": {
         "kind": "browser",
@@ -243,14 +245,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "analytics-chargeback-locked",
       "title": "Chargeback (Enterprise, locked)",
       "path": "screenshots/analytics-chargeback-locked.png",
       "capturedAt": "2026-10-01T06:51:06.150Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f7ec69cb930d2b5eea3a339271cd2e9e326661421d1a821ca3305cd1cb214bd0",
       "source": {
         "kind": "browser",
@@ -265,14 +268,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "analytics-gateways",
       "title": "Analytics: gateways",
       "path": "screenshots/analytics-gateways.png",
       "capturedAt": "2026-10-01T06:51:01.020Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "88aa07490ff5133741a23fd2dfe69f586f9eabc30b941b17f47e334adb901cc3",
       "source": {
         "kind": "browser",
@@ -287,14 +291,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "analytics-overview",
       "title": "Analytics overview",
       "path": "screenshots/analytics-overview.png",
       "capturedAt": "2026-10-01T06:50:53.167Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f6d944f80833e42b51e47e7a025316a7690adea2cb8bdf91fcf5e119100d9765",
       "source": {
         "kind": "browser",
@@ -309,14 +314,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "analytics-tools",
       "title": "Analytics: tools",
       "path": "screenshots/analytics-tools.png",
       "capturedAt": "2026-10-01T06:50:58.451Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "761ac7751c4dd9a3ad5bbe49294b0350fbbdda8c745b41f6d2e00d86d9deab76",
       "source": {
         "kind": "browser",
@@ -331,7 +337,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "apis-list",
@@ -434,7 +441,7 @@
       "title": "Branding and visitor rules",
       "path": "screenshots/channel-branding-rules.png",
       "capturedAt": "2026-10-01T06:49:26.864Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5fe3919689b49ac17afb25e0b3c21b321e1f2dd3f63d68cfec96dd7944aa8033",
       "source": {
         "kind": "browser",
@@ -449,14 +456,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "f9a25adb7545a123db6b319605369a5dd42b19ae18d2d0f82cdbfdb4d0777d2e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "channel-slack-keys",
       "title": "Slack channel keys",
       "path": "screenshots/channel-slack-keys.png",
       "capturedAt": "2026-10-01T06:49:32.209Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a1432ca8be33bf97efb4a599c922a74acd8641df7f66afdb379bf3f9f0178eb9",
       "source": {
         "kind": "browser",
@@ -471,14 +479,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "channel-slack-live",
       "title": "Published Slack channel",
       "path": "screenshots/channel-slack-live.png",
       "capturedAt": "2026-10-01T06:49:35.331Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "dd68ca412b2556b438148d1d454cfbf7c50b9487273edcb747ceb54c85c25762",
       "source": {
         "kind": "browser",
@@ -493,14 +502,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "channel-terminal-build",
       "title": "Terminal app channel",
       "path": "screenshots/channel-terminal-build.png",
       "capturedAt": "2026-10-01T06:49:38.048Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "81db9c8408d17de95edf28458b79f099a72aa46ea3d4d25fef2d76adeebb4067",
       "source": {
         "kind": "browser",
@@ -515,14 +525,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "channel-web-published",
       "title": "Published web chat channel",
       "path": "screenshots/channel-web-published.png",
       "capturedAt": "2026-10-01T06:49:29.551Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "ed18f83d07bef8b1484cf0040a39442cbd0298d8f6e0b15af696079653326c7a",
       "source": {
         "kind": "browser",
@@ -537,7 +548,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "cli-agents-help",
@@ -989,7 +1001,7 @@
       "title": "Add Microsoft Teams",
       "path": "screenshots/guides/helpdesk-6-teams.png",
       "capturedAt": "2026-10-01T06:48:23.494Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "cc4b79db256ca6a1a9ee0291661212e83ee11694b56c9be4dace979f5bebc2e8",
       "source": {
         "kind": "browser",
@@ -1005,7 +1017,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "773fc9c47f199ebd3699dc2e1f4bbb0fb5e842bc4b4331f80b2159bfe0e8a242",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "guides-marketing-1-connect-docs",
@@ -1078,7 +1091,7 @@
       "title": "A daily spending cap for visitors",
       "path": "screenshots/guides/marketing-4-limits.png",
       "capturedAt": "2026-10-01T06:46:57.238Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d0d46865f3269bf200257dba435a1389c6b992b665828fd0ff1c95c8c2adf54f",
       "source": {
         "kind": "browser",
@@ -1093,14 +1106,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "f9a25adb7545a123db6b319605369a5dd42b19ae18d2d0f82cdbfdb4d0777d2e",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "guides-marketing-5-widget",
       "title": "The chat bubble, only on your own site",
       "path": "screenshots/guides/marketing-5-widget.png",
       "capturedAt": "2026-10-01T06:47:09.585Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "fdb6b6f7149d07940632721d094101305165955e5481693283d2accdb29ac641",
       "source": {
         "kind": "browser",
@@ -1116,7 +1130,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c816e6c0188a61adb7cba35ad385d732aed84525f2821cff92c85871f8ab95e7",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "guides-marketing-6-visitor",
@@ -1211,7 +1226,7 @@
       "title": "Slack, published for the report",
       "path": "screenshots/guides/ops-4-slack.png",
       "capturedAt": "2026-10-01T06:47:42.082Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "b5ec35b9384a9be0179e2c29820e5b65d4d82374462c991d4ba0482930cfd492",
       "source": {
         "kind": "browser",
@@ -1227,7 +1242,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "773fc9c47f199ebd3699dc2e1f4bbb0fb5e842bc4b4331f80b2159bfe0e8a242",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "guides-ops-5-schedule",
@@ -1389,7 +1405,7 @@
       "title": "Add Slack with your Slack app",
       "path": "screenshots/guides/sales-5-slack-keys.png",
       "capturedAt": "2026-10-01T06:46:33.763Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "eae7f3b21043a830d14e5697e5a8918b0e1a89c7dd89bdcf11097bd7e3110cd0",
       "source": {
         "kind": "browser",
@@ -1405,14 +1421,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "773fc9c47f199ebd3699dc2e1f4bbb0fb5e842bc4b4331f80b2159bfe0e8a242",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "guides-sales-6-slack-live",
       "title": "Published: the install link and redirect URL",
       "path": "screenshots/guides/sales-6-slack-live.png",
       "capturedAt": "2026-10-01T06:46:37.497Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "ac9f351221ec20b3a23294651432598ec6eb81819d57a3a7afe00d282263dbf3",
       "source": {
         "kind": "browser",
@@ -1427,7 +1444,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "guides-support-1-connect-model",
@@ -1478,7 +1496,7 @@
       "title": "Pick where customers reach it",
       "path": "screenshots/guides/support-11-add-channel.png",
       "capturedAt": "2026-10-01T06:45:15.927Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "fc5b1b35779b863f88cfda40fa77fe8714850e8339b32c3f1ab3261bf71cdc0a",
       "source": {
         "kind": "browser",
@@ -1493,14 +1511,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "ecf2b7366d37cabacb0295f4403c2ca234213a673a7dea0734f4e64b4724d5fb",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "guides-support-12-web-chat",
       "title": "Publish the web chat",
       "path": "screenshots/guides/support-12-web-chat.png",
       "capturedAt": "2026-10-01T06:45:16.725Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8e73128a5b0ccc74abc3f5e18cb3cc4910727a0b701fbddadc28fa66c7686f0d",
       "source": {
         "kind": "browser",
@@ -1515,14 +1534,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "guides-support-13-widget",
       "title": "Put the chat bubble on your website",
       "path": "screenshots/guides/support-13-widget.png",
       "capturedAt": "2026-10-01T06:45:20.608Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "d7fe17efc1c2acefe0aae1a2f013da74f505d5cffa16a491293b6b5ad2f0171e",
       "source": {
         "kind": "browser",
@@ -1538,14 +1558,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c816e6c0188a61adb7cba35ad385d732aed84525f2821cff92c85871f8ab95e7",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "guides-support-14-whatsapp",
       "title": "Add WhatsApp with your Twilio keys",
       "path": "screenshots/guides/support-14-whatsapp.png",
       "capturedAt": "2026-10-01T06:45:51.446Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3bb4b5603102d51de33b30573e442a6d0715d423356548b8018bb0dd75961684",
       "source": {
         "kind": "browser",
@@ -1561,14 +1582,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "773fc9c47f199ebd3699dc2e1f4bbb0fb5e842bc4b4331f80b2159bfe0e8a242",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "guides-support-15-email",
       "title": "Add email with your Resend key",
       "path": "screenshots/guides/support-15-email.png",
       "capturedAt": "2026-10-01T06:45:57.153Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7491e05737a1187280f8ac2701974125c0002a42aef1c929848c832197ff57c0",
       "source": {
         "kind": "browser",
@@ -1584,14 +1606,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "773fc9c47f199ebd3699dc2e1f4bbb0fb5e842bc4b4331f80b2159bfe0e8a242",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "guides-support-16-branding",
       "title": "Name, greeting and limits",
       "path": "screenshots/guides/support-16-branding.png",
       "capturedAt": "2026-10-01T06:46:01.377Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "96c2dfc86213c388a152dda91658fed1f2617aaca9134431d6a21e07233d0595",
       "source": {
         "kind": "browser",
@@ -1606,7 +1629,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "f9a25adb7545a123db6b319605369a5dd42b19ae18d2d0f82cdbfdb4d0777d2e",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "guides-support-17-customer-view",
@@ -1856,7 +1880,7 @@
       "title": "Add channel",
       "path": "screenshots/interfaces-channel-config.png",
       "capturedAt": "2026-10-01T06:49:40.689Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "aa6a65aabbf701d494218a1311d013f4bc5cd7d662e8e8477d18684631b06957",
       "source": {
         "kind": "browser",
@@ -1871,14 +1895,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "ecf2b7366d37cabacb0295f4403c2ca234213a673a7dea0734f4e64b4724d5fb",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "interfaces-channel-setup",
       "title": "Microsoft Teams channel",
       "path": "screenshots/interfaces-channel-setup.png",
       "capturedAt": "2026-10-01T06:49:43.315Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "525249d57fa91992ceb9e56a0e31b29447ad953dc6755722d4d28e85aa58ff04",
       "source": {
         "kind": "browser",
@@ -1893,7 +1918,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     },
     {
       "id": "memory-write",
@@ -2503,6 +2529,28 @@
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
+      "id": "visitor-data-request",
+      "title": "Visitor data request",
+      "path": "screenshots/visitor-data-request.png",
+      "capturedAt": "2026-10-01T09:16:25.000Z",
+      "status": "current",
+      "sha256": "eaab71925e9fdf3ebb6261d0421f9891497d1b0b33e6244ea65b46a0cb55e0bc",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/channels/visitor-data"
+      },
+      "sources": [
+        "frontend/src/pages/agent-visitor-data.tsx",
+        "frontend/src/components/channels/visitor-data-request.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "a4f06d5568f595c5e221feb5c1fbb3fe19f545bd61a54b553496bee29201d576",
+      "notes": "Local stack with a fake Northwind AI organization and fake people; local test credentials; not staging or production data."
+    },
+    {
       "id": "webhook-config",
       "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
@@ -2529,7 +2577,7 @@
       "title": "Website widget channel",
       "path": "screenshots/widget-builder.png",
       "capturedAt": "2026-10-01T06:49:46.605Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "ce07dc4f3fc8e51c2d82bc47d7635aaffe6d9650b203c971ec18665e5635fb21",
       "source": {
         "kind": "browser",
@@ -2545,7 +2593,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c816e6c0188a61adb7cba35ad385d732aed84525f2821cff92c85871f8ab95e7",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The channel pages' source changed: the Channels tab's branding summary now also links to Visitor data (owners and admins), and a Visitor data page was added beside the channel pages. This view may look the same; recapture it to confirm."
     }
   ]
 }
