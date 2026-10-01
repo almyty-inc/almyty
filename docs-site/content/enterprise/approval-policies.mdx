@@ -9,7 +9,9 @@ Every organization already has simple [approvals](/approvals) for free: an agent
 - **A quorum**: any two reviewers must approve.
 
 When no policy matches a request, the simple one-person approval applies as usual.
+When no policy matches a request, the simple one-person approval applies as usual.
 
+To ask before a tool call over an amount whatever the agent was told, use an amount rule: it is free on every plan. See [ask before a large amount](/approvals#ask-before-a-large-amount-whatever-the-assistant-was-told). On these plans a rule can also be given its own steps.
 ![A refund over the limit paused for human approval, with Approve and Reject](/screenshots/approval-refund-820.png)
 
 ## Create a policy
@@ -22,7 +24,7 @@ Owners and admins manage policies.
 
 2. Give it a **Name** (for example "Refunds over $1,000") and optionally a **Description**.
 3. Under **Match conditions**, click **Add condition** for each thing that must be true, for example `amount`, greater than, `1000`. All conditions must match. With no conditions, the policy matches every approval request.
-4. Under **Approval steps**, click **Add step** for each stage. Give each step a name, the role that approves it (such as `admin`, a [custom role](/enterprise/advanced-rbac) like `finance`, or `*` for anyone allowed to approve) and how many approvals it needs.
+5. Under **Which agents it applies to**, choose **Everyone** or **One team** and pick the team. If two of your policies could fit the same request, open **Advanced** and give the one that should decide a higher **Priority**; otherwise leave it at 0.
 5. Set the **Priority**: if several policies match, the one with the highest priority decides. Optionally scope it to one team with **Team ID (optional)**.
 6. Leave **Enabled** on and click **Create policy**.
 
@@ -62,5 +64,6 @@ A policy is a match condition, ordered steps and a priority:
 - **`steps`**: ordered sign-off stages, each with an `approverRole` (an org role or custom role name; `"*"` accepts anyone authorized to approve) and `minApprovals` (at least 1).
 - **`priority`**: exactly one policy governs a request, the highest-priority enabled match.
 - **`teamId`**: optional, scopes the policy to one team's agents.
+- **`trigger`**: set on an amount rule (see [Approvals](/approvals#amount-rules)); such a policy asks on its own at the tool call and governs only the requests it raises. Amount rules are managed at `/approval-rules` on every plan; this editor manages the rest.
 
 A quorum is a single step: `{ "approverRole": "*", "minApprovals": 2 }`. Each pending request under a policy reports per-step state (required, collected, satisfied) and the current step. Policy management (list, read, enable or disable, delete) is admin or owner only; endpoints are in the [API reference](/api-reference/authentication).

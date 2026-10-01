@@ -106,6 +106,31 @@ export class SlackAdapter extends BaseAdapter {
   }
 
   /**
+   * The channels the bot is in, for picking where a scheduled result goes:
+   * conversations.list with the bot token (channels:read, and groups:read
+   * for private channels). Empty when Slack will not say -- a missing
+   * scope, a revoked token -- and the page then offers the channels the
+   * bot has been written to in, and a box to type an ID.
+   */
+  async listChannels(config: Record<string, any>): Promise<Array<{ id: string; name: string }>> {
+    if (!config.bot_token) return [];
+    try {
+      const fetch = globalThis.fetch || (await import('node-fetch')).default;
+      const res = await (fetch as any)(
+        'https://slack.com/api/conversations.list?types=public_channel,private_channel&exclude_archived=true&limit=200',
+        { headers: { Authorization: `Bearer ${config.bot_token}` }, signal: AbortSignal.timeout(5_000) },
+      );
+      const body = await this.readJsonBody(res);
+      if (body?.ok !== true || !Array.isArray(body.channels)) return [];
+      return body.channels
+        .filter((c: any) => c && typeof c.id === 'string' && c.is_member !== false)
+        .map((c: any) => ({ id: c.id, name: typeof c.name === 'string' ? c.name : c.id }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Slack's `event_id` is the envelope id and is identical on every
    * retry of the same event (the retry also carries
    * X-Slack-Retry-Num). `channel:ts` is the message's own identity and

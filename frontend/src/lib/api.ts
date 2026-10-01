@@ -7,6 +7,7 @@ import {
   recoverFromStaleOrganizationContext,
 } from '@/store/organization-selection'
 import type { ApiKeyView, ConnectApiInput, ConnectApiResult, SetApiKeyInput } from '@/types/api-connect'
+import type { DeliveryOptions, SchedulePreview, ScheduleRequest, ScheduleView } from '@/lib/schedule'
 
 const API_BASE_URL = import.meta.env.ALMYTY_API_BASE_URL || ''
 
@@ -931,9 +932,11 @@ export const agentsApi = {
   importAgent: (data: any) => apiPost('/agents/import', data),
   // Audit log
   getAuditLog: (id: string) => apiGet(`/agents/${id}/audit-log`),
-  // Scheduling
-  schedule: (id: string, intervalMinutes: number, input?: any) =>
-    apiPost(`/agents/${id}/schedule`, { intervalMinutes, input }),
+  // Scheduling (lib/schedule.ts has the shapes)
+  getSchedule: (id: string) => apiGet<ScheduleView>(`/agents/${id}/schedule`),
+  schedule: (id: string, body: ScheduleRequest) => apiPost(`/agents/${id}/schedule`, body),
+  previewSchedule: (id: string, body: ScheduleRequest) => apiPost<SchedulePreview>(`/agents/${id}/schedule/preview`, body),
+  scheduleDestinations: (id: string) => apiGet<DeliveryOptions>(`/agents/${id}/schedule/destinations`),
   unschedule: (id: string) => apiDel(`/agents/${id}/schedule`),
   setHeartbeat: (id: string, body: { enabled: boolean; intervalMinutes?: number; prompt?: string }) =>
     apiPatch(`/agents/${id}/heartbeat`, body),
@@ -1320,6 +1323,20 @@ export interface ApprovalStep {
   minApprovals: number
 }
 
+/**
+ * An approval policy's amount rule: ask before `toolId` runs when the
+ * numeric input `argument` is over (gt) or at or over (gte) `amount`.
+ * Mirrors ApprovalToolAmountTrigger on the backend entity.
+ */
+export interface ApprovalToolAmountTrigger {
+  kind: 'tool_amount'
+  toolId: string
+  toolName?: string
+  argument: string
+  op: 'gt' | 'gte'
+  amount: number
+}
+
 export interface ApprovalPolicy {
   id: string
   organizationId: string
@@ -1330,6 +1347,8 @@ export interface ApprovalPolicy {
   steps: ApprovalStep[]
   priority: number
   enabled: boolean
+  /** Set: the policy asks on its own when the tool is called over the amount. */
+  trigger?: ApprovalToolAmountTrigger | null
   createdAt: string
   updatedAt: string
 }
@@ -1342,6 +1361,7 @@ export interface UpsertApprovalPolicy {
   steps?: ApprovalStep[]
   priority?: number
   enabled?: boolean
+  trigger?: ApprovalToolAmountTrigger | null
 }
 
 export const approvalPoliciesApi = {
@@ -1354,6 +1374,25 @@ export const approvalPoliciesApi = {
   delete: (id: string) => apiDel(`/approval-policies/${id}`),
 }
 
+/** An amount rule as the free rules endpoints take it (backend AmountRulesService). */
+export interface UpsertAmountRule {
+  name?: string
+  description?: string | null
+  teamId?: string | null
+  enabled?: boolean
+  trigger?: ApprovalToolAmountTrigger
+  /** Business plan only; without it one approval decides. */
+  steps?: ApprovalStep[]
+}
+
+/** Amount rules ("ask before refunds over 500"): free for every organization. */
+export const approvalRulesApi = {
+  list: () => apiGet<ApprovalPolicy[]>('/approval-rules'),
+  getById: (id: string) => apiGet<ApprovalPolicy>(`/approval-rules/${id}`),
+  create: (data: UpsertAmountRule) => apiPost<ApprovalPolicy>('/approval-rules', data),
+  update: (id: string, data: UpsertAmountRule) => apiPatch<ApprovalPolicy>(`/approval-rules/${id}`, data),
+  delete: (id: string) => apiDel(`/approval-rules/${id}`),
+}
 /**
  * Mirrors backend/src/modules/onboarding/dto/onboarding.dto.ts. Every step
  * is computed server-side from what exists in the org, never from a box

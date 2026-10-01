@@ -23,7 +23,7 @@ For a full walk-through with screenshots, see [Customer support assistant](/exam
 
    ![The support assistant's models and reviewers](/screenshots/support-agent-overview.png)
 
-3. **Put a person on the large refunds.** Tell it in its **Instructions**, as well as in the constraint: "Ask for approval before any refund over $500." When it asks, the run pauses and the request appears on the **Approvals** page, where an owner or admin clicks **Approve** or **Reject**. Below the limit it goes ahead on its own.
+3. **Put a person on the large refunds.** Tell it in its **Instructions**, as well as in the constraint: "Ask for approval before any refund over $500." When it asks, the run pauses and the request appears on the **Approvals** page, where an owner or admin clicks **Approve** or **Reject**. Below the limit it goes ahead on its own. To make the limit hold even if the assistant forgets, add an amount rule, *Ask before “Create refund” when amount is over 500*, under **Settings → Advanced → Approvals**: almyty then checks every refund call before it is made. See [ask before a large amount](/approvals#ask-before-a-large-amount-whatever-the-assistant-was-told).
 4. **Keep the record.** Every action and every change to the assistant is in the audit trail (**Analytics**, **Audit trail**), with who, when and what.
 
 The assistant asks for approval because its instructions tell it to. Keep the rule short and put it in both places.

@@ -12,6 +12,7 @@ import { AgentMode, AgentRun, AgentRunStatus } from '../../entities/agent-run.en
 import { runWithRequestContext } from '../../common/request-context';
 import { agentOwnerUserId } from './agent-owner';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
+import { AgentSchedulerService } from './agent-scheduler.service';
 
 /**
  * A run in one of these is finished; a late queue failure must not
@@ -40,6 +41,10 @@ export class AgentRuntimeProcessor {
     @Optional()
     @InjectRepository(Workspace)
     private readonly workspaceRepository?: Repository<Workspace>,
+    // Hands a finished scheduled run's result to its channel or webhook.
+    // Optional for the positional unit tests.
+    @Optional()
+    private readonly scheduler?: AgentSchedulerService,
   ) {}
 
   @Process('next-step')
@@ -92,6 +97,8 @@ export class AgentRuntimeProcessor {
             // Finished (completed, failed, cancelled or timed out): its
             // runner workspaces are released now, freeing the runner.
             await releaseRunWorkspaces(this.workspaceRepository, runId, this.runRepository);
+            // A scheduled run's result goes where its schedule said.
+            await this.scheduler?.deliverScheduledRun(runId);
           }
         } catch (error) {
           this.logger.error(`Step processing failed for run ${runId}: ${error.message}`, error.stack);
@@ -179,7 +186,10 @@ export class AgentRuntimeProcessor {
     try {
       // This will be checked in processStep via checkLimits
       const result = await this.runtimeService.processStep(runId);
-      if (result === 'done') await releaseRunWorkspaces(this.workspaceRepository, runId, this.runRepository);
+      if (result === 'done') {
+        await releaseRunWorkspaces(this.workspaceRepository, runId, this.runRepository);
+        await this.scheduler?.deliverScheduledRun(runId);
+      }
     } catch (error) {
       // Rethrow. Swallowing this made a failing timeout check disappear
       // entirely: no retry, no failed job, and the run left in whatever
@@ -281,6 +291,7 @@ export class AgentRuntimeProcessor {
     }
 
     await releaseRunWorkspaces(this.workspaceRepository, runId, this.runRepository);
+    await this.scheduler?.deliverScheduledRun(runId);
     this.logger.error(`Run ${runId} marked FAILED after exhausted retries: ${error?.message}`);
   }
 }

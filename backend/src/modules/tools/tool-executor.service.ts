@@ -36,6 +36,7 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { sanitizeToolParameters } from '../../common/security/input-sanitizer';
+import { ToolApprovalGateService } from './tool-approval-gate.service';
 import { verifyToolIntegrity } from '../../common/security/tool-integrity';
 import { decideToolCaller } from '../../common/security/gateway-tool-permissions';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -123,6 +124,9 @@ export class ToolExecutorService {
     // @Optional() only so the positional spec harnesses keep their order;
     // without it such a call is told it needs a workspaceId.
     @Optional() private readonly runWorkspaces?: RunWorkspaceService,
+    // Approval policies' amount rules, checked before any call runs.
+    // Optional for the positional unit tests; Nest always provides it.
+    @Optional() private readonly approvalGate?: ToolApprovalGateService,
   ) {}
 
   // ─── Public entry point ────────────────────────────────────────
@@ -137,6 +141,16 @@ export class ToolExecutorService {
     let cached = false;
     let rateLimited = false;
     let notFound = false;
+
+    // `_approvalId` is not the tool's: it is the approval a held call was
+    // given, sent back by a caller asking for the outcome (see the amount
+    // rules below). It never reaches the tool or its fingerprint.
+    let retryApprovalId: string | null = null;
+    if (parameters && typeof parameters === 'object' && typeof (parameters as any)._approvalId === 'string') {
+      const { _approvalId, ...rest } = parameters as Record<string, any>;
+      retryApprovalId = _approvalId;
+      parameters = rest;
+    }
 
     // Short-circuit before any DB work if the caller already aborted
     // (e.g. the HTTP request was cancelled between queueing and
@@ -367,6 +381,81 @@ export class ToolExecutorService {
         // the rewritten parameters have to be what the tool, the cache key
         // and the execution record all see -- not just a local copy.
         if (hooked.data !== undefined) parameters = hooked.data;
+      }
+
+      // Approval policies' amount rules: "ask before issue_refund when
+      // amount is over 500". Checked on the parameters the tool would
+      // actually receive (after the gateway's mapping and any filter
+      // plugin), and before the cache, so a cached answer cannot stand in
+      // for a call nobody approved. A held call does not run. Only an
+      // approval raised for this very call -- same tool, same parameters --
+      // lets it through.
+      //
+      // Who asks the person depends on the caller. The autonomous runtime
+      // can pause its run, so it asks itself (`holdForApproval: 'caller'`)
+      // and calls again with `approvedGate`. Every other caller -- a
+      // workflow agent, a gateway or MCP client, the Test button -- cannot
+      // wait, so the call is held here: it waits in Approvals, the caller
+      // is told it is waiting (with the approval id), and once approved it
+      // runs exactly as asked (ToolApprovalGateService.runHeld). A caller
+      // that calls again with `_approvalId` gets the state, or the result.
+      if (this.approvalGate) {
+        const gateContext = {
+          organizationId: options.organizationId,
+          userId: options.userId ?? null,
+          agentId: options.agentId ?? getRequestContext()?.agentId ?? null,
+          runId: options.runId ?? getRequestContext()?.runId ?? null,
+          teamId: options.agentTeamId,
+        };
+        const hit = await this.approvalGate.check(tool, parameters, gateContext);
+        if (hit) {
+          const approved =
+            !!options.approvedGate?.approvalId &&
+            (await this.approvalGate.approved(options.approvedGate.approvalId, hit, options.organizationId));
+          if (!approved) {
+            const answer = (error: string, extra: Partial<ToolExecutionResult> = {}): ToolExecutionResult => ({
+              success: false,
+              error,
+              executionTime: Date.now() - startTime,
+              cached,
+              rateLimited,
+              retryCount,
+              approvalRequired: hit,
+              ...extra,
+            });
+            const why = hit.value === null ? `${hit.argument} is not a number` : `${hit.argument} is ${hit.value}`;
+            if (options.holdForApproval === 'caller') {
+              if (!options.approvedGate) await this.approvalGate.record(hit, gateContext, 'held');
+              return answer(`Needs approval: ${hit.summary} (${why}). The call was not made.`);
+            }
+            // The caller came back with the approval id it was given.
+            if (retryApprovalId) {
+              const state = await this.approvalGate.stateOf(retryApprovalId, hit, options.organizationId);
+              if (state?.status === 'done') return { ...(state.result as ToolExecutionResult), executionTime: Date.now() - startTime, cached: false, rateLimited: false, retryCount: 0, approvalId: retryApprovalId };
+              if (state?.status === 'refused') {
+                return answer(`Not approved: ${state.reason}. The call was not made.`, { approvalId: retryApprovalId, approvalStatus: 'rejected' });
+              }
+              if (state?.status === 'waiting') {
+                return answer(`Waiting for approval: ${hit.summary} (${why}). It runs once a person approves it in Approvals; call again with _approvalId "${retryApprovalId}" for the result.`, { approvalId: retryApprovalId, approvalStatus: 'pending' });
+              }
+              // Another call's approval id, or an unknown one: this call is asked about on its own.
+            }
+            const held = await this.approvalGate.hold(tool, parameters, hit, gateContext, {
+              userId: options.userId ?? null,
+              principal: options.principal ?? null,
+              gatewayId: options.gatewayId ?? null,
+              scopes: options.scopes ?? null,
+              runnerLabels: options.runnerLabels ?? null,
+              agentTeamId: options.agentTeamId ?? null,
+            });
+            return answer(
+              `Waiting for approval: ${hit.summary} (${why}). The call was not made yet; it runs once a person approves it in Approvals` +
+                (held ? `. Call again with _approvalId "${held.id}" for the result.` : '.'),
+              { approvalId: held?.id, approvalStatus: 'pending' },
+            );
+          }
+          await this.approvalGate.record(hit, gateContext, 'approved');
+        }
       }
 
       // Tool integrity: refuse to execute if the stored definitionHash

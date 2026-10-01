@@ -61,13 +61,33 @@ export class ApprovalRequest {
   @Column({ type: 'uuid', nullable: true })
   ownerUserId: string | null;
 
-  /** The agent run that paused on this approval gate. */
-  @Column()
-  runId: string;
+  /**
+   * The agent run that paused on this approval gate. Null for a tool call
+   * held from a caller that cannot pause (a workflow agent, a gateway or
+   * MCP call, the tool's Test button): the call itself waits here.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  runId: string | null;
 
-  /** The agent that triggered the approval. */
-  @Column()
-  agentId: string;
+  /** The agent that triggered the approval; null for a held call no agent made. */
+  @Column({ type: 'uuid', nullable: true })
+  agentId: string | null;
+
+  /** A held tool call (ToolApprovalGateService): the tool it is for. */
+  @Column({ type: 'uuid', nullable: true })
+  toolId: string | null;
+
+  /** A held tool call: a fingerprint of its parameters, so an approval covers that call alone. */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  fingerprint: string | null;
+
+  /** A held tool call, once approved and run: what it returned. */
+  @Column({ type: 'jsonb', nullable: true })
+  result: Record<string, any> | null;
+
+  /** When a held, approved call was run; claimed before it runs, so it runs once. */
+  @Column({ type: 'timestamptz', nullable: true })
+  resultAt: Date | null;
 
   /**
    * Tool-call correlation id from the agent runtime. When the run

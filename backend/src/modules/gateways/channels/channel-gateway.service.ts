@@ -741,19 +741,93 @@ export class ChannelGatewayService {
    * without per-adapter changes.
    */
   async applyAiDisclosure(gateway: Gateway, run: AgentRun, text: string): Promise<string> {
-    const setting = gateway.configuration?.aiDisclosure;
-    if (!setting) return text;
+    const line = ChannelGatewayService.disclosureLine(gateway);
+    if (!line) return text;
     if ((run.metadata as any)?.aiDisclosureSent) return text;
-
-    const line =
-      typeof setting === 'string' && setting.trim()
-        ? setting.trim()
-        : ChannelGatewayService.DEFAULT_AI_DISCLOSURE;
 
     run.metadata = { ...(run.metadata || {}), aiDisclosureSent: true };
     await this.runRepository.save(run);
 
     return `${line}\n\n${text}`;
+  }
+
+  /**
+   * The AI disclosure line a gateway carries, or null when it carries
+   * none: `configuration.aiDisclosure` true is the default wording, a
+   * non-empty string is the channel's own.
+   */
+  static disclosureLine(gateway: Pick<Gateway, 'configuration'>): string | null {
+    const setting = gateway.configuration?.aiDisclosure;
+    if (!setting) return null;
+    return typeof setting === 'string' && setting.trim()
+      ? setting.trim()
+      : ChannelGatewayService.DEFAULT_AI_DISCLOSURE;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Messages the agent starts (scheduled results)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Post a message nobody asked for in this conversation -- a scheduled
+   * result -- through the channel's own send path: the same adapter,
+   * the same configuration and credentials, the same outbound event row
+   * per message as a reply. `parts` are sent in order, one platform
+   * message each; the first the platform refuses stops the rest and is
+   * thrown (ChannelSendError, with the platform's own wording), after the
+   * refusal is recorded.
+   */
+  async postMessage(
+    gateway: Gateway,
+    parts: string[],
+    threadContext: Record<string, any>,
+  ): Promise<{ sent: number }> {
+    const adapter = this.getAdapter(gateway.type);
+    const config = await this.channelConfig(gateway, 'channel_outbound');
+    const context = { ...threadContext, gatewayId: gateway.id, organizationId: gateway.organizationId, runId: null };
+    let sent = 0;
+    for (const text of parts) {
+      const formatted = adapter.formatOutbound({ text });
+      try {
+        await adapter.sendResponse(config, formatted, context);
+      } catch (err: any) {
+        await this.logEvent(gateway, 'outbound', 'failed', this.truncatePayload(formatted), err?.message ?? String(err));
+        throw err;
+      }
+      await this.logEvent(gateway, 'outbound', 'processed', this.truncatePayload(formatted), null);
+      sent++;
+    }
+    return { sent };
+  }
+
+  /**
+   * The conversations a channel has recently been written to in, newest
+   * first: each verified inbound delivery read back through its adapter.
+   * The places a bot may post to on most platforms are the places people
+   * have talked to it, so this is what the schedule page offers.
+   */
+  async recentConversations(
+    gateway: Gateway,
+    take = 200,
+  ): Promise<Array<{ message: NormalizedMessage; raw: any; at: Date }>> {
+    const adapter = this.adapters.get(gateway.type);
+    if (!adapter) return [];
+    const rows = await this.eventRepository.find({
+      where: { gatewayId: gateway.id, organizationId: gateway.organizationId, direction: 'inbound', status: In(['processed', 'received']) as any },
+      order: { createdAt: 'DESC' },
+      take,
+    });
+    const out: Array<{ message: NormalizedMessage; raw: any; at: Date }> = [];
+    for (const row of rows) {
+      const raw = row.payload;
+      if (!raw || raw._truncated || raw._unserializable) continue;
+      try {
+        out.push({ message: adapter.normalizeInbound(raw), raw, at: row.createdAt });
+      } catch {
+        // A payload this adapter no longer reads is skipped, not fatal.
+      }
+    }
+    return out;
   }
 
   // ---------------------------------------------------------------------------

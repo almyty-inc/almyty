@@ -41,6 +41,7 @@ const AgentChannelNewPage = lazy(() => import('@/pages/agent-channel-new').then(
 const AgentChannelPage = lazy(() => import('@/pages/agent-channel').then(m => ({ default: m.AgentChannelPage })))
 const AgentChannelSigningNewPage = lazy(() => import('@/pages/agent-channel-signing-new').then(m => ({ default: m.AgentChannelSigningNewPage })))
 const AgentPublicSettingsPage = lazy(() => import('@/pages/agent-public-settings').then(m => ({ default: m.AgentPublicSettingsPage })))
+const AgentSchedulePage = lazy(() => import('@/pages/agent-schedule').then(m => ({ default: m.AgentSchedulePage })))
 const ApisPage = lazy(() => import('@/pages/apis').then(m => ({ default: m.ApisPage })))
 const ApiDetailPage = lazy(() => import('@/pages/api-detail').then(m => ({ default: m.ApiDetailPage })))
 const ApiNewPage = lazy(() => import('@/pages/api-new').then(m => ({ default: m.ApiNewPage })))
@@ -69,6 +70,7 @@ const MemoryMoveDetailPage = lazy(() => import('@/pages/memory-accounts').then(m
 const MemoryAccountNewPage = lazy(() => import('@/pages/memory-accounts').then(m => ({ default: m.MemoryAccountNewPage })))
 const AnalyticsBudgetPage = lazy(() => import('@/pages/analytics-budget').then(m => ({ default: m.AnalyticsBudgetPage })))
 const ApprovalPolicyPage = lazy(() => import('@/pages/approval-policy').then(m => ({ default: m.ApprovalPolicyPage })))
+const ApprovalRulePage = lazy(() => import('@/pages/approval-rule').then(m => ({ default: m.ApprovalRulePage })))
 const CredentialDetailRoutePage = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.CredentialDetailRoutePage })))
 const CustomServiceNewPage = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.CustomServiceNewPage })))
 const CredentialPolicyPage = lazy(() => import('@/pages/credential-pages').then(m => ({ default: m.CredentialPolicyPage })))
@@ -196,6 +198,7 @@ export function createAppRoutes() {
           <Route path="/agents/import" element={<AgentImportPage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
           <Route path="/agents/:id/channels/new" element={<AgentChannelNewPage />} />
+          <Route path="/agents/:id/schedule" element={<AgentSchedulePage />} />
           <Route path="/agents/:id/channels/settings" element={<AgentPublicSettingsPage />} />
           <Route path="/agents/:id/channels/:channelId" element={<AgentChannelPage />} />
           <Route path="/agents/:id/channels/:channelId/signing/new" element={<AgentChannelSigningNewPage />} />
@@ -221,6 +224,8 @@ export function createAppRoutes() {
           <Route path="/memories/accounts/new" element={<MemoryAccountNewPage />} />
           <Route path="/settings/approvals/policies/new" element={<ApprovalPolicyPage />} />
           <Route path="/settings/approvals/policies/:policyId" element={<ApprovalPolicyPage />} />
+          <Route path="/settings/approvals/rules/new" element={<ApprovalRulePage />} />
+          <Route path="/settings/approvals/rules/:ruleId" element={<ApprovalRulePage />} />
           <Route path="/settings/*" element={<SettingsPage />} />
           {/* /credentials?connection=<id> is where a sign-in at a service comes back. */}
           <Route path="/credentials" element={<CredentialsPage />} />

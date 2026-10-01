@@ -22,6 +22,8 @@ import { answerCallMessages, composesFinalAnswer } from './final-answer';
 import { AgentRoleCall, ModelRoleCall, Team, TeamRole, stampOf, teamOf, teammateToolName } from './autonomous-team';
 import { AutonomousStrategyRunner, answeredBy, chargeRole, checkedBy } from './autonomous-strategy.runner';
 import type { ResolvedRunLimits } from './run-limits';
+import type { ApprovalGateHit } from '../tools/tool-approval-gate.service';
+import { NamedTool, readableToolName } from '../tools/tool-readable-name';
 
 
 /**
@@ -134,6 +136,20 @@ type FinalCall = {
   /** Set when the answer call did not produce the answer and the draft stood in. */
   fallback?: 'error' | 'empty';
   error?: string;
+};
+
+/**
+ * A tool call an approval policy's amount rule held, waiting on
+ * `run.workingMemory.gatedToolCalls` for its approval.
+ */
+type GatedToolCall = {
+  toolCallId: string;
+  toolId: string;
+  toolName: string;
+  parameters: Record<string, any>;
+  approvalId: string;
+  /** The rule in plain words. */
+  rule: string;
 };
 @Injectable()
 export class AgentStepProcessor {
@@ -267,6 +283,13 @@ export class AgentStepProcessor {
       // run for it.
       // (principal: the run's, resolved above)
       const tools = await this.s.executionAccess.filterExecutable(principal, await this.resolveTools(agent));
+
+      // Calls an approval policy held on an earlier step, now decided:
+      // the approved ones run, as a step of their own, before the model
+      // is asked anything (it needs their results).
+      if (Array.isArray(run.workingMemory?.gatedToolCalls) && run.workingMemory.gatedToolCalls.length > 0) {
+        return await this.runApprovedCalls(run, agent, tools, resolvedLimits, expectedStep, stepStart);
+      }
 
       // The roles this step works with (autonomous-team.ts), read from the
       // agent on every step like its instructions are.
@@ -538,6 +561,8 @@ export class AgentStepProcessor {
           await this.s.messageRepository.save(assistantMsg);
         }
 
+        // Calls an approval policy's amount rule held for a person.
+        const gated: GatedToolCall[] = [];
         // Execute each tool call
         for (const toolCall of responseMessage.toolCalls) {
           // The tool-call budget, spent per call rather than per step.
@@ -790,6 +815,10 @@ export class AgentStepProcessor {
               // belongs to (RunWorkspaceService).
               runId: run.id,
               agentId: agent.id,
+              // A team's approval rules hold only that team's agents' calls.
+              agentTeamId: agent.teamId ?? null,
+              // This run pauses and asks a person itself (holdForApproval).
+              holdForApproval: 'caller',
             };
 
             const toolResult: ToolExecutionResult = await this.s.toolExecutorService.executeTool(
@@ -797,6 +826,30 @@ export class AgentStepProcessor {
               toolCall.parameters || {},
               execOptions,
             );
+
+            // Held by an approval policy's amount rule: the call did not
+            // run. Ask a person, and run it once they approve.
+            if (toolResult.approvalRequired) {
+              const held = await this.holdForApproval(run, agent, matchingTool, toolCall, toolResult.approvalRequired);
+              gated.push(held);
+              toolCall.executionTime = Date.now() - toolExecStart;
+              this.s.emitEvent(runId, 'tool.result', {
+                step: run.currentStep,
+                toolCallId: toolCall.id,
+                tool: matchingTool.name,
+                success: false,
+                awaitingApproval: true,
+                executionTime: toolCall.executionTime,
+              });
+              run.steps.push({
+                type: 'tool_call',
+                input: { tool: matchingTool.name, toolId: matchingTool.id, parameters: toolCall.parameters },
+                output: { status: 'waiting_approval', rule: held.rule, approvalId: held.approvalId },
+                duration: toolCall.executionTime,
+                timestamp: new Date().toISOString(),
+              });
+              continue;
+            }
 
             toolCall.result = toolResult.data;
             toolCall.error = toolResult.success ? undefined : toolResult.error;
@@ -858,6 +911,34 @@ export class AgentStepProcessor {
               timestamp: new Date().toISOString(),
             });
           }
+        }
+
+        // A call an approval policy's amount rule held: the run waits for a
+        // person. The other calls of this reply have run; the held ones run
+        // on the step after they are approved (runApprovedCalls).
+        if (gated.length > 0) {
+          const stepDuration = Date.now() - stepStart;
+          run.steps.push({
+            type: 'llm_call',
+            role: stampOf(acting),
+            input: { messageCount: messages.length, toolCount: allToolDefs.length },
+            output: {
+              status: 'waiting_approval',
+              heldToolCalls: gated.map((g) => ({ tool: g.toolName, rule: g.rule })),
+              ...answeredBy(llmResponse, acting),
+            },
+            cost: stepCost,
+            tokens: { input: stepInputTokens, output: stepOutputTokens },
+            duration: stepDuration,
+            timestamp: new Date().toISOString(),
+          });
+          run.workingMemory = { ...(run.workingMemory || {}), gatedToolCalls: gated };
+          run.status = AgentRunStatus.WAITING_APPROVAL;
+          run.currentStep++;
+          run.executionTime += stepDuration;
+          if (!(await this.commitStep(run, expectedStep))) return 'done';
+          this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'waiting_approval' });
+          return 'waiting';
         }
 
         // Record the LLM call step
@@ -1558,6 +1639,141 @@ export class AgentStepProcessor {
     this.s.emitEvent(run.id, 'explore.completed', { step: run.currentStep, brief });
     this.s.emitEvent(run.id, 'step.completed', { step: run.currentStep, status: 'explored' });
     return 'continue';
+  }
+
+  /**
+   * Ask a person about a call an approval policy's amount rule held. The
+   * approval request carries the tool, the arguments and the rule, so the
+   * approver sees exactly what would run; `_gate` is how the executor
+   * later recognises the approval as covering this call and no other.
+   */
+  private async holdForApproval(
+    run: AgentRun,
+    agent: Agent,
+    tool: { id: string; name: string },
+    toolCall: { id: string; parameters?: Record<string, any> },
+    hit: ApprovalGateHit,
+  ): Promise<GatedToolCall> {
+    const parameters = toolCall.parameters || {};
+    const approval = await this.s.approvals.create({
+      organizationId: run.organizationId,
+      teamId: agent.teamId ?? null,
+      runId: run.id,
+      agentId: agent.id,
+      toolCallId: toolCall.id,
+      reason:
+        hit.value === null
+          ? `${hit.summary}. On this call ${hit.argument} is not a number.`
+          : `${hit.summary}. On this call ${hit.argument} is ${hit.value}.`,
+      payload: {
+        tool: readableToolName(tool as NamedTool),
+        parameters,
+        _gate: {
+          policyId: hit.policyId,
+          toolId: hit.toolId,
+          argument: hit.argument,
+          value: hit.value,
+          op: hit.op,
+          amount: hit.amount,
+          paramsHash: hit.paramsHash,
+          rule: hit.summary,
+        },
+      },
+      principal: principalOfRun(run),
+    });
+    return {
+      toolCallId: toolCall.id,
+      toolId: tool.id,
+      toolName: tool.name,
+      parameters,
+      approvalId: approval.id,
+      rule: hit.summary,
+    };
+  }
+
+  /**
+   * The step after a held call is decided: run each approved call with
+   * its approval, exactly as it was asked for, and hand the model the
+   * results. A call still waiting for its approval keeps the run waiting.
+   * A rejection never gets here: it cancels the run.
+   */
+  private async runApprovedCalls(
+    run: AgentRun,
+    agent: Agent,
+    tools: Array<{ id: string; name: string }>,
+    resolvedLimits: ResolvedRunLimits,
+    expectedStep: number,
+    stepStart: number,
+  ): Promise<'continue' | 'done' | 'waiting'> {
+    const runId = run.id;
+    const held: GatedToolCall[] = run.workingMemory?.gatedToolCalls ?? [];
+    const waiting: GatedToolCall[] = [];
+    for (const call of held) {
+      const started = Date.now();
+      const tool = tools.find((t) => t.id === call.toolId);
+      const result: ToolExecutionResult = tool
+        ? await this.s.toolExecutorService.executeTool(tool.id, call.parameters, {
+            userId: run.userId ?? undefined,
+            principal: principalOfRun(run),
+            organizationId: run.organizationId,
+            retries: resolvedLimits.toolErrorRetries,
+            runnerLabels: agent.agentConfig?.runnerLabels,
+            runId: run.id,
+            agentId: agent.id,
+            agentTeamId: agent.teamId ?? null,
+            approvedGate: { approvalId: call.approvalId },
+            holdForApproval: 'caller',
+          })
+        : {
+            success: false,
+            error: `Tool '${call.toolName}' is no longer available to this run`,
+            executionTime: 0,
+            cached: false,
+            rateLimited: false,
+            retryCount: 0,
+          };
+      if (result.approvalRequired) {
+        waiting.push(call);
+        continue;
+      }
+      this.s.emitEvent(runId, 'tool.result', {
+        step: run.currentStep,
+        toolCallId: call.toolCallId,
+        tool: call.toolName,
+        success: result.success,
+        executionTime: result.executionTime,
+      });
+      if (run.conversationId) {
+        const content = result.success
+          ? typeof result.data === 'string'
+            ? result.data
+            : JSON.stringify(result.data)
+          : formatToolError(result.error, resolvedLimits.toolErrorFeedback);
+        const msg = Message.createToolResultMessage(run.conversationId, call.toolCallId, content, result.success ? undefined : result.error);
+        msg.runId = run.id;
+        await this.s.messageRepository.save(msg);
+      }
+      run.steps.push({
+        type: 'tool_call',
+        input: { tool: call.toolName, toolId: call.toolId, parameters: call.parameters, approvalId: call.approvalId },
+        output: result.data,
+        cost: result.metadata?.cost || 0,
+        duration: Date.now() - started,
+        timestamp: new Date().toISOString(),
+        error: result.success ? undefined : result.error,
+      });
+    }
+    const { gatedToolCalls: _done, ...rest } = run.workingMemory || {};
+    run.workingMemory = waiting.length ? { ...rest, gatedToolCalls: waiting } : rest;
+    if (waiting.length) run.status = AgentRunStatus.WAITING_APPROVAL;
+    run.currentStep++;
+    run.executionTime += Date.now() - stepStart;
+    if (!(await this.commitStep(run, expectedStep))) return 'done';
+    this.s.emitEvent(runId, 'step.completed', {
+      step: run.currentStep,
+      ...(waiting.length ? { status: 'waiting_approval' } : { total: run.maxSteps }),
+    });
+    return waiting.length ? 'waiting' : 'continue';
   }
 
   private async commitStep(run: AgentRun, expectedStep: number): Promise<boolean> {

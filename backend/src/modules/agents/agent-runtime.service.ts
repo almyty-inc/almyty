@@ -681,11 +681,13 @@ export class AgentRuntimeService implements OnModuleInit {
    * /'expired' the run is cancelled with the decision_reason.
    */
   private async handleApprovalDecided(approval: {
-    runId: string;
+    runId: string | null;
     status: 'approved' | 'rejected' | 'expired';
     decisionReason: string | null;
     toolCallId: string | null;
   }): Promise<void> {
+    // A held tool call has no run: ToolApprovalGateService runs it.
+    if (!approval.runId) return;
     const run = await this.runRepository.findOne({ where: { id: approval.runId } });
     if (!run) return;
     if (run.status !== AgentRunStatus.WAITING_APPROVAL) return;
