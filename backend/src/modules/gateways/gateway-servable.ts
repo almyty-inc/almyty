@@ -61,13 +61,28 @@ export async function servableGatewayTools(
   return rows.filter(isServableGatewayTool);
 }
 
-/** The servable tools themselves, in listing order. */
+/**
+ * The servable tools themselves, in listing order: by name, then id.
+ *
+ * The rows come back in whatever order Postgres finds them, which is not
+ * stable between queries; MCP clients (and the 2026-07-28 revision, Minor
+ * 3) want the same listing every time so a tool list does not reshuffle a
+ * model's prompt cache. Compared by code unit, not locale, so the order
+ * does not depend on the server's locale either.
+ */
 export async function servableToolsOnGateway(
   gatewayTools: GatewayToolFinder,
   gatewayId: string,
   toolRelations: Record<string, any> | true = true,
 ): Promise<Tool[]> {
-  return (await servableGatewayTools(gatewayTools, gatewayId, {}, toolRelations)).map((row) => row.tool);
+  const tools = (await servableGatewayTools(gatewayTools, gatewayId, {}, toolRelations)).map((row) => row.tool);
+  return tools.sort((a, b) => compareCodeUnits(a.name, b.name) || compareCodeUnits(a.id, b.id));
+}
+
+function compareCodeUnits(a: string | null | undefined, b: string | null | undefined): number {
+  const left = a ?? '';
+  const right = b ?? '';
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 /** One servable row by tool id, or null when the gateway does not serve it. */

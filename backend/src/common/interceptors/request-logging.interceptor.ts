@@ -139,6 +139,8 @@ export class RequestLoggingInterceptor implements NestInterceptor {
         // unauthenticated caller.
         ...(error?.authDiagnostics ? { auth: error.authDiagnostics } : {}),
         ...(this.rateLimitBucketOf(error) ? { rateLimit: this.rateLimitBucketOf(error) } : {}),
+        // Protocol version, method and client of an MCP request.
+        ...(protocolContext?.mcp ? { mcp: protocolContext.mcp } : {}),
       };
 
       // Save async — don't block the response
@@ -168,6 +170,12 @@ export class RequestLoggingInterceptor implements NestInterceptor {
         requestSize: requestPayload.size,
         userAgent: request.headers?.['user-agent'],
         ipAddress: request.ip,
+        ...(protocolContext?.mcp
+          ? {
+              mcpProtocolVersion: protocolContext.mcp.protocolVersion,
+              mcpClient: protocolContext.mcp.clientName,
+            }
+          : {}),
       };
 
       // Record response time alongside the request count.
