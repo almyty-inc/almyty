@@ -344,6 +344,15 @@ describe('McpAgentRuns', () => {
       expect(resumed.result.content).toEqual([{ type: 'text', text: 'eu-west it is.' }]);
     });
 
+    it('stops asking when the person closed the form: the run keeps waiting and the call returns no result', async () => {
+      const { runs, deps } = setup(waitingForAnswer);
+      const asked: any = await runs.waitForRun(RUN_ID, ORG, OWNER, elicits, request);
+      const retry = { ...request.params, inputResponses: { 'question-3': { action: 'cancel' } }, requestState: asked.requestState };
+      const out = await runs.resumeFromRetry(retry, ORG, OWNER, elicits, 'tools/call');
+      expect(out).toEqual({ runId: RUN_ID, result: null });
+      expect(deps.runtime.sendInput).not.toHaveBeenCalled();
+    });
+
     it('refuses a retry with a state from another caller, another call or one that was changed', async () => {
       const { runs } = setup(waitingForAnswer);
       const asked: any = await runs.waitForRun(RUN_ID, ORG, OWNER, elicits, request);

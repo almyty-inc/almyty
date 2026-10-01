@@ -271,11 +271,17 @@ export class McpAgentRuns {
   /**
    * Apply `inputResponses` to a run: an answer to its current question, a
    * decision on an approval the caller may decide. Keys that are not
-   * outstanding are ignored (Tasks, "Task Update Requests"). Returns whether
-   * anything was applied.
+   * outstanding are ignored (Tasks, "Task Update Requests"). Reports whether
+   * anything was applied, and whether the person closed a form without
+   * answering ("cancel") -- then a waiting call stops asking.
    */
-  private async applyInputResponses(run: AgentRun, userId: string, inputResponses: Record<string, unknown>): Promise<boolean> {
+  private async applyInputResponses(
+    run: AgentRun,
+    userId: string,
+    inputResponses: Record<string, unknown>,
+  ): Promise<{ applied: boolean; dismissed: boolean }> {
     let applied = false;
+    let dismissed = false;
     for (const [key, value] of Object.entries(inputResponses)) {
       const answer = parseElicitAnswer(value);
       if (!answer) {
@@ -284,7 +290,10 @@ export class McpAgentRuns {
       if (key.startsWith(QUESTION_KEY_PREFIX)) {
         const step = Number(key.slice(QUESTION_KEY_PREFIX.length));
         if (run.status !== AgentRunStatus.WAITING_INPUT || step !== run.currentStep) continue;
-        if (answer.action === 'cancel') continue;
+        if (answer.action === 'cancel') {
+          dismissed = true;
+          continue;
+        }
         const text = answer.action === 'decline'
           ? 'The person declined to answer.'
           : typeof answer.content?.answer === 'string'
@@ -305,9 +314,10 @@ export class McpAgentRuns {
       if (outcome === 'incomplete') {
         throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, `inputResponses["${key}"] needs content.decision (approve or reject)`);
       }
+      if (outcome === 'left') dismissed = true;
       if (outcome === 'approved' || outcome === 'rejected') applied = true;
     }
-    return applied;
+    return { applied, dismissed };
   }
 
   /** tasks/update: acknowledged once the answers are handed to the run. */
@@ -400,7 +410,12 @@ export class McpAgentRuns {
     if (responses !== undefined && (responses === null || typeof responses !== 'object' || Array.isArray(responses))) {
       throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, 'inputResponses must be an object');
     }
-    if (responses) await this.applyInputResponses(run, userId as string, responses);
+    const applied = responses ? await this.applyInputResponses(run, userId as string, responses) : null;
+    // The person closed the form: stop asking in this call. The run keeps
+    // waiting, and the caller answers with its id (get_run, answer_run).
+    // Asking again would loop with a client that cannot show forms, such as
+    // one running headless, which answers every form with "cancel".
+    if (applied?.dismissed && !applied.applied) return { runId, result: null };
     return { runId, result: await this.waitForRun(runId, organizationId, userId as string, ctx, { method, params }) };
   }
 

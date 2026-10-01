@@ -96,14 +96,24 @@ describe('held tool calls over input_required', () => {
       }
     });
 
-    it('asks again when the answer is missing, incomplete or the form was closed', async () => {
-      for (const responses of [undefined, {}, { 'approval-appr-1': { action: 'cancel' } }, { 'approval-appr-1': { action: 'accept', content: {} } }]) {
+    it('asks again when the answer is missing or incomplete', async () => {
+      for (const responses of [undefined, {}, { 'approval-appr-1': { action: 'accept', content: {} } }]) {
         const { approvals, state } = await asked();
         const out: any = await heldCallRetry(retry(state, responses), elicits, APPROVER, ORG, approvals);
         expect(out.again.resultType).toBe('input_required');
         expect(approvals.approve).not.toHaveBeenCalled();
         expect(approvals.reject).not.toHaveBeenCalled();
       }
+    });
+
+    it('stops asking when the person closed the form, leaving the request pending', async () => {
+      // A headless client (Claude Code with -p) answers every form with
+      // "cancel"; asking again would loop until it gives up.
+      const { approvals, state } = await asked();
+      const out = await heldCallRetry(retry(state, { 'approval-appr-1': { action: 'cancel' } }), elicits, APPROVER, ORG, approvals);
+      expect(out).toEqual({ approvalId: 'appr-1', decided: false });
+      expect(approvals.approve).not.toHaveBeenCalled();
+      expect(approvals.reject).not.toHaveBeenCalled();
     });
 
     it('does not ask an approver again once an approval policy waits for others', async () => {

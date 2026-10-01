@@ -69,9 +69,10 @@ export async function heldCallInputRequired(
 
 /**
  * Before a call runs: a retry that carries `requestState`. Applies the
- * decision it carries and returns the approval id to call again with, or
- * the same question again when the answer is missing or the person closed
- * the form, as the MRTR page asks a server to do.
+ * decision it carries and returns the approval id to call again with; the
+ * same question again when the answer is missing or incomplete, as the MRTR
+ * page asks a server to do; and the approval id undecided when the person
+ * closed the form ("cancel"), so the call says it is waiting.
  */
 export async function heldCallRetry(
   params: any,
@@ -106,7 +107,12 @@ export async function heldCallRetry(
     throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, `inputResponses["${approvalInputKey(approvalId)}"] is not an elicitation result`);
   }
   const outcome = await applyApprovalAnswer(approvals, row, answer, { id: userId as string });
-  if (outcome === 'incomplete' || outcome === 'left') return { again: inputRequired(row, userId as string, params) };
+  if (outcome === 'incomplete') return { again: inputRequired(row, userId as string, params) };
+  // The person closed the form ('left'): stop asking in this call, and let
+  // the call say it is waiting, with its approval id. Asking again would
+  // loop with a client that cannot show forms (headless clients answer
+  // every form with "cancel").
+  if (outcome === 'left') return { approvalId, decided: false };
   // 'not_allowed': their role changed since they were asked; the call says it is waiting.
   return { approvalId, decided: outcome === 'approved' || outcome === 'rejected' };
 }
