@@ -52,11 +52,30 @@ export class OAuthClient {
   @Column({ nullable: true })
   gatewayId: string;
 
-  @Column()
-  organizationId: string;
+  /**
+   * Null only on a Client ID Metadata Document client, which no
+   * organization owns (CHK_oauth_clients_owner).
+   */
+  @Column({ type: 'uuid', nullable: true })
+  organizationId: string | null;
 
   @Column({ default: true })
   isActive: boolean;
+
+  /** OIDC / RFC 7591 application_type: decides which redirect URIs are allowed. */
+  @Column({ type: 'varchar', length: 16, default: 'web' })
+  applicationType: 'web' | 'native';
+
+  /**
+   * A Client ID Metadata Document client: `clientId` is the https URL of
+   * its metadata, which the server fetched (and refreshes) instead of the
+   * client registering. Valid on every gateway, like the URL itself.
+   */
+  @Column({ default: false })
+  isMetadataDocument: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  metadataFetchedAt: Date | null;
 
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;

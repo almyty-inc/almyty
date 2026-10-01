@@ -1,0 +1,37 @@
+# Conformance scenarios an almyty MCP gateway is expected to fail, for
+# @modelcontextprotocol/conformance --spec-version 2025-11-25 (CI job
+# mcp-conformance). Every other scenario must pass, and a scenario listed
+# here that starts passing fails the run until it is removed (the
+# conformance CLI's own rule for a stale baseline).
+#
+# Each of these asks the server under test to implement a named fixture
+# from the reference "everything" server. A gateway serves the tools,
+# resources and prompts its owner published, so none of these exist on it:
+#
+#   - tools returning image, audio, embedded-resource or mixed content
+#     (almyty tools return JSON, served as text plus structuredContent);
+#   - tools that send log or progress notifications mid-call, or that ask
+#     the client for sampling or elicitation (a gateway answers each call
+#     with one JSON response; sampling, roots and logging are deprecated in
+#     2026-07-28, and input requests arrive with the 2026 MRTR work, P2);
+#   - the fixed test:// resources and test_* prompts.
+#
+# docs/design/mcp-2026-07-28.md, "Phases and acceptance" (P0).
+server:
+  - tools-call-image
+  - tools-call-audio
+  - tools-call-embedded-resource
+  - tools-call-mixed-content
+  - tools-call-with-logging
+  - tools-call-with-progress
+  - tools-call-sampling
+  - tools-call-elicitation
+  - elicitation-sep1034-defaults
+  - elicitation-sep1330-enums
+  - resources-read-text
+  - resources-read-binary
+  - resources-templates-read
+  - prompts-get-simple
+  - prompts-get-with-args
+  - prompts-get-embedded-resource
+  - prompts-get-with-image

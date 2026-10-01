@@ -50,7 +50,7 @@ The backend never spawns processes itself; it dispatches over the runner connect
 `backend/src/modules/mcp/transports/streamable-http.transport.ts` and `backend/src/modules/mcp/types/worker-protocol.types.ts`.
 
 - **Why not WebSockets**: MCP Streamable HTTP (2025-03-26 revision) is the transport the project will need anyway for non-runner MCP clients. Building it as the foundation for the runner connection saves a separate transport.
-- **Single endpoint, two methods**: `POST /mcp/streamable` for client→server, `GET /mcp/streamable` for the server→client SSE stream. Sessions identified by the `Mcp-Session-Id` header.
+- **Single endpoint, two methods**: `POST /runners/stream` for client→server, `GET /runners/stream` for the server→client SSE stream. Sessions identified by the `Mcp-Session-Id` header. This channel carries worker envelopes only; it was `/mcp/streamable` while it shared the MCP transport, and that path still serves envelopes for one runner release (runners try `/runners/stream` first and fall back on a 404).
 - **Two message shapes on one wire**: JSON-RPC for MCP itself (routed to `McpService.handleJsonRpc`), worker envelopes for the runner (and any future worker-shaped protocols, emitted as `envelope` events for downstream subscribers).
 - **Reconnect via Last-Event-ID**: per-session ring buffer of recent events. Client reconnects with the last id it saw; server replays everything after. REPLAY_UNAVAILABLE error when the requested id has aged out of the buffer.
 - **Cross-tenant refusal returns UNKNOWN_SESSION**: not 403, not "session belongs to another org" — the same code as truly-unknown so the response doesn't leak session existence.
@@ -209,7 +209,7 @@ Sidebar entry inserted in `dashboard-layout.tsx` after Agents, before Credential
 
 ### Open question deferred to follow-up: real-time updates
 
-Cluster 1 lands a Streamable HTTP transport on the backend. A natural follow-up is to use it for runner-state subscriptions in the UI (the start-page "waiting for heartbeat" experience and the detail-page state badge would both feel snappier with sub-second updates instead of 15s polling). The cleanest shape would be a per-org event subscription routed through the same `/mcp/streamable` endpoint with a runner-events worker envelope; the UI subscribes once and gets push updates. Polling stays as the conservative default until that subscription endpoint exists; this cluster doesn't add any speculative subscription code.
+Cluster 1 lands a Streamable HTTP transport on the backend. A natural follow-up is to use it for runner-state subscriptions in the UI (the start-page "waiting for heartbeat" experience and the detail-page state badge would both feel snappier with sub-second updates instead of 15s polling). The cleanest shape would be a per-org event subscription routed through the same `/runners/stream` endpoint with a runner-events worker envelope; the UI subscribes once and gets push updates. Polling stays as the conservative default until that subscription endpoint exists; this cluster doesn't add any speculative subscription code.
 
 ### Anti-goals (UI cluster)
 

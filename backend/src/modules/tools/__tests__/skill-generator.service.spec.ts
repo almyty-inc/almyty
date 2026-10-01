@@ -363,7 +363,8 @@ describe('SkillGeneratorService', () => {
       ]);
 
       const result = await service.generateIndividualSkills('gw-1', 'org-1');
-      expect(result[0].name).toBe('petstore-find-pet-by-id');
+      // A gateway's tools come back sorted by name, so look the skill up by name.
+      expect(result.map((s: any) => s.name)).toContain('petstore-find-pet-by-id');
     });
 
     it('dedupes shared kebab segments between gateway slug and tool name', async () => {

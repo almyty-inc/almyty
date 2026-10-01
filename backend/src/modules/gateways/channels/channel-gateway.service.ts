@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Inject,
   Optional,
+  ServiceUnavailableException,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -15,7 +16,7 @@ import { isUniqueViolation } from '../../../common/utils/unique-violation';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRun } from '../../../entities/agent-run.entity';
-import { ChannelEvent, ChannelEventStatus } from '../../../entities/channel-event.entity';
+import { ChannelEvent, ChannelEventStatus, InboundMessageRecord } from '../../../entities/channel-event.entity';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { AdapterResponse, BaseAdapter, NormalizedMessage } from './adapters/base.adapter';
 import { ChatWidgetAdapter } from './adapters/chat-widget.adapter';
@@ -40,9 +41,10 @@ import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { outboundFailureDetail, safeFetch } from '../../../common/security/safe-fetch';
 import { isPrivateGateway } from '../private-gateway';
 import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
-import { Message } from '../../../entities/message.entity';
-import { Conversation } from '../../../entities/conversation.entity';
-import { HostedChatService } from './hosted-chat.service';
+import { AuditAction, AuditLog } from '../../../entities/audit-log.entity';
+import { AuditLogService } from '../../audit-log/audit-log.service';
+import { VisitorDataService } from '../visitor-data.service';
+import { visitorDataAudit } from '../visitor-data-audit';
 import { SPEND_CAP_MESSAGES, ChannelPolicy, ChannelPolicyService, withChannelPolicy } from '../channel-policy.service';
 import { ChannelAttachmentReader, type ReadAttachments } from './channel-attachments.service';
 import { withSpeaker } from './channel-speaker';
@@ -120,6 +122,13 @@ export class ChannelGatewayService {
     // the agent sees them. Optional for the same positional-construction
     // reason; without it a file is named in the input but not read.
     @Optional() private readonly attachmentReader?: ChannelAttachmentReader,
+    // What a widget visitor's download and erasure cover, shared with the
+    // web chat and with an owner answering a data request. Required: Nest
+    // always injects it (visitor-data.guard.spec.ts); typed optional only
+    // for positional unit specs.
+    private readonly visitorData?: VisitorDataService,
+    // Records a widget visitor's erasure. Optional for positional specs.
+    @Optional() private readonly auditLog?: AuditLogService,
   ) {
 
     this.adapters = new Map<string, BaseAdapter>([
@@ -294,6 +303,10 @@ export class ChannelGatewayService {
       null,
       undefined,
       deliveryId,
+      // The sender, so their data request finds this message even if it never becomes a run.
+      normalized.userId && normalized.userId !== 'unknown' ? normalized.userId : null,
+      // What it said, so their download has the words even if it never becomes a run.
+      inboundMessageRecord(normalized),
     );
     if (!claim) {
       this.logger.log(
@@ -995,72 +1008,61 @@ export class ChannelGatewayService {
   // ---------------------------------------------------------------------------
   // Widget visitor rights: the visitor's own copy, and erasure
   // ---------------------------------------------------------------------------
-
-  /**
-   * The runs behind one widget thread on this gateway. The widget has no
-   * visitor row, so the thread is the visitor: every run filed under the
-   * gateway with that threadId (a thread can outlive one run).
-   */
-  private async widgetThreadRuns(gateway: Gateway, threadId: string): Promise<AgentRun[]> {
-    if (!threadId) return [];
-    return this.runRepository
-      .createQueryBuilder('run')
-      .where('run.organizationId = :organizationId', { organizationId: gateway.organizationId })
-      .andWhere("run.metadata->>'gatewayId' = :gatewayId", { gatewayId: gateway.id })
-      .andWhere("run.metadata->>'threadId' = :threadId", { threadId })
-      .orderBy('run.createdAt', 'ASC')
-      .limit(500)
-      .getMany();
-  }
+  //
+  // The widget has no visitor row, so the thread is the visitor: every run
+  // filed under the gateway with that threadId (a thread can outlive one
+  // run). What a thread covers is VisitorDataService's, the same scope the
+  // web chat's erasure and an owner's data request use.
 
   /** Everything the widget holds about one thread, for the visitor to keep. */
   async exportWidgetThread(gateway: Gateway, threadId: string): Promise<Record<string, unknown>> {
-    const runs = await this.widgetThreadRuns(gateway, threadId);
-    const conversationIds = [...new Set(runs.map((r) => r.conversationId).filter((id): id is string => !!id))];
-    const messages = conversationIds.length
-      ? await this.runRepository.manager.getRepository(Message).find({
-          where: { conversationId: In(conversationIds) },
-          order: { createdAt: 'ASC' },
-          take: 25_000,
-        })
-      : [];
-    return {
-      exportedAt: new Date().toISOString(),
-      threadId,
-      messages: messages
-        .filter((m) => HostedChatService.isPublicTurn(m))
-        .map((m) => {
-          const { role, content, createdAt } = HostedChatService.toTranscript(m);
-          return { role, content, createdAt };
-        }),
-    };
+    const data = this.requireVisitorData();
+    const footprint = await data.forWidgetThread(gateway, threadId);
+    const [transcripts, held] = await Promise.all([data.transcripts(footprint.conversationIds), data.memoriesAndFiles(footprint)]);
+    // One thread reads as one conversation: the turns of every run behind
+    // it, in order.
+    const messages = footprint.conversationIds
+      .flatMap((id) => transcripts.get(id) ?? [])
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .map(({ role, content, createdAt }) => ({ role, content, createdAt }));
+    return { exportedAt: new Date().toISOString(), threadId, messages, ...held };
   }
 
   /**
-   * Erase one widget thread: its runs, their conversations and messages,
-   * and the replies stored for the poll endpoint. Scoped to this gateway
-   * and organization, so a thread id can only ever reach its own rows.
+   * Erase one widget thread: its runs with their tool calls, their
+   * conversations and messages, the files sent in it or not sent yet, the
+   * memories those runs wrote, and the replies stored for the poll
+   * endpoint. Scoped to this gateway and organization, so a thread id can
+   * only ever reach its own rows. The audit log records that it happened,
+   * with counts, in the same transaction.
    */
   async deleteWidgetThread(gateway: Gateway, threadId: string): Promise<void> {
-    const runs = await this.widgetThreadRuns(gateway, threadId);
-    const conversationIds = [...new Set(runs.map((r) => r.conversationId).filter((id): id is string => !!id))];
-    // The files the visitor sent, in the thread or uploaded and not sent.
-    await this.attachmentReader?.erase(gateway.organizationId, conversationIds, { gatewayId: gateway.id, threadId });
-    if (runs.length) await this.runRepository.delete({ id: In(runs.map((r) => r.id)) });
-    if (conversationIds.length) {
-      await this.runRepository.manager.getRepository(Message).delete({ conversationId: In(conversationIds) });
-      await this.runRepository.manager
-        .getRepository(Conversation)
-        .delete({ id: In(conversationIds), organizationId: gateway.organizationId });
-    }
-    await this.eventRepository
-      .createQueryBuilder()
-      .delete()
-      .from(ChannelEvent)
-      .where('"gatewayId" = :gatewayId', { gatewayId: gateway.id })
-      .andWhere(`payload->>'threadId' = :threadId`, { threadId })
-      .execute();
-    this.logger.log(`[widget] visitor thread erased gateway=${gateway.id} runs=${runs.length}`);
+    const data = this.requireVisitorData();
+    const written: AuditLog[] = [];
+    const removed = await data.erase(await data.forWidgetThread(gateway, threadId), async (tx, counts) => {
+      if (!this.auditLog) return;
+      written.push(
+        await this.auditLog.logInTransaction(
+          tx,
+          visitorDataAudit({
+            action: AuditAction.VISITOR_DATA_ERASE,
+            organizationId: gateway.organizationId,
+            agentId: gateway.agentId ?? gateway.id,
+            channel: gateway.id,
+            identifier: threadId,
+            counts: { ...counts },
+          }),
+        ),
+      );
+    });
+    this.auditLog?.publishCommitted(written);
+    this.logger.log(`[widget] visitor thread erased gateway=${gateway.id} runs=${removed.runs}`);
+  }
+
+  /** The visitor-data scope; Nest always injects it (visitor-data.guard.spec.ts). */
+  private requireVisitorData(): VisitorDataService {
+    if (!this.visitorData) throw new ServiceUnavailableException('Visitor data is not available here.');
+    return this.visitorData;
   }
 
   // ---------------------------------------------------------------------------
@@ -1126,6 +1128,10 @@ export class ChannelGatewayService {
     errorMessage?: string | null,
     runId?: string,
     deliveryId?: string | null,
+    // Who sent an inbound message, so a data request finds it (ChannelEvent.senderId).
+    senderId?: string | null,
+    // What an inbound message said: its text and file names only (ChannelEvent.message).
+    message?: InboundMessageRecord | null,
   ): Promise<ChannelEventRef | null> {
     try {
       const saved = await this.eventRepository.save(this.eventRepository.create({
@@ -1138,6 +1144,8 @@ export class ChannelGatewayService {
         errorMessage: errorMessage ?? null,
         runId: runId ?? null,
         deliveryId: deliveryId ?? null,
+        senderId: senderId ? String(senderId).slice(0, 255) : null,
+        message: message ?? null,
       }));
       return {
         eventId: (saved as any)?.id ?? null,
@@ -1465,4 +1473,24 @@ export class ChannelGatewayService {
       return { ok: false, detail: err?.message ?? String(err) };
     }
   }
+}
+
+/** Longest message text kept on an inbound delivery. */
+const INBOUND_TEXT_LIMIT = 20_000;
+/** Most file names kept on an inbound delivery. */
+const INBOUND_ATTACHMENT_NAMES = 20;
+
+/**
+ * What an inbound message said, for the person's own download: the
+ * normalized text and the names of its files, and nothing else of the
+ * platform's delivery. Null when it said nothing.
+ */
+export function inboundMessageRecord(normalized: Pick<NormalizedMessage, 'text' | 'attachments'>): InboundMessageRecord | null {
+  const text = typeof normalized.text === 'string' ? normalized.text.slice(0, INBOUND_TEXT_LIMIT) : '';
+  const attachments = (normalized.attachments ?? [])
+    .map((a) => (typeof a?.name === 'string' ? a.name.slice(0, 255) : ''))
+    .filter(Boolean)
+    .slice(0, INBOUND_ATTACHMENT_NAMES);
+  if (!text && !attachments.length) return null;
+  return { text, ...(attachments.length ? { attachments } : {}) };
 }

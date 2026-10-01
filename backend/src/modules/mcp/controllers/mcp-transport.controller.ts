@@ -16,7 +16,6 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { SseTransport } from '../transports/sse.transport';
-import { StreamableHttpTransport } from '../transports/streamable-http.transport';
 import { McpService } from '../mcp.service';
 import { JsonRpcRequest } from '../types/mcp.types';
 
@@ -27,37 +26,13 @@ export class McpTransportController {
   constructor(
     private readonly mcpService: McpService,
     private readonly sseTransport: SseTransport,
-    private readonly streamable: StreamableHttpTransport,
   ) {}
 
-
-  // Streamable HTTP endpoint (MCP 2025-03-26 revision). Single path
-  // hosting both directions: POST is client->server, GET opens an SSE
-  // stream for server->client. Sessions identified via Mcp-Session-Id
-  // header; Last-Event-ID drives reconnect replay.
-  @Post('/streamable')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('member', 'admin', 'owner')
-  async streamablePost(@Request() req, @Response() res): Promise<void> {
-    const organizationId = req.user?.currentOrganizationId;
-    const userId = req.user?.id;
-    if (!organizationId) {
-      throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
-    }
-    await this.streamable.handlePost(req, res, organizationId, userId);
-  }
-
-  @Get('/streamable')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('member', 'admin', 'owner')
-  async streamableStream(@Request() req, @Response() res): Promise<void> {
-    const organizationId = req.user?.currentOrganizationId;
-    const userId = req.user?.id;
-    if (!organizationId) {
-      throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
-    }
-    await this.streamable.handleStream(req, res, organizationId, userId);
-  }
+  // The Streamable HTTP session transport that used to live at
+  // /mcp/streamable is the runner's worker stream now
+  // (runner/transport/worker-stream.controller.ts, which keeps that path
+  // for envelopes for one runner release). MCP itself is served statelessly
+  // by gateways and POST /mcp.
   // Server-Sent Events endpoint
   @Get('/sse')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -140,7 +115,7 @@ export class McpTransportController {
       serverInfo: {
         name: 'almyty',
         version: '1.0.0',
-        supportedTransports: ['http', 'sse', 'streamable-http'],
+        supportedTransports: ['http', 'sse'],
       },
     };
   }

@@ -7,6 +7,12 @@ import {
 } from 'typeorm';
 
 export type ChannelDirection = 'inbound' | 'outbound';
+
+/** What an inbound message said: its text and the names of its files. */
+export interface InboundMessageRecord {
+  text: string;
+  attachments?: string[];
+}
 export type ChannelEventStatus = 'received' | 'processed' | 'failed';
 
 /**
@@ -26,6 +32,7 @@ export type ChannelEventStatus = 'received' | 'processed' | 'failed';
 @Entity('channel_events')
 @Index(['gatewayId', 'createdAt'])
 @Index(['organizationId', 'createdAt'])
+@Index('IDX_channel_events_gateway_sender', ['gatewayId', 'senderId'], { where: '"senderId" IS NOT NULL' })
 // One delivery, one run: the partial unique index is what rejects a
 // platform's redelivery of a message this gateway already accepted.
 // Partial so the NULL deliveryId every other event row carries stays
@@ -71,6 +78,27 @@ export class ChannelEvent {
    */
   @Column({ type: 'uuid', nullable: true })
   runId: string | null;
+
+  /**
+   * Who sent an inbound message, as the channel knows them (the platform's
+   * sender id, as normalized onto the run as `channelUserId`). Set on the
+   * inbound claim of a message, verified or not yet answered, so a person's
+   * data request finds the messages of theirs that never became a run.
+   * NULL on outbound rows and on deliveries whose signature failed.
+   */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  senderId: string | null;
+
+  /**
+   * What an inbound message said, as the channel normalized it: its text
+   * and the names of the files sent with it. Nothing else of the platform's
+   * delivery (never the owner's workspace or bot ids), so a person's
+   * download can give them the words of a message that never became a run.
+   * Erased with the row, and swept with it by the channel's retention.
+   * NULL on outbound rows and on deliveries whose signature failed.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  message: InboundMessageRecord | null;
 
   /**
    * The platform's own id for the delivery that produced this event,

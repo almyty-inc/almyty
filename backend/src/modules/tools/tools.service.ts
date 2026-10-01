@@ -1,4 +1,4 @@
-import { Inject, forwardRef } from '@nestjs/common';
+import { Inject, Optional, forwardRef } from '@nestjs/common';
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Not } from 'typeorm';
@@ -21,6 +21,7 @@ import { assertToolAuthHoldsNoSecret } from './tool-auth-config';
 import { assertProtocolToolShape, impliedExecutionMethod } from './protocol-tool-config';
 import { ToolsStatsHelper } from './tools-stats.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { McpChangeBus } from '../mcp-events/mcp-change-bus.service';
 import {
   assertAttachable,
   isOthersPrivate,
@@ -62,6 +63,9 @@ export class ToolsService {
     private readonly operationHelper: ToolsOperationHelper,
     private readonly statsHelper: ToolsStatsHelper,
     private readonly accessPolicy: AccessPolicyService,
+    // Gateways serving a tool hear when it changes (MCP subscriptions/listen).
+    // Optional for the positional spec harnesses.
+    @Optional() private readonly changeBus?: McpChangeBus,
   ) {}
 
   async createTool(
@@ -392,6 +396,9 @@ export class ToolsService {
       const changes = this.auditLogService.computeChanges(oldValues, updateToolDto, ['name', 'description', 'parameters', 'code', 'configuration', 'metadata']);
       this.auditLogService.logUpdate(organizationId, userId, AuditResource.TOOL, updatedTool.id, updatedTool.name, changes);
 
+      // A gateway serving this tool lists it differently now (name, schema,
+      // description): tell its MCP listen streams.
+      await this.changeBus?.toolsChanged([updatedTool.id]);
       return updatedTool;
 
     } catch (error) {
@@ -568,6 +575,7 @@ export class ToolsService {
 
     // Audit log (fire-and-forget)
     this.auditLogService.log({ organizationId, userId, action: AuditAction.TOOL_ACTIVATE, resourceType: AuditResource.TOOL, resourceId: tool.id, resourceName: tool.name });
+    await this.changeBus?.toolsChanged([tool.id]);
 
     return updatedTool;
   }
@@ -597,6 +605,7 @@ export class ToolsService {
 
     // Audit log (fire-and-forget)
     this.auditLogService.log({ organizationId, userId, action: AuditAction.TOOL_DEACTIVATE, resourceType: AuditResource.TOOL, resourceId: tool.id, resourceName: tool.name });
+    await this.changeBus?.toolsChanged([tool.id]);
 
     return updatedTool;
   }
@@ -622,6 +631,7 @@ export class ToolsService {
 
     // Audit log (fire-and-forget)
     this.auditLogService.logDelete(organizationId, userId, AuditResource.TOOL, tool.id, tool.name);
+    await this.changeBus?.toolsChanged([tool.id]);
   }
 
   async getToolVersions(

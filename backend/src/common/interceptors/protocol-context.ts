@@ -18,6 +18,20 @@ export interface ProtocolContext {
   organizationId?: string | null;
   /** Protocol identifier: 'mcp' | 'utcp' | 'a2a' | 'skills' | ... */
   protocol?: string | null;
+  /**
+   * For an MCP request: the protocol version it was served at, how that
+   * was decided, the method and the client, so the request log can show a
+   * version-by-client breakdown (mcp/core/mcp-http-binding.ts).
+   */
+  mcp?: {
+    protocolVersion: string;
+    era: string;
+    method: string;
+    clientName: string;
+    clientVersion: string | null;
+    outcome?: string;
+    trace?: { traceparent: string; tracestate?: string; baggage?: string };
+  } | null;
 }
 
 const CONTEXT_KEY = 'protocolContext';

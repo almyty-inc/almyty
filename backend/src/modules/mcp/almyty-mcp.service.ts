@@ -5,7 +5,15 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import { JsonRpcResponse } from './types/mcp.types';
+import { JsonRpcErrorCode, JsonRpcResponse } from './types/mcp.types';
+import {
+  DEFAULT_CALL_CONTEXT,
+  McpCallContext,
+  McpSurface,
+  McpToolResult,
+  handleMessage,
+  mcpError,
+} from './core/mcp-protocol-core';
 import { ApisService } from '../apis/apis.service';
 import { ToolsService } from '../tools/tools.service';
 import { GatewaysService } from '../gateways/gateways.service';
@@ -220,91 +228,105 @@ const TOOLS = [
   { name: 'decide_approval', description: 'Approve or reject a pending approval. Approving resumes the waiting run; rejecting terminates it. Refused unless the caller may decide this one (team lead for a team-scoped request, or organization admin/owner).', inputSchema: { type: 'object', properties: { approvalId: { type: 'string' }, decision: { type: 'string', enum: ['approve', 'reject'] }, reason: { type: 'string', description: 'Recorded with the decision.' } }, required: ['approvalId', 'decision'] } },
 ];
 
+/**
+ * What each management tool does to the organization, for its MCP
+ * annotations. Reads are listed by prefix; deletes are destructive;
+ * everything else changes something.
+ */
+const READ_ONLY_PREFIXES = ['list_', 'get_', 'check_', 'preview_'];
+const READ_ONLY_TOOLS = new Set(['memory_search', 'memory_get', 'memory_backends_health']);
+const DESTRUCTIVE_TOOLS = new Set(['delete_api', 'delete_tool', 'delete_gateway', 'delete_agent', 'delete_channel', 'remove_auth_from_gateway', 'memory_delete']);
+/** Tools that reach outside almyty: fetch a URL, call a model or a third party, run an agent. */
+const OPEN_WORLD_TOOLS = new Set([
+  'import_schema',
+  'invoke_agent',
+  'validate_model',
+  'sync_models',
+  'start_connection',
+  'complete_connection',
+  'install_tool_template',
+  'memory_consolidate',
+]);
+const ACRONYMS: Record<string, string> = { api: 'API', apis: 'APIs', mcp: 'MCP', a2a: 'A2A' };
+
+function managementTitle(name: string): string {
+  const words = name.split('_').map((w) => ACRONYMS[w] ?? w);
+  words[0] = words[0].charAt(0).toUpperCase() + words[0].slice(1);
+  return words.join(' ');
+}
+
+function managementAnnotations(name: string) {
+  const readOnly = READ_ONLY_TOOLS.has(name) || READ_ONLY_PREFIXES.some((p) => name.startsWith(p));
+  return {
+    readOnlyHint: readOnly,
+    ...(readOnly ? {} : { destructiveHint: DESTRUCTIVE_TOOLS.has(name) }),
+    openWorldHint: OPEN_WORLD_TOOLS.has(name),
+  };
+}
+
+/** The management tools as tools/list serves them: name, title, description, schema, annotations. */
+const MANAGEMENT_TOOLS = TOOLS.map((tool) => ({
+  name: tool.name,
+  title: managementTitle(tool.name),
+  description: tool.description,
+  inputSchema: tool.inputSchema,
+  annotations: managementAnnotations(tool.name),
+}));
+
+const MANAGEMENT_TOOL_NAMES: ReadonlySet<string> = new Set(TOOLS.map((tool) => tool.name));
+
 @Injectable()
 export class AlmytyMcpService {
   private readonly logger = new Logger(AlmytyMcpService.name);
   constructor(private readonly moduleRef: ModuleRef) {}
 
   /**
-   * JSON-RPC 2.0 §4.1: a Notification — any message without an `id` — MUST
-   * NOT be answered. `notifications/initialized` is the first thing every
-   * client sends after `initialize`, and this used to answer it with
-   * `{jsonrpc, id: undefined, result:{}}`, which serialises to
-   * `{"jsonrpc":"2.0","result":{}}` — not a valid JSON-RPC message of any
-   * kind, so both official SDKs raise on it.
+   * One POSTed MCP message on the management gateway (`/:org/almyty`).
+   *
+   * The protocol (notifications, batching, version negotiation, result
+   * shaping) is the shared core's, the same one tenant gateways use
+   * (core/mcp-protocol-core.ts); this service is only the management
+   * surface: its tool list and what each tool does. It used to carry its
+   * own dispatcher that answered every client in 2024-11-05.
    *
    * `null` means "nothing to send"; the caller turns that into an empty
-   * 202 Accepted. This matches McpService.handleJsonRpc, which the
-   * non-system gateway path already went through.
-   *
-   * The method still runs before the reply is dropped: a notification is
-   * allowed to have side effects, it just has no response.
+   * 202 Accepted.
    */
   async handleJsonRpc(
     body: any,
     organizationId: string,
     userId: string,
+    ctx: McpCallContext = DEFAULT_CALL_CONTEXT,
   ): Promise<JsonRpcResponse | JsonRpcResponse[] | null> {
-    // A JSON-RPC batch. The control plane is the endpoint the docs point
-    // Claude Code, Cursor and Claude Desktop at, so it accepts what the
-    // negotiated revision allows a client to send.
-    if (Array.isArray(body)) {
-      if (body.length === 0) {
-        // JSON-RPC 2.0 §6: an empty array is an Invalid Request, answered
-        // with a single (non-array) error response.
-        return { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid Request: empty batch' } };
-      }
-      const responses: JsonRpcResponse[] = [];
-      for (const member of body) {
-        const response = await this.handleJsonRpc(member, organizationId, userId);
-        if (response !== null) responses.push(response as JsonRpcResponse);
-      }
-      return responses.length > 0 ? responses : null;
-    }
-
-    const response = await this.dispatch(body, organizationId, userId);
-    return body?.id === undefined ? null : response;
+    return handleMessage(body, this.surfaceFor(organizationId, userId), ctx);
   }
 
-  private async dispatch(body: any, organizationId: string, userId: string): Promise<JsonRpcResponse | null> {
-    const { method, id, params } = body;
-    switch (method) {
-      case 'initialize':
-        return { jsonrpc: '2.0', id, result: { protocolVersion: '2024-11-05', capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'almyty', version: '1.0.0' } } };
-      case 'tools/list':
-        return { jsonrpc: '2.0', id, result: { tools: TOOLS } };
-      case 'tools/call':
-        return this.callTool(id, params?.name, params?.arguments || {}, organizationId, userId);
-      case 'resources/list':
-        return { jsonrpc: '2.0', id, result: { resources: [] } };
-      case 'resources/read':
-        return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Resource not found' } };
-      case 'prompts/list':
-        return { jsonrpc: '2.0', id, result: { prompts: [] } };
-      case 'prompts/get':
-        return { jsonrpc: '2.0', id, result: { messages: [{ role: 'user', content: { type: 'text', text: params?.name || '' } }] } };
-      case 'ping':
-        return { jsonrpc: '2.0', id, result: {} };
-      case 'notifications/initialized':
-      case 'notifications/cancelled':
-      case 'notifications/progress':
-      case 'notifications/roots/list_changed':
-        // Nothing to do. handleJsonRpc drops this reply when the message
-        // carries no `id`, which is what every real client sends; a client
-        // that wrongly gives one still gets a well-formed answer rather
-        // than a hang.
-        return { jsonrpc: '2.0', id, result: {} };
-      default:
-        return { jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } };
-    }
+  private surfaceFor(organizationId: string, userId: string): McpSurface {
+    return {
+      serverInfo: () => ({ name: 'almyty', title: 'almyty platform', version: '1.0.0' }),
+      capabilities: () => ({ tools: { listChanged: false } }),
+      instructions: () =>
+        'Manage this almyty organization: connect APIs, generate and activate tools, publish gateways, build and run agents.',
+      listTools: async () => ({ tools: MANAGEMENT_TOOLS }),
+      callTool: (params) => this.callTool(params?.name, params?.arguments || {}, organizationId, userId),
+    };
   }
 
-  private async callTool(id: any, name: string, args: any, orgId: string, userId: string): Promise<JsonRpcResponse> {
+  private async callTool(name: string, args: any, orgId: string, userId: string): Promise<McpToolResult> {
+    // An unknown tool is a protocol error (-32602), as on every other
+    // surface; a known tool that fails is a tool error the model can read.
+    if (!MANAGEMENT_TOOL_NAMES.has(name)) {
+      throw mcpError(JsonRpcErrorCode.INVALID_PARAMS, `Tool not found: ${name}`);
+    }
     try {
       const result = await this.exec(name, args, orgId, userId);
-      return { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] } };
+      const structured = result && typeof result === 'object' && !Array.isArray(result) ? result : undefined;
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        ...(structured ? { structuredContent: structured } : {}),
+      };
     } catch (err: any) {
-      return { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true } };
+      return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
     }
   }
 

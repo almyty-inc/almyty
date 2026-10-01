@@ -18,6 +18,7 @@ import { AppBuildProcessor } from './app-build.processor';
 import { buildProcessingEnabled } from './build-mode';
 import { BuildSignerService } from './build-signer.service';
 import { ChannelHousekeepingProcessor, CHANNEL_HOUSEKEEPING_QUEUE } from './channel-housekeeping.processor';
+import { VisitorDataRequestsService } from './visitor-data-requests.service';
 
 /**
  * Channels on an agent: the web chat, the website widget, messaging
@@ -43,6 +44,8 @@ import { ChannelHousekeepingProcessor, CHANNEL_HOUSEKEEPING_QUEUE } from './chan
   controllers: [AgentChannelsController],
   providers: [
     AgentChannelsService,
+    // An owner answering one person's data request across the agent's channels.
+    VisitorDataRequestsService,
     AppBuildsService,
     BuildSignerService,
     // Channel housekeeping (unsaved app icons) runs whatever the build
