@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { McpTransportController } from './mcp-transport.controller';
 import { McpService } from '../mcp.service';
 import { SseTransport } from '../transports/sse.transport';
-import { StreamableHttpTransport } from '../transports/streamable-http.transport';
 
 describe('McpTransportController', () => {
   let controller: McpTransportController;
@@ -28,10 +27,6 @@ describe('McpTransportController', () => {
             broadcastToAll: jest.fn(),
             getConnectionStats: jest.fn(),
           },
-        },
-        {
-          provide: StreamableHttpTransport,
-          useValue: { handlePost: jest.fn(), handleStream: jest.fn() },
         },
       ],
     }).compile();

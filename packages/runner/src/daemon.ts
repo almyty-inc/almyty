@@ -156,7 +156,7 @@ export class RunnerDaemon {
     this.wireClient();
 
     // First POST mints the session id; send a hello envelope so the
-    // backend's StreamableHttpTransport assigns one.
+    // backend's worker stream (WorkerStreamTransport) assigns one.
     await this.client.send(envelope('event', { kind: 'runner.hello', runnerId: this.runnerId }));
     await this.client.openStream();
 
