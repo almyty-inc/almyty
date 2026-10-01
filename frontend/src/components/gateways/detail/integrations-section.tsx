@@ -150,7 +150,8 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
   if (gatewayType === 'mcp') {
     const mcpEndpoint = mcpEndpointFor(gateway, orgSlug, backendUrl)
     const claudeCmd = claudeCodeCommand(gateway, orgSlug, backendUrl)
-    const sseEndpoint = `${mcpEndpoint}/sse`
+    // No HTTP+SSE URL here: that transport is deprecated (MCP 2026-07-28)
+    // and was never served on gateways. Streamable HTTP is the one URL.
     const discoveryUrl = `${mcpEndpoint}/.well-known/mcp`
 
     return (
@@ -165,22 +166,12 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label className="text-sm font-medium">JSON-RPC endpoint</Label>
-              <p className="text-xs text-muted-foreground mb-1">POST with JSON-RPC 2.0 payloads</p>
+              <Label className="text-sm font-medium">MCP endpoint (Streamable HTTP)</Label>
+              <p className="text-xs text-muted-foreground mb-1">Paste this into Claude Code, Cursor or any MCP client. Speaks MCP 2025-11-25 and 2025-06-18.</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{mcpEndpoint}</code>
                 <Button aria-label="Copy MCP JSON-RPC endpoint URL" size="sm" variant="outline" onClick={() => copyToClipboard(mcpEndpoint, 'mcp-endpoint')}>
                   {copiedField === 'mcp-endpoint' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-            <div>
-              <Label className="text-sm font-medium">SSE transport</Label>
-              <p className="text-xs text-muted-foreground mb-1">Server-Sent Events for streaming</p>
-              <div className="flex gap-2 mt-1">
-                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{sseEndpoint}</code>
-                <Button aria-label="Copy MCP SSE transport URL" size="sm" variant="outline" onClick={() => copyToClipboard(sseEndpoint, 'sse-endpoint')}>
-                  {copiedField === 'sse-endpoint' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
