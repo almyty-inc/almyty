@@ -73,9 +73,10 @@ updates:
         update-types: ["version-update:semver-major"]
       # The schedule page's next-run times must come from the cron-parser
       # Bull fires repeatable jobs with, and bull 4 depends on ^4.9.0.
-      # v5 also throws "loop limit exceeded" for a daily 03:00 in
-      # Australia/Lord_Howe across its half-hour DST change, where v4
-      # answers. Moves only together with the queue's own parser.
+      # v5 disagrees with v4 across DST changes: it throws "loop limit
+      # exceeded" for a daily 03:00 in Australia/Lord_Howe and picks
+      # different 03:00 runs in Pacific/Chatham. Moves only together with
+      # the queue's own parser.
       - dependency-name: "cron-parser"
         update-types: ["version-update:semver-major"]
     groups:
