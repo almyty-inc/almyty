@@ -7,7 +7,7 @@
       "title": "Autonomous agent: work mode",
       "path": "screenshots/agent-builder-autonomous.png",
       "capturedAt": "2026-10-01T06:49:00.541Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "077e7cf0a3ae49e2d49762a9ea520da001b9b9981283b2f7f3e64b75f4e3f24a",
       "source": {
         "kind": "browser",
@@ -22,14 +22,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "agent-builder-node-palette",
       "title": "Steps palette",
       "path": "screenshots/agent-builder-node-palette.png",
       "capturedAt": "2026-10-01T06:49:08.859Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "16ed372b8779633c72addd328d2f8dd2adc8f8b263b09737d417c2bf07f6f256",
       "source": {
         "kind": "browser",
@@ -44,14 +45,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "agent-builder",
       "title": "Workflow builder",
       "path": "screenshots/agent-builder.png",
       "capturedAt": "2026-10-01T06:49:06.211Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7101205493af213b7b6dbbc67eb4730a8a9980de53c6384df3a440cf03dd1e06",
       "source": {
         "kind": "browser",
@@ -66,7 +68,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "agent-channels",
@@ -158,11 +161,32 @@
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
+      "id": "agent-tool-mode",
+      "title": "How the model sees its tools",
+      "path": "screenshots/agent-tool-mode.png",
+      "capturedAt": "2026-10-01T19:05:49.000Z",
+      "status": "current",
+      "sha256": "26d7fab643eabade88deb5bff6ef90f9d1e562e01d600a786d17cb35549fd3d1",
+      "source": {
+        "kind": "browser",
+        "environment": "local",
+        "route": "/agents/:id/edit"
+      },
+      "sources": [
+        "frontend/src/components/agents/builder/capabilities-section.tsx",
+        "frontend/src/pages/agent-builder.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "d014046b48466a076c3668fb13401a4354c53260e2fa3d00b7ad75bb8d02f4a1",
+      "notes": "Local stack, local test user; the three benchmark mock APIs (Bench Pet Store, Bench Coffee Shop, Bench Helpdesk)."
+    },
+    {
       "id": "agent-work-mode-panel",
       "title": "Panel work mode",
       "path": "screenshots/agent-work-mode-panel.png",
       "capturedAt": "2026-10-01T06:49:03.651Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "472eceef77a0d801d628b27c6d94382300690462de91cd2aca8f40681c2c8108",
       "source": {
         "kind": "browser",
@@ -177,14 +201,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "agents-list",
       "title": "Agents list",
       "path": "screenshots/agents-list.png",
       "capturedAt": "2026-10-01T06:48:41.254Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "6d7908e9e7d374cba03ef445f6ea71ce0e5b23e9da84168f9b57858f3362eb02",
       "source": {
         "kind": "browser",
@@ -199,7 +224,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "6a16b38d1fec1f68742a5b6a1f97039fe20b65393ff1c8b26b90610653a3a311",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "analytics-agents",
@@ -924,7 +950,7 @@
       "title": "The help desk assistant reads shared memory",
       "path": "screenshots/guides/helpdesk-3-agent.png",
       "capturedAt": "2026-10-01T06:48:06.751Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "81d2ad6fbc8b8c637699db44c59a9f9258706043876f12bb709d679e015f4066",
       "source": {
         "kind": "browser",
@@ -939,7 +965,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "guides-helpdesk-4-leave",
@@ -1035,7 +1062,7 @@
       "title": "A product assistant that answers from the help center",
       "path": "screenshots/guides/marketing-2-agent.png",
       "capturedAt": "2026-10-01T06:46:45.372Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "8d3bb4fe41c12f34d2926477238f0a487bb0bce2d2bb3746bbcb6127d2376fee",
       "source": {
         "kind": "browser",
@@ -1050,7 +1077,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "guides-marketing-3-try",
@@ -1168,7 +1196,7 @@
       "title": "The nightly check and its status tools",
       "path": "screenshots/guides/ops-2-agent.png",
       "capturedAt": "2026-10-01T06:47:25.565Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "37da7d36fde11165de45599d891f5a407f748f9a3319a67e613e38dd369b29b4",
       "source": {
         "kind": "browser",
@@ -1183,7 +1211,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "guides-ops-3-try",
@@ -1324,7 +1353,7 @@
       "title": "The sales assistant and its CRM tools",
       "path": "screenshots/guides/sales-2-agent.png",
       "capturedAt": "2026-10-01T06:46:16.920Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4fdc31139f46c69b717a0af660bd44944ce1a4d4bceb45e20fb4656cd6d1be75",
       "source": {
         "kind": "browser",
@@ -1339,7 +1368,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "guides-sales-3-brief",
@@ -1681,7 +1711,7 @@
       "title": "A new autonomous agent",
       "path": "screenshots/guides/support-4-new-agent.png",
       "capturedAt": "2026-10-01T06:44:49.281Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0d0eb4398386c4cebd9d3ea1bb98b0df76f19b2c48bbffe24df853827f35747b",
       "source": {
         "kind": "browser",
@@ -1696,14 +1726,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "guides-support-5-model-and-tools",
       "title": "Tick the order tools",
       "path": "screenshots/guides/support-5-model-and-tools.png",
       "capturedAt": "2026-10-01T06:44:49.841Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "5689d3f669842e02e475c6ce67d010bc920483832cc230404d41c9301a4c4e07",
       "source": {
         "kind": "browser",
@@ -1718,7 +1749,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
     },
     {
       "id": "guides-support-6-activate",
