@@ -1,4 +1,5 @@
 import { Injectable, Logger, Inject, forwardRef, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -31,6 +32,9 @@ import { mcpProtocolSettings } from '../core/mcp-settings';
 import { outputSchemaViolation } from '../core/output-schema-check';
 import { toolAnnotations, toolIcons, toolTitle } from '../core/tool-presentation';
 import { mcpParamHeaderMismatch } from '../core/mcp-param-headers';
+import { McpCallContext, McpPolymorphicResult } from '../core/mcp-protocol-core';
+import { ApprovalsService } from '../../approvals/approvals.service';
+import { HeldCallApprovals, heldCallInputRequired, heldCallRetry } from './mcp-held-call';
 
 /** Errors this handler raised for an unknown tool: rethrown as protocol errors, never folded into isError. */
 const UNKNOWN_TOOL_ERRORS = new WeakSet<object>();
@@ -52,7 +56,19 @@ export class McpToolHandler {
     private toolExecutorService: ToolExecutorService,
     @InjectRedis() private readonly redis: Redis.Redis,
     @Optional() private readonly metrics?: MetricsRecorderService,
+    // ApprovalsService, reached lazily: the approvals module imports the
+    // agents module, which imports this one. Absent in unit tests, and then
+    // a held call keeps its legacy answer.
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
+
+  private approvalsService(): HeldCallApprovals | null {
+    try {
+      return (this.moduleRef?.get(ApprovalsService, { strict: false }) as HeldCallApprovals) ?? null;
+    } catch {
+      return null;
+    }
+  }
 
   // Resolve how a tool listing should be scoped.
   //
@@ -379,7 +395,9 @@ export class McpToolHandler {
     gatewayId?: string,
     /** Modern requests only: the Mcp-Param-* headers it carried, lower-cased names. */
     paramHeaders?: Record<string, string>,
-  ): Promise<McpCallToolResult> {
+    /** The request's protocol context: a 2026 client may be asked to approve a held call. */
+    ctx?: McpCallContext,
+  ): Promise<McpCallToolResult | McpPolymorphicResult> {
     if (!params.name) {
       throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'Tool name is required');
     }
@@ -422,10 +440,23 @@ export class McpToolHandler {
       principal = gatewayPrincipal(gateway, userId ?? null);
     }
 
+    // A 2026 retry of a held call: the person's decision travels in
+    // inputResponses, the approval in the sealed requestState. A protocol
+    // error (a tampered or foreign state) is thrown before anything runs.
+    const approvals = this.approvalsService();
+    let args: Record<string, any> = params.arguments || {};
+    let waitForHeld = false;
+    if ((params as any).requestState !== undefined) {
+      const retry = await heldCallRetry(params, ctx, userId, organizationId, approvals);
+      if ('again' in retry) return retry.again;
+      args = { ...args, _approvalId: retry.approvalId };
+      waitForHeld = retry.decided;
+    }
+
     try {
-      const result = await this.toolExecutorService.executeTool(
+      const execute = () => this.toolExecutorService.executeTool(
         tool.id,
-        params.arguments || {},
+        args,
         {
           userId: userId || null,
           organizationId,
@@ -436,11 +467,26 @@ export class McpToolHandler {
           principal,
         },
       );
+      let result = await execute();
+      // Just approved: the held call runs once, on the approval event. Wait
+      // a little for its result rather than send the person away.
+      if (waitForHeld) {
+        const deadline = Date.now() + mcpProtocolSettings().heldCallWaitMs;
+        while (result.approvalStatus === 'pending' && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          result = await execute();
+        }
+      }
       // A tool outside the call's scope is the same "not found" as a tool
       // that does not exist.
       if (result.notFound) {
         throw this.unknownTool(params.name);
       }
+
+      // Held for a person who is the caller, on a client that can ask them:
+      // ask (input_required) instead of sending them to Approvals.
+      const ask = await heldCallInputRequired(result, params, ctx, userId, organizationId, approvals);
+      if (ask) return ask;
 
       this.metrics?.record(MetricType.MCP_TOOL_CALL, {
         organizationId,

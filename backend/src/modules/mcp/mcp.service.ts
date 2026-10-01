@@ -105,7 +105,7 @@ export class McpService {
       capabilities: () => this.capabilities(),
       listTools: (params) => tools.handleToolsList(params, organizationId, gatewayId, caller),
       callTool: (params, ctx) =>
-        tools.handleToolCall(params as McpCallToolRequest, organizationId, userId, gatewayId, ctx?.paramHeaders),
+        tools.handleToolCall(params as McpCallToolRequest, organizationId, userId, gatewayId, ctx?.paramHeaders, ctx),
       complete: (params) => tools.handleCompletionComplete(params, organizationId, gatewayId),
       listResources: (params) => content.handleResourcesList(params, organizationId, gatewayId, caller),
       readResource: (params) =>
