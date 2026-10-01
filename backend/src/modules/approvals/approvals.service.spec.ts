@@ -385,4 +385,23 @@ describe('ApprovalsService notifications', () => {
     await flush();
     expect(row.status).toBe('pending');
   });
+
+describe('ApprovalsService.canDecide (who MCP may ask, owner decision 6)', () => {
+  const row = (status = 'pending') => ({ id: 'appr-1', organizationId: 'org-1', status, visibility: 'org' }) as any;
+
+  it('is yes for someone who may read and manage a pending request', async () => {
+    const { svc } = makeService();
+    expect(await svc.canDecide(row(), { id: 'u-1' })).toBe(true);
+  });
+
+  it('is no without a caller, for a request already decided, and for one they may see but not manage', async () => {
+    const { svc, policy } = makeService();
+    expect(await svc.canDecide(row(), null)).toBe(false);
+    expect(await svc.canDecide(row('approved'), { id: 'u-1' })).toBe(false);
+    policy.byAction = { manage: { allowed: false, reason: 'not an approver' } };
+    expect(await svc.canDecide(row(), { id: 'u-1' })).toBe(false);
+    policy.byAction = { read: { allowed: false, reason: 'not visible' } };
+    expect(await svc.canDecide(row(), { id: 'u-1' })).toBe(false);
+  });
+});
 });

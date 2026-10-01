@@ -89,6 +89,7 @@ describe('regenerate tool — organization scope', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await controller.regenerateTool('org-a', 'tool-1', { user: { id: 'u-1' } });

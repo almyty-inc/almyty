@@ -652,6 +652,8 @@ export const toolsApi = {
   activate: (id: string, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/activate`),
   deactivate: (id: string, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/deactivate`),
 
+  update: (id: string, data: Record<string, any>, organizationId: string) => apiPut(`/organizations/${organizationId}/tools/${id}`, data),
+
   execute: (id: string, data: any, organizationId: string) => apiPost(`/organizations/${organizationId}/tools/${id}/execute`, data),
 
   // Export formats

@@ -15,6 +15,13 @@
  *   MCP_RESULT_TTL_MS                ttlMs on cacheable 2026-07-28 results (default 60000)
  *   MCP_LISTEN_KEEPALIVE_MS          keep-alive on subscriptions/listen streams (default 15000)
  *   MCP_LISTEN_MAX_SECONDS           longest a listen stream stays open (default 3600)
+ *   MCP_TASK_POLL_INTERVAL_MS        pollIntervalMs on an agent run served as a task (default 2000)
+ *   MCP_INVOKE_WAIT_MS               how long invoke_agent waits for a run that may ask
+ *                                    a question, without tasks (default 25000; 0 = never)
+ *   MCP_HELD_CALL_WAIT_MS            how long a just-approved held call is waited for
+ *                                    before the caller is told to come back (default 5000)
+ *   MCP_REQUEST_STATE_TTL_SECONDS    how long an input_required requestState stays valid
+ *                                    (default 900)
  *   MCP_CIMD_ENABLED                 accept Client ID Metadata Documents (default true)
  *   MCP_CIMD_FETCH_TIMEOUT_MS        total deadline per metadata fetch (default 5000)
  *   MCP_CIMD_MAX_BYTES               metadata document size cap (default 65536)
@@ -25,6 +32,8 @@
  *   MCP_OAUTH_INFER_APPLICATION_TYPE treat a DCR request without
  *                                    application_type whose redirect URIs are
  *                                    all loopback as native (default true)
+ *   MCP_LEGACY_SSE_*                 deprecation headers on the legacy HTTP+SSE
+ *                                    routes (legacySseSettings, below)
  */
 import { KNOWN_PROTOCOL_VERSIONS, ProtocolVersion, isKnownVersion } from './versions';
 
@@ -66,6 +75,14 @@ export interface McpProtocolSettings {
   listenKeepaliveMs: number;
   /** A listen stream is closed gracefully after this long; the client re-listens. */
   listenMaxSeconds: number;
+  /** pollIntervalMs on an agent run served as a task (Tasks extension). */
+  taskPollIntervalMs: number;
+  /** invoke_agent without tasks: how long it waits for a run before answering with the run id. 0 = never. */
+  invokeWaitMs: number;
+  /** A held call approved through input_required: how long its result is waited for. */
+  heldCallWaitMs: number;
+  /** Lifetime of a sealed requestState handed out with input_required. */
+  requestStateTtlSeconds: number;
 }
 
 export function mcpProtocolSettings(env: Env = process.env): McpProtocolSettings {
@@ -83,6 +100,10 @@ export function mcpProtocolSettings(env: Env = process.env): McpProtocolSettings
     resultTtlMs: intSetting(env, 'MCP_RESULT_TTL_MS', 60_000, 0, 86_400_000),
     listenKeepaliveMs: intSetting(env, 'MCP_LISTEN_KEEPALIVE_MS', 15_000, 1_000, 300_000),
     listenMaxSeconds: intSetting(env, 'MCP_LISTEN_MAX_SECONDS', 3_600, 10, 86_400),
+    taskPollIntervalMs: intSetting(env, 'MCP_TASK_POLL_INTERVAL_MS', 2_000, 100, 600_000),
+    invokeWaitMs: intSetting(env, 'MCP_INVOKE_WAIT_MS', 25_000, 0, 120_000),
+    heldCallWaitMs: intSetting(env, 'MCP_HELD_CALL_WAIT_MS', 5_000, 0, 60_000),
+    requestStateTtlSeconds: intSetting(env, 'MCP_REQUEST_STATE_TTL_SECONDS', 900, 30, 86_400),
   };
 }
 
@@ -112,4 +133,39 @@ export function cimdSettings(env: Env = process.env): CimdSettings {
 
 export function inferApplicationType(env: Env = process.env): boolean {
   return boolSetting(env, 'MCP_OAUTH_INFER_APPLICATION_TYPE', true);
+}
+
+/**
+ * The legacy HTTP+SSE transport (2024-11-05; `GET /mcp/sse`,
+ * `POST /mcp/sse/:connectionId/message`, `GET /mcp/servers/:serverId/sse`)
+ * is deprecated in MCP 2026-07-28 (SEP-2596). It is still served; its
+ * responses say so with RFC 9745 headers:
+ *
+ *   MCP_LEGACY_SSE_DEPRECATION_HEADERS  send them (default true)
+ *   MCP_LEGACY_SSE_DEPRECATED_AT        the date it was deprecated, ISO 8601
+ *                                       (default 2026-07-28)
+ *   MCP_LEGACY_SSE_DOCS_URL             where the Link header points
+ *                                       (default the MCP gateway docs)
+ */
+export interface LegacySseSettings {
+  deprecationHeaders: boolean;
+  /** Seconds since the epoch, for the `Deprecation: @<seconds>` header. */
+  deprecatedAt: number;
+  docsUrl: string;
+}
+
+const LEGACY_SSE_DEPRECATED_AT = '2026-07-28T00:00:00Z';
+const LEGACY_SSE_DOCS_URL = 'https://docs.almyty.com/gateways/mcp#legacy-sse-transport';
+
+export function legacySseSettings(env: Env = process.env): LegacySseSettings {
+  const raw = env.MCP_LEGACY_SSE_DEPRECATED_AT?.trim();
+  const parsed = raw ? Date.parse(raw) : NaN;
+  const at = Number.isFinite(parsed) ? parsed : Date.parse(LEGACY_SSE_DEPRECATED_AT);
+  const docs = env.MCP_LEGACY_SSE_DOCS_URL?.trim();
+  return {
+    deprecationHeaders: boolSetting(env, 'MCP_LEGACY_SSE_DEPRECATION_HEADERS', true),
+    deprecatedAt: Math.floor(at / 1000),
+    // Only an http(s) URL goes into a header; anything else falls back.
+    docsUrl: docs && /^https?:\/\/[^\s<>"]+$/.test(docs) ? docs : LEGACY_SSE_DOCS_URL,
+  };
 }

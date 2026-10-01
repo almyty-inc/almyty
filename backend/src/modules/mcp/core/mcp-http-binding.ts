@@ -101,10 +101,14 @@ const META_CAPABILITIES = 'io.modelcontextprotocol/clientCapabilities';
 const META_CLIENT = 'io.modelcontextprotocol/clientInfo';
 
 /** The methods whose `Mcp-Name` header mirrors a body field (2026-07-28, "Standard Request Headers"). */
-const NAME_FIELD: Record<string, 'name' | 'uri'> = {
+const NAME_FIELD: Record<string, 'name' | 'uri' | 'taskId'> = {
   'tools/call': 'name',
   'prompts/get': 'name',
   'resources/read': 'uri',
+  // Tasks extension, "Streamable HTTP: Routing Headers".
+  'tasks/get': 'taskId',
+  'tasks/update': 'taskId',
+  'tasks/cancel': 'taskId',
 };
 
 function refusal(status: number, id: unknown, code: number, message: string, data?: unknown): { refusal: McpHttpRefusal } {

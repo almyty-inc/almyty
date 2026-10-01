@@ -26,6 +26,7 @@ import { useOrganizationStore } from '@/store/organization'
 import type { GatewayToolAssociation } from '@/types'
 import { isPublishable } from '@/components/tools/publish-tool-form'
 import { gatewayClientName } from '@/lib/gateway-connect'
+import { SideEffectCard } from '@/components/tools/side-effect-card'
 
 export function ToolDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -271,6 +272,8 @@ export function ToolDetailPage() {
             )}
           </CardContent>
         </Card>
+
+        <SideEffectCard tool={tool} organizationId={currentOrganization!.id} canEdit />
 
         {tool.runnerConfig ? (
           <Card className="border-cyan-200 dark:border-cyan-900">

@@ -1,6 +1,6 @@
 {
   "name": "@almyty/mcp-server",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "publishConfig": {
     "access": "public"
   },
@@ -36,9 +36,9 @@
   "author": "almyty",
   "license": "Apache-2.0",
   "dependencies": {
-    "@almyty/client": "^1.5.1",
-    "@modelcontextprotocol/sdk": "^1.7.0",
-    "zod": "^3.22.0"
+    "@almyty/client": "^1.5.2",
+    "@modelcontextprotocol/server": "^2.2.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

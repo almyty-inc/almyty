@@ -11,7 +11,7 @@ import { snapshotEnv } from '../../../test/env';
  * arguments into a tool error rather than a protocol error.
  */
 describe('MCP tool results (2025-06-18 / 2025-11-25)', () => {
-  const restore = snapshotEnv('MCP_EMIT_OUTPUT_SCHEMA', 'MCP_TOOLS_LIST_CACHE_SECONDS');
+  const restore = snapshotEnv('MCP_EMIT_OUTPUT_SCHEMA', 'MCP_TOOLS_LIST_CACHE_SECONDS', 'ENCRYPTION_KEY', 'MCP_HELD_CALL_WAIT_MS');
   afterEach(restore);
 
   const gateway = { id: 'gw-1', organizationId: 'org-1', visibility: 'org', teamId: null, ownerUserId: null, isSystem: false };
@@ -159,6 +159,70 @@ describe('MCP tool results (2025-06-18 / 2025-11-25)', () => {
       await expect(handler.handleToolCall({ name: 'nope' }, 'org-1', 'u-1', 'gw-1')).rejects.toEqual(
         expect.objectContaining({ code: -32602, message: 'Tool not found: nope' }),
       );
+    });
+
+    describe('a held call on a 2026-07-28 client (input_required)', () => {
+      const elicits = { version: '2026-07-28' as any, era: 'modern' as const, clientCapabilities: { elicitation: {} } };
+      const heldResult = {
+        success: false,
+        error: 'Waiting for approval',
+        approvalRequired: { summary: 'Ask before refund when amount is over 500' },
+        approvalStatus: 'pending',
+        approvalId: 'appr-1',
+      };
+      let approvals: any;
+      let withApprovals: McpToolHandler;
+
+      beforeEach(() => {
+        process.env.ENCRYPTION_KEY = 'e'.repeat(64);
+        approvals = {
+          row: { id: 'appr-1', organizationId: 'org-1', status: 'pending', reason: 'Refund over 500', payload: { tool: 'Refund' } },
+          findInOrganization: jest.fn(async () => approvals.row),
+          canDecide: jest.fn(async (row: any, caller: any) => row.status === 'pending' && caller?.id === 'u-1'),
+          approve: jest.fn(async () => {
+            approvals.row = { ...approvals.row, status: 'approved' };
+            return approvals.row;
+          }),
+          reject: jest.fn(),
+        };
+        const gatewayToolRepository: any = {
+          find: jest.fn(async () => rows.map((t) => ({ isActive: true, tool: t, gateway }))),
+          manager: { getRepository: () => ({ findOne: jest.fn().mockResolvedValue(gateway) }) },
+        };
+        withApprovals = new McpToolHandler(
+          { find: jest.fn().mockResolvedValue([]), findOne: jest.fn() } as any,
+          gatewayToolRepository,
+          { find: jest.fn().mockResolvedValue([]) } as any,
+          { getTools: jest.fn(), findByName: jest.fn() } as any,
+          executor as any,
+          redis,
+          undefined,
+          { get: () => approvals } as any,
+        );
+        rows = [tool({ name: 'refund' })];
+      });
+
+      it('asks the approver, then runs the call with the approval on the retry', async () => {
+        executor.executeTool.mockResolvedValueOnce(heldResult);
+        const params = { name: 'refund', arguments: { amount: 820 } };
+        const asked: any = await withApprovals.handleToolCall(params, 'org-1', 'u-1', 'gw-1', undefined, elicits);
+        expect(asked.resultType).toBe('input_required');
+
+        executor.executeTool.mockResolvedValueOnce({ success: true, data: { refunded: true } });
+        const done: any = await withApprovals.handleToolCall(
+          { ...params, requestState: asked.requestState, inputResponses: { 'approval-appr-1': { action: 'accept', content: { decision: 'approve' } } } } as any,
+          'org-1', 'u-1', 'gw-1', undefined, elicits,
+        );
+        expect(approvals.approve).toHaveBeenCalled();
+        expect(executor.executeTool).toHaveBeenLastCalledWith(expect.any(String), { amount: 820, _approvalId: 'appr-1' }, expect.anything());
+        expect(done).toEqual({ content: [{ type: 'text', text: expect.stringContaining('refunded') }], structuredContent: { refunded: true }, isError: false });
+      });
+
+      it('keeps the waiting answer for someone who could not approve it', async () => {
+        executor.executeTool.mockResolvedValueOnce(heldResult);
+        const result: any = await withApprovals.handleToolCall({ name: 'refund', arguments: { amount: 820 } }, 'org-1', 'u-2', 'gw-1', undefined, elicits);
+        expect(result).toEqual({ content: [{ type: 'text', text: 'Waiting for approval' }], isError: true });
+      });
     });
 
     describe('Mcp-Param-* headers (2026-07-28)', () => {

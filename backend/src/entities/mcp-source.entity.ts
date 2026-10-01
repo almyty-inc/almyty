@@ -81,9 +81,13 @@ export class McpSource {
   @Column({ type: 'int', default: 0 })
   toolCount: number;
 
-  /** serverInfo returned by the remote initialize handshake. */
+  /**
+   * What the server said about itself, and which era it speaks: 'modern'
+   * (MCP 2026-07-28, no handshake) or 'legacy' (initialize). The era is the
+   * client's cache: a call does not probe again until it stops working.
+   */
   @Column({ type: 'json', nullable: true })
-  serverInfo: { name?: string; version?: string; protocolVersion?: string } | null;
+  serverInfo: { name?: string; version?: string; protocolVersion?: string; era?: 'modern' | 'legacy' } | null;
 
   @Column()
   organizationId: string;

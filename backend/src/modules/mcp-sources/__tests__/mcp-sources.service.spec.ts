@@ -69,6 +69,13 @@ describe('McpSourcesService', () => {
       assertUrlAllowed: jest.fn(),
       listTools: jest.fn(),
       callTool: jest.fn(),
+      // The service calls callToolOutcome; a plain result here comes from the
+      // callTool mock, so the cases below keep asserting on what it was sent.
+      callToolOutcome: jest.fn(async (config: any, name: string, args: any) => ({
+        outcome: { kind: 'result', result: await mcpClient.callTool(config, name, args) },
+        init: { era: 'legacy', protocolVersion: '2025-11-25', serverInfo: {}, sessionId: null, capabilities: {} },
+      })),
+      cancelTask: jest.fn(),
     };
 
     store = makeCredentialRefFake();
