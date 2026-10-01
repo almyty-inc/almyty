@@ -307,7 +307,7 @@ next call.
 | Consumer | Reference | What a pasted secret becomes |
 |---|---|---|
 | LLM provider | `llm_providers.credentialId` (inference key), `llm_providers.usageCredentialId` (usage/admin key, a different scope at the vendor) | an `api_key` row tagged with the vendor as its connector, owned by the provider: rotated in place on the next paste, deleted with the provider |
-| MCP server | `mcp_sources.credentialId` | a `bearer_token` row (token) or a `custom` row (header map, every value encrypted) |
+| MCP server | `mcp_sources.credentialId` | a `bearer_token` row (token) or a `custom` row (header map, every value encrypted); a sign-in made on Credentials is an `oauth2` row of the `mcp-custom` connector holding the tokens with their issuer, refreshed by `connections/mcp-oauth` before use |
 | Chat channel installation | `channel_installations.credentialId` | a `custom` row with the workspace's bot token, released when the installation is revoked |
 | API | `credentials.apiId` (the row is bound to the API; tool execution already prefers it) | a row of the matching type; the API keeps the public part of its auth config plus `credentialId` |
 | Deployment | `providerConfig.credentialId` | the connection made in the form first. A request that names a `credentialId` and also pastes an `x-secret` value is refused (`PROVIDER_CONFIG_INLINE_SECRET`) |

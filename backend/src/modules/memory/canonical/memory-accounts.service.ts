@@ -128,7 +128,7 @@ export class MemoryAccountsService {
     accountId: string,
     input: PutInput,
     actor: { user_id?: string },
-    opts: { agentId?: string | null; expiresInSeconds?: number | null } & AgentAccountUse = {},
+    opts: { agentId?: string | null; runId?: string | null; expiresInSeconds?: number | null } & AgentAccountUse = {},
   ): Promise<MemoryItem> {
     const ttl = opts.expiresInSeconds ?? null;
     if (!accountId || accountId === NATIVE_MEMORY_ACCOUNT) {
@@ -153,6 +153,7 @@ export class MemoryAccountsService {
           nativeId,
           memoryId: item.id,
           credentialId: opts.credentialId ?? null,
+          runId: opts.runId ?? null,
           expiresAt: ttl ? new Date(Date.now() + ttl * 1000) : null,
         }),
       );
@@ -257,6 +258,66 @@ export class MemoryAccountsService {
     }
     if (done.length) await this.expiryRepo.delete({ id: In(done) });
     return { deleted, failed };
+  }
+
+  /**
+   * The text of these outside memories, read back from their service, for
+   * a visitor's download (VisitorDataService). `ids` are memory_expiries
+   * rows of this organization; any other id is ignored. Each read goes
+   * through the service's own client, so the organization's egress rules
+   * apply, and is given `timeoutMs`. A memory the service cannot give back
+   * (down, refused, slow, or no way to read one memory) maps to null.
+   */
+  async read(organizationId: string, ids: string[], timeoutMs = 5_000): Promise<Map<string, string | null>> {
+    const out = new Map<string, string | null>();
+    if (!ids.length) return out;
+    const rows = await this.expiryRepo.find({ where: { id: In(ids), organizationId } });
+    for (const row of rows) {
+      let timer: NodeJS.Timeout | undefined;
+      try {
+        const creds = row.credentialId ? await this.agentCredentials(row) : undefined;
+        const item = await Promise.race([
+          this.router.getOn(row.backendId, row.nativeId, orgScope(row.organizationId), creds),
+          new Promise<null>((resolve) => {
+            timer = setTimeout(() => resolve(null), timeoutMs);
+          }),
+        ]);
+        out.set(row.id, typeof item?.content === 'string' ? item.content : null);
+      } catch (e: any) {
+        out.set(row.id, null);
+        this.logger.warn(`could not read memory ${row.memoryId} from ${row.backendId}: ${e?.message ?? e}`);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Delete these outside memories now, through their service's API: a
+   * visitor's erasure (VisitorDataService). `ids` are memory_expiries rows
+   * of this organization; any other id is ignored. A delete the service
+   * does not answer is handed to sweepExpired (its due date set to now),
+   * which keeps trying on its hourly pass.
+   */
+  async forget(organizationId: string, ids: string[]): Promise<{ deleted: number; pending: number }> {
+    if (!ids.length) return { deleted: 0, pending: 0 };
+    const rows = await this.expiryRepo.find({ where: { id: In(ids), organizationId } });
+    const done: string[] = [];
+    const later: string[] = [];
+    for (const row of rows) {
+      try {
+        const creds = row.credentialId ? await this.agentCredentials(row) : undefined;
+        await this.router.deleteOn(row.backendId, row.nativeId, orgScope(row.organizationId), creds);
+        done.push(row.id);
+      } catch (e: any) {
+        later.push(row.id);
+        this.logger.warn(`could not delete memory ${row.memoryId} from ${row.backendId} now, the sweep will retry: ${e?.message ?? e}`);
+      }
+    }
+    if (done.length) await this.expiryRepo.delete({ id: In(done) });
+    if (later.length) await this.expiryRepo.update({ id: In(later) }, { expiresAt: new Date() });
+    return { deleted: done.length, pending: later.length };
   }
 
   // ── the Memory page's account list ────────────────────────────

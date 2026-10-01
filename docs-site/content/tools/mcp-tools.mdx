@@ -7,7 +7,9 @@ MCP (Model Context Protocol) is a common standard AI apps use to call tools. Man
 1. Open **Tools** and click **Add MCP server**.
 2. Enter a **Name**. It goes in front of every tool name from this server, so you can tell them apart.
 3. Enter the **Server URL**, the address the service gives for its MCP server.
-4. If the server needs a key, pick it under **Token (optional)** from [Credentials](/credentials), or create one right there. It is sent as a bearer token (the usual way to pass a key).
+4. If the server needs a key, pick it under **Token or sign-in (optional)** from [Credentials](/credentials), or create one right there. A token is sent as a bearer token (the usual way to pass a key).
+
+   If the server asks you to **sign in** instead (many hosted MCP servers do), sign in once on [Credentials](/credentials): add **MCP server**, open **Advanced**, choose **Sign in to the server**, enter the server's address and click **Sign in**. You approve almyty on the server's own sign-in page and come back. Then pick that sign-in here. almyty renews it before it runs out; if the server ever moves its sign-in somewhere else, the source tells you to sign in again.
 5. Click **Add server**. almyty connects, asks the server what tools it has, and adds each one to your tools list with an **MCP** badge. They are active straight away.
 
 The server then appears on **Tools** with its status, its address, how many tools it has and when it last synced.
@@ -16,12 +18,47 @@ The server then appears on **Tools** with its status, its address, how many tool
 
 If a call fails, the run shows why in plain terms: the server couldn't be reached, it took too long, or it answered with an error.
 
+**Servers on any MCP version.** almyty works with servers on the newest MCP version (2026-07-28) and on the older ones. It finds out which one a server speaks the first time it connects and remembers it; there is nothing to set. A server that later moves to another version is noticed on the next call.
+
+**What the server says about its tools comes along.** A tool keeps the readable name, the "only reads / changes something / deletes something" hints, the icon and the description of its result that the server gives it, so they show up in your gateways too.
+
+**Long-running tools.** A server can answer "started, I'll tell you when it's done". almyty waits for the result (up to ten minutes by default) and cancels the work on the server if the run is cancelled or the wait runs out.
+
+**When the server needs to ask something.** A newer server can stop and ask a person a question before it finishes ("Which warehouse, Berlin or Leipzig?"). When an agent called the tool, the agent asks the person in the chat and calls the tool again; their answer goes to the server. Anywhere nobody can be asked (the **Test tool** tab, a gateway passing the call through, a workflow step), the call fails with the server's question, so you can see what it wanted.
+
 ## For developers
 
-**Protocol.** Streamable HTTP transport; almyty sends protocol version `2025-06-18` and uses the version the server answers with. Both plain-JSON and SSE-framed responses are handled, and the `Mcp-Session-Id` session header is managed for you. Not supported: stdio servers, the legacy HTTP+SSE transport (2024-11-05), and server-initiated requests such as sampling and elicitation. Put those behind a bridge if you need them.
+**Protocol versions.** Streamable HTTP transport, dual-era:
 
-**Discovery and calls.** Adding or syncing runs `initialize` then `tools/list`. When an agent calls a tool, almyty sends `tools/call` with the agent's arguments and returns the result as the tool output.
+- **2026-07-28 (modern).** almyty first sends `server/discover` with the modern `_meta` (`protocolVersion`, `clientCapabilities`, `clientInfo`) and the `MCP-Protocol-Version` and `Mcp-Method` headers. A `DiscoverResult`, or a modern error (`-32020`, `-32021`, `-32022`), means the server is modern; on `-32022` almyty retries with a version from the error's `supported` list. Every later request carries `_meta`, `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name` (Base64 sentinel `=?base64?...?=` for values that are not plain ASCII) and an `Mcp-Param-{Name}` header for each argument the tool marks with `x-mcp-header`. No session.
+- **2025-11-25 and older (legacy).** Anything else from the probe (a 4xx without a modern error, a "no session" 400, method not found) falls back to `initialize` with `2025-11-25`, then `notifications/initialized`, and the session (`Mcp-Session-Id`, `MCP-Protocol-Version`) from then on. The version the server answers with is used.
 
-**Error codes.** Failures come back as typed tool errors on the run: `MCP_CONNECT_FAILED`, `MCP_TIMEOUT`, `MCP_HTTP_ERROR`, `MCP_PROTOCOL_ERROR`, `MCP_REMOTE_ERROR`, `MCP_RESPONSE_TOO_LARGE` and `MCP_URL_BLOCKED`.
+The era is stored on the source (`serverInfo.era`, `serverInfo.protocolVersion`) and reused for every call; a call that fails in a way that means the server changed era probes again once. `MCP_CLIENT_ERA=modern` or `legacy` pins one era for every server.
+
+**Discovery and calls.** Adding or syncing runs the probe (or `initialize`) then `tools/list`. Each tool keeps its `inputSchema`, and the server's `title` (`metadata.title`), `annotations` and `icons` (`configuration.mcp`) and `outputSchema` (the tool's output schema, so almyty's own MCP gateways declare it and check results against it). A tool whose `x-mcp-header` annotations break the 2026-07-28 rules (empty or not an HTTP token, used twice, on a `number`/object/array parameter, or not reachable from the schema root through `properties` alone) is left out, as the spec requires; the sync reports it in `rejected` and on the source's last error. When an agent calls a tool, almyty sends `tools/call` with the agent's arguments and returns the result as the tool output (`structuredContent` first; any JSON value from 2026-07-28 on).
+
+**Tasks.** Modern requests declare the Tasks extension (`io.modelcontextprotocol/tasks`). A `tools/call` answered with `resultType: "task"` is followed with `tasks/get` (`Mcp-Name` is the task id) at the server's `pollIntervalMs`, kept between `MCP_CLIENT_TASK_POLL_MIN_MS` and `MCP_CLIENT_TASK_POLL_MAX_MS`, for at most `MCP_CLIENT_TASK_DEADLINE_MS`. `completed` returns its result, `failed` and `cancelled` are `MCP_REMOTE_ERROR`; running out of time, or the agent run being cancelled (checked every `MCP_CLIENT_RUN_CANCEL_CHECK_MS`), sends `tasks/cancel`.
+
+**input_required.** A modern server may answer `resultType: "input_required"`:
+
+- `roots/list`: answered with no roots, and the call retried with the echoed `requestState` (up to `MCP_CLIENT_INPUT_ROUNDS` rounds).
+- `sampling/createMessage`: refused, as a tool error. almyty does not lend its models to remote servers.
+- `elicitation/create`: form elicitation is declared only for calls from the autonomous agent runtime, which can ask the person. There the question is kept for the run (Redis, `MCP_CLIENT_PENDING_INPUT_SECONDS`) and the tool error tells the model to ask with `ask_user` and call again with the same arguments. That call goes to the server only once the person has answered (the run's next user message): the answer fills the form (a single field directly; several from a JSON answer), and is sent as `inputResponses` with the echoed `requestState`, or with `tasks/update` when the question came from a task. Everywhere else the call is a tool error with the server's question, and a task waiting for an answer is cancelled.
+
+**Connection check.** The **MCP server** connection on Credentials checks a server with the same client (probe, then `initialize`), on the check's own pinned transport; its label is the name the server gives itself.
+
+**Settings.** `MCP_CLIENT_ERA` (`auto`), `MCP_CLIENT_TIMEOUT_MS` (30000, per request), `MCP_CLIENT_MAX_TOOL_PAGES` (50), `MCP_CLIENT_TASK_DEADLINE_MS` (600000), `MCP_CLIENT_TASK_POLL_MIN_MS` (500), `MCP_CLIENT_TASK_POLL_MAX_MS` (30000), `MCP_CLIENT_INPUT_ROUNDS` (3), `MCP_CLIENT_PENDING_INPUT_SECONDS` (3600), `MCP_CLIENT_RUN_CANCEL_CHECK_MS` (2000: how often a call for an agent run checks whether the run was cancelled; a cancelled run's remote task is cancelled too).
+
+Not supported: stdio servers and the deprecated HTTP+SSE transport (2024-11-05); server-initiated requests on legacy servers (sampling, elicitation, roots); resources and prompts. Put those behind a bridge if you need them.
+
+**Error codes.** Failures come back as typed tool errors on the run: `MCP_CONNECT_FAILED`, `MCP_TIMEOUT`, `MCP_HTTP_ERROR`, `MCP_PROTOCOL_ERROR`, `MCP_REMOTE_ERROR`, `MCP_RESPONSE_TOO_LARGE`, `MCP_UNSUPPORTED_VERSION` (a modern-only server that speaks no version almyty knows) and `MCP_URL_BLOCKED`.
 
 **Security.** Server URLs are checked before every request: private ranges, loopback, link-local and cloud-metadata addresses are blocked, and redirects are refused. A self-hosted install that needs in-cluster MCP servers can set `MCP_ALLOW_PRIVATE_URLS=true` (http and https only). The token is a credential kept on Credentials, encrypted at rest; the MCP server entry only points at it.
+
+**Signing in (OAuth).** The **Sign in to the server** way on the `mcp-custom` connector follows MCP authorization:
+
+- *Discovery.* almyty calls the server without a token; its `401` names the Protected Resource Metadata in `WWW-Authenticate` (`resource_metadata`), else almyty tries `/.well-known/oauth-protected-resource` with and without the server's path (RFC 9728). The metadata's `resource` must be the server itself. The first authorization server it lists is read through RFC 8414 metadata, then OpenID Connect discovery; its `issuer` must match, and it must offer PKCE with `S256`.
+- *Who almyty is there.* A client id entered under **Advanced** first (with its secret, sent with `client_secret_basic` or `client_secret_post`); else almyty's client metadata document as `client_id`, when the server advertises `client_id_metadata_document_supported` and the API is served over https; else dynamic registration with `application_type: "web"` and `token_endpoint_auth_method: "none"`. The document is served at `GET /credentials/oauth/client-metadata.json` on the API origin (public, no secret, cacheable for `MCP_CLIENT_CIMD_MAX_AGE_SECONDS`); `MCP_CLIENT_CIMD_ENABLED=false` turns it off and `MCP_CLIENT_NAME` sets the name the consent page shows.
+- *The sign-in.* PKCE `S256`, and `resource` (RFC 8707, the server's URL) on the authorize and token requests. The scope is the one the `401` named, else every scope the server lists, unless one is entered. The callback is `/credentials/oauth/callback`; its `iss` must be the issuer the sign-in started with (RFC 9207), and is required when the server says it sends it.
+- *The tokens.* Kept only on the credential (type `oauth2`), encrypted, with the issuer, resource, token endpoint and client they belong to. They are refreshed `MCP_CLIENT_OAUTH_REFRESH_SKEW_SECONDS` (default 60) before they expire. On a `401` from the server almyty reads its metadata again: if it now names another authorization server, the old token is not sent there and the credential is marked expired with "sign in again" (SEP-2352); otherwise the token is refreshed and the call retried once. A refused refresh marks it expired; an issuer that is down leaves it as it is. Removing the credential revokes both tokens at the issuer's revocation endpoint when it has one (RFC 7009).
+- *Limits.* Every discovery, registration and token request goes through the SSRF guard, follows no redirect, times out after `MCP_CLIENT_OAUTH_FETCH_TIMEOUT_MS` (default 10000) and reads at most `MCP_CLIENT_OAUTH_MAX_BYTES` (default 65536). `MCP_ALLOW_PRIVATE_URLS` applies to sign-in as it does to the server.

@@ -3,34 +3,38 @@ import { getRedisConnectionToken } from '@nestjs-modules/ioredis';
 import { Request, Response } from 'express';
 import { EventEmitter } from 'events';
 
-import { StreamableHttpTransport } from './streamable-http.transport';
-import { McpService } from '../mcp.service';
-import { McpSessionService } from '../mcp-session.service';
-import { WORKER_PROTOCOL_VERSION, WORKER_ERROR_CODES } from '../types/worker-protocol.types';
+import { WorkerStreamTransport } from './worker-stream.transport';
+import { WORKER_PROTOCOL_VERSION, WORKER_ERROR_CODES } from '../../mcp/types/worker-protocol.types';
 
 /**
- * Each test exercises one specific behavior of the Streamable HTTP
- * transport. No coverage padding: if a test isn't pinning a real
- * failure mode, it isn't here.
+ * Each test exercises one specific behavior of the worker stream. No
+ * coverage padding: if a test isn't pinning a real failure mode, it isn't
+ * here. Moved from mcp/transports/streamable-http.transport.spec.ts with the
+ * class; the session, replay and multi-replica assertions are unchanged.
+ * Sessions are minted with a heartbeat envelope where they used to be
+ * minted with a JSON-RPC ping, which this channel no longer carries.
  */
-describe('StreamableHttpTransport', () => {
-  let transport: StreamableHttpTransport;
-  let mcpService: { handleJsonRpc: jest.Mock; handleJsonRpcMessage: jest.Mock };
-  let sessionService: { createSession: jest.Mock };
+describe('WorkerStreamTransport', () => {
+  let transport: WorkerStreamTransport;
+  /** Every envelope the transport emitted, as the runner services see them. */
+  let emitted: Array<{ env: any; session: any }>;
+
+  /** A heartbeat envelope: what a runner posts to open its session. */
+  const hb = (id: number | string) => ({
+    v: WORKER_PROTOCOL_VERSION,
+    type: 'heartbeat' as const,
+    id: `hb-${id}`,
+    ts: Date.now(),
+    payload: {},
+  });
 
   beforeEach(async () => {
-    mcpService = { handleJsonRpc: jest.fn(), handleJsonRpcMessage: jest.fn() };
-    sessionService = {
-      createSession: jest.fn().mockReturnValue({ id: 'mcp-session', organizationId: 'org', transport: 'streamable-http' }),
-    };
     const moduleRef = await Test.createTestingModule({
-      providers: [
-        StreamableHttpTransport,
-        { provide: McpService, useValue: mcpService },
-        { provide: McpSessionService, useValue: sessionService },
-      ],
+      providers: [WorkerStreamTransport],
     }).compile();
-    transport = moduleRef.get(StreamableHttpTransport);
+    transport = moduleRef.get(WorkerStreamTransport);
+    emitted = [];
+    transport.on('envelope', (env, session) => emitted.push({ env, session }));
   });
 
   afterEach(async () => {
@@ -87,34 +91,22 @@ describe('StreamableHttpTransport', () => {
       });
   }
 
-  // ── POST: JSON-RPC dispatch ─────────────────────────────────────────
+  // ── POST: MCP is not served here ─────────────────────────────────
 
-  it('POST with JSON-RPC body dispatches to McpService and returns 200 with the response inline', async () => {
-    mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 1, result: { ok: true } });
-    const req = mockReq({}, { jsonrpc: '2.0', id: 1, method: 'tools/list' });
+  // The split: JSON-RPC (MCP) has its own endpoints, and a JSON-RPC body on
+  // the worker channel is refused with the worker error, not dispatched.
+  it.each([
+    ['a JSON-RPC request', { jsonrpc: '2.0', id: 1, method: 'tools/list' }],
+    ['a JSON-RPC notification', { jsonrpc: '2.0', method: 'notifications/initialized' }],
+    ['a JSON-RPC batch', [{ jsonrpc: '2.0', id: 1, method: 'ping' }]],
+    ['an unrecognized body', { hello: 'world' }],
+  ])('POST with %s is refused with MALFORMED_ENVELOPE and emits nothing', async (_label, body) => {
     const res = mockRes();
+    await transport.handlePost(mockReq({}, body), res, 'org', 'user');
 
-    await transport.handlePost(req, res, 'org', 'user');
-
-    expect(mcpService.handleJsonRpc).toHaveBeenCalledWith(
-      { jsonrpc: '2.0', id: 1, method: 'tools/list' },
-      'org',
-      'user',
-    );
-    expect(res._statusCode).toBe(200);
-    expect(res._jsonBody).toEqual({ jsonrpc: '2.0', id: 1, result: { ok: true } });
-    expect(res._headers['Mcp-Session-Id']).toBeTruthy();
-  });
-
-  it('POST with JSON-RPC notification (no id) returns 202 with no body', async () => {
-    const req = mockReq({}, { jsonrpc: '2.0', method: 'notifications/initialized' });
-    const res = mockRes();
-    mcpService.handleJsonRpc.mockResolvedValue(undefined);
-
-    await transport.handlePost(req, res, 'org', 'user');
-
-    expect(res._statusCode).toBe(202);
-    expect(res._ended).toBe(true);
+    expect(res._statusCode).toBe(400);
+    expect(res._jsonBody.payload.code).toBe(WORKER_ERROR_CODES.MALFORMED_ENVELOPE);
+    expect(emitted).toHaveLength(0);
   });
 
   // ── POST: worker envelope dispatch ──────────────────────────────────
@@ -136,8 +128,6 @@ describe('StreamableHttpTransport', () => {
     expect(onEnvelope).toHaveBeenCalledTimes(1);
     expect(onEnvelope.mock.calls[0][0]).toMatchObject({ id: 'req-1', type: 'request' });
     expect(res._statusCode).toBe(202);
-    // McpService should not have been invoked for a worker envelope.
-    expect(mcpService.handleJsonRpc).not.toHaveBeenCalled();
   });
 
   it('POST with a malformed envelope (wrong v) returns a typed error, not 500', async () => {
@@ -149,57 +139,39 @@ describe('StreamableHttpTransport', () => {
     expect(res._jsonBody.payload.code).toBe(WORKER_ERROR_CODES.MALFORMED_ENVELOPE);
   });
 
-  // MCP clients reach this path too, and a worker envelope is not something
-  // they can parse. -32600 Invalid Request in a real JSON-RPC error body is
-  // readable by both kinds of client.
-  it('POST with an unrecognized body returns a JSON-RPC error, not a worker envelope', async () => {
-    const res = mockRes();
-    await transport.handlePost(mockReq({}, { hello: 'world' }), res, 'org', 'user');
-    expect(res._statusCode).toBe(400);
-    expect(res._jsonBody).toEqual({
-      jsonrpc: '2.0',
-      id: null,
-      error: { code: -32600, message: expect.stringContaining('Invalid Request') },
-    });
-    expect(res._jsonBody.payload).toBeUndefined();
-  });
-
   // ── Sessions ─────────────────────────────────────────────────────────
 
   it('POST without Mcp-Session-Id mints a fresh session and echoes the id', async () => {
-    mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 1, result: 'ok' });
     const res = mockRes();
-    await transport.handlePost(mockReq({}, { jsonrpc: '2.0', id: 1, method: 'ping' }), res, 'org');
+    await transport.handlePost(mockReq({}, hb(1)), res, 'org');
     const sid = res._headers['Mcp-Session-Id'];
     expect(sid).toMatch(/^sh_/);
     expect(transport.getStats().sessions).toBe(1);
   });
 
   it('POST with a known Mcp-Session-Id reuses the existing session', async () => {
-    mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 1, result: 'ok' });
     const r1 = mockRes();
-    await transport.handlePost(mockReq({}, { jsonrpc: '2.0', id: 1, method: 'a' }), r1, 'org');
+    await transport.handlePost(mockReq({}, hb(1)), r1, 'org');
     const sid = r1._headers['Mcp-Session-Id'];
     const r2 = mockRes();
-    await transport.handlePost(mockReq({ 'Mcp-Session-Id': sid }, { jsonrpc: '2.0', id: 2, method: 'b' }), r2, 'org');
+    await transport.handlePost(mockReq({ 'Mcp-Session-Id': sid }, hb(2)), r2, 'org');
     expect(r2._headers['Mcp-Session-Id']).toBe(sid);
     expect(transport.getStats().sessions).toBe(1);
   });
 
   it('POST with a known Mcp-Session-Id from a different org refuses with UNKNOWN_SESSION (no cross-tenant reuse)', async () => {
-    mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 1, result: 'ok' });
     const r1 = mockRes();
-    await transport.handlePost(mockReq({}, { jsonrpc: '2.0', id: 1, method: 'a' }), r1, 'org-a', 'user-a');
+    await transport.handlePost(mockReq({}, hb(1)), r1, 'org-a', 'user-a');
     const sid = r1._headers['Mcp-Session-Id'];
 
     const r2 = mockRes();
-    await transport.handlePost(mockReq({ 'Mcp-Session-Id': sid }, { jsonrpc: '2.0', id: 2, method: 'b' }), r2, 'org-b', 'user-b');
+    await transport.handlePost(mockReq({ 'Mcp-Session-Id': sid }, hb(2)), r2, 'org-b', 'user-b');
 
     expect(r2._statusCode).toBe(404);
     expect(r2._jsonBody.payload.code).toBe(WORKER_ERROR_CODES.UNKNOWN_SESSION);
     // The original session must NOT be hijacked or re-orged.
-    expect(mcpService.handleJsonRpc).toHaveBeenCalledTimes(1);
-    expect(mcpService.handleJsonRpc.mock.calls[0][1]).toBe('org-a');
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].session.organizationId).toBe('org-a');
   });
 
   // MCP 2025-03-26 Streamable HTTP: an unrecognised Mcp-Session-Id is a 404,
@@ -207,11 +179,10 @@ describe('StreamableHttpTransport', () => {
   // re-initialise. Minting a session under the requested id instead meant a
   // client kept a dead id alive forever, losing all state behind a 200.
   it('POST with an unknown Mcp-Session-Id returns 404 and does NOT invent the session', async () => {
-    mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 1, result: 'ok' });
     const res = mockRes();
 
     await transport.handlePost(
-      mockReq({ 'Mcp-Session-Id': 'sh_totally-unknown-session' }, { jsonrpc: '2.0', id: 1, method: 'ping' }),
+      mockReq({ 'Mcp-Session-Id': 'sh_totally-unknown-session' }, hb(1)),
       res, 'org', 'user',
     );
 
@@ -219,14 +190,14 @@ describe('StreamableHttpTransport', () => {
     expect(res._jsonBody.payload.code).toBe(WORKER_ERROR_CODES.UNKNOWN_SESSION);
     expect(transport.getStats().sessions).toBe(0);
     expect(transport.getSession('sh_totally-unknown-session')).toBeUndefined();
-    // The request itself must not have been executed under a phantom session.
-    expect(mcpService.handleJsonRpc).not.toHaveBeenCalled();
+    // The envelope itself must not have been accepted under a phantom session.
+    expect(emitted).toHaveLength(0);
   });
 
   it('POST and GET agree: a session id neither half knows is 404 on both', async () => {
     const post = mockRes();
     await transport.handlePost(
-      mockReq({ 'Mcp-Session-Id': 'sh_gc-swept-me' }, { jsonrpc: '2.0', id: 1, method: 'ping' }),
+      mockReq({ 'Mcp-Session-Id': 'sh_gc-swept-me' }, hb(1)),
       post, 'org', 'user',
     );
     const get = mockRes();
@@ -234,52 +205,6 @@ describe('StreamableHttpTransport', () => {
 
     expect(post._statusCode).toBe(404);
     expect(get._statusCode).toBe(404);
-  });
-
-  // ── JSON-RPC batch (required by the 2025-03-26 revision) ────────────
-
-  it('POST with a JSON-RPC batch answers with an array of the responses', async () => {
-    mcpService.handleJsonRpcMessage.mockResolvedValue([
-      { jsonrpc: '2.0', id: 1, result: 'a' },
-      { jsonrpc: '2.0', id: 2, result: 'b' },
-    ]);
-    const batch = [
-      { jsonrpc: '2.0', id: 1, method: 'ping' },
-      { jsonrpc: '2.0', id: 2, method: 'tools/list' },
-    ];
-    const res = mockRes();
-
-    await transport.handlePost(mockReq({}, batch), res, 'org', 'user');
-
-    expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(batch, 'org', 'user');
-    expect(res._statusCode).toBe(200);
-    expect(res._jsonBody).toEqual([
-      { jsonrpc: '2.0', id: 1, result: 'a' },
-      { jsonrpc: '2.0', id: 2, result: 'b' },
-    ]);
-  });
-
-  it('POST with a batch of nothing but notifications returns 202 with no body', async () => {
-    mcpService.handleJsonRpcMessage.mockResolvedValue(null);
-    const res = mockRes();
-
-    await transport.handlePost(
-      mockReq({}, [{ jsonrpc: '2.0', method: 'notifications/initialized' }]),
-      res, 'org', 'user',
-    );
-
-    expect(res._statusCode).toBe(202);
-    expect(res._ended).toBe(true);
-    expect(res._jsonBody).toBeUndefined();
-  });
-
-  it('a batch is never mistaken for a malformed message shape', async () => {
-    mcpService.handleJsonRpcMessage.mockResolvedValue([{ jsonrpc: '2.0', id: 1, result: 'a' }]);
-    const res = mockRes();
-
-    await transport.handlePost(mockReq({}, [{ jsonrpc: '2.0', id: 1, method: 'ping' }]), res, 'org', 'user');
-
-    expect(res._statusCode).not.toBe(400);
   });
 
   // ── GET stream + Last-Event-ID replay ───────────────────────────────
@@ -292,9 +217,8 @@ describe('StreamableHttpTransport', () => {
   });
 
   it('GET refuses cross-tenant session reuse (different org returns UNKNOWN_SESSION)', async () => {
-    mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 1, result: 'ok' });
     const r1 = mockRes();
-    await transport.handlePost(mockReq({}, { jsonrpc: '2.0', id: 1, method: 'ping' }), r1, 'org-a');
+    await transport.handlePost(mockReq({}, hb(1)), r1, 'org-a');
     const sid = r1._headers['Mcp-Session-Id'];
 
     const r2 = mockRes();
@@ -303,9 +227,8 @@ describe('StreamableHttpTransport', () => {
   });
 
   it('push() writes formatted SSE frame with id+event+data and increments seq', async () => {
-    mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 1, result: 'ok' });
     const r1 = mockRes();
-    await transport.handlePost(mockReq({}, { jsonrpc: '2.0', id: 1, method: 'ping' }), r1, 'org');
+    await transport.handlePost(mockReq({}, hb(1)), r1, 'org');
     const sid = r1._headers['Mcp-Session-Id'];
 
     const r2 = mockRes();
@@ -323,9 +246,8 @@ describe('StreamableHttpTransport', () => {
   });
 
   it('mid-stream disconnect + reconnect with Last-Event-ID replays missed events', async () => {
-    mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 1, result: 'ok' });
     const r1 = mockRes();
-    await transport.handlePost(mockReq({}, { jsonrpc: '2.0', id: 1, method: 'ping' }), r1, 'org');
+    await transport.handlePost(mockReq({}, hb(1)), r1, 'org');
     const sid = r1._headers['Mcp-Session-Id'];
 
     // Open stream, push two, "disconnect", push two more, reconnect with
@@ -352,9 +274,8 @@ describe('StreamableHttpTransport', () => {
   });
 
   it('reconnect with an aged-out Last-Event-ID emits REPLAY_UNAVAILABLE error event', async () => {
-    mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 1, result: 'ok' });
     const r1 = mockRes();
-    await transport.handlePost(mockReq({}, { jsonrpc: '2.0', id: 1, method: 'ping' }), r1, 'org');
+    await transport.handlePost(mockReq({}, hb(1)), r1, 'org');
     const sid = r1._headers['Mcp-Session-Id'];
 
     // Push an event so the buffer is non-empty.
@@ -420,15 +341,13 @@ describe('StreamableHttpTransport', () => {
     }
 
     function makeTransport(redis: any) {
-      return new StreamableHttpTransport(mcpService as any, sessionService as any, redis);
+      return new WorkerStreamTransport(redis);
     }
 
     async function nestTransport(redis: any) {
       const moduleRef = await Test.createTestingModule({
         providers: [
-          StreamableHttpTransport,
-          { provide: McpService, useValue: mcpService },
-          { provide: McpSessionService, useValue: sessionService },
+          WorkerStreamTransport,
           { provide: getRedisConnectionToken(), useValue: redis },
         ],
       }).compile();

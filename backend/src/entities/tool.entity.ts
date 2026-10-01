@@ -214,6 +214,10 @@ export class Tool {
       sourceId: string;
       remoteName: string;
       inputSchema?: Record<string, any>;
+      /** The remote's own behaviour hints (readOnlyHint, destructiveHint, ...), as it declared them. */
+      annotations?: Record<string, any>;
+      /** The remote's icons. */
+      icons?: Array<Record<string, any>>;
     };
   };
 

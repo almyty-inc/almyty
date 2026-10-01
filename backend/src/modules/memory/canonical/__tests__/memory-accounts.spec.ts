@@ -104,6 +104,27 @@ describe('MemoryAccountsService', () => {
     expect(expiries.rows().map((r) => r.nativeId).sort()).toEqual(['m0-3', 'm0-broken']);
   });
 
+  it("reads outside memories' text back for a visitor's download: by the service's id, null when it cannot, never another organization's", async () => {
+    const { svc, router, expiries } = build();
+    (router as any).getOn = jest.fn(async (_b: string, nativeId: string) => {
+      if (nativeId === 'm0-down') throw new Error('mem0 is down');
+      if (nativeId === 'm0-slow') return new Promise(() => undefined);
+      return { content: `text of ${nativeId}` };
+    });
+    const saved = (await expiries.save([
+      { organizationId: 'org-1', backendId: 'mem0', scopeType: 'user', scopeId: 's', nativeId: 'm0-1', memoryId: 'x1', expiresAt: null },
+      { organizationId: 'org-1', backendId: 'mem0', scopeType: 'user', scopeId: 's', nativeId: 'm0-down', memoryId: 'x2', expiresAt: null },
+      { organizationId: 'org-1', backendId: 'mem0', scopeType: 'user', scopeId: 's', nativeId: 'm0-slow', memoryId: 'x3', expiresAt: null },
+      { organizationId: 'org-2', backendId: 'mem0', scopeType: 'user', scopeId: 's', nativeId: 'm0-theirs', memoryId: 'x4', expiresAt: null },
+    ] as any)) as unknown as MemoryExpiry[];
+
+    const read = await svc.read('org-1', saved.map((r) => r.id), 50);
+
+    expect([...read.values()]).toEqual(['text of m0-1', null, null]);
+    expect(read.has(saved[3].id)).toBe(false);
+    expect((router as any).getOn).not.toHaveBeenCalledWith('mem0', 'm0-theirs', expect.anything(), undefined);
+  });
+
   describe("an agent's own account (a connection added from its page)", () => {
     function withConnection() {
       const built = build({});

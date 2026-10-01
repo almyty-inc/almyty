@@ -9,6 +9,7 @@ import { OrganizationsModule } from '../modules/organizations/organizations.modu
 import { MemoryModule } from '../modules/memory/memory.module'
 import { UnifiedEndpointModule } from '../modules/gateways/unified-endpoint.module'
 import { RunnerModule } from '../modules/runner/runner.module'
+import { WorkspaceModule } from '../modules/workspace/workspace.module'
 
 // Regression for #91. The boot regression that crash-looped staging
 // for four days came from missing forwardRef edges on
@@ -43,7 +44,9 @@ describe('DI cycle topology (#91)', () => {
     { name: 'UnifiedEndpointModule', module: UnifiedEndpointModule, expects: [McpModule] },
     { name: 'OrganizationsModule', module: OrganizationsModule, expects: [GatewaysModule] },
     { name: 'MemoryModule', module: MemoryModule, expects: [LlmProvidersModule] },
-    { name: 'RunnerModule', module: RunnerModule, expects: [McpModule] },
+    // The McpModule edge went with the runner split: the worker stream is
+    // the runner module's own now. Its remaining cycle is with WorkspaceModule.
+    { name: 'RunnerModule', module: RunnerModule, expects: [WorkspaceModule] },
   ]
 
   it.each(cases)('$name imports include all forwardRef edges', ({ module, expects }) => {

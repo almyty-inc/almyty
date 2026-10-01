@@ -41,6 +41,8 @@ export interface JsonSchemaProperty {
   maximum?: number
   format?: string
   'x-secret'?: boolean
+  /** Shown under Advanced on the connect form, even when secret (an optional client secret). */
+  'x-advanced'?: boolean
 }
 
 export interface JsonSchemaObject {

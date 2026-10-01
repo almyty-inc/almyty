@@ -19,6 +19,7 @@ import { Organization } from '../../entities/organization.entity';
 import { validateUrl } from '../../common/security/url-validator';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { generatePkcePair } from '../credentials/oauth2.service';
+import { McpOAuthClientService } from './mcp-oauth/mcp-oauth-client.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import {
   CONNECT_STATE_STORE,
@@ -95,7 +96,7 @@ export function defaultAllowUserScopedConnections(plan: string | null | undefine
   return !plan || plan === 'free' || plan === 'personal';
 }
 
-const OAUTH_SECRET_KEYS = ['accessToken', 'refreshToken', 'apiKey'];
+const OAUTH_SECRET_KEYS = ['accessToken', 'refreshToken', 'apiKey', 'clientSecret'];
 
 /**
  * Connect, validate, rotate and disconnect. A connection is a Credential
@@ -123,6 +124,8 @@ export class ConnectionsService {
     @Optional() private readonly grants?: GrantsService,
     @Optional() private readonly rotation?: RotationService,
     @Optional() @Inject(CONNECTIONS_GOVERNANCE_HOOK) private readonly governance?: ConnectionsGovernanceHook,
+    // Signing in to MCP servers (connections/mcp-oauth). Optional for the positional spec harnesses.
+    @Optional() private readonly mcpOAuth?: McpOAuthClientService,
   ) {
     this.stateStore = stateStore ?? stateStoreFactory.create();
   }
@@ -174,7 +177,7 @@ export class ConnectionsService {
       const plainInput = this.plainInput(method, body.input);
       return this.startRedirect({
         connector, method, organizationId, userId: principal.id, ownerUserId, visibility, teamId,
-        mode: body.mode ?? 'browser', input: plainInput, rotateConnectionId: null, requestBase,
+        mode: body.mode ?? 'browser', input: plainInput, rotateConnectionId: null, requestBase, secretInput: body.input,
       });
     }
 
@@ -186,12 +189,17 @@ export class ConnectionsService {
     return { pending: false, connection: view };
   }
 
-  /** Headless / CLI completion: the user pastes the code the provider printed. */
-  async complete(state: string, code: string): Promise<ConnectionView> {
+  /**
+   * Headless / CLI completion: the user pastes the code the provider printed.
+   * `iss` is the authorization response's issuer (RFC 9207), when the service sent one.
+   */
+  async complete(state: string, code: string, iss?: string): Promise<ConnectionView> {
     if (!state || !code) throw new BadRequestException({ code: 'CONNECT_STATE_INVALID', message: 'state and code are required' });
     const pending = await this.stateStore.take(state);
     if (!pending) throw new UnauthorizedException({ code: 'CONNECT_STATE_INVALID', message: 'unknown or expired connect state; start the connect again' });
 
+    // An MCP server sign-in: endpoints discovered, iss checked (RFC 9207).
+    if (pending.mcpOAuth) return this.completeMcpSignIn(pending, code, iss);
     const connector = await this.catalog.require(pending.organizationId, pending.connectorKey);
     const method = this.pickMethod(connector, pending.methodType as ConnectMethodType);
     const oauth = method.oauth!;
@@ -256,12 +264,12 @@ export class ConnectionsService {
   }
 
   /** Browser completion: the provider redirected here with code and state. Same exchange as `complete`. */
-  async handleCallback(query: { code?: string; state?: string; error?: string; error_description?: string }): Promise<ConnectionView> {
+  async handleCallback(query: { code?: string; state?: string; error?: string; error_description?: string; iss?: string }): Promise<ConnectionView> {
     if (query.error) {
       if (query.state) await this.stateStore.take(query.state);
       throw new BadRequestException({ code: 'CONNECT_DENIED', message: query.error_description ?? query.error });
     }
-    return this.complete(String(query.state ?? ''), String(query.code ?? ''));
+    return this.complete(String(query.state ?? ''), String(query.code ?? ''), typeof query.iss === 'string' ? query.iss : undefined);
   }
 
   // ------------------------------------------------------------------
@@ -319,9 +327,24 @@ export class ConnectionsService {
     await this.governance?.beforeConnect(organizationId, connector.key, row.ownerUserId ? 'user' : 'org');
 
     if (REDIRECT_METHODS.includes(method.type)) {
+      // Signing in to an MCP server again needs its URL (and a client id
+      // entered by hand), which the connection already has.
+      let input = this.plainInput(method, body.input);
+      let secretInput: Record<string, unknown> | undefined;
+      if (method.oauth?.discover === 'mcp') {
+        const current = await this.decryptConfig(row);
+        const handEntered = current.oauthRegistration === 'pre_registered';
+        input = {
+          serverUrl: current.serverUrl,
+          ...(handEntered ? { clientId: current.oauthClientId } : {}),
+          ...(current.oauthScope ? { scope: current.oauthScope } : {}),
+          ...input,
+        };
+        if (handEntered && current.clientSecret) secretInput = { clientSecret: current.clientSecret };
+      }
       return this.startRedirect({
         connector, method, organizationId, userId: principal.id, ownerUserId: row.ownerUserId,
-        mode: body.mode ?? 'browser', input: this.plainInput(method, body.input), rotateConnectionId: row.id, requestBase,
+        mode: body.mode ?? 'browser', input, rotateConnectionId: row.id, requestBase, secretInput,
       });
     }
     // Gate 5: providers with a key-provisioning API rotate in place, no
@@ -489,6 +512,12 @@ export class ConnectionsService {
           { userId: actorUserId },
         );
         if (outcome.supported) return { attempted: true, revoked: outcome.revoked, via: 'rotation', error: outcome.error };
+      }
+      // An MCP server sign-in revokes at the authorization server that issued it.
+      if (this.mcpOAuth && typeof secrets.oauthIssuer === 'string') {
+        const outcome = await this.mcpOAuth.revoke(secrets);
+        if (outcome.attempted) return { attempted: true, revoked: outcome.ok, via: 'oauth2', error: outcome.error };
+        return { attempted: false, revoked: false };
       }
       const connector = await this.catalog.find(row.organizationId, row.connectorKey);
       if (connector?.revoke) {
@@ -712,15 +741,107 @@ export class ConnectionsService {
     return row;
   }
 
-  callbackUrl(requestBase?: string): string {
-    const base = (
+  /** The API's public origin: where services send people back, and where the client metadata document is. */
+  apiBase(requestBase?: string): string {
+    return (
       this.configService.get<string>('PUBLIC_API_URL') ||
       this.configService.get<string>('BASE_URL') ||
       this.configService.get<string>('API_BASE_URL') ||
       requestBase ||
       'http://localhost:3000'
     ).replace(/\/$/, '');
-    return `${base}/credentials/oauth/callback`;
+  }
+
+  callbackUrl(requestBase?: string): string {
+    return `${this.apiBase(requestBase)}/credentials/oauth/callback`;
+  }
+
+  /**
+   * Sign in to an MCP server (owner decision 11): the endpoints and who
+   * almyty is there come from the server (connections/mcp-oauth), then the
+   * same PKCE redirect and state as every other sign-in. What the callback
+   * needs -- the token endpoint, the issuer it must come from, the client --
+   * is kept in the state, not in the browser.
+   */
+  private async startMcpSignIn(args: {
+    connector: ConnectorDefinition; method: ConnectMethod; organizationId: string; userId: string; ownerUserId: string | null;
+    mode: 'browser' | 'headless'; input: Record<string, unknown>; rotateConnectionId: string | null; requestBase?: string;
+    visibility?: 'org' | 'team' | 'private';
+    teamId?: string | null;
+    secretInput?: Record<string, unknown>;
+  }): Promise<PendingRedirect> {
+    if (!this.mcpOAuth) throw new BadRequestException({ code: 'CONNECT_METHOD_UNSUPPORTED', message: 'signing in to MCP servers is not available on this API' });
+    const values = { ...args.input, ...(args.secretInput ?? {}) };
+    const serverUrl = typeof values.serverUrl === 'string' ? values.serverUrl.trim() : '';
+    if (!serverUrl) throw new BadRequestException({ code: 'CONNECT_INPUT_INVALID', message: 'serverUrl is required', errors: ['serverUrl is required'] });
+    const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+    const callbackUrl = this.callbackUrl(args.requestBase);
+    const mcpOAuth = await this.mcpOAuth.prepareSignIn({
+      organizationId: args.organizationId,
+      serverUrl,
+      callbackUrl,
+      apiBase: this.apiBase(args.requestBase),
+      frontendUrl: this.configService.get<string>('FRONTEND_URL') ?? null,
+      clientId: text(values.clientId),
+      clientSecret: text(values.clientSecret),
+      scope: text(values.scope),
+    });
+    const pkce = generatePkcePair();
+    const state = newState();
+    const payload: PendingConnect = {
+      organizationId: args.organizationId,
+      userId: args.userId,
+      ownerUserId: args.ownerUserId,
+      visibility: args.visibility ?? 'org',
+      teamId: args.visibility === 'team' ? args.teamId ?? null : null,
+      connectorKey: args.connector.key,
+      methodType: args.method.type,
+      codeVerifier: pkce.codeVerifier,
+      callbackUrl,
+      mode: 'browser',
+      rotateConnectionId: args.rotateConnectionId,
+      input: { serverUrl },
+      mcpOAuth,
+      createdAt: Date.now(),
+    };
+    await this.stateStore.put(state, payload, CONNECT_STATE_TTL_SECONDS);
+    this.logger.log(`MCP sign-in started at ${new URL(mcpOAuth.issuer).host} (${mcpOAuth.registration}) for org ${args.organizationId}${args.rotateConnectionId ? ' (again)' : ''}`);
+    return {
+      pending: true,
+      method: args.method.type,
+      mode: 'browser',
+      authorizeUrl: this.mcpOAuth.authorizeUrl(mcpOAuth, { state, codeChallenge: pkce.codeChallenge, callbackUrl }),
+      state,
+      expiresInSeconds: CONNECT_STATE_TTL_SECONDS,
+      completeWith: 'callback',
+    };
+  }
+
+  /** The code of an MCP sign-in for its tokens, after checking who sent the browser back. */
+  private async completeMcpSignIn(pending: PendingConnect, code: string, iss: string | undefined): Promise<ConnectionView> {
+    if (!this.mcpOAuth || !pending.mcpOAuth || !pending.codeVerifier || !pending.callbackUrl) {
+      throw new UnauthorizedException({ code: 'CONNECT_STATE_INVALID', message: 'this sign-in cannot be finished here; start it again' });
+    }
+    this.mcpOAuth.checkIssuer(pending.mcpOAuth, iss);
+    const tokens = await this.mcpOAuth.exchangeCode(pending.organizationId, pending.mcpOAuth, {
+      code,
+      codeVerifier: pending.codeVerifier,
+      callbackUrl: pending.callbackUrl,
+    });
+    const connector = await this.catalog.require(pending.organizationId, pending.connectorKey);
+    const method = this.pickMethod(connector, pending.methodType as ConnectMethodType);
+    let existing: Credential | undefined;
+    if (pending.rotateConnectionId) {
+      existing = (await this.credentials.findOne({ where: { id: pending.rotateConnectionId, organizationId: pending.organizationId } })) ?? undefined;
+    }
+    return this.finalize({
+      connector, method, organizationId: pending.organizationId, userId: pending.userId, ownerUserId: pending.ownerUserId,
+      config: this.mcpOAuth.connectionConfig(pending.mcpOAuth, tokens),
+      existing, expiresAt: tokens.expiresAt,
+      scopesGranted: (tokens.scope ?? pending.mcpOAuth.scope ?? '').split(/\s+/).filter(Boolean),
+      visibility: pending.visibility, teamId: pending.teamId ?? null,
+      action: pending.rotateConnectionId ? AuditAction.CONNECTION_ROTATE : AuditAction.CONNECTION_CONNECT,
+    });
   }
 
   private platformClient(connectorKey: string): { clientId: string; clientSecret: string } {
@@ -738,8 +859,11 @@ export class ConnectionsService {
     mode: 'browser' | 'headless'; input: Record<string, unknown>; rotateConnectionId: string | null; requestBase?: string;
     visibility?: 'org' | 'team' | 'private';
     teamId?: string | null;
+    /** The form's secret values too (an MCP sign-in's client secret); never stored in the state as given. */
+    secretInput?: Record<string, unknown>;
   }): Promise<PendingRedirect> {
     const { connector, method } = args;
+    if (method.oauth?.discover === 'mcp') return this.startMcpSignIn(args);
     const oauth = method.oauth;
     if (!oauth) throw new BadRequestException({ code: 'CONNECT_METHOD_UNSUPPORTED', message: `${connector.key} ${method.type} has no oauth endpoints` });
     const urlCheck = validateUrl(oauth.authorizeUrl);

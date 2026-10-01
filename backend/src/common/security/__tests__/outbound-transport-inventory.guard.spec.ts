@@ -52,6 +52,7 @@ const INVENTORY: Record<string, [Kind, string]> = {
   'src/modules/agents/agent-webhook.service.ts': ['gated', 'agent webhook URL: validateUrl + pinned agents + maxRedirects 0 + cap'],
   'src/modules/credentials/oauth2.service.ts': ['gated', 'OAuth token endpoint: validateUrl + ssrfSafeDispatcher + redirect manual + capped read'],
   'src/modules/connections/connection-validation.service.ts': ['gated', 'connector probes: guardUrl + ssrfSafeDispatcher (host-scoped exemption under a hatch)'],
+  'src/modules/connections/mcp-oauth/mcp-oauth-client.service.ts': ['gated', 'MCP sign-in discovery, registration, token and revocation: validateUrl(AllowingPrivate under MCP_ALLOW_PRIVATE_URLS) + ssrfSafeDispatcher (host-scoped exemption under the hatch) + redirect manual + capped read'],
   'src/modules/mcp-sources/mcp-client.service.ts': ['gated', 'MCP source URL: validateUrl + ssrfSafeDispatcher + redirect error + capResponse'],
   'src/modules/memory/embedding.service.ts': ['gated', 'embedding provider URL: validateUrl + pinned agents'],
   'src/modules/model-registry/model-registry.service.ts': ['gated', 'S3-compatible registry endpoint: validateUrl + pinned NodeHttpHandler'],

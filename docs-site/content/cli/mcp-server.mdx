@@ -20,6 +20,8 @@ $ npx @almyty/mcp-server acme/petstore
 
 The MCP server fetches tools from your almyty gateway and registers them as MCP tools (or skills). When the LLM calls a tool, the server proxies the request through the gateway to the real API. Authentication, rate limiting, and audit logging are handled by the gateway.
 
+It works with assistants on every MCP version in use: the newest, MCP 2026-07-28, and the earlier ones (2024-11-05 to 2025-11-25) that Claude Desktop, Cursor and most editors speak today. The assistant's first message decides which; there is nothing to set. Towards almyty the server speaks MCP 2026-07-28 too, and switches to the earlier protocol by itself when it reaches an almyty that does not speak 2026-07-28 yet.
+
 ## Modes
 
 ### Skill-first mode (default)
@@ -47,6 +49,8 @@ Registers every tool individually as a standard MCP tool. Use this when your LLM
 ```bash
 $ ALMYTY_MODE=full npx @almyty/mcp-server
 ```
+
+Each tool keeps what the gateway says about it: its readable name, the full description of its parameters, what it returns (its output schema, so the assistant gets the result as data next to the text) and whether it only reads, changes or deletes something. A tool whose parameter description is not valid JSON Schema is left out, with a line on stderr saying which.
 
 ## Setup
 
@@ -174,6 +178,8 @@ $ claude mcp add petstore -- npx -y @almyty/mcp-server acme/petstore
 | `ALMYTY_TOKEN` | API key or JWT token | Read from `~/.almyty/credentials.json` |
 | `ALMYTY_GATEWAY_ID` | Gateway to serve (`org/slug`). Also accepted as first positional arg. | -- |
 | `ALMYTY_MODE` | `skill-first` or `full` | `skill-first` |
+| `ALMYTY_MCP_PROTOCOL` | How the server talks to almyty: `auto` (MCP 2026-07-28, falling back to the earlier protocol for an older almyty), `modern` or `legacy` | `auto` |
+| `ALMYTY_DISCOVERY_WAIT_MS` | How long the assistant's first message waits for the gateway's tool list, so the assistant sees every tool from the start. Some assistants read the list once and never again. `0` never waits; the tools are then announced once they arrive | `5000` |
 
 ### Finding your gateway ID
 

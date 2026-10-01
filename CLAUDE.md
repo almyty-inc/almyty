@@ -207,9 +207,11 @@ Tokens live in httpOnly cookies only. `withCredentials: true` on every axios cal
 ## Design Documents
 
 - `docs/design/layers.md` — The six layers (L1 egress → L6 orchestrator), what belongs where, and the cross-cutting concerns. Twenty-nine code comments cite it by layer number; keep it true or fix the comments.
+- `docs/design/code-mode.md` — Code mode and tool discovery (design, under review): side-effect classes, search_tools/get_tool/run_code meta-tools, the server-side broker and staged change sets
 - `docs/architecture.md` — System architecture: the layers, the backend module map, and the five request paths
 - `docs/channels.md` — an agent's channels: publishing, builds, signing
 - `docs/runner.md` — Runner + workspace architecture
+- `docs/design/mcp-2026-07-28.md` — MCP spec compliance: gaps against 2025-06-18 / 2025-11-25 / 2026-07-28, one protocol core, runner transport split, phases P0-P2
 - `docs/models.md` — Models layer: catalog, routing, pricing, deployments (design: `docs/design/models-layer.md`)
 - `docs/enterprise.md` — EE entitlements, what each grants, and how per-org gating works
 - `docs/retention.md` — Data retention classes and the sweep

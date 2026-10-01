@@ -10,7 +10,7 @@ For example, give Claude Code on your laptop one key and a partner's system anot
 
 1. Open the gateway and find the **Authentication** section.
 2. Click **Add auth method** and pick a **Method**:
-   - **API Key**: an access key the app sends with every request. The right choice for most cases.
+   - **OAuth 2.0**: people sign in with their almyty account in a browser, and the AI app keeps the sign-in (OAuth is the standard "sign in with..." flow). Good for AI apps that support it, so nobody pastes keys. Current apps identify themselves by a web address and need no setup step; the sign-in page shows the app's name and that address, so check both before you approve.
    - **OAuth 2.0**: people sign in with their almyty account in a browser, and the AI app keeps the sign-in (OAuth is the standard "sign in with..." flow). Good for AI apps that support it, so nobody pastes keys.
    - **Bearer Token**, **Basic Auth**, **JWT** or **Custom**: for systems that already sign their requests one of those ways.
    - **None (Public)**: anyone can call it. Only for tests and public tools.
@@ -75,12 +75,14 @@ Discovery endpoints (`.well-known/*`, Agent Cards) are public, except on a priva
 almyty runs an OAuth 2.1 authorization server per the MCP specification:
 
 - Authorization code flow with PKCE (S256 required)
-- Dynamic Client Registration (RFC 7591)
+- Client ID Metadata Documents (MCP 2025-11-25): no registration step
+- Dynamic Client Registration (RFC 7591): deprecated in MCP 2026-07-28 and kept for clients without metadata-document support; metadata documents come first
+- `iss` in every authorization response (RFC 9207)
 - Token revocation (RFC 7009)
 - Authorization Server Metadata (RFC 8414)
 - Protected Resource Metadata (RFC 9728)
 
-MCP clients handle the flow themselves. On a 401 the gateway returns a `WWW-Authenticate` header pointing at the protected resource metadata; a compatible client registers itself, runs the code exchange and attaches the token.
+MCP clients handle the flow themselves. On a 401 the gateway returns a `WWW-Authenticate` header pointing at the protected resource metadata; a compatible client finds the authorization server, identifies itself, runs the code exchange and attaches the token.
 
 ```
 https://api.almyty.com/acme/petstore/.well-known/oauth-authorization-server
@@ -89,10 +91,29 @@ https://api.almyty.com/acme/petstore/.well-known/oauth-protected-resource
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /acme/petstore/register` | Dynamic Client Registration |
+| `POST /acme/petstore/register` | Dynamic Client Registration (deprecated in MCP 2026-07-28; kept for clients without metadata-document support) |
 | `GET /acme/petstore/authorize` | Start the authorization code flow (`code_challenge`, `code_challenge_method=S256`) |
 | `POST /acme/petstore/token` | Exchange the code (with `code_verifier`) for tokens |
 | `POST /acme/petstore/revoke` | Revoke a token |
+
+**How a client identifies itself.** The metadata advertises both ways, in the order the specification asks clients to try them:
+
+1. **Client ID Metadata Document** (`client_id_metadata_document_supported: true`). The client uses an `https` URL as its `client_id`, for example `https://app.example.com/oauth/client.json`. almyty fetches that document, checks that its `client_id` is exactly that URL, that it names `client_name` and `redirect_uris`, and that the `redirect_uri` of the request is one of them. Only public clients (`token_endpoint_auth_method: none`) are accepted. The consent screen shows the client's name and the host of its URL, because the name is the client's own claim. The client is stored once, keyed by its URL, so codes, tokens and revocation work as for a registered client, on any gateway.
+2. **Dynamic Client Registration.** Deprecated in MCP 2026-07-28 and kept for clients that need it. A registration may name `application_type`: `web` needs `https` redirect URIs (loopback `http` only outside production), `native` may use loopback `http` on any port or a private-use scheme such as `cursor://`. A registration without it whose redirect URIs are all loopback is taken as `native`, since that is what CLIs and desktop apps send; set `MCP_OAUTH_INFER_APPLICATION_TYPE=false` for the plain OIDC default (`web`). The response echoes `application_type`.
+
+The metadata document is fetched through the same guard as every other outbound request (no private, loopback or cloud-metadata addresses, no redirects, a total deadline and a size cap), with nothing relaxed for self-hosted installs. Fetches are limited per host, and a document is cached for its `Cache-Control` lifetime within bounds. All of it is configuration:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `MCP_CIMD_ENABLED` | `true` | Accept metadata-document clients at all |
+| `MCP_CIMD_FETCH_TIMEOUT_MS` | `5000` | Total deadline per fetch |
+| `MCP_CIMD_MAX_BYTES` | `65536` | Largest document read |
+| `MCP_CIMD_CACHE_MIN_SECONDS` / `MCP_CIMD_CACHE_MAX_SECONDS` | `300` / `86400` | Bounds on the cache lifetime |
+| `MCP_CIMD_FETCHES_PER_HOST` / `MCP_CIMD_FETCH_WINDOW_SECONDS` | `30` / `60` | Fetches allowed per host per window |
+
+A gateway owner can accept registered clients only by setting `"oauth": { "clientMetadataDocuments": false }` in the gateway's configuration; the gateway's metadata then stops advertising the option.
+
+**`iss`.** Every authorization response, approval or denial, carries `iss` set to the gateway's issuer (`https://api.almyty.com/acme/petstore`), and the metadata says so with `authorization_response_iss_parameter_supported: true`.
 
 | Token | Lifetime |
 |-------|----------|

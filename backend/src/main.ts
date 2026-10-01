@@ -14,6 +14,7 @@ import { requestContextMiddleware } from './common/middleware/request-context.mi
 import { sentryInitOptions } from './common/observability/sentry-options';
 import { SurfaceCorsService } from './modules/gateways/channels/surface-cors';
 import { csrfOriginCheck } from './common/security/csrf-origin';
+import { dashboardAllowedOrigins } from './common/security/allowed-origins';
 // No global response interceptor — each controller is responsible for consistent {success, data} format
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { RequestLog } from './entities/request-log.entity';
@@ -110,24 +111,10 @@ async function bootstrap() {
   // sites. Pin to a concrete allowlist and fail closed for
   // everything else.
   //
-  // The allowlist is built from these env vars, in order:
-  //   CORS_ALLOWED_ORIGINS   comma-separated explicit list
-  //   FRONTEND_URL           the primary web UI (always included)
-  //   ADMIN_URL              optional admin panel (if deployed)
-  // Plus localhost:3002 in non-production for local dev.
-  const envOrigins = (configService.get<string>('CORS_ALLOWED_ORIGINS') || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const allowedOrigins = new Set<string>(envOrigins);
-  const frontendUrl = configService.get<string>('FRONTEND_URL');
-  if (frontendUrl) allowedOrigins.add(frontendUrl);
-  const adminUrl = configService.get<string>('ADMIN_URL');
-  if (adminUrl) allowedOrigins.add(adminUrl);
-  if (process.env.NODE_ENV !== 'production') {
-    allowedOrigins.add('http://localhost:3002');
-    allowedOrigins.add('http://127.0.0.1:3002');
-  }
+  // The allowlist (CORS_ALLOWED_ORIGINS, FRONTEND_URL, ADMIN_URL, plus the
+  // local dev server outside production) comes from one builder, shared
+  // with the MCP Origin check -- see common/security/allowed-origins.ts.
+  const allowedOrigins = dashboardAllowedOrigins((name) => configService.get<string>(name));
 
   // Every route but the public chat surfaces keeps exactly this policy: no
   // Origin header (server-to-server, curl, same-origin) is fine, otherwise

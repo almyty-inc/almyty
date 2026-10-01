@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, forwardRef } from '@nestjs/common';
 import { v7 as uuidv7 } from 'uuid';
 
-import { StreamableHttpTransport } from '../mcp/transports/streamable-http.transport';
+import { WorkerStreamTransport } from './transport/worker-stream.transport';
 import {
   HeartbeatAckPayload,
   WorkerEnvelope,
@@ -162,7 +162,7 @@ export class RunnerCallService implements OnModuleDestroy {
 
   constructor(
     private readonly runners: RunnerService,
-    private readonly transport: StreamableHttpTransport,
+    private readonly transport: WorkerStreamTransport,
     // forwardRef: WorkspaceModule imports RunnerModule for the TTL tick,
     // and this is the return edge.
     @Inject(forwardRef(() => WorkspaceService))

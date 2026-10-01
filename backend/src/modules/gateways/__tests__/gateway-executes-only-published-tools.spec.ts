@@ -189,9 +189,9 @@ describe('a gateway executes only the tools it publishes (MCP, UTCP, Skills)', (
       ['another member\'s private tool', 'private_tool'],
     ])('answers %s exactly as a tool that does not exist, off the network', async (_label, name) => {
       const missing = await refusal('no_such_tool', GATEWAYS.org.id);
-      expect(missing).toEqual({ code: JsonRpcErrorCode.TOOL_NOT_FOUND, message: 'Tool not found: no_such_tool' });
+      expect(missing).toEqual({ code: JsonRpcErrorCode.INVALID_PARAMS, message: 'Tool not found: no_such_tool' });
       expect(await refusal(name, GATEWAYS.org.id)).toEqual({
-        code: JsonRpcErrorCode.TOOL_NOT_FOUND,
+        code: JsonRpcErrorCode.INVALID_PARAMS,
         message: `Tool not found: ${name}`,
       });
       expect(mockedAxios).not.toHaveBeenCalled();
@@ -202,7 +202,7 @@ describe('a gateway executes only the tools it publishes (MCP, UTCP, Skills)', (
 
     it('does not serve a tool published on a different gateway of the same org', async () => {
       expect((await call('unpublished', GATEWAYS.other.id)).isError).toBe(false);
-      expect(await refusal('unpublished', GATEWAYS.org.id)).toMatchObject({ code: JsonRpcErrorCode.TOOL_NOT_FOUND });
+      expect(await refusal('unpublished', GATEWAYS.org.id)).toMatchObject({ code: JsonRpcErrorCode.INVALID_PARAMS });
     });
 
     it('lists and calls from one set: every listed tool runs, every other org tool is not found', async () => {
@@ -211,7 +211,7 @@ describe('a gateway executes only the tools it publishes (MCP, UTCP, Skills)', (
       for (const tool of tools.rows()) {
         const outcome = await call(tool.name, GATEWAYS.org.id).then(
           (r) => (r.isError ? 'error' : 'ran'),
-          (e) => (e.code === JsonRpcErrorCode.TOOL_NOT_FOUND ? 'not found' : `threw ${e.message}`),
+          (e) => (e.code === JsonRpcErrorCode.INVALID_PARAMS ? 'not found' : `threw ${e.message}`),
         );
         expect([tool.name, outcome]).toEqual([tool.name, listed.includes(tool.name) ? 'ran' : 'not found']);
       }
@@ -235,7 +235,7 @@ describe('a gateway executes only the tools it publishes (MCP, UTCP, Skills)', (
       // Attached is necessary, not sufficient: the private tool attached to
       // its owner's gateway is still not served to anyone else's call there.
       expect(await refusal('private_tool', GATEWAYS.privateOwner.id, CAST.member)).toMatchObject({
-        code: JsonRpcErrorCode.TOOL_NOT_FOUND,
+        code: JsonRpcErrorCode.INVALID_PARAMS,
       });
     });
   });

@@ -4,18 +4,22 @@ import { Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  JsonRpcRequest,
   JsonRpcResponse,
-  JsonRpcError,
-  JsonRpcErrorCode,
   McpInitializeRequest,
-  McpInitializeResult,
   McpCapabilities,
   McpSession,
   McpCallToolRequest,
   McpReadResourceRequest,
   McpGetPromptRequest,
 } from './types/mcp.types';
+import {
+  DEFAULT_CALL_CONTEXT,
+  McpCallContext,
+  McpSurface,
+  handleMessage,
+  handleSingleMessage,
+} from './core/mcp-protocol-core';
+import { toolsChangedChannel } from '../mcp-events/mcp-change-bus.service';
 
 import { Gateway } from '../../entities/gateway.entity';
 import { Organization } from '../../entities/organization.entity';
@@ -48,15 +52,15 @@ export class McpService {
   ) {}
 
   /**
-   * Entry point for a POSTed MCP *message*, which — in the 2025-03-26
-   * revision this server negotiates for modern clients — may be a single
-   * JSON-RPC message or an array batching several of them.
+   * Entry point for a POSTed MCP *message* on a tenant gateway or the
+   * gateway-less org endpoint: one JSON-RPC message, or (2025-03-26 and
+   * older only) a batch. Everything protocol-shaped -- notifications,
+   * batching, version negotiation, per-version result shaping -- is the
+   * core's (core/mcp-protocol-core.ts); this service is the surface.
    *
-   * An array used to be rejected outright with -32600 even though the
-   * transport docstring claimed batch support and the negotiated revision
-   * requires a server to accept one. (2025-06-18 removed batching again,
-   * but a client asking for that version is answered 2025-03-26, so the
-   * obligation stands.)
+   * `ctx` is the version the HTTP binding resolved for this request.
+   * Omitted (in-process callers, the legacy SSE transport), the request is
+   * treated as the spec's no-header default, 2025-03-26.
    *
    * Returns `null` when there is nothing to send back at all — a lone
    * notification, or a batch made up entirely of notifications. Callers
@@ -67,198 +71,96 @@ export class McpService {
     organizationId: string,
     userId?: string,
     gatewayId?: string,
+    ctx: McpCallContext = DEFAULT_CALL_CONTEXT,
   ): Promise<JsonRpcResponse | JsonRpcResponse[] | null> {
-    if (!Array.isArray(message)) {
-      return this.handleJsonRpc(message, organizationId, userId, gatewayId);
-    }
-
-    // JSON-RPC 2.0 §6: an empty array is itself an Invalid Request, and is
-    // answered with a single (non-array) error response.
-    if (message.length === 0) {
-      return {
-        jsonrpc: '2.0',
-        id: null,
-        error: {
-          code: JsonRpcErrorCode.INVALID_REQUEST,
-          message: 'Invalid Request: empty batch',
-        },
-      };
-    }
-
-    const responses: JsonRpcResponse[] = [];
-    for (const member of message) {
-      const response = await this.handleJsonRpc(member, organizationId, userId, gatewayId);
-      if (response !== null) {
-        responses.push(response);
-      }
-    }
-
-    // A batch of nothing but notifications gets no response document.
-    return responses.length > 0 ? responses : null;
+    return handleMessage(message, this.surfaceFor(organizationId, userId, gatewayId), ctx);
   }
 
-  async handleJsonRpc(requestBody: any, organizationId: string, userId?: string, gatewayId?: string): Promise<JsonRpcResponse> {
-    // JSON-RPC 2.0 §4.1: a Notification is any message with no `id`, and it
-    // MUST NOT be answered. Captured before validation so that a malformed
-    // notification is dropped rather than answered with an error — which
-    // would itself be a reply to a notification.
-    const isNotification = requestBody && typeof requestBody === 'object' && requestBody.id === undefined;
-    try {
-      const request = this.validateJsonRpcRequest(requestBody);
+  /** One JSON-RPC message; null for a notification. */
+  async handleJsonRpc(
+    requestBody: any,
+    organizationId: string,
+    userId?: string,
+    gatewayId?: string,
+    ctx: McpCallContext = DEFAULT_CALL_CONTEXT,
+  ): Promise<JsonRpcResponse> {
+    return handleSingleMessage(requestBody, this.surfaceFor(organizationId, userId, gatewayId), ctx) as Promise<JsonRpcResponse>;
+  }
 
-      // `bypassTeamFilter: true` on the tool-listing paths is documented as
-      // safe because gateway-tool resolution gates access by gateway
-      // membership. On the gateway-less path there is no gateway -- gatewayId
-      // is undefined on every call from McpController and from the transports
-      // -- so nothing compensated, AccessPolicyService.applyListFilter was
-      // skipped, and the listing fell back to an org-only filter that exposed
-      // team-scoped tools the caller holds no membership for. Hand the
-      // handlers the real caller so they can scope properly.
-      const caller = userId ? { id: userId } : undefined;
+  /**
+   * The tenant gateway (or, without a gateway, the caller's organization)
+   * as an MCP surface.
+   *
+   * `bypassTeamFilter: true` on the tool-listing paths is documented as
+   * safe because gateway-tool resolution gates access by gateway
+   * membership. On the gateway-less path there is no gateway, so the
+   * handlers get the real caller and scope the listing to it.
+   */
+  private surfaceFor(organizationId: string, userId?: string, gatewayId?: string): McpSurface {
+    const caller = userId ? { id: userId } : undefined;
+    const tools = this.toolHandler;
+    const content = this.contentHandler;
+    return {
+      serverInfo: async () => ({ name: await this.serverName(organizationId, gatewayId), version: '1.0.0' }),
+      capabilities: () => this.capabilities(),
+      listTools: (params) => tools.handleToolsList(params, organizationId, gatewayId, caller),
+      callTool: (params, ctx) =>
+        tools.handleToolCall(params as McpCallToolRequest, organizationId, userId, gatewayId, ctx?.paramHeaders, ctx),
+      complete: (params) => tools.handleCompletionComplete(params, organizationId, gatewayId),
+      listResources: (params) => content.handleResourcesList(params, organizationId, gatewayId, caller),
+      readResource: (params) =>
+        content.handleResourceRead(params as McpReadResourceRequest, organizationId, caller, gatewayId),
+      listResourceTemplates: () => content.handleResourceTemplatesList(),
+      listPrompts: (params) => content.handlePromptsList(params, organizationId, gatewayId, caller),
+      getPrompt: (params) => content.handlePromptGet(params as McpGetPromptRequest, organizationId, gatewayId, caller),
+      // almyty's own methods, kept for the clients that use them (design
+      // doc, decision 16). Not in any MCP revision.
+      extraMethods: {
+        'tools/discover': (params) => tools.handleToolsDiscover(params, organizationId, gatewayId, caller),
+        'tools/search': (params) => tools.handleToolsSearch(params, organizationId, gatewayId, caller),
+        'tools/get': (params) => tools.handleToolGet(params, organizationId, userId, gatewayId),
+        'skills/list': (params) => content.handleSkillsList(params, organizationId, gatewayId, caller),
+        'skills/get': (params) => content.handleSkillGet(params, organizationId, caller, gatewayId),
+      },
+      // A tenant gateway's tool set changes (assignments, activations,
+      // re-syncs); the org-wide surface has no channel of its own.
+      toolsChangedChannel: () => (gatewayId ? toolsChangedChannel(gatewayId) : null),
+      onInitialize: (params) => this.recordInitialize(params as McpInitializeRequest, organizationId, userId, gatewayId),
+      onOutcome: gatewayId ? (success) => this.bumpGatewayMetrics(gatewayId, organizationId, success) : undefined,
+    };
+  }
 
-      this.logger.debug(`Handling MCP method: ${request.method} for org: ${organizationId}`);
+  private async serverName(organizationId: string, gatewayId?: string): Promise<string> {
+    if (!gatewayId) return 'almyty';
+    const gateway = await this.gatewayRepository.findOne({ where: { id: gatewayId, organizationId } });
+    return gateway?.name ?? 'almyty';
+  }
 
-      let result: any;
-
-      switch (request.method) {
-        case 'initialize':
-          result = await this.handleInitialize(request.params as McpInitializeRequest, organizationId, userId, gatewayId);
-          break;
-
-        case 'ping':
-          result = {};
-          break;
-
-        // Tool methods
-        case 'tools/list':
-          result = await this.toolHandler.handleToolsList(request.params, organizationId, gatewayId, caller);
-          break;
-
-        case 'tools/discover':
-          result = await this.toolHandler.handleToolsDiscover(request.params, organizationId, gatewayId, caller);
-          break;
-
-        case 'tools/search':
-          result = await this.toolHandler.handleToolsSearch(request.params, organizationId, gatewayId, caller);
-          break;
-
-        case 'tools/get':
-          result = await this.toolHandler.handleToolGet(request.params, organizationId, userId, gatewayId);
-          break;
-
-        case 'tools/call':
-          result = await this.toolHandler.handleToolCall(request.params as McpCallToolRequest, organizationId, userId, gatewayId);
-          break;
-
-        case 'completion/complete':
-          result = await this.toolHandler.handleCompletionComplete(request.params, organizationId, gatewayId);
-          break;
-
-        // Resource methods
-        case 'resources/list':
-          result = await this.contentHandler.handleResourcesList(request.params, organizationId, gatewayId, caller);
-          break;
-
-        case 'resources/read':
-          result = await this.contentHandler.handleResourceRead(request.params as McpReadResourceRequest, organizationId, caller, gatewayId);
-          break;
-
-        case 'resources/templates/list':
-          result = await this.contentHandler.handleResourceTemplatesList();
-          break;
-
-        case 'resources/subscribe':
-        case 'resources/unsubscribe':
-          result = {};
-          break;
-
-        // Prompt methods
-        case 'prompts/list':
-          result = await this.contentHandler.handlePromptsList(request.params, organizationId, gatewayId, caller);
-          break;
-
-        case 'prompts/get':
-          result = await this.contentHandler.handlePromptGet(request.params as McpGetPromptRequest, organizationId, gatewayId, caller);
-          break;
-
-        // Skills methods
-        case 'skills/list':
-          result = await this.contentHandler.handleSkillsList(request.params, organizationId, gatewayId, caller);
-          break;
-
-        case 'skills/get':
-          result = await this.contentHandler.handleSkillGet(request.params, organizationId, caller, gatewayId);
-          break;
-
-        // Logging
-        case 'logging/setLevel':
-          result = {};
-          break;
-
-        // Client→server notifications (fire-and-forget, no response per JSON-RPC 2.0)
-        case 'notifications/initialized':
-        case 'notifications/cancelled':
-        case 'notifications/progress':
-        case 'notifications/roots/list_changed':
-          return null;
-
-        default:
-          throw this.createJsonRpcError(
-            JsonRpcErrorCode.METHOD_NOT_FOUND,
-            `Method not found: ${request.method}`,
-            request.id,
-          );
-      }
-
-      const response: JsonRpcResponse = {
-        jsonrpc: '2.0',
-        id: request.id,
-        result,
-      };
-
-      if (gatewayId) {
-        await this.bumpGatewayMetrics(gatewayId, organizationId, true);
-      }
-
-      // The method ran — a notification is allowed side effects — but a
-      // message with no `id` gets no reply. `{"jsonrpc":"2.0","method":"ping"}`
-      // used to come back as a -32600 error, which was both wrong and itself
-      // a reply to a notification.
-      return isNotification ? null : response;
-
-    } catch (error) {
-      if (gatewayId) {
-        await this.bumpGatewayMetrics(gatewayId, organizationId, false);
-      }
-
-      // Same rule on the error path: never answer a notification, not even
-      // to complain about it.
-      if (isNotification) {
-        this.logger.debug(`Dropping error for notification: ${error?.message}`);
-        return null;
-      }
-
-      // `?? null`, not `|| null`: id `0` is a legal JSON-RPC id, and
-      // rewriting it to null left the client unable to correlate the error
-      // with its request — the call just hung.
-      if (error && typeof error === 'object' && 'code' in error && 'message' in error) {
-        return {
-          jsonrpc: '2.0',
-          id: requestBody?.id ?? null,
-          error,
-        };
-      }
-
-      this.logger.error(`MCP JSON-RPC error: ${error.message}`, error.stack);
-      return {
-        jsonrpc: '2.0',
-        id: requestBody?.id ?? null,
-        error: {
-          code: JsonRpcErrorCode.INTERNAL_ERROR,
-          message: 'Internal server error',
+  private capabilities(): McpCapabilities {
+    return {
+      // listChanged stays false: telling a legacy client about a change
+      // needs a server stream, which needs sessions (owner decision 13).
+      tools: { listChanged: false },
+      resources: { subscribe: false, listChanged: false },
+      prompts: { listChanged: false },
+      completions: {},
+      logging: {},
+      experimental: {
+        almyty: {
+          universalApiTranslation: true,
+          multiProtocolSupport: ['mcp', 'utcp', 'a2a'],
+          apiFormats: ['openapi', 'graphql', 'soap', 'protobuf'],
+          progressiveDiscovery: {
+            methods: ['tools/discover', 'tools/search', 'tools/get'],
+            description: 'Use tools/discover for categories, tools/search for filtered results, tools/get for full schema',
+          },
+          skills: {
+            methods: ['skills/list', 'skills/get'],
+            description: 'Generate procedural skill files (YAML frontmatter + markdown) for tools and gateways',
+          },
         },
-      };
-    }
+      },
+    };
   }
 
   private async bumpGatewayMetrics(
@@ -285,20 +187,12 @@ export class McpService {
     }
   }
 
-  private async handleInitialize(
+  private recordInitialize(
     params: McpInitializeRequest,
     organizationId: string,
     userId?: string,
     gatewayId?: string,
-  ): Promise<McpInitializeResult> {
-    const SUPPORTED_VERSIONS = ['2024-11-05', '2025-03-26'];
-    if (!params.protocolVersion || params.protocolVersion < '2024-11-05') {
-      throw this.createJsonRpcError(
-        JsonRpcErrorCode.INVALID_PARAMS,
-        `Unsupported protocol version: ${params.protocolVersion}. Supported: ${SUPPORTED_VERSIONS.join(', ')}`,
-      );
-    }
-
+  ): void {
     const sessionId = uuidv4();
     const session: McpSession = {
       id: sessionId,
@@ -312,7 +206,6 @@ export class McpService {
       organizationId,
       userId,
     };
-
     this.sessions.set(sessionId, session);
     this.logger.log(`MCP session initialized: ${sessionId} for org: ${organizationId}`);
     this.metrics?.record(MetricType.MCP_SESSION, {
@@ -320,80 +213,6 @@ export class McpService {
       userId: userId || null,
       gatewayId: gatewayId || null,
     });
-
-    // Resolve gateway name for serverInfo
-    let serverName = 'almyty';
-    if (gatewayId) {
-      const gateway = await this.gatewayRepository.findOne({
-        where: { id: gatewayId, organizationId },
-      });
-      if (gateway) {
-        serverName = gateway.name;
-      }
-    }
-
-    const serverCapabilities: McpCapabilities = {
-      tools: { listChanged: false },
-      resources: { subscribe: false, listChanged: false },
-      prompts: { listChanged: false },
-      completions: {},
-      logging: {},
-      experimental: {
-        almyty: {
-          universalApiTranslation: true,
-          multiProtocolSupport: ['mcp', 'utcp', 'a2a'],
-          apiFormats: ['openapi', 'graphql', 'soap', 'protobuf'],
-          progressiveDiscovery: {
-            methods: ['tools/discover', 'tools/search', 'tools/get'],
-            description: 'Use tools/discover for categories, tools/search for filtered results, tools/get for full schema',
-          },
-          skills: {
-            methods: ['skills/list', 'skills/get'],
-            description: 'Generate procedural skill files (YAML frontmatter + markdown) for tools and gateways',
-          },
-        },
-      },
-    };
-
-    const negotiatedVersion = params.protocolVersion >= '2025-03-26'
-      ? '2025-03-26'
-      : '2024-11-05';
-
-    return {
-      protocolVersion: negotiatedVersion,
-      capabilities: serverCapabilities,
-      serverInfo: { name: serverName, version: '1.0.0' },
-    };
-  }
-
-  private validateJsonRpcRequest(body: any): JsonRpcRequest {
-    if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      throw this.createJsonRpcError(JsonRpcErrorCode.INVALID_REQUEST, 'Invalid request body');
-    }
-
-    if (body.jsonrpc !== '2.0') {
-      throw this.createJsonRpcError(JsonRpcErrorCode.INVALID_REQUEST, 'Invalid JSON-RPC version');
-    }
-
-    if (!body.method || typeof body.method !== 'string') {
-      throw this.createJsonRpcError(JsonRpcErrorCode.INVALID_REQUEST, 'Missing or invalid method');
-    }
-
-    // A JSON-RPC notification is any message with no `id` — the method name
-    // has nothing to do with it. Keying off a `notifications/` prefix made
-    // `{"jsonrpc":"2.0","method":"ping"}` a -32600 "Missing request ID",
-    // which is both wrong and a reply to a notification. There is no
-    // "missing id" error to raise: an absent id simply means notification,
-    // and handleJsonRpc drops the reply.
-    return body as JsonRpcRequest;
-  }
-
-  private createJsonRpcError(code: JsonRpcErrorCode, message: string, id?: string | number): JsonRpcError {
-    const error = new Error() as any;
-    error.code = code;
-    error.message = message;
-    error.id = id;
-    return error;
   }
 
   // Session Management

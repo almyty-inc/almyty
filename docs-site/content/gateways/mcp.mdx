@@ -24,6 +24,21 @@ Need another key, for another person or app? Add one in the gateway's **Authenti
 
 ![Claude client configured with an almyty gateway](/screenshots/quickstart-claude-config.png)
 
+
+## Which apps and versions work
+
+MCP has several versions, and AI apps move to new ones over time. An almyty gateway speaks the newest one, **MCP 2026-07-28**, and the two before it, **MCP 2025-11-25** and **MCP 2025-06-18**, which is what today's Claude Code, Cursor, Codex and Claude Desktop use. Apps still on the older 2025-03-26 and 2024-11-05 versions keep working too. Your app and the gateway agree on a version by themselves when the app connects; there is nothing to set and the address stays the same.
+
+One old way of connecting is being retired: the separate streaming address (SSE) that MCP apps used in 2024. Gateways never offered it, and the newer MCP versions drop it. almyty's own `/mcp/sse` address still answers for the few apps that need it and tells them it is deprecated; it goes away once nobody uses it.
+
+What your app gets from the gateway:
+
+- **Readable tool names.** Next to `petstore_get_pet_by_id` the app sees "Petstore get pet by id".
+- **What a tool does to your data.** Each tool says whether it only reads, changes something, or deletes something, so the app can ask you before a change. These are hints for the app; the gateway still applies your approval rules and security policies itself.
+- **Structured results.** A tool that answers with a record returns it as data the app can read field by field, next to the usual text.
+- **Tool changes right away.** An app on MCP 2026-07-28 hears when you add, remove, turn on or turn off a tool on the gateway, and refreshes its list without reconnecting.
+- **Sign-in without a setup step.** With OAuth on the gateway, apps that support the newer sign-in (client metadata documents) connect with no registration first, and the sign-in page shows which website the app identified itself from. Apps that only support the older registration still work. See [Gateway authentication](/gateways/authentication).
+
 ## For developers
 
 The endpoint follows this pattern, and speaks MCP over HTTP (JSON-RPC 2.0 requests sent with `POST`):
@@ -32,7 +47,7 @@ The endpoint follows this pattern, and speaks MCP over HTTP (JSON-RPC 2.0 reques
 https://api.almyty.com/{org}/{gateway-slug}
 ```
 
-The **Integrations** tab also lists an SSE transport address (`/sse` under the endpoint) and a discovery address.
+Only `POST` carries MCP: the gateway keeps no session and opens no stream of its own, so `GET` and `DELETE` on the endpoint answer `405 Method Not Allowed`. A 2026-07-28 client that wants change notifications asks for them with a `subscriptions/listen` POST (see [MCP 2026-07-28](#mcp-2026-07-28)). The legacy HTTP+SSE transport (2024-11-05) is not served on gateways; it is deprecated in MCP 2026-07-28 (see [Legacy SSE transport](#legacy-sse-transport)).
 
 ### Claude Code
 
@@ -102,6 +117,109 @@ https://api.almyty.com/acme/petstore/.well-known/oauth-protected-resource
 
 A 401 carries a `WWW-Authenticate` header pointing at the protected resource metadata, so MCP clients start the OAuth flow by themselves. See [Gateway authentication](/gateways/authentication).
 
+### Protocol versions
+
+| Version | Status |
+|---------|--------|
+| `2026-07-28` | Supported: stateless, no `initialize`; checked against the conformance suite's 2026-07-28 requirements in CI |
+| `2025-11-25` | Supported; covered by the official conformance suite in CI |
+| `2025-06-18` | Supported; covered by the official conformance suite in CI |
+| `2025-03-26` | Answered for older clients, not claimed |
+| `2024-11-05` | Answered for older clients, not claimed |
+
+How the version of a request is decided:
+
+1. A request whose `params._meta` names `io.modelcontextprotocol/protocolVersion` is a 2026-07-28 request (below).
+2. `initialize`: the gateway answers with the version the client asked for when it speaks it, otherwise with its newest legacy version (`2025-11-25`). It is never an error.
+3. Every later request carries the `MCP-Protocol-Version` header, which the gateway follows. A request without the header is treated as `2025-03-26`, as the specification says. A header naming a version the gateway does not speak gets `400` with `-32022`, whose `data` lists the supported versions.
+
+From `2025-06-18` on, JSON-RPC batches are refused with `400` (`-32600`). `2025-03-26` and older still accept them.
+
+A self-hosted install picks the versions it answers with `MCP_PROTOCOL_VERSIONS` (comma list, default all five).
+
+### MCP 2026-07-28
+
+Every request stands alone: there is no `initialize`, no session and no `Mcp-Session-Id`. Each request carries in `params._meta`:
+
+- `io.modelcontextprotocol/protocolVersion` (required) and `io.modelcontextprotocol/clientCapabilities` (required, may be `{}`); missing either is `-32602` with `400`;
+- `io.modelcontextprotocol/clientInfo` (optional), which the request log records.
+
+The HTTP headers must mirror the body; any disagreement is `-32020` with `400`. The first three are checked before authentication, the last when the tool is known:
+
+- `MCP-Protocol-Version` equals the `_meta` version;
+- `Mcp-Method` equals the JSON-RPC `method` (every request);
+- `Mcp-Name` equals `params.name` (`tools/call`, `prompts/get`) or `params.uri` (`resources/read`). A value that is not plain ASCII is sent as `=?base64?<base64 of UTF-8>?=`;
+- `Mcp-Param-<Name>` for each tool argument the tool's input schema marks with `"x-mcp-header": "<Name>"` (reachable through `properties` only). The header must be present when the argument is, and carry the same value (numbers compare numerically, booleans as `true`/`false`).
+
+`server/discover` answers `supportedVersions`, `capabilities` and `instructions`; a client asks it instead of guessing. Every result carries `resultType: "complete"` and the server's name and version in `_meta["io.modelcontextprotocol/serverInfo"]`. The list results and `resources/read` also carry `ttlMs` (`MCP_RESULT_TTL_MS`, default 60000) and `cacheScope: "private"`: a list depends on who asks, so a shared cache must not reuse it.
+
+`ping`, `logging/setLevel`, `resources/subscribe` and the other methods 2026-07-28 removed are `-32601` with `404`, which is how a client that speaks both eras tells the two apart. 2026 clients do not get the `logging` capability. A tool's `structuredContent` may be any JSON value (below 2026-07-28 only an object).
+
+`subscriptions/listen` replaces the server stream. It is a POST whose response is an event stream: the first message is `notifications/subscriptions/acknowledged` with the subset of the requested notifications the gateway will send, and every message carries the listen request's id in `_meta["io.modelcontextprotocol/subscriptionId"]`. A gateway honours `toolsListChanged`, and advertises `tools.listChanged: true` to 2026 clients: assigning or removing a tool, activating, deactivating, editing or deleting one, and re-syncing an MCP source all send `notifications/tools/list_changed` to every open stream of the gateways involved, on whichever server holds the stream (Redis pub/sub). The stream sends a keep-alive comment every `MCP_LISTEN_KEEPALIVE_MS` (default 15000) and ends with a `complete` result after `MCP_LISTEN_MAX_SECONDS` (default 3600); the client opens a new one. Legacy clients keep `listChanged: false`.
+
+The gateway page shows no separate discovery address: MCP defines none, and a client asks the endpoint itself with `server/discover`.
+
+A call that an approval rule holds can be approved inside the call by a 2026-07-28 client that declared `elicitation`, when its user could approve it on the Approvals page: `tools/call` answers `resultType: "input_required"` with an approve-or-reject form and a sealed `requestState`, and the retry returns the call's result. Everyone else gets the "waiting for approval" answer with an `_approvalId`, as before. See [Approvals](/approvals). Long agent runs (tasks, `get_run`) are on the management server: see [Control almyty via MCP](/control-via-mcp).
+
+### Legacy SSE transport
+
+The HTTP+SSE transport of MCP 2024-11-05 (a long-lived `GET` stream plus a separate address to `POST` messages to) is deprecated in MCP 2026-07-28 (SEP-2596). Gateways never served it. almyty's organization endpoint still does, for clients that have not moved to Streamable HTTP:
+
+| Route | What it is |
+|-------|------------|
+| `GET /mcp/sse` | Opens the stream; its first event names the message address |
+| `POST /mcp/sse/:connectionId/message` | Sends a JSON-RPC message on that stream |
+| `GET /mcp/servers/:serverId/sse` | The same stream for one MCP server |
+
+Every response on these routes carries the standard deprecation headers (RFC 9745), so a client's tooling can say so:
+
+```
+Deprecation: @1785196800
+Link: <https://docs.almyty.com/gateways/mcp#legacy-sse-transport>; rel="deprecation"; type="text/html"
+```
+
+`/mcp` lists the transport in `deprecatedTransports`. The request log records the protocol version of every MCP request, which is how almyty sees whether anyone still uses these routes; they are removed once nobody does. Move a client to Streamable HTTP: `POST https://api.almyty.com/mcp`, or a gateway's own address.
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `MCP_LEGACY_SSE_DEPRECATION_HEADERS` | `true` | Send the two headers at all |
+| `MCP_LEGACY_SSE_DEPRECATED_AT` | `2026-07-28` | The date in `Deprecation` (ISO 8601) |
+| `MCP_LEGACY_SSE_DOCS_URL` | this section | Where `Link` points (`http` or `https` only) |
+
+### Origin
+
+A request that carries an `Origin` header must come from the dashboard, the API's own origin, or an origin in `MCP_ALLOWED_ORIGINS` (comma list); anything else gets `403` with an id-less JSON-RPC error, before authentication. Requests without `Origin` (Claude Code, Cursor, curl, the stdio proxy) are not affected. Outside production, MCP Inspector's local origin (`http://localhost:6274`) is allowed.
+
+### Tools
+
+`tools/list` returns the gateway's tools sorted by name, then id, so the list is the same on every call. Each tool carries:
+
+| Field | From version | Content |
+|-------|--------------|---------|
+| `name`, `description`, `inputSchema` | all | `inputSchema` is JSON Schema 2020-12 (OpenAPI 3.0 idioms such as `nullable` and boolean `exclusiveMinimum` are rewritten on the way out; the stored schema is unchanged) |
+| `annotations` | 2025-03-26 | `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` |
+| `title` | 2025-06-18 | the tool's `metadata.title`, else its name in words |
+| `outputSchema` | 2025-06-18 | when the tool has an object-shaped output schema (`MCP_EMIT_OUTPUT_SCHEMA=false` turns this off) |
+| `icons` | 2025-11-25 | the tool's or its API's icon, when one is set (https only) |
+
+Annotations come from what the tool calls: `GET`, `HEAD` and `OPTIONS` read; `DELETE` is destructive; `POST`, `PUT` and `PATCH` write; a GraphQL query reads and a mutation writes; an LLM tool reads and does not reach outside; anything without a signal is a write. A tool's `metadata.sideEffect` (`read`, `write`, `destructive`) overrides this.
+
+`tools/call` returns the result as a text block and also as `structuredContent`: for a 2025-06-18 or 2025-11-25 client when the result is a JSON object, for a 2026-07-28 client whatever JSON it is. When the tool declares an `outputSchema`, the result is checked against it first; a result that does not match comes back as a tool error that carries the data, so the client does not reject it. Invalid arguments, a failing upstream API and a refused call are tool errors (`isError: true`) the model can read and act on. An unknown tool is a protocol error, `-32602`.
+
+`tools/list` is cached for `MCP_TOOLS_LIST_CACHE_SECONDS` (default 60; `0` turns the cache off). Gateway traffic is also limited per client by `UNIFIED_ENDPOINT_RATE_LIMIT` requests per `UNIFIED_ENDPOINT_RATE_TTL_SECONDS` (defaults 60 and 60), on top of each gateway's own limits.
+
+### Request log
+
+Every MCP request's row in the request log records the protocol version, how it was decided (`modern` for a 2026-07-28 request, `legacy` when negotiated or named by the header, `assumed` without a header), the method, the outcome and the client's name and version (`metadata.mcp`). A 2026-07-28 client names itself on every request; older clients only on `initialize`, and the row's User-Agent identifies them after that.
+
+A 2026-07-28 request may carry W3C trace context in `_meta` (`traceparent`, `tracestate`, `baggage`). A well-formed one is kept, not followed: it is stored as `metadata.mcp.trace` on the request log row, and as `metadata.trace` on the tool execution and audit rows written while the request runs, so you can join our rows to your own trace.
+
+### Conformance
+
+CI runs the official [MCP conformance suite](https://github.com/modelcontextprotocol/conformance) against a seeded gateway for `2025-11-25` and `2025-06-18` and blocks a merge on any unexpected failure. The scenarios that need the reference server's fixtures (tools that return images or audio, send progress or log messages mid-call, or ask the client for sampling or elicitation; the `test://` resources and `test_*` prompts) are listed with reasons in `backend/scripts/mcp-conformance/expected-failures-2025-11-25.yml`. MCP Inspector and the official SDK client at each claimed version run in the same job.
+
+The same job runs the suite's `2026-07-28` requirements against its own list, `expected-failures-2026-07-28.yml` (the same fixtures, plus the multi-round-trip scenarios this gateway does not serve yet). It does not block a merge until a stable release of the suite covers 2026-07-28. MCP Inspector also connects in the modern era.
+
 ### Error codes
 
 MCP errors follow JSON-RPC 2.0:
@@ -110,6 +228,12 @@ MCP errors follow JSON-RPC 2.0:
 |------|---------|
 | `-32700` | Parse error |
 | `-32600` | Invalid request |
-| `-32601` | Method not found |
-| `-32602` | Invalid params |
+| `-32601` | Method not found (`404` for a 2026-07-28 request) |
+| `-32602` | Invalid params (`400` when a 2026-07-28 request lacks a required `_meta` field) |
 | `-32603` | Internal error |
+| `-32020` | A header does not match the body (`400`) |
+| `-32021` | A client capability the request needs is missing (`400`) |
+| `-32022` | Unsupported protocol version, `data` has `supported` and `requested` (`400`) |
+
+`-32602` also answers an unknown tool, and a resource or prompt that does not exist, on every version: `data` carries the `uri` or `name` asked for. An unsupported `MCP-Protocol-Version` header is `-32022` with `400` on every version. A refused batch is `-32600` with `400`, and a refused `Origin` `-32600` with `403`. Below 2026-07-28 every other answer is `200`.
+`-32602` also answers an unknown tool. A resource or prompt that does not exist is `-32001` today (it moves to `-32602` with MCP 2026-07-28 support). `-32600` comes with HTTP `400` for a refused batch or an unsupported `MCP-Protocol-Version`, and with `403` for a refused `Origin`.

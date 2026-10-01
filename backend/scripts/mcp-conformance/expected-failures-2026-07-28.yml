@@ -1,0 +1,43 @@
+# Conformance scenarios an almyty MCP gateway is expected to fail, for
+# @modelcontextprotocol/conformance --requirements 2026-07-28 (CI job
+# mcp-conformance; non-blocking until a stable conformance release covers
+# 2026-07-28, design doc decision 14). A scenario listed here that starts
+# passing fails the run until it is removed.
+#
+# Fixtures a gateway does not have (see expected-failures-2025-11-25.yml):
+# image/audio/embedded/mixed-content and progress tools, the test:// resources
+# and the test_* prompts.
+#
+# server-stateless: its other checks pass; the failing ones need diagnostic
+# tools of the reference server (test_missing_capability, test_logging_tool,
+# test_streaming_elicitation) that make the server ask for client capabilities
+# or log mid-call. The same rules are pinned by backend specs instead
+# (mcp-modern.spec.ts).
+#
+# input-required-result-*: multi round-trip requests (MRTR), design doc P2.
+server:
+  - tools-call-image
+  - tools-call-audio
+  - tools-call-embedded-resource
+  - tools-call-mixed-content
+  - tools-call-with-progress
+  - resources-read-text
+  - resources-read-binary
+  - resources-templates-read
+  - prompts-get-simple
+  - prompts-get-with-args
+  - prompts-get-embedded-resource
+  - prompts-get-with-image
+  - server-stateless
+  - input-required-result-basic-elicitation
+  - input-required-result-basic-sampling
+  - input-required-result-basic-list-roots
+  - input-required-result-request-state
+  - input-required-result-multiple-input-requests
+  - input-required-result-multi-round
+  - input-required-result-non-tool-request
+  - input-required-result-result-type
+  - input-required-result-tampered-state
+  - input-required-result-capability-check
+  - input-required-result-missing-input-response
+  - input-required-result-ignore-extra-params

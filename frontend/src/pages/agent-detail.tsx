@@ -429,7 +429,7 @@ export function AgentDetailPage() {
         </TabsContent>
 
         <TabsContent value="channels" className="space-y-4">
-          <ChannelsTab agentId={id!} agentName={agent?.name} />
+          <ChannelsTab agentId={id!} agentName={agent?.name} agentOwnerId={agent?.createdBy} />
         </TabsContent>
 
         <TabsContent value="skills" className="space-y-4">

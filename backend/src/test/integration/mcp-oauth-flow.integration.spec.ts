@@ -17,7 +17,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { McpOAuthService } from '../../modules/mcp/services/mcp-oauth.service';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
-import { listenOnLoopback } from '../http';
+import * as http from 'http';
+import { AddressInfo } from 'net';
+import { listenOnLoopback, serveOnLoopback } from '../http';
+import { cimdTestDocuments } from '../cimd-test-fetcher';
 import { GlobalExceptionFilter } from '../../common/filters/global-exception.filter';
 import cookieParser from 'cookie-parser';
 import { DataSource } from 'typeorm';
@@ -426,15 +429,16 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
       expect(res.body.result.prompts).toEqual([]);
     });
 
-    it('prompts/get returns valid message (not error)', async () => {
+    // The management gateway lists no prompts, so a name is unknown: the
+    // spec's -32602, not a made-up message echoing the name back.
+    it('prompts/get answers an unknown prompt with -32602', async () => {
       const res = await request(app.getHttpServer())
         .post(`/${ORG_SLUG}/almyty`)
         .set('Authorization', `Bearer ${bearerToken}`)
         .send({ jsonrpc: '2.0', id: 1, method: 'prompts/get', params: { name: 'test' } })
         .expect(200);
 
-      expect(res.body.result.messages).toBeDefined();
-      expect(res.body.error).toBeUndefined();
+      expect(res.body.error.code).toBe(-32602);
     });
 
     it('resources/list returns empty array', async () => {
@@ -700,6 +704,148 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
       for (const { clientId } of authorized) {
         expect((await clients.findOneByOrFail({ clientId })).isActive).toBe(true);
       }
+    });
+  });
+
+  // Registration by Client ID Metadata Document, end to end over HTTP: no
+  // /register call at all. The client names itself by an https URL, the
+  // server fetches the document (here from a local server through the
+  // spec's fetcher; the real fetcher refuses loopback, see
+  // mcp-oauth-cimd.spec.ts), the user consents, the code comes back with
+  // `iss`, the token works on the gateway and can be revoked.
+  describe('registration by Client ID Metadata Document', () => {
+    const CLIENT_ID = `https://client.example.test/oauth/${SUFFIX}/client.json`;
+    const REDIRECT = 'http://127.0.0.1:33418/callback';
+    let docServer: http.Server;
+    let documentFetches = 0;
+
+    beforeAll(async () => {
+      docServer = await serveOnLoopback((req, res) => {
+        documentFetches += 1;
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'max-age=600' });
+        res.end(
+          JSON.stringify({
+            client_id: CLIENT_ID,
+            client_name: 'Metadata Client',
+            redirect_uris: [REDIRECT],
+            grant_types: ['authorization_code', 'refresh_token'],
+            response_types: ['code'],
+            token_endpoint_auth_method: 'none',
+            application_type: 'native',
+          }),
+        );
+      });
+      const port = (docServer.address() as AddressInfo).port;
+      cimdTestDocuments.serve = async (url) => {
+        const res = await fetch(`http://127.0.0.1:${port}${new URL(url).pathname}`);
+        return { status: res.status, cacheControl: res.headers.get('cache-control'), body: await res.text() };
+      };
+    });
+
+    afterAll(async () => {
+      cimdTestDocuments.serve = null;
+      await new Promise<void>((resolve) => docServer.close(() => resolve()));
+      await ds.getRepository(OAuthClient).delete({ clientId: CLIENT_ID });
+    });
+
+    it('advertises it in the authorization server metadata', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/.well-known/oauth-authorization-server/${ORG_SLUG}/almyty`)
+        .expect(200);
+      expect(res.body.client_id_metadata_document_supported).toBe(true);
+      expect(res.body.authorization_response_iss_parameter_supported).toBe(true);
+    });
+
+    it('authorizes, issues a token the gateway accepts, and revokes it', async () => {
+      const codeVerifier = crypto.randomBytes(32).toString('base64url');
+      const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+      const authorizeQuery = {
+        response_type: 'code',
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT,
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
+        state: 'cimd-state',
+        scope: 'mcp:*',
+      };
+
+      // The authorize GET fetches and validates the document before the
+      // consent screen is shown.
+      const consentRedirect = await request(app.getHttpServer())
+        .get(`/${ORG_SLUG}/almyty/authorize`)
+        .set('Cookie', accessTokenCookie)
+        .query(authorizeQuery)
+        .expect(302);
+      expect(consentRedirect.headers.location).toContain('/oauth/consent');
+      expect(documentFetches).toBe(1);
+
+      const consent = await request(app.getHttpServer())
+        .get(`/${ORG_SLUG}/almyty/oauth-consent`)
+        .set('Cookie', accessTokenCookie)
+        .query({ client_id: CLIENT_ID, redirect_uri: REDIRECT, scope: 'mcp:*' })
+        .expect(200);
+      expect(consent.body.clientName).toBe('Metadata Client');
+      expect(consent.body.clientHost).toBe('client.example.test');
+      expect(consent.body.issuer).toMatch(new RegExp(`/${ORG_SLUG}/almyty$`));
+
+      // The row is keyed by the URL, belongs to no organization, and was
+      // created without any registration request.
+      const row = await ds.getRepository(OAuthClient).findOneByOrFail({ clientId: CLIENT_ID });
+      expect(row.isMetadataDocument).toBe(true);
+      expect(row.organizationId).toBeNull();
+      expect(row.applicationType).toBe('native');
+
+      // Approve: the code comes back with iss (RFC 9207).
+      const approved = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/authorize`)
+        .set('Authorization', `Bearer ${accessTokenCookie.split('=')[1]}`)
+        .send(authorizeQuery)
+        .expect(201);
+      expect(approved.body.state).toBe('cimd-state');
+      expect(approved.body.iss).toBe(consent.body.issuer);
+
+      const token = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/token`)
+        .send({
+          grant_type: 'authorization_code',
+          code: approved.body.code,
+          redirect_uri: REDIRECT,
+          client_id: CLIENT_ID,
+          code_verifier: codeVerifier,
+        })
+        .expect(200);
+      expect(token.body.access_token).toBeDefined();
+      // (Caching is mcp-oauth-cimd.spec.ts's: TestAppModule's Redis stores
+      // nothing, so every step here fetched the document again.)
+
+      const listed = await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty`)
+        .set('Authorization', `Bearer ${token.body.access_token}`)
+        .set('MCP-Protocol-Version', '2025-11-25')
+        .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
+        .expect(200);
+      expect(listed.body.result.tools.map((t: any) => t.name)).toContain('list_apis');
+
+      await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty/revoke`)
+        .send({ token: token.body.access_token, client_id: CLIENT_ID })
+        .expect(200);
+      await request(app.getHttpServer())
+        .post(`/${ORG_SLUG}/almyty`)
+        .set('Authorization', `Bearer ${token.body.access_token}`)
+        .send({ jsonrpc: '2.0', id: 2, method: 'tools/list' })
+        .expect(401);
+
+      // A second authorization reuses the same row.
+      expect(await ds.getRepository(OAuthClient).count({ where: { clientId: CLIENT_ID } })).toBe(1);
+    });
+
+    it('refuses a redirect_uri the document does not list', async () => {
+      await request(app.getHttpServer())
+        .get(`/${ORG_SLUG}/almyty/oauth-consent`)
+        .set('Cookie', accessTokenCookie)
+        .query({ client_id: CLIENT_ID, redirect_uri: 'http://127.0.0.1:9/elsewhere', scope: 'mcp:*' })
+        .expect(400);
     });
   });
 });
