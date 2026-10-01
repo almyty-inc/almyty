@@ -399,7 +399,9 @@ export class ConnectionValidationService {
     const refused = this.guardUrl(url, 'MCP_ALLOW_PRIVATE_URLS');
     if (refused) return fail(`server URL refused: ${refused}`);
     const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' };
-    if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`;
+    // A pasted token (apiKey) or a sign-in's access token (accessToken).
+    const token = config.apiKey || config.accessToken;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'almyty', version: '1' } } });
     let res: Response;
     try {
