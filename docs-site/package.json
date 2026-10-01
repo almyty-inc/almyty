@@ -15,7 +15,7 @@
     "test-screenshots": "node --test scripts/check-screenshots.test.mjs"
   },
   "dependencies": {
-    "next": "^16.3.5",
+    "next": "^16.3.8",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "react": "^19.3.0",
