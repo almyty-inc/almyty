@@ -734,7 +734,7 @@
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
     },
     {
       "id": "gateway-detail",
@@ -757,7 +757,7 @@
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
     },
     {
       "id": "gateway-petstore-config",
@@ -780,7 +780,7 @@
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
     },
     {
       "id": "gateway-petstore-integration",
@@ -803,7 +803,7 @@
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
     },
     {
       "id": "guides-dev-1-gateway",
@@ -826,7 +826,7 @@
       ],
       "sourceDigest": "b3ddeb70c6d23ad49253804669cabf489d6a784240447e4aaf841621dfd21047",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
     },
     {
       "id": "guides-dev-2-gateway-setup",
@@ -849,7 +849,7 @@
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
       "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
     },
     {
       "id": "guides-dev-3-runner",
@@ -2049,7 +2049,7 @@
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
     },
     {
       "id": "quickstart-gateway-mcp",
@@ -2072,7 +2072,7 @@
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
     },
     {
       "id": "quickstart-mcp-endpoints",
@@ -2095,7 +2095,7 @@
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks; MCP P1 removed the Discovery URL (2026-07-28 clients ask the endpoint with server/discover). Recapture from the local demo stack."
     },
     {
       "id": "runner-detail",

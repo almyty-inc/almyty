@@ -527,9 +527,11 @@ jobs:
   #     reviewed baseline of fixture-only scenarios
   #     (expected-failures-2025-11-25.yml): BLOCKING;
   #   - its authorization-server metadata scenario: BLOCKING;
-  #   - the 2026-07-28 suite: non-blocking until a stable conformance
-  #     release covers it (design doc, decision 14) and P1 ships;
-  #   - MCP Inspector's CLI on the Petstore gateway (tools/list --strict);
+  #   - the 2026-07-28 requirements against their own reviewed baseline
+  #     (expected-failures-2026-07-28.yml): non-blocking until a stable
+  #     conformance release covers them (design doc, decision 14);
+  #   - MCP Inspector's CLI on the Petstore gateway (tools/list --strict),
+  #     in the legacy and the modern (2026-07-28) era;
   #   - the official TypeScript SDK client pinned at the release that speaks
   #     each version (sdk-check.mjs), since Inspector always negotiates its
   #     newest.
@@ -646,14 +648,23 @@ jobs:
           npx -y "$CONFORMANCE" authorization --url "http://localhost:4000/${MCP_ORG_SLUG}/conformance" \
             --scenario authorization-server-metadata-endpoint --spec-version 2025-11-25
 
-      - name: Conformance, 2026-07-28 (informational until P1)
+      # Reviewed baseline: the same fixtures plus MRTR (design doc P2). Not
+      # blocking until a stable conformance release covers 2026-07-28
+      # (decision 14), but a regression shows as a red step.
+      - name: Conformance, 2026-07-28 (informational until a stable suite)
         continue-on-error: true
-        run: npx -y "$CONFORMANCE" server --url "$CONFORMANCE_URL" --spec-version 2026-07-28
+        run: |
+          npx -y "$CONFORMANCE" server --url "$CONFORMANCE_URL" --requirements 2026-07-28 \
+            --expected-failures backend/scripts/mcp-conformance/expected-failures-2026-07-28.yml
 
       - name: MCP Inspector on the Petstore gateway
         run: |
           npx -y "$INSPECTOR" --cli "$PETSTORE_URL" --transport http --method tools/list --strict > /dev/null
           npx -y "$INSPECTOR" --cli "$CONFORMANCE_URL" --transport http --method tools/call --tool-name test_simple_text
+          for era in legacy modern; do
+            npx -y "$INSPECTOR" --cli "$PETSTORE_URL" --transport http --protocol-era "$era" --method tools/list --strict > /dev/null
+          done
+          npx -y "$INSPECTOR" --cli "$CONFORMANCE_URL" --transport http --protocol-era modern --method tools/call --tool-name test_simple_text
 
       - name: Official SDK client per claimed version
         run: |
