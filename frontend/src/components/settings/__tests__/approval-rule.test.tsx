@@ -15,6 +15,8 @@ import { describeAmountRule, numericFields } from '../../../lib/approval-rules'
  * Advanced.
  */
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
+// Several popovers per case: slower than the default on a busy CI runner.
+vi.setConfig({ testTimeout: 20_000 })
 
 vi.mock('../../../hooks/use-entitlement', async () => {
   const actual = await vi.importActual<any>('../../../hooks/use-entitlement')

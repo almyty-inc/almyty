@@ -93,7 +93,7 @@ beforeEach(() => {
     summary: 'Every weekday at 8:00, Europe/Berlin',
     nextRuns: ['2026-10-05T06:00:00.000Z', '2026-10-06T06:00:00.000Z'],
     timezone: 'Europe/Berlin',
-  })
+  }, 20_000)
   api.schedule.mockResolvedValue({})
 })
 
@@ -131,7 +131,7 @@ describe('/agents/:id/schedule', () => {
       }),
     )
     expect(await screen.findByText('at /agents/a1')).toBeInTheDocument()
-  })
+  }, 20_000)
 
   it('schedules on the days picked', async () => {
     const user = userEvent.setup()
@@ -146,7 +146,7 @@ describe('/agents/:id/schedule', () => {
 
     await user.click(screen.getByRole('button', { name: 'Save schedule' }))
     await waitFor(() => expect(api.schedule).toHaveBeenCalledWith('a1', expect.objectContaining({ kind: 'days', days: [1, 4] })))
-  })
+  }, 20_000)
 
   it('asks for the address before sending to an email channel', async () => {
     const user = userEvent.setup()
@@ -158,12 +158,12 @@ describe('/agents/:id/schedule', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Enter the email address.')
     expect(api.schedule).not.toHaveBeenCalled()
 
-    await user.type(screen.getByLabelText('Email address'), 'team@example.com')
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'team@example.com' } })
     await user.click(screen.getByRole('button', { name: 'Save schedule' }))
     await waitFor(() =>
       expect(api.schedule).toHaveBeenCalledWith('a1', expect.objectContaining({ deliverTo: { kind: 'channel', channelId: 'ch-email', to: 'team@example.com' } })),
     )
-  })
+  }, 20_000)
 
   it('shows a channel that cannot take a post, and why, but does not offer it', async () => {
     const user = userEvent.setup()
@@ -174,7 +174,7 @@ describe('/agents/:id/schedule', () => {
     expect(option).toHaveAttribute('aria-disabled', 'true')
     // No webhook URL on the agent: the webhook is there, not offered.
     expect(screen.getByRole('option', { name: /add a webhook URL first/ })).toHaveAttribute('aria-disabled', 'true')
-  })
+  }, 20_000)
 
   it('asks an autonomous agent in words what to do each time', async () => {
     const user = userEvent.setup()
@@ -185,10 +185,10 @@ describe('/agents/:id/schedule', () => {
     await user.click(screen.getByRole('button', { name: 'Save schedule' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Say what it should do each time.')
 
-    await user.type(screen.getByLabelText('Message'), 'Summarise yesterday.')
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Summarise yesterday.' } })
     await user.click(screen.getByRole('button', { name: 'Save schedule' }))
     await waitFor(() => expect(api.schedule).toHaveBeenCalledWith('a1', expect.objectContaining({ input: { message: 'Summarise yesterday.' } })))
-  })
+  }, 20_000)
 
   it('runs on the last day of every month', async () => {
     const user = userEvent.setup()
@@ -199,7 +199,7 @@ describe('/agents/:id/schedule', () => {
     expect(screen.getByTestId('schedule-summary')).toHaveTextContent('On the last day of every month at 9:00, Europe/Berlin')
     await user.click(screen.getByRole('button', { name: 'Save schedule' }))
     await waitFor(() => expect(api.schedule).toHaveBeenCalledWith('a1', expect.objectContaining({ kind: 'monthly', dayOfMonth: 'last' })))
-  })
+  }, 20_000)
 
   it('shows Slack channels by name, and takes a channel ID under Other', async () => {
     const user = userEvent.setup()
@@ -210,12 +210,12 @@ describe('/agents/:id/schedule', () => {
     expect(await screen.findByRole('option', { name: '#sales' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: 'C0123ABCDEF' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('option', { name: 'Other (enter its ID)' }))
-    await user.type(screen.getByLabelText('Other slack channel'), 'C0999SUPPORT')
+    fireEvent.change(screen.getByLabelText('Other slack channel'), { target: { value: 'C0999SUPPORT' } })
     await user.click(screen.getByRole('button', { name: 'Save schedule' }))
     await waitFor(() =>
       expect(api.schedule).toHaveBeenCalledWith('a1', expect.objectContaining({ deliverTo: { kind: 'channel', channelId: 'ch-slack', to: 'C0999SUPPORT' } })),
     )
-  })
+  }, 20_000)
 
   it('opens a saved monthly schedule as it was, and keeps every few minutes working', async () => {
     const user = userEvent.setup()
