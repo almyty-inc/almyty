@@ -30,6 +30,12 @@ import { assertOAuthScope } from '../mcp/services/mcp-oauth-scope';
 import { ChannelPolicy, ChannelPolicyService, a2aCallerId, withA2ACaller } from './channel-policy.service';
 import { HostedChatService } from './channels/hosted-chat.service';
 import { trustedClientIp } from '../../common/security/client-ip';
+import {
+  mcpOriginRefusal,
+  mcpOutcomeOf,
+  recordMcpRequest,
+  resolveMcpRequestVersion,
+} from '../mcp/core/mcp-http-binding';
 
 /**
  * Per-protocol delegation for gateways exposed under
@@ -164,6 +170,17 @@ export class UnifiedGatewayDelegation {
         },
         HttpStatus.TOO_MANY_REQUESTS,
       );
+    }
+
+    // MCP Origin check, before authentication: a browser page on another
+    // origin (DNS rebinding included) must not reach the gateway with the
+    // visitor's network position or credentials. 403 for every version.
+    if (gateway.type === GatewayType.MCP && !action.startsWith('.well-known/')) {
+      const refusal = mcpOriginRefusal(req);
+      if (refusal) {
+        recordMcpRequest(req, null, body, 'refused');
+        return res.status(refusal.status).json(refusal.body);
+      }
     }
 
     const isDiscovery =
@@ -314,6 +331,31 @@ export class UnifiedGatewayDelegation {
   ) {
     const incomingSessionId = req.headers['mcp-session-id'] as string;
 
+    // Only POST carries MCP here. There is no server-to-client stream (GET)
+    // and no session to terminate (DELETE: the Mcp-Session-Id minted on
+    // initialize is never stored), so both are 405 Method Not Allowed, the
+    // answer the Streamable HTTP transport gives a server without them.
+    if (req.method === 'GET' || req.method === 'DELETE') {
+      recordMcpRequest(req, null, body, 'refused');
+      res.setHeader('Allow', 'POST');
+      return res.status(405).json({
+        jsonrpc: '2.0',
+        id: null,
+        error: { code: -32600, message: `${req.method} is not supported on this MCP endpoint; use POST` },
+      });
+    }
+
+    // The protocol version this POST is served at: negotiated on
+    // `initialize`, named by MCP-Protocol-Version otherwise, 2025-03-26 with
+    // no header. An unsupported header, or a batch from 2025-06-18 on, is a
+    // 400 before anything runs.
+    const resolution = resolveMcpRequestVersion(req, body);
+    if ('refusal' in resolution) {
+      recordMcpRequest(req, null, body, 'refused');
+      return res.status(resolution.refusal.status).json(resolution.refusal.body);
+    }
+    const ctx = resolution.ctx;
+
     if (gateway.isSystem) {
       let userId = auth?.userId || (req as any).user?.sub || (req as any).user?.id;
       if (!userId) {
@@ -329,7 +371,9 @@ export class UnifiedGatewayDelegation {
         body,
         gateway.organizationId,
         userId,
+        ctx,
       );
+      recordMcpRequest(req, ctx, body, mcpOutcomeOf(result));
       // 202 Accepted, not 204: the Streamable HTTP revision names 202 for a
       // POST that carries only notifications or responses, and the
       // TypeScript SDK's StreamableHTTPClientTransport branches on
@@ -361,7 +405,9 @@ export class UnifiedGatewayDelegation {
       gateway.organizationId,
       callerId,
       gateway.id,
+      ctx,
     );
+    recordMcpRequest(req, ctx, body, mcpOutcomeOf(result));
 
     // 202 Accepted for a notification-only POST — see the system-gateway
     // branch above for why the SDK cares about the exact status.
@@ -369,6 +415,8 @@ export class UnifiedGatewayDelegation {
       return res.status(202).end();
     }
 
+    // The session id is minted on `initialize` only so clients that insist
+    // on one are satisfied; nothing stores or reads it (design doc, R3).
     const single = Array.isArray(result) ? null : result;
     if (body?.method === 'initialize' && single?.result) {
       const sessionId = single.result.sessionId || crypto.randomUUID();

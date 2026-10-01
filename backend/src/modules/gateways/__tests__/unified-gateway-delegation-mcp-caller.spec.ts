@@ -69,7 +69,7 @@ describe('UnifiedGatewayDelegation — MCP caller on tenant gateways', () => {
 
     await delegation.handleGatewayRequest(organization, gateway('private'), 'acme', 'mcp', req, makeRes(), body);
 
-    expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(body, 'org-1', 'u-owner', 'gw-mcp-1');
+    expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(body, 'org-1', 'u-owner', 'gw-mcp-1', expect.objectContaining({ version: expect.any(String) }));
   });
 
   it('passes the identified user on an org gateway too', async () => {
@@ -77,7 +77,7 @@ describe('UnifiedGatewayDelegation — MCP caller on tenant gateways', () => {
 
     await delegation.handleGatewayRequest(organization, gateway('org'), 'acme', 'mcp', req, makeRes(), body);
 
-    expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(body, 'org-1', 'u-member', 'gw-mcp-1');
+    expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(body, 'org-1', 'u-member', 'gw-mcp-1', expect.objectContaining({ version: expect.any(String) }));
   });
 
   it('passes no user when the credential names none (fails closed on private tools)', async () => {
@@ -85,6 +85,6 @@ describe('UnifiedGatewayDelegation — MCP caller on tenant gateways', () => {
 
     await delegation.handleGatewayRequest(organization, gateway('org'), 'acme', 'mcp', req, makeRes(), body);
 
-    expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(body, 'org-1', undefined, 'gw-mcp-1');
+    expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(body, 'org-1', undefined, 'gw-mcp-1', expect.objectContaining({ version: expect.any(String) }));
   });
 });

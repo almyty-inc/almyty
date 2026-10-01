@@ -118,4 +118,38 @@ describe('UnifiedGatewayDelegation — MCP wire conformance', () => {
     expect(res.status).not.toHaveBeenCalledWith(204);
     expect(res.json).not.toHaveBeenCalled();
   });
+
+  // No server stream and no stored session: GET and DELETE are 405, which
+  // the official clients and the conformance suite read as "not supported".
+  it.each(['GET', 'DELETE'])('answers %s on a tenant gateway with 405 and Allow: POST', async (method) => {
+    const res = makeRes();
+    const req = { ...makeReq({}), method, headers: { 'mcp-session-id': 'abc' } };
+    await delegation.handleGatewayRequest(organization, gw(false), 'acme', 'mcp', req, res, undefined);
+
+    expect(res.status).toHaveBeenCalledWith(405);
+    expect(res.setHeader).toHaveBeenCalledWith('Allow', 'POST');
+    expect(mcpService.handleJsonRpcMessage).not.toHaveBeenCalled();
+  });
+
+  it('refuses a foreign Origin with 403 before authenticating', async () => {
+    const res = makeRes();
+    const req = { ...makeReq({ jsonrpc: '2.0', id: 1, method: 'ping' }), headers: { origin: 'https://evil.example.com' } };
+    const resolver = (delegation as any).gatewayResolver.resolveAndAuthenticate as jest.Mock;
+    resolver.mockClear();
+    await delegation.handleGatewayRequest(organization, gw(false), 'acme', 'mcp', req, res, { jsonrpc: '2.0', id: 1, method: 'ping' });
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(resolver).not.toHaveBeenCalled();
+    expect(mcpService.handleJsonRpcMessage).not.toHaveBeenCalled();
+  });
+
+  it('refuses a batch from a 2025-06-18 client with 400 on both gateway kinds', async () => {
+    for (const system of [true, false]) {
+      const res = makeRes();
+      const batch = [{ jsonrpc: '2.0', id: 1, method: 'ping' }];
+      const req = { ...makeReq(batch), headers: { 'mcp-protocol-version': '2025-06-18' } };
+      await delegation.handleGatewayRequest(organization, gw(system), 'acme', 'mcp', req, res, batch);
+      expect(res.status).toHaveBeenCalledWith(400);
+    }
+  });
 });

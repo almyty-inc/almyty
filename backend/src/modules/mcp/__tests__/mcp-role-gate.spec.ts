@@ -49,24 +49,10 @@ describe('MCP surface role gate', () => {
     } as unknown as ExecutionContext;
   };
 
-  // Every authenticated handler on McpController.
-  const mcpHandlers = [
-    'handleMcp',
-    'initialize',
-    'ping',
-    'handleNotifications',
-    'listTools',
-    'callTool',
-    'discoverTools',
-    'searchTools',
-    'getToolDetails',
-    'listSkills',
-    'getSkill',
-    'listResources',
-    'readResource',
-    'listPrompts',
-    'getPrompt',
-  ] as const;
+  // Every authenticated handler on McpController. The per-method REST
+  // routes (/mcp/tools/call and friends) are gone; POST /mcp is the one
+  // door, and the last test below keeps it that way.
+  const mcpHandlers = ['handleMcp'] as const;
 
   const transportHandlers = [
     'streamablePost',
@@ -93,6 +79,11 @@ describe('MCP surface role gate', () => {
       expect(guard.canActivate(contextFor(McpController, handler, OrganizationRole.MEMBER))).toBe(
         true,
       );
+    });
+
+    it('has no handler besides POST /mcp and the two unauthenticated probes', () => {
+      const handlers = Object.getOwnPropertyNames(McpController.prototype).filter((n) => n !== 'constructor');
+      expect(handlers.sort()).toEqual(['handleMcp', 'health', 'wellKnown']);
     });
 
     it('leaves the unauthenticated probes ungated', () => {

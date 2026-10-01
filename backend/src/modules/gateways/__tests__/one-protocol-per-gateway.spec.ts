@@ -424,7 +424,7 @@ describe('each gateway serves one protocol', () => {
       'answers %s as not found on MCP and UTCP, off the network',
       async (_name, tool) => {
         const viaMcp = await send('weather', { key: KEYS.mcp, body: rpc('tools/call', { name: tool.name, arguments: {} }) });
-        expect(viaMcp.body.error).toMatchObject({ code: JsonRpcErrorCode.TOOL_NOT_FOUND });
+        expect(viaMcp.body.error).toMatchObject({ code: JsonRpcErrorCode.INVALID_PARAMS });
 
         const viaUtcp = await send('weather-utcp', { key: KEYS.utcp, action: 'execute', body: { toolId: tool.id, parameters: {} } });
         expect(viaUtcp.body).toMatchObject({ success: false, error: { code: 'TOOL_NOT_FOUND' } });

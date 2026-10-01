@@ -67,8 +67,22 @@ export interface McpInitializeResult {
 // MCP Tool Types
 export interface McpTool {
   name: string;
+  /** Human-readable name (2025-06-18). */
+  title?: string;
   description?: string;
   inputSchema: any; // JSON Schema
+  /** JSON Schema of structuredContent (2025-06-18); always an object schema. */
+  outputSchema?: any;
+  /** Behaviour hints (2025-03-26): readOnlyHint, destructiveHint, idempotentHint, openWorldHint. */
+  annotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+  /** Icons (2025-11-25). */
+  icons?: Array<{ src: string; mimeType?: string; sizes?: string[]; theme?: 'light' | 'dark' }>;
 }
 
 export interface McpToolsListRequest {
@@ -87,6 +101,8 @@ export interface McpCallToolRequest {
 
 export interface McpCallToolResult {
   content: McpContent[];
+  /** The result as a JSON object (2025-06-18), next to its serialized text block. */
+  structuredContent?: Record<string, unknown>;
   isError?: boolean;
 }
 

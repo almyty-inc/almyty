@@ -76,6 +76,8 @@ import { McpOAuthController } from '../modules/mcp/controllers/mcp-oauth.control
 import { McpOAuthDiscoveryController } from '../modules/mcp/controllers/mcp-oauth-discovery.controller';
 import { McpOAuthService } from '../modules/mcp/services/mcp-oauth.service';
 import { McpOAuthTokensHelper } from '../modules/mcp/services/mcp-oauth-tokens.helper';
+import { MCP_CIMD_FETCHER, McpOAuthCimdService } from '../modules/mcp/services/mcp-oauth-cimd.service';
+import { testCimdFetcher } from './cimd-test-fetcher';
 import { McpOAuthResolveHelper } from '../modules/mcp/controllers/mcp-oauth-resolve.helper';
 import { GatewayResolverService } from '../modules/mcp/services/gateway-resolver.service';
 import { GatewayAuthService } from '../modules/gateways/gateway-auth.service';
@@ -249,6 +251,8 @@ const mockRedis = {
     // MCP
     McpOAuthService,
     McpOAuthTokensHelper,
+    McpOAuthCimdService,
+    { provide: MCP_CIMD_FETCHER, useValue: testCimdFetcher },
     McpOAuthResolveHelper,
     GatewayResolverService,
     GatewayAuthService,

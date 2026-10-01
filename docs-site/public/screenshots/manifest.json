@@ -718,7 +718,7 @@
       "title": "Gateway tool scoping",
       "path": "screenshots/gateway-detail-tools.png",
       "capturedAt": "2026-10-01T06:50:12.402Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "3e7a9a4d505b40e40611fa03560562c44b5e1f4f1682b77837585eaf8543e490",
       "source": {
         "kind": "browser",
@@ -733,14 +733,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
     },
     {
       "id": "gateway-detail",
       "title": "Gateway detail",
       "path": "screenshots/gateway-detail.png",
       "capturedAt": "2026-10-01T06:50:09.333Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "343e858c9e9877d81bd0b7c1604aedd076ec7ac792bd9ce08a264709eab8c2a8",
       "source": {
         "kind": "browser",
@@ -755,14 +756,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
     },
     {
       "id": "gateway-petstore-config",
       "title": "Petstore gateway",
       "path": "screenshots/gateway-petstore-config.png",
       "capturedAt": "2026-10-01T06:50:15.088Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "94b5ad87d36caafc48925cb404ee3656cec454036be4fb198ff818ba69ca3d2f",
       "source": {
         "kind": "browser",
@@ -777,14 +779,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
     },
     {
       "id": "gateway-petstore-integration",
       "title": "Gateway integrations",
       "path": "screenshots/gateway-petstore-integration.png",
       "capturedAt": "2026-10-01T06:50:20.834Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a73146de1379a4cd034095c3bd31501e4ba6b15a71d473e48a1b780deda95a02",
       "source": {
         "kind": "browser",
@@ -799,14 +802,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
     },
     {
       "id": "guides-dev-1-gateway",
       "title": "Serve the order tools to coding assistants",
       "path": "screenshots/guides/dev-1-gateway.png",
       "capturedAt": "2026-10-01T06:48:27.619Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f563b3b7c9e0423baa7c53fcb258196e11323bcdb6cdf1f8753fe18cedc580c0",
       "source": {
         "kind": "browser",
@@ -821,14 +825,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "b3ddeb70c6d23ad49253804669cabf489d6a784240447e4aaf841621dfd21047",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
     },
     {
       "id": "guides-dev-2-gateway-setup",
       "title": "The address, the key and a ready-made setup",
       "path": "screenshots/guides/dev-2-gateway-setup.png",
       "capturedAt": "2026-10-01T06:48:30.046Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "4e54eea855f1049ae1bfcf4f8de3df9d112fba84659a05fcbf6464949ec4f994",
       "source": {
         "kind": "browser",
@@ -843,7 +848,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
     },
     {
       "id": "guides-dev-3-runner",
@@ -2027,7 +2033,7 @@
       "title": "Client setup",
       "path": "screenshots/quickstart-claude-config.png",
       "capturedAt": "2026-10-01T06:50:26.869Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "1c8b32d819ed1dabde66f6597199e8b93d74e82df34f26cb712c7148757e6f22",
       "source": {
         "kind": "browser",
@@ -2042,14 +2048,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
     },
     {
       "id": "quickstart-gateway-mcp",
       "title": "Petstore MCP gateway",
       "path": "screenshots/quickstart-gateway-mcp.png",
       "capturedAt": "2026-10-01T06:50:17.807Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "bb010649f6474ca214b8eeb41e972c52ec755e64312665db849350dcc7caedba",
       "source": {
         "kind": "browser",
@@ -2064,14 +2071,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
     },
     {
       "id": "quickstart-mcp-endpoints",
       "title": "MCP endpoints",
       "path": "screenshots/quickstart-mcp-endpoints.png",
       "capturedAt": "2026-10-01T06:50:23.863Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "40b6baaf71470610c1c7d08d8761e4a167c997ec31f2afe36346ed141f8f0247",
       "source": {
         "kind": "browser",
@@ -2086,7 +2094,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "MCP P0 changed the gateway page: the deprecated HTTP+SSE URL is gone and the endpoint now names the MCP versions it speaks. Recapture from the local demo stack."
     },
     {
       "id": "runner-detail",

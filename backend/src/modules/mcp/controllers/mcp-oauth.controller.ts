@@ -19,7 +19,12 @@ import { Throttle } from '@nestjs/throttler';
 
 import { McpOAuthService, MCP_OAUTH_SCOPES } from '../services/mcp-oauth.service';
 import { McpOAuthResolveHelper } from './mcp-oauth-resolve.helper';
-import { validateRedirectUri } from '../services/mcp-oauth-helpers.helper';
+import {
+  isMetadataDocumentClientId,
+  registrationApplicationType,
+  validateRedirectUri,
+} from '../services/mcp-oauth-helpers.helper';
+import { authorizationServerMetadata, gatewayAcceptsMetadataDocuments, gatewayIssuer } from './mcp-oauth-metadata';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 /**
@@ -67,6 +72,20 @@ export class McpOAuthController {
   }
 
   /**
+   * A Client ID Metadata Document client on a gateway whose owner limited it
+   * to registered clients, or on a server that turned CIMD off, is refused
+   * the way an unknown client is.
+   */
+  private assertClientAccepted(gateway: { configuration?: Record<string, any> | null }, clientId: string): void {
+    if (isMetadataDocumentClientId(clientId) && !gatewayAcceptsMetadataDocuments(gateway)) {
+      throw new HttpException(
+        { error: 'invalid_client', error_description: 'This gateway accepts registered clients only' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  /**
    * RFC 8707 `resource`: the audience the client wants the token for.
    *
    * The only resource this authorization server protects under this path
@@ -102,29 +121,12 @@ export class McpOAuthController {
     @Param('gatewaySlug') gatewaySlug: string,
   ) {
     const { gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug, null);
-    const base = this.resolve.getBaseUrl();
-    const prefix = `${base}/${orgSlug}/${gatewaySlug}`;
 
     this.logger.log(
       `OAuth metadata request: org=${orgSlug}, gateway=${gateway.name}`,
     );
 
-    return {
-      issuer: prefix,
-      authorization_endpoint: `${prefix}/authorize`,
-      token_endpoint: `${prefix}/token`,
-      registration_endpoint: `${prefix}/register`,
-      revocation_endpoint: `${prefix}/revoke`,
-      response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token'],
-      token_endpoint_auth_methods_supported: [
-        'none',
-        'client_secret_post',
-      ],
-      code_challenge_methods_supported: ['S256'],
-      scopes_supported: MCP_OAUTH_SCOPES,
-      service_documentation: `${base}/docs`,
-    };
+    return authorizationServerMetadata(this.resolve.getBaseUrl(), orgSlug, gatewaySlug, gateway);
   }
 
   // ---------------------------------------------------------------------------
@@ -255,6 +257,7 @@ export class McpOAuthController {
     // here, before the user interacts), then hand off to the front-end
     // consent page. The code is only issued after the user explicitly
     // approves, via POST .../authorize.
+    this.assertClientAccepted(gateway, clientId);
     await this.mcpOAuthService.getConsentInfo(clientId, gateway.id, redirectUri, scope);
 
     const consentUrl = `${this.resolve.getFrontendUrl()}/oauth/consent?${new URLSearchParams({
@@ -313,6 +316,7 @@ export class McpOAuthController {
     }
 
     try {
+      this.assertClientAccepted(gateway, clientId);
       const info = await this.mcpOAuthService.getConsentInfo(
         clientId,
         gateway.id,
@@ -321,8 +325,13 @@ export class McpOAuthController {
       );
       return res.json({
         clientName: info.clientName,
+        // For a metadata-document client, the host its self-asserted name
+        // came from; the consent page shows both.
+        clientHost: info.clientHost ?? null,
         gatewayName: gateway.name,
         scopes: info.scopes,
+        // RFC 9207: the consent page adds this to the redirect as `iss`.
+        issuer: gatewayIssuer(this.resolve.getBaseUrl(), orgSlug, gatewaySlug),
       });
     } catch (e: any) {
       return res.status(HttpStatus.BAD_REQUEST).json({
@@ -405,6 +414,8 @@ export class McpOAuthController {
       );
     }
 
+    this.assertClientAccepted(gateway, clientId);
+
     // User is authenticated via JwtAuthGuard — req.user is always set here
     const user = req.user;
 
@@ -418,9 +429,12 @@ export class McpOAuthController {
       { redirectUri, codeChallenge, codeChallengeMethod, scope: scope || undefined, resource },
     );
 
+    // RFC 9207: the authorization response names its issuer, so a client
+    // talking to several authorization servers can tell which one answered.
     return {
       code: authorizationCode,
       ...(state ? { state } : {}),
+      iss: gatewayIssuer(this.resolve.getBaseUrl(), orgSlug, gatewaySlug),
     };
   }
 
@@ -537,6 +551,7 @@ export class McpOAuthController {
       grant_types?: string[];
       response_types?: string[];
       token_endpoint_auth_method?: string;
+      application_type?: string;
       client_uri?: string;
     },
     @Res() res: Response,
@@ -565,7 +580,7 @@ export class McpOAuthController {
     // `javascript://localhost/...` URI either.
     for (const uri of body.redirect_uris) {
       try {
-        validateRedirectUri(uri);
+        validateRedirectUri(uri, registrationApplicationType(body));
       } catch (e: any) {
         throw new HttpException(
           {
@@ -586,6 +601,7 @@ export class McpOAuthController {
         grant_types: body.grant_types || ['authorization_code', 'refresh_token'],
         response_types: body.response_types || ['code'],
         token_endpoint_auth_method: body.token_endpoint_auth_method || 'none',
+        ...(body.application_type !== undefined ? { application_type: body.application_type } : {}),
       },
     );
 

@@ -187,7 +187,10 @@ describe('McpService', () => {
       expect(result.result.serverInfo.name).toBe('almyty');
     });
 
-    it('should reject initialize with unsupported protocol version', async () => {
+    // Lifecycle, "Version Negotiation": a server that does not support the
+    // requested version answers with one it does (its latest), and the
+    // client decides whether to go on. It is not an error.
+    it('answers an initialize for a version it does not speak with its newest version', async () => {
       const request = {
         jsonrpc: '2.0',
         id: '1',
@@ -201,10 +204,21 @@ describe('McpService', () => {
 
       const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
-      expect(result.error).toBeDefined();
-      expect(result.error.code).toBe(-32602);
-      expect(result.error.message).toContain('Unsupported protocol version');
+      expect(result.error).toBeUndefined();
+      expect(result.result.protocolVersion).toBe('2025-11-25');
     });
+
+    it.each(['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'])(
+      'answers an initialize for %s with that same version',
+      async (version) => {
+        const result = await service.handleJsonRpc(
+          { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: version, capabilities: {}, clientInfo: { name: 'c', version: '1' } } },
+          'org-1',
+          'user-1',
+        );
+        expect(result.result.protocolVersion).toBe(version);
+      },
+    );
 
     it('should reject initialize with missing protocol version', async () => {
       const request = {

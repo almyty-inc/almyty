@@ -179,3 +179,65 @@ describe('the OAuth consent screen with a non-http redirect_uri', () => {
     expect(window.location.href).toBe('')
   })
 })
+
+/**
+ * RFC 9207 and Client ID Metadata Documents on the consent screen: the
+ * redirect names the issuer (`iss`) on approval and on denial, a client that
+ * described itself by URL shows the host its name came from, and a native
+ * app's private-use scheme is a valid place to send the browser.
+ */
+describe('the OAuth consent screen for current MCP clients', () => {
+  const ORIGINAL = QUERY.get('redirect_uri')!
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    ;(apiGet as any).mockResolvedValue({
+      clientName: 'Example Client',
+      clientHost: 'client.example.com',
+      gatewayName: 'Support Gateway',
+      scopes: ['mcp:tools'],
+      issuer: 'https://api.example/acme/support',
+    })
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { href: '', pathname: '/oauth/consent', search: '' },
+    })
+  })
+
+  afterEach(() => {
+    QUERY.set('redirect_uri', ORIGINAL)
+  })
+
+  it('shows the host a self-described client came from', async () => {
+    render(<OAuthConsentPage />)
+    expect(await screen.findByTestId('consent-client-host', {}, WAIT)).toHaveTextContent('client.example.com')
+  })
+
+  it('names the issuer when it sends the code back', async () => {
+    ;(apiPost as any).mockResolvedValue({ code: 'auth-code', iss: 'https://api.example/acme/support' })
+    render(<OAuthConsentPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }, WAIT))
+    await waitFor(
+      () =>
+        expect(window.location.href).toBe(
+          'https://client.example/callback?code=auth-code&state=xyz&iss=https%3A%2F%2Fapi.example%2Facme%2Fsupport',
+        ),
+      WAIT,
+    )
+  })
+
+  it('names the issuer on a denial too', async () => {
+    render(<OAuthConsentPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Deny' }, WAIT))
+    expect(window.location.href).toBe(
+      'https://client.example/callback?error=access_denied&state=xyz&iss=https%3A%2F%2Fapi.example%2Facme%2Fsupport',
+    )
+  })
+
+  it('sends a native app back to its private-use scheme', async () => {
+    QUERY.set('redirect_uri', 'cursor://anysphere.cursor-mcp/oauth/callback')
+    render(<OAuthConsentPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Deny' }, WAIT))
+    expect(window.location.href).toMatch(/^cursor:\/\/anysphere\.cursor-mcp\/oauth\/callback\?error=access_denied&state=xyz&iss=/)
+  })
+})
