@@ -25,6 +25,8 @@
  *   MCP_OAUTH_INFER_APPLICATION_TYPE treat a DCR request without
  *                                    application_type whose redirect URIs are
  *                                    all loopback as native (default true)
+ *   MCP_LEGACY_SSE_*                 deprecation headers on the legacy HTTP+SSE
+ *                                    routes (legacySseSettings, below)
  */
 import { KNOWN_PROTOCOL_VERSIONS, ProtocolVersion, isKnownVersion } from './versions';
 
@@ -112,4 +114,39 @@ export function cimdSettings(env: Env = process.env): CimdSettings {
 
 export function inferApplicationType(env: Env = process.env): boolean {
   return boolSetting(env, 'MCP_OAUTH_INFER_APPLICATION_TYPE', true);
+}
+
+/**
+ * The legacy HTTP+SSE transport (2024-11-05; `GET /mcp/sse`,
+ * `POST /mcp/sse/:connectionId/message`, `GET /mcp/servers/:serverId/sse`)
+ * is deprecated in MCP 2026-07-28 (SEP-2596). It is still served; its
+ * responses say so with RFC 9745 headers:
+ *
+ *   MCP_LEGACY_SSE_DEPRECATION_HEADERS  send them (default true)
+ *   MCP_LEGACY_SSE_DEPRECATED_AT        the date it was deprecated, ISO 8601
+ *                                       (default 2026-07-28)
+ *   MCP_LEGACY_SSE_DOCS_URL             where the Link header points
+ *                                       (default the MCP gateway docs)
+ */
+export interface LegacySseSettings {
+  deprecationHeaders: boolean;
+  /** Seconds since the epoch, for the `Deprecation: @<seconds>` header. */
+  deprecatedAt: number;
+  docsUrl: string;
+}
+
+const LEGACY_SSE_DEPRECATED_AT = '2026-07-28T00:00:00Z';
+const LEGACY_SSE_DOCS_URL = 'https://docs.almyty.com/gateways/mcp#legacy-sse-transport';
+
+export function legacySseSettings(env: Env = process.env): LegacySseSettings {
+  const raw = env.MCP_LEGACY_SSE_DEPRECATED_AT?.trim();
+  const parsed = raw ? Date.parse(raw) : NaN;
+  const at = Number.isFinite(parsed) ? parsed : Date.parse(LEGACY_SSE_DEPRECATED_AT);
+  const docs = env.MCP_LEGACY_SSE_DOCS_URL?.trim();
+  return {
+    deprecationHeaders: boolSetting(env, 'MCP_LEGACY_SSE_DEPRECATION_HEADERS', true),
+    deprecatedAt: Math.floor(at / 1000),
+    // Only an http(s) URL goes into a header; anything else falls back.
+    docsUrl: docs && /^https?:\/\/[^\s<>"]+$/.test(docs) ? docs : LEGACY_SSE_DOCS_URL,
+  };
 }

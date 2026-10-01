@@ -150,16 +150,20 @@ export class McpController {
       // tenant host uses and the ingress strips before this server sees
       // it — it is not part of any URL this server hands out here.
       //
-      // `http` and `sse` are the MCP HTTP+SSE transport of the revision
-      // named in `version`. `websocket` is NOT an MCP transport: no MCP
-      // revision defines one, and almyty's WebSocket endpoint wraps
-      // JSON-RPC in its own envelope. It is listed here for the clients
-      // that use it, not as a claim of MCP conformance.
+      // `http` is Streamable HTTP (POST /mcp), every version this server
+      // speaks. `sse` is the legacy HTTP+SSE transport (2024-11-05),
+      // deprecated in MCP 2026-07-28 (SEP-2596) and listed in
+      // `deprecatedTransports`: still served, with Deprecation headers, until
+      // the request log shows nobody uses it. `websocket` is NOT an MCP
+      // transport: no MCP revision defines one, and almyty's WebSocket
+      // endpoint wraps JSON-RPC in its own envelope. It is listed here for
+      // the clients that use it, not as a claim of MCP conformance.
       transports: {
         http: `${process.env.BASE_URL || 'http://localhost:4000'}/mcp`,
         sse: `${process.env.BASE_URL || 'http://localhost:4000'}/mcp/sse`,
         websocket: `${process.env.BASE_URL || 'http://localhost:4000'}/mcp/ws`,
       },
+      deprecatedTransports: ['sse'],
     };
   }
 }

@@ -183,6 +183,8 @@ describe('McpController', () => {
       expect(result.transports.sse).not.toContain('/api/');
       expect(result.transports.websocket).not.toContain('/api/');
       expect(result.transports.sse).toMatch(/\/mcp\/sse$/);
+      // HTTP+SSE is still listed, as deprecated (MCP 2026-07-28, SEP-2596).
+      expect(result.deprecatedTransports).toEqual(['sse']);
     });
 
     // The handshake advertises listChanged: false for all three, and
