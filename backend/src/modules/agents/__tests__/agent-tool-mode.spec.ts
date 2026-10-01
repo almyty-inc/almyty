@@ -58,7 +58,10 @@ describe('tool mode: the decision', () => {
 
   it('names what is wrong with the settings', () => {
     expect(toolModeProblems({ toolMode: 'auto', toolModeThresholdTokens: 5000, pinnedToolIds: ['3f1c2b6e-0d9a-4c4e-9b1a-2f6d8e7c5a10'] })).toEqual([]);
-    expect(toolModeProblems({ toolMode: 'everything' })).toEqual(['Tool mode must be direct, discover or auto']);
+    expect(toolModeProblems({ toolMode: 'everything' })).toEqual(['Tool mode must be direct, discover, code or auto']);
+    expect(toolModeProblems({ toolMode: 'code', codeMode: { writes: { destructive: 'sometimes' } } })).toHaveLength(1);
+    // auto never picks code (decision 8); code is kept when a person sets it.
+    expect(decideToolMode({ configured: 'code', definitions: [], env: {} }).mode).toBe('code');
     expect(toolModeProblems({ toolModeThresholdTokens: 0 })).toHaveLength(1);
     expect(toolModeProblems({ toolModeThresholdTokens: 1.5 })).toHaveLength(1);
     expect(toolModeProblems({ pinnedToolIds: ['crm'] })).toEqual(['Pinned tools must be a list of tool ids']);
