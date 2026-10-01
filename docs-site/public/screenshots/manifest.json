@@ -6,8 +6,8 @@
       "id": "agent-builder-autonomous",
       "title": "Autonomous agent: work mode",
       "path": "screenshots/agent-builder-autonomous.png",
-      "capturedAt": "2026-09-30T16:31:15.343Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:49:00.541Z",
+      "status": "current",
       "sha256": "077e7cf0a3ae49e2d49762a9ea520da001b9b9981283b2f7f3e64b75f4e3f24a",
       "source": {
         "kind": "browser",
@@ -21,16 +21,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed; the Delete agent confirmation says its channels go too. Recapture against the current UI."
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-builder-node-palette",
       "title": "Steps palette",
       "path": "screenshots/agent-builder-node-palette.png",
-      "capturedAt": "2026-09-30T16:31:23.724Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:49:08.859Z",
+      "status": "current",
       "sha256": "16ed372b8779633c72addd328d2f8dd2adc8f8b263b09737d417c2bf07f6f256",
       "source": {
         "kind": "browser",
@@ -44,16 +43,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-builder",
       "title": "Workflow builder",
       "path": "screenshots/agent-builder.png",
-      "capturedAt": "2026-09-30T16:31:21.134Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:49:06.211Z",
+      "status": "current",
       "sha256": "7101205493af213b7b6dbbc67eb4730a8a9980de53c6384df3a440cf03dd1e06",
       "source": {
         "kind": "browser",
@@ -67,17 +65,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-channels",
       "title": "An agent's Channels tab",
       "path": "screenshots/agent-channels.png",
-      "capturedAt": "2026-09-30T16:31:38.871Z",
-      "status": "needs-recapture",
-      "sha256": "530432af9fd768d2511d8a3cbf1e3b5141aed845c64f8f50dbe8252765cc3650",
+      "capturedAt": "2026-10-01T06:49:24.228Z",
+      "status": "current",
+      "sha256": "6bb7266e5588f7bd9a77104eb95e4e3fd148ae86c54decce5f6668d19c7a18e0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -91,17 +88,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4984f7a4169c68ac30b9c3fbea699b0f6f0b86d90132bff7788c6ba8ea5bb60d",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "833f2e1a2d6c3bde8dc2bb6ed93973fcfa69b702603fbc5b133b03a5263d58da",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-constraints",
       "title": "Agent constraints",
       "path": "screenshots/agent-constraints.png",
-      "capturedAt": "2026-09-30T16:31:04.439Z",
-      "status": "needs-recapture",
-      "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
+      "capturedAt": "2026-10-01T06:48:49.225Z",
+      "status": "current",
+      "sha256": "72fbe1a4338ad0a6f1a16aab2650c7ff9b749009c05f0bbd1fbf268f9991798e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -114,17 +110,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-detail-overview",
       "title": "Autonomous agent overview",
       "path": "screenshots/agent-detail-overview.png",
-      "capturedAt": "2026-09-30T16:30:59.155Z",
-      "status": "needs-recapture",
-      "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
+      "capturedAt": "2026-10-01T06:48:43.901Z",
+      "status": "current",
+      "sha256": "9d60f8bbc04d9620e607b172e7376200cb02661647658dc0f96521d10bbb5d09",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -137,17 +132,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-skill-viewer",
       "title": "Agent skills",
       "path": "screenshots/agent-skill-viewer.png",
-      "capturedAt": "2026-09-30T16:31:12.292Z",
-      "status": "needs-recapture",
-      "sha256": "c2b086bc7ce818fddb0a24c44b62a5666aff19edf03f2700901f0dc065a5595b",
+      "capturedAt": "2026-10-01T06:48:57.441Z",
+      "status": "current",
+      "sha256": "07cb1f393d3f89e6265db90ec4dc0d2d1f3e8b2199295856b338a5c9d5f0a776",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -160,16 +154,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-work-mode-panel",
       "title": "Panel work mode",
       "path": "screenshots/agent-work-mode-panel.png",
-      "capturedAt": "2026-09-30T16:31:18.460Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:49:03.651Z",
+      "status": "current",
       "sha256": "472eceef77a0d801d628b27c6d94382300690462de91cd2aca8f40681c2c8108",
       "source": {
         "kind": "browser",
@@ -183,17 +176,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agents-list",
       "title": "Agents list",
       "path": "screenshots/agents-list.png",
-      "capturedAt": "2026-09-30T16:30:56.493Z",
-      "status": "needs-recapture",
-      "sha256": "51439432f06dc456afb11b2269f589455ce90968ea8b12b619f5a5594a1d2f69",
+      "capturedAt": "2026-10-01T06:48:41.254Z",
+      "status": "current",
+      "sha256": "6d7908e9e7d374cba03ef445f6ea71ce0e5b23e9da84168f9b57858f3362eb02",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -206,17 +198,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "95e5fcadc2b793781f6186159b1fea52b955cb62daffa98a151fba314ee79456",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "6a16b38d1fec1f68742a5b6a1f97039fe20b65393ff1c8b26b90610653a3a311",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-agents",
       "title": "Analytics: agents",
       "path": "screenshots/analytics-agents.png",
-      "capturedAt": "2026-09-30T16:33:10.097Z",
-      "status": "needs-recapture",
-      "sha256": "55d153fc2eb58ac02e0a12bc9928d2803eec8367a6b943b610846e92eed4c821",
+      "capturedAt": "2026-10-01T06:50:55.853Z",
+      "status": "current",
+      "sha256": "63d3c1aa8427205c04fe29c8e8df80eb48e819ec00deaee9461ed93b7693a70d",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -229,17 +220,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "dd96446c4f816b6b425bcb5471516134184b82eed88c6493fc97fae457c8361c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-audit",
       "title": "Audit trail",
       "path": "screenshots/analytics-audit.png",
-      "capturedAt": "2026-09-30T16:33:17.685Z",
-      "status": "needs-recapture",
-      "sha256": "fd1d94c1b1596d0fa097a457261991b7149fa915c78ee8d9f912754c4ac9bb57",
+      "capturedAt": "2026-10-01T06:51:03.614Z",
+      "status": "current",
+      "sha256": "aeb4fdddd3aebed54dce52f007b3ae444c91ed071e59904db41641848e330038",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -252,16 +242,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "dd96446c4f816b6b425bcb5471516134184b82eed88c6493fc97fae457c8361c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-chargeback-locked",
       "title": "Chargeback (Enterprise, locked)",
       "path": "screenshots/analytics-chargeback-locked.png",
-      "capturedAt": "2026-09-30T16:33:20.188Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:51:06.150Z",
+      "status": "current",
       "sha256": "f7ec69cb930d2b5eea3a339271cd2e9e326661421d1a821ca3305cd1cb214bd0",
       "source": {
         "kind": "browser",
@@ -275,16 +264,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "dd96446c4f816b6b425bcb5471516134184b82eed88c6493fc97fae457c8361c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-gateways",
       "title": "Analytics: gateways",
       "path": "screenshots/analytics-gateways.png",
-      "capturedAt": "2026-09-30T16:33:15.163Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:51:01.020Z",
+      "status": "current",
       "sha256": "88aa07490ff5133741a23fd2dfe69f586f9eabc30b941b17f47e334adb901cc3",
       "source": {
         "kind": "browser",
@@ -298,17 +286,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "dd96446c4f816b6b425bcb5471516134184b82eed88c6493fc97fae457c8361c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-overview",
       "title": "Analytics overview",
       "path": "screenshots/analytics-overview.png",
-      "capturedAt": "2026-09-30T16:33:07.320Z",
-      "status": "needs-recapture",
-      "sha256": "03aa89a5dbe1bbb447eac8d8f7e326b886793795057f0d1e04d776b3647c402c",
+      "capturedAt": "2026-10-01T06:50:53.167Z",
+      "status": "current",
+      "sha256": "f6d944f80833e42b51e47e7a025316a7690adea2cb8bdf91fcf5e119100d9765",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -321,17 +308,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "dd96446c4f816b6b425bcb5471516134184b82eed88c6493fc97fae457c8361c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-tools",
       "title": "Analytics: tools",
       "path": "screenshots/analytics-tools.png",
-      "capturedAt": "2026-09-30T16:33:12.648Z",
-      "status": "needs-recapture",
-      "sha256": "64856cdce045ae84a4256b53d625dc97e7a44e4c00cfef301505435b40bf28d2",
+      "capturedAt": "2026-10-01T06:50:58.451Z",
+      "status": "current",
+      "sha256": "761ac7751c4dd9a3ad5bbe49294b0350fbbdda8c745b41f6d2e00d86d9deab76",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -344,17 +330,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "dd96446c4f816b6b425bcb5471516134184b82eed88c6493fc97fae457c8361c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "a9d0079499a9f7ec4051446f4401053411c44f5a04fe252fae451c20e1e1ad10",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "apis-list",
       "title": "APIs list",
       "path": "screenshots/apis-list.png",
-      "capturedAt": "2026-09-30T16:32:10.748Z",
-      "status": "needs-recapture",
-      "sha256": "22dff5aa90bf6f4cbfd7d5dc4fbc6849ba0233b29005a5feeac107705eeeb2f1",
+      "capturedAt": "2026-10-01T06:49:57.792Z",
+      "status": "current",
+      "sha256": "81e7de7b9f19a44a139fcfa01c22eb535f7e5e9e478a0b767c74ce931cc072d4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -367,17 +352,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6245d5f84ed35f5cab50a4ca27f8b56bc73c59f54d3946207963b060379e861b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "511c56d3fd150904241da7a485344a20059dc4b0e96f0072d8c21228e86e76b4",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "approval-refund-820",
       "title": "Refund approval",
       "path": "screenshots/approval-refund-820.png",
-      "capturedAt": "2026-09-30T16:32:57.431Z",
-      "status": "needs-recapture",
-      "sha256": "517a1f4fdebb03353058d72aa7a2948804a5a3751bc223783ef3f2f722abf53e",
+      "capturedAt": "2026-10-01T06:50:45.392Z",
+      "status": "current",
+      "sha256": "7f8ca2057a650dbe8db99a32594e32f74ff32fcd46fc80389754995857861798",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -390,17 +374,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8538813d7a49c12abe17bef395a8e2a9a0aba0b23dfdb8a299204825d05815cf",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the Approvals page names the agent (or \"Deleted agent\") instead of \"agent <id>\". Recapture against the current UI."
+      "sourceDigest": "4bec482e40fb46550c821b8346cca9620d5976bfd6eea947f01291f91e27ad3b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "approvals-pending",
       "title": "Pending approvals",
       "path": "screenshots/approvals-pending.png",
-      "capturedAt": "2026-09-30T16:32:54.318Z",
-      "status": "needs-recapture",
-      "sha256": "517a1f4fdebb03353058d72aa7a2948804a5a3751bc223783ef3f2f722abf53e",
+      "capturedAt": "2026-10-01T06:50:42.290Z",
+      "status": "current",
+      "sha256": "7f8ca2057a650dbe8db99a32594e32f74ff32fcd46fc80389754995857861798",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -413,9 +396,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8538813d7a49c12abe17bef395a8e2a9a0aba0b23dfdb8a299204825d05815cf",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the Approvals page names the agent (or \"Deleted agent\") instead of \"agent <id>\". Recapture against the current UI."
+      "sourceDigest": "4bec482e40fb46550c821b8346cca9620d5976bfd6eea947f01291f91e27ad3b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "apps-hosted-chat-routing-failure",
@@ -430,8 +412,8 @@
       "id": "auth-register",
       "title": "Create account",
       "path": "screenshots/auth-register.png",
-      "capturedAt": "2026-09-30T16:33:54.217Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:51:36.201Z",
+      "status": "current",
       "sha256": "0fd0ae6cb048a83098acac5ce38ccac627a4dd850110428e20666f1a23b3b4f6",
       "source": {
         "kind": "browser",
@@ -444,16 +426,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "87b3cd25100a829aaf59637e04645293dd846147ac923363f73610fe57dbeed1",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "7244e25336678d3611903a9077a1076dab3882e8e0cf992072f99e7a63044e6a",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-branding-rules",
       "title": "Branding and visitor rules",
       "path": "screenshots/channel-branding-rules.png",
-      "capturedAt": "2026-09-30T16:31:41.505Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:49:26.864Z",
+      "status": "current",
       "sha256": "5fe3919689b49ac17afb25e0b3c21b321e1f2dd3f63d68cfec96dd7944aa8033",
       "source": {
         "kind": "browser",
@@ -467,17 +448,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0129ba1e9a49526179cc2a1483e43ff3b692f43938e51834712d3f391a4c0744",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "f9a25adb7545a123db6b319605369a5dd42b19ae18d2d0f82cdbfdb4d0777d2e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-slack-keys",
       "title": "Slack channel keys",
       "path": "screenshots/channel-slack-keys.png",
-      "capturedAt": "2026-09-30T16:31:46.846Z",
-      "status": "needs-recapture",
-      "sha256": "f02ad147bb7dd07a60dbf0902c446ba0c73a65ff46399c587d9b7ff87ddd8616",
+      "capturedAt": "2026-10-01T06:49:32.209Z",
+      "status": "current",
+      "sha256": "a1432ca8be33bf97efb4a599c922a74acd8641df7f66afdb379bf3f9f0178eb9",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -490,17 +470,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6596ef7e0c7ea6f51f541d1693e187b2be2fc0471c2d4cd80c996755613ac05b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-slack-live",
       "title": "Published Slack channel",
       "path": "screenshots/channel-slack-live.png",
-      "capturedAt": "2026-09-30T16:31:49.861Z",
-      "status": "needs-recapture",
-      "sha256": "319768e01fd6f4e7453168926d5b7cc51e872c1396b50c100774524f52951f50",
+      "capturedAt": "2026-10-01T06:49:35.331Z",
+      "status": "current",
+      "sha256": "dd68ca412b2556b438148d1d454cfbf7c50b9487273edcb747ceb54c85c25762",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -513,16 +492,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6596ef7e0c7ea6f51f541d1693e187b2be2fc0471c2d4cd80c996755613ac05b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-terminal-build",
       "title": "Terminal app channel",
       "path": "screenshots/channel-terminal-build.png",
-      "capturedAt": "2026-09-30T16:31:52.587Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:49:38.048Z",
+      "status": "current",
       "sha256": "81db9c8408d17de95edf28458b79f099a72aa46ea3d4d25fef2d76adeebb4067",
       "source": {
         "kind": "browser",
@@ -536,16 +514,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6596ef7e0c7ea6f51f541d1693e187b2be2fc0471c2d4cd80c996755613ac05b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-web-published",
       "title": "Published web chat channel",
       "path": "screenshots/channel-web-published.png",
-      "capturedAt": "2026-09-30T16:31:44.196Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:49:29.551Z",
+      "status": "current",
       "sha256": "ed18f83d07bef8b1484cf0040a39442cbd0298d8f6e0b15af696079653326c7a",
       "source": {
         "kind": "browser",
@@ -559,9 +536,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6596ef7e0c7ea6f51f541d1693e187b2be2fc0471c2d4cd80c996755613ac05b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "cli-agents-help",
@@ -681,8 +657,8 @@
       "id": "credentials-connect-provider",
       "title": "Connect a provider",
       "path": "screenshots/credentials-connect-provider.png",
-      "capturedAt": "2026-09-30T16:32:43.941Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:50:32.101Z",
+      "status": "current",
       "sha256": "17eff1ae55d6c6f71e81612ef2a7c1d7738ee6ac661224c74718d46e1931ebdb",
       "source": {
         "kind": "browser",
@@ -696,17 +672,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4eca76512903aaca653c464a969b5a990f2109c5636532c3b147d6f10bf5342b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "b38c432c5abf5a1f87ba952a5aae70f1448eaac4f3608aea4aaae48f1138681f",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "credentials-vault",
       "title": "Credentials",
       "path": "screenshots/credentials-vault.png",
-      "capturedAt": "2026-09-30T16:32:41.640Z",
-      "status": "needs-recapture",
-      "sha256": "a849d65fc1d24aa0c72ff59852dd4272384450db13beb2a57136819c060f895d",
+      "capturedAt": "2026-10-01T06:50:29.664Z",
+      "status": "current",
+      "sha256": "d81477b07cbcbf8a07061daeea9bf8c2b5bcbb33cfe74fb09ef79e51b146b2b6",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -720,17 +695,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "1d988301f85ac98708d8741b2a4a84055170b4696b2feb22c73fea970caa7137",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "c6ff08b197d87223444d02f6613e0ae3a6028da98f36d23c67900bfcb143c8ba",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-detail-tools",
       "title": "Gateway tool scoping",
       "path": "screenshots/gateway-detail-tools.png",
-      "capturedAt": "2026-09-30T16:32:24.832Z",
-      "status": "needs-recapture",
-      "sha256": "a3ed36014b8b02186baea225fb0c5cec19c9cb70ba8dc3f0b2fdd73c3144a081",
+      "capturedAt": "2026-10-01T06:50:12.402Z",
+      "status": "current",
+      "sha256": "3e7a9a4d505b40e40611fa03560562c44b5e1f4f1682b77837585eaf8543e490",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -743,16 +717,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-detail",
       "title": "Gateway detail",
       "path": "screenshots/gateway-detail.png",
-      "capturedAt": "2026-09-30T16:32:21.872Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:50:09.333Z",
+      "status": "current",
       "sha256": "343e858c9e9877d81bd0b7c1604aedd076ec7ac792bd9ce08a264709eab8c2a8",
       "source": {
         "kind": "browser",
@@ -766,16 +739,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-petstore-config",
       "title": "Petstore gateway",
       "path": "screenshots/gateway-petstore-config.png",
-      "capturedAt": "2026-09-30T16:32:27.447Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:50:15.088Z",
+      "status": "current",
       "sha256": "94b5ad87d36caafc48925cb404ee3656cec454036be4fb198ff818ba69ca3d2f",
       "source": {
         "kind": "browser",
@@ -789,16 +761,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-petstore-integration",
       "title": "Gateway integrations",
       "path": "screenshots/gateway-petstore-integration.png",
-      "capturedAt": "2026-09-30T16:32:33.016Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:50:20.834Z",
+      "status": "current",
       "sha256": "a73146de1379a4cd034095c3bd31501e4ba6b15a71d473e48a1b780deda95a02",
       "source": {
         "kind": "browser",
@@ -812,17 +783,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "guides-dev-1-gateway",
       "title": "Serve the order tools to coding assistants",
       "path": "screenshots/guides/dev-1-gateway.png",
-      "capturedAt": "2026-09-30T16:37:20.023Z",
-      "status": "needs-recapture",
-      "sha256": "52c9d9c8d8138bf59530310b58b80c476665fd2411ca5253614f133113da6533",
+      "capturedAt": "2026-10-01T06:48:27.619Z",
+      "status": "current",
+      "sha256": "f563b3b7c9e0423baa7c53fcb258196e11323bcdb6cdf1f8753fe18cedc580c0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -835,17 +805,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b3537de670ffce128250dead51ffb1d31d884a3c25228a255982901fe91cf516",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "b3ddeb70c6d23ad49253804669cabf489d6a784240447e4aaf841621dfd21047",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-dev-2-gateway-setup",
       "title": "The address, the key and a ready-made setup",
       "path": "screenshots/guides/dev-2-gateway-setup.png",
-      "capturedAt": "2026-09-30T16:37:22.386Z",
-      "status": "needs-recapture",
-      "sha256": "e6f8e92b18513df900998287a881d65cf80f5a92110451cb63b1884a093a1dd3",
+      "capturedAt": "2026-10-01T06:48:30.046Z",
+      "status": "current",
+      "sha256": "4e54eea855f1049ae1bfcf4f8de3df9d112fba84659a05fcbf6464949ec4f994",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -858,17 +827,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-dev-3-runner",
       "title": "Start a runner on your own machine",
       "path": "screenshots/guides/dev-3-runner.png",
-      "capturedAt": "2026-09-30T16:37:25.489Z",
-      "status": "needs-recapture",
-      "sha256": "ddcf66ffe0d5f9d4f7854e6d8882c37ed58dca9030e687043f9ec2a2870d569b",
+      "capturedAt": "2026-10-01T06:48:33.057Z",
+      "status": "current",
+      "sha256": "cff20499b1e2da1c5860e2b43173a029a1c09726c3d593d9f91a25351309e76b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -881,17 +849,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "448b431f840b992d9b36ad81238c2349bbaa3adac2ff722bcb71909b47b41560",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "c1f20812d16cf4ee2ddf301fcce9379e87e2f6cb26a226fa1ba9ebe88005a35f",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-dev-4-runner-command",
       "title": "The commands to run on the machine",
       "path": "screenshots/guides/dev-4-runner-command.png",
-      "capturedAt": "2026-09-30T16:37:27.867Z",
-      "status": "needs-recapture",
-      "sha256": "69edceb4d21049826d67538f4dd05f64463b70048b9208c9577d8536c4dec4f9",
+      "capturedAt": "2026-10-01T06:48:35.424Z",
+      "status": "current",
+      "sha256": "c5e47ea0e7a13ca082aae5f5711c9a1daa15284385904addb457ba829bb82907",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -904,16 +871,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "448b431f840b992d9b36ad81238c2349bbaa3adac2ff722bcb71909b47b41560",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "c1f20812d16cf4ee2ddf301fcce9379e87e2f6cb26a226fa1ba9ebe88005a35f",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-helpdesk-1-connect-intranet",
       "title": "Connect your intranet",
       "path": "screenshots/guides/helpdesk-1-connect-intranet.png",
-      "capturedAt": "2026-09-30T16:36:49.201Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:47:57.319Z",
+      "status": "current",
       "sha256": "639df1dea1987761d34e1cf5c1819b794fdca3472fe86d4df99aec4624c127e8",
       "source": {
         "kind": "browser",
@@ -927,17 +893,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4a17754ecf6fb96042b63eac703a5a440e1abb864d3b7b0db3c0d616df45dbb1",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "9ac4e6e1f36fd1b595b9fdeff891c2d8693598622eb918e62a35b1dcc2975213",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
-      "id": "guides-helpdesk-2-shared-memory",
-      "title": "Something every assistant should know",
-      "path": "screenshots/guides/helpdesk-2-shared-memory.png",
-      "capturedAt": "2026-09-30T16:36:52.543Z",
-      "status": "needs-recapture",
-      "sha256": "17d55bd418db683f3b6853ef0f9d150b73b4ea1c64f7e59bd233ae7f8d8c1dc3",
+      "id": "guides-helpdesk-2-office-guide",
+      "title": "The office guide, added as a document",
+      "path": "screenshots/guides/helpdesk-2-office-guide.png",
+      "capturedAt": "2026-10-01T06:48:00.684Z",
+      "status": "current",
+      "sha256": "882c486b2218ea81f0a98018e82230d9a1f1b5edf19e6d9ac77ac31a6356bd75",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -950,16 +915,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b451424bcf8384dc79330578b5c23b2a8a4c1c61b0908a09e1590de113ab00e9",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "b264e12680eff3dc27f385ce41f02a386522c887c8cf08276cf141d1846d13ed",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-helpdesk-3-agent",
       "title": "The help desk assistant reads shared memory",
       "path": "screenshots/guides/helpdesk-3-agent.png",
-      "capturedAt": "2026-09-30T16:36:58.800Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:48:06.751Z",
+      "status": "current",
       "sha256": "81d2ad6fbc8b8c637699db44c59a9f9258706043876f12bb709d679e015f4066",
       "source": {
         "kind": "browser",
@@ -973,17 +937,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-helpdesk-4-leave",
       "title": "A question answered from the HR system",
       "path": "screenshots/guides/helpdesk-4-leave.png",
-      "capturedAt": "2026-09-30T16:37:07.836Z",
-      "status": "needs-recapture",
-      "sha256": "4c0b07a3926301184d8314c5f937dfcc1cc6e4ea853759275c4492620e0e47e4",
+      "capturedAt": "2026-10-01T06:48:15.698Z",
+      "status": "current",
+      "sha256": "86a7e9cf1a71709bce0cf1ae49364eb3383df26d510745e2a5e64735a3712932",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -996,17 +959,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-helpdesk-5-wifi",
       "title": "A question answered from the office guide",
       "path": "screenshots/guides/helpdesk-5-wifi.png",
-      "capturedAt": "2026-09-30T16:37:09.905Z",
-      "status": "needs-recapture",
-      "sha256": "9818c4f019dac507c46c43ffce8e8118864a59f168bd27b63c5e339d910a6869",
+      "capturedAt": "2026-10-01T06:48:17.787Z",
+      "status": "current",
+      "sha256": "03dba1ff244ac7e74835a978e367988ecf0bc7a043264a0c9d97aae24ec5d357",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1019,16 +981,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-helpdesk-6-teams",
       "title": "Add Microsoft Teams",
       "path": "screenshots/guides/helpdesk-6-teams.png",
-      "capturedAt": "2026-09-30T16:37:15.610Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:48:23.494Z",
+      "status": "current",
       "sha256": "cc4b79db256ca6a1a9ee0291661212e83ee11694b56c9be4dace979f5bebc2e8",
       "source": {
         "kind": "browser",
@@ -1043,17 +1004,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2ae801dd9f4c79b947922c93d18fba727710962669f18d13c187871fd0c893a7",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "773fc9c47f199ebd3699dc2e1f4bbb0fb5e842bc4b4331f80b2159bfe0e8a242",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-marketing-1-connect-docs",
       "title": "Connect your help center",
       "path": "screenshots/guides/marketing-1-connect-docs.png",
-      "capturedAt": "2026-09-30T16:35:37.160Z",
-      "status": "needs-recapture",
-      "sha256": "156f277f7325c00c73621de610e4988e8510d2f522887ff06f8291669499699a",
+      "capturedAt": "2026-10-01T06:46:42.487Z",
+      "status": "current",
+      "sha256": "bdffef031f9b9f6ce1891bc5e44b566f5c27ed7c7edf03c8032786de11273dca",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1066,16 +1026,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4a17754ecf6fb96042b63eac703a5a440e1abb864d3b7b0db3c0d616df45dbb1",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "9ac4e6e1f36fd1b595b9fdeff891c2d8693598622eb918e62a35b1dcc2975213",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-marketing-2-agent",
       "title": "A product assistant that answers from the help center",
       "path": "screenshots/guides/marketing-2-agent.png",
-      "capturedAt": "2026-09-30T16:35:40.234Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:46:45.372Z",
+      "status": "current",
       "sha256": "8d3bb4fe41c12f34d2926477238f0a487bb0bce2d2bb3746bbcb6127d2376fee",
       "source": {
         "kind": "browser",
@@ -1089,17 +1048,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-marketing-3-try",
       "title": "An answer with its source",
       "path": "screenshots/guides/marketing-3-try.png",
-      "capturedAt": "2026-09-30T16:35:49.200Z",
-      "status": "needs-recapture",
-      "sha256": "4351a481fdc6122703320ae6ae23943e64a3e594fe9d0e6281bdeaf5d0272329",
+      "capturedAt": "2026-10-01T06:46:54.395Z",
+      "status": "current",
+      "sha256": "39eeb4c3d9f494493ef60f20e6edc861d05878236107d0aeb232f6abe159e8cf",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1112,16 +1070,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-marketing-4-limits",
       "title": "A daily spending cap for visitors",
       "path": "screenshots/guides/marketing-4-limits.png",
-      "capturedAt": "2026-09-30T16:35:52.072Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:46:57.238Z",
+      "status": "current",
       "sha256": "d0d46865f3269bf200257dba435a1389c6b992b665828fd0ff1c95c8c2adf54f",
       "source": {
         "kind": "browser",
@@ -1135,16 +1092,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0129ba1e9a49526179cc2a1483e43ff3b692f43938e51834712d3f391a4c0744",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "f9a25adb7545a123db6b319605369a5dd42b19ae18d2d0f82cdbfdb4d0777d2e",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-marketing-5-widget",
       "title": "The chat bubble, only on your own site",
       "path": "screenshots/guides/marketing-5-widget.png",
-      "capturedAt": "2026-09-30T16:36:04.262Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:47:09.585Z",
+      "status": "current",
       "sha256": "fdb6b6f7149d07940632721d094101305165955e5481693283d2accdb29ac641",
       "source": {
         "kind": "browser",
@@ -1159,16 +1115,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "58fb27eb16c99f9cc83b5f34ef6015ce9f5cdf243c28c0b7140dd5a632297206",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "c816e6c0188a61adb7cba35ad385d732aed84525f2821cff92c85871f8ab95e7",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-marketing-6-visitor",
       "title": "A visitor asks a product question",
       "path": "screenshots/guides/marketing-6-visitor.png",
-      "capturedAt": "2026-09-30T16:36:12.269Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:47:17.566Z",
+      "status": "current",
       "sha256": "6585c66632f7b3595004a9bde79d4019845423ebded43942ddfd6154779723fc",
       "source": {
         "kind": "browser",
@@ -1182,17 +1137,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "44271aaddc5f3e43995e34f5b87b0b3116412eb115c2f470e2c3c23dc62d1a16",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "677c063efc0b021aceb3a5ccd6a6f217590bad20584fa35b42621ca65916770b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-ops-1-connect-status",
       "title": "Connect the system you check",
       "path": "screenshots/guides/ops-1-connect-status.png",
-      "capturedAt": "2026-09-30T16:36:16.955Z",
-      "status": "needs-recapture",
-      "sha256": "f8d23dac1f9a7dd794eb2af28b22768dd7eaed8cb1ef106976c581185bf32461",
+      "capturedAt": "2026-10-01T06:47:22.570Z",
+      "status": "current",
+      "sha256": "fc92dd1e976328bda95bc2999f39154184055c3d1ca63b4686297f71af9f1d4a",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1205,40 +1159,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4a17754ecf6fb96042b63eac703a5a440e1abb864d3b7b0db3c0d616df45dbb1",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "9ac4e6e1f36fd1b595b9fdeff891c2d8693598622eb918e62a35b1dcc2975213",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
-      "id": "guides-ops-2-slack-tool",
-      "title": "A tool that posts to Slack",
-      "path": "screenshots/guides/ops-2-slack-tool.png",
-      "capturedAt": "2026-09-30T16:36:20.491Z",
-      "status": "needs-recapture",
-      "sha256": "85bcc80914eef82366db42c8881e1be16c062fd546ea79bf0d2beac157f6508d",
-      "source": {
-        "kind": "browser",
-        "environment": "local-demo",
-        "route": "/tools/new"
-      },
-      "sources": [
-        "frontend/src/pages/tool-new.tsx",
-        "frontend/src/components/tools",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "e58414fb1f97cdb2151ddd39381a9747ac9ee8b05e2dd92831a8b9f145de0f1f",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "The Create tool form and tool detail page changed for GraphQL, SOAP and gRPC tools (PR #889). The captured HTTP/imported-tool states look the same, but the sources moved; recapture to confirm."
-    },
-    {
-      "id": "guides-ops-3-agent",
-      "title": "The nightly check, with its two kinds of tools",
-      "path": "screenshots/guides/ops-3-agent.png",
-      "capturedAt": "2026-09-30T16:36:24.902Z",
-      "status": "needs-recapture",
-      "sha256": "d47222a14a888a56bf20db1cb2789601502ffd15b93072bc571b7949942701c0",
+      "id": "guides-ops-2-agent",
+      "title": "The nightly check and its status tools",
+      "path": "screenshots/guides/ops-2-agent.png",
+      "capturedAt": "2026-10-01T06:47:25.565Z",
+      "status": "current",
+      "sha256": "37da7d36fde11165de45599d891f5a407f748f9a3319a67e613e38dd369b29b4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1251,17 +1181,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
-      "id": "guides-ops-4-try",
-      "title": "A test run posts the report",
-      "path": "screenshots/guides/ops-4-try.png",
-      "capturedAt": "2026-09-30T16:36:33.886Z",
-      "status": "needs-recapture",
-      "sha256": "39acfbb597b745da38650e01ee7984bdcabd8bb84293e7097b76bc324ccf858c",
+      "id": "guides-ops-3-try",
+      "title": "A test run writes the report",
+      "path": "screenshots/guides/ops-3-try.png",
+      "capturedAt": "2026-10-01T06:47:34.527Z",
+      "status": "current",
+      "sha256": "e5e9a58606d3f11ce0eba62c76fa870636390486632a010e43da1e90141e9a2b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1274,40 +1203,84 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
-      "id": "guides-ops-5-heartbeat",
-      "title": "Wake it up every night",
-      "path": "screenshots/guides/ops-5-heartbeat.png",
-      "capturedAt": "2026-09-30T16:36:36.645Z",
-      "status": "needs-recapture",
-      "sha256": "30ab4869aceedccf04e12cf8118ce345d00ce8234689a663c725c30e1f0ddcd7",
+      "id": "guides-ops-4-slack",
+      "title": "Slack, published for the report",
+      "path": "screenshots/guides/ops-4-slack.png",
+      "capturedAt": "2026-10-01T06:47:42.082Z",
+      "status": "current",
+      "sha256": "b5ec35b9384a9be0179e2c29820e5b65d4d82374462c991d4ba0482930cfd492",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/agents/:id/edit"
+        "route": "/agents/:id/channels/:id"
       },
       "sources": [
-        "frontend/src/pages/agent-builder.tsx",
-        "frontend/src/components/agents",
+        "frontend/src/pages/agent-channel.tsx",
+        "frontend/src/components/channels",
+        "frontend/src/components/connect",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "773fc9c47f199ebd3699dc2e1f4bbb0fb5e842bc4b4331f80b2159bfe0e8a242",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
-      "id": "guides-ops-6-report-run",
+      "id": "guides-ops-5-schedule",
+      "title": "Every day at 6:00, to the Slack channel",
+      "path": "screenshots/guides/ops-5-schedule.png",
+      "capturedAt": "2026-10-01T06:47:46.372Z",
+      "status": "current",
+      "sha256": "9ed95fb77745ad1cbe194e8b37b110e29828e02454de5ee8756c7a4b6dd03585",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id/schedule"
+      },
+      "sources": [
+        "frontend/src/pages/agent-schedule.tsx",
+        "frontend/src/lib/schedule.ts",
+        "frontend/src/components/settings/time-zone-select.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b362a60b2182cb86441990d4f7741dfa88c57e99de1bd492e7eff368682957de",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-ops-6-schedule-card",
+      "title": "The schedule on the agent",
+      "path": "screenshots/guides/ops-6-schedule-card.png",
+      "capturedAt": "2026-10-01T06:47:48.351Z",
+      "status": "current",
+      "sha256": "b53affba683c512a0b8a4e59fdcc151175d1c565b0a2e0b8f15f00ce3a5dcf26",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents/detail/schedule-card.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b4f37615bd07d05b01065d013bed17a18f980b7bcd86bd887b3f4b3434c80b9d",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-ops-7-report-run",
       "title": "A report run, step by step",
-      "path": "screenshots/guides/ops-6-report-run.png",
-      "capturedAt": "2026-09-30T16:36:43.949Z",
-      "status": "needs-recapture",
-      "sha256": "c48426774dc05b80a387e27c029c541520dd9f812dca629090d1e95c264d2392",
+      "path": "screenshots/guides/ops-7-report-run.png",
+      "capturedAt": "2026-10-01T06:47:52.282Z",
+      "status": "current",
+      "sha256": "36faf7946b9ed4d64165efba792534f17127760f1880cf3b5e163efdc0fcd0c4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1320,16 +1293,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-1-connect-crm",
       "title": "Connect your CRM",
       "path": "screenshots/guides/sales-1-connect-crm.png",
-      "capturedAt": "2026-09-30T16:35:07.568Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:46:13.993Z",
+      "status": "current",
       "sha256": "ce473e5a9904307c4ee1a9caa98658920b77c5415a7c67a717ab8874c0a63f49",
       "source": {
         "kind": "browser",
@@ -1343,16 +1315,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4a17754ecf6fb96042b63eac703a5a440e1abb864d3b7b0db3c0d616df45dbb1",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "9ac4e6e1f36fd1b595b9fdeff891c2d8693598622eb918e62a35b1dcc2975213",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-2-agent",
       "title": "The sales assistant and its CRM tools",
       "path": "screenshots/guides/sales-2-agent.png",
-      "capturedAt": "2026-09-30T16:35:11.538Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:46:16.920Z",
+      "status": "current",
       "sha256": "4fdc31139f46c69b717a0af660bd44944ce1a4d4bceb45e20fb4656cd6d1be75",
       "source": {
         "kind": "browser",
@@ -1366,17 +1337,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-3-brief",
       "title": "A brief before the call",
       "path": "screenshots/guides/sales-3-brief.png",
-      "capturedAt": "2026-09-30T16:35:20.520Z",
-      "status": "needs-recapture",
-      "sha256": "440c676a9696f39bda5db143ab32b27becff31c04fac068496c8c6d4c24031f2",
+      "capturedAt": "2026-10-01T06:46:25.959Z",
+      "status": "current",
+      "sha256": "c6943ecf9ca7fb56e3078ffa5d73912b86cfc5bef6c2b7615a8560564e4fed19",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1389,17 +1359,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-4-notes",
       "title": "Meeting notes saved to the CRM",
       "path": "screenshots/guides/sales-4-notes.png",
-      "capturedAt": "2026-09-30T16:35:22.618Z",
-      "status": "needs-recapture",
-      "sha256": "0b87ef81d40d361ad1a0ecdab15026005ba2ad30f5d02d6bb6fbd6a23132e81e",
+      "capturedAt": "2026-10-01T06:46:28.045Z",
+      "status": "current",
+      "sha256": "3d96a529dd76bc3527b8a49d846a270e18ea98c625dc22b62313ab852ac87b00",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1412,16 +1381,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-5-slack-keys",
       "title": "Add Slack with your Slack app",
       "path": "screenshots/guides/sales-5-slack-keys.png",
-      "capturedAt": "2026-09-30T16:35:28.326Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:46:33.763Z",
+      "status": "current",
       "sha256": "eae7f3b21043a830d14e5697e5a8918b0e1a89c7dd89bdcf11097bd7e3110cd0",
       "source": {
         "kind": "browser",
@@ -1436,17 +1404,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2ae801dd9f4c79b947922c93d18fba727710962669f18d13c187871fd0c893a7",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "773fc9c47f199ebd3699dc2e1f4bbb0fb5e842bc4b4331f80b2159bfe0e8a242",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-sales-6-slack-live",
       "title": "Published: the install link and redirect URL",
       "path": "screenshots/guides/sales-6-slack-live.png",
-      "capturedAt": "2026-09-30T16:35:32.055Z",
-      "status": "needs-recapture",
-      "sha256": "cc8194ce86fc2b8ee21f32a97839109c2059ae5918ffcf334923bc6622afd5fd",
+      "capturedAt": "2026-10-01T06:46:37.497Z",
+      "status": "current",
+      "sha256": "ac9f351221ec20b3a23294651432598ec6eb81819d57a3a7afe00d282263dbf3",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1459,16 +1426,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6596ef7e0c7ea6f51f541d1693e187b2be2fc0471c2d4cd80c996755613ac05b",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-1-connect-model",
       "title": "Connect an AI model",
       "path": "screenshots/guides/support-1-connect-model.png",
-      "capturedAt": "2026-09-30T16:34:02.518Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:44:39.145Z",
+      "status": "current",
       "sha256": "7ea268d434cc30085ece6ffb88b37f25a3d3486914c618e4e9c4a1cbebf5efa7",
       "source": {
         "kind": "browser",
@@ -1483,17 +1449,37 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "301879e36c64bbd182cd5cbd98d6dc0d6b7155e4d513f36c9c4901e0e6ead904",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "d27c47977964b5784fc616762b0139a524d3c7c690f6f1f5ecb7bc2221da84da",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
-      "id": "guides-support-10-add-channel",
+      "id": "guides-support-10-approve",
+      "title": "Approve the refund",
+      "path": "screenshots/guides/support-10-approve.png",
+      "capturedAt": "2026-10-01T06:45:12.805Z",
+      "status": "current",
+      "sha256": "91b294624d769898989048e7b6e73c34e0efe1a7d24390753d2342cb6aeafeb2",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "967332123d5f78d7e7c56c8c44030e86f1eeb5c3d8c5527a14c2ff54e70b102d",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-11-add-channel",
       "title": "Pick where customers reach it",
-      "path": "screenshots/guides/support-10-add-channel.png",
-      "capturedAt": "2026-09-30T16:34:32.718Z",
-      "status": "needs-recapture",
-      "sha256": "7b8060a00a12a8320a7a7a81d575bf9e4c28c3b87c9e5b9ed9a030955d235790",
+      "path": "screenshots/guides/support-11-add-channel.png",
+      "capturedAt": "2026-10-01T06:45:15.927Z",
+      "status": "current",
+      "sha256": "fc5b1b35779b863f88cfda40fa77fe8714850e8339b32c3f1ab3261bf71cdc0a",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1506,17 +1492,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4f7bd0a7718a7a4121e613a933756090a0c6c5b0079776f0727e9eb682e6bf2a",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "ecf2b7366d37cabacb0295f4403c2ca234213a673a7dea0734f4e64b4724d5fb",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
-      "id": "guides-support-11-web-chat",
+      "id": "guides-support-12-web-chat",
       "title": "Publish the web chat",
-      "path": "screenshots/guides/support-11-web-chat.png",
-      "capturedAt": "2026-09-30T16:34:33.486Z",
-      "status": "needs-recapture",
-      "sha256": "0f696a3a50aac1b196cab4471aa49677de4488d34a500dbd6f19548edf6b0c05",
+      "path": "screenshots/guides/support-12-web-chat.png",
+      "capturedAt": "2026-10-01T06:45:16.725Z",
+      "status": "current",
+      "sha256": "8e73128a5b0ccc74abc3f5e18cb3cc4910727a0b701fbddadc28fa66c7686f0d",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1529,17 +1514,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6596ef7e0c7ea6f51f541d1693e187b2be2fc0471c2d4cd80c996755613ac05b",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
-      "id": "guides-support-12-widget",
+      "id": "guides-support-13-widget",
       "title": "Put the chat bubble on your website",
-      "path": "screenshots/guides/support-12-widget.png",
-      "capturedAt": "2026-09-30T16:34:37.350Z",
-      "status": "needs-recapture",
-      "sha256": "c1d615ac7ecb390d2850bb2e4a2b363280924aabb77c751b4b012d8251dae62a",
+      "path": "screenshots/guides/support-13-widget.png",
+      "capturedAt": "2026-10-01T06:45:20.608Z",
+      "status": "current",
+      "sha256": "d7fe17efc1c2acefe0aae1a2f013da74f505d5cffa16a491293b6b5ad2f0171e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1553,17 +1537,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "58fb27eb16c99f9cc83b5f34ef6015ce9f5cdf243c28c0b7140dd5a632297206",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "c816e6c0188a61adb7cba35ad385d732aed84525f2821cff92c85871f8ab95e7",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
-      "id": "guides-support-13-whatsapp",
+      "id": "guides-support-14-whatsapp",
       "title": "Add WhatsApp with your Twilio keys",
-      "path": "screenshots/guides/support-13-whatsapp.png",
-      "capturedAt": "2026-09-30T16:34:44.692Z",
-      "status": "needs-recapture",
-      "sha256": "57022529bea35a39f29e6de4eca45560f6aad03038653438667aeb308cc94535",
+      "path": "screenshots/guides/support-14-whatsapp.png",
+      "capturedAt": "2026-10-01T06:45:51.446Z",
+      "status": "current",
+      "sha256": "3bb4b5603102d51de33b30573e442a6d0715d423356548b8018bb0dd75961684",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1577,17 +1560,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2ae801dd9f4c79b947922c93d18fba727710962669f18d13c187871fd0c893a7",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "773fc9c47f199ebd3699dc2e1f4bbb0fb5e842bc4b4331f80b2159bfe0e8a242",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
-      "id": "guides-support-14-email",
+      "id": "guides-support-15-email",
       "title": "Add email with your Resend key",
-      "path": "screenshots/guides/support-14-email.png",
-      "capturedAt": "2026-09-30T16:34:50.400Z",
-      "status": "needs-recapture",
-      "sha256": "acd4d7bcc32b97ab2c5e05d4d0eeb9050e77f10929c445fa0138042192d7a9d1",
+      "path": "screenshots/guides/support-15-email.png",
+      "capturedAt": "2026-10-01T06:45:57.153Z",
+      "status": "current",
+      "sha256": "7491e05737a1187280f8ac2701974125c0002a42aef1c929848c832197ff57c0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1601,17 +1583,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2ae801dd9f4c79b947922c93d18fba727710962669f18d13c187871fd0c893a7",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "773fc9c47f199ebd3699dc2e1f4bbb0fb5e842bc4b4331f80b2159bfe0e8a242",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
-      "id": "guides-support-15-branding",
+      "id": "guides-support-16-branding",
       "title": "Name, greeting and limits",
-      "path": "screenshots/guides/support-15-branding.png",
-      "capturedAt": "2026-09-30T16:34:54.649Z",
-      "status": "needs-recapture",
-      "sha256": "b1035a3a63e7f36405ce5a54632f0d1ac311a7e5e3ef21ea8f6290a272986591",
+      "path": "screenshots/guides/support-16-branding.png",
+      "capturedAt": "2026-10-01T06:46:01.377Z",
+      "status": "current",
+      "sha256": "96c2dfc86213c388a152dda91658fed1f2617aaca9134431d6a21e07233d0595",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1624,16 +1605,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0129ba1e9a49526179cc2a1483e43ff3b692f43938e51834712d3f391a4c0744",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "f9a25adb7545a123db6b319605369a5dd42b19ae18d2d0f82cdbfdb4d0777d2e",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
-      "id": "guides-support-16-customer-view",
+      "id": "guides-support-17-customer-view",
       "title": "What a customer sees",
-      "path": "screenshots/guides/support-16-customer-view.png",
-      "capturedAt": "2026-09-30T16:35:02.642Z",
-      "status": "needs-recapture",
+      "path": "screenshots/guides/support-17-customer-view.png",
+      "capturedAt": "2026-10-01T06:46:09.059Z",
+      "status": "current",
       "sha256": "d997fe307a9d7c91571ac219770208dd6dd7787b6d7e68a00b3248a0e60af6ed",
       "source": {
         "kind": "browser",
@@ -1647,16 +1627,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "44271aaddc5f3e43995e34f5b87b0b3116412eb115c2f470e2c3c23dc62d1a16",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "677c063efc0b021aceb3a5ccd6a6f217590bad20584fa35b42621ca65916770b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-2-connect-orders",
       "title": "Connect your order system",
       "path": "screenshots/guides/support-2-connect-orders.png",
-      "capturedAt": "2026-09-30T16:34:06.976Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:44:43.685Z",
+      "status": "current",
       "sha256": "595b33955978c725da7a7bcb183958204559da0162ad866022cb5dd24b1320a6",
       "source": {
         "kind": "browser",
@@ -1671,16 +1650,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "41619f09f6499a2517df25f1a95a3298f68e5fe930db1d8943aec3778be828c0",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "1d4b26eb70012d87ad5019b8011348ec7121c53ad13e909cb43ba59aa8a859e3",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-3-orders-tools",
       "title": "The order system, with what it can do",
       "path": "screenshots/guides/support-3-orders-tools.png",
-      "capturedAt": "2026-09-30T16:34:08.254Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:44:44.982Z",
+      "status": "current",
       "sha256": "41298c6bfefb1fdf00abad1ee810a3dd30a99b3011c40ae54509273177571796",
       "source": {
         "kind": "browser",
@@ -1694,17 +1672,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4a17754ecf6fb96042b63eac703a5a440e1abb864d3b7b0db3c0d616df45dbb1",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "9ac4e6e1f36fd1b595b9fdeff891c2d8693598622eb918e62a35b1dcc2975213",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-4-new-agent",
       "title": "A new autonomous agent",
       "path": "screenshots/guides/support-4-new-agent.png",
-      "capturedAt": "2026-09-30T16:34:12.409Z",
-      "status": "needs-recapture",
-      "sha256": "8b7fbc0acbdf108da5b2da89ae412583f05bbeb1544babe1ee28fb533700a692",
+      "capturedAt": "2026-10-01T06:44:49.281Z",
+      "status": "current",
+      "sha256": "0d0eb4398386c4cebd9d3ea1bb98b0df76f19b2c48bbffe24df853827f35747b",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1717,17 +1694,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-5-model-and-tools",
       "title": "Tick the order tools",
       "path": "screenshots/guides/support-5-model-and-tools.png",
-      "capturedAt": "2026-09-30T16:34:12.970Z",
-      "status": "needs-recapture",
-      "sha256": "b2ab86892dc57197e99f2657e4accc0b03a5c77eb47b7a4c8c622668bce32275",
+      "capturedAt": "2026-10-01T06:44:49.841Z",
+      "status": "current",
+      "sha256": "5689d3f669842e02e475c6ce67d010bc920483832cc230404d41c9301a4c4e07",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1740,17 +1716,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6e0b101ea68f49da5ed7e5ceaf3a789022b8eaef3497b96ca724225af5bb22e5",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-6-activate",
       "title": "Save and turn the agent on",
       "path": "screenshots/guides/support-6-activate.png",
-      "capturedAt": "2026-09-30T16:34:16.317Z",
-      "status": "needs-recapture",
-      "sha256": "8ad15f6493a391fd6c65fd259535a6835447c5d31f728d1af17c58df80994c46",
+      "capturedAt": "2026-10-01T06:44:53.233Z",
+      "status": "current",
+      "sha256": "b78bb107a3dfa60bd2c1315e4fc885cdd76c97bb51e94092e70dcd9f03aa1125",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1763,17 +1738,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "guides-support-7-try-order",
       "title": "Ask about an order",
       "path": "screenshots/guides/support-7-try-order.png",
-      "capturedAt": "2026-09-30T16:34:18.446Z",
-      "status": "needs-recapture",
-      "sha256": "7aa8b7fd269eeae351da00870fa2bab5d3ac56aa57f801ea2170fbcb6c0623aa",
+      "capturedAt": "2026-10-01T06:44:55.320Z",
+      "status": "current",
+      "sha256": "52adc397dd862debdb5e41cbfaf9ff72de218c2515e11414c6d173967ba0a086",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1786,17 +1760,39 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
-      "id": "guides-support-8-refund-waits",
+      "id": "guides-support-8-amount-rule",
+      "title": "Ask before refunds over 500",
+      "path": "screenshots/guides/support-8-amount-rule.png",
+      "capturedAt": "2026-10-01T06:44:59.447Z",
+      "status": "current",
+      "sha256": "482dea7623ff903a11064a35a774327d9c63fecbc1479ef6c2e7890d97509dc0",
+      "source": {
+        "kind": "browser",
+        "environment": "local-demo",
+        "route": "/settings/approvals/rules/new"
+      },
+      "sources": [
+        "frontend/src/pages/approval-rule.tsx",
+        "frontend/src/components/settings/approval-amount-rule.tsx",
+        "frontend/src/lib/approval-rules.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "6e1177c4b404113478986099894f795111401f1cb8c6a46a0bee7c551271a09f",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+    },
+    {
+      "id": "guides-support-9-refund-waits",
       "title": "A big refund waits for approval",
-      "path": "screenshots/guides/support-8-refund-waits.png",
-      "capturedAt": "2026-09-30T16:34:28.727Z",
-      "status": "needs-recapture",
-      "sha256": "9945c5591463923f72d3c1f32e2dd340c36884f329dd87d87d7bebabaf774ef5",
+      "path": "screenshots/guides/support-9-refund-waits.png",
+      "capturedAt": "2026-10-01T06:45:11.920Z",
+      "status": "current",
+      "sha256": "e8a3a5f05a0577cdba06cfa17e7eb10f1e05f594c7132031aa78e4a3ad7b256a",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1808,38 +1804,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c7f2487bd278909887646363871e9764c3bdf55fe97445ff4a6b49364f316804",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the Approvals page names the agent (or \"Deleted agent\") instead of \"agent <id>\". Recapture against the current UI."
-    },
-    {
-      "id": "guides-support-9-approve",
-      "title": "Approve the refund",
-      "path": "screenshots/guides/support-9-approve.png",
-      "capturedAt": "2026-09-30T16:34:29.583Z",
-      "status": "needs-recapture",
-      "sha256": "847b0b9ea9c976d3ca77ad17aecfada1415ffcdaca1c6b79f5d86acc75cb6769",
-      "source": {
-        "kind": "browser",
-        "environment": "local-demo",
-        "route": "/approvals"
-      },
-      "sources": [
-        "frontend/src/pages/approvals.tsx",
-        "frontend/src/components/ui",
-        "frontend/src/components/layout",
-        "frontend/src/index.css"
-      ],
-      "sourceDigest": "c7f2487bd278909887646363871e9764c3bdf55fe97445ff4a6b49364f316804",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
-      "reason": "Source changed after capture: the Approvals page names the agent (or \"Deleted agent\") instead of \"agent <id>\". Recapture against the current UI."
+      "sourceDigest": "967332123d5f78d7e7c56c8c44030e86f1eeb5c3d8c5527a14c2ff54e70b102d",
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
     },
     {
       "id": "hosted-chat-privacy",
       "title": "Hosted chat: visitor data",
       "path": "screenshots/hosted-chat-privacy.png",
-      "capturedAt": "2026-09-30T16:32:08.169Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:49:55.086Z",
+      "status": "current",
       "sha256": "11208187d15885d3bb4a0b0785cc47b8ca759b24348c76cd76071e5742eba010",
       "source": {
         "kind": "browser",
@@ -1853,16 +1826,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "44271aaddc5f3e43995e34f5b87b0b3116412eb115c2f470e2c3c23dc62d1a16",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "677c063efc0b021aceb3a5ccd6a6f217590bad20584fa35b42621ca65916770b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "hosted-chat",
       "title": "Hosted web chat",
       "path": "screenshots/hosted-chat.png",
-      "capturedAt": "2026-09-30T16:32:04.203Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:49:50.573Z",
+      "status": "current",
       "sha256": "8f2479f7c99e114f697b5ff8aa02d2ec29ca5c03a9d8a8f2b53cc76799c8ad24",
       "source": {
         "kind": "browser",
@@ -1876,16 +1848,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "44271aaddc5f3e43995e34f5b87b0b3116412eb115c2f470e2c3c23dc62d1a16",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "677c063efc0b021aceb3a5ccd6a6f217590bad20584fa35b42621ca65916770b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "interfaces-channel-config",
       "title": "Add channel",
       "path": "screenshots/interfaces-channel-config.png",
-      "capturedAt": "2026-09-30T16:31:55.129Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:49:40.689Z",
+      "status": "current",
       "sha256": "aa6a65aabbf701d494218a1311d013f4bc5cd7d662e8e8477d18684631b06957",
       "source": {
         "kind": "browser",
@@ -1899,17 +1870,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4f7bd0a7718a7a4121e613a933756090a0c6c5b0079776f0727e9eb682e6bf2a",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "ecf2b7366d37cabacb0295f4403c2ca234213a673a7dea0734f4e64b4724d5fb",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "interfaces-channel-setup",
       "title": "Microsoft Teams channel",
       "path": "screenshots/interfaces-channel-setup.png",
-      "capturedAt": "2026-09-30T16:31:57.802Z",
-      "status": "needs-recapture",
-      "sha256": "c96bca5f7f55dd84f5a59e0c975f0abadb220a9028e206a56bae1268a1cebe50",
+      "capturedAt": "2026-10-01T06:49:43.315Z",
+      "status": "current",
+      "sha256": "525249d57fa91992ceb9e56a0e31b29447ad953dc6755722d4d28e85aa58ff04",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1922,16 +1892,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6596ef7e0c7ea6f51f541d1693e187b2be2fc0471c2d4cd80c996755613ac05b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "567dd5383e20eb392a2ba2561a56934721885cad29061f1f425a364d2019da4e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "memory-write",
       "title": "Add memory",
       "path": "screenshots/memory-write.png",
-      "capturedAt": "2026-09-30T16:32:51.514Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:50:39.845Z",
+      "status": "current",
       "sha256": "7786413e5bfedd08a2b08cb2da55b620839935778e23326012324d20444f9443",
       "source": {
         "kind": "browser",
@@ -1945,18 +1914,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b451424bcf8384dc79330578b5c23b2a8a4c1c61b0908a09e1590de113ab00e9",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "b264e12680eff3dc27f385ce41f02a386522c887c8cf08276cf141d1846d13ed",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "memory",
       "title": "Memory",
       "path": "screenshots/memory.png",
-      "capturedAt": "2026-09-30T16:32:49.148Z",
-      "status": "needs-recapture",
-      "reason": "memories.tsx now lists each document once (its chunks hidden); no visible change expected on the seeded page, recapture to refresh the source digest.",
-      "sha256": "16eae1d86f93fe323b45a65aefe4d718c0bc102269e900e44d0f9987d12c5795",
+      "capturedAt": "2026-10-01T06:50:37.453Z",
+      "status": "current",
+      "sha256": "e63f6b06ac3332949b7509b1654a981f245aaf83459cf3b120f7fae0b52aab40",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1969,15 +1936,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "61c844a2d9c8dbd21ed2f1ebac031ee67ed35fe18bad7e74868e1ab66242d0ee",
+      "sourceDigest": "8d9d523bf5ec7d7013b7a32bac345f4dba2f8b8a2ae095055a513008ef30b306",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "models",
       "title": "Model catalog",
       "path": "screenshots/models.png",
-      "capturedAt": "2026-09-30T16:32:46.480Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:50:34.720Z",
+      "status": "current",
       "sha256": "69d454fd8eab70ef2b795281cba2d58bd6354b6132c8ba127c5edce184e6915e",
       "source": {
         "kind": "browser",
@@ -1991,16 +1958,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "eb6834b856578f5cbffd5111cc51ab0736d6bb2e971629ac6621caa9cb31d1a0",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "fd1a05a1aa4becde25b5e7b27f4266b4b7fa07d2deab1ba7ba269977567c624e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-api-imported",
       "title": "Imported API",
       "path": "screenshots/quickstart-api-imported.png",
-      "capturedAt": "2026-09-30T16:32:13.328Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:50:00.413Z",
+      "status": "current",
       "sha256": "e915b3cd315ad4d7af5c7a7ba6b0a337fbdca296fc9c2cc4352128b49b192a27",
       "source": {
         "kind": "browser",
@@ -2014,16 +1980,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4a17754ecf6fb96042b63eac703a5a440e1abb864d3b7b0db3c0d616df45dbb1",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "9ac4e6e1f36fd1b595b9fdeff891c2d8693598622eb918e62a35b1dcc2975213",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-claude-config",
       "title": "Client setup",
       "path": "screenshots/quickstart-claude-config.png",
-      "capturedAt": "2026-09-30T16:32:39.080Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:50:26.869Z",
+      "status": "current",
       "sha256": "1c8b32d819ed1dabde66f6597199e8b93d74e82df34f26cb712c7148757e6f22",
       "source": {
         "kind": "browser",
@@ -2037,16 +2002,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-gateway-mcp",
       "title": "Petstore MCP gateway",
       "path": "screenshots/quickstart-gateway-mcp.png",
-      "capturedAt": "2026-09-30T16:32:30.041Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:50:17.807Z",
+      "status": "current",
       "sha256": "bb010649f6474ca214b8eeb41e972c52ec755e64312665db849350dcc7caedba",
       "source": {
         "kind": "browser",
@@ -2060,16 +2024,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-mcp-endpoints",
       "title": "MCP endpoints",
       "path": "screenshots/quickstart-mcp-endpoints.png",
-      "capturedAt": "2026-09-30T16:32:35.993Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:50:23.863Z",
+      "status": "current",
       "sha256": "40b6baaf71470610c1c7d08d8761e4a167c997ec31f2afe36346ed141f8f0247",
       "source": {
         "kind": "browser",
@@ -2083,17 +2046,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9e546c37501afc64f10fcd8608959c8b08ecfa0ed367ce5f20f25a0b710dd64f",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "9af477da02cf675e9ed2c563ad9b62eb530fb31f3bf4ff4f38108510598652e5",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "runner-detail",
       "title": "Runner detail",
       "path": "screenshots/runner-detail.png",
-      "capturedAt": "2026-09-30T16:33:04.731Z",
-      "status": "needs-recapture",
-      "sha256": "50122568e58ed9f50680f6329b599c4deffd243c7c58c5a6a044a979bea2e89d",
+      "capturedAt": "2026-10-01T06:50:50.583Z",
+      "status": "current",
+      "sha256": "d8e6c348308efc524a62094e4d1888c91c75ca37050bda9171a69c4f81a54799",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2107,17 +2069,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c625508929502099d25adada79ba3e598c113269e4b22f7f4bc752a737aae41b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "8d1e49beb4a74cc9c96bf09f71d19156d37d0ca158bf788700a928c3616bec5f",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "runners-list",
       "title": "Runners",
       "path": "screenshots/runners-list.png",
-      "capturedAt": "2026-09-30T16:33:01.038Z",
-      "status": "needs-recapture",
-      "sha256": "68fe07c48ed6f75381ff9c753b580c5705ed901412b95825f17a1d5be726e829",
+      "capturedAt": "2026-10-01T06:50:47.975Z",
+      "status": "current",
+      "sha256": "b68c31157a171c62180e3d5c3d3dd284a5a8f5c58d2dcba05f335fb6870593f4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2131,17 +2092,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a452a589ebd73eeb1abf1ec7e2f7a31007afec3d9d2ea4cd84505bc315ee240f",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "daa92cae05a4e3d140e9d0e756f528cdd00c0a870a3c593632101feb7e2b0640",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "schedule-config",
       "title": "Schedule card",
       "path": "screenshots/schedule-config.png",
-      "capturedAt": "2026-09-30T16:31:26.849Z",
-      "status": "needs-recapture",
-      "sha256": "5ea1a39891d2d5e6524c2d3067f19f48281fb7492174962f6dd681882dfc8906",
+      "capturedAt": "2026-10-01T06:49:11.919Z",
+      "status": "current",
+      "sha256": "929931322f27d42b1e12407be532c1030d3c5bc2bf49f6a26b5c56239d78ea08",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2154,9 +2114,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "self-hosting-compose",
@@ -2171,9 +2130,9 @@
       "id": "settings-approval-policies-enabled",
       "title": "Approval policies",
       "path": "screenshots/settings-approval-policies-enabled.png",
-      "capturedAt": "2026-09-30T16:33:37.052Z",
-      "status": "needs-recapture",
-      "sha256": "da6523a7ef981ce7a2eafcfefd06a2808c629a83d4c1c890912beb67a426d1d9",
+      "capturedAt": "2026-10-01T06:51:23.501Z",
+      "status": "current",
+      "sha256": "4654abcbce0e5df9f6253d933fb52c284d05a678706759baae0acb3138eacbd1",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2187,17 +2146,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8c5378634f8eaf697bb074af0b20bb730fce7d557d95dd6a355d56f3ed973968",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The approval policy editor gained 'When to ask' with the amount rule (tool, number, comparison, amount), and the policy list names such a rule in plain words. Recapture the changed view."
+      "sourceDigest": "950c607e540c55bb650e62e7e9afafd43c11f97f1a2bcb227e808758d49fe40a",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-approval-policy-new",
       "title": "New approval policy",
       "path": "screenshots/settings-approval-policy-new.png",
-      "capturedAt": "2026-09-30T16:33:39.592Z",
-      "status": "needs-recapture",
-      "sha256": "682ff2c3645de5b00d7a45e3b603e689d43923223e1528c5ae0d31b8fdfbf6e1",
+      "capturedAt": "2026-10-01T06:51:26.130Z",
+      "status": "current",
+      "sha256": "881347549e4cdd0d304720189e23f270338b8540667c0e14ef07fc3504c69ae1",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2210,16 +2168,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7a43090b29f280dfe085858ccdd5bbabb17d0d12d5267728fb6a86c294ea4ab1",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The approval policy editor gained 'When to ask' with the amount rule (tool, number, comparison, amount), and the policy list names such a rule in plain words. Recapture the changed view."
+      "sourceDigest": "4df9da13c43d5513b942056c8b0b55ea321abab0930a6f25d436f99bd2e2ecf5",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-audit-streams-enabled",
       "title": "Audit streaming",
       "path": "screenshots/settings-audit-streams-enabled.png",
-      "capturedAt": "2026-09-30T16:33:49.468Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:51:31.418Z",
+      "status": "current",
       "sha256": "2814af83e89ad903c7d8c2878fa6800e5c288e6a761e914d489f570afb5c8696",
       "source": {
         "kind": "browser",
@@ -2233,16 +2190,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "821998e41060f0d7343a97a8253968797102991c9582c628abae6d076b0e380b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-compliance-enabled",
       "title": "Compliance",
       "path": "screenshots/settings-compliance-enabled.png",
-      "capturedAt": "2026-09-30T16:33:46.879Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:51:28.832Z",
+      "status": "current",
       "sha256": "b332d4756ae97808a2f4c1a58213786ad3fb604a38880a0a16207d871a3240a3",
       "source": {
         "kind": "browser",
@@ -2256,16 +2212,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "821998e41060f0d7343a97a8253968797102991c9582c628abae6d076b0e380b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-encryption-locked",
       "title": "Encryption (Enterprise, locked)",
       "path": "screenshots/settings-encryption-locked.png",
-      "capturedAt": "2026-09-30T16:33:52.033Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:51:33.975Z",
+      "status": "current",
       "sha256": "ca3f57182b20332d233e278098c2f9300ef16aa966a92ca58c1f1feb521024a7",
       "source": {
         "kind": "browser",
@@ -2279,16 +2234,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "821998e41060f0d7343a97a8253968797102991c9582c628abae6d076b0e380b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-enabled",
       "title": "Roles",
       "path": "screenshots/settings-rbac-enabled.png",
-      "capturedAt": "2026-09-30T16:33:25.283Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:51:11.389Z",
+      "status": "current",
       "sha256": "67bc2b8e69f6153b3f42b8311a78756be6fc5f17ba31e2823297f919f6b25550",
       "source": {
         "kind": "browser",
@@ -2302,16 +2256,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "821998e41060f0d7343a97a8253968797102991c9582c628abae6d076b0e380b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-new-policy",
       "title": "New access policy",
       "path": "screenshots/settings-rbac-new-policy.png",
-      "capturedAt": "2026-09-30T16:33:31.881Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:51:18.103Z",
+      "status": "current",
       "sha256": "3cc722b28c931573030004cfe046ae2ba5f7a6349a825584fd5a2eb3f5de3323",
       "source": {
         "kind": "browser",
@@ -2325,16 +2278,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "821998e41060f0d7343a97a8253968797102991c9582c628abae6d076b0e380b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-new-role",
       "title": "New role",
       "path": "screenshots/settings-rbac-new-role.png",
-      "capturedAt": "2026-09-30T16:33:28.609Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:51:14.741Z",
+      "status": "current",
       "sha256": "4372359444cf418eba043e752eca0bb06f51e33ebf79e01a8f6e456edb289e0f",
       "source": {
         "kind": "browser",
@@ -2348,16 +2300,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "821998e41060f0d7343a97a8253968797102991c9582c628abae6d076b0e380b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-sso-enabled",
       "title": "Single sign-on",
       "path": "screenshots/settings-sso-enabled.png",
-      "capturedAt": "2026-09-30T16:33:34.507Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:51:20.801Z",
+      "status": "current",
       "sha256": "339d5078a61e7093f33ea8c3299add6025effe0d01185b86e14088def496ea68",
       "source": {
         "kind": "browser",
@@ -2371,17 +2322,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "821998e41060f0d7343a97a8253968797102991c9582c628abae6d076b0e380b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-teams",
       "title": "Members and teams",
       "path": "screenshots/settings-teams.png",
-      "capturedAt": "2026-09-30T16:33:22.699Z",
-      "status": "needs-recapture",
-      "sha256": "0470f8f33bf7e9f7b78a79c9c906677fc15d4748cb0d72a2d6bb725970cb5a48",
+      "capturedAt": "2026-10-01T06:51:08.798Z",
+      "status": "current",
+      "sha256": "39d8f050fffd3db55c942d730ec8d6ec6de78d9822eae5eb543580501979b1f1",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2395,17 +2345,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "fc85b11a97141d67811563edd91e91078612dfdc3af39961cbb9e4910f49d933",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared settings source changed (the approval policy components under components/settings gained the amount rule); this view should look the same, but recapture it to confirm."
+      "sourceDigest": "70ab2349a3922c15273d719ea14ef388d1b1667e48ff816b81e093e24ce4671b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-constraints",
       "title": "Support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
-      "capturedAt": "2026-09-30T16:31:07.033Z",
-      "status": "needs-recapture",
-      "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
+      "capturedAt": "2026-10-01T06:48:51.913Z",
+      "status": "current",
+      "sha256": "72fbe1a4338ad0a6f1a16aab2650c7ff9b749009c05f0bbd1fbf268f9991798e",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2418,17 +2367,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-overview",
       "title": "Support agent overview",
       "path": "screenshots/support-agent-overview.png",
-      "capturedAt": "2026-09-30T16:31:01.802Z",
-      "status": "needs-recapture",
-      "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
+      "capturedAt": "2026-10-01T06:48:46.565Z",
+      "status": "current",
+      "sha256": "9d60f8bbc04d9620e607b172e7376200cb02661647658dc0f96521d10bbb5d09",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2441,17 +2389,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-runs",
       "title": "Support agent runs",
       "path": "screenshots/support-agent-runs.png",
-      "capturedAt": "2026-09-30T16:31:09.705Z",
-      "status": "needs-recapture",
-      "sha256": "5c532a613cf19c9621c2fca36392e49a9521a1ebdb73ce4d704539d4ecc33a32",
+      "capturedAt": "2026-10-01T06:48:54.767Z",
+      "status": "current",
+      "sha256": "1081aa42342a0363ca5f5fcbad8ddce8a94d2165c5031be4b3c5fdaa3aa56935",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2464,16 +2411,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "tool-detail",
       "title": "Tool test",
       "path": "screenshots/tool-detail.png",
-      "capturedAt": "2026-09-30T16:39:17.525Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:50:06.395Z",
+      "status": "current",
       "sha256": "6060c3bd3b88b8c7e8c0df729350b1e7514b99e51eebeb34a3114e8bba2e8840",
       "source": {
         "kind": "browser",
@@ -2487,17 +2433,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b2a8a7c1ebe0985e24dfa89609b6bee89deb199c29e3ce641683fdccb4cd00f7",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The Create tool form and tool detail page changed for GraphQL, SOAP and gRPC tools (PR #889). The captured HTTP/imported-tool states look the same, but the sources moved; recapture to confirm."
+      "sourceDigest": "c5bca9fa2a36ff2ea5ac6f62338fce3a5ccc3c66679d9f47f835f55a3e4d0c3c",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "tools-list",
       "title": "Tools list",
       "path": "screenshots/tools-list.png",
-      "capturedAt": "2026-09-30T16:32:15.909Z",
-      "status": "needs-recapture",
-      "sha256": "406ee85143d1b98ddefae4faa1ee5b74ca1abdd9da69d1069b03c0ef2850d418",
+      "capturedAt": "2026-10-01T06:50:03.016Z",
+      "status": "current",
+      "sha256": "f323b7031bd76945b279271975cb4f058a96094dd05db95af16d6cd5be468d92",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2510,17 +2455,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6e31b4943d1cf05db697d4ab45f519abaeae248d1dfa7ed0f78164f95fa8c471",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The Create tool form and tool detail page changed for GraphQL, SOAP and gRPC tools (PR #889). The captured HTTP/imported-tool states look the same, but the sources moved; recapture to confirm."
+      "sourceDigest": "72534cd6c01c5404790be58231ca2915723ae9fd35ae60dd0b4831d53119b4e6",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "versioning-history",
       "title": "Change history",
       "path": "screenshots/versioning-history.png",
-      "capturedAt": "2026-09-30T16:31:36.193Z",
-      "status": "needs-recapture",
-      "sha256": "3d9337edb0726c49a6c1bb764422caf91f262d4088e84e772d216080c8c30ccf",
+      "capturedAt": "2026-10-01T06:49:21.407Z",
+      "status": "current",
+      "sha256": "09a40dd505781b51054852d00884c8bd47cb638f34cb7b83f66e82c79ec55393",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2533,17 +2477,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "versioning",
       "title": "Pipeline versions",
       "path": "screenshots/versioning.png",
-      "capturedAt": "2026-09-30T16:31:33.132Z",
-      "status": "needs-recapture",
-      "sha256": "3ec54254ec29ece9dcb1ebe7ca165a1ee6b066f34b78598e3cc1f39b7cbcdb68",
+      "capturedAt": "2026-10-01T06:49:18.211Z",
+      "status": "current",
+      "sha256": "ce5ea5ee2e749a042c1159e5d4088a9eec57b8d8161598de548431645d1dab51",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2556,17 +2499,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "webhook-config",
       "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
-      "capturedAt": "2026-09-30T16:31:29.999Z",
-      "status": "needs-recapture",
-      "sha256": "5ea1a39891d2d5e6524c2d3067f19f48281fb7492174962f6dd681882dfc8906",
+      "capturedAt": "2026-10-01T06:49:15.045Z",
+      "status": "current",
+      "sha256": "929931322f27d42b1e12407be532c1030d3c5bc2bf49f6a26b5c56239d78ea08",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2579,16 +2521,15 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3d4b51ad915b59ecb148367087ad8a71d443e3f82d00e813b6ef90ec03f9e73c",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Source changed after capture: the agent Overview's Recent runs lists autonomous runs too; an autonomous run's Route row shows only for runs that routed. Recapture against the current UI."
+      "sourceDigest": "277ca709131e32b1f9a67bb1e612fc1811b7ad84b93744f60ee4bf7daf829f4b",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "widget-builder",
       "title": "Website widget channel",
       "path": "screenshots/widget-builder.png",
-      "capturedAt": "2026-09-30T16:32:00.784Z",
-      "status": "needs-recapture",
+      "capturedAt": "2026-10-01T06:49:46.605Z",
+      "status": "current",
       "sha256": "ce07dc4f3fc8e51c2d82bc47d7635aaffe6d9650b203c971ec18665e5635fb21",
       "source": {
         "kind": "browser",
@@ -2603,9 +2544,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "58fb27eb16c99f9cc83b5f34ef6015ce9f5cdf243c28c0b7140dd5a632297206",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Shared UI source changed: components/ui/visibility-field.tsx took an optional label and wording for the new approval-rule page, and the command palette gained an entry. This view should look the same; recapture it to confirm."
+      "sourceDigest": "c816e6c0188a61adb7cba35ad385d732aed84525f2821cff92c85871f8ab95e7",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     }
   ]
 }

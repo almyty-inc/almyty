@@ -232,7 +232,8 @@ async function workflow(prov, toolRows) {
     log('agent', name)
   }
   if (row.status !== 'active') { try { await call('POST', `/agents/${row.id}/activate`) } catch (e) { log('activate failed', name, e.message.slice(0, 300)) } }
-  try { await call('POST', `/agents/${row.id}/schedule`, { intervalMinutes: 1440, input: { days: 1 } }) } catch (e) { log('schedule failed', e.message.slice(0, 200)) }
+  // A time of day in a time zone, the result to the agent's webhook: what the Schedule card shows.
+  try { await call('POST', `/agents/${row.id}/schedule`, { kind: 'days', days: [1, 2, 3, 4, 5], time: '08:00', timezone: 'Europe/Berlin', input: { days: 1 }, deliverTo: { kind: 'webhook' } }) } catch (e) { log('schedule failed', e.message.slice(0, 200)) }
   return row
 }
 
@@ -335,6 +336,18 @@ async function approvalPolicy() {
   } catch (e) { log('approval policy skipped', e.message.slice(0, 200)) }
 }
 
+// The free amount rule: a refund call over 500 waits for a person, whatever the agent was told.
+async function amountRule(toolRows) {
+  const refund = toolRows.find((t) => t.name === 'northwind_orders_create_refund')
+  if (!refund) return
+  const have = list(await call('GET', '/approval-rules').catch(() => []), 'rules')
+  if (have.some((r) => r.name === 'Refunds over 500')) return
+  try {
+    await call('POST', '/approval-rules', { name: 'Refunds over 500', enabled: true, trigger: { kind: 'tool_amount', toolId: refund.id, argument: 'amount', op: 'gt', amount: 500 } })
+    log('amount rule')
+  } catch (e) { log('amount rule skipped', e.message.slice(0, 200)) }
+}
+
 async function runner() {
   const have = list(await call('GET', '/runners'), 'runners')
   if (!have.some((r) => r.name === 'ci-mac-studio')) {
@@ -393,6 +406,7 @@ export async function main() {
   await memories(orgId, ag.support.id)
   await channels(ag.support.id, cred)
   await approvalPolicy()
+  await amountRule(toolRows)
   await runner()
   if (process.env.SEED_RUNS !== '0') {
     if (gw['support-tools']?.initialApiKey) await mcpTraffic(org.slug, '/support-tools', gw['support-tools'].initialApiKey)
