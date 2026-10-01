@@ -22,7 +22,6 @@ import { PromotedSkillsModule } from '../promoted-skills/promoted-skills.module'
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
 import { McpServerRequestService } from './services/mcp-server-request.service';
 import { SseTransport } from './transports/sse.transport';
-import { StreamableHttpTransport } from './transports/streamable-http.transport';
 
 // Import related entities
 import { Tool } from '../../entities/tool.entity';
@@ -91,7 +90,6 @@ import { jwtSecretOrDevFallback } from '../auth/dev-jwt-secret';
     McpOAuthCimdService,
     McpOAuthResolveHelper,
     SseTransport,
-    StreamableHttpTransport,
   ],
   exports: [
     AlmytyMcpService,
@@ -102,7 +100,6 @@ import { jwtSecretOrDevFallback } from '../auth/dev-jwt-secret';
     UtcpService,
     GatewayResolverService,
     SseTransport,
-    StreamableHttpTransport,
   ],
 })
 export class McpModule {}

@@ -5,45 +5,34 @@ import { Request, Response } from 'express';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
 
-import { McpService } from '../mcp.service';
-import { McpSessionService } from '../mcp-session.service';
-import { JsonRpcRequest, JsonRpcResponse } from '../types/mcp.types';
 import {
   WorkerEnvelope,
   WorkerErrorPayload,
   WORKER_ERROR_CODES,
   WORKER_PROTOCOL_VERSION,
   isWorkerEnvelope,
-} from '../types/worker-protocol.types';
+} from '../../mcp/types/worker-protocol.types';
 
 /**
- * Streamable HTTP transport (MCP 2025-03-26 revision).
+ * The worker stream: the long-lived channel between the backend and a
+ * runner daemon (and any future worker).
  *
- * Single endpoint hosting both directions:
+ *   POST /runners/stream   - worker -> server envelope.
+ *   GET  /runners/stream   - opens the server -> worker SSE stream.
  *
- *   POST /mcp/streamable          - client -> server JSON-RPC or worker envelope.
- *   GET  /mcp/streamable          - opens an SSE stream for server -> client.
+ * It used to be the MCP Streamable HTTP transport at /mcp/streamable, with
+ * JSON-RPC (MCP) and worker envelopes sharing one wire. MCP 2026-07-28 is
+ * stateless and the gateway MCP path never needed this session store, so
+ * the two are split (docs/design/mcp-2026-07-28.md, "Runner transport
+ * split"): this class carries envelopes only, and a JSON-RPC body is refused
+ * with MALFORMED_ENVELOPE. /mcp/streamable stays routed here, envelopes
+ * only, for one runner release so an installed runner keeps connecting.
  *
- * Sessions identified by the `Mcp-Session-Id` request/response header.
- * Server assigns it on the first POST that creates a session; clients
- * echo it back. Reconnection uses the standard SSE `Last-Event-ID`
- * header: a client reconnecting includes the last event id it saw, and
- * the transport replays everything after it from a per-session ring
- * buffer. Events older than the buffer's high-water mark return
- * REPLAY_UNAVAILABLE.
- *
- * The transport hosts two message shapes on the same wire:
- *
- *   - JSON-RPC 2.0 (MCP itself), routed to McpService.handleJsonRpc.
- *   - Worker envelopes (the runner subsystem and any future workers),
- *     emitted as `envelope` events for the runner module to subscribe to.
- *
- * Dispatch is by shape: JSON-RPC has `jsonrpc: '2.0'` and `method`,
- * envelopes have `v: 1` and `type`. Anything else is rejected with a
- * MALFORMED_ENVELOPE error.
- *
- * This transport is independent of SSE/WebSocket transports; it does
- * not refactor them. They coexist behind different routes.
+ * What runners depend on is unchanged: the `Mcp-Session-Id` header names
+ * the session (minted on the first POST), the GET stream replays from
+ * `Last-Event-ID` out of a per-session ring buffer, and the Redis keys and
+ * channels (`strm:sess:<id>`, `strm:out`, `strm:resp`) keep their names so
+ * a rolling deploy does not split old and new pods.
  */
 
 interface BufferedEvent {
@@ -104,8 +93,8 @@ const CH_RESP = 'strm:resp'; // client->server responses, fan to the dispatching
  */
 
 @Injectable()
-export class StreamableHttpTransport extends EventEmitter implements OnModuleDestroy {
-  private readonly logger = new Logger(StreamableHttpTransport.name);
+export class WorkerStreamTransport extends EventEmitter implements OnModuleDestroy {
+  private readonly logger = new Logger(WorkerStreamTransport.name);
   private readonly sessions = new Map<string, StreamableSession>();
   private gcInterval?: NodeJS.Timeout;
   /** Dedicated subscriber connection (ioredis requires one for sub mode). */
@@ -115,34 +104,22 @@ export class StreamableHttpTransport extends EventEmitter implements OnModuleDes
   /** Session ids this pod minted (vs adopted) — diagnostic only. */
   private readonly sessionMintedHere = new Set<string>();
 
-  constructor(
-    private readonly mcpService: McpService,
-    private readonly mcpSessionService: McpSessionService,
-    @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
-  ) {
+  constructor(@Optional() @InjectRedis() private readonly redis?: Redis.Redis) {
     super();
     this.startGcLoop();
     if (this.redis) this.startRedisBridge();
   }
 
   /**
-   * Handle POST /mcp/streamable. The request body is either a single
-   * JSON-RPC message, a JSON-RPC batch (an array of them), or a worker
-   * envelope.
+   * Handle a worker POST. The body is one worker envelope.
    *
-   * Response shape per the MCP spec:
-   *   - 404, when `Mcp-Session-Id` names a session this server does not
-   *     know. That is the client's signal to re-initialise, and it is the
-   *     only honest answer after a pod restart or a session GC.
-   *   - 202 Accepted, empty body, when the message is a notification or
-   *     a response (nothing to return inline).
-   *   - 200 application/json, a single JSON value, for a unary request;
-   *     a JSON array for a batch that contained at least one request.
-   *
-   * Batch SSE responses (200 text/event-stream) are not implemented in
-   * this cluster; they are not needed by the runner subsystem and would
-   * couple this transport to the McpService request semantics. Add when
-   * the first MCP method that benefits actually lands.
+   *   - 404 when `Mcp-Session-Id` names a session this server does not
+   *     know: the worker's signal to start a new one (after a pod restart
+   *     or a session GC).
+   *   - 202 Accepted, empty body, for an accepted envelope; anything the
+   *     server sends back arrives on the GET stream.
+   *   - 400 MALFORMED_ENVELOPE for anything that is not an envelope,
+   *     JSON-RPC included: MCP is served elsewhere.
    */
   async handlePost(
     req: Request,
@@ -194,27 +171,6 @@ export class StreamableHttpTransport extends EventEmitter implements OnModuleDes
 
     const body = req.body;
 
-    // JSON-RPC batch. The revision this transport negotiates (2025-03-26)
-    // requires a server to accept one; an array used to fall through to the
-    // malformed-envelope error. Batching was removed again in 2025-06-18,
-    // but a client asking for that version is answered 2025-03-26, so the
-    // obligation stands.
-    if (Array.isArray(body)) {
-      const responses = await this.mcpService.handleJsonRpcMessage(
-        body,
-        organizationId,
-        userId,
-      );
-      // Every member was a notification: JSON-RPC 2.0 §6 says the server
-      // returns nothing at all.
-      if (responses === null) {
-        res.status(202).end();
-      } else {
-        res.status(200).json(responses);
-      }
-      return;
-    }
-
     // Worker envelope path. The envelope-shaped check runs first so a
     // body that happens to set both `v` and `jsonrpc` (a misconfigured
     // client) gets a deterministic dispatch on the worker side.
@@ -243,48 +199,13 @@ export class StreamableHttpTransport extends EventEmitter implements OnModuleDes
       return;
     }
 
-    // JSON-RPC path. Mirrors how SseTransport.handleSseMessage delegates,
-    // but here we return the response inline rather than via SSE because
-    // a single POST is supposed to settle synchronously when possible.
-    if (this.looksLikeJsonRpc(body)) {
-      try {
-        const response = await this.mcpService.handleJsonRpc(
-          body as JsonRpcRequest,
-          organizationId,
-          userId,
-        );
-        // Notifications (no `id`) get 202; requests get 200 with body.
-        const isNotification = (body as JsonRpcRequest).id === undefined;
-        if (isNotification) {
-          res.status(202).end();
-        } else {
-          res.status(200).json(response);
-        }
-      } catch (err: any) {
-        const errorResponse: JsonRpcResponse = {
-          jsonrpc: '2.0',
-          id: (body as JsonRpcRequest).id ?? null as any,
-          error: {
-            code: WORKER_ERROR_CODES.INTERNAL,
-            message: 'Internal error',
-            data: err?.message ?? String(err),
-          },
-        };
-        res.status(200).json(errorResponse);
-      }
-      return;
-    }
-
-    // Neither an envelope nor JSON-RPC. This used to answer with a worker
-    // envelope, which an MCP client cannot parse — it saw a 400 with an
-    // opaque body. A JSON-RPC error is readable by both kinds of client,
-    // and -32600 Invalid Request is exactly what an unrecognised message
-    // shape is.
-    this.sendJsonRpcError(res, 400, -32600, 'Invalid Request: unrecognized message shape');
+    // Anything else, JSON-RPC included, is not this channel's: MCP clients
+    // talk to a gateway or POST /mcp.
+    this.sendErrorResponse(res, WORKER_ERROR_CODES.MALFORMED_ENVELOPE, 'not a worker envelope');
   }
 
   /**
-   * Handle GET /mcp/streamable. Opens (or resumes) the server -> client
+   * Handle the worker GET. Opens (or resumes) the server -> client
    * SSE stream for a session. Honors `Last-Event-ID` for replay.
    *
    * Each session has at most one open stream; opening a second one
@@ -485,9 +406,6 @@ export class StreamableHttpTransport extends EventEmitter implements OnModuleDes
       ? requestedId
       : `sh_${randomUUID()}`;
     if (this.sessions.has(id)) return this.sessions.get(id)!;
-    // Mirror SSE transport: also create a parallel McpSession so MCP-side
-    // listeners (notifications, etc.) can wire by sessionId if desired.
-    this.mcpSessionService.createSession(organizationId, 'streamable-http', userId);
     const session: StreamableSession = {
       id,
       stream: null,
@@ -631,20 +549,6 @@ export class StreamableHttpTransport extends EventEmitter implements OnModuleDes
   }
 
   /**
-   * A real JSON-RPC 2.0 error response, for the paths an MCP client can
-   * reach. `id: null` is what JSON-RPC prescribes when the offending
-   * message could not be correlated to a request id.
-   */
-  private sendJsonRpcError(res: Response, status: number, code: number, message: string): void {
-    const body: JsonRpcResponse = {
-      jsonrpc: '2.0',
-      id: null as any,
-      error: { code, message },
-    };
-    res.status(status).json(body);
-  }
-
-  /**
    * Worker-shaped: carries a protocol version field at all. A `v` this
    * server does not speak is still a worker client and gets a worker
    * MALFORMED_ENVELOPE error rather than a JSON-RPC one — which is why
@@ -653,10 +557,6 @@ export class StreamableHttpTransport extends EventEmitter implements OnModuleDes
    */
   private looksLikeEnvelope(body: unknown): boolean {
     return !!body && typeof body === 'object' && !Array.isArray(body) && 'v' in (body as any);
-  }
-
-  private looksLikeJsonRpc(body: unknown): boolean {
-    return !!body && typeof body === 'object' && !Array.isArray(body) && (body as any).jsonrpc === '2.0';
   }
 
   /**
