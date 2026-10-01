@@ -76,7 +76,7 @@ almyty runs an OAuth 2.1 authorization server per the MCP specification:
 
 - Authorization code flow with PKCE (S256 required)
 - Client ID Metadata Documents (MCP 2025-11-25): no registration step
-- Dynamic Client Registration (RFC 7591), kept for clients without metadata-document support
+- Dynamic Client Registration (RFC 7591): deprecated in MCP 2026-07-28 and kept for clients without metadata-document support; metadata documents come first
 - `iss` in every authorization response (RFC 9207)
 - Token revocation (RFC 7009)
 - Authorization Server Metadata (RFC 8414)
@@ -91,7 +91,7 @@ https://api.almyty.com/acme/petstore/.well-known/oauth-protected-resource
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /acme/petstore/register` | Dynamic Client Registration |
+| `POST /acme/petstore/register` | Dynamic Client Registration (deprecated in MCP 2026-07-28; kept for clients without metadata-document support) |
 | `GET /acme/petstore/authorize` | Start the authorization code flow (`code_challenge`, `code_challenge_method=S256`) |
 | `POST /acme/petstore/token` | Exchange the code (with `code_verifier`) for tokens |
 | `POST /acme/petstore/revoke` | Revoke a token |

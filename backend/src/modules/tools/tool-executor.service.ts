@@ -981,7 +981,17 @@ export class ToolExecutorService {
         cfg,
         parameters,
         // The source's connection is resolved as the run's principal.
-        { timeoutMs: tool.configuration?.timeout, signal: options.signal, principal: options.principal ?? userPrincipal(options.userId) },
+        {
+          timeoutMs: tool.configuration?.timeout,
+          signal: options.signal,
+          principal: options.principal ?? userPrincipal(options.userId),
+          // A 2026 server may stop to ask a person something. Only a caller
+          // that can ask one and call again (the autonomous runtime, which
+          // pauses on ask_user and holds approvals itself) gets its question;
+          // everyone else gets a tool error that says what it wanted.
+          runId: options.runId ?? null,
+          canAskPerson: options.holdForApproval === 'caller' && !!options.runId,
+        },
       );
       return {
         success: mapped.success,

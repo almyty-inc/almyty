@@ -7,22 +7,35 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import * as Redis from 'ioredis';
+import { EntityManager, MoreThan, Repository } from 'typeorm';
+import { createHash } from 'crypto';
 
 import { McpSource, McpSourceStatus, McpSourceAuthType } from '../../entities/mcp-source.entity';
 import { Tool, ToolType, ToolStatus } from '../../entities/tool.entity';
+import { JsonSchema, JsonSchemaType } from '../../entities/json-schema.entity';
+import { Message, MessageRole } from '../../entities/message.entity';
+import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { McpChangeBus } from '../mcp-events/mcp-change-bus.service';
+import { McpOAuthClientService } from '../connections/mcp-oauth/mcp-oauth-client.service';
 import { CredentialType } from '../../entities/credential.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { CredentialRefResolver, type ResolveOptions } from '../credentials/credential-ref.resolver';
 import { computeToolHash } from '../../common/security/tool-integrity';
 import { assertWithinPerSchemaCap, capGeneratedDescription, withToolQuota } from '../tools/tool-quota';
 import {
+  McpCallOptions,
   McpClientService,
   McpClientError,
   McpConnectionConfig,
+  McpInitializeInfo,
+  McpInputRequests,
+  McpRemoteTool,
   McpToolCallResult,
+  describeInputRequired,
 } from './mcp-client.service';
+import { mcpClientSettings } from './mcp-client-settings';
 
 export interface CreateMcpSourceInput {
   name: string;
@@ -42,6 +55,8 @@ export interface McpSyncSummary {
   updated: number;
   removed: number;
   total: number;
+  /** Tools the server listed that the client refused (invalid x-mcp-header), with why. */
+  rejected?: Array<{ name: string; reason: string }>;
 }
 
 export interface McpExecuteOptions {
@@ -53,6 +68,30 @@ export interface McpExecuteOptions {
    * connection reaches the server only for its team.
    */
   principal?: ResolveOptions['principal'];
+  /** The agent run making the call, if any. */
+  runId?: string | null;
+  /**
+   * The caller can put a question to a person and call again (the
+   * autonomous runtime, which has ask_user). Only then does the client
+   * declare elicitation and keep a remote's question for the run.
+   */
+  canAskPerson?: boolean;
+}
+
+/** Run states after which nothing the run started should keep working. */
+const ENDED_RUN_STATUSES: ReadonlySet<string> = new Set([
+  AgentRunStatus.CANCELLED,
+  AgentRunStatus.FAILED,
+  AgentRunStatus.TIMEOUT,
+  AgentRunStatus.COMPLETED,
+]);
+
+/** A remote's question kept for the agent run that asked, until the person answers. */
+interface PendingRemoteInput {
+  inputRequests: McpInputRequests;
+  requestState?: string;
+  taskId?: string;
+  askedAt: string;
 }
 
 /** API-safe view: auth secrets never leave the service. */
@@ -75,6 +114,15 @@ export class McpSourcesService {
     // MCP listen streams of the gateways serving these tools. Optional for
     // the positional spec harnesses.
     @Optional() private readonly changeBus?: McpChangeBus,
+    // A remote's question inside an agent run: the person's answer is the
+    // run's next user message, and the question waits in Redis meanwhile.
+    // Without either, a remote that asks gets the "nobody can answer" error.
+    @Optional() @InjectRepository(Message) private readonly messageRepository?: Repository<Message>,
+    @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
+    // A call for an agent run watches the run, to cancel a remote task when the run ends.
+    @Optional() @InjectRepository(AgentRun) private readonly runRepository?: Repository<AgentRun>,
+    // Signing in to OAuth-protected servers: refresh, and renew on a 401.
+    @Optional() private readonly mcpOAuth?: McpOAuthClientService,
   ) {}
 
   /**
@@ -212,8 +260,11 @@ export class McpSourcesService {
     try {
       // Discovery calls the server as the person who asked for it: a team
       // or private connection they may not use is not sent for them.
-      const { tools: remoteTools, init } = await this.mcpClient.listTools(
-        await this.connectionConfig(source, { principal: userId ? { id: userId } : null }),
+      // Through withSignIn: a source signed in with OAuth renews on a 401.
+      const { tools: remoteTools, init, rejected = [] } = await this.withSignIn(
+        source,
+        { principal: userId ? { id: userId } : null },
+        (config) => this.mcpClient.listTools(config),
       );
 
       const mine = await this.findMaterializedTools(source);
@@ -245,12 +296,10 @@ export class McpSourcesService {
             existing.parameters = remote.inputSchema ?? { type: 'object', properties: {} };
             existing.configuration = {
               ...(existing.configuration ?? {}),
-              mcp: {
-                sourceId: source.id,
-                remoteName: remote.name,
-                inputSchema: remote.inputSchema,
-              },
+              mcp: this.remoteConfig(source, remote),
             };
+            existing.metadata = this.remoteMetadata(source, remote, existing.metadata);
+            await this.syncOutputSchema(tx, existing, source, remote);
             existing.status = ToolStatus.ACTIVE;
             existing.definitionHash = computeToolHash(existing).hash;
             await tools.save(existing);
@@ -266,20 +315,16 @@ export class McpSourcesService {
               parameters: remote.inputSchema ?? { type: 'object', properties: {} },
               configuration: {
                 timeout: 30000,
-                mcp: {
-                  sourceId: source.id,
-                  remoteName: remote.name,
-                  inputSchema: remote.inputSchema,
-                },
+                mcp: this.remoteConfig(source, remote),
               },
-              metadata: {
-                mcpSource: { id: source.id, name: source.name, url: source.url },
+              metadata: this.remoteMetadata(source, remote, {
                 autoGenerated: true,
                 generatedAt: new Date(),
-              },
+              }),
               createdBy: source.createdBy ?? undefined,
               generated: true,
             });
+            await this.syncOutputSchema(tx, tool, source, remote);
             tool.definitionHash = computeToolHash(tool).hash;
             await tools.save(tool);
             added++;
@@ -287,8 +332,9 @@ export class McpSourcesService {
         }
       });
 
-      // Remote tools that disappeared: keep the row (execution history,
-      // gateway associations) but mark it inactive so it stops serving.
+      // Remote tools that disappeared, or that the client refused (invalid
+      // x-mcp-header): keep the row (execution history, gateway
+      // associations) but mark it inactive so it stops serving.
       const remoteNames = new Set(remoteTools.map((t) => t.name));
       let removed = 0;
       for (const tool of mine) {
@@ -305,19 +351,22 @@ export class McpSourcesService {
 
       source.status = McpSourceStatus.ACTIVE;
       source.lastSyncAt = new Date();
-      source.lastError = null;
+      source.lastError = rejected.length
+        ? `${rejected.length} tool(s) left out: ${rejected.map((r) => `${r.name} (${r.reason})`).join('; ')}`.slice(0, 2000)
+        : null;
       source.toolCount = remoteTools.length;
       source.serverInfo = {
         name: init.serverInfo?.name,
         version: init.serverInfo?.version,
         protocolVersion: init.protocolVersion,
+        era: init.era,
       };
       await this.sourceRepository.save(source);
 
       this.logger.log(
-        `Synced MCP source '${source.name}' (${source.id}): +${added} ~${updated} -${removed} (${remoteTools.length} remote tools)`,
+        `Synced MCP source '${source.name}' (${source.id}, MCP ${init.protocolVersion}): +${added} ~${updated} -${removed} (${remoteTools.length} remote tools${rejected.length ? `, ${rejected.length} refused` : ''})`,
       );
-      return { added, updated, removed, total: remoteTools.length };
+      return { added, updated, removed, total: remoteTools.length, ...(rejected.length ? { rejected } : {}) };
     } catch (err: any) {
       source.status = McpSourceStatus.ERROR;
       source.lastError = err?.message ?? String(err);
@@ -326,16 +375,94 @@ export class McpSourcesService {
     }
   }
 
+  /**
+   * What the tool row keeps of the remote definition to call it and present
+   * it: the remote name and input schema (for tools/call and its
+   * Mcp-Param-* headers), and the annotations and icons the server declared
+   * (tool-presentation.ts serves them to our own MCP clients, and the
+   * annotations decide the tool's side-effect class there).
+   */
+  private remoteConfig(source: McpSource, remote: McpRemoteTool): NonNullable<Tool['configuration']>['mcp'] {
+    return {
+      sourceId: source.id,
+      remoteName: remote.name,
+      inputSchema: remote.inputSchema,
+      ...(remote.annotations ? { annotations: remote.annotations } : {}),
+      ...(remote.icons?.length ? { icons: remote.icons } : {}),
+    };
+  }
+
+  /** The tool's metadata with the source it came from and the remote's own title. */
+  private remoteMetadata(source: McpSource, remote: McpRemoteTool, base: Record<string, any> | null | undefined): Record<string, any> {
+    const { title: _old, ...rest } = base ?? {};
+    return {
+      ...rest,
+      mcpSource: { id: source.id, name: source.name, url: source.url },
+      ...(remote.title ? { title: remote.title } : {}),
+    };
+  }
+
+  /**
+   * The remote's outputSchema, as the tool's output schema row (the same
+   * relation generated API tools use, so it is declared on our gateways and
+   * results are checked against it). A row this source made is updated in
+   * place; one it did not make is never touched. A remote that drops its
+   * outputSchema drops ours.
+   */
+  private async syncOutputSchema(tx: EntityManager, tool: Tool, source: McpSource, remote: McpRemoteTool): Promise<void> {
+    const schemas = tx.getRepository(JsonSchema);
+    const current = tool.outputSchemaId ? await schemas.findOne({ where: { id: tool.outputSchemaId } }) : null;
+    const ours = !!current && current.metadata?.mcpSourceId === source.id;
+    if (!remote.outputSchema) {
+      if (ours) {
+        tool.outputSchemaId = null as unknown as string;
+        tool.outputSchema = null as unknown as JsonSchema;
+        await schemas.remove(current!);
+      }
+      return;
+    }
+    if (ours) {
+      current!.schema = remote.outputSchema;
+      await schemas.save(current!);
+      return;
+    }
+    const row = await schemas.save(
+      schemas.create({
+        name: `${this.toolName(source, remote.name)} output`.slice(0, 255),
+        schema: remote.outputSchema,
+        type: JsonSchemaType.OUTPUT,
+        description: `Output schema of '${remote.name}' on MCP server '${source.name}'`,
+        metadata: { mcpSourceId: source.id, remoteName: remote.name },
+      }),
+    );
+    tool.outputSchemaId = row.id;
+    tool.outputSchema = row;
+  }
+
   // ─── execution bridge (called by ToolExecutorService) ─────────────
 
   /**
-   * tools/call against the tool's source. Returns the raw MCP result;
+   * tools/call against the tool's source. Returns the mapped result;
    * content mapping to a plain tool payload happens in mapCallResult.
    * Throws McpClientError (typed) — never a bare 500-shaped error.
+   *
+   * A 2026-07-28 server may stop to ask a person something
+   * (`input_required` with an elicitation, directly or inside a task):
+   *
+   *  - Inside an autonomous agent run (`canAskPerson`), the question is kept
+   *    for the run (MCP_CLIENT_PENDING_INPUT_SECONDS) and the call answers
+   *    with a tool error telling the model to put it to the person with
+   *    ask_user and call again with the same arguments. That call does not
+   *    go to the server until the person has answered; then it carries the
+   *    answer (`inputResponses`) and the server's `requestState`, or answers
+   *    the task (tasks/update), and returns what the server returns.
+   *  - Anywhere else (the Test button, a gateway passing a call through, a
+   *    workflow step) nobody can be asked: a tool error says what the server
+   *    wanted.
    */
   async executeToolCall(
     organizationId: string,
-    mcpConfig: { sourceId: string; remoteName: string },
+    mcpConfig: { sourceId: string; remoteName: string; inputSchema?: Record<string, any> },
     args: Record<string, any>,
     options: McpExecuteOptions = {},
   ): Promise<{ success: boolean; data: any; error?: string }> {
@@ -348,13 +475,106 @@ export class McpSourcesService {
         `MCP source ${mcpConfig.sourceId} not found in this organization (was it deleted?)`,
       );
     }
+    const callArgs = args ?? {};
+    const canAsk = !!options.runId && !!options.canAskPerson && !!this.redis;
+    const key = canAsk ? this.pendingKey(options.runId as string, source.id, mcpConfig.remoteName, callArgs) : null;
 
-    const result = await this.mcpClient.callTool(
-      await this.connectionConfig(source, options),
-      mcpConfig.remoteName,
-      args ?? {},
-    );
-    return this.mapCallResult(result);
+    let retry: Pick<McpCallOptions, 'inputResponses' | 'requestState' | 'taskId'> = {};
+    if (key) {
+      const pending = await this.readPending(key);
+      if (pending) {
+        const answer = await this.answerSince(options.runId as string, pending.askedAt);
+        if (!answer) return this.needsAnswer(mcpConfig.remoteName, pending.inputRequests);
+        await this.redis!.del(key).catch(() => undefined);
+        retry = {
+          inputResponses: inputResponsesFrom(pending.inputRequests, answer),
+          ...(pending.requestState !== undefined ? { requestState: pending.requestState } : {}),
+          ...(pending.taskId ? { taskId: pending.taskId } : {}),
+        };
+      }
+    }
+
+    const watch = this.watchRun(options.runId, options.signal);
+    let called: Awaited<ReturnType<McpClientService['callToolOutcome']>>;
+    try {
+      // Through withSignIn: a source signed in with OAuth renews on a 401.
+      called = await this.withSignIn(source, { ...options, signal: watch.signal }, (config) =>
+        this.mcpClient.callToolOutcome(
+          config,
+          mcpConfig.remoteName,
+          callArgs,
+          { tool: { inputSchema: mcpConfig.inputSchema }, canElicit: canAsk, ...retry },
+        ),
+      );
+    } finally {
+      watch.stop();
+    }
+    const { outcome, init } = called;
+    await this.rememberEra(source, init);
+    if (outcome.kind === 'result') return this.mapCallResult(outcome.result);
+
+    const asks = Object.values(outcome.inputRequests).some((r) => r?.method === 'elicitation/create');
+    if (key && asks) {
+      const kept = await this.savePending(key, {
+        inputRequests: outcome.inputRequests,
+        ...(outcome.requestState !== undefined ? { requestState: outcome.requestState } : {}),
+        ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
+        askedAt: new Date().toISOString(),
+      });
+      if (kept) return this.needsAnswer(mcpConfig.remoteName, outcome.inputRequests);
+    }
+    // Nobody to ask: a task that waits for input would wait forever.
+    if (outcome.taskId) {
+      const taskId = outcome.taskId;
+      await this.withSignIn(source, options, (config) => this.mcpClient.cancelTask(config, taskId)).catch(() => undefined);
+    }
+    const message = describeInputRequired(outcome.inputRequests);
+    return { success: false, data: { inputRequired: questionsOf(outcome.inputRequests) }, error: message };
+  }
+
+  /**
+   * A signal that also fires when the agent run making the call ends from
+   * outside (cancelled, timed out): the runtime cancels runs by writing the
+   * row, not by aborting a signal, so the call looks at the row every
+   * MCP_CLIENT_RUN_CANCEL_CHECK_MS. A remote task followed under it is then
+   * cancelled on the server (tasks/cancel), not left running.
+   */
+  private watchRun(runId: string | null | undefined, outer?: AbortSignal): { signal?: AbortSignal; stop: () => void } {
+    if (!runId || !this.runRepository) return { signal: outer, stop: () => undefined };
+    const controller = new AbortController();
+    const onOuter = () => controller.abort(outer?.reason);
+    outer?.addEventListener('abort', onOuter, { once: true });
+    if (outer?.aborted) controller.abort(outer.reason);
+    const timer = setInterval(() => {
+      this.runRepository!
+        .findOne({ where: { id: runId }, select: { id: true, status: true } })
+        .then((run) => {
+          if (!run || ENDED_RUN_STATUSES.has(run.status)) controller.abort(new Error('the agent run ended'));
+        })
+        .catch(() => undefined);
+    }, mcpClientSettings().runCancelCheckMs);
+    timer.unref?.();
+    return {
+      signal: controller.signal,
+      stop: () => {
+        clearInterval(timer);
+        outer?.removeEventListener('abort', onOuter);
+      },
+    };
+  }
+
+  /** The tool error that sends the model to the person with the server's question. */
+  private needsAnswer(remoteName: string, inputRequests: McpInputRequests): { success: boolean; data: any; error: string } {
+    const questions = questionsOf(inputRequests);
+    const asked = questions.map((q) => (q.url ? `${q.message} (${q.url})` : q.message)).join(' / ');
+    return {
+      success: false,
+      data: { inputRequired: questions },
+      error:
+        `The MCP tool '${remoteName}' needs the person's input before it can finish: ${asked}${/[.?!]$/.test(asked) ? '' : '.'} ` +
+        'Ask them with ask_user (use this question), then call this tool again with exactly the same arguments; ' +
+        'their answer is passed on to the server.',
+    };
   }
 
   /**
@@ -420,7 +640,79 @@ export class McpSourcesService {
       headers: await this.authHeaders(source, options.principal),
       timeoutMs: options.timeoutMs,
       signal: options.signal,
+      // The era the last sync or call found: no probe per call. A cached era
+      // that stops working is probed again by the client.
+      era: source.serverInfo?.era ?? null,
+      protocolVersion: source.serverInfo?.protocolVersion ?? null,
     };
+  }
+
+  /** Keep the source's era current when a call found the server changed. */
+  private async rememberEra(source: McpSource, init: McpInitializeInfo): Promise<void> {
+    if (source.serverInfo?.era === init.era && source.serverInfo?.protocolVersion === init.protocolVersion) return;
+    source.serverInfo = { ...(source.serverInfo ?? {}), era: init.era, protocolVersion: init.protocolVersion };
+    await this.sourceRepository.save(source).catch((err: any) => {
+      this.logger.warn(`Could not record the MCP era of source ${source.id}: ${err?.message ?? err}`);
+    });
+  }
+
+  // ─── a remote's question, inside an agent run ─────────────────────
+
+  private pendingKey(runId: string, sourceId: string, remoteName: string, args: Record<string, any>): string {
+    return `mcp:input:${runId}:${sourceId}:${createHash('sha256').update(`${remoteName}\n${stableJson(args)}`).digest('hex').slice(0, 32)}`;
+  }
+
+  private async readPending(key: string): Promise<PendingRemoteInput | null> {
+    if (!this.redis) return null;
+    try {
+      const raw = await this.redis.get(key);
+      return raw ? (JSON.parse(raw) as PendingRemoteInput) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async savePending(key: string, pending: PendingRemoteInput): Promise<boolean> {
+    if (!this.redis) return false;
+    try {
+      await this.redis.set(key, JSON.stringify(pending), 'EX', mcpClientSettings().pendingInputSeconds);
+      return true;
+    } catch (err: any) {
+      this.logger.warn(`Could not keep a remote MCP question for the run: ${err?.message ?? err}`);
+      return false;
+    }
+  }
+
+  /** The person's answer: the run's latest user message after the question was asked. */
+  private async answerSince(runId: string, since: string): Promise<string | null> {
+    if (!this.messageRepository) return null;
+    const latest = await this.messageRepository.findOne({
+      where: { runId, role: MessageRole.USER, createdAt: MoreThan(new Date(since)) },
+      order: { createdAt: 'DESC' },
+    });
+    if (!latest) return null;
+    const text = latest.content ?? (Array.isArray(latest.contentParts)
+      ? latest.contentParts.map((p: any) => (typeof p?.text === 'string' ? p.text : '')).filter(Boolean).join('\n')
+      : '');
+    return text && text.trim() ? text.trim() : null;
+  }
+
+  /**
+   * One call to the source's server. A source signed in with OAuth
+   * (connections/mcp-oauth) whose server answers 401 gets one retry after
+   * the sign-in is renewed; when it cannot be renewed (or the server now
+   * signs in elsewhere), the error says to sign in again.
+   */
+  private async withSignIn<T>(source: McpSource, options: McpExecuteOptions, call: (config: McpConnectionConfig) => Promise<T>): Promise<T> {
+    try {
+      return await call(await this.connectionConfig(source, options));
+    } catch (err) {
+      if (!this.mcpOAuth || !source.credentialId || !(err instanceof McpClientError) || err.data?.status !== 401) throw err;
+      const renewed = await this.mcpOAuth.ensureFresh(source.organizationId, source.credentialId, { force: true });
+      if (renewed.status === 'reconnect') throw new McpClientError('MCP_HTTP_ERROR', renewed.error, err.data);
+      if (renewed.status !== 'refreshed') throw err;
+      return call(await this.connectionConfig(source, options));
+    }
   }
 
   /**
@@ -479,6 +771,10 @@ export class McpSourcesService {
    */
   private async authHeaders(source: McpSource, principal: McpExecuteOptions['principal']): Promise<Record<string, string>> {
     if (source.credentialId) {
+      // A sign-in that has expired is renewed first (connections/mcp-oauth);
+      // one that cannot be renewed says to sign in again.
+      const fresh = await this.mcpOAuth?.ensureFresh(source.organizationId, source.credentialId);
+      if (fresh?.status === 'reconnect') throw new McpClientError('MCP_HTTP_ERROR', fresh.error);
       const resolved = await this.credentialRefs.resolve(source.organizationId, source.credentialId, {
         principal: principal ?? null,
         context: { purpose: 'mcp_call', resourceType: 'mcp_source', resourceId: source.id },
@@ -526,3 +822,92 @@ export class McpSourcesService {
     return { ...rest, hasAuth: source.authType !== 'none' } as RedactedMcpSource;
   }
 }
+
+/** JSON with sorted keys: the same arguments give the same string. */
+function stableJson(value: unknown): string {
+  const sort = (v: any): any =>
+    Array.isArray(v)
+      ? v.map(sort)
+      : v && typeof v === 'object'
+        ? Object.keys(v).sort().reduce((o, k) => ({ ...o, [k]: sort(v[k]) }), {} as Record<string, any>)
+        : v;
+  return JSON.stringify(sort(value ?? {}));
+}
+
+/** What the server asked, for the model and the person. */
+function questionsOf(inputRequests: McpInputRequests): Array<{ message: string; url?: string }> {
+  return Object.values(inputRequests)
+    .filter((r) => r?.method === 'elicitation/create')
+    .map((r) => ({
+      message: typeof r.params?.message === 'string' && r.params.message.trim() ? r.params.message.trim() : 'The server needs more information.',
+      ...(r.params?.mode === 'url' && typeof r.params?.url === 'string' ? { url: r.params.url } : {}),
+    }));
+}
+
+const YES = /^(y|yes|true|1|ok|okay|sure|approve|approved|confirm|confirmed)$/i;
+
+/** One answer as the value a form field wants. */
+function fieldValue(answer: string, schema: Record<string, any> | undefined): unknown {
+  const type = schema?.type;
+  if (type === 'boolean') return YES.test(answer.trim());
+  if (type === 'integer' || type === 'number') {
+    const n = Number(answer.trim().replace(/,/g, ''));
+    return Number.isFinite(n) ? (type === 'integer' ? Math.trunc(n) : n) : answer;
+  }
+  const options: string[] = Array.isArray(schema?.enum)
+    ? schema!.enum
+    : Array.isArray(schema?.oneOf)
+      ? schema!.oneOf.map((o: any) => o?.const).filter((c: unknown) => typeof c === 'string')
+      : [];
+  if (options.length) return options.find((o) => o.toLowerCase() === answer.trim().toLowerCase()) ?? answer.trim();
+  if (type === 'array') return answer.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+  return answer;
+}
+
+/**
+ * The person's answer as the server's `inputResponses`: an elicitation form
+ * with one field gets the answer in that field; with several, a JSON object
+ * answer fills them, else the answer goes to the first text field. A URL
+ * elicitation (the person did it on the server's page) is accepted as done.
+ */
+function inputResponsesFrom(inputRequests: McpInputRequests, answer: string): Record<string, unknown> {
+  const responses: Record<string, unknown> = {};
+  for (const [key, request] of Object.entries(inputRequests)) {
+    if (request?.method === 'roots/list') {
+      responses[key] = { roots: [] };
+      continue;
+    }
+    if (request?.method !== 'elicitation/create') continue;
+    if (request.params?.mode === 'url') {
+      responses[key] = { action: 'accept' };
+      continue;
+    }
+    const properties: Record<string, any> = request.params?.requestedSchema?.properties ?? {};
+    const names = Object.keys(properties);
+    const content: Record<string, unknown> = {};
+    if (names.length === 1) {
+      content[names[0]] = fieldValue(answer, properties[names[0]]);
+    } else if (names.length > 1) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(answer);
+      } catch {
+        parsed = null;
+      }
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        for (const name of names) {
+          const value = (parsed as Record<string, unknown>)[name];
+          if (value !== undefined) content[name] = typeof value === 'string' ? fieldValue(value, properties[name]) : value;
+        }
+      } else {
+        const first = names.find((n) => (properties[n]?.type ?? 'string') === 'string') ?? names[0];
+        content[first] = fieldValue(answer, properties[first]);
+      }
+    }
+    responses[key] = { action: 'accept', content };
+  }
+  return responses;
+}
+
+/** Exported for the spec. */
+export const __testing = { inputResponsesFrom, questionsOf, stableJson };

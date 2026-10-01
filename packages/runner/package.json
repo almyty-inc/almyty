@@ -1,6 +1,6 @@
 {
   "name": "@almyty/runner",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "publishConfig": {
     "access": "public"
   },
@@ -24,8 +24,8 @@
     "node": ">=20"
   },
   "dependencies": {
-    "node-pty": "^1.0.0",
-    "@almyty/client": "^1.5.1"
+    "@almyty/client": "^1.5.1",
+    "node-pty": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.4.0",

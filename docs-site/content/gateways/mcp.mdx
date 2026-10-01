@@ -29,6 +29,8 @@ Need another key, for another person or app? Add one in the gateway's **Authenti
 
 MCP has several versions, and AI apps move to new ones over time. An almyty gateway speaks the newest one, **MCP 2026-07-28**, and the two before it, **MCP 2025-11-25** and **MCP 2025-06-18**, which is what today's Claude Code, Cursor, Codex and Claude Desktop use. Apps still on the older 2025-03-26 and 2024-11-05 versions keep working too. Your app and the gateway agree on a version by themselves when the app connects; there is nothing to set and the address stays the same.
 
+One old way of connecting is being retired: the separate streaming address (SSE) that MCP apps used in 2024. Gateways never offered it, and the newer MCP versions drop it. almyty's own `/mcp/sse` address still answers for the few apps that need it and tells them it is deprecated; it goes away once nobody uses it.
+
 What your app gets from the gateway:
 
 - **Readable tool names.** Next to `petstore_get_pet_by_id` the app sees "Petstore get pet by id".
@@ -45,7 +47,7 @@ The endpoint follows this pattern, and speaks MCP over HTTP (JSON-RPC 2.0 reques
 https://api.almyty.com/{org}/{gateway-slug}
 ```
 
-Only `POST` carries MCP: the gateway keeps no session and opens no stream of its own, so `GET` and `DELETE` on the endpoint answer `405 Method Not Allowed`. A 2026-07-28 client that wants change notifications asks for them with a `subscriptions/listen` POST (see [MCP 2026-07-28](#mcp-2026-07-28)). The legacy HTTP+SSE transport (2024-11-05) is not served on gateways; it is deprecated in MCP 2026-07-28.
+Only `POST` carries MCP: the gateway keeps no session and opens no stream of its own, so `GET` and `DELETE` on the endpoint answer `405 Method Not Allowed`. A 2026-07-28 client that wants change notifications asks for them with a `subscriptions/listen` POST (see [MCP 2026-07-28](#mcp-2026-07-28)). The legacy HTTP+SSE transport (2024-11-05) is not served on gateways; it is deprecated in MCP 2026-07-28 (see [Legacy SSE transport](#legacy-sse-transport)).
 
 ### Claude Code
 
@@ -156,6 +158,33 @@ The HTTP headers must mirror the body; any disagreement is `-32020` with `400`. 
 `subscriptions/listen` replaces the server stream. It is a POST whose response is an event stream: the first message is `notifications/subscriptions/acknowledged` with the subset of the requested notifications the gateway will send, and every message carries the listen request's id in `_meta["io.modelcontextprotocol/subscriptionId"]`. A gateway honours `toolsListChanged`, and advertises `tools.listChanged: true` to 2026 clients: assigning or removing a tool, activating, deactivating, editing or deleting one, and re-syncing an MCP source all send `notifications/tools/list_changed` to every open stream of the gateways involved, on whichever server holds the stream (Redis pub/sub). The stream sends a keep-alive comment every `MCP_LISTEN_KEEPALIVE_MS` (default 15000) and ends with a `complete` result after `MCP_LISTEN_MAX_SECONDS` (default 3600); the client opens a new one. Legacy clients keep `listChanged: false`.
 
 The gateway page shows no separate discovery address: MCP defines none, and a client asks the endpoint itself with `server/discover`.
+
+A call that an approval rule holds can be approved inside the call by a 2026-07-28 client that declared `elicitation`, when its user could approve it on the Approvals page: `tools/call` answers `resultType: "input_required"` with an approve-or-reject form and a sealed `requestState`, and the retry returns the call's result. Everyone else gets the "waiting for approval" answer with an `_approvalId`, as before. See [Approvals](/approvals). Long agent runs (tasks, `get_run`) are on the management server: see [Control almyty via MCP](/control-via-mcp).
+
+### Legacy SSE transport
+
+The HTTP+SSE transport of MCP 2024-11-05 (a long-lived `GET` stream plus a separate address to `POST` messages to) is deprecated in MCP 2026-07-28 (SEP-2596). Gateways never served it. almyty's organization endpoint still does, for clients that have not moved to Streamable HTTP:
+
+| Route | What it is |
+|-------|------------|
+| `GET /mcp/sse` | Opens the stream; its first event names the message address |
+| `POST /mcp/sse/:connectionId/message` | Sends a JSON-RPC message on that stream |
+| `GET /mcp/servers/:serverId/sse` | The same stream for one MCP server |
+
+Every response on these routes carries the standard deprecation headers (RFC 9745), so a client's tooling can say so:
+
+```
+Deprecation: @1785196800
+Link: <https://docs.almyty.com/gateways/mcp#legacy-sse-transport>; rel="deprecation"; type="text/html"
+```
+
+`/mcp` lists the transport in `deprecatedTransports`. The request log records the protocol version of every MCP request, which is how almyty sees whether anyone still uses these routes; they are removed once nobody does. Move a client to Streamable HTTP: `POST https://api.almyty.com/mcp`, or a gateway's own address.
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `MCP_LEGACY_SSE_DEPRECATION_HEADERS` | `true` | Send the two headers at all |
+| `MCP_LEGACY_SSE_DEPRECATED_AT` | `2026-07-28` | The date in `Deprecation` (ISO 8601) |
+| `MCP_LEGACY_SSE_DOCS_URL` | this section | Where `Link` points (`http` or `https` only) |
 
 ### Origin
 

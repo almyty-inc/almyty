@@ -538,7 +538,7 @@ const OTHER_CONNECTORS: ConnectorDefinition[] = [
     key: 'mcp-custom',
     kind: 'mcp',
     displayName: 'MCP server',
-    description: 'A remote MCP server over streamable HTTP, optionally behind a bearer token.',
+    description: 'A remote MCP server over streamable HTTP, open, behind a bearer token, or behind a sign-in (OAuth).',
     connect: [{
       type: 'api_key',
       label: 'Server URL and token',
@@ -551,6 +551,27 @@ const OTHER_CONNECTORS: ConnectorDefinition[] = [
         required: ['serverUrl'],
       },
       credentialType: CredentialType.BEARER_TOKEN,
+    }, {
+      // MCP authorization: the server says where to sign in. Endpoints,
+      // registration and token refresh are connections/mcp-oauth's.
+      type: 'oauth2_pkce',
+      label: 'Sign in to the server',
+      description:
+        'For an MCP server that asks you to sign in. almyty finds the sign-in page from the server itself and keeps the sign-in fresh.\n' +
+        'A client id is only needed for a server whose owner registers apps by hand; enter the one they gave you.',
+      schema: {
+        type: 'object',
+        properties: {
+          serverUrl: { type: 'string', title: 'Server URL', format: 'uri' },
+          clientId: { type: 'string', title: 'Client id (only if the server gave you one)', 'x-advanced': true },
+          clientSecret: { type: 'string', title: 'Client secret (only with a client id)', 'x-secret': true, 'x-advanced': true },
+          scope: { type: 'string', title: 'Scopes (optional, space separated)', 'x-advanced': true },
+        },
+        required: ['serverUrl'],
+      },
+      oauth: { authorizeUrl: '', tokenUrl: '', pkce: true, discover: 'mcp' },
+      credentialType: CredentialType.OAUTH2,
+      secretField: 'accessToken',
     }],
     capabilities: ['tools'],
     validation: { kind: 'mcp_initialize' },
