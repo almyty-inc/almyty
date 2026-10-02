@@ -670,13 +670,64 @@ describe('RunnerService', () => {
       expect(runners.row(runner.id)).toBeUndefined();
     });
 
-    it('a runner that has connected keeps its name', async () => {
+    it('a runner that has connected can be renamed; its tools follow and a restart keeps the new name', async () => {
       const { runner } = await service.register(
         { name: 'franemb', labels: {}, runtimeInfo: validRuntimeInfo, config: validConfig },
         ownerUserId, organizationId,
       );
-      await expect(service.update(runner.id, ownerUserId, organizationId, { name: 'renamed' }))
+      fakePublisher.publish.mockClear();
+      const renamed = await service.update(runner.id, ownerUserId, organizationId, { name: 'studio' });
+      expect(renamed.name).toBe('studio');
+      expect(runners.row(runner.id)?.name).toBe('studio');
+      expect(fakePublisher.publish).toHaveBeenCalledWith(expect.objectContaining({ id: runner.id, name: 'studio' }));
+
+      // The daemon restarts without --name: same row, the name chosen on the page.
+      const again = await service.register({ runtimeInfo: validRuntimeInfo, config: validConfig }, ownerUserId, organizationId);
+      expect(again.runner.id).toBe(runner.id);
+      expect(again.runner.name).toBe('studio');
+    });
+
+    it('a rename to a name another member uses is refused', async () => {
+      await service.register({ name: 'taken', runtimeInfo: validRuntimeInfo, config: validConfig }, 'user-2', organizationId);
+      const { runner } = await service.register({ runtimeInfo: validRuntimeInfo, config: validConfig }, ownerUserId, organizationId);
+      await expect(service.update(runner.id, ownerUserId, organizationId, { name: 'taken' }))
         .rejects.toBeInstanceOf(ConflictException);
+    });
+  });
+
+  describe('a runner started without a name', () => {
+    const on = (hostname: string) => ({ runtimeInfo: { ...validRuntimeInfo, hostname }, config: validConfig });
+
+    it('is named after its machine', async () => {
+      const { runner } = await service.register(on('Franes-MacBook-Pro.local'), ownerUserId, organizationId);
+      expect(runner.name).toBe('franes-macbook-pro');
+      expect(fakePublisher.publish).toHaveBeenCalledWith(expect.objectContaining({ name: 'franes-macbook-pro' }));
+    });
+
+    it('gets a number when another runner in the organization has that name', async () => {
+      await service.register(on('build-box'), 'user-2', organizationId);
+      await service.register(on('build-box'), 'user-3', organizationId);
+      const { runner } = await service.register(on('build-box'), ownerUserId, organizationId);
+      expect([...runners.rows()].map((r) => r.name).sort()).toEqual(['build-box', 'build-box-2', 'build-box-3']);
+      expect(runner.name).toBe('build-box-3');
+    });
+
+    it('does not count a runner in another organization', async () => {
+      await service.register(on('build-box'), 'user-2', 'org-2');
+      const { runner } = await service.register(on('build-box'), ownerUserId, organizationId);
+      expect(runner.name).toBe('build-box');
+    });
+
+    it('takes over the pending record the setup page made, keeping its name', async () => {
+      const pending = await service.create({ name: 'franemb' }, ownerUserId, organizationId);
+      const { runner } = await service.register(on('studio'), ownerUserId, organizationId);
+      expect(runner.id).toBe(pending.id);
+      expect(runner.name).toBe('franemb');
+    });
+
+    it('falls back to "runner" for a hostname with nothing usable in it', async () => {
+      const { runner } = await service.register(on('...'), ownerUserId, organizationId);
+      expect(runner.name).toBe('runner');
     });
   });
 
