@@ -13,6 +13,7 @@
  *   CODE_MODE_LOG_CAP          16384   characters of log() output the model gets back
  *   CODE_MODE_RESULT_CAP       16384   characters of the return value the model gets back
  *   CODE_MODE_MAX_CODE_CHARS   50000   length of a script
+ *   CODE_MODE_CPU_MS           10000   CPU time a gateway script may spend computing (QuickJS)
  *
  * The sandbox pool is set apart from JavaScript tools by SANDBOX_CODE_*
  * (node-sandbox.service.ts).
@@ -26,6 +27,8 @@ export interface CodeModeLimits {
   logCapChars: number;
   resultCapChars: number;
   maxCodeChars: number;
+  /** CPU time a script may spend computing (the QuickJS runtime for gateway scripts). */
+  cpuBudgetMs: number;
 }
 
 type Env = Record<string, string | undefined>;
@@ -39,6 +42,7 @@ const ENV_NAMES: Record<keyof CodeModeLimits, [string, number]> = {
   logCapChars: ['CODE_MODE_LOG_CAP', 16_384],
   resultCapChars: ['CODE_MODE_RESULT_CAP', 16_384],
   maxCodeChars: ['CODE_MODE_MAX_CODE_CHARS', 50_000],
+  cpuBudgetMs: ['CODE_MODE_CPU_MS', 10_000],
 };
 
 function positiveInt(raw: unknown): number | null {

@@ -73,6 +73,7 @@ describe('code mode limits', () => {
       logCapChars: 16_384,
       resultCapChars: 16_384,
       maxCodeChars: 50_000,
+      cpuBudgetMs: 10_000,
     });
   });
 

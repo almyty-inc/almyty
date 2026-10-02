@@ -12,6 +12,8 @@ import { ApprovalRequest } from '../../entities/approval-request.entity';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { withTruncationMarker } from '../agents/persist-cap';
 import { NodeSandboxService } from '../tools/node-sandbox/node-sandbox.service';
+import { QuickJsSandboxService } from '../tools/node-sandbox/quickjs-sandbox.service';
+import type { CodeCall } from '../tools/node-sandbox/types';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { ToolApprovalGateService } from '../tools/tool-approval-gate.service';
 import type { ToolExecutionResult } from '../tools/tool-execution.types';
@@ -59,6 +61,8 @@ export interface RunCodeInput {
   signal?: AbortSignal;
   /** The script's `context` global (a workflow step's input and earlier steps); absent for agents and gateways. */
   scriptContext?: unknown;
+  /** Where the script runs: the Node code profile (agents, workflows; the default) or QuickJS (outside clients). */
+  runtime?: 'node' | 'quickjs';
 }
 
 /** What a script did, for the caller and (through forModel) for the model. */
@@ -127,6 +131,8 @@ export class CodeModeService implements OnModuleInit {
     @Optional() @Inject(forwardRef(() => ToolApprovalGateService)) private readonly gate?: ToolApprovalGateService,
     // ApprovalsService for held change sets, reached lazily (see HeldChangeSetApprovals).
     @Optional() private readonly moduleRef?: ModuleRef,
+    // The QuickJS runtime for scripts from outside clients (gateway run_code).
+    @Optional() private readonly quickjs?: QuickJsSandboxService,
   ) {
     this.discovery = discovery ?? new ToolDiscoveryService();
   }
@@ -187,7 +193,7 @@ export class CodeModeService implements OnModuleInit {
       return fail(`The script is not valid TypeScript or JavaScript: ${err?.message ?? err}`);
     }
 
-    const sandboxed = await this.sandbox.executeCode({
+    const request = {
       code: body,
       namespaces: broker.namespaces(),
       organizationId: context.organizationId,
@@ -195,10 +201,18 @@ export class CodeModeService implements OnModuleInit {
       memoryLimitMb: limits.memoryMb,
       logCapChars: limits.logCapChars,
       resultCapChars: limits.resultCapChars,
-      onCall: (call) => broker.handle(call),
+      onCall: (call: CodeCall) => broker.handle(call),
       signal: input.signal,
       ...(input.scriptContext !== undefined ? { context: input.scriptContext } : {}),
-    });
+    };
+    // Scripts from outside clients run in QuickJS (decision 1 as taken);
+    // agents and workflows inside almyty keep the Node code profile.
+    if (input.runtime === 'quickjs') {
+      if (!this.quickjs) return fail('Scripts from outside clients are not available on this server.');
+      const sandboxed = await this.quickjs.executeCode({ ...request, cpuBudgetMs: limits.cpuBudgetMs });
+      return this.finish(row, broker, input, started, sandboxed);
+    }
+    const sandboxed = await this.sandbox.executeCode(request);
     return this.finish(row, broker, input, started, sandboxed);
   }
 
@@ -587,6 +601,8 @@ export class CodeModeService implements OnModuleInit {
       policy,
       grantsLeft: grantsLeftFor(policy, {}),
       limits: codeModeLimits((organization?.settings as any)?.codeMode),
+      // Outside clients: QuickJS in a worker of its own (decision 1 as taken).
+      runtime: 'quickjs',
       ...(llm && extractor
         ? { extract: buildExtract({ chat: (providerId, request) => llm.chat(providerId as string, request as any, gateway.organizationId, principal), extractor }) }
         : {}),
