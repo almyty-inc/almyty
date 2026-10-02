@@ -4,9 +4,8 @@ Status: accepted (all 15 recommendations in "Decisions for Frane"). Being built 
 by phase. Done: part A, the stored side-effect class (#915); part B, search_tools and get_tool
 with embeddings (#917); part E for autonomous agents, `toolMode` and the benchmark harness
 (#920); P2, code mode for autonomous agents: the `code` sandbox profile, the broker, write
-policy, change sets, grants, `extract`, traces and sandbox CPU in usage (#924). P3
-(`feat/code-mode-p3`): gateway exposure on MCP, UTCP and Skills behind `CODE_MODE_GATEWAYS`
-(off until decision 1 is taken at the P3 gate, see "P3 gate" below), held change sets for
+policy, change sets, grants, `extract`, traces and sandbox CPU in usage (#924). P3 (#925): gateway exposure on MCP, UTCP and Skills behind `CODE_MODE_GATEWAYS`
+(default off; scripts from outside clients run in QuickJS in a worker of their own, decided at the P3 gate below, `feat/code-mode-quickjs`), held change sets for
 callers that cannot pause, the workflow Code step, the UTCP aliases, and code mode in the
 benchmark harness; the full benchmark run is still to come. Recon taken on `development` at
 `b0281c1a` (after #886, #889, #892).
@@ -570,12 +569,62 @@ benchmark report below exists.
   tool-call budget. A workflow cannot pause, so held changes stop the step
   with `AWAITING_APPROVAL`, like a held `tool_call`.
 
-## P3 gate: the sandbox runtime spike (decision 1)
+## P3 gate: the sandbox runtime (decision 1)
 
-Decision 1 leaves one choice for the P3 gate: keep the Node `code` profile
-for scripts from outside clients, or run them in a JavaScript interpreter
-compiled to WebAssembly. Until it is made, gateway scripts are off
-(`CODE_MODE_GATEWAYS`); agents use the Node profile, as in P2.
+**Decided (Frane, 2026-10-02):** scripts sent by outside clients through a
+gateway run in QuickJS compiled to WebAssembly, in a worker of their own.
+Agents and workflows inside almyty keep the Node `code` profile.
+`CODE_MODE_GATEWAYS` stays off by default; it is switched on per install.
+
+**In plain words.** A script an outside app sends now runs in a box that
+contains nothing but the JavaScript language: no files, no network, no
+other software, not even a way to ask the server for anything except the
+one door to your tools. Each script gets a fresh box, which is thrown away
+when the script ends, so it can never slow the server down or keep memory.
+A script that uses too much memory, computes for too long or simply takes
+too long is stopped.
+
+**As built** (`tools/node-sandbox/quickjs-sandbox.service.ts`,
+`quickjs-sandbox-worker.ts`):
+
+- **Its own pool.** `QuickJsSandboxService` runs each script in a fresh
+  worker thread, terminated when the script ends, so the interpreter never
+  runs on the server's event loop and all its memory, the WebAssembly
+  memory included, is given back. The pool is separate from JavaScript
+  tools and from the Node profile (`SANDBOX_QUICKJS_MAX_WORKERS`, default
+  4; `_PER_ORG`, half; `_MAX_QUEUE_SIZE`, 50; `_MAX_QUEUE_PER_ORG`, a
+  quarter; past a queue limit the script is refused, not queued).
+- **The worker.** Started with the permission model, read access to its
+  own files and the interpreter's packages only, no network, no child
+  processes, no workers, and an empty environment. Its own JavaScript heap
+  is capped (64 MB).
+- **Inside the interpreter.** No `require`, `import`, `process`, timers,
+  network or message port. The prelude builds the script's globals (one
+  object per API, `tools`, `extract`, `log`, `console`, `ToolError`, a
+  frozen `context`) around a single host function, then deletes that
+  function from the global object. Calls use the same broker protocol as
+  the Node profile, so the broker, the write policy and staging are the
+  same code.
+- **Memory.** The WebAssembly memory is created with a hard maximum of
+  `CODE_MODE_MEMORY_MB` (default 128) and cannot grow past it; QuickJS's
+  own allocator is capped a little under it, so a script gets a clean
+  "out of memory" and its worker is terminated.
+- **CPU.** The time spent inside the interpreter is summed across every
+  entry, and the interrupt handler stops the script past
+  `CODE_MODE_CPU_MS` (default 10 s). Time waiting on tool calls does not
+  count.
+- **Wall time.** The host terminates the worker at the script's timeout
+  (`CODE_MODE_TIMEOUT_MS`, at most `CODE_MODE_MAX_TIMEOUT_MS`), whatever
+  it is doing.
+- Every limit is set for the install by its variable, and an organization
+  may lower each one in `settings.codeMode`, never raise it.
+- **Tests.** `quickjs-sandbox-profile.spec.ts` runs the escape suite and
+  every limit against real workers, in CI with the backend tests.
+  Gateway `run_code` (MCP, UTCP, Skills) goes through `runOnGateway`, which
+  asks for `runtime: 'quickjs'`; without the QuickJS service it refuses
+  rather than falling back to Node (`code-mode-runtime.spec.ts`).
+
+The measurements behind the decision:
 
 **In plain words.** Both boxes kept every escape attempt out. The Node box
 runs scripts at full speed, but it is Node with its doors locked, so its
@@ -616,13 +665,9 @@ run of 20 to 50 scripts.
   slower interpreter is unlikely to matter, but a script that sorts or
   filters large results will feel it.
 
-**Recommendation.** Before outside clients get `run_code`, run the `code`
-profile in QuickJS inside a dedicated worker, behind the same broker
-protocol and limits, and keep the Node profile as the fallback until the
-escape suite passes on the new runtime. Agents and workflows can stay on
-the Node profile meanwhile. The alternative is to turn
-`CODE_MODE_GATEWAYS` on with the Node profile as it is, which decision 12
-already limits to gateways that ask callers who they are.
+**Recommendation at the time.** Run scripts from outside clients in QuickJS
+inside a dedicated worker, behind the same broker protocol and limits.
+Decided as recommended; see the top of this section.
 
 ## Decisions for Frane
 
@@ -632,6 +677,8 @@ already limits to gateways that ask callers who they are.
    `code` profile for P2 (agents, organization-internal callers), and a
    WebAssembly-interpreter spike behind the same broker protocol, decided
    at the P3 gate before gateways expose `run_code` to external clients.
+   **Decided at the P3 gate:** QuickJS in a dedicated worker for outside
+   clients; the Node `code` profile for agents and workflows.
 2. **Meta-tool names.** `search_tools` / `get_tool` / `run_code` (spec part
    2) or the MCP best-practices spelling (spec part 1 says
    `get_tool_details`). **Recommended:** one canonical set matching the MCP
