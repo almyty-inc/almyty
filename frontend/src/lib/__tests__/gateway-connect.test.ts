@@ -85,6 +85,20 @@ describe('gateway connect commands', () => {
       expect(src, file).not.toMatch(/(gateway|mcpGateway)\.name[^\n]*\.toLowerCase\(\)\.replace\(\/\\s\+\/g/)
     }
   })
+
+  it('does not suggest a key header for internal or explicitly open access', () => {
+    for (const accessScope of ['private', 'team', 'org', 'external_open']) {
+      const snippets = gatewaySnippets({ ...gw, accessScope }, 'acme', null, 'https://x')
+      for (const snippet of snippets) expect(snippet.value).not.toContain('x-api-key')
+      expect(snippets.find(s => s.id === 'claude-code')?.value).toBe('claude mcp add weather-api --transport http https://x/acme/weather-api')
+    }
+  })
+  it('includes a key header only when keys are an allowed outside method', () => {
+    const snippets = gatewaySnippets({ ...gw, accessScope: 'external_protected', authConfigs: [{ type: 'api_key', isActive: true }] }, 'acme', 'gw_secret', 'https://x')
+    expect(snippets.find(s => s.id === 'claude-code')?.value).toContain('--header "x-api-key: gw_secret"')
+    const company = gatewaySnippets({ ...gw, accessScope: 'external_protected', authConfigs: [{ type: 'company_signin', isActive: true }] }, 'acme', null, 'https://x')
+    expect(company.find(s => s.id === 'claude-code')?.value).not.toContain('--header')
+  })
 })
 
 describe('one protocol per gateway', () => {

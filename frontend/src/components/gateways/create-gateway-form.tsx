@@ -12,12 +12,13 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import type { VisibilityValue } from '@/components/ui/visibility-field'
-import { WHO_CAN_USE_LABELS, WhoCanUse } from '@/components/connect/who-can-use'
+import { VisibilityField } from '@/components/ui/visibility-field'
+import { AccessScopeField, ACCESS_SCOPE_LABELS, type AccessScopeValue } from '@/components/ui/access-scope-field'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { gatewaysApi } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { GATEWAY_PROTOCOLS, gatewayBackendUrl, gatewayUsesAccessKey, orgSlugOf, type GatewayProtocol } from '@/lib/gateway-connect'
+import { GATEWAY_PROTOCOLS, gatewayBackendUrl, orgSlugOf, type GatewayProtocol } from '@/lib/gateway-connect'
 import { toolsQuery } from '@/lib/list-queries'
 import { readableToolName } from '@/lib/tool-names'
 import { cn, pluralized } from '@/lib/utils'
@@ -145,6 +146,7 @@ export function CreateGatewayForm() {
   const [description, setDescription] = useState('')
   const [scope, setScope] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [scopeTouched, setScopeTouched] = useState(false)
+  const [access, setAccess] = useState<AccessScopeValue | null>(null)
   const [pickError, setPickError] = useState<string | undefined>()
   const [nameError, setNameError] = useState<string | undefined>()
 
@@ -172,6 +174,7 @@ export function CreateGatewayForm() {
   const effectiveName = nameTouched ? name : suggestedName
   const effectivePath = pathTouched ? path : `/${slugOf(effectiveName)}`
   const effectiveScope = scopeTouched ? scope : scopeFor(pickedTools)
+  const effectiveAccess: AccessScopeValue = access ?? { accessScope: effectiveScope.visibility, teamId: effectiveScope.teamId }
   const orgSlug = orgSlugOf(currentOrganization)
   const address = `${gatewayBackendUrl()}/${orgSlug}${effectivePath}`
 
@@ -253,11 +256,13 @@ export function CreateGatewayForm() {
       configuration: protocolConfiguration(protocol),
       visibility: effectiveScope.visibility,
       teamId: effectiveScope.teamId,
+      accessScope: effectiveAccess.accessScope,
+      accessTeamId: effectiveAccess.teamId,
       toolIds: [...picked],
     })
   }
 
-  const whoSummary = WHO_CAN_USE_LABELS[effectiveScope.visibility]
+  const whoSummary = ACCESS_SCOPE_LABELS[effectiveAccess.accessScope]
 
   return (
     <FormPage
@@ -417,7 +422,11 @@ export function CreateGatewayForm() {
         </Field>
       </FormSection>
 
-      <Disclosure title="Advanced" summary={`Path ${effectivePath} · ${whoSummary}${!protocol || gatewayUsesAccessKey(protocol) ? ' · access key' : ''}`}>
+      <FormSection title="Who can use it">
+        <AccessScopeField organizationId={currentOrganization?.id ?? ''} value={effectiveAccess} onChange={setAccess} />
+        {effectiveAccess.accessScope === 'external_protected' && <p className="text-sm text-muted-foreground">Set up keys or sign-in methods on the gateway after saving.</p>}
+      </FormSection>
+      <Disclosure title="Advanced" summary={`Path ${effectivePath} · ${whoSummary}`}>
         <Field id="gateway-path" label="Path" hint="The last part of the address.">
           <Input
             value={effectivePath}
@@ -432,7 +441,9 @@ export function CreateGatewayForm() {
         <Field id="gateway-description" label="Description">
           <Textarea rows={2} value={description} placeholder="What these tools are for" onChange={(e) => setDescription(e.target.value)} />
         </Field>
-        <WhoCanUse
+        <VisibilityField
+          organizationId={currentOrganization?.id ?? ''}
+          label="Who can manage it"
           value={effectiveScope}
           noun="this gateway"
           onChange={(next) => {
@@ -440,11 +451,7 @@ export function CreateGatewayForm() {
             setScope(next)
           }}
         />
-        <p className="text-sm text-muted-foreground">
-          {protocol === 'skills'
-            ? 'Skills are installed with the almyty CLI, signed in as you, so a Skills gateway has no access key.'
-            : 'The gateway gets an access key, shown once on the next page. Other sign-in methods, such as OAuth or JWT, can be added there.'}
-        </p>
+        <p className="text-sm text-muted-foreground">This controls who can see and manage the gateway in almyty. Endpoint access is set above.</p>
       </Disclosure>
     </FormPage>
   )

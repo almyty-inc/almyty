@@ -8,6 +8,8 @@ export interface ConnectableGateway {
   name?: string | null
   type?: string | null
   endpoint?: string | null
+  accessScope?: string
+  authConfigs?: { type: string; isActive?: boolean }[]
 }
 
 /** Lowercase a-z and 0-9 with single dashes between words, none at either end. */
@@ -135,20 +137,23 @@ export function clientSnippets(
   const url = mcpEndpointFor(gateway, orgSlug, backendUrl)
   const name = gatewayClientName(gateway)
   const secret = key || ACCESS_KEY_PLACEHOLDER
+  const usesKey = gatewayUsesAccessKey(gateway.type) && (!gateway.accessScope || gateway.accessScope === 'external_protected') && (!gateway.authConfigs || gateway.authConfigs.some(auth => auth.type === 'api_key' && auth.isActive !== false))
+  const headers = usesKey ? { [ACCESS_KEY_HEADER]: secret } : undefined
+  const headerArgument = usesKey ? ` --header "${ACCESS_KEY_HEADER}: ${secret}"` : ''
   const json = (value: unknown) => JSON.stringify(value, null, 2)
   return [
     {
       id: 'claude-code',
       label: 'Claude Code',
       hint: 'Run in your terminal.',
-      value: `claude mcp add ${name} --transport http ${url} --header "${ACCESS_KEY_HEADER}: ${secret}"`,
+      value: `claude mcp add ${name} --transport http ${url}${headerArgument}`,
       language: 'bash',
     },
     {
       id: 'cursor',
       label: 'Cursor',
       hint: 'Add to .cursor/mcp.json in your project, or ~/.cursor/mcp.json for all of them.',
-      value: json({ mcpServers: { [name]: { url, headers: { [ACCESS_KEY_HEADER]: secret } } } }),
+      value: json({ mcpServers: { [name]: { url, ...(headers ? { headers } : {}) } } }),
       language: 'json',
     },
     {
@@ -159,8 +164,8 @@ export function clientSnippets(
         mcpServers: {
           [name]: {
             command: 'npx',
-            args: ['-y', 'mcp-remote', url, '--header', `${ACCESS_KEY_HEADER}:\${ALMYTY_KEY}`],
-            env: { ALMYTY_KEY: secret },
+            args: ['-y', 'mcp-remote', url, ...(usesKey ? ['--header', `${ACCESS_KEY_HEADER}:\${ALMYTY_KEY}`] : [])],
+            ...(usesKey ? { env: { ALMYTY_KEY: secret } } : {}),
           },
         },
       }),
@@ -170,14 +175,14 @@ export function clientSnippets(
       id: 'mcp',
       label: 'Other MCP clients',
       hint: 'Any client that speaks MCP over HTTP.',
-      value: `URL:    ${url}\nHeader: ${ACCESS_KEY_HEADER}: ${secret}`,
+      value: `URL: ${url}${usesKey ? `\nHeader: ${ACCESS_KEY_HEADER}: ${secret}` : ''}`,
       language: 'text',
     },
     {
       id: 'utcp',
       label: 'UTCP',
       hint: `The manual lists every tool; POST to ${url}/execute to run one.`,
-      value: `curl -H "${ACCESS_KEY_HEADER}: ${secret}" ${url}/manual`,
+      value: `curl${usesKey ? ` -H "${ACCESS_KEY_HEADER}: ${secret}"` : ''} ${url}/manual`,
       language: 'bash',
     },
     {

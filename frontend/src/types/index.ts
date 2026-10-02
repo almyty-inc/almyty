@@ -132,6 +132,8 @@ export enum OrganizationRole {
 
 // Gateway Types
 export interface Gateway {
+  accessScope?: 'private' | 'team' | 'org' | 'external_open' | 'external_protected'
+  accessTeamId?: string | null
   id: string
   name: string
   description?: string

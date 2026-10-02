@@ -507,7 +507,8 @@ export const gatewaysApi = {
   // Auth configuration
   getAuthConfigs: (gatewayId: string) => apiGet(`/gateways/${gatewayId}/auth`),
   createAuthConfig: (gatewayId: string, data: any) => apiPost(`/gateways/${gatewayId}/auth`, data),
-  deleteAuthConfig: (gatewayId: string, authId: string) => apiDel(`/gateways/${gatewayId}/auth/${authId}`),
+  updateAuthConfig: (gatewayId: string, authId: string, data: any) => apiPatch(`/gateways/${gatewayId}/auth/${authId}`, data),
+  getCompanySignInMetadata: (gatewayId: string) => apiGet(`/gateways/${gatewayId}/auth/company-signin-metadata`),
 
   // API key management
   generateApiKey: (gatewayId: string, data: { name: string; scopes?: string[]; expiresAt?: string }) =>
@@ -911,6 +912,8 @@ export const complianceApi = {
 
 // Agents API
 export const agentsApi = {
+  getApiAccess: (id: string) => apiGet(`/agents/${id}/api-access`),
+  setApiAccess: (id: string, body: { accessScope: string; accessTeamId: string | null }) => apiPost(`/agents/${id}/api-access`, body),
   getAll: () => apiGet('/agents'),
   getById: (id: string) => apiGet(`/agents/${id}`),
   create: (data: any, _organizationId?: string) => apiPost('/agents', data),
@@ -1259,13 +1262,6 @@ export const credentialsApi = {
     scopes?: string[]
     credentialName?: string
   }): Promise<{ credentialId: string }> => apiPost('/credentials/oauth2/client-credentials', data),
-}
-
-// Access Keys API
-export const accessKeysApi = {
-  getAll: () => apiGet('/access-keys'),
-  create: (data: any) => apiPost('/access-keys', data),
-  revoke: (id: string) => apiDel(`/access-keys/${id}`),
 }
 
 // Versions API (entity version history via typeorm-versions)

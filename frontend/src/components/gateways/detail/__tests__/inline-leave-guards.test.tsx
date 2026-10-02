@@ -52,15 +52,15 @@ describe('gateway authentication', () => {
 
   it('asks while a key name is typed into the generate form', async () => {
     const { router } = at(<GatewayAuthSection gatewayId="gw-1" gatewayName="Support" />)
-    fireEvent.click(await screen.findByRole('button', { name: /Generate key/ }))
-    fireEvent.change(screen.getByLabelText('Key name'), { target: { value: 'Production' } })
+    fireEvent.click(await screen.findByRole('button', { name: /New key/ }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Production' } })
     await expectLeaveAsks(router)
   })
 
   it('leaves without asking after Cancel', async () => {
     const { router } = at(<GatewayAuthSection gatewayId="gw-1" gatewayName="Support" />)
-    fireEvent.click(await screen.findByRole('button', { name: /Generate key/ }))
-    fireEvent.change(screen.getByLabelText('Key name'), { target: { value: 'Production' } })
+    fireEvent.click(await screen.findByRole('button', { name: /New key/ }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Production' } })
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await expectLeavesWithoutAsking(router)
   })

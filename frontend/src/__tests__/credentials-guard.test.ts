@@ -215,7 +215,7 @@ describe('adding a credential speaks plainly', () => {
     'components/connect/service-tiles.tsx',
     'components/connect/who-can-use.tsx',
     'components/connect/status-label.tsx',
-    'components/access-keys/access-keys-section.tsx',
+    'components/agents/detail/agent-api-access-section.tsx',
   ]
 
   it.each(USER_FACING)('%s', (rel) => {

@@ -1,537 +1,198 @@
-/**
- * GatewayAuthSection — manages auth methods + API keys for a single gateway.
- *
- * Renders the active auth-method list (api_key/bearer/basic/oauth2/jwt/custom/none),
- * an API key list when api_key auth is configured, and inline forms for adding a
- * method and generating a key. A generated key is shown once, in place, with a
- * copy button and a plain "you won't see it again".
- * Used by GatewayDetailPage for non-skills gateways.
- */
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Key, Lock, Plus, Shield, Trash2 } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
+import { CredentialPicker } from '@/components/credentials/credential-picker'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CopyField } from '@/components/ui/copy-field'
+import { Disclosure } from '@/components/ui/disclosure'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
-import { useLeaveGuard } from '@/hooks/use-leave-guard'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { useConfirm } from '@/components/ui/confirm-dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { gatewaysApi } from '@/lib/api'
-import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { formatDate } from '@/lib/utils'
 
-const AUTH_TYPE_LABELS: Record<string, string> = {
-  api_key: 'API Key',
-  bearer_token: 'Bearer Token',
-  basic_auth: 'Basic Auth',
-  oauth2: 'OAuth 2.0',
-  jwt: 'JWT',
-  none: 'None (Public)',
-  custom: 'Custom',
-}
+export type SignInMethod = 'api_key' | 'basic_auth' | 'company_signin' | 'jwt'
+interface AuthConfig { id: string; type: string; isActive?: boolean; configuration: Record<string, any> }
+const METHODS: { type: SignInMethod; label: string; hint: string }[] = [
+  { type: 'api_key', label: 'Keys', hint: 'Create named keys, give them an expiry and revoke them when needed.' },
+  { type: 'basic_auth', label: 'Usernames and passwords', hint: 'Keep a list of the people or systems allowed to sign in.' },
+  { type: 'company_signin', label: 'Company sign-in', hint: 'Let people sign in with Google, Microsoft, Okta or Auth0.' },
+  { type: 'jwt', label: 'Tokens from your own system', hint: 'Your system issues tokens; almyty checks who issued them and their signature.' },
+]
 
-const AUTH_TYPE_DESCRIPTIONS: Record<string, string> = {
-  api_key: 'Clients authenticate with an API key in the x-api-key header',
-  bearer_token: 'Clients authenticate with a Bearer token in the Authorization header',
-  basic_auth: 'Clients authenticate with a username and password (Basic auth)',
-  oauth2: 'Clients authenticate via OAuth 2.0 (authorization code + PKCE)',
-  jwt: 'Clients authenticate with a signed JWT token',
-  none: 'No authentication required — gateway is publicly accessible',
-  custom: 'Custom authentication scheme with configurable header/value',
-}
-
-export interface GatewayAuthSectionProps {
-  gatewayId: string
-  gatewayName?: string
-}
-
-export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectionProps) {
+/** The methods beneath Outside, protected, shared by gateways and agent APIs. */
+export function GatewayAuthSection({ gatewayId, readOnly = false }: { gatewayId: string; gatewayName?: string; readOnly?: boolean }) {
   const queryClient = useQueryClient()
-  const { success, error: errorNotif } = useNotifications()
-  // API key state. `generating` opens the inline name form; a generated
-  // key replaces it until the user says they have saved it.
-  const [generating, setGenerating] = useState(false)
-  const [newKeyName, setNewKeyName] = useState('')
-  const [generatedKey, setGeneratedKey] = useState<string | null>(null)
-
-  // Auth config state
-  const [addingAuth, setAddingAuth] = useState(false)
-  const [authTypeError, setAuthTypeError] = useState<string | undefined>()
-  const [newAuthType, setNewAuthType] = useState('')
-  const [newAuthConfig, setNewAuthConfig] = useState<Record<string, string>>({})
-
-  // Either inline form with something chosen or typed in asks before a
-  // navigation throws it away. Cancel closes the form and a successful save
-  // resets it, so neither asks.
-  const guard = useLeaveGuard(
-    (addingAuth && (newAuthType !== '' || Object.values(newAuthConfig).some((v) => v !== ''))) ||
-      (generating && newKeyName !== ''),
-  )
-
-  // Fetch auth configs
-  const { data: authConfigsData, isLoading: authLoading } = useQuery({
-    queryKey: ['gateway-auth-configs', gatewayId],
-    queryFn: () => gatewaysApi.getAuthConfigs(gatewayId),
-    enabled: !!gatewayId,
-  })
-
-  // Fetch API keys
-  const { data: keysData, isLoading: keysLoading } = useQuery({
-    queryKey: ['gateway-api-keys', gatewayId],
-    queryFn: () => gatewaysApi.listApiKeys(gatewayId),
-    enabled: !!gatewayId,
-  })
-
-  const createAuthConfigMutation = useMutation({
-    mutationFn: (data: { type: string; configuration: Record<string, any> }) =>
-      gatewaysApi.createAuthConfig(gatewayId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['gateway-auth-configs', gatewayId] })
-      queryClient.invalidateQueries({ queryKey: ['gateway', gatewayId] })
-      success('Authentication method added', `${AUTH_TYPE_LABELS[newAuthType] || newAuthType} authentication enabled`)
-      setAddingAuth(false)
-      setNewAuthType('')
-      setNewAuthConfig({})
-    },
-    onError: (err: any) => {
-      errorNotif('Failed to add auth config', getApiErrorMessage(err, 'Please try again'))
-    },
-  })
-
-  const deleteAuthConfigMutation = useMutation({
-    mutationFn: (authId: string) => gatewaysApi.deleteAuthConfig(gatewayId, authId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['gateway-auth-configs', gatewayId] })
-      queryClient.invalidateQueries({ queryKey: ['gateway', gatewayId] })
-      success('Authentication method removed', 'Clients can no longer use it.')
-    },
-    onError: (err: any) => {
-      errorNotif('Failed to remove auth config', getApiErrorMessage(err, 'Please try again'))
-    },
-  })
-
-  const generateKeyMutation = useMutation({
-    mutationFn: (name: string) => gatewaysApi.generateApiKey(gatewayId, { name }),
-    onSuccess: (response: any) => {
-      const key = response?.key
-      setGeneratedKey(key)
-      setGenerating(false)
-      queryClient.invalidateQueries({ queryKey: ['gateway-api-keys', gatewayId] })
-      success('API key generated', 'Copy and save it now. It will not be shown again.')
-    },
-    onError: () => {
-      errorNotif('Failed to generate key', 'Could not generate API key')
-    },
-  })
-
-  const revokeKeyMutation = useMutation({
-    mutationFn: (keyId: string) => gatewaysApi.revokeApiKey(gatewayId, keyId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['gateway-api-keys', gatewayId] })
-      success('Key revoked', 'API key has been revoked')
-    },
-    onError: () => {
-      errorNotif('Failed to revoke', 'Could not revoke API key')
-    },
-  })
-
-  const { confirm, dialog: confirmDialog } = useConfirm()
-  const handleRevokeKey = async (key: { id: string; name?: string }) => {
-    const ok = await confirm({
-      title: 'Revoke this API key?',
-      description: `${key.name ? `"${key.name}"` : 'This key'} stops working immediately. Clients still using it will be refused. This cannot be undone.`,
-      confirmLabel: 'Revoke key',
-      destructive: true,
-    })
-    if (ok) revokeKeyMutation.mutate(key.id)
+  const [editing, setEditing] = useState<SignInMethod | null>(null)
+  const [error, setError] = useState('')
+  const auth = useQuery({ queryKey: ['gateway-auth-configs', gatewayId], queryFn: () => gatewaysApi.getAuthConfigs(gatewayId) })
+  const companyMetadata = useQuery({ queryKey: ['gateway-company-signin-metadata', gatewayId], queryFn: () => gatewaysApi.getCompanySignInMetadata(gatewayId), enabled: editing === 'company_signin' })
+  const raw = auth.data?.authConfigs ?? auth.data
+  const configs: AuthConfig[] = Array.isArray(raw) ? raw : []
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['gateway-auth-configs', gatewayId] })
+    queryClient.invalidateQueries({ queryKey: ['gateway', gatewayId] })
   }
-
-  const authConfigsRaw = authConfigsData?.authConfigs || authConfigsData || []
-  const authConfigs = Array.isArray(authConfigsRaw) ? authConfigsRaw : []
-  // The endpoint returns the keys as a bare array. Don't probe `keysData?.keys`
-  // first: on an array that resolves to Array.prototype.keys (a function, so
-  // truthy), which swallowed the data and always rendered the empty state.
-  const keys = Array.isArray(keysData) ? keysData : Array.isArray((keysData as any)?.keys) ? (keysData as any).keys : []
-
-  const hasApiKeyAuth = authConfigs.some((c: any) => c.type === 'api_key')
-  const existingTypes = authConfigs.map((c: any) => c.type)
-
-  const handleAddAuth = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newAuthType) {
-      setAuthTypeError('Choose how clients authenticate.')
-      return
-    }
-    setAuthTypeError(undefined)
-    const configuration: Record<string, any> = { ...newAuthConfig }
-    if (newAuthType === 'api_key') {
-      configuration.keyHeader = configuration.keyHeader || 'x-api-key'
-    }
-    createAuthConfigMutation.mutate({ type: newAuthType, configuration })
-  }
-
-  const renderAuthConfigFields = () => {
-    switch (newAuthType) {
-      case 'api_key':
-        return (
-          <div>
-            <Label htmlFor="gwauth-header-name">Header name</Label>
-            <Input id="gwauth-header-name"
-              value={newAuthConfig.keyHeader || 'x-api-key'}
-              onChange={e => setNewAuthConfig({ ...newAuthConfig, keyHeader: e.target.value })}
-              placeholder="x-api-key"
-              className="mt-1"
-            />
-            <p className="text-xs text-muted-foreground mt-1">Header where clients send their API key</p>
-          </div>
-        )
-      case 'bearer_token':
-        return (
-          <div>
-            <Label htmlFor="gwauth-token-prefix">Token prefix</Label>
-            <Input id="gwauth-token-prefix"
-              value={newAuthConfig.tokenPrefix || 'Bearer'}
-              onChange={e => setNewAuthConfig({ ...newAuthConfig, tokenPrefix: e.target.value })}
-              placeholder="Bearer"
-              className="mt-1"
-            />
-            <p className="text-xs text-muted-foreground mt-1">Prefix in the Authorization header (usually "Bearer")</p>
-          </div>
-        )
-      case 'basic_auth':
-        return (
-          <p className="text-sm text-muted-foreground">
-            Clients will send credentials as <code className="text-xs bg-muted px-1 py-0.5 rounded">Authorization: Basic base64(username:password)</code>
-          </p>
-        )
-      case 'oauth2':
-        return (
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="gwauth-scopes">Scopes (comma-separated)</Label>
-              <Input id="gwauth-scopes"
-                value={newAuthConfig.scopes || ''}
-                onChange={e => setNewAuthConfig({ ...newAuthConfig, scopes: e.target.value })}
-                placeholder="read, write, admin"
-                className="mt-1"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              OAuth 2.1 with PKCE. The authorization server metadata, client registration, and token endpoints are auto-configured at the gateway URL.
-            </p>
-          </div>
-        )
-      case 'jwt':
-        return (
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="gwauth-jwks-url">JWKS URL (optional)</Label>
-              <Input id="gwauth-jwks-url"
-                value={newAuthConfig.jwksUrl || ''}
-                onChange={e => setNewAuthConfig({ ...newAuthConfig, jwksUrl: e.target.value })}
-                placeholder="https://auth.example.com/.well-known/jwks.json"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="gwauth-issuer">Issuer (optional)</Label>
-              <Input id="gwauth-issuer"
-                value={newAuthConfig.issuer || ''}
-                onChange={e => setNewAuthConfig({ ...newAuthConfig, issuer: e.target.value })}
-                placeholder="https://auth.example.com"
-                className="mt-1"
-              />
-            </div>
-          </div>
-        )
-      case 'custom':
-        return (
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="gwauth-header-name-2">Header name</Label>
-              <Input id="gwauth-header-name-2"
-                value={newAuthConfig.headerName || ''}
-                onChange={e => setNewAuthConfig({ ...newAuthConfig, headerName: e.target.value })}
-                placeholder="X-Custom-Auth"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="gwauth-validation-regex">Validation regex (optional)</Label>
-              <Input id="gwauth-validation-regex"
-                value={newAuthConfig.validationRegex || ''}
-                onChange={e => setNewAuthConfig({ ...newAuthConfig, validationRegex: e.target.value })}
-                placeholder="^[a-zA-Z0-9]{32}$"
-                className="mt-1"
-              />
-            </div>
-          </div>
-        )
-      case 'none':
-        return (
-          <p className="text-sm text-muted-foreground">
-            This will make the gateway publicly accessible without any authentication.
-          </p>
-        )
-      default:
-        return null
-    }
-  }
-
+  const save = useMutation({
+    mutationFn: ({ type, configuration, isActive = true }: { type: SignInMethod; configuration?: Record<string, any>; isActive?: boolean }) => {
+      const existing = configs.find(c => c.type === type)
+      return existing
+        ? gatewaysApi.updateAuthConfig(gatewayId, existing.id, { ...(configuration ? { configuration } : {}), isActive })
+        : gatewaysApi.createAuthConfig(gatewayId, { type, configuration: configuration ?? {}, isActive })
+    },
+    onSuccess: () => { invalidate(); setEditing(null); setError('') },
+    onError: err => setError(getApiErrorMessage(err, 'The method could not be saved.')),
+  })
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-y-3">
-          <div className="min-w-0">
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Authentication
-            </CardTitle>
-            <CardDescription>
-              Configure how clients authenticate with this gateway
-            </CardDescription>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {hasApiKeyAuth && (
-              <Button
-                size="sm"
-                variant="outline"
-                aria-expanded={generating}
-                onClick={() => {
-                  setNewKeyName('')
-                  setGeneratedKey(null)
-                  setGenerating(true)
-                }}
-              >
-                <Key className="h-4 w-4 mr-1" />
-                Generate key
-              </Button>
-            )}
-            <Button
-              size="sm"
-              aria-expanded={addingAuth}
-              onClick={() => {
-                setNewAuthType('')
-                setNewAuthConfig({})
-                setAuthTypeError(undefined)
-                setAddingAuth(true)
-              }}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Add auth method
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {addingAuth && (
-          <form
-            noValidate
-            onSubmit={handleAddAuth}
-            aria-label="Add authentication method"
-            className="space-y-4 rounded-lg border bg-muted/30 p-4"
-          >
-            <p className="text-sm font-medium">Add authentication method</p>
-            <Field
-              id="gwauth-auth-type"
-              label="Method"
-              required
-              hint={newAuthType ? AUTH_TYPE_DESCRIPTIONS[newAuthType] : `How clients prove who they are to ${gatewayName || 'this gateway'}.`}
-              error={authTypeError}
-            >
-              <Select
-                value={newAuthType}
-                onValueChange={(v) => {
-                  setNewAuthType(v)
-                  setNewAuthConfig({})
-                  setAuthTypeError(undefined)
-                }}
-              >
-                <SelectTrigger id="gwauth-auth-type" className="sm:max-w-sm" aria-invalid={authTypeError ? true : undefined}>
-                  <SelectValue placeholder="Select authentication type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(AUTH_TYPE_LABELS)
-                    .filter(([type]) => !existingTypes.includes(type))
-                    .map(([type, label]) => (
-                      <SelectItem key={type} value={type}>{label}</SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            {newAuthType && renderAuthConfigFields()}
-            <InlineFormActions
-              onCancel={() => setAddingAuth(false)}
-              submitLabel="Add auth method"
-              submitting={createAuthConfigMutation.isPending}
-            />
-          </form>
-        )}
-
-        {generating && (
-          <form
-            noValidate
-            aria-label="Generate API key"
-            className="space-y-4 rounded-lg border bg-muted/30 p-4"
-            onSubmit={(e) => {
-              e.preventDefault()
-              generateKeyMutation.mutate(newKeyName.trim() || `${gatewayName || 'Gateway'} Key`)
-            }}
-          >
-            <p className="text-sm font-medium">Generate API key</p>
-            <Field
-              id="gwauth-key-name"
-              label="Key name"
-              hint="So you can tell keys apart later, e.g. Production or CI. The key itself is shown once."
-            >
-              <Input
-                value={newKeyName}
-                onChange={(e) => setNewKeyName(e.target.value)}
-                placeholder="e.g. Production, CI/CD, Development"
-                autoComplete="off"
-                className="sm:max-w-sm"
-              />
-            </Field>
-            <InlineFormActions
-              onCancel={() => setGenerating(false)}
-              submitLabel="Generate key"
-              submitting={generateKeyMutation.isPending}
-            />
-          </form>
-        )}
-
-        {generatedKey && (
-          <div
-            data-testid="generated-api-key"
-            className="space-y-3 rounded-lg border border-amber-400/60 bg-amber-50 p-4 dark:bg-amber-950/30"
-          >
-            <p className="text-sm font-medium">Your new API key</p>
-            <CopyField value={generatedKey} label="API key" />
-            <p className="text-sm text-amber-800 dark:text-amber-300">
-              Copy it now. You won't see it again: once you close this, only its first characters are shown.
-            </p>
-            <div className="flex justify-end">
-              <Button type="button" size="sm" variant="outline" onClick={() => setGeneratedKey(null)}>
-                I've saved it
-              </Button>
+    <div className="space-y-4" data-testid="gateway-sign-in-methods">
+      <p className="text-sm text-muted-foreground">Allow any combination. A caller only needs one of the enabled methods.</p>
+      {auth.isError && <p role="alert" className="text-sm text-destructive">Sign-in methods could not be loaded. Reload to try again.</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {METHODS.map(method => {
+        const config = configs.find(c => c.type === method.type)
+        const enabled = !!config && config.isActive !== false
+        const open = editing === method.type
+        return (
+          <section key={method.type} className="space-y-4 rounded-lg border p-4">
+            <div className="flex items-start justify-between gap-3">
+              <label className="flex items-start gap-3">
+                <input type="checkbox" className="mt-1 h-4 w-4 accent-primary" aria-label={method.label} checked={enabled || open}
+                  disabled={readOnly || auth.isLoading || auth.isError || save.isPending}
+                  onChange={event => {
+                    setError('')
+                    if (!event.target.checked) {
+                      setEditing(null)
+                      if (enabled) save.mutate({ type: method.type, isActive: false })
+                    } else if (method.type === 'api_key') save.mutate({ type: method.type, configuration: config?.configuration ?? { keyHeader: 'x-api-key' } })
+                    else setEditing(method.type)
+                  }} />
+                <span><span className="block text-sm font-medium">{method.label}</span><span className="block text-xs text-muted-foreground">{method.hint}</span></span>
+              </label>
+              {enabled && !readOnly && method.type !== 'api_key' && !open && <Button type="button" size="sm" variant="outline" onClick={() => setEditing(method.type)}>Edit {method.label.toLowerCase()}</Button>}
             </div>
-          </div>
-        )}
-
-        {/* Auth Configs */}
-        {authLoading ? (
-          <div className="flex justify-center py-4"><LoadingSpinner /></div>
-        ) : authConfigs.length === 0 ? (
-          <div className="text-center py-4 text-muted-foreground text-sm">
-            No authentication configured. Gateway will deny all requests by default.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground">Active auth methods</p>
-            {authConfigs.length > 1 && (
-              <p className="text-xs text-muted-foreground">Clients can authenticate with any of the methods below.</p>
-            )}
-            {authConfigs.map((config: any) => (
-              <div key={config.id} className="flex items-center justify-between px-3 py-2 bg-muted rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Lock className="h-4 w-4 text-muted-foreground" />
-                  <Badge variant={config.type === 'none' ? 'secondary' : 'default'}>
-                    {AUTH_TYPE_LABELS[config.type] || config.type}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {config.type === 'api_key' && `Header: ${config.configuration?.keyHeader || 'x-api-key'}`}
-                    {config.type === 'bearer_token' && 'Authorization: Bearer <token>'}
-                    {config.type === 'basic_auth' && 'Authorization: Basic <credentials>'}
-                    {config.type === 'oauth2' && 'OAuth 2.1 + PKCE'}
-                    {config.type === 'jwt' && (config.configuration?.issuer ? `Issuer: ${config.configuration.issuer}` : 'JWT validation')}
-                    {config.type === 'custom' && (config.configuration?.headerName ? `Header: ${config.configuration.headerName}` : 'Custom header')}
-                    {config.type === 'none' && 'Public access'}
-                  </span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label="Delete auth configuration"
-                  className="text-destructive hover:text-destructive"
-                  disabled={deleteAuthConfigMutation.isPending && deleteAuthConfigMutation.variables === config.id}
-                  onClick={async () => {
-                    const ok = await confirm({
-                      title: 'Remove this authentication method?',
-                      description: 'Clients using this authentication method will no longer be able to access the gateway. This cannot be undone.',
-                      confirmLabel: 'Remove method',
-                      destructive: true,
-                    })
-                    if (ok) deleteAuthConfigMutation.mutate(config.id)
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* API Keys (only show when API_KEY auth is configured) */}
-        {hasApiKeyAuth && (
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground">API keys</p>
-            {keysLoading ? (
-              <div className="flex justify-center py-4"><LoadingSpinner /></div>
-            ) : keys.length === 0 ? (
-              <div className="text-center py-4 text-muted-foreground text-sm">
-                No API keys yet. Generate one to allow clients to access this gateway.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {keys.map((key: any) => (
-                  <div key={key.id} className="flex items-center justify-between px-3 py-2 bg-muted rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Key className="h-4 w-4 text-muted-foreground" />
-                      <code className="text-xs font-mono bg-background px-2 py-1 rounded">{key.keyPrefix}...</code>
-                      <span className="text-sm font-medium">{key.name}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {key.lastUsedAt && (
-                        <span className="text-xs text-muted-foreground">
-                          Last used {formatDate(key.lastUsedAt)}
-                        </span>
-                      )}
-                      <span className="text-xs text-muted-foreground">
-                        Created {formatDate(key.createdAt)}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => void handleRevokeKey(key)}
-                        disabled={revokeKeyMutation.isPending}
-                      >
-                        Revoke
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </CardContent>
-
-      {confirmDialog}
-      {guard.element}
-    </Card>
+            {method.type === 'api_key' && enabled && <GatewayKeys gatewayId={gatewayId} readOnly={readOnly} />}
+            {method.type === 'basic_auth' && enabled && !open && <p className="text-sm text-muted-foreground">{config?.configuration.users?.filter((u: any) => u.isActive !== false).length ?? 0} usernames allowed</p>}
+            {method.type === 'company_signin' && enabled && !open && <p className="text-sm text-muted-foreground">{config?.configuration.preset ?? 'Company'} sign-in is enabled.</p>}
+            {open && <MethodForm key={`${method.type}-${config?.id ?? 'new'}`} type={method.type} configuration={{ ...config?.configuration, ...(method.type === 'company_signin' && companyMetadata.data?.redirectUri ? { redirectUri: companyMetadata.data.redirectUri } : {}) }} onCancel={() => setEditing(null)} saving={save.isPending}
+              onSave={configuration => save.mutate({ type: method.type, configuration })} />}
+          </section>
+        )
+      })}
+    </div>
   )
+}
+
+function GatewayKeys({ gatewayId, readOnly }: { gatewayId: string; readOnly: boolean }) {
+  const queryClient = useQueryClient()
+  const [creating, setCreating] = useState(false)
+  const [name, setName] = useState('')
+  const [expiry, setExpiry] = useState('')
+  const [secret, setSecret] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const guard = useLeaveGuard(creating && (name !== '' || expiry !== ''))
+  const query = useQuery({ queryKey: ['gateway-api-keys', gatewayId], queryFn: () => gatewaysApi.listApiKeys(gatewayId) })
+  const keys = Array.isArray(query.data) ? query.data : Array.isArray(query.data?.keys) ? query.data.keys : []
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['gateway-api-keys', gatewayId] })
+  const create = useMutation({
+    mutationFn: () => gatewaysApi.generateApiKey(gatewayId, { name: name.trim(), ...(expiry ? { expiresAt: `${expiry}T23:59:59.999Z` } : {}) }),
+    onSuccess: result => { setSecret(result.key); setCreating(false); setName(''); setExpiry(''); setError(''); invalidate() },
+    onError: err => setError(getApiErrorMessage(err)),
+  })
+  const revoke = useMutation({ mutationFn: (id: string) => gatewaysApi.revokeApiKey(gatewayId, id), onSuccess: invalidate, onError: err => setError(getApiErrorMessage(err)) })
+  return (
+    <div className="space-y-3">
+      {!readOnly && !creating && <Button type="button" size="sm" variant="outline" onClick={() => { setCreating(true); setSecret(null) }}>New key</Button>}
+      {creating && <form aria-label="New key" className="space-y-3" onSubmit={event => { event.preventDefault(); if (name.trim()) create.mutate(); else setError('Give the key a name.') }}>
+        <Field id={`key-name-${gatewayId}`} label="Name"><Input value={name} onChange={event => setName(event.target.value)} autoComplete="off" /></Field>
+        <Field id={`key-expiry-${gatewayId}`} label="Expires on" hint="Leave empty to keep it until you revoke it."><Input type="date" value={expiry} onChange={event => setExpiry(event.target.value)} /></Field>
+        <InlineFormActions onCancel={() => setCreating(false)} submitLabel="Make key" submitting={create.isPending} />
+      </form>}
+      {secret && <div data-testid="generated-api-key" className="space-y-3 rounded-lg border bg-muted p-4">
+        <CopyField value={secret} label="API key" />
+        <p className="text-sm">Copy it now. You won't see it again.</p>
+        <Button type="button" variant="outline" size="sm" onClick={() => setSecret(null)}>I've saved it</Button>
+      </div>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {query.isError && <p role="alert" className="text-sm text-destructive">Keys could not be loaded.</p>}
+      {!query.isLoading && !query.isError && !keys.length && <p className="text-sm text-muted-foreground">No keys yet.</p>}
+      {guard.element}
+      <ul className="space-y-2" aria-label="Keys">{keys.map((key: any) => <li key={key.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2">
+        <div><span className="text-sm font-medium">{key.name}</span><code className="ml-2 text-xs">{key.keyPrefix}…</code></div>
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <span>{key.lastUsedAt ? `Last used ${formatDate(key.lastUsedAt)}` : 'Never used'}</span>
+          <span>{key.expiresAt ? `Expires ${formatDate(key.expiresAt)}` : 'No expiry'}</span>
+          <span>{key.isActive === false ? 'Revoked' : ''}</span>
+          {!readOnly && key.isActive !== false && <Button type="button" variant="ghost" size="sm" disabled={revoke.isPending} onClick={() => revoke.mutate(key.id)}>Revoke {key.name}</Button>}
+        </div>
+      </li>)}</ul>
+    </div>
+  )
+}
+
+interface ManagedUser { id?: string; username: string; password?: string; isActive: boolean }
+function MethodForm({ type, configuration, onSave, onCancel, saving }: { type: SignInMethod; configuration: Record<string, any>; onSave: (config: Record<string, any>) => void; onCancel: () => void; saving: boolean }) {
+  const [values, setValues] = useState<Record<string, any>>({ preset: 'google', ...configuration })
+  const [users, setUsers] = useState<ManagedUser[]>(configuration.users?.map((u: any) => ({ id: u.id, username: u.username, isActive: u.isActive !== false })) ?? [{ username: '', password: '', isActive: true }])
+  const [error, setError] = useState('')
+  const initialValues = { preset: 'google', ...configuration }
+  const initialUsers = configuration.users?.map((u: any) => ({ id: u.id, username: u.username, isActive: u.isActive !== false })) ?? [{ username: '', password: '', isActive: true }]
+  const guard = useLeaveGuard(JSON.stringify(values) !== JSON.stringify(initialValues) || JSON.stringify(users) !== JSON.stringify(initialUsers))
+  const label = METHODS.find(method => method.type === type)!.label.toLowerCase()
+  const set = (key: string, value: any) => setValues(old => ({ ...old, [key]: value }))
+  const input = (key: string, label: string, hint?: string, secret = false) => <Field key={key} id={`signin-${type}-${key}`} label={label} hint={hint}><Input type={secret ? 'password' : 'text'} value={values[key] ?? ''} onChange={event => set(key, event.target.value)} autoComplete={secret ? 'new-password' : 'off'} /></Field>
+  const list = (key: string, label: string, hint: string) => <Field id={`signin-${type}-${key}`} label={label} hint={hint}><Input value={Array.isArray(values[key]) ? values[key].join(', ') : values[key] ?? ''} onChange={event => set(key, event.target.value)} /></Field>
+  const submit = () => {
+    if (type === 'basic_auth') {
+      if (!users.length || users.some(user => !user.username.trim() || (!user.id && !user.password))) { setError('Give every username a name and password.'); return }
+      onSave({ users: users.map(user => ({ ...user, username: user.username.trim(), ...(user.password ? {} : { password: undefined }) })) }); return
+    }
+    if (type === 'company_signin' && (!values.clientId || (!values.hasClientSecret && !values.clientSecret))) { setError('Enter the client ID and secret for your sign-in application.'); return }
+    if (type === 'jwt' && (!values.issuer || !values.jwksUrl || !values.audience)) { setError('Open Advanced and enter the issuer, signing keys address and audience.'); return }
+    const out = { ...values }
+    delete out.hasClientSecret; delete out.redirectUri; delete out.credentialId
+    if (!out.clientSecret) delete out.clientSecret
+    for (const key of ['allowedEmailDomains', 'allowedGroups']) if (typeof out[key] === 'string') out[key] = out[key].split(',').map((value: string) => value.trim()).filter(Boolean)
+    if (type === 'company_signin' && out.preset === 'google' && out.allowedGroups?.length && (!out.directoryCredentialId || !out.directoryAdminEmail)) { setError('Choose a Google Directory credential and enter its delegated administrator email to check groups.'); return }
+    if (type === 'jwt') delete out.preset
+    onSave(out)
+  }
+  return <form className="space-y-4" aria-label={`Configure ${label}`} onSubmit={event => { event.preventDefault(); submit() }}>
+    {type === 'basic_auth' && <>
+      {users.map((user, index) => <div key={user.id ?? index} className="space-y-3 rounded border p-3">
+        <Field id={`signin-user-${index}`} label={index === 0 ? 'Username' : `Username ${index + 1}`}><Input value={user.username} onChange={event => setUsers(old => old.map((row, i) => i === index ? { ...row, username: event.target.value } : row))} autoComplete="off" /></Field>
+        <Field id={`signin-password-${index}`} label={index === 0 ? 'Password' : `Password ${index + 1}`} hint={user.id ? 'Leave empty to keep the current password.' : undefined}><Input type="password" value={user.password ?? ''} onChange={event => setUsers(old => old.map((row, i) => i === index ? { ...row, password: event.target.value } : row))} autoComplete="new-password" /></Field>
+        <Button type="button" size="sm" variant="ghost" onClick={() => setUsers(old => old.filter((_, i) => i !== index))}>Remove username {user.username || index + 1}</Button>
+      </div>)}
+      <Button type="button" size="sm" variant="outline" onClick={() => setUsers(old => [...old, { username: '', password: '', isActive: true }])}>Add username</Button>
+    </>}
+    {type === 'company_signin' && <>
+      <div className="space-y-1"><Label htmlFor="company-provider">Provider</Label><Select value={values.preset} onValueChange={preset => set('preset', preset)}><SelectTrigger id="company-provider"><SelectValue /></SelectTrigger><SelectContent>{[['google', 'Google'], ['microsoft', 'Microsoft'], ['okta', 'Okta'], ['auth0', 'Auth0']].map(([value, name]) => <SelectItem key={value} value={value}>{name}</SelectItem>)}</SelectContent></Select></div>
+      {values.preset === 'microsoft' && input('tenant', 'Microsoft directory', 'Your directory ID or verified domain.')}
+      {['okta', 'auth0'].includes(values.preset) && input('issuer', 'Company sign-in address', 'The issuer address from your provider.')}
+      {input('clientId', 'Client ID')}{input('clientSecret', 'Client secret', values.hasClientSecret ? 'Leave empty to keep the saved secret.' : undefined, true)}
+      {list('allowedEmailDomains', 'Allowed email domains', 'Optional, separated by commas. Leave empty to allow every domain.')}
+      {list('allowedGroups', 'Allowed groups', 'Optional group names or IDs, separated by commas.')}
+      {values.preset === 'google' && (Array.isArray(values.allowedGroups) ? values.allowedGroups.length > 0 : Boolean(values.allowedGroups?.trim())) && <>
+        <CredentialPicker id="company-directory-credential" label="Google Directory credential" kind="cloud" connectorKey="gcp" value={values.directoryCredentialId ?? ''} onChange={credential => set('directoryCredentialId', credential?.id ?? '')} hint="Use a Google service account with Workspace domain-wide delegation for reading group membership." />
+        {input('directoryAdminEmail', 'Delegated administrator email', 'A Workspace administrator the service account may act as.')}
+      </>}
+      <Disclosure title="Advanced" summary="Sign-in settings">
+        {values.preset !== 'google' && input('groupsClaim', 'Groups claim', 'Usually groups. Your provider must include it in the signed token.')}
+        {values.preset === 'google' && <p className="text-xs text-muted-foreground">Google domain restrictions require a verified Workspace domain. Groups are checked through Google Directory.</p>}
+        {configuration.redirectUri && <CopyField value={configuration.redirectUri} label="Callback address" />}
+        <p className="text-xs text-muted-foreground">Register the callback address with your provider. Only verified email addresses can satisfy a domain restriction.</p>
+      </Disclosure>
+    </>}
+    {type === 'jwt' && <Disclosure title="Advanced" summary="Issuer, signing keys and audience">
+      {input('issuer', 'Issuer', 'The exact issuer in tokens your system creates.')}
+      {input('jwksUrl', 'Signing keys address', 'The HTTPS address of your JSON Web Key Set.')}
+      {input('audience', 'Audience', 'The audience your system puts in tokens for this endpoint.')}
+    </Disclosure>}
+    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    <InlineFormActions onCancel={onCancel} submitLabel={`Save ${label}`} submitting={saving} />
+    {guard.element}
+  </form>
 }
