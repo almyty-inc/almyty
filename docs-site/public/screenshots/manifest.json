@@ -492,9 +492,9 @@
       "id": "builder-code-step",
       "title": "A Code step in the builder",
       "path": "screenshots/builder-code-step.png",
-      "capturedAt": "2026-10-02T02:24:40.010Z",
+      "capturedAt": "2026-10-02T03:15:53.785Z",
       "status": "current",
-      "sha256": "bdda8c8b4aec87a7099b4a6bd8bb9b112412c72fe29b5d0ea6dba3bcaac56f04",
+      "sha256": "97b174567acb8d26ead36e2625f07edd4a45ffab018583945996cb86bd974e1f",
       "source": {
         "kind": "browser",
         "environment": "local",
@@ -506,7 +506,7 @@
         "frontend/src/components/ui",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b2f936cbca7b524322a3b47bea6f5c74b6f03ad63b4000f1d7b0ec5185c82c9b",
+      "sourceDigest": "30e691b2e74909b365cf184fc31cc3b5747fb2350844b0af8c50fa46a60367ad",
       "notes": "Local stack, local test user; a workflow agent over the benchmark's mock Pet Store API."
     },
     {
