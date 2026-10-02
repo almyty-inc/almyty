@@ -2419,9 +2419,9 @@
       "id": "tool-detail",
       "title": "Tool test",
       "path": "screenshots/tool-detail.png",
-      "capturedAt": "2026-10-01T16:12:27.476Z",
+      "capturedAt": "2026-10-02T00:12:52.738Z",
       "status": "current",
-      "sha256": "7cffcfc9b1b5ddb6c954364a9bfb3c877b63f99838085eb867c78fa49bb0ef9b",
+      "sha256": "7e5a3724291982fdccec0691962a367aedeea933d2d828920c33e9b147315551",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2434,7 +2434,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "41d65ed7612efab138849951a749901a01c1d78ca235117fd0b1c9be76724809",
+      "sourceDigest": "24cd1039c596709f5e0600482da7cc55df49d64e5dc68a30317e24683672fb60",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2463,9 +2463,9 @@
       "id": "tools-list",
       "title": "Tools list",
       "path": "screenshots/tools-list.png",
-      "capturedAt": "2026-10-01T16:12:30.056Z",
+      "capturedAt": "2026-10-02T00:12:44.037Z",
       "status": "current",
-      "sha256": "6f4bf151392a561496ff79dec535046f4c46b41ad0fa3b5131f07b407c17ba11",
+      "sha256": "fd031f67bff1d7520d1464dc45eee80486cba1ec17efd1b9c158f35a8134bcd4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2478,7 +2478,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "e328a71a4d0825e4ee6bb7eaeb47639d030288710323db1a1209e0615c8af281",
+      "sourceDigest": "2a490942adbfacb561a82718defd1e0d7e8ec263ee9e841514e4fec66960422d",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
