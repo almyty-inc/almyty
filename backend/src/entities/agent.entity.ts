@@ -214,6 +214,12 @@ export class Agent {
      */
     runnerLabels?: Record<string, string>;
     /**
+     * The one runner its runner-backed tools run on ("Runs on" on the
+     * agent page). Absent: any runner, each tool's own unless labels route
+     * it. The runner's labels must still include runnerLabels, if any.
+     */
+    runnerId?: string;
+    /**
      * Autonomous verify: a refute-only checker panel reviews the agent's final
      * answer. On failure (within the revision budget) the failures are fed back
      * as synthetic user feedback and the agent loops again. Checkers pick their

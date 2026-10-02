@@ -99,6 +99,8 @@ export class CreateAgentDto {
     maxTemporaryAgentsAlive?: number;
     /** Machine label requirements, as `gpu=yes, os=mac` or an object; see Agent.agentConfig. */
     runnerLabels?: Record<string, string> | string;
+    /** The one runner its runner tools run on; null or absent for any of the caller's runners. */
+    runnerId?: string | null;
     /** How the model sees its tools (agent-tool-mode.ts); checked by toolModeProblems. */
     toolMode?: 'direct' | 'discover' | 'code' | 'auto';
     toolModeThresholdTokens?: number;

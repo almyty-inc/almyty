@@ -35,6 +35,13 @@ export interface ToolExecutionOptions {
    * the tool was published for. Ignored by every other tool type.
    */
   runnerLabels?: Record<string, string>;
+  /**
+   * The one runner a runner-backed tool runs on, from the agent's "Runs
+   * on" (agentConfig.runnerId), whichever runner published the tool.
+   * Labels, when also set, are a check on that runner. Ignored by every
+   * other tool type.
+   */
+  pinnedRunnerId?: string;
   timeout?: number;
   retries?: number;
   skipCache?: boolean;

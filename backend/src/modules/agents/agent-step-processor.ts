@@ -15,7 +15,7 @@ import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 import { decideEscalation, nextRoutingPolicy, planPosition } from '../model-catalog/routing/verify-escalation';
 import { AgentMemoryKeeper } from './agent-memory.keeper';
-import { agentApiIds, callsAgents, mayCallAgent } from './agent-capabilities';
+import { agentApiIds, agentRunnerId, callsAgents, mayCallAgent } from './agent-capabilities';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { emitStreamChunk } from './llm-stream-events';
 import { answerCallMessages, composesFinalAnswer } from './final-answer';
@@ -949,6 +949,8 @@ export class AgentStepProcessor {
               retries: resolvedLimits.toolErrorRetries,
               // The machine this agent's runner-backed tools must run on.
               runnerLabels: agent.agentConfig?.runnerLabels,
+              // The one runner they run on, when the agent is pinned to one.
+              pinnedRunnerId: agentRunnerId(agent) ?? undefined,
               // The run and agent a runner workspace made for this call
               // belongs to (RunWorkspaceService).
               runId: run.id,
@@ -1892,6 +1894,7 @@ export class AgentStepProcessor {
         agentId: agent.id,
         agentTeamId: agent.teamId ?? null,
         runnerLabels: agent.agentConfig?.runnerLabels,
+        pinnedRunnerId: agentRunnerId(agent) ?? undefined,
         retries: resolvedLimits.toolErrorRetries,
       },
       policy: config,
@@ -2041,6 +2044,7 @@ export class AgentStepProcessor {
               agentId: agent.id,
               agentTeamId: agent.teamId ?? null,
               runnerLabels: agent.agentConfig?.runnerLabels,
+              pinnedRunnerId: agentRunnerId(agent) ?? undefined,
             })
           : await this.codeMode.rejectChangeSet(set.codeExecutionId, run.organizationId);
       const answer = changeSetOutcomeForModel(set.forModel, decision, entries, approval.decisionReason);
@@ -2079,6 +2083,7 @@ export class AgentStepProcessor {
             organizationId: run.organizationId,
             retries: resolvedLimits.toolErrorRetries,
             runnerLabels: agent.agentConfig?.runnerLabels,
+            pinnedRunnerId: agentRunnerId(agent) ?? undefined,
             runId: run.id,
             agentId: agent.id,
             agentTeamId: agent.teamId ?? null,

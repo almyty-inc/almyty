@@ -583,4 +583,45 @@ describe('RunnerCallService', () => {
       expect(transport.pushed).toHaveLength(1);
     });
   });
+
+  // ── an agent pinned to one runner ("Runs on") ───────────────────────
+
+  describe('pinned to one runner', () => {
+    it('goes to that runner even with labels set, and never searches for another', async () => {
+      const { svc, runners, transport } = makeService();
+      runners.runner = { ...runners.runner, labels: { gpu: 'yes' } } as any;
+      runners.labelPick = { ...runners.runner, id: 'runner-other' } as any;
+      const p = svc.dispatch('runner-1', 'shell.exec', {}, undefined, {
+        timeoutMs: 30, callerUserId: 'owner-1', organizationId: 'org-1', labels: { gpu: 'yes' }, pinned: true,
+      });
+      await p.catch(() => undefined);
+      expect(runners.labelCalls).toEqual([]);
+      expect(runners.resolveCallers).toEqual(['owner-1']);
+      expect(transport.pushed).toHaveLength(1);
+      expect(transport.pushed[0].sessionId).toBe('sh_session_1');
+    });
+
+    it('is refused, in plain words, when the pinned runner lacks a label', async () => {
+      const { svc, runners, transport } = makeService();
+      runners.runner = { ...runners.runner, labels: { os: 'mac' } } as any;
+      runners.labelPick = { ...runners.runner, id: 'runner-gpu', labels: { gpu: 'yes' } } as any;
+      await expect(svc.dispatch('runner-1', 'shell.exec', {}, undefined, {
+        callerUserId: 'owner-1', organizationId: 'org-1', labels: { gpu: 'yes' }, pinned: true,
+      })).rejects.toMatchObject({
+        code: RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND,
+        message: 'laptop, the runner this agent runs on, does not have gpu=yes',
+      });
+      expect(runners.labelCalls).toEqual([]);
+      expect(transport.pushed).toHaveLength(0);
+    });
+
+    it('does not reach a runner of another organization', async () => {
+      const { svc, runners, transport } = makeService();
+      runners.runner = { ...runners.runner, organizationId: 'org-2' } as any;
+      await expect(svc.dispatch('runner-1', 'shell.exec', {}, undefined, {
+        callerUserId: 'owner-1', organizationId: 'org-1', pinned: true,
+      })).rejects.toMatchObject({ code: RUNNER_CALL_ERRORS.RUNNER_NOT_FOUND });
+      expect(transport.pushed).toHaveLength(0);
+    });
+  });
 });

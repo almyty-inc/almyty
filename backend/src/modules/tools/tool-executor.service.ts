@@ -446,6 +446,7 @@ export class ToolExecutorService {
               gatewayId: options.gatewayId ?? null,
               scopes: options.scopes ?? null,
               runnerLabels: options.runnerLabels ?? null,
+              pinnedRunnerId: options.pinnedRunnerId ?? null,
               agentTeamId: options.agentTeamId ?? null,
             });
             return answer(
@@ -803,9 +804,15 @@ export class ToolExecutorService {
     const { workspaceId: _ws, ...callParams } = parameters;
 
     try {
+      // The agent's "Runs on": a pinned runner takes the call whichever
+      // runner published the tool, and nothing reroutes it (labels become
+      // a check on that runner).
+      const pinned = !!options.pinnedRunnerId;
+      let targetRunnerId = options.pinnedRunnerId ?? cfg.runnerId;
       if (cfg.requiresWorkspace && !workspaceId && runId && this.runWorkspaces) {
         const workspace = await this.runWorkspaces.acquire({
-          runnerId: cfg.runnerId,
+          runnerId: targetRunnerId,
+          pinned,
           organizationId: options.organizationId,
           runId,
           agentId: options.agentId ?? scope?.agentId ?? null,
@@ -815,9 +822,12 @@ export class ToolExecutorService {
           signal: options.signal,
         });
         workspaceId = workspace.id;
+        // The work goes where its workspace is, which labels may have
+        // chosen over the tool's own runner.
+        targetRunnerId = workspace.runnerId ?? targetRunnerId;
       }
       const response = await this.runnerCalls.dispatch(
-        cfg.runnerId,
+        targetRunnerId,
         cfg.method,
         callParams,
         workspaceId,
@@ -832,6 +842,7 @@ export class ToolExecutorService {
           // The agent's machine requirements (gpu=yes): the call goes to an
           // online runner with those labels, this tool's own when it has them.
           labels: options.runnerLabels,
+          pinned,
           organizationId: options.organizationId,
         },
       );

@@ -120,6 +120,7 @@ export interface HeldCallContext {
   gatewayId: string | null;
   scopes: string[] | null;
   runnerLabels: Record<string, string> | null;
+  pinnedRunnerId?: string | null;
   agentTeamId: string | null;
 }
 
@@ -262,6 +263,7 @@ export class ToolApprovalGateService implements OnModuleInit {
       ...(call.gatewayId ? { gatewayId: call.gatewayId } : {}),
       ...(call.scopes ? { scopes: call.scopes } : {}),
       ...(call.runnerLabels ? { runnerLabels: call.runnerLabels } : {}),
+      ...(call.pinnedRunnerId ? { pinnedRunnerId: call.pinnedRunnerId } : {}),
       agentId: row.agentId ?? null,
       agentTeamId: call.agentTeamId ?? null,
       approvedGate: { approvalId: row.id },

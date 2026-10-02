@@ -10,10 +10,13 @@ import type { Agent } from '../../entities/agent.entity';
  *    offered to its model as `call_agent_*` tools. `canCallAgents` is kept
  *    equal to "the list is not empty"; an API client that sets only the
  *    switch still means every agent the run could start.
- *  - `runnerLabels`: the machine its runner tools run on.
+ *  - `runnerLabels`: labels a machine its runner tools run on must have.
+ *  - `runnerId`: the one runner its runner tools run on, when pinned.
  *  - `canCreateAgents` with `maxTemporaryAgents` (per run) and
  *    `maxTemporaryAgentsAlive` (existing at once, across its runs).
  */
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const TEMPORARY_AGENTS_MAX = 20;
 
 type Config = NonNullable<Agent['agentConfig']>;
@@ -52,6 +55,17 @@ export function agentApiIds(agent: Pick<Agent, 'agentConfig'>): string[] {
   return Array.isArray(ids) ? ids.filter((id) => typeof id === 'string' && id) : [];
 }
 
+/**
+ * The one runner its runner tools run on, when it is pinned to one
+ * (`agentConfig.runnerId`); null for "any of my runners". A pinned call
+ * goes to that runner whichever runner published the tool, and fails
+ * plainly when that runner is offline, rather than going elsewhere.
+ */
+export function agentRunnerId(agent: Pick<Agent, 'agentConfig'> | null | undefined): string | null {
+  const id = agent?.agentConfig?.runnerId;
+  return typeof id === 'string' && id ? id : null;
+}
+
 const dedupe = (ids: string[]) => [...new Set(ids)];
 
 /** Tidy what a save writes: lists without repeats, the switch equal to the list. */
@@ -62,6 +76,8 @@ export function normaliseCapabilities(cfg: Partial<Config> | null | undefined): 
     cfg.canCallAgents = cfg.callableAgentIds.length > 0;
   }
   if (Array.isArray(cfg.apiIds)) cfg.apiIds = dedupe(cfg.apiIds);
+  // "Any of my runners" is stored as no pin at all.
+  if (cfg.runnerId === null || cfg.runnerId === '') delete cfg.runnerId;
 }
 
 /** Everything wrong with the capability fields, one sentence each. */
@@ -75,5 +91,6 @@ export function capabilityProblems(cfg: unknown): string[] {
   const limit = (v: unknown) => v === undefined || v === null || (typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= TEMPORARY_AGENTS_MAX);
   if (!limit(c.maxTemporaryAgents)) problems.push(`Temporary agents per run must be a whole number from 1 to ${TEMPORARY_AGENTS_MAX}`);
   if (!limit(c.maxTemporaryAgentsAlive)) problems.push(`Temporary agents alive at once must be a whole number from 1 to ${TEMPORARY_AGENTS_MAX}`);
+  if (c.runnerId !== undefined && c.runnerId !== null && !(typeof c.runnerId === 'string' && UUID_RE.test(c.runnerId))) problems.push('The runner it runs on must be a runner id');
   return problems;
 }
