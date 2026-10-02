@@ -245,6 +245,16 @@ export interface Agent {
     maxTemporaryAgents?: number
     /** Temporary agents of its runs that may exist at once. */
     maxTemporaryAgentsAlive?: number
+    /**
+     * How the model sees its tools (backend agents/agent-tool-mode.ts):
+     * every definition, or search_tools/get_tool/call_tool plus the pinned
+     * tools; `auto` switches above the threshold. Absent: the server default.
+     */
+    toolMode?: 'direct' | 'discover' | 'auto'
+    /** The `auto` threshold in tokens; absent: 3% of the model's context window. */
+    toolModeThresholdTokens?: number
+    /** Tools always shown in full, also when the model searches for the rest. */
+    pinnedToolIds?: string[]
     /** Machine label requirements for runner-backed tools; the server stores an object, a save may send text. */
     runnerLabels?: Record<string, string> | string
     verify?: {

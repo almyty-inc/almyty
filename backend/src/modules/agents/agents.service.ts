@@ -20,6 +20,7 @@ import { AgentModels, agentModelsProblems, syncMainRole } from './autonomous-mod
 import { parseLabelRequirements } from '../runner/runner-labels';
 import { AgentMemoryConfig, memoryConfigProblems, memorySettings, retentionSeconds, NATIVE_MEMORY_ACCOUNT } from './agent-memory-settings';
 import { capabilityProblems, normaliseCapabilities } from './agent-capabilities';
+import { toolModeProblems } from './agent-tool-mode';
 import { MemoryAccountsService } from '../memory/canonical/memory-accounts.service';
 import { Api } from '../../entities/api.entity';
 import { CredentialType } from '../../entities/credential.entity';
@@ -256,6 +257,7 @@ export class AgentsService {
     normaliseCapabilities(agentConfig as any);
     const capability = capabilityProblems(agentConfig);
     problems.push(...capability);
+    problems.push(...toolModeProblems(agentConfig as Record<string, any> | null | undefined));
     if (!capability.length && agentConfig) {
       const callable = (agentConfig.callableAgentIds ?? []).filter((id) => id !== selfId);
       if (agentConfig.callableAgentIds?.includes(selfId ?? '')) problems.push('An agent cannot call itself');

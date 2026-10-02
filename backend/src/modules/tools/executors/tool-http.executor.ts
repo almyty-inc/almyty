@@ -347,26 +347,33 @@ export class ToolHttpExecutor {
         headerParams = parameters.header || {};
         bodyData = parameters.body;
       } else {
-        // Flattened — figure out where each key goes based on method + endpoint shape
+        // Flattened: the endpoint's {placeholders} are path parameters
+        // whatever the method. The rest go to the body on a write with a
+        // body (except the operation's declared query parameters), and to
+        // the query string otherwise, so `/tickets/{ticketId}/close` is
+        // called with the ticket's id in the URL.
+        const pathParamNames = matchDelimited(operation.endpoint, '{', '}').map(p =>
+          p.slice(1, -1),
+        );
+        pathParamNames.forEach(name => {
+          if (parameters[name] !== undefined) {
+            pathParams[name] = parameters[name];
+          }
+        });
+        const rest = Object.keys(parameters).filter(key => !pathParamNames.includes(key));
         if (
           ['POST', 'PUT', 'PATCH'].includes(operation.method) &&
           operation.parameters?.body
         ) {
-          bodyData = parameters;
+          const queryNames = new Set(Object.keys(operation.parameters?.query ?? {}));
+          const body: Record<string, any> = {};
+          for (const key of rest) {
+            if (queryNames.has(key)) queryParams[key] = parameters[key];
+            else body[key] = parameters[key];
+          }
+          bodyData = body;
         } else {
-          const pathParamNames = matchDelimited(operation.endpoint, '{', '}').map(p =>
-            p.slice(1, -1),
-          );
-          pathParamNames.forEach(name => {
-            if (parameters[name] !== undefined) {
-              pathParams[name] = parameters[name];
-            }
-          });
-          Object.keys(parameters).forEach(key => {
-            if (!pathParamNames.includes(key)) {
-              queryParams[key] = parameters[key];
-            }
-          });
+          for (const key of rest) queryParams[key] = parameters[key];
         }
       }
 

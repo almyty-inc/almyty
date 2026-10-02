@@ -251,6 +251,18 @@ export class Agent {
       autoLearn?: boolean;
       distill?: { providerId: string; model?: string };
     };
+    /**
+     * How the model sees the agent's tools (agents/agent-tool-mode.ts;
+     * docs/design/code-mode.md, part E): `direct` (every definition),
+     * `discover` (search_tools, get_tool, call_tool and the pinned tools) or
+     * `auto` (discover once the definitions pass the threshold). Absent:
+     * AGENT_TOOL_MODE_DEFAULT.
+     */
+    toolMode?: 'direct' | 'discover' | 'auto';
+    /** The `auto` threshold in tokens, instead of a share of the model's context window. */
+    toolModeThresholdTokens?: number;
+    /** Tools the model always sees in full, also in discover mode. */
+    pinnedToolIds?: string[];
   };
 
   @Column({ default: false })
