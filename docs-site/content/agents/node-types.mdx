@@ -550,6 +550,8 @@ Runs a short script that calls the agent's tools, for a job that needs several c
 
 In the side panel: the **Script**. It calls the agent's tools as functions, one object per API (`petstore.findPetsByStatus({ status: 'sold' })`), reads the run's input as `context.input` and earlier steps as `context.steps["<step id>"]`, and ends with `return`. `log(...)` adds a line to the step's log.
 
+![A Code step and its script in the builder](/screenshots/builder-code-step.png)
+
 A change the agent's settings send to a person (deletions, by default) does not run inside the script. A workflow cannot pause, so the step stops, waiting, and the changes wait in **Approvals** as one list; approved, they run in order.
 
 | Property | Type | Description |

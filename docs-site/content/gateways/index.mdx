@@ -49,6 +49,8 @@ A gateway with many tools hands every connected app a long list to read before i
 - **Search, and write scripts**: the app sees three tools. One searches your tools, one reads a tool's details, and one runs a short script that calls your tools, so a job like "archive every pet we sold last month" is one request instead of fifty.
 - **Every tool, plus search and scripts**: both. Not offered on a Skills gateway, where scripts replace the per-tool skills with one skill.
 
+![A gateway set to search and scripts, asking a person before changes](/screenshots/gateway-exposure.png)
+
 A script runs on almyty in a locked box with no network and no passwords. Every call it makes goes through the same checks, keys, approval rules and audit log as a direct call. Changes the gateway's settings send to a person wait in **Approvals** as one list; the app is told they are waiting and asks again for the outcome.
 
 Scripts have two conditions. Your administrator turns them on for the server, and the gateway must ask apps who they are: an access key or sign-in, not open to anyone. Until both hold, the choice is greyed out with the reason, and the gateway offers every tool.

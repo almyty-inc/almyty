@@ -503,7 +503,9 @@ export class CodeModeService implements OnModuleInit {
         };
       }
       const n = state.entries.length;
-      const before: CodeResultForModel = { status: 'completed', calls: { made: n, ran: 0, failed: 0, staged: n, refused: 0 } };
+      // The calls here are the change set's: how many there were, and what became of them.
+      const count = (o: string) => state.entries.filter((e) => e.outcome === o).length;
+      const before: CodeResultForModel = { status: 'completed', calls: { made: n, ran: count('ran'), failed: count('failed'), staged: n, refused: 0 } };
       const answer = changeSetOutcomeForModel(before, state.decision, state.entries, state.reason);
       return { forModel: answer, isError: state.decision === 'approved' && state.entries.some((e) => e.outcome === 'failed'), approvalId, codeExecutionId: state.codeExecutionId };
     }

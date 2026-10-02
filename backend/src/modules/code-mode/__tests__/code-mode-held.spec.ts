@@ -100,7 +100,7 @@ describe('held change sets', () => {
     expect(toolExecutions.rows().filter((r) => r.codeExecutionId === first.codeExecutionId)).toHaveLength(3);
 
     const back = await run({ approvalId: 'appr-1' });
-    expect(back.forModel).toMatchObject({ status: 'completed', changeSet: { decision: 'approved', ran: [{ id: 1 }, { id: 2 }], failed: [], notRun: [] } });
+    expect(back.forModel).toMatchObject({ status: 'completed', calls: { made: 2, ran: 2, staged: 2 }, changeSet: { decision: 'approved', ran: [{ id: 1 }, { id: 2 }], failed: [], notRun: [] } });
   });
 
   it('runs none of a rejected set, and says so', async () => {
