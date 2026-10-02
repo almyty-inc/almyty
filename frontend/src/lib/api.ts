@@ -724,6 +724,8 @@ export const analyticsApi = {
     return apiGet(`/analytics/requests${qs}`)
   },
   getToolUsage: (timeframe = '7d') => apiGet(`/analytics/tool-usage?timeframe=${timeframe}`),
+  /** Scripts agents ran in code mode, and the sandbox CPU they used. */
+  getScriptUsage: (timeframe = '7d') => apiGet(`/analytics/script-usage?timeframe=${timeframe}`),
   getGatewayUsage: (timeframe = '7d') => apiGet(`/analytics/gateway-usage?timeframe=${timeframe}`),
   getLlmUsage: (timeframe = '7d') => apiGet(`/analytics/llm-usage?timeframe=${timeframe}`),
   getTimeline: (timeframe = '24h', granularity = 'hour') =>

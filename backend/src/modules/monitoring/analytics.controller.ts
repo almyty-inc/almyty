@@ -101,6 +101,17 @@ export class AnalyticsController {
     return { success: true, data, message: 'Tool usage retrieved successfully' };
   }
 
+  /** Scripts agents ran in code mode, and the sandbox CPU they used. */
+  @Get('/script-usage')
+  @Roles('viewer', 'member', 'admin', 'owner')
+  async getScriptUsage(
+    @Request() req,
+    @Query('timeframe') timeframe: string = '7d',
+  ) {
+    const orgId = this.requireOrg(req);
+    const data = await this.analyticsService.getScriptUsage(orgId, clampTimeframe(timeframe));
+    return { success: true, data, message: 'Script usage retrieved successfully' };
+  }
   @Get('/gateway-usage')
   @Roles('viewer', 'member', 'admin', 'owner')
   async getGatewayUsage(

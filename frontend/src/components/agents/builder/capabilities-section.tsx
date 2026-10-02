@@ -31,7 +31,7 @@ import { RunnerLabelsField, parseRunnerLabels } from '@/components/agents/builde
 import { apisApi, runnersApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
-import type { Agent } from '@/types'
+import type { Agent, CodeWriteAction } from '@/types'
 
 type AgentConfig = NonNullable<Agent['agentConfig']> & { runnerLabels?: Record<string, string> | string }
 
@@ -433,15 +433,17 @@ export const TOOL_MODE_LABEL: Record<ToolMode, string> = {
   auto: 'Automatic',
   direct: 'Show every tool',
   discover: 'Search for tools',
+  code: 'Search, and write scripts',
 }
 
 const TOOL_MODE_HINT: Record<ToolMode, string> = {
   auto: 'Every tool is shown to the model while the list is small. Once it would take a large share of the model\'s context, the model searches for the tools it needs instead.',
   direct: 'The model sees every tool, in full, on every step. Best for a handful of tools.',
   discover: 'The model gets three small tools to search for, read and run its tools, and finds the right one when it needs it. Best for many tools.',
+  code: 'As with searching, and the model can also write a short script that calls the tools many times, for example to go through a list. The script runs in a locked box with no network access; every call it makes is checked like any other.',
 }
 
-type ToolMode = 'auto' | 'direct' | 'discover'
+type ToolMode = 'auto' | 'direct' | 'discover' | 'code'
 
 export function ToolModeSection({
   agentConfig,
@@ -472,7 +474,7 @@ export function ToolModeSection({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {(['auto', 'direct', 'discover'] as const).map((m) => (
+            {(['auto', 'direct', 'discover', 'code'] as const).map((m) => (
               <SelectItem key={m} value={m}>{TOOL_MODE_LABEL[m]}</SelectItem>
             ))}
           </SelectContent>
@@ -494,6 +496,7 @@ export function ToolModeSection({
           <p className="text-xs text-muted-foreground">Leave empty for the default: a share of the model's context window (3% unless the server sets another).</p>
         </div>
       )}
+      {mode === 'code' && <ScriptChanges agentConfig={agentConfig} onChange={onChange} />}
       {mode !== 'direct' && usableTools.length > 0 && (
         <div className="space-y-1.5">
           <Label>Always show in full</Label>
@@ -523,4 +526,54 @@ export function toolModeProblems(agentConfig: AgentConfig): string[] {
   const n = agentConfig.toolModeThresholdTokens
   if (n === undefined) return []
   return Number.isInteger(n) && n > 0 && n <= 10_000_000 ? [] : ['Switch to searching above: a whole number of tokens from 1 to 10,000,000']
+}
+
+/* ── What a script may change (code mode) ───────────────────────────── */
+
+const WRITE_ACTION_LABEL: Record<CodeWriteAction, string> = {
+  allow: 'Make them',
+  stage: 'Ask a person first',
+  deny: 'Never',
+}
+
+/**
+ * What happens to a change or a deletion a script makes (backend
+ * code-mode/code-write-policy.ts). Reads always run. Changes run unless
+ * a person asks to approve them; deletions wait for a person unless someone
+ * says otherwise. Every call still goes through the same permissions,
+ * approval rules and audit as a call the model makes directly.
+ */
+export function ScriptChanges({ agentConfig, onChange }: { agentConfig: AgentConfig; onChange: (patch: Partial<AgentConfig>) => void }) {
+  const writes = agentConfig.codeMode?.writes ?? {}
+  const set = (key: 'write' | 'destructive', value: CodeWriteAction) =>
+    onChange({ codeMode: { ...(agentConfig.codeMode ?? {}), writes: { ...writes, [key]: value } } })
+  const rows: Array<{ key: 'write' | 'destructive'; label: string; fallback: CodeWriteAction }> = [
+    { key: 'write', label: 'Changes to data', fallback: 'allow' },
+    { key: 'destructive', label: 'Deletions', fallback: 'stage' },
+  ]
+  return (
+    <div className="space-y-2" data-testid="script-changes">
+      <Label>When a script changes data</Label>
+      <p className="text-xs text-muted-foreground">
+        Reading always runs. Changes the script asks a person about are collected into one list, approved or rejected as a whole once the script is done.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {rows.map((row) => (
+          <div key={row.key} className="space-y-1.5">
+            <Label htmlFor={`script-${row.key}`} className="text-xs font-normal text-muted-foreground">{row.label}</Label>
+            <Select value={writes[row.key] ?? row.fallback} onValueChange={(v) => set(row.key, v as CodeWriteAction)}>
+              <SelectTrigger id={`script-${row.key}`} aria-label={row.label} className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(['allow', 'stage', 'deny'] as const).map((a) => (
+                  <SelectItem key={a} value={a}>{WRITE_ACTION_LABEL[a]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }

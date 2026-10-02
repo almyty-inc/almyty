@@ -124,6 +124,11 @@ export interface ToolExecutionOptions {
    */
   holdForApproval?: 'caller';
   /**
+   * The run_code script making this call (code_executions.id): recorded on
+   * the tool_executions row, so a script's calls are its call tree.
+   */
+  codeExecutionId?: string | null;
+  /**
    * The team of the agent making the call. A team's amount rule holds only
    * that team's agents; absent (no agent behind the call), every rule on
    * the tool applies.

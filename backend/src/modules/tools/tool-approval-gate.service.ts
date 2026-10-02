@@ -322,18 +322,22 @@ export class ToolApprovalGateService implements OnModuleInit {
   }
 
   /**
-   * Whether `approvalId` is an approved request raised by this rule for
-   * exactly this call (same tool, same parameters) in this organization.
+   * Whether `approvalId` is an approved request that covers exactly this
+   * call (same tool, same parameters) in this organization: one raised by
+   * this rule for the call, or a script's change set with the call in it
+   * (docs/design/code-mode.md, part D: the person saw the call and its rule
+   * in the set and approved the set as a whole).
    */
   async approved(approvalId: string, hit: ApprovalGateHit, organizationId: string): Promise<boolean> {
     const row = await this.requests.findOne({ where: { id: approvalId, organizationId } });
-    const gate = row?.payload?._gate;
+    if (!row || row.status !== 'approved') return false;
+    const gate = row.payload?._gate;
+    if (gate && gate.toolId === hit.toolId && gate.paramsHash === hit.paramsHash) return true;
+    const changeSet = row.payload?.changeSet;
     return (
-      !!row &&
-      row.status === 'approved' &&
-      !!gate &&
-      gate.toolId === hit.toolId &&
-      gate.paramsHash === hit.paramsHash
+      row.payload?.kind === 'change_set' &&
+      Array.isArray(changeSet) &&
+      changeSet.some((entry: any) => entry?.toolId === hit.toolId && entry?.paramsHash === hit.paramsHash)
     );
   }
 

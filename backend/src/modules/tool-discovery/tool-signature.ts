@@ -44,12 +44,19 @@ function camel(text: string): string {
     .join('');
 }
 
+/**
+ * Names a script's own globals take (code-sandbox-worker.ts); an API called
+ * `tools` or `log` gets an `Api` suffix so it cannot shadow them.
+ */
+const CODE_GLOBALS = new Set(['tools', 'log', 'extract', 'console', 'ToolError']);
+
 /** The namespace a tool lives under. */
 export function namespaceOf(tool: NameableTool): string {
   const meta = tool.metadata ?? {};
   const source = tool.api?.name ?? meta.sourceApi?.name ?? meta.mcpSource?.name ?? null;
   if (!source) return 'custom';
-  return jsIdentifier(camel(String(source)), 'custom');
+  const name = jsIdentifier(camel(String(source)), 'custom');
+  return CODE_GLOBALS.has(name) ? `${name}Api` : name;
 }
 
 /** The function name a tool has in its namespace, before collisions are resolved. */

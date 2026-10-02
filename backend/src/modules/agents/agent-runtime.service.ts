@@ -685,6 +685,7 @@ export class AgentRuntimeService implements OnModuleInit {
     status: 'approved' | 'rejected' | 'expired';
     decisionReason: string | null;
     toolCallId: string | null;
+    payload?: Record<string, any> | null;
   }): Promise<void> {
     // A held tool call has no run: ToolApprovalGateService runs it.
     if (!approval.runId) return;
@@ -692,7 +693,10 @@ export class AgentRuntimeService implements OnModuleInit {
     if (!run) return;
     if (run.status !== AgentRunStatus.WAITING_APPROVAL) return;
 
-    if (approval.status === 'approved') {
+    // A script's change set (code mode) resumes the run whatever the
+    // decision: rejected or expired, none of it runs, the model is told so
+    // and carries on (docs/design/code-mode.md, part D).
+    if (approval.status === 'approved' || approval.payload?.kind === 'change_set') {
       run.status = AgentRunStatus.RUNNING;
       await this.runRepository.save(run);
       // Same seq-from-timestamp rule as the resume path above, and for

@@ -62,3 +62,34 @@ export const META_TOOL_DEFINITIONS: readonly MetaToolDefinition[] = [
     },
   },
 ];
+
+export const RUN_CODE = 'run_code';
+
+/**
+ * run_code (docs/design/code-mode.md, part C): one short script that calls
+ * the tools, run in a locked sandbox; only what it logs and returns comes
+ * back. The description says what a staged call is (a receipt, not data),
+ * as the design's "Staged receipts confuse the model" risk asks.
+ */
+export const RUN_CODE_DEFINITION: MetaToolDefinition = {
+  name: RUN_CODE,
+  description:
+    'Run a short JavaScript or TypeScript script that calls the tools, when a job needs several calls, a loop or filtering. ' +
+    'The script is the body of an async function: use await and return a value. Each API is an object of async functions ' +
+    '(get_tool shows a tool\'s `code.namespace` and `code.function`, and its signature), for example ' +
+    '`const sold = await petstore.findPetsByStatus({ status: "sold" })`. Also available: tools.search(query), tools.get(name), ' +
+    'tools.call(name, args), extract(value, jsonSchema) to turn loose text into data, and log(...). ' +
+    'There is no network, no files, no require or import: call the tools instead. A failed call throws a ToolError with `tool` and `message`. ' +
+    'Only what you log and the return value come back to you. ' +
+    'A call that changes or deletes data may be staged for a person to approve instead of running: it returns ' +
+    '{ staged: true, id } and no data, so nothing later in the same script can use its result. When a write\'s result matters, ' +
+    'read in one script and write in the next.',
+  parameters: {
+    type: 'object',
+    properties: {
+      code: { type: 'string', description: 'The script body.' },
+      timeoutMs: { type: 'integer', minimum: 1, description: 'How long it may run, in milliseconds (there is a default and a maximum).' },
+    },
+    required: ['code'],
+  },
+};

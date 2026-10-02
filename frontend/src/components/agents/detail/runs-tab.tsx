@@ -28,6 +28,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { runStatusVariant, formatDuration } from './constants'
 import type { AgentRun } from '@/types'
 import { VerifyStepCard, VerifySummary } from './verify-step'
+import { CodeStepCard, isCodeStep } from './code-step'
 import { PromoteRunSection } from './promote-run-section'
 import { RouteTraceTimeline } from './route-trace-timeline'
 import { RoleCostTable, StepRoleLine, hasStepSummary, stepSummary } from './run-roles'
@@ -141,7 +142,10 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                     {expandedRunId === run.id && (
                       <TableRow>
                         <TableCell colSpan={8} className="bg-muted/30 p-4">
-                          <div className="space-y-4">
+                          {/* w-0 min-w-full: the details fill the row without widening the
+                              table, so a long step line truncates instead of pushing every
+                              column off screen. */}
+                          <div className="w-0 min-w-full space-y-4">
                             {/* Verification verdict (if the agent ran a verify gate) */}
                             <VerifySummary run={run} />
                             {/* Where the requests went. Only for runs that
@@ -162,6 +166,7 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                                 <div className="space-y-2">
                                   {run.steps.map((step, idx) => {
                                     if (step.type === 'verify') return <VerifyStepCard key={idx} step={step} index={idx} />
+                                    if (isCodeStep(step)) return <CodeStepCard key={idx} step={step} index={idx} agentId={agentId} runId={run.id} />
                                     const summary = stepSummary(step)
                                     return (
                                     <div key={idx} className="flex items-start gap-3 p-2 rounded bg-background border text-sm" data-testid={`run-step-${idx}`}>

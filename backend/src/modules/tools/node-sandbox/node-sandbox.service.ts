@@ -3,6 +3,11 @@ import { Worker } from 'worker_threads';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
+  CodeCallError,
+  CodeSandboxRequest,
+  CodeSandboxResult,
+  CodeWorkerDone,
+  CodeWorkerInput,
   SandboxExecutionRequest,
   SandboxExecutionResult,
   WorkerInput,
@@ -20,6 +25,8 @@ const DEFAULT_MAX_WORKERS = 4;
  * and eventually OOM the backend process.
  */
 const DEFAULT_MAX_QUEUE_SIZE = 100;
+/** How many scripts of the code profile may wait for a worker (SANDBOX_CODE_MAX_QUEUE_SIZE). */
+const DEFAULT_CODE_MAX_QUEUE_SIZE = 50;
 /**
  * Ceiling on the timeout any single execution gets, whatever it asks
  * for. A worker keeps its pool slot until its timer fires, so an
@@ -100,6 +107,11 @@ export class NodeSandboxService {
     orgKey: string;
   }> = [];
 
+  /** The code profile's own pool (executeCode): running, per organization, and waiting. */
+  private codeActive = 0;
+  private readonly codeActiveByOrg = new Map<string, number>();
+  private readonly codeQueue: Array<{ resolve: (result: CodeSandboxResult) => void; request: CodeSandboxRequest; orgKey: string }> = [];
+
   constructor(private readonly depManager: DependencyManagerService) {}
 
   // ──────────────────────────────────────────────
@@ -175,6 +187,195 @@ export class NodeSandboxService {
     return new Promise<SandboxExecutionResult>((resolve) => {
       this.queue.push({ resolve, request, orgKey });
     });
+  }
+
+  /**
+   * Run model-written code in the `code` profile (docs/design/code-mode.md,
+   * part D): no network, no credentials, no modules, a scrubbed
+   * environment, and its own pool, separate from JavaScript tools, so
+   * model-written code cannot starve human-written tools or the other way
+   * round:
+   *
+   *   - at most SANDBOX_CODE_MAX_WORKERS run at once (default 4), and at
+   *     most SANDBOX_CODE_MAX_WORKERS_PER_ORG for one organization
+   *     (default half);
+   *   - at most SANDBOX_CODE_MAX_QUEUE_SIZE wait (default 50), at most
+   *     SANDBOX_CODE_MAX_QUEUE_PER_ORG of them for one organization
+   *     (default a quarter). Past either the request is refused.
+   */
+  async executeCode(request: CodeSandboxRequest): Promise<CodeSandboxResult> {
+    const refused = (error: string): CodeSandboxResult => ({ success: false, logs: '', error: { message: error }, durationMs: 0, cpuMs: 0 });
+    if (request.signal?.aborted) return refused('Cancelled');
+    const limits = this.codeLimits();
+    const orgKey = request.organizationId || '';
+    if (this.codeActive < limits.maxWorkers && (this.codeActiveByOrg.get(orgKey) ?? 0) < limits.maxWorkersPerOrg) {
+      return this.runCodeWorker(request, orgKey);
+    }
+    if (this.codeQueue.length >= limits.maxQueueSize) {
+      return refused(`Too many scripts are waiting to run (${limits.maxQueueSize}). Try again shortly.`);
+    }
+    if (this.codeQueue.filter((q) => q.orgKey === orgKey).length >= limits.maxQueuePerOrg) {
+      return refused(`Too many scripts of this organization are waiting to run (${limits.maxQueuePerOrg}). Try again shortly.`);
+    }
+    return new Promise<CodeSandboxResult>((resolve) => this.codeQueue.push({ resolve, request, orgKey }));
+  }
+
+  private async runCodeWorker(request: CodeSandboxRequest, orgKey: string): Promise<CodeSandboxResult> {
+    this.codeActive++;
+    this.codeActiveByOrg.set(orgKey, (this.codeActiveByOrg.get(orgKey) ?? 0) + 1);
+    const start = Date.now();
+    const limits = this.limits();
+    try {
+      let workerPath = path.join(__dirname, 'code-sandbox-worker.js');
+      const isCompiledPath = fs.existsSync(workerPath);
+      if (!isCompiledPath) workerPath = path.join(__dirname, 'code-sandbox-worker.ts');
+      const workerData: CodeWorkerInput = {
+        code: request.code,
+        namespaces: request.namespaces,
+        logCapChars: request.logCapChars,
+        resultCapChars: request.resultCapChars,
+      };
+      return await new Promise<CodeSandboxResult>((resolve) => {
+        let settled = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let ready = false;
+        const worker = new Worker(workerPath, {
+          workerData,
+          // No `env` of the backend's: the worker starts with an empty one.
+          env: {},
+          resourceLimits: {
+            maxOldGenerationSizeMb: request.memoryLimitMb,
+            maxYoungGenerationSizeMb: Math.max(1, Math.ceil(request.memoryLimitMb / 4)),
+          },
+          execArgv: this.buildCodeWorkerExecArgv(workerPath, isCompiledPath, request.extraAllowReads),
+        } as any);
+        let cpuFrom: ReturnType<typeof worker.performance.eventLoopUtilization> | undefined;
+        const cpuMs = () => {
+          try {
+            return Math.round(worker.performance.eventLoopUtilization(cpuFrom).active);
+          } catch {
+            return 0;
+          }
+        };
+        const settle = (r: Omit<CodeSandboxResult, 'durationMs' | 'cpuMs'>) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          request.signal?.removeEventListener?.('abort', onAbort);
+          const used = cpuMs();
+          worker.terminate();
+          resolve({ ...r, durationMs: Date.now() - start, cpuMs: used });
+        };
+        const failed = (message: string, extra: Partial<CodeSandboxResult> = {}) => settle({ success: false, logs: '', error: { message }, ...extra });
+        timer = setTimeout(() => failed(`The sandbox did not start within ${limits.bootTimeoutMs}ms`), limits.bootTimeoutMs);
+        const onAbort = () => failed('Cancelled');
+        if (request.signal) {
+          if (request.signal.aborted) onAbort();
+          else request.signal.addEventListener('abort', onAbort);
+        }
+        worker.on('message', async (msg: any) => {
+          if (msg?.type === 'ready') {
+            if (ready || settled) return;
+            ready = true;
+            // CPU is counted from here: the worker's start-up is the platform's.
+            try {
+              cpuFrom = worker.performance.eventLoopUtilization();
+            } catch {
+              /* not available: counted from the start */
+            }
+            clearTimeout(timer);
+            timer = setTimeout(
+              () => failed(`The script timed out after ${request.timeoutMs}ms`, { timedOut: true }),
+              request.timeoutMs,
+            );
+            return;
+          }
+          if (msg?.type === 'code-call') {
+            const reply = (message: Record<string, unknown>) => {
+              if (settled) return;
+              try {
+                worker.postMessage({ type: 'code-call-response', id: msg.id, ...message });
+              } catch {
+                /* worker already gone */
+              }
+            };
+            try {
+              reply({ ok: true, result: await request.onCall(msg.call) });
+            } catch (err: any) {
+              reply({ ok: false, error: err?.message ?? String(err), ...(err instanceof CodeCallError && err.tool ? { tool: err.tool } : {}) });
+            }
+            return;
+          }
+          if (msg?.type === 'done') {
+            settle(codeWorkerDone(msg, request));
+          }
+        });
+        worker.on('error', (err: Error) => {
+          const oom = /out of memory|allocation failed|heap/i.test(err?.message ?? '');
+          failed(oom ? `The script ran out of memory (${request.memoryLimitMb} MB)` : err?.message ?? String(err), oom ? { oom: true } : {});
+        });
+        worker.on('exit', (code: number) => failed(`The sandbox stopped (exit code ${code})`));
+      });
+    } catch (err: any) {
+      return { success: false, logs: '', error: { message: err?.message ?? String(err) }, durationMs: Date.now() - start, cpuMs: 0 };
+    } finally {
+      this.codeActive--;
+      const n = (this.codeActiveByOrg.get(orgKey) ?? 1) - 1;
+      if (n > 0) this.codeActiveByOrg.set(orgKey, n);
+      else this.codeActiveByOrg.delete(orgKey);
+      this.drainCodeQueue();
+    }
+  }
+
+  private drainCodeQueue(): void {
+    const limits = this.codeLimits();
+    let i = 0;
+    while (i < this.codeQueue.length && this.codeActive < limits.maxWorkers) {
+      const next = this.codeQueue[i];
+      if ((this.codeActiveByOrg.get(next.orgKey) ?? 0) >= limits.maxWorkersPerOrg) {
+        i++;
+        continue;
+      }
+      this.codeQueue.splice(i, 1);
+      this.runCodeWorker(next.request, next.orgKey).then(next.resolve, (err: any) =>
+        next.resolve({ success: false, logs: '', error: { message: err?.message ?? String(err) }, durationMs: 0, cpuMs: 0 }),
+      );
+    }
+  }
+
+  /**
+   * The code worker's execArgv: the permission model with read access to
+   * the worker's own files only, and never --allow-net (so Node 26 refuses
+   * every socket). No dependency directories: the profile has none.
+   */
+  private buildCodeWorkerExecArgv(workerPath: string, isCompiledPath: boolean, extraAllowReads: string[] = []): string[] {
+    const argv: string[] = [];
+    if (!isCompiledPath) argv.push('-r', 'ts-node/register/transpile-only');
+    argv.push('--permission');
+    if (isCompiledPath) {
+      argv.push(`--allow-fs-read=${path.dirname(workerPath)}`);
+      for (const shared of sandboxGuardDependencyPaths(workerPath)) argv.push(`--allow-fs-read=${shared}`);
+    } else {
+      // ts-node (tests, local dev): it reads the project's sources, as for
+      // the JavaScript-tool worker. Writes, child processes, workers and
+      // sockets stay denied.
+      const backendRoot = this.findBackendRoot(workerPath);
+      argv.push(`--allow-fs-read=${backendRoot}`, `--allow-fs-read=${path.join(backendRoot, 'node_modules')}`, `--allow-fs-read=${path.dirname(process.execPath)}`);
+    }
+    for (const extra of extraAllowReads) argv.push(`--allow-fs-read=${extra}`);
+    return argv;
+  }
+
+  /** The code pool's limits, read from the environment on every call. */
+  private codeLimits(): { maxWorkers: number; maxWorkersPerOrg: number; maxQueueSize: number; maxQueuePerOrg: number } {
+    const maxWorkers = positiveIntFromEnv('SANDBOX_CODE_MAX_WORKERS', DEFAULT_MAX_WORKERS);
+    const maxQueueSize = positiveIntFromEnv('SANDBOX_CODE_MAX_QUEUE_SIZE', DEFAULT_CODE_MAX_QUEUE_SIZE);
+    return {
+      maxWorkers,
+      maxWorkersPerOrg: Math.min(maxWorkers, positiveIntFromEnv('SANDBOX_CODE_MAX_WORKERS_PER_ORG', Math.max(1, Math.ceil(maxWorkers / 2)))),
+      maxQueueSize,
+      maxQueuePerOrg: Math.min(maxQueueSize, positiveIntFromEnv('SANDBOX_CODE_MAX_QUEUE_PER_ORG', Math.max(1, Math.ceil(maxQueueSize / 4)))),
+    };
   }
 
   // ──────────────────────────────────────────────
@@ -681,6 +882,42 @@ export function effectiveSandboxTimeoutMs(requested: unknown, maxTimeoutMs: numb
       ? requested
       : DEFAULT_TIMEOUT_MS;
   return Math.min(wanted, maxTimeoutMs);
+}
+
+/**
+ * The code worker's last message, as the host keeps it. The worker shares
+ * its realm with the script, and a script can reach the worker's port
+ * (MessagePort.prototype is a global) and post a `done` of its own, so
+ * nothing in it is trusted: every field is type-checked and every text is
+ * cut to the request's caps here, whatever the worker says it already did.
+ */
+export function codeWorkerDone(msg: unknown, caps: { logCapChars: number; resultCapChars: number }): Omit<CodeSandboxResult, 'durationMs' | 'cpuMs'> {
+  const done = (msg && typeof msg === 'object' ? msg : {}) as Partial<CodeWorkerDone>;
+  const count = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.floor(n) : 0);
+  const rawLogs = typeof done.logs === 'string' ? done.logs : '';
+  const logs = rawLogs.slice(0, caps.logCapChars);
+  const logChars = Math.max(rawLogs.length, count(done.logChars));
+  const rawResult = typeof done.resultJson === 'string' ? done.resultJson : undefined;
+  const resultJson = rawResult?.slice(0, caps.resultCapChars);
+  const resultChars = rawResult === undefined ? 0 : Math.max(rawResult.length, count(done.resultChars));
+  const error = done.error && typeof done.error === 'object' ? done.error : undefined;
+  const ok = done.success === true && rawResult !== undefined;
+  return {
+    success: ok,
+    ...(resultJson !== undefined ? { resultJson } : {}),
+    ...(resultJson !== undefined && resultChars > resultJson.length ? { resultChars } : {}),
+    logs,
+    ...(logChars > logs.length ? { logChars } : {}),
+    ...(!ok
+      ? {
+          error: {
+            message: String(error?.message ?? 'The script failed').slice(0, 2000),
+            ...(Number.isInteger(error?.line) && (error!.line as number) > 0 ? { line: error!.line } : {}),
+            ...(typeof error?.tool === 'string' ? { tool: error.tool.slice(0, 200) } : {}),
+          },
+        }
+      : {}),
+  };
 }
 
 /**

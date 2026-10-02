@@ -51,6 +51,13 @@ export class ToolExecution {
   @Index()
   runId: string | null;
 
+  /**
+   * The run_code script this call was made from (code_executions), when a
+   * script made it: its brokered calls are ordinary rows, joined here.
+   */
+  @Column('uuid', { nullable: true })
+  @Index()
+  codeExecutionId: string | null;
   @Column('json')
   parameters: Record<string, any>;
 

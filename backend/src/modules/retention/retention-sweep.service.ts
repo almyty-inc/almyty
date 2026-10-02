@@ -14,6 +14,7 @@ import { Message } from '../../entities/message.entity';
 import { RequestLog } from '../../entities/request-log.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
+import { CodeExecution } from '../../entities/code-execution.entity';
 import { Notification } from '../../entities/notification.entity';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AgentChannel } from '../../entities/agent-channel.entity';
@@ -295,6 +296,15 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
         organizationId,
         createdAt: LessThan(this.cutoff(policy.toolExecutionsDays)),
       } as FindOptionsWhere<ToolExecution>);
+      // run_code scripts (code_executions) are the same retention class:
+      // the trace a script's tool executions hang off. Counted with them.
+      const scripts = this.toolExecutionRepository.manager?.getRepository?.(CodeExecution);
+      if (scripts) {
+        counts.toolExecutions += await this.batchDelete(scripts, {
+          organizationId,
+          createdAt: LessThan(this.cutoff(policy.toolExecutionsDays)),
+        } as FindOptionsWhere<CodeExecution>);
+      }
     }
 
     // notifications is the other per-event table nothing swept. A
