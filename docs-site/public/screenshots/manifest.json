@@ -2659,7 +2659,7 @@
       "title": "A script's changes in Approvals",
       "path": "screenshots/approvals-change-set.png",
       "capturedAt": "2026-10-02T00:05:51.000Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "0ed0f374216a66fff0cad2fcba5307b9cbbbddeeab5894bdfdc0883b814d484c",
       "source": {
         "kind": "browser",
@@ -2673,7 +2673,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30e8ed513305fb2dc6cca7fb6156c933d50c76974c15a68df4846dab413bce81",
-      "notes": "Local stack, local test user; a real run of a local model in code mode against the mock Pet Store API."
+      "notes": "Local stack, local test user; a real run of a local model in code mode against the mock Pet Store API.",
+      "reason": "The decision message for a change set changed wording; recapture against the current UI and re-register."
     },
     {
       "id": "run-script-step",
