@@ -1,5 +1,5 @@
 /**
- * Credentials > Advanced > Governance (EE, `credentials_governance`).
+ * Settings > Advanced > Credential rules (EE, `credentials_governance`).
  * Locked without the entitlement; with it, a sub-navigation over the
  * policies table, the review dashboard, and expiry, rotation and export.
  */
@@ -25,10 +25,10 @@ const VIEWS: Array<{ key: GovernanceView; label: string; icon: typeof ShieldChec
 
 export function ConnectionsGovernanceSection({ initialView = 'policies' }: { initialView?: GovernanceView }) {
   return (
-    <section className="space-y-3" aria-label="Governance" data-testid="connections-governance">
-      <div className="flex items-baseline gap-2">
-        <h2 className="font-heading text-lg font-semibold">Governance</h2>
-        <span className="text-xs text-muted-foreground">org-wide rules, review, expiry and rotation</span>
+    <section className="space-y-3" aria-label="Credential rules" data-testid="connections-governance">
+      <div className="space-y-1">
+        <h2 className="font-heading text-lg font-semibold">Credential rules</h2>
+        <p className="text-sm text-muted-foreground">Which services may be used and by whom, a review of keys given to agents, and when keys expire or are replaced.</p>
       </div>
       <EntitlementGate
         feature={CONNECTIONS_GOVERNANCE_ENTITLEMENT}

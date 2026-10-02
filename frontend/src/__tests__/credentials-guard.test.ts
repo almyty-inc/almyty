@@ -42,20 +42,20 @@ function importsFrom(source: string, from: string): string[] {
 }
 
 describe('Credentials and Models are built from the same pieces', () => {
-  // Connecting a provider (under Credentials, and inline in a model chooser) is this component.
-  const modelsConnect = read('components/llm-providers/provider-connection-create.tsx')
+  const modelsConnect = read('pages/models-connect.tsx')
   const addCredential = read('pages/credential-new.tsx')
   const credentialsList = read('pages/credentials.tsx')
   const modelsList = read('pages/models.tsx')
   const providerForm = read('components/llm-providers/connect-provider-form.tsx')
   const serviceForm = read('components/connections/connect-flow.tsx')
 
-  it('both add pages use the shared tile grid and picked-tile card', () => {
+  it('both add pages use one simple form and an ungrouped service select', () => {
     for (const source of [modelsConnect, addCredential]) {
-      expect(importsFrom(source, '@/components/connect/service-tiles')).toEqual(expect.arrayContaining(['ServiceTileGrid', 'PickedService']))
+      expect(importsFrom(source, '@/components/credentials/credential-form')).toContain('CredentialForm')
+      expect(source).not.toMatch(/ServiceTileGrid|PickedService/)
     }
+    expect(read('components/credentials/credential-form.tsx')).not.toMatch(/group: entries/)
   })
-
   it('lists credentials in the shared table, not cards', () => {
     expect(importsFrom(credentialsList, '@/components/ui/data-table')).toContain('DataTable')
     expect(importsFrom(credentialsList, '@/components/connect/connected-card')).toEqual([])
@@ -90,7 +90,7 @@ describe('one Credentials page', () => {
   it('sits in the sidebar in the agreed order, with no Connections or Workspaces entry', () => {
     const layout = read('components/layout/dashboard-layout.tsx')
     const names = [...layout.matchAll(/\{ name: '([^']+)', href: '([^']*)'/g)].map((m) => m[1]).filter((n) => n !== 'divider')
-    const order = ['Dashboard', 'APIs', 'Tools', 'Gateways', 'Agents', 'Runners', 'Credentials', 'Models', 'Memory', 'Analytics', 'Settings']
+    const order = ['Dashboard', 'Agents', 'Approvals', 'Models', 'Memory', 'Tools', 'APIs', 'Gateways', 'Runners', 'Analytics', 'Credentials', 'Settings']
     const positions = order.map((n) => names.indexOf(n))
     expect(positions.every((p) => p >= 0)).toBe(true)
     expect([...positions].sort((a, b) => a - b)).toEqual(positions)
@@ -173,7 +173,7 @@ describe('one pick-or-create control', () => {
 
   it('creates inline with the same add flow as the Credentials page, and links to what was picked', () => {
     const picker = read('components/credentials/credential-picker.tsx')
-    expect(importsFrom(picker, '@/components/connections/connect-flow')).toContain('ConnectFlow')
+    expect(importsFrom(picker, '@/components/credentials/credential-form')).toContain('CredentialForm')
     expect(picker).toMatch(/embedded/)
     expect(picker).toMatch(/credentialPath\(selected\.id\)/)
     expect(picker).toMatch(/Create one here/)

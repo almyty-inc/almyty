@@ -24,10 +24,10 @@ describe('credentialRows', () => {
         { id: 's1', name: 'Petstore key', type: 'bearer_token', connectorKey: null, createdAt: '2026-09-01T00:00:00.000Z', metadata: { managedBy: { kind: 'api', id: 'api-1' } } },
       ],
     )
-    expect(rows.map((r) => [r.id, r.group, r.service])).toEqual([
-      ['c2', 'models', 'OpenAI'],
-      ['c1', 'other', 'GitHub'],
-      ['s1', 'other', 'Bearer token'],
+    expect(rows.map((r) => [r.id, r.service])).toEqual([
+      ['c2', 'OpenAI'],
+      ['c1', 'GitHub'],
+      ['s1', 'Bearer token'],
     ])
   })
 
@@ -55,7 +55,7 @@ describe('credentialRows', () => {
 
   it('puts a model provider\'s own key with the model providers, opening the provider', () => {
     const row = storedRow({ id: 'llm-p1', name: 'OpenAI API Key', type: 'api_key', _source: 'llm_provider', _sourceId: 'p1', usedBy: [{ type: 'llm_provider', id: 'p1', name: 'OpenAI' }] })
-    expect(row).toMatchObject({ group: 'models', href: '/credentials/providers/p1', uses: [{ label: 'OpenAI', href: '/credentials/providers/p1' }] })
+    expect(row).toMatchObject({ href: '/models/providers/p1', uses: [{ label: 'OpenAI connection', href: '/models/providers/p1' }] })
   })
 
   it('lists every model provider connection once, keyless ones included, and not its own key again', () => {
@@ -72,10 +72,10 @@ describe('credentialRows', () => {
         { id: 'p3', name: 'Qwen on Modal', type: 'custom', metadata: { managedBy: { kind: 'model_endpoint' } } },
       ],
     )
-    expect(rows.map((r) => [r.id, r.group, r.href])).toEqual([
-      ['p1', 'models', '/credentials/providers/p1'],
-      ['saved-openai', 'models', '/credentials/saved-openai'],
-      ['p2', 'models', '/credentials/providers/p2'],
+    expect(rows.map((r) => [r.id, r.href])).toEqual([
+      ['p1', '/models/providers/p1'],
+      ['saved-openai', '/credentials/saved-openai'],
+      ['p2', '/models/providers/p2'],
     ])
     expect(rows[0]).toMatchObject({ service: 'Hugging Face', check: { state: 'ok', label: 'Key works' }, who: 'Everyone' })
     expect(rows[2]).toMatchObject({ service: 'Ollama', who: 'Only you' })

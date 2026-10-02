@@ -1,11 +1,12 @@
 /**
- * Where provider connections live: under Credentials, next to every other
- * key. The Models page is the catalog of what they reach and links here.
- * One place, so every link to them is built the same way.
+ * Where provider connections live: under Models, whose models they bring.
+ * Their keys are credentials too, and Credentials lists them, but a
+ * connection is opened, connected and changed here. One place, so every
+ * link to them is built the same way.
  */
-export const PROVIDER_CONNECTIONS_PATH = '/credentials/providers'
+export const PROVIDER_CONNECTIONS_PATH = '/models/providers'
 
-/** Connecting a provider, optionally opened on one tile and coming back to `returnTo` when done. */
+/** Connecting a provider, optionally opened on one provider and coming back to `returnTo` when done. */
 export function connectProviderPath(type?: string | null, returnTo?: string | null): string {
   const params = new URLSearchParams()
   if (type) params.set('type', type)

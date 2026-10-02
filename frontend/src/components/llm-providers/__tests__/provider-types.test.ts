@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import { LlmProviderType } from '@/types'
 import { providerLogos, providerTypeLabels } from '../provider-type-config'
-import { PROVIDER_TILE_GROUPS, PROVIDER_TILE_ORDER, defaultProviderName, providerTileLabel } from '../provider-catalog'
+import { PROVIDER_TILE_GROUPS, PROVIDER_TILE_ORDER, providerTileLabel } from '../provider-catalog'
 
 /**
  * The frontend's counterpart to the backend's dispatch-completeness spec.
@@ -49,6 +49,5 @@ describe('every provider type can be connected, and is named', () => {
     expect(labels.every((l) => l.trim().length > 0)).toBe(true)
     expect(new Set(labels).size).toBe(labels.length)
     expect(providerTileLabel('custom')).toBe('Your own server (OpenAI-compatible)')
-    expect(defaultProviderName('openai')).toBe('OpenAI')
   })
 })

@@ -9,12 +9,9 @@ import type {
   ConnectRedirect,
   ConnectResult,
   Connection,
-  ConnectionGrant,
   ConnectionValidationFailure,
   Connector,
   ConnectorKind,
-  CreateConnectorBody,
-  CreateGrantBody,
   DisconnectResult,
   RotateBody,
 } from '@/types/connections'
@@ -28,7 +25,6 @@ import type {
 export const connectorsApi = {
   list: (kind?: ConnectorKind) => apiGet<Connector[]>('/credentials/services', kind ? { params: { kind } } : undefined),
 
-  create: (body: CreateConnectorBody) => apiPost<Connector>('/credentials/services', body),
 }
 
 /** The server may answer a bare view or `{ connection }`; both are read. */
@@ -74,11 +70,6 @@ export const connectionsApi = {
   setSharing: (id: string, body: { owner: 'org' | 'team' | 'private'; teamId?: string }) =>
     apiPatch<unknown>(`/credentials/${id}/sharing`, body).then(unwrapConnection),
 
-  listGrants: (id: string) => apiGet<ConnectionGrant[]>(`/credentials/${id}/grants`),
-
-  addGrant: (id: string, body: CreateGrantBody) => apiPost<ConnectionGrant>(`/credentials/${id}/grants`, body),
-
-  removeGrant: (id: string, grantId: string) => apiDel<void>(`/credentials/${id}/grants/${grantId}`),
 }
 
 /**
@@ -132,10 +123,6 @@ export function isConnectForm(result: ConnectResult | null | undefined): result 
   return !!result && (result as ConnectForm).pending === true && typeof (result as ConnectForm).form === 'object' && !(result as ConnectRedirect).authorizeUrl
 }
 
-/** Custom connectors are org-defined. */
-export function isCustomConnector(connector: Pick<Connector, 'organizationId'>): boolean {
-  return !!connector.organizationId
-}
 
 /**
  * Pull the validation failure out of an axios rejection. The backend answers

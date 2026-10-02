@@ -2,10 +2,11 @@
  * CredentialPicker: the one way a form uses a credential, everywhere.
  *
  * Pick one of the credentials already on the Credentials page, or create
- * one right here. "Create one here" opens the same add flow the
- * Credentials page uses, inline under the field, so a half-filled form
- * keeps its state; the new credential lands on the Credentials page like
- * any other and comes straight back selected. "Open" links to the picked
+ * one right here. "Create one here" opens the same add-credential form the
+ * Credentials page uses (Name, Service, its fields, who can use it),
+ * inline under the field, so a half-filled form keeps its state; the new
+ * credential lands on the Credentials page like any other and comes
+ * straight back selected. "Open" links to the picked
  * credential's own page, in a new tab so the work here survives.
  *
  * The look is the reference for every "pick an existing one or create one
@@ -27,10 +28,10 @@ import { ExternalLink, Plus } from 'lucide-react'
 
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ConnectFlow } from '@/components/connections/connect-flow'
 import { useConnectionOptions } from '@/components/connections/connection-select'
 import { connectionCheck } from '@/components/connections/connection-status'
 import { CONNECTIONS_QUERY_KEY, CREDENTIALS_QUERY_KEY, credentialPath } from '@/components/credentials/paths'
+import { CredentialForm } from '@/components/credentials/credential-form'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { cn } from '@/lib/utils'
 import type { Connection, ConnectorKind } from '@/types/connections'
@@ -58,8 +59,10 @@ export interface CredentialPickerProps {
   allowNone?: boolean
   /** Skip the fetch and list these instead (tests, callers that already hold the list). */
   connections?: Connection[]
-  /** Replaces the add flow in the "Create one here" panel; `close` folds it. */
+  /** Replaces the add form in the "Create one here" panel; `close` folds it. */
   createPanel?: (close: () => void) => ReactNode
+  /** Offer "Create one here" (default). Off where a new credential could not be used (a provider's saved key). */
+  allowCreate?: boolean
   className?: string
 }
 
@@ -93,6 +96,7 @@ export function CredentialPicker({
   allowNone = false,
   connections,
   createPanel,
+  allowCreate = true,
   className,
 }: CredentialPickerProps) {
   const queryClient = useQueryClient()
@@ -149,8 +153,9 @@ export function CredentialPicker({
           })}
         </SelectContent>
       </Select>
-      {!creating && (
+      {!creating && (allowCreate || selected) && (
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          {allowCreate && (
           <button
             type="button"
             className="inline-flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
@@ -163,6 +168,7 @@ export function CredentialPicker({
             <Plus className="h-3.5 w-3.5" aria-hidden />
             Create one here
           </button>
+          )}
           {selected && (
             <Link
               to={credentialPath(selected.id)}
@@ -196,19 +202,22 @@ export function CredentialPicker({
       )}
       {creating && !createPanel && (
         <div id={panelId} className="pt-1">
-          <ConnectFlow
+          <CredentialForm
             embedded
-            kind={kind}
+            idPrefix={`${id}-new`}
+            kind={connectorKey ? undefined : kind}
             connectorKey={connectorKey}
+            withoutModels
             defaultName={defaultName}
             onDirtyChange={setPanelDirty}
             onCancel={() => setCreating(false)}
-            onConnected={(credential) => {
+            onSaved={({ connection }) => {
               setCreating(false)
-              setCreated(credential)
+              if (!connection) return
+              setCreated(connection)
               queryClient.invalidateQueries({ queryKey: CONNECTIONS_QUERY_KEY })
               queryClient.invalidateQueries({ queryKey: CREDENTIALS_QUERY_KEY })
-              onChange(credential)
+              onChange(connection)
             }}
           />
         </div>

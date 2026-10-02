@@ -78,30 +78,21 @@ interface DashboardLayoutProps {
   children: React.ReactNode
 }
 
-// Sidebar order follows the onboarding checklist on the
-// Dashboard (Connect API → Generate Tools → Create Gateway →
-// Build Agent) and the `docs/brand` IA rules — reading the
-// sidebar top-down tells a new user the same story the
-// onboarding flow tells them. Previously Agents was first,
-// which rewarded existing users who already knew they wanted
-// an agent but left newcomers wondering what to click first.
+// Work first, then the resources agents use, then organization controls.
 const navigation: { name: string; href: string; icon: any }[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  // Core workflow — follows the APIs → Tools → Gateways → Agents pipeline
-  // narrative. Where an agent is put in front of people (its channels)
-  // lives on the agent itself.
-  { name: 'APIs', href: '/apis', icon: Globe },
-  { name: 'Tools', href: '/tools', icon: Wrench },
-  { name: 'Gateways', href: '/gateways', icon: Zap },
   { name: 'Agents', href: '/agents', icon: Bot },
-  { name: 'Runners', href: '/runners', icon: Cpu },
-  { name: 'Credentials', href: '/credentials', icon: KeyRound },
   { name: 'Approvals', href: '/approvals', icon: Shield },
-  // Configuration
   { name: 'divider', href: '', icon: null as any },
   { name: 'Models', href: '/models', icon: Brain },
   { name: 'Memory', href: '/memories', icon: Database },
+  { name: 'Tools', href: '/tools', icon: Wrench },
+  { name: 'APIs', href: '/apis', icon: Globe },
+  { name: 'Gateways', href: '/gateways', icon: Zap },
+  { name: 'Runners', href: '/runners', icon: Cpu },
+  { name: 'divider', href: '', icon: null as any },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Credentials', href: '/credentials', icon: KeyRound },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 

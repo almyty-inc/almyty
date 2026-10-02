@@ -33,7 +33,7 @@ import { cn, pluralized } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import type { Connection, Connector } from '@/types/connections'
 import { storedRow, type CredentialUse, type StoredCredential } from './credential-rows'
-import { CONNECTIONS_QUERY_KEY, CREDENTIALS_PATH, CREDENTIALS_QUERY_KEY, credentialAccessPath } from './paths'
+import { CONNECTIONS_QUERY_KEY, CREDENTIALS_PATH, CREDENTIALS_QUERY_KEY } from './paths'
 
 type CheckOutcome = { ok: boolean; message: string }
 
@@ -184,7 +184,7 @@ export function CredentialDetail({ connection, connector, onDeleted }: Credentia
   return (
     <div className="space-y-8" data-testid="credential-detail">
       <DetailHeader
-        icon={connectorIcon(connector ?? { key: connection.connectorKey, kind: connection.kind ?? 'tool_source' })}
+        icon={connectorIcon(connector ?? { key: connection.connectorKey, displayName: service })}
         name={connection.name}
         subtitle={connection.accountLabel ? `${service} · ${connection.accountLabel}` : service}
         status={<StatusLabel check={status} testId="credential-status" />}
@@ -253,23 +253,16 @@ export function CredentialDetail({ connection, connector, onDeleted }: Credentia
                   </div>
                 )}
               </div>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <WhoCanUse
-                  value={{ visibility: who, teamId: connection.teamId ?? null }}
-                  onChange={(next) => {
-                    if (next.visibility === 'team' && !next.teamId) return
-                    share.mutate(next)
-                  }}
-                  disabled={share.isPending}
-                  noun="this credential"
-                  options={shareOptions}
-                />
-                {canManage && (connection.owner === 'org' || connection.owner === 'team') && (
-                  <Link to={credentialAccessPath(connection.id)} className="text-sm text-primary hover:underline">
-                    Advanced
-                  </Link>
-                )}
-              </div>
+              <WhoCanUse
+                value={{ visibility: who, teamId: connection.teamId ?? null }}
+                onChange={(next) => {
+                  if (next.visibility === 'team' && !next.teamId) return
+                  share.mutate(next)
+                }}
+                disabled={share.isPending}
+                noun="this credential"
+                options={shareOptions}
+              />
             </CardContent>
           </Card>
           <DeleteSection name={connection.name} uses={uses.length} pending={remove.isPending} onDelete={() => remove.mutate()} />
@@ -301,7 +294,7 @@ export function StoredCredentialDetail({ credential, onDeleted }: { credential: 
 
   return (
     <div className="space-y-8" data-testid="credential-detail">
-      <DetailHeader icon={connectorIcon({ key: 'other', kind: 'tool_source' })} name={credential.name} subtitle={row.service} />
+      <DetailHeader icon={connectorIcon({ key: 'other' })} name={credential.name} subtitle={row.service} />
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
