@@ -9,7 +9,7 @@
 //   node scripts/tool-mode-benchmark/run.mjs --self-check
 //   node scripts/tool-mode-benchmark/run.mjs \
 //     --api http://localhost:4000 --email you@example.com --password ... \
-//     --models ollama=qwen3.8:27b,openai=gpt-5-mini --modes direct,discover --reps 5
+//     --models ollama=qwen3.8:27b,openai=gpt-5-mini --modes direct,discover,code --reps 5
 //
 // --models takes provider=model pairs; `provider` is an LLM provider id or a
 // provider type (the organization's first provider of that type). The
@@ -145,7 +145,9 @@ for (const m of models) {
       mode: 'autonomous',
       instructions: INSTRUCTIONS,
       modelConfig: { providerId: m.providerId, model: m.model, temperature: 0 },
-      agentConfig: { apiIds, toolMode: mode },
+      // In code mode a script's changes run without a person, as direct calls
+      // do in the other modes, so every mode is measured on the same job.
+      agentConfig: { apiIds, toolMode: mode, ...(mode === 'code' ? { codeMode: { writes: { write: 'allow', destructive: 'allow' } } } : {}) },
     }
     const agent = have ? await call('PATCH', `/agents/${have.id}`, body) : await call('POST', '/agents', body)
     if (agent.status !== 'active') await call('POST', `/agents/${agent.id}/activate`).catch(() => undefined)
@@ -201,7 +203,9 @@ for (let rep = 1; rep <= reps; rep++) {
           inputTokens: llm.reduce((s, x) => s + (x.tokens?.input ?? 0), 0),
           outputTokens: llm.reduce((s, x) => s + (x.tokens?.output ?? 0), 0),
           turns: llm.length,
-          toolCalls: toolSteps.filter((s) => !META.has(s.input?.tool)).length,
+          toolCalls: toolSteps.filter((s) => !META.has(s.input?.tool) && s.input?.tool !== 'run_code').length,
+          // Scripts the model ran (code mode); the calls inside them are in apiCalls.
+          scripts: toolSteps.filter((s) => s.input?.tool === 'run_code').length,
           metaCalls: toolSteps.filter((s) => META.has(s.input?.tool)).length,
           apiCalls: mock.calls.length,
           costUsd: Number(run?.totalCost ?? 0),

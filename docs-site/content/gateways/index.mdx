@@ -39,6 +39,19 @@ Each gateway speaks one protocol, the one it was created with. To offer the same
 
 - **[Authentication](/gateways/authentication)**: a gateway turns everyone away until you add a way in. Use access keys, one per app or person, or OAuth sign-in.
 - **[Tool scoping](/gateways/tool-scoping)**: choose exactly which tools a gateway offers, and limit what each may reach.
+- **[Search and scripts](#search-and-scripts-instead-of-every-tool)**: offer a search box and scripts instead of every tool.
+
+## Search and scripts instead of every tool
+
+A gateway with many tools hands every connected app a long list to read before it can do anything. Under **How apps see the tools** on the gateway's page you can offer something smaller instead:
+
+- **Every tool**: the app sees each tool in full. The default, and best for a handful of tools.
+- **Search, and write scripts**: the app sees three tools. One searches your tools, one reads a tool's details, and one runs a short script that calls your tools, so a job like "archive every pet we sold last month" is one request instead of fifty.
+- **Every tool, plus search and scripts**: both. Not offered on a Skills gateway, where scripts replace the per-tool skills with one skill.
+
+A script runs on almyty in a locked box with no network and no passwords. Every call it makes goes through the same checks, keys, approval rules and audit log as a direct call. Changes the gateway's settings send to a person wait in **Approvals** as one list; the app is told they are waiting and asks again for the outcome.
+
+Scripts have two conditions. Your administrator turns them on for the server, and the gateway must ask apps who they are: an access key or sign-in, not open to anyone. Until both hold, the choice is greyed out with the reason, and the gateway offers every tool.
 
 ## For developers
 
@@ -50,6 +63,8 @@ claude mcp add petstore --transport http https://api.almyty.com/acme/petstore \
 ```
 
 An agent's A2A channel answers at `https://api.almyty.com/{org}/channels/{channel-id}`, with its Agent Card next to it. Agents you build also have an [OpenAI-compatible endpoint](/api-reference/openai-compatible), so anything that talks to the OpenAI API can call an agent without code changes. To use a gateway from a client that only speaks stdio, see the [MCP server CLI](/cli/mcp-server).
+
+Search and scripts: `configuration.exposure` is `tools`, `code` or `both`, and `configuration.codeMode` holds the write policy, as on an agent. `CODE_MODE_GATEWAYS=true` turns scripts on for the install; without it, saving `code` or `both` is refused. In `code` exposure MCP `tools/list` returns exactly `search_tools`, `get_tool` and `run_code`; `both` adds `call_tool` after the gateway's own tools. A waiting `run_code` answer carries an `approvalId`; calling `run_code` with only `{ "approvalId": "..." }` returns what happened to the changes. UTCP serves the same tools at `<gateway>/execute/meta/<name>` and also accepts the names `tool_info` and `call_tool_chain`. A Skills gateway in `code` exposure generates one skill that posts scripts to `POST /gateways/:id/skills/run-code`. The design and the open sandbox decision are in `docs/design/code-mode.md`.
 
 ## Related
 

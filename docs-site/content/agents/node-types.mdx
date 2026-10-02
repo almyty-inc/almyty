@@ -2,9 +2,9 @@
 
 A workflow agent is made of steps, such as "ask a model", "use a tool" or "go one way or the other". This page lists every kind of step, what each one needs to be filled in, and what it passes on to the next step. It is a reference: to learn how to draw a workflow, start with the [visual builder](/agents/builder).
 
-In the builder, steps are dragged from the **Steps** palette and connected by lines (connections). Here a step is also called a **node** and a connection an **edge**, because that is what they are called in the saved agent. There are 13 kinds, each doing one job.
+In the builder, steps are dragged from the **Steps** palette and connected by lines (connections). Here a step is also called a **node** and a connection an **edge**, because that is what they are called in the saved agent. There are 14 kinds, each doing one job.
 
-All thirteen are in the palette. [Verify](#verify) and
+All fourteen are in the palette. [Verify](#verify) and
 [Extract context](#extract-context) are also produced by the strategy compiler;
 see [Roles and strategies](/agents/execution).
 
@@ -30,6 +30,7 @@ else, and nothing will read it.
 | **Verify** | `checkers` (required), `target`, `spec`, `policy` | `{{nodes.<id>.output}}`, a verdict object |
 | **Extract context** | `task`, `sources`, `instruction`, `roleKey`, `providerId`, `model`, `routing`, `temperature`, `maxTokens` | `{{nodes.<id>.output}}`, a brief object |
 | **Decision** | `question` (required), `thresholds`, `state`, `roleKey`, `providerId`, `model`, `routing`, `temperature`, `maxTokens` | (routes to the chosen answer's edge) |
+| **Code** | `code` (required), `timeoutMs` | `{{nodes.<id>.output}}`, what the script returns |
 
 A Model call node needs a model from somewhere: a `providerId`, a `routing`
 policy, a `roleKey` the agent defines, or the organization's default routing
@@ -542,3 +543,18 @@ In the side panel: the **Question**, the **Answers** (each with an optional mean
 | `roleKey`, `providerId`, `model`, `routing`, `temperature`, `maxTokens` | | Which model answers, as for Model call. |
 
 The output carries `selectedOption`, `argmax`, `abstained`, `probability`, `threshold` and the whole `distribution`. The numbers order the answers; they are not calibrated probabilities.
+
+## Code
+
+Runs a short script that calls the agent's tools, for a job that needs several calls, a loop or filtering: "find every sold pet and archive each one" is one Code step instead of a loop of tool steps. The script runs in a locked box with no network, no files and no passwords; every call it makes is checked like a Tool call step, with the same permissions, approval rules and audit log. What the script returns is the step's result.
+
+In the side panel: the **Script**. It calls the agent's tools as functions, one object per API (`petstore.findPetsByStatus({ status: 'sold' })`), reads the run's input as `context.input` and earlier steps as `context.steps["<step id>"]`, and ends with `return`. `log(...)` adds a line to the step's log.
+
+A change the agent's settings send to a person (deletions, by default) does not run inside the script. A workflow cannot pause, so the step stops, waiting, and the changes wait in **Approvals** as one list; approved, they run in order.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `code` | string | Required. The script: the body of an async function, JavaScript or TypeScript. |
+| `timeoutMs` | number | How long it may run, within the server's limits (30 seconds unless set, at most 2 minutes by default). |
+
+The scope is the agent's tools (`toolIds` and the active tools of its APIs). The calls count against the run's tool-call budget. The write policy is the agent's `agentConfig.codeMode` ([scripts in autonomous agents](/agents/autonomous#scripts-many-tool-calls-in-one-go)). A held change set fails the node with `AWAITING_APPROVAL` and its `approvalId` on the node's input, as a held Tool call does. The trace is a `code_executions` row on the run.
