@@ -3,6 +3,9 @@ jest.mock('../../llm-providers/providers/safe-request', () => ({
   callLlmProviderHttpStream: jest.fn(),
 }));
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { AgentRunStatus } from '../../../entities/agent-run.entity';
 import { CodeExecution } from '../../../entities/code-execution.entity';
 import { ToolExecution } from '../../../entities/tool-execution.entity';
@@ -226,5 +229,21 @@ describe('code mode: an autonomous run', () => {
     });
     expect(executeTool).not.toHaveBeenCalled();
     expect(JSON.stringify(result.bodies[1].body.messages)).toContain('Code mode is not available');
+  });
+});
+
+describe('code mode: guards', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'agent-step-processor.ts'), 'utf8');
+
+  it('scripts and search_tools resolve against the same scope: the run\'s executable tools', () => {
+    expect(source).toMatch(/const tools = await this\.s\.executionAccess\.filterExecutable\(/);
+    expect(source).toMatch(/this\.runCode\(run, agent, toolCall, tools, resolvedLimits, organization \?\? null\)/);
+    expect(source).toMatch(/this\.answerDiscovery\(toolCall\.name, callParams, tools, run\.organizationId\)/);
+    expect(source).toMatch(/scope: await this\.withApiNames\(tools\)/);
+  });
+
+  it('a change set runs only through the code mode service, with the approval (no executor call site of its own)', () => {
+    expect(source.match(/toolExecutorService\.executeTool\(/g) ?? []).toHaveLength(2);
+    expect(source).toMatch(/this\.codeMode\.applyChangeSet\(set\.codeExecutionId, set\.approvalId, tools,/);
   });
 });

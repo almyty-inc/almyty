@@ -201,6 +201,29 @@ export interface AgentPauseReason {
   detectedAt: string
 }
 
+/** What happens to a call a script makes (code mode): run it, ask a person first, or refuse it. */
+export type CodeWriteAction = 'allow' | 'stage' | 'deny'
+
+export interface CodeModeConfig {
+  writes?: { write?: CodeWriteAction; destructive?: CodeWriteAction; tools?: Record<string, CodeWriteAction> }
+  grants?: Array<{ toolId: string; max: number }>
+  extractor?: { providerId: string; model?: string } | null
+}
+
+/** One staged call of a script's change set (backend entities/code-execution.entity.ts). */
+export interface ChangeSetEntry {
+  id: number
+  toolId: string
+  toolName: string
+  codeName: string
+  title: string
+  arguments: Record<string, unknown>
+  sideEffect: 'read' | 'write' | 'destructive'
+  reason: 'policy' | 'amount_rule'
+  rule?: string
+  outcome?: 'ran' | 'failed' | 'not_run'
+  error?: string
+}
 export interface Agent {
 
   id: string
@@ -250,11 +273,18 @@ export interface Agent {
      * every definition, or search_tools/get_tool/call_tool plus the pinned
      * tools; `auto` switches above the threshold. Absent: the server default.
      */
-    toolMode?: 'direct' | 'discover' | 'auto'
+    toolMode?: 'direct' | 'discover' | 'code' | 'auto'
     /** The `auto` threshold in tokens; absent: 3% of the model's context window. */
     toolModeThresholdTokens?: number
     /** Tools always shown in full, also when the model searches for the rest. */
     pinnedToolIds?: string[]
+    /**
+     * Scripts in the code tool mode (backend code-mode/code-write-policy.ts):
+     * what happens to a change or a deletion a script makes (run, ask a
+     * person first, or refuse), per-tool exceptions, per-run allowances and
+     * the model extract() uses.
+     */
+    codeMode?: CodeModeConfig
     /** Machine label requirements for runner-backed tools; the server stores an object, a save may send text. */
     runnerLabels?: Record<string, string> | string
     verify?: {

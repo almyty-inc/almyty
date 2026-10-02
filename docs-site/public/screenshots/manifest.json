@@ -215,7 +215,7 @@
       "title": "Analytics: agents",
       "path": "screenshots/analytics-agents.png",
       "capturedAt": "2026-10-01T16:11:19.993Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "c76b798f222ef734b16382f4483601c14a6a7b0b3a75a66f693d637b43554a57",
       "source": {
         "kind": "browser",
@@ -230,14 +230,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
     },
     {
       "id": "analytics-audit",
       "title": "Audit trail",
       "path": "screenshots/analytics-audit.png",
       "capturedAt": "2026-10-01T16:11:22.526Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "a7af888214f7a172480a7f2c58a301ed97b1ec43f30f9d7a6a0343a514b13d23",
       "source": {
         "kind": "browser",
@@ -252,14 +253,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
     },
     {
       "id": "analytics-chargeback-locked",
       "title": "Chargeback (Enterprise, locked)",
       "path": "screenshots/analytics-chargeback-locked.png",
       "capturedAt": "2026-10-01T16:11:25.056Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "f7ec69cb930d2b5eea3a339271cd2e9e326661421d1a821ca3305cd1cb214bd0",
       "source": {
         "kind": "browser",
@@ -274,14 +276,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
     },
     {
       "id": "analytics-gateways",
       "title": "Analytics: gateways",
       "path": "screenshots/analytics-gateways.png",
       "capturedAt": "2026-10-01T16:11:27.584Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "88aa07490ff5133741a23fd2dfe69f586f9eabc30b941b17f47e334adb901cc3",
       "source": {
         "kind": "browser",
@@ -296,14 +299,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
     },
     {
       "id": "analytics-overview",
       "title": "Analytics overview",
       "path": "screenshots/analytics-overview.png",
       "capturedAt": "2026-10-01T16:11:30.163Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "92d0924f996fdd498ed6ee5fb004d4dba1310a0485a8b71b04411284bc3911ef",
       "source": {
         "kind": "browser",
@@ -318,14 +322,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
     },
     {
       "id": "analytics-tools",
       "title": "Analytics: tools",
       "path": "screenshots/analytics-tools.png",
       "capturedAt": "2026-10-01T16:11:32.674Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "9679040f9e76d6b855531f5dbc2dcc2e3f86e2de2582157c91555fe2674e003f",
       "source": {
         "kind": "browser",
@@ -340,7 +345,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
     },
     {
       "id": "apis-list",
@@ -369,7 +375,7 @@
       "title": "Refund approval",
       "path": "screenshots/approval-refund-820.png",
       "capturedAt": "2026-10-01T06:50:45.392Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7f8ca2057a650dbe8db99a32594e32f74ff32fcd46fc80389754995857861798",
       "source": {
         "kind": "browser",
@@ -384,14 +390,15 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "4bec482e40fb46550c821b8346cca9620d5976bfd6eea947f01291f91e27ad3b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Approvals gained the change-set view for scripts (code mode), which moved this capture's sources. Recapture against the current UI and re-register."
     },
     {
       "id": "approvals-pending",
       "title": "Pending approvals",
       "path": "screenshots/approvals-pending.png",
       "capturedAt": "2026-10-01T06:50:42.290Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "7f8ca2057a650dbe8db99a32594e32f74ff32fcd46fc80389754995857861798",
       "source": {
         "kind": "browser",
@@ -406,7 +413,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "4bec482e40fb46550c821b8346cca9620d5976bfd6eea947f01291f91e27ad3b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
+      "reason": "Approvals gained the change-set view for scripts (code mode), which moved this capture's sources. Recapture against the current UI and re-register."
     },
     {
       "id": "apps-hosted-chat-routing-failure",
@@ -1478,7 +1486,7 @@
       "title": "Approve the refund",
       "path": "screenshots/guides/support-10-approve.png",
       "capturedAt": "2026-10-01T06:45:12.805Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "91b294624d769898989048e7b6e73c34e0efe1a7d24390753d2342cb6aeafeb2",
       "source": {
         "kind": "browser",
@@ -1492,7 +1500,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "967332123d5f78d7e7c56c8c44030e86f1eeb5c3d8c5527a14c2ff54e70b102d",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Approvals gained the change-set view for scripts (code mode), which moved this capture's sources. Recapture against the current UI and re-register."
     },
     {
       "id": "guides-support-11-add-channel",
@@ -1816,7 +1825,7 @@
       "title": "A big refund waits for approval",
       "path": "screenshots/guides/support-9-refund-waits.png",
       "capturedAt": "2026-10-01T06:45:11.920Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "e8a3a5f05a0577cdba06cfa17e7eb10f1e05f594c7132031aa78e4a3ad7b256a",
       "source": {
         "kind": "browser",
@@ -1830,7 +1839,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "967332123d5f78d7e7c56c8c44030e86f1eeb5c3d8c5527a14c2ff54e70b102d",
-      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data."
+      "notes": "Use-case guide step, walked through the UI on the local seeded demo stack (scripts/demo-seed/guides.mjs); fake model vendor and company systems, not staging or production data.",
+      "reason": "Approvals gained the change-set view for scripts (code mode), which moved this capture's sources. Recapture against the current UI and re-register."
     },
     {
       "id": "hosted-chat-privacy",
@@ -2627,9 +2637,9 @@
       "id": "agent-tool-mode",
       "title": "How the model sees its tools",
       "path": "screenshots/agent-tool-mode.png",
-      "capturedAt": "2026-10-01T19:05:49.000Z",
+      "capturedAt": "2026-10-02T00:13:43.000Z",
       "status": "current",
-      "sha256": "26d7fab643eabade88deb5bff6ef90f9d1e562e01d600a786d17cb35549fd3d1",
+      "sha256": "08cad43e567a1ba701b8450469df206b27d749bf044929d82cd32f7d351ef320",
       "source": {
         "kind": "browser",
         "environment": "local",
@@ -2641,8 +2651,51 @@
         "frontend/src/components/ui",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d014046b48466a076c3668fb13401a4354c53260e2fa3d00b7ad75bb8d02f4a1",
-      "notes": "Local stack, local test user; the three benchmark mock APIs (Bench Pet Store, Bench Coffee Shop, Bench Helpdesk)."
+      "sourceDigest": "349fe9ec190837827c99354ae89199f696bd2c230a76e1514edc70600b2b241e",
+      "notes": "Local stack, local test user; the benchmark's mock Pet Store API and a local model."
+    },
+    {
+      "id": "approvals-change-set",
+      "title": "A script's changes in Approvals",
+      "path": "screenshots/approvals-change-set.png",
+      "capturedAt": "2026-10-02T00:05:51.000Z",
+      "status": "current",
+      "sha256": "0ed0f374216a66fff0cad2fcba5307b9cbbbddeeab5894bdfdc0883b814d484c",
+      "source": {
+        "kind": "browser",
+        "environment": "local",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/components/approvals",
+        "frontend/src/components/ui",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "30e8ed513305fb2dc6cca7fb6156c933d50c76974c15a68df4846dab413bce81",
+      "notes": "Local stack, local test user; a real run of a local model in code mode against the mock Pet Store API."
+    },
+    {
+      "id": "run-script-step",
+      "title": "A script step in a run",
+      "path": "screenshots/run-script-step.png",
+      "capturedAt": "2026-10-02T00:13:24.000Z",
+      "status": "current",
+      "sha256": "cf89514ab38d2142687c32745d0b8de9da0a90fa5c9979d0a23201860bca1dc3",
+      "source": {
+        "kind": "browser",
+        "environment": "local",
+        "route": "/agents/:id"
+      },
+      "sources": [
+        "frontend/src/components/agents/detail/code-step.tsx",
+        "frontend/src/components/agents/detail/runs-tab.tsx",
+        "frontend/src/components/approvals",
+        "frontend/src/components/ui",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "ff2a2c89860df9492a64f240940f052467e6f95e8b48a7000895c1c4692a1fca",
+      "notes": "Local stack, local test user; the same run after its changes were approved."
     }
   ]
 }

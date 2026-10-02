@@ -249,9 +249,10 @@ export class NodeSandboxService {
           },
           execArgv: this.buildCodeWorkerExecArgv(workerPath, isCompiledPath, request.extraAllowReads),
         } as any);
+        let cpuFrom: ReturnType<typeof worker.performance.eventLoopUtilization> | undefined;
         const cpuMs = () => {
           try {
-            return Math.round(worker.performance.eventLoopUtilization().active);
+            return Math.round(worker.performance.eventLoopUtilization(cpuFrom).active);
           } catch {
             return 0;
           }
@@ -276,6 +277,12 @@ export class NodeSandboxService {
           if (msg?.type === 'ready') {
             if (ready || settled) return;
             ready = true;
+            // CPU is counted from here: the worker's start-up is the platform's.
+            try {
+              cpuFrom = worker.performance.eventLoopUtilization();
+            } catch {
+              /* not available: counted from the start */
+            }
             clearTimeout(timer);
             timer = setTimeout(
               () => failed(`The script timed out after ${request.timeoutMs}ms`, { timedOut: true }),

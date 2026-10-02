@@ -18,6 +18,8 @@ import { approvalsApi } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { ChangeSetView } from '@/components/approvals/change-set-view'
+import type { ChangeSetEntry } from '@/types'
 
 interface ApprovalRequest {
   id: string
@@ -41,6 +43,24 @@ interface ApprovalRequest {
 }
 
 const POLL_MS = 10_000
+
+/** A script's change set (code mode): several calls approved or rejected as a whole. */
+export function isChangeSet(row: Pick<ApprovalRequest, 'payload'>): boolean {
+  return row.payload?.kind === 'change_set' && Array.isArray(row.payload?.changeSet)
+}
+
+/** What a decision does, in one sentence, before a person confirms it. */
+export function decisionMessage(row: Pick<ApprovalRequest, 'payload'>, intent: 'approve' | 'reject'): string {
+  if (isChangeSet(row)) {
+    const n = (row.payload!.changeSet as unknown[]).length
+    return intent === 'approve'
+      ? `All ${n} change${n === 1 ? '' : 's'} run, in this order. If one fails, the ones after it do not run; nothing is undone.`
+      : 'None of the changes run. The agent is told, and carries on without them.'
+  }
+  return intent === 'approve'
+    ? 'The run resumes where it paused, with this approval as the answer to its request.'
+    : 'The run is cancelled for good; it cannot be resumed.'
+}
 
 export function ApprovalsPage() {
   const queryClient = useQueryClient()
@@ -140,6 +160,11 @@ export function ApprovalsPage() {
                       <Badge variant="outline">{row.visibility === 'private' ? 'private' : row.visibility === 'team' ? 'team' : 'org'}</Badge>
                     </CardTitle>
                     <CardDescription className="mt-2 text-foreground">{row.reason}</CardDescription>
+                    {isChangeSet(row) && (
+                      <div className="mt-3">
+                        <ChangeSetView entries={row.payload!.changeSet as ChangeSetEntry[]} />
+                      </div>
+                    )}
                   </div>
                   {decisionFor?.row.id !== row.id && (
                   <div className="flex items-center gap-2 shrink-0">
@@ -207,9 +232,7 @@ export function ApprovalsPage() {
                       ) : (
                         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" aria-hidden="true" />
                       )}
-                      {decisionFor.intent === 'approve'
-                        ? 'The run resumes where it paused, with this approval as the answer to its request.'
-                        : 'The run is cancelled for good; it cannot be resumed.'}
+                      {decisionMessage(row, decisionFor.intent)}
                     </p>
                     <Field id={`decision-reason-${row.id}`} label="Note (optional)" hint="Saved with the decision.">
                       <Textarea

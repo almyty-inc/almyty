@@ -73,6 +73,32 @@ Workflow agents can do the same with a Verify step.
 
 Several models working together inside one agent is the [work mode](#work-mode-how-it-works-and-which-models-do-it); several agents working together is this list.
 
+## Scripts: many tool calls in one go
+
+Some jobs take many small steps: "archive every pet we sold more than a month ago" means finding the sold pets, checking each date, and archiving each old one. Calling a tool, waiting, reading the whole answer and calling the next one costs a model call per step.
+
+Choose **Search, and write scripts** under **How the model sees its tools**, and the agent can do such a job in one go. It writes a short script that calls its tools, almyty runs the script in a locked box, and only what the script returns comes back to the model.
+
+What stays the same:
+
+- The script can only use the agent's own tools. It has no network, no files, no passwords and no other software: every call it makes goes through the same permissions, approval rules, credentials and audit log as a call the model makes directly.
+- Reading data always runs.
+
+What you decide, under **When a script changes data**:
+
+- **Changes to data**: make them (the default), ask a person first, or never.
+- **Deletions**: ask a person first (the default), make them, or never.
+
+When a script wants changes a person has to approve, they are collected into one list. The agent's run waits, and the request shows up in **Approvals** with every change in it: what it changes, and any approval rule it also trips. **Approve** makes all of them, in order; if one fails, the ones after it are not made and nothing is undone. **Reject** makes none of them; the agent is told and carries on.
+
+![A script's changes waiting in Approvals](/screenshots/approvals-change-set.png)
+
+Every script is kept with its run. On the agent's **Runs** tab, open a run and choose **Show script** on a script step to see the script, what it logged and returned, the changes it asked for, and every call it made.
+
+![A script step in a run, with its calls](/screenshots/run-script-step.png)
+
+A script ends after 30 seconds unless it asks for more (at most 2 minutes), may make 100 calls, and runs 4 at a time. Your administrator can change these numbers.
+
 ## Constraints
 
 Constraints are standing rules the agent follows on every run, such as "never promise a refund over $500 without approval" or "keep replies under 150 words". Add them on the agent's **Constraints** tab. The agent can also learn them: when a run fails, the lesson is turned into a new constraint automatically, for example "a run was blocked for issuing a $900 refund without approval, gate refunds over $500".
@@ -133,5 +159,10 @@ See the [Agents CLI](/cli/agents) for the full command set. Any client can also 
 - Verification lives in `agentConfig.verify` (`enabled`, `checkers`, `policy`: `all_pass`, `majority` or `any_fail_blocks`, `triggers`: `on_final_output`, `every_n_steps`, `on_tool_result`, `maxReviseLoops`, default 2). The same checking logic backs the workflow `verify` node.
 - Context compaction lives in `modelConfig.compaction`: `enabled`, `maxContextTokens`, `keepRecentMessages` (default 8), `strategy` (`summarize` or `truncate`), and an optional `providerId`/`model` for the summariser.
 - Promoted skills are stored as `SKILL.md` and are also served over REST.
-- Tool mode lives in `agentConfig.toolMode` (`direct`, `discover` or `auto`), `agentConfig.toolModeThresholdTokens` and `agentConfig.pinnedToolIds`. In `discover` the tools array is `search_tools`, `get_tool`, `call_tool`, the pinned tools and the built-ins, the same on every step. `call_tool` runs through the same executor, approval rules and audit as a direct call, and only reaches the agent's own tools. `auto` estimates the definitions at four characters per token and compares them with `AGENT_TOOL_MODE_THRESHOLD_PERCENT` (default 3) of the main model card's `contextLength`, or with `AGENT_TOOL_MODE_FALLBACK_TOKENS` (default 4000) when there is no card or the role is routed. `AGENT_TOOL_MODE_DEFAULT` (default `auto`) applies when an agent sets nothing. The decision is kept in the run's `workingMemory.toolMode`.
+- Tool mode lives in `agentConfig.toolMode` (`direct`, `discover`, `code` or `auto`), `agentConfig.toolModeThresholdTokens` and `agentConfig.pinnedToolIds`. In `discover` the tools array is `search_tools`, `get_tool`, `call_tool`, the pinned tools and the built-ins, the same on every step. `call_tool` runs through the same executor, approval rules and audit as a direct call, and only reaches the agent's own tools. `auto` estimates the definitions at four characters per token and compares them with `AGENT_TOOL_MODE_THRESHOLD_PERCENT` (default 3) of the main model card's `contextLength`, or with `AGENT_TOOL_MODE_FALLBACK_TOKENS` (default 4000) when there is no card or the role is routed. `AGENT_TOOL_MODE_DEFAULT` (default `auto`) applies when an agent sets nothing. The decision is kept in the run's `workingMemory.toolMode`.
+- Code mode is `agentConfig.toolMode: 'code'`: the tools array is `search_tools`, `get_tool`, `call_tool`, `run_code`, the pinned tools and the built-ins, and the system prompt names the namespaces (one per API, from `tool-discovery/tool-signature.ts`). `auto` never picks `code`.
+- `run_code({ code, timeoutMs? })` strips TypeScript types (`module.stripTypeScriptTypes`) and runs the body as an async function in the sandbox's `code` profile (`NodeSandboxService.executeCode`, `code-sandbox-worker.ts`): `--permission` without `--allow-net`, the net guard in deny-all mode, an empty environment, every module resolution refused, its own pool (`SANDBOX_CODE_*`). Each namespace function posts to the broker (`code-mode/code-broker.ts`), which resolves the name in the run's executable tools, claims the budget, applies `agentConfig.codeMode.writes` (`write`, `destructive`, per-tool `tools`), `grants` (`{ toolId, max }` per run) and calls `ToolExecutorService.executeTool` with the run's principal, `holdForApproval: 'caller'` and `codeExecutionId`. An amount rule's hold becomes a staged entry.
+- Limits are `CODE_MODE_*` (calls 100, in flight 4, 30 s default and 120 s maximum, 128 MB, 16 KB of log and of return value, 50,000 characters of script); `organization.settings.codeMode` may lower each. `extract(value, schema)` uses `agentConfig.codeMode.extractor` (`{ providerId, model }`) or the organization's routing policy with `objective: 'cheapest'`; its cost goes to the run.
+- A script with staged calls creates one approval request with `payload.kind: 'change_set'` and `payload.changeSet`; the run waits with `workingMemory.pendingChangeSets`. Approved, the entries run in order with `approvedGate` (an amount rule accepts a change set that contains the call) and stop at the first failure; rejected or expired, none run and the run resumes.
+- Traces: `code_executions` (script, logs, result, error, status, change set, approval, call count, CPU ms, duration) and `tool_executions.codeExecutionId`. `GET /agents/:id/runs/:runId/code-executions[/:codeExecutionId]` returns a run's scripts and one script with its calls. Retention deletes them with `tool_executions`.
 - The tool-mode benchmark (`backend/scripts/tool-mode-benchmark/`) runs a fixed task set against three mock APIs (53 tools) in each mode, on the models you name, and reports tokens, turns, tool calls, latency, cost and success; `--self-check` verifies the task checks without a model.

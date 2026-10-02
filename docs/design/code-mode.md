@@ -2,8 +2,10 @@
 
 Status: accepted (all 15 recommendations in "Decisions for Frane"). Being built phase
 by phase. Done: part A, the stored side-effect class (#915); part B, search_tools and get_tool
-with embeddings (`feat/code-mode-p1-discovery`). Recon
-taken on `development` at `b0281c1a` (after #886, #889, #892).
+with embeddings (#917); part E for autonomous agents, `toolMode` and the benchmark harness
+(#920); P2, code mode for autonomous agents: the `code` sandbox profile, the broker, write
+policy, change sets, grants, `extract`, traces and sandbox CPU in usage
+(`feat/code-mode-p2`). Recon taken on `development` at `b0281c1a` (after #886, #889, #892).
 
 ## In plain words
 
@@ -395,7 +397,8 @@ can change after P2 without touching anything above it.
   exposure.
 - REST: `POST /tools/search` (hybrid), `GET /tools/:id/signature`,
   `PATCH /tools/:id` accepts a `sideEffect` override, `GET
-  /code-executions/:id` with its call tree.
+  /agents/:id/runs/:runId/code-executions/:codeExecutionId` with its call tree (built under
+  the run so access follows the agent, as for the run itself), `GET /analytics/script-usage`.
 - Codegen: the gateway and tool SDK downloads gain return types.
 - Approvals: a change-set view (the calls, their class, any rule hits),
   approved or rejected as a whole.

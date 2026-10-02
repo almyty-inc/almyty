@@ -62,4 +62,21 @@ describe('how the model sees its tools', () => {
     const source = readFileSync(join(__dirname, '..', 'capabilities-section.tsx'), 'utf8')
     expect(source).toMatch(/<ToolModeSection[\s\S]*usableTools=\{tools\.filter\(\(t\) => toolIds\.includes\(t\.id\) \|\| \(t\.apiId && \(agentConfig\.apiIds \?\? \[\]\)\.includes\(t\.apiId\)\)\)\}/)
   })
+
+  it('offers scripts, and asks what a script may change: changes run, deletions wait for a person by default', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const { rerender } = render(<ToolModeSection agentConfig={{}} usableTools={TOOLS} onChange={onChange} />)
+    await user.click(screen.getByLabelText('Tool list'))
+    await user.click(screen.getByRole('option', { name: 'Search, and write scripts' }))
+    expect(onChange).toHaveBeenLastCalledWith({ toolMode: 'code' })
+    expect(screen.queryByTestId('script-changes')).not.toBeInTheDocument()
+
+    rerender(<ToolModeSection agentConfig={{ toolMode: 'code' }} usableTools={TOOLS} onChange={onChange} />)
+    expect(screen.getByLabelText('Changes to data')).toHaveTextContent('Make them')
+    expect(screen.getByLabelText('Deletions')).toHaveTextContent('Ask a person first')
+    await user.click(screen.getByLabelText('Changes to data'))
+    await user.click(screen.getByRole('option', { name: 'Ask a person first' }))
+    expect(onChange).toHaveBeenLastCalledWith({ codeMode: { writes: { write: 'stage' } } })
+  })
 })
