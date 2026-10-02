@@ -167,7 +167,7 @@ export interface AgentPipeline {
 
 export interface PipelineNode {
   id: string
-  type: 'input' | 'output' | 'llm_call' | 'tool_call' | 'condition' | 'loop' | 'transform' | 'merge' | 'parallel' | 'sub_agent' | 'verify' | 'extract_context' | 'decision'
+  type: 'input' | 'output' | 'llm_call' | 'tool_call' | 'condition' | 'loop' | 'transform' | 'merge' | 'parallel' | 'sub_agent' | 'verify' | 'extract_context' | 'decision' | 'code'|'extract_context' | 'decision' | 'code'
   position: { x: number; y: number }
   data: Record<string, any>
 }

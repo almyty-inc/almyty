@@ -163,6 +163,13 @@ export class AgentValidationHelper {
           break;
         }
 
+        case 'code': {
+          if (!nonEmpty((node.data || node.config || {}).code)) {
+            throw new BadRequestException(`Code step '${node.id}' must have a script ('code' in config)`);
+          }
+          break;
+        }
+
         case 'loop': {
           if (!nonEmpty((node.data || node.config || {}).iterableExpression)) {
             throw new BadRequestException(

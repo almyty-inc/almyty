@@ -635,6 +635,9 @@ export class AgentExecutionEngine {
                     resolvedRoles,
                     // The machine this agent's runner-backed tools run on.
                     runnerLabels: agent.agentConfig?.runnerLabels,
+                    // A Code step's scope (the agent's tools) and the run its trace hangs off.
+                    agent,
+                    runId: execution.id,
                     // The answering model call streams its text as it
                     // arrives, when the caller asked and this is that node.
                     ...(nodeId === answerNodeId

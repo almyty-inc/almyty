@@ -234,6 +234,7 @@ export class NodeSandboxService {
         namespaces: request.namespaces,
         logCapChars: request.logCapChars,
         resultCapChars: request.resultCapChars,
+        ...(request.context !== undefined ? { context: request.context } : {}),
       };
       return await new Promise<CodeSandboxResult>((resolve) => {
         let settled = false;

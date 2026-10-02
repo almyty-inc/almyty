@@ -178,6 +178,7 @@ function StepPanel({ node, nodes, edges, onUpdateNode, onDeleteNode, onClose }: 
             {nodeType === 'tool_call' && <ToolCallConfig node={node} nodes={nodes} tools={tools} onUpdateNode={onUpdateNode} />}
             {nodeType === 'condition' && <ConditionConfig node={node} updateData={updateData} />}
             {nodeType === 'transform' && <TransformConfig node={node} updateData={updateData} />}
+            {nodeType === 'code' && <CodeConfig node={node} updateData={updateData} />}
             {nodeType === 'merge' && <MergeConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
             {nodeType === 'parallel' && <ParallelConfig node={node} />}
             {nodeType === 'sub_agent' && <SubAgentConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
@@ -678,6 +679,38 @@ function TransformConfig({ node, updateData }: { node: Node; updateData: UpdateD
         placeholder="Text with values from earlier steps"
         hint="Put earlier values into text. Shaped like JSON, it still arrives downstream as text."
       />
+      <StepAdvanced node={node} />
+    </div>
+  )
+}
+
+// --- Code ---
+/**
+ * A Code step (code mode): a short script over the agent's tools. It reads
+ * the run's input as `context.input` and earlier steps as
+ * `context.steps["<step id>"]`; what it returns is the step's result.
+ */
+function CodeConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <Label htmlFor="code-script">Script</Label>
+        <div id="code-script" data-testid="code-script">
+          <CodeEditor
+            value={(node.data.code as string) || ''}
+            onChange={(value) => updateData('code', value)}
+            language="javascript"
+            height="220px"
+            placeholder={"const sold = await petstore.findPetsByStatus({ status: 'sold' })\nreturn sold.length"}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Call the agent's tools as functions (one object per API), then return the result. The run's input is{' '}
+          <code className="font-mono">context.input</code>, earlier steps are <code className="font-mono">context.steps</code>. The
+          script runs in a locked box with no network; every call is checked like any other, and changes that need a person wait in
+          Approvals.
+        </p>
+      </div>
       <StepAdvanced node={node} />
     </div>
   )

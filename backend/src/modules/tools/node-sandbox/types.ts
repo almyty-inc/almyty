@@ -173,7 +173,7 @@ export type CodeCall =
   | { op: 'extract'; value: unknown; schema: unknown };
 
 /** Names of the script's own globals; no namespace may take one of them (tool-signature.ts namespaceOf). */
-export const CODE_GLOBAL_NAMES = ['tools', 'log', 'extract', 'console', 'ToolError'] as const;
+export const CODE_GLOBAL_NAMES = ['tools', 'log', 'extract', 'console', 'ToolError', 'context'] as const;
 /** A failed call, as the script sees it: `ToolError` with the tool's code name. */
 export class CodeCallError extends Error {
   constructor(
@@ -203,6 +203,8 @@ export interface CodeSandboxRequest {
   logCapChars: number;
   /** Characters of the serialised return value the worker sends back. */
   resultCapChars: number;
+  /** The script's `context` global: plain JSON the caller hands it (a workflow step's input), frozen; null when absent. */
+  context?: unknown;
   /** Every call the script makes. Resolves with what the script receives, or rejects with CodeCallError. */
   onCall: (call: CodeCall) => Promise<unknown>;
   signal?: AbortSignal;
@@ -234,6 +236,8 @@ export interface CodeWorkerInput {
   namespaces: Record<string, string[]>;
   logCapChars: number;
   resultCapChars: number;
+  /** The script's `context` global: plain JSON the caller hands it (a workflow step's input), frozen; null when absent. */
+  context?: unknown;
 }
 
 /** The code worker's last message. */

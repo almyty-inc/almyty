@@ -569,6 +569,20 @@ export class UnifiedGatewayDelegation {
       return res.json(manual);
     }
 
+    // A meta-tool of a gateway in code or both exposure (code mode).
+    const metaName = utcpMetaToolName(action);
+    if (metaName && req.method === 'POST') {
+      const userId = auth?.userId || (req as any).user?.sub || null;
+      const result = await this.utcpService.executeMetaTool(metaName, body, organization.id, userId, gateway.id);
+      this.metrics?.record(MetricType.UTCP_DIRECT_CALL, {
+        organizationId: organization.id,
+        gatewayId: gateway.id,
+        userId,
+        status: result?.success === false ? MetricStatus.ERROR : MetricStatus.SUCCESS,
+      });
+      return res.json(result);
+    }
+
     const toolId = utcpExecuteToolId(action);
     if ((action === 'execute' || toolId) && req.method === 'POST') {
       const userId = auth?.userId || (req as any).user?.sub || null;
@@ -626,5 +640,11 @@ export class UnifiedGatewayDelegation {
 /** The tool id of an `execute/<toolId>` path: one plain segment, or null. */
 export function utcpExecuteToolId(action: string): string | null {
   const match = /^execute\/([A-Za-z0-9_-]+)$/.exec(action);
+  return match ? match[1] : null;
+}
+
+/** `execute/meta/<name>`: a code-mode meta-tool's address on a UTCP gateway. */
+export function utcpMetaToolName(action: string): string | null {
+  const match = /^execute\/meta\/([a-z_]{1,40})$/.exec(action);
   return match ? match[1] : null;
 }

@@ -48,7 +48,7 @@ function camel(text: string): string {
  * Names a script's own globals take (code-sandbox-worker.ts); an API called
  * `tools` or `log` gets an `Api` suffix so it cannot shadow them.
  */
-const CODE_GLOBALS = new Set(['tools', 'log', 'extract', 'console', 'ToolError']);
+const CODE_GLOBALS = new Set(['tools', 'log', 'extract', 'console', 'ToolError', 'context']);
 
 /** The namespace a tool lives under. */
 export function namespaceOf(tool: NameableTool): string {

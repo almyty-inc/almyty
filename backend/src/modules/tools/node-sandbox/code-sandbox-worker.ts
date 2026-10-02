@@ -46,6 +46,15 @@ function plain(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value));
 }
 
+/** A value frozen all the way down, so a script cannot change what it was handed. */
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const key of Object.keys(value as object)) deepFreeze((value as any)[key]);
+  }
+  return value;
+}
+
 /**
  * The script's line where an error was thrown. The script is compiled with
  * the Function constructor, whose source starts two lines before the body.
@@ -180,8 +189,11 @@ async function run(): Promise<void> {
 
   try {
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-    const fn = new AsyncFunction(...names, 'tools', 'log', 'extract', 'console', 'ToolError', `"use strict"; ${input.code}`);
-    const value = await fn(...values, tools, log, extract, consoleLike, ToolError);
+    // `context`: what the caller hands the script (a workflow step's input
+    // and earlier steps), plain JSON, frozen all the way down; null if none.
+    const context = deepFreeze(input.context === undefined ? null : plain(input.context));
+    const fn = new AsyncFunction(...names, 'tools', 'log', 'extract', 'console', 'ToolError', 'context', `"use strict"; ${input.code}`);
+    const value = await fn(...values, tools, log, extract, consoleLike, ToolError, context);
     let json: string;
     try {
       json = JSON.stringify(value === undefined ? null : value) ?? 'null';
