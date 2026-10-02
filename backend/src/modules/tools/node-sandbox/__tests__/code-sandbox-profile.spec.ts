@@ -157,6 +157,36 @@ describe('code sandbox profile', () => {
     expect(big.resultChars).toBe(1000002);
   });
 
+  it('keeps a forged last message to the caps too: the host trusts nothing the worker says', async () => {
+    // The script shares the worker's realm, so it can catch the port the
+    // worker posts on and send a `done` of its own, past the worker's caps.
+    const forged = await run(`
+      const post = MessagePort.prototype.postMessage;
+      let port;
+      MessagePort.prototype.postMessage = function (m) { port = this; return post.call(this, m); };
+      try { await tools.search('x'); } catch {}
+      MessagePort.prototype.postMessage = post;
+      post.call(port, { type: 'done', success: true, resultJson: 'y'.repeat(50000), logs: 'z'.repeat(50000), logChars: 1, error: { message: 'e'.repeat(10000), line: 'x', tool: 7 } });
+      await new Promise(() => {});
+    `);
+    expect(forged.logs.length).toBe(1000);
+    expect(forged.logChars).toBe(50000);
+    expect(forged.resultJson!.length).toBe(1000);
+    expect(forged.resultChars).toBe(50000);
+    const failed = await run(`
+      const post = MessagePort.prototype.postMessage;
+      let port;
+      MessagePort.prototype.postMessage = function (m) { port = this; return post.call(this, m); };
+      try { await tools.search('x'); } catch {}
+      MessagePort.prototype.postMessage = post;
+      post.call(port, { type: 'done', success: false, logs: 3, error: { message: 'e'.repeat(10000), line: 'x', tool: 7 } });
+      await new Promise(() => {});
+    `);
+    expect(failed.success).toBe(false);
+    expect(failed.logs).toBe('');
+    expect(failed.error).toEqual({ message: 'e'.repeat(2000) });
+  });
+
   it('never starts the code worker with network access (guard)', () => {
     const source = fs.readFileSync(path.join(__dirname, '..', 'node-sandbox.service.ts'), 'utf8');
     const method = source.slice(source.indexOf('private buildCodeWorkerExecArgv'), source.indexOf('private codeLimits'));

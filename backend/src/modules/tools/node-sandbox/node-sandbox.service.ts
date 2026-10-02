@@ -307,15 +307,7 @@ export class NodeSandboxService {
             return;
           }
           if (msg?.type === 'done') {
-            const done = msg as CodeWorkerDone;
-            settle({
-              success: done.success === true,
-              resultJson: typeof done.resultJson === 'string' ? done.resultJson : undefined,
-              ...(typeof done.resultChars === 'number' ? { resultChars: done.resultChars } : {}),
-              logs: typeof done.logs === 'string' ? done.logs : '',
-              ...(typeof done.logChars === 'number' && done.logChars > (done.logs?.length ?? 0) ? { logChars: done.logChars } : {}),
-              ...(done.error ? { error: done.error } : {}),
-            });
+            settle(codeWorkerDone(msg, request));
           }
         });
         worker.on('error', (err: Error) => {
@@ -890,6 +882,42 @@ export function effectiveSandboxTimeoutMs(requested: unknown, maxTimeoutMs: numb
       ? requested
       : DEFAULT_TIMEOUT_MS;
   return Math.min(wanted, maxTimeoutMs);
+}
+
+/**
+ * The code worker's last message, as the host keeps it. The worker shares
+ * its realm with the script, and a script can reach the worker's port
+ * (MessagePort.prototype is a global) and post a `done` of its own, so
+ * nothing in it is trusted: every field is type-checked and every text is
+ * cut to the request's caps here, whatever the worker says it already did.
+ */
+export function codeWorkerDone(msg: unknown, caps: { logCapChars: number; resultCapChars: number }): Omit<CodeSandboxResult, 'durationMs' | 'cpuMs'> {
+  const done = (msg && typeof msg === 'object' ? msg : {}) as Partial<CodeWorkerDone>;
+  const count = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.floor(n) : 0);
+  const rawLogs = typeof done.logs === 'string' ? done.logs : '';
+  const logs = rawLogs.slice(0, caps.logCapChars);
+  const logChars = Math.max(rawLogs.length, count(done.logChars));
+  const rawResult = typeof done.resultJson === 'string' ? done.resultJson : undefined;
+  const resultJson = rawResult?.slice(0, caps.resultCapChars);
+  const resultChars = rawResult === undefined ? 0 : Math.max(rawResult.length, count(done.resultChars));
+  const error = done.error && typeof done.error === 'object' ? done.error : undefined;
+  const ok = done.success === true && rawResult !== undefined;
+  return {
+    success: ok,
+    ...(resultJson !== undefined ? { resultJson } : {}),
+    ...(resultJson !== undefined && resultChars > resultJson.length ? { resultChars } : {}),
+    logs,
+    ...(logChars > logs.length ? { logChars } : {}),
+    ...(!ok
+      ? {
+          error: {
+            message: String(error?.message ?? 'The script failed').slice(0, 2000),
+            ...(Number.isInteger(error?.line) && (error!.line as number) > 0 ? { line: error!.line } : {}),
+            ...(typeof error?.tool === 'string' ? { tool: error.tool.slice(0, 200) } : {}),
+          },
+        }
+      : {}),
+  };
 }
 
 /**
