@@ -9,6 +9,7 @@ import { isOthersPrivate } from '../../common/authorization/private-visibility';
 import { servableToolsOnGateway } from '../gateways/gateway-servable';
 import { SkillRendererHelper } from './skill-renderer.helper';
 import { dedupeSharedSegments } from './skill-graphql.helper';
+import { effectiveExposure } from '../code-mode/code-exposure';
 
 export interface SkillOutput {
   name: string;
@@ -81,6 +82,8 @@ export class SkillGeneratorService {
     if (!gateway) {
       throw new NotFoundException(`Gateway not found: ${gatewayId}`);
     }
+    const code = await this.codeSkill(gateway);
+    if (code) return code;
 
     const tools = await this.getGatewayTools(gatewayId);
 
@@ -134,6 +137,8 @@ export class SkillGeneratorService {
     if (!gateway) {
       throw new NotFoundException(`Gateway not found: ${gatewayId}`);
     }
+    const code = await this.codeSkill(gateway);
+    if (code) return [{ name: code.name, fileName: code.name, content: code.content }];
 
     const tools = await this.getGatewayTools(gatewayId);
     const gatewaySlug = this.gatewayEndpointSlug(gateway);
@@ -146,6 +151,24 @@ export class SkillGeneratorService {
         content: this.renderer.renderToolSkillMd(tool, slug, context),
       };
     });
+  }
+
+  /**
+   * A gateway in `code` exposure is one skill: the typed functions and how
+   * to run a script on it (code-mode/code-exposure.ts). Null for every
+   * other gateway, and for one whose scripts are off (the install switch,
+   * or a gateway that admits anonymous callers).
+   */
+  private async codeSkill(gateway: Gateway): Promise<SkillOutput | null> {
+    if (gateway.configuration?.exposure !== 'code') return null;
+    const withAuth = await this.gatewayRepository.findOne({ where: { id: gateway.id }, relations: { authConfigs: true } });
+    if (effectiveExposure({ type: gateway.type, configuration: gateway.configuration, authConfigs: withAuth?.authConfigs }) !== 'code') return null;
+    const tools = await servableToolsOnGateway(this.gatewayToolRepository, gateway.id, { api: true, outputSchema: true, operation: true });
+    return {
+      name: this.renderer.slugify(gateway.name),
+      content: this.renderer.renderCodeSkill(gateway, tools, `/gateways/${gateway.id}/skills/run-code`),
+      toolCount: tools.length,
+    };
   }
 
   /**

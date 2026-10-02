@@ -64,7 +64,10 @@ describe('Transform is a template, not JavaScript', () => {
 
   it('is documented by the key it reads', () => {
     expect(nodeTypesDoc).toContain('| `expression` | string | Template rendered against the execution context. Required. |');
-    expect(nodeTypesDoc).not.toMatch(/\|\s*`code`\s*\|/);
+    // Transform has no `code` key (the Code step has one; it is another section).
+    const transform = nodeTypesDoc.slice(nodeTypesDoc.indexOf('## Transform'), nodeTypesDoc.indexOf('## Loop'));
+    expect(transform).toContain('expression');
+    expect(transform).not.toMatch(/\|\s*`code`\s*\|/);
     expect(nodeTypesProse).toContain('It is a template language, not JavaScript');
   });
 });

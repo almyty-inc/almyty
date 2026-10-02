@@ -16,6 +16,7 @@ import { Agent, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agen
 import { AgentExecutionEngine } from './agent-execution.engine';
 import { A2AClientService } from '../a2a/a2a-client.service';
 import { ExternalAgentsService } from '../a2a/external-agents.service';
+import { CodeModeService } from '../code-mode/code-mode.service';
 import { AgentSubAgentExecutors } from './agent-subagent-executors.helper';
 import { AgentVerifierHelper, VerifyPolicy } from './agent-verifier.helper';
 import {
@@ -97,6 +98,12 @@ export interface NodeExecutionOptions {
    * tool call and sub-agent run this node makes. Never re-derived here.
    */
   principal?: ExecutionPrincipal;
+  /**
+   * The agent this run belongs to, and the run: a Code step's scope is the
+   * agent's tools and its trace hangs off the run. Set by the engine.
+   */
+  agent?: Pick<Agent, 'id' | 'organizationId' | 'toolIds' | 'agentConfig' | 'teamId'>;
+  runId?: string;
   nestingDepth?: number;
   maxNestingDepth?: number;
   /** The run whose runner workspaces this run's work shares (EngineInternalOptions). */
@@ -298,6 +305,8 @@ export class AgentNodeExecutor {
     @Optional() private readonly modelRouter?: ModelRouterService,
     @Optional() @InjectRepository(Organization)
     private readonly organizationRepository?: Repository<Organization>,
+    // A workflow Code step (code-mode/); without it the step says scripts are unavailable.
+    @Optional() @Inject(forwardRef(() => CodeModeService)) private readonly codeMode?: CodeModeService,
   ) {}
 
   /**
@@ -400,6 +409,9 @@ export class AgentNodeExecutor {
 
       case 'decision':
         return this.executeDecisionNode(node, context, organizationId, userId, execOptions);
+
+      case 'code':
+        return this.executeCodeNode(node, context, execOptions);
 
       default:
         throw new Error(`Unsupported node type: ${node.type}`);
@@ -776,6 +788,72 @@ export class AgentNodeExecutor {
       output: result.data,
       executionTime,
       resolvedInput: { toolId, parameters: resolvedParams },
+    };
+  }
+
+  /**
+   * A Code step (docs/design/code-mode.md, part E): a script over the
+   * agent's tools, run in the code sandbox with the step's input as its
+   * `context` (`context.input`, and `context.steps`, every earlier step's
+   * output by id). Its output is what the script returns. The calls it
+   * makes come out of the run's tool-call budget. A workflow cannot pause,
+   * so changes that need a person are held in Approvals and the step
+   * stops here, waiting, like a held tool_call.
+   */
+  private async executeCodeNode(
+    node: AgentPipelineNode,
+    context: ExecutionContext,
+    options: NodeExecutionOptions,
+  ): Promise<NodeExecutionResult> {
+    const { code, timeoutMs } = node.data || node.config || {};
+    const startTime = Date.now();
+    if (typeof code !== 'string' || !code.trim()) {
+      throw new Error(`Code step '${node.id}' has no script`);
+    }
+    if (!this.codeMode || !options.agent) {
+      throw new Error('Scripts are not available on this server');
+    }
+    const toolBudget = context.runLimits?.maxToolCalls;
+    let maxCalls: number | undefined;
+    if (context.toolCalls && typeof toolBudget === 'number') {
+      if (context.toolCalls.count >= toolBudget) {
+        const trip = describeLimitTrip('TOOL_CALL_LIMIT_EXCEEDED');
+        throw Object.assign(new Error(`${trip.code}: ${trip.message}`), { code: trip.code });
+      }
+      context.toolCalls.count++;
+      maxCalls = toolBudget - context.toolCalls.count;
+    }
+    const steps: Record<string, unknown> = {};
+    for (const [id, entry] of Object.entries(context.nodes ?? {})) steps[id] = entry?.output ?? null;
+    const answer = await this.codeMode.runWorkflowStep({
+      agent: options.agent,
+      runId: options.runId ?? null,
+      userId: options.userId ?? null,
+      ...(options.principal ? { principal: options.principal } : {}),
+      code,
+      ...(typeof timeoutMs === 'number' ? { timeoutMs } : {}),
+      scriptContext: { input: context.input ?? {}, steps },
+      ...(options.runnerLabels ? { runnerLabels: options.runnerLabels } : {}),
+      ...(maxCalls !== undefined ? { maxCalls } : {}),
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+    const made = Number((answer.forModel as any)?.calls?.made ?? 0);
+    if (context.toolCalls && made > 0) context.toolCalls.count += made;
+    const resolvedInput = { codeExecutionId: answer.codeExecutionId ?? null, ...(answer.approvalId ? { approvalId: answer.approvalId } : {}) };
+    if (answer.approvalId) {
+      throw Object.assign(new Error(String((answer.forModel as any).note ?? 'The script\'s changes wait for a person in Approvals.')), {
+        resolvedInput,
+        code: 'AWAITING_APPROVAL',
+      });
+    }
+    if (answer.isError) {
+      const error = (answer.forModel as any)?.error;
+      throw Object.assign(new Error(typeof error?.message === 'string' ? error.message : String(error ?? 'The script failed')), { resolvedInput });
+    }
+    return {
+      output: (answer.forModel as any).result ?? null,
+      executionTime: Date.now() - startTime,
+      resolvedInput,
     };
   }
 

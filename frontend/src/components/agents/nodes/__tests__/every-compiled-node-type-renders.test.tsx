@@ -14,7 +14,7 @@ import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ReactFlowProvider } from '@xyflow/react'
 
-import { nodeTypes, NODE_TYPE_CONFIG, VerifyNode, ExtractContextNode } from '..'
+import { nodeTypes, NODE_TYPE_CONFIG, VerifyNode, ExtractContextNode, CodeNode } from '..'
 
 /** Every node type the engine dispatches; see agent-node-executor.ts. */
 const ENGINE_NODE_TYPES = [
@@ -30,6 +30,8 @@ const ENGINE_NODE_TYPES = [
   'sub_agent',
   'verify',
   'extract_context',
+  'decision',
+  'code',
 ]
 
 const nodeProps = {
@@ -51,6 +53,12 @@ describe('every node type a strategy compiles to has a component', () => {
       expect(NODE_TYPE_CONFIG[type as keyof typeof NODE_TYPE_CONFIG]?.label).toBeTruthy()
       expect(NODE_TYPE_CONFIG[type as keyof typeof NODE_TYPE_CONFIG]?.color).toBeTruthy()
     }
+  })
+
+  it('shows a Code step the first line of its script', () => {
+    draw(<CodeNode {...nodeProps} id="c1" type="code" data={{ code: '\n// archive the sold pets\nreturn 1' }} />)
+    expect(screen.getByText('Code')).toBeInTheDocument()
+    expect(screen.getByText('// archive the sold pets')).toBeInTheDocument()
   })
 
   const draw = (ui: React.ReactElement) => render(<ReactFlowProvider>{ui}</ReactFlowProvider>)

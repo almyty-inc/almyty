@@ -169,6 +169,8 @@ describe('a gateway executes only what it publishes (source guard)', () => {
  */
 const GATEWAY_TOOL_READERS: Record<string, string> = {
   'src/modules/gateways/gateway-servable.ts': 'the servable rule itself',
+  'src/modules/code-mode/code-mode.service.ts':
+    "a script's scope on a gateway: servableToolsOnGateway, the set tools/list serves",
   'src/modules/tools/tool-executor.service.ts':
     'the executor backstop: loads the one row a gateway call names and answers isServableGatewayTool',
   'src/modules/gateways/gateways.service.ts':
@@ -197,6 +199,7 @@ const LISTING_SURFACES = [
   'src/modules/mcp/services/mcp-tool.handler.ts',
   'src/modules/mcp/services/mcp-content.handler.ts',
   'src/modules/mcp/utcp.service.ts',
+  'src/modules/code-mode/code-mode.service.ts',
 ];
 
 describe('a gateway lists only what it serves (source guard)', () => {

@@ -10,7 +10,7 @@ export function quantile(values, q) {
   return v[lo] + (v[hi] - v[lo]) * (pos - lo)
 }
 
-const METRICS = ['inputTokens', 'outputTokens', 'latencyMs', 'turns', 'toolCalls', 'metaCalls', 'costUsd']
+const METRICS = ['inputTokens', 'outputTokens', 'latencyMs', 'turns', 'toolCalls', 'metaCalls', 'scripts', 'apiCalls', 'costUsd']
 
 function stats(rows) {
   const out = { runs: rows.length, successRate: rows.length ? rows.filter((r) => r.ok).length / rows.length : null }
@@ -49,12 +49,12 @@ export function markdownReport(meta, summary) {
   const kinds = [...new Set(summary.map((s) => s.kind))]
   for (const kind of ['all', ...kinds.filter((k) => k !== 'all')]) {
     lines.push(`## ${kind === 'all' ? 'All tasks' : kind}`, '')
-    lines.push('| Model | Mode | Runs | Success | Input tokens | Output tokens | Latency (s) | Turns | Tool calls | Meta calls | Cost (USD) |')
-    lines.push('|---|---|---|---|---|---|---|---|---|---|---|')
+    lines.push('| Model | Mode | Runs | Success | Input tokens | Output tokens | Latency (s) | Turns | Tool calls | Meta calls | Scripts | API calls | Cost (USD) |')
+    lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|')
     for (const s of summary.filter((x) => x.kind === kind)) {
       const sec = { median: s.latencyMs.median / 1000, p25: s.latencyMs.p25 / 1000, p75: s.latencyMs.p75 / 1000 }
       lines.push(
-        `| ${s.model} | ${s.mode} | ${s.runs} | ${Math.round(s.successRate * 100)}% | ${fmt(s.inputTokens)} | ${fmt(s.outputTokens)} | ${fmt(sec, 1)} | ${fmt(s.turns)} | ${fmt(s.toolCalls)} | ${fmt(s.metaCalls)} | ${fmt(s.costUsd, 4)} |`,
+        `| ${s.model} | ${s.mode} | ${s.runs} | ${Math.round(s.successRate * 100)}% | ${fmt(s.inputTokens)} | ${fmt(s.outputTokens)} | ${fmt(sec, 1)} | ${fmt(s.turns)} | ${fmt(s.toolCalls)} | ${fmt(s.metaCalls)} | ${fmt(s.scripts)} | ${fmt(s.apiCalls)} | ${fmt(s.costUsd, 4)} |`,
       )
     }
     lines.push('')

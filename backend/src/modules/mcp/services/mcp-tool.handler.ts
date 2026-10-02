@@ -37,6 +37,9 @@ import { ApprovalsService } from '../../approvals/approvals.service';
 import { HeldCallApprovals, heldCallInputRequired, heldCallRetry } from './mcp-held-call';
 import { ToolDiscoveryService } from '../../tool-discovery/tool-discovery.service';
 import { allPagesOfTools } from '../../tools/tool-pages';
+import { CodeModeService } from '../../code-mode/code-mode.service';
+import { GATEWAY_META_NAMES, GatewayExposure, effectiveExposure, gatewayMetaTools } from '../../code-mode/code-exposure';
+import { CALL_TOOL, GET_TOOL, RUN_CODE, SEARCH_TOOLS } from '../../tool-discovery/meta-tools';
 
 /** Errors this handler raised for an unknown tool: rethrown as protocol errors, never folded into isError. */
 const UNKNOWN_TOOL_ERRORS = new WeakSet<object>();
@@ -73,6 +76,86 @@ export class McpToolHandler {
     } catch {
       return null;
     }
+  }
+
+  // run_code on gateways (code-mode/), reached lazily like ApprovalsService.
+  private codeModeService(): CodeModeService | null {
+    try {
+      return (this.moduleRef?.get(CodeModeService, { strict: false }) as CodeModeService) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** What a gateway serves (code-mode/code-exposure.ts), and the gateway. Unreadable means `tools`. */
+  async exposureOf(gatewayId: string, organizationId: string): Promise<{ exposure: GatewayExposure; gateway: Gateway | null }> {
+    let gateway: Gateway | null = null;
+    try {
+      gateway = await this.gatewayToolRepository.manager
+        .getRepository(Gateway)
+        .findOne({ where: { id: gatewayId, organizationId }, relations: { authConfigs: true } });
+    } catch {
+      gateway = null;
+    }
+    return { exposure: gateway ? effectiveExposure(gateway) : 'tools', gateway };
+  }
+
+  /**
+   * search_tools, get_tool, call_tool and run_code on a gateway in `code`
+   * or `both` exposure, over exactly the set tools/call resolves against
+   * (discoveryScope). A wrong argument is a tool error the model can
+   * correct, not a protocol error.
+   */
+  async callGatewayMetaTool(
+    params: McpCallToolRequest,
+    organizationId: string,
+    userId: string | undefined,
+    gateway: Gateway,
+    ctx?: McpCallContext,
+  ): Promise<McpCallToolResult | McpPolymorphicResult> {
+    const args: Record<string, any> = params.arguments && typeof params.arguments === 'object' ? params.arguments : {};
+    const caller = userId ? { id: userId } : undefined;
+    const answer = (value: unknown, isError = false): McpCallToolResult => ({
+      content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }],
+      ...(isPlainObject(value) ? { structuredContent: value as Record<string, unknown> } : {}),
+      isError,
+    });
+    try {
+      switch (params.name) {
+        case SEARCH_TOOLS: {
+          if (typeof args.query !== 'string' || !args.query.trim()) return answer('search_tools needs a query.', true);
+          const found = await this.handleToolsSearch({ query: args.query, limit: Number.isInteger(args.limit) ? args.limit : 10 }, organizationId, gateway.id, caller);
+          return answer({ tools: found.tools.map((t: any) => ({ name: t.name, summary: t.description, sideEffect: t.sideEffect, score: t.score })) });
+        }
+        case GET_TOOL: {
+          if (typeof args.name !== 'string' || !args.name.trim()) return answer('get_tool needs a name.', true);
+          const tool = await this.handleToolGet({ name: args.name }, organizationId, userId, gateway.id);
+          const detail = args.detail === 'name' || args.detail === 'description' ? args.detail : 'full';
+          if (detail === 'name') return answer({ name: tool.name, sideEffect: tool.sideEffect });
+          if (detail === 'description') return answer({ name: tool.name, description: tool.description, sideEffect: tool.sideEffect });
+          const { usage: _usage, metadata: _metadata, status: _status, version: _version, ...full } = tool;
+          return answer(full);
+        }
+        case CALL_TOOL: {
+          if (typeof args.name !== 'string' || !args.name.trim() || GATEWAY_META_NAMES.has(args.name)) {
+            return answer('call_tool needs the name of one of this gateway\'s tools.', true);
+          }
+          const inner = args.arguments && typeof args.arguments === 'object' && !Array.isArray(args.arguments) ? args.arguments : {};
+          return this.handleToolCall({ name: args.name, arguments: inner } as McpCallToolRequest, organizationId, userId, gateway.id, undefined, ctx);
+        }
+        case RUN_CODE: {
+          const codeMode = this.codeModeService();
+          if (!codeMode) return answer('Scripts are not available on this server.', true);
+          const scope = await this.discoveryScope(organizationId, gateway.id, caller);
+          const ran = await codeMode.runOnGateway({ gateway, userId: userId ?? null, scope, params: args });
+          return answer(ran.forModel, ran.isError);
+        }
+      }
+    } catch (error: any) {
+      if (UNKNOWN_TOOL_ERRORS.has(error)) return answer(`No tool named "${String(args.name)}" here. Use search_tools to find one.`, true);
+      return answer(`${params.name} failed: ${error?.message ?? error}`, true);
+    }
+    return answer(`Unknown tool ${params.name}`, true);
   }
 
   // Resolve how a tool listing should be scoped.
@@ -143,8 +226,11 @@ export class McpToolHandler {
     // member's scoped list to another. It also carries the cursor, because
     // the cached VALUE is one page — without it a `cursor=100` request was
     // served page 0 from cache.
+    // A gateway's exposure decides what it lists, and is part of the key, so
+    // a change to it is not served from the old listing.
+    const exposure: GatewayExposure = gatewayId ? (await this.exposureOf(gatewayId, organizationId)).exposure : 'tools';
     const cacheKey = gatewayId
-      ? `mcp:tools:${organizationId}:${gatewayId}:cursor:${cursor}`
+      ? `mcp:tools:${organizationId}:${gatewayId}:${exposure}:cursor:${cursor}`
       : `mcp:tools:${organizationId}:user:${caller?.id ?? 'none'}:cursor:${cursor}`;
     try {
       const cached = await this.redis.get(cacheKey);
@@ -190,7 +276,14 @@ export class McpToolHandler {
 
     // Title, annotations, outputSchema and icons ride along; the core drops
     // whichever the negotiated protocol version does not define.
-    const mcpTools: McpTool[] = tools.map((tool) => this.toMcpTool(tool));
+    let mcpTools: McpTool[] = tools.map((tool) => this.toMcpTool(tool));
+
+    // `code` exposure lists exactly the meta-tools; `both` lists them after
+    // the gateway's own tools (decision 3).
+    if (exposure !== 'tools') {
+      const meta = gatewayMetaTools(exposure).map((d) => ({ name: d.name, description: d.description, inputSchema: d.parameters }) as McpTool);
+      mcpTools = exposure === 'code' ? meta : [...mcpTools.filter((t) => !GATEWAY_META_NAMES.has(t.name)), ...meta];
+    }
 
     // Cursor-based pagination
     const paged = prePaged ? mcpTools : mcpTools.slice(cursor, cursor + pageSize);
@@ -418,6 +511,16 @@ export class McpToolHandler {
   ): Promise<McpCallToolResult | McpPolymorphicResult> {
     if (!params.name) {
       throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'Tool name is required');
+    }
+
+    // A gateway in `code` or `both` exposure answers the meta-tools itself
+    // (code-mode/code-exposure.ts); in `tools` exposure these names are
+    // ordinary tool names, resolved below like any other.
+    if (gatewayId && GATEWAY_META_NAMES.has(params.name)) {
+      const { exposure, gateway } = await this.exposureOf(gatewayId, organizationId);
+      if (gateway && exposure !== 'tools' && (params.name !== CALL_TOOL || exposure === 'both')) {
+        return this.callGatewayMetaTool(params, organizationId, userId, gateway, ctx);
+      }
     }
 
     // Through a gateway, only what that gateway lists (the same set tools/list
