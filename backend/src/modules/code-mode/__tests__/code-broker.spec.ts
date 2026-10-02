@@ -116,6 +116,16 @@ describe('code broker', () => {
     expect(b.changeSet[0]).toMatchObject({ reason: 'amount_rule', rule: 'Ask before updatePet when price is over 500', paramsHash: 'rule-hash' });
   });
 
+
+  it('shows the amount rule a call staged by the policy would also trip, so one decision covers both', async () => {
+    const ruleFor = jest.fn(async (t: Tool, args: Record<string, any>) => (t.id === 't-delete' && args.petId > 5 ? 'Ask before deletePet when petId is over 5' : null));
+    const { b, execute } = broker({ ruleFor });
+    await b.handle({ op: 'tool', namespace: 'petstore', fn: 'deletePet', args: { petId: 7 } });
+    await b.handle({ op: 'tool', namespace: 'petstore', fn: 'deletePet', args: { petId: 2 } });
+    expect(execute).not.toHaveBeenCalled();
+    expect(b.changeSet[0]).toMatchObject({ reason: 'policy', rule: 'Ask before deletePet when petId is over 5' });
+    expect(b.changeSet[1].rule).toBeUndefined();
+  });
   it('makes a failed call throw a ToolError naming the tool', async () => {
     const execute = jest.fn(async () => ({ success: false, error: 'Pet 9 not found', executionTime: 1, cached: false, rateLimited: false, retryCount: 0 }));
     const { b } = broker({ execute });

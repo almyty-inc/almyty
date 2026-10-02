@@ -100,6 +100,7 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     ToolsService,
     ToolGeneratorService,
     ToolExecutorService,
+    ToolApprovalGateService,
     SkillGeneratorService,
     CliGeneratorService,
     CodegenService,

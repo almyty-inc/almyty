@@ -53,6 +53,8 @@ export interface BrokerDeps {
   discovery: ToolDiscoveryService;
   execute: (tool: Tool, args: Record<string, any>) => Promise<ToolExecutionResult>;
   extract?: ExtractFn;
+  /** The amount rule a call would trip, in plain words (ToolApprovalGateService.check), for a call staged before it reached the gate. */
+  ruleFor?: (tool: Tool, args: Record<string, any>) => Promise<string | null>;
 }
 
 export class CodeBroker {
@@ -181,7 +183,12 @@ export class CodeBroker {
         codeName,
       );
     }
-    if (decision.action === 'stage') return this.stage(tool, args, 'policy', undefined, started);
+    if (decision.action === 'stage') {
+      // Staged by the policy, so it never reached the amount gate: ask the
+      // gate which rule it would also trip, so the person sees it in the set.
+      const rule = this.deps.ruleFor ? await this.deps.ruleFor(tool, args).catch(() => null) : null;
+      return this.stage(tool, args, 'policy', rule ?? undefined, started);
+    }
     if (decision.viaGrant) this.grantsUsed[tool.id] = (this.grantsUsed[tool.id] ?? 0) + 1;
 
     const result = await this.deps.execute(tool, args);

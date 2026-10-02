@@ -10,6 +10,7 @@ import type { ExecutionPrincipal } from '../../common/authorization/execution-ac
 import { withTruncationMarker } from '../agents/persist-cap';
 import { NodeSandboxService } from '../tools/node-sandbox/node-sandbox.service';
 import { ToolExecutorService } from '../tools/tool-executor.service';
+import { ToolApprovalGateService } from '../tools/tool-approval-gate.service';
 import type { ToolExecutionResult } from '../tools/tool-execution.types';
 import { ToolDiscoveryService } from '../tool-discovery/tool-discovery.service';
 import { BrokeredCall, CodeBroker, ExtractFn } from './code-broker';
@@ -83,6 +84,8 @@ export class CodeModeService {
     @Inject(forwardRef(() => ToolExecutorService))
     private readonly executor: ToolExecutorService,
     @Optional() discovery?: ToolDiscoveryService,
+    // Names the amount rule a staged call would also trip (part D: one decision covers both).
+    @Optional() @Inject(forwardRef(() => ToolApprovalGateService)) private readonly gate?: ToolApprovalGateService,
   ) {
     this.discovery = discovery ?? new ToolDiscoveryService();
   }
@@ -114,6 +117,20 @@ export class CodeModeService {
       limits,
       discovery: this.discovery,
       extract: input.extract,
+      ...(this.gate
+        ? {
+            ruleFor: async (tool: Tool, args: Record<string, any>) =>
+              (
+                await this.gate!.check(tool, args, {
+                  organizationId: context.organizationId,
+                  userId: context.userId ?? null,
+                  agentId: context.agentId ?? null,
+                  runId: context.runId ?? null,
+                  teamId: context.agentTeamId,
+                })
+              )?.summary ?? null,
+          }
+        : {}),
       execute: (tool, args) => this.execute(tool, args, context, row.id, input.signal),
     });
 
