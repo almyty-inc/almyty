@@ -1,6 +1,24 @@
 import { redactQueryError } from '../errors/redact-query-error';
 
 /**
+ * What the SDK may attach to an event on its own. Errors only: no bodies,
+ * headers, cookies, inferred user, database parameters, queue payloads,
+ * GraphQL variables, stack-frame locals or gen-AI inputs and outputs.
+ */
+export const SENTRY_DATA_COLLECTION = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: false,
+  httpBodies: [],
+  urlQueryParams: false,
+  graphQL: { document: false, variables: false },
+  genAI: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  queues: false,
+  stackFrameVariables: false,
+} as const;
+
+/**
  * The @sentry/node options main.ts initializes with, or null when no DSN
  * is configured (Sentry ships dark).
  *
@@ -16,6 +34,7 @@ export interface SentryInitOptions {
   tracesSampleRate: number;
   beforeBreadcrumb: (breadcrumb: any, hint?: any) => any;
   beforeSend: (event: any, hint?: any) => any;
+  dataCollection: typeof SENTRY_DATA_COLLECTION;
 }
 
 function redactEach(values: unknown): void {
@@ -47,5 +66,11 @@ export function sentryInitOptions(vars: NodeJS.ProcessEnv = process.env): Sentry
     tracesSampleRate: 0,
     beforeBreadcrumb: redactSentryBreadcrumb,
     beforeSend: redactSentryEvent,
+    // @sentry/node 11 collects request and response bodies, headers,
+    // cookies, user fields, query parameters bound to database statements,
+    // stack-frame locals and gen-AI prompts and completions unless told
+    // otherwise. Any of those can carry a credential, a prompt or a row
+    // the redaction above never sees, so only the request URL is kept.
+    dataCollection: SENTRY_DATA_COLLECTION,
   };
 }
