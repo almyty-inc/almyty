@@ -15,7 +15,7 @@ import { Field, InlineFormActions } from '@/components/layout/form-page'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 import { approvalsApi } from '@/lib/api'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, pluralized } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { ChangeSetView } from '@/components/approvals/change-set-view'
@@ -54,7 +54,7 @@ export function decisionMessage(row: Pick<ApprovalRequest, 'payload'>, intent: '
   if (isChangeSet(row)) {
     const n = (row.payload!.changeSet as unknown[]).length
     return intent === 'approve'
-      ? `All ${n} change${n === 1 ? '' : 's'} run, in this order. If one fails, the ones after it do not run; nothing is undone.`
+      ? `All ${pluralized(n, 'change')} run, in this order. If one fails, the ones after it do not run; nothing is undone.`
       : 'None of the changes run. The agent is told, and carries on without them.'
   }
   return intent === 'approve'

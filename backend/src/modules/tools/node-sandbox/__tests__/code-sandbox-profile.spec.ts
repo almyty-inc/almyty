@@ -7,6 +7,7 @@ import { Worker } from 'worker_threads';
 import { NodeSandboxService } from '../node-sandbox.service';
 import { DependencyManagerService } from '../dependency-manager.service';
 import { CodeCall, CodeCallError, CodeSandboxRequest } from '../types';
+import { snapshotEnv } from '../../../../test/env';
 
 /**
  * The `code` sandbox profile (docs/design/code-mode.md, part D) against
@@ -216,7 +217,7 @@ describe('code sandbox profile', () => {
   });
 
   it('refuses past its own queue limits', async () => {
-    const env = { ...process.env };
+    const restore = snapshotEnv('SANDBOX_CODE_MAX_WORKERS', 'SANDBOX_CODE_MAX_QUEUE_SIZE');
     process.env.SANDBOX_CODE_MAX_WORKERS = '1';
     process.env.SANDBOX_CODE_MAX_QUEUE_SIZE = '1';
     try {
@@ -228,7 +229,7 @@ describe('code sandbox profile', () => {
       expect((await first).success).toBe(true);
       expect((await second).resultJson).toBe('2');
     } finally {
-      process.env = env;
+      restore();
     }
   });
 });
