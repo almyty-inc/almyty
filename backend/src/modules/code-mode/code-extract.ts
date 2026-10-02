@@ -48,7 +48,14 @@ const SYSTEM =
 
 /** The first JSON object or array in a model's answer. */
 export function parseJsonAnswer(text: string): unknown {
-  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  // A code fence around the answer, without a regex that backtracks on long whitespace.
+  let trimmed = text.trim();
+  if (trimmed.startsWith('```')) {
+    trimmed = trimmed.slice(3);
+    if (trimmed.toLowerCase().startsWith('json')) trimmed = trimmed.slice(4);
+    if (trimmed.endsWith('```')) trimmed = trimmed.slice(0, -3);
+    trimmed = trimmed.trim();
+  }
   try {
     return JSON.parse(trimmed);
   } catch {
