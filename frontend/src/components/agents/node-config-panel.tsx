@@ -701,7 +701,7 @@ function CodeConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn
             onChange={(value) => updateData('code', value)}
             language="javascript"
             height="220px"
-            placeholder={"const sold = await petstore.findPetsByStatus({ status: 'sold' })\nreturn sold.length"}
+            placeholder={"const open = await helpdesk.listTickets({ status: 'open' })\nreturn open.length"}
           />
         </div>
         <p className="text-xs text-muted-foreground">
