@@ -67,6 +67,42 @@ describe('sentry wrapper — DSN set (enabled)', () => {
     expect(s.isSentryEnabled()).toBe(true)
   })
 
+  it('turns off everything the SDK would collect on its own', async () => {
+    const s = await loadSentry()
+    await s.initSentry()
+    const opts = sentryMock.init.mock.calls[0][0]
+    expect(opts.dataCollection).toEqual(s.SENTRY_DATA_COLLECTION)
+    // Gone in @sentry/react 11; setting it would silently do nothing.
+    expect(opts).not.toHaveProperty('sendDefaultPii')
+  })
+
+  // Loading the real SDK is slow on a busy machine; the check is instant.
+  it('is what the real SDK resolves its collection rules to', async () => {
+    const s = await loadSentry()
+    const Sentry = await vi.importActual<any>('@sentry/react')
+    Sentry.init({
+      dsn: 'https://public@o1.ingest.sentry.io/123',
+      defaultIntegrations: false,
+      dataCollection: s.SENTRY_DATA_COLLECTION,
+    })
+    try {
+      expect(Sentry.getClient().getDataCollectionOptions()).toMatchObject({
+        userInfo: false,
+        cookies: false,
+        httpHeaders: { request: false, response: false },
+        httpBodies: [],
+        urlQueryParams: false,
+        graphQL: { document: false, variables: false },
+        genAI: { inputs: false, outputs: false },
+        databaseQueryData: false,
+        queues: false,
+        stackFrameVariables: false,
+      })
+    } finally {
+      await Sentry.close(0)
+    }
+  }, 60_000)
+
   it('tags the environment super-property (staging vs production)', async () => {
     vi.stubEnv('ALMYTY_APP_ENV', 'staging')
     const s = await loadSentry()
