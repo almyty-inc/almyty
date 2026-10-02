@@ -1875,7 +1875,10 @@ export class AgentStepProcessor {
     }
     const params = toolCall.parameters || {};
     const config: CodeModeConfig | undefined = agent.agentConfig?.codeMode;
-    const limits = codeModeLimits((organization?.settings as any)?.codeMode);
+    // A script's calls come out of the run's tool-call budget too, so it may
+    // make at most what is left of it (run_code itself was counted above).
+    const orgLimits = codeModeLimits((organization?.settings as any)?.codeMode);
+    const limits = { ...orgLimits, maxCalls: Math.min(orgLimits.maxCalls, Math.max(0, resolvedLimits.maxToolCalls - (run.toolCallCount ?? 0))) };
     const principal = principalOfRun(run);
     const outcome = await this.codeMode.run({
       code: params.code,

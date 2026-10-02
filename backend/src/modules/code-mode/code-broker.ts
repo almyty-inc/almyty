@@ -106,7 +106,7 @@ export class CodeBroker {
 
   private claim(target: string): () => void {
     if (this.used >= this.deps.limits.maxCalls) {
-      throw new CodeCallError(`This script has made its ${this.deps.limits.maxCalls} calls; split the work into another script.`, target);
+      throw new CodeCallError(`This script may make ${this.deps.limits.maxCalls} calls (what is left of the run's budget included); split the work into another script.`, target);
     }
     if (this.inFlight >= this.deps.limits.maxInFlight) {
       throw new CodeCallError(`At most ${this.deps.limits.maxInFlight} calls may run at once; await some before starting more.`, target);

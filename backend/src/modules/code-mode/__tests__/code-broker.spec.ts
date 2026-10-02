@@ -126,7 +126,7 @@ describe('code broker', () => {
     const { b } = broker({ limits: { maxCalls: 2, maxInFlight: 100 } });
     await b.handle({ op: 'tool', namespace: 'petstore', fn: 'findPetsByStatus', args: {} });
     await b.handle({ op: 'tool', namespace: 'petstore', fn: 'findPetsByStatus', args: {} });
-    await expect(b.handle({ op: 'tool', namespace: 'petstore', fn: 'findPetsByStatus', args: {} })).rejects.toThrow(/made its 2 calls/);
+    await expect(b.handle({ op: 'tool', namespace: 'petstore', fn: 'findPetsByStatus', args: {} })).rejects.toThrow(/may make 2 calls/);
 
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));

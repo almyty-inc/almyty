@@ -215,6 +215,28 @@ describe('code mode: an autonomous run', () => {
     expect(result.run.status).toBe(AgentRunStatus.COMPLETED);
   });
 
+  it("spends the run's tool-call budget: a script gets only what is left of it", async () => {
+    const { codeMode, executeTool, approvals, executions } = setup();
+    const script = "let ran = 0;\nfor (const id of [1, 2, 3, 4, 5]) { try { await petstore.updatePet({ id, status: 'archived' }); ran++; } catch (e) { log(e.message); } }\nreturn ran;";
+    const result = await runAgent({
+      models: null,
+      agent: { toolIds: ['tool-find', 'tool-update'], agentConfig: { toolMode: 'code' } },
+      tools: [FIND, UPDATE],
+      executeTool,
+      approvals,
+      codeMode,
+      limits: { maxToolCalls: 3 },
+      streams: {
+        [MODEL]: [anthropicTool(MODEL, RUN_CODE, { code: script }, 120, 40), anthropicText(MODEL, 200, ['Two of five.'], 8)],
+      },
+    });
+    // run_code itself is one call of the three; the script may make two.
+    expect(executeTool).toHaveBeenCalledTimes(2);
+    // The refusals are what the script logged; the run has spent its budget.
+    expect(executions.rows()[0].logs).toContain("what is left of the run's budget");
+    expect(result.run.toolCallCount).toBe(3);
+  });
+
   it('answers that code mode is unavailable when the server has none, without running anything', async () => {
     const { executeTool, approvals } = setup();
     const result = await runAgent({
