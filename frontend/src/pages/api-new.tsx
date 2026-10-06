@@ -6,7 +6,7 @@ import { FormPage } from '@/components/layout/form-page'
 import { ChoiceTile, ChoiceTiles, ServiceIcon } from '@/components/connect/service-tiles'
 import { API_KIND_TILES } from '@/components/apis/api-types'
 import { PROVIDER_APIS, providerApiPath } from '@/components/apis/provider-apis'
-import { providerLogos } from '@/components/llm-providers/provider-type-config'
+import { BrandIcon } from '@/components/brand-icon'
 import type { ConnectApiResult } from '@/types/api-connect'
 
 /** Where "Finish connecting" picks up: the import job, and what is still needed. */
@@ -61,7 +61,7 @@ export function ApiNewPage() {
             <ChoiceTile
               key={p.key}
               testId={`provider-api-${p.key}`}
-              icon={<ServiceIcon>{providerLogos[p.key] ?? p.label.charAt(0)}</ServiceIcon>}
+              icon={<ServiceIcon><BrandIcon brand={p.key} name={p.label} /></ServiceIcon>}
               label={p.label}
               hint={p.hint}
               onClick={() => navigate(providerApiPath(p.key))}

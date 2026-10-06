@@ -19,7 +19,7 @@ import { connectorIcon, useConnectors } from '@/components/connections/connect-f
 import { CredentialForm } from '@/components/credentials/credential-form'
 import { StatusLabel } from '@/components/connect/status-label'
 import { connectionCheck } from '@/components/connections/connection-status'
-import { CONNECTIONS_QUERY_KEY, CREDENTIALS_QUERY_KEY, credentialPath } from '@/components/credentials/paths'
+import { CONNECTIONS_QUERY_KEY, credentialPath } from '@/components/credentials/paths'
 import { connectionsApi } from '@/lib/connections-api'
 import { memoriesApi, type MemoryAccountRow, type MemoryAccountsOverview, type MemoryMove } from '@/lib/api'
 import { formatRelativeTime, pluralized } from '@/lib/utils'

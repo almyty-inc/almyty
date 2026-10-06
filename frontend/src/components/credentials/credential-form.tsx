@@ -99,7 +99,7 @@ export function CredentialForm({
       return connector ? credentialServices([connector], { kind: connector.kind }) : []
     }
     return credentialServices(connectors, { modelsOnly, kind, allowedKeys, withoutModels })
-  }, [connectors, connectorKey, modelsOnly, kind, allowedKeys?.join(','), withoutModels])
+  }, [connectors, connectorKey, modelsOnly, kind, allowedKeys, withoutModels])
   const entry = entries.find((e) => e.id === picked) ?? null
   const custom = entry?.id === CUSTOM_SERVICE ? CUSTOM_KINDS.find((k) => k.id === customKind) ?? null : null
   const target: ServiceTarget | null = entry?.target ?? custom?.target ?? null

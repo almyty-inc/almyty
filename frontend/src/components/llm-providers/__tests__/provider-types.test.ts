@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { LlmProviderType } from '@/types'
-import { providerLogos, providerTypeLabels } from '../provider-type-config'
+import { providerTypeLabels } from '../provider-type-config'
 import { PROVIDER_TILE_GROUPS, PROVIDER_TILE_ORDER, providerTileLabel } from '../provider-catalog'
 
 /**
@@ -37,11 +37,6 @@ describe('every provider type can be connected, and is named', () => {
   it('names nothing that is not a type, so a removed provider cannot linger in a form', () => {
     const strays = Object.keys(providerTypeLabels).filter((k) => !all.includes(k as LlmProviderType))
     expect(strays).toEqual([])
-  })
-
-  it('has a logo for every type, so no provider falls back to the generic icon', () => {
-    const missing = all.filter((t) => !providerLogos[t])
-    expect(missing).toEqual([])
   })
 
   it('gives each tile a distinct, non-empty label, and your own server a plain one', () => {

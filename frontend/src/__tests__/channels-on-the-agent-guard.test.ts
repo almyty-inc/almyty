@@ -72,7 +72,7 @@ describe('channels are on the agent, and nowhere else', () => {
   })
 
   it('keeps chat apps out of the Add credential gallery', () => {
-    const add = read('components/credentials/services.ts')
+    expect(read('components/credentials/services.ts')).toContain("c.kind !== 'channel'")
   })
 
   // Every key goes through Credentials: the channel page picks one, or

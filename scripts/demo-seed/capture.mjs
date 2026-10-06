@@ -106,7 +106,7 @@ export const SHOTS = {
   'quickstart-mcp-endpoints': ['quickstart-mcp-endpoints.png', (i) => `/gateways/${i.gwPetstore}?tab=integrations`, 2880, 1800, 'MCP endpoints', src('frontend/src/pages/gateway-detail.tsx', 'frontend/src/components/gateways'), section('MCP endpoint')],
   'quickstart-claude-config': ['quickstart-claude-config.png', (i) => `/gateways/${i.gwPetstore}?tab=integrations`, 2880, 1800, 'Client setup', src('frontend/src/pages/gateway-detail.tsx', 'frontend/src/components/gateways'), section('Quick setup')],
   'credentials-vault': ['credentials-vault.png', () => '/credentials', 2880, 1800, 'Credentials', src('frontend/src/pages/credentials.tsx', 'frontend/src/pages/credential-pages.tsx', 'frontend/src/components/credentials')],
-  'credentials-connect-provider': ['credentials-connect-provider.png', () => '/credentials/providers/new', 1440, 900, 'Connect a provider', src('frontend/src/pages/models-connect.tsx', 'frontend/src/components/models'), null, 1],
+  'credentials-connect-provider': ['credentials-connect-provider.png', () => '/models/providers/new', 1440, 900, 'Connect a provider', src('frontend/src/pages/models-connect.tsx', 'frontend/src/components/models'), null, 1],
   'models': ['models.png', () => '/models', 2880, 1800, 'Model catalog', src('frontend/src/pages/models.tsx', 'frontend/src/components/models')],
   'memory': ['memory.png', () => '/memories', 2880, 1800, 'Memory', src('frontend/src/pages/memories.tsx', 'frontend/src/components/memory')],
   'memory-write': ['memory-write.png', () => '/memories/new', 2880, 1800, 'Add memory', src('frontend/src/pages/memory-new.tsx', 'frontend/src/components/memory')],

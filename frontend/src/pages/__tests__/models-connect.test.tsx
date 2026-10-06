@@ -228,7 +228,7 @@ describe('ConnectProviderPage', () => {
     fireEvent.click(await within(form).findByRole('combobox', { name: 'Where Ollama runs' }))
     fireEvent.click(screen.getByRole('option', { name: /Your own server/ }))
     expect(within(form).getByLabelText('API key (optional)')).toBeInTheDocument()
-    expect(within(form).getByText(/OLLAMA_ALLOW_PRIVATE_URLS=true/)).toBeInTheDocument()
+    expect(within(form).getByText('The address of your model server, reachable from almyty.')).toBeInTheDocument()
     fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
     expect(await screen.findByText(/Enter the server URL/)).toBeInTheDocument()
     fireEvent.change(within(form).getByLabelText('Server URL'), { target: { value: 'http://build-box:11434' } })

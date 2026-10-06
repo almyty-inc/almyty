@@ -127,7 +127,7 @@ export const JOURNEYS: Journey[] = [
         cta: 'Connect a provider',
         target: () => ({
           to: connectProviderPath(null, '/guide'),
-          place: 'Credentials › Connect a provider',
+          place: 'Models › Connect a provider',
         }),
       },
       {

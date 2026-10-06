@@ -42,11 +42,6 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
-/** What the private-host rule is for a server you run, per type. */
-function privateHostHint(type: string): string {
-  const flag = type === 'ollama' ? 'OLLAMA_ALLOW_PRIVATE_URLS' : 'LLM_ALLOW_PRIVATE_URLS'
-  return `Private or LAN hosts (10.x, 192.168.x, .internal, localhost) need ${flag}=true on the almyty server.`
-}
 
 export interface ConnectProviderFormProps {
   type: string
@@ -210,7 +205,7 @@ export function ConnectProviderForm({ type, name, onNameMissing, onConnected, on
         <Field
           id={id('api-url')}
           label="Server URL"
-          hint={`${type === 'custom' ? 'Any server that speaks the OpenAI API: vLLM, LM Studio, llama.cpp, a gateway. ' : 'The address your Ollama answers on. '}${privateHostHint(type)}`}
+          hint="The address of your model server, reachable from almyty."
           error={errors.apiUrl}
         >
           <Input value={apiUrl} onChange={(e) => setApiUrl(e.target.value)} placeholder={type === 'custom' ? 'https://llm.example.com/v1' : 'http://localhost:11434'} />

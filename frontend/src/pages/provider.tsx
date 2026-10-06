@@ -31,7 +31,8 @@ import { useHostingActions } from '@/components/models/use-model-data'
 import { CredentialSlot, CredentialRefSummary, isMaskedKey } from '@/components/llm-providers/credential-slot'
 import { ProviderStatus, canTurnBackOn, inactiveReason, providerCheck } from '@/components/llm-providers/provider-status'
 import { HOSTING_ADAPTER_FOR_TYPE, keyUrlFor, providerTileLabel, takesBaseUrl } from '@/components/llm-providers/provider-catalog'
-import { providerLogos, providerUsageApiSupport, usageApiSupported } from '@/components/llm-providers/provider-type-config'
+import { providerUsageApiSupport, usageApiSupported } from '@/components/llm-providers/provider-type-config'
+import { BrandIcon } from '@/components/brand-icon'
 import { BASE_URL_PRIVATE_HOST_HINT, buildProviderUpdateBody } from '@/components/llm-providers/schema'
 import { WhoCanUse } from '@/components/connect/who-can-use'
 import { llmProvidersApi } from '@/lib/api'
@@ -209,7 +210,7 @@ export function ProviderPage() {
 
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
-          <ServiceIcon size="lg">{providerLogos[provider.type] || '⚙️'}</ServiceIcon>
+          <ServiceIcon size="lg"><BrandIcon brand={provider.type} name={provider.name} /></ServiceIcon>
           <div className="min-w-0 space-y-1">
             <EditableName name={provider.name} saving={update.isPending} onSave={(name) => update.mutate({ name })} />
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">

@@ -26,7 +26,6 @@ import { WhoCanUse, WhoCanUseLine } from '@/components/connect/who-can-use'
 import { ConnectServiceForm, connectorIcon, useConnectOwners, useConnectors } from '@/components/connections/connect-flow'
 import { connectionCheck, connectionWho } from '@/components/connections/connection-status'
 import type { Visibility, VisibilityValue } from '@/components/ui/visibility-field'
-import { useOrganizationRole } from '@/hooks/use-organization-role'
 import { credentialsApi } from '@/lib/api'
 import { connectionsApi, errorMessage } from '@/lib/connections-api'
 import { cn, pluralized } from '@/lib/utils'
@@ -133,7 +132,6 @@ export interface CredentialDetailProps {
 export function CredentialDetail({ connection, connector, onDeleted }: CredentialDetailProps) {
   const queryClient = useQueryClient()
   const notifications = useNotifications()
-  const { canManage } = useOrganizationRole()
   const [replacing, setReplacing] = useState(false)
   const [outcome, setOutcome] = useState<CheckOutcome | null>(null)
 
