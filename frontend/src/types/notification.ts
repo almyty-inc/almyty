@@ -7,6 +7,8 @@ export const NOTIFICATION_EVENT_TYPES = [
   'approval.pending',
   'approval.decided',
   'run.failed',
+  'agent.report',
+  'agent.paused',
   'budget.alert',
   'invite.received',
   'referral.qualified',

@@ -13,6 +13,8 @@ import {
   Globe,
   KeyRound,
   Lock,
+  PauseCircle,
+  Radio,
   Shield,
   ShieldCheck,
   User,
@@ -46,6 +48,18 @@ const PRESENTATION: Record<string, NotificationPresentation> = {
     accentClass: 'text-red-500',
     label: 'Run failed',
     description: 'An agent run ended with an error.',
+  },
+  'agent.report': {
+    icon: Radio,
+    accentClass: 'text-violet-500',
+    label: 'Agent report',
+    description: 'An always-on agent finished a wake and reported what it did.',
+  },
+  'agent.paused': {
+    icon: PauseCircle,
+    accentClass: 'text-amber-500',
+    label: 'Agent paused',
+    description: 'An always-on agent stopped itself, and says why.',
   },
   'budget.alert': {
     icon: Coins,
