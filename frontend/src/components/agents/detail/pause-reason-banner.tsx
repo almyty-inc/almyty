@@ -50,7 +50,7 @@ const COPY: Record<AgentPauseReason['code'], { what: (kind: Kind) => string; fix
   },
   IDENTITY_LAPSED: {
     what: (kind) =>
-      `The ${kind} was ${stopped(kind)} because this agent acts as itself, which needs the Business plan, and the plan no longer includes it. It was not run as its owner instead.`,
+      `The ${named(kind)} was ${stopped(kind)} because this agent acts as itself, which needs the Business plan, and the plan no longer includes it. It was not run as its owner instead.`,
     fix: (kind) =>
       `Upgrade to Business and ${restart(kind)}, or switch Acts as back to its owner under Capabilities and ${restart(kind)}.`,
   },
