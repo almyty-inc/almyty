@@ -8,6 +8,7 @@ import {
 } from '@/store/organization-selection'
 import type { ApiKeyView, ConnectApiInput, ConnectApiResult, SetApiKeyInput } from '@/types/api-connect'
 import type { DeliveryOptions, SchedulePreview, ScheduleRequest, ScheduleView } from '@/lib/schedule'
+import type { AgentWakeRow, AlwaysOnInput, AlwaysOnView } from '@/lib/always-on'
 
 const API_BASE_URL = import.meta.env.ALMYTY_API_BASE_URL || ''
 
@@ -945,8 +946,11 @@ export const agentsApi = {
   previewSchedule: (id: string, body: ScheduleRequest) => apiPost<SchedulePreview>(`/agents/${id}/schedule/preview`, body),
   scheduleDestinations: (id: string) => apiGet<DeliveryOptions>(`/agents/${id}/schedule/destinations`),
   unschedule: (id: string) => apiDel(`/agents/${id}/schedule`),
-  setHeartbeat: (id: string, body: { enabled: boolean; intervalMinutes?: number; prompt?: string }) =>
-    apiPatch(`/agents/${id}/heartbeat`, body),
+  // Always on (lib/always-on.ts has the shapes)
+  getAlwaysOn: (id: string) => apiGet<AlwaysOnView>(`/agents/${id}/always-on`),
+  setAlwaysOn: (id: string, body: AlwaysOnInput) => apiPatch<AlwaysOnView>(`/agents/${id}/always-on`, body),
+  wakeNow: (id: string) => apiPost(`/agents/${id}/always-on/wake`, {}),
+  listWakes: (id: string, limit = 20) => apiGet<AgentWakeRow[]>(`/agents/${id}/always-on/wakes`, { params: { limit } }),
   // Runs (autonomous mode)
   listRuns: (id: string, params?: any) => apiGet(`/agents/${id}/runs`, { params }),
   getRun: (id: string, runId: string) => apiGet(`/agents/${id}/runs/${runId}`),

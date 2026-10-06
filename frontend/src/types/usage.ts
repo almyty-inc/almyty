@@ -2,6 +2,7 @@ import type { Gateway, Tool, LlmProvider, User, Organization, ApiAuthType } from
 import type { RouteAttribution, RoutingPolicy } from './models';
 import type { AgentMemoryConfig, AgentModels } from './agent-models';
 import type { AgentSchedule } from '@/lib/schedule';
+import type { AlwaysOnConfig } from '@/lib/always-on';
 // Usage Metrics Types
 export interface UsageMetric {
   id: string
@@ -190,13 +191,13 @@ export interface AgentModelIssue {
 }
 
 /**
- * Why the backend switched a schedule or heartbeat off on its own, for
+ * Why the backend switched a schedule or Always on off on its own, for
  * every reason other than a retired model (that one is AgentModelIssue).
  * The codes are those of AgentPauseReason in
  * backend/src/entities/agent.entity.ts.
  */
 export interface AgentPauseReason {
-  code: 'OWNER_CANNOT_RUN' | 'OWNER_NOT_MEMBER' | 'RESTORE_FAILED'
+  code: 'OWNER_CANNOT_RUN' | 'OWNER_NOT_MEMBER' | 'RESTORE_FAILED' | 'WAKE_LOOP' | 'CAPACITY_EXHAUSTED' | 'IDENTITY_LAPSED'
   message: string
   detectedAt: string
 }
@@ -236,13 +237,8 @@ export interface Agent {
   pipeline: AgentPipeline
   instructions?: string
   personality?: string
-  heartbeat?: {
-    enabled: boolean
-    intervalMinutes: number
-    prompt: string
-    /** Set by the backend when it switched the heartbeat off on its own. */
-    pausedReason?: AgentPauseReason
-  }
+  /** Always on (lib/always-on.ts has the full shape); edited on /agents/:id/always-on. */
+  alwaysOn?: AlwaysOnConfig | null
   toolIds?: string[]
   /** 'private' = only its owner (createdBy) can see or use it. */
   visibility?: 'private' | 'team' | 'org'
@@ -289,6 +285,12 @@ export interface Agent {
     runnerLabels?: Record<string, string> | string
     /** Pin runner-backed work to one machine. */
     runnerId?: string | null
+    /**
+     * Who unattended runs act as: its owner (default), or the agent itself
+     * with its own connection grants and audit identity. 'agent' needs the
+     * agent_identity entitlement.
+     */
+    runAs?: 'owner' | 'agent'
     verify?: {
       enabled?: boolean
       checkers?: Array<{ name?: string; providerId?: string; model?: string; instructions?: string }>

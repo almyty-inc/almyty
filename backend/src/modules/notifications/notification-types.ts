@@ -7,6 +7,8 @@ export const NOTIFICATION_EVENT_TYPES = [
   'approval.pending',
   'approval.decided',
   'run.failed',
+  'agent.report',
+  'agent.paused',
   'budget.alert',
   'invite.received',
   'referral.qualified',
@@ -50,6 +52,12 @@ export const NOTIFICATION_DEFAULTS: Record<NotificationEventType, ChannelPrefs> 
   'approval.pending': { inApp: true, email: true },
   'approval.decided': { inApp: true, email: true },
   'run.failed': { inApp: true, email: false },
+  // An always-on agent's report after a wake: in the app; by email only
+  // for someone who asks for it (a busy agent reports often).
+  'agent.report': { inApp: true, email: false },
+  // An always-on agent paused itself (it looped, its owner lost access):
+  // nothing runs until someone looks, so it is emailed too.
+  'agent.paused': { inApp: true, email: true },
   'budget.alert': { inApp: true, email: true },
   'connections.expiring': { inApp: true, email: true },
   'connections.expired': { inApp: true, email: true },

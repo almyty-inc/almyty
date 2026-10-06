@@ -1046,7 +1046,7 @@ describe('AlmytyMcpService', () => {
       const schema = res.result.tools.find((t: any) => t.name === 'create_agent').inputSchema;
       // Only name/description/mode/instructions used to be reachable, so an
       // MCP-built agent had no graph, no tools and no model.
-      for (const field of ['pipeline', 'toolIds', 'modelConfig', 'memoryConfig', 'agentConfig', 'collaboration', 'variables', 'personality', 'heartbeat', 'webhookUrl']) {
+      for (const field of ['pipeline', 'toolIds', 'modelConfig', 'memoryConfig', 'agentConfig', 'collaboration', 'variables', 'personality', 'webhookUrl']) {
         expect(Object.keys(schema.properties)).toContain(field);
       }
       expect(schema.properties.pipeline.properties.nodes).toBeDefined();

@@ -35,6 +35,7 @@ vi.mock('@/lib/api', () => ({
     getTemplates: vi.fn().mockResolvedValue([]),
     create: vi.fn(),
     update: vi.fn(),
+    getAlwaysOn: vi.fn().mockResolvedValue({ alwaysOn: null, capacity: { timerFloorMinutes: 15, maxWakesPerHour: 6, includedAgents: null }, tools: [] }),
   },
   llmProvidersApi: {
     getAll: vi.fn().mockResolvedValue([{ id: 'prov-openai', name: 'OpenAI', type: 'openai', status: 'active' }]),
@@ -160,7 +161,7 @@ describe('the autonomous agent page', () => {
 
   it('shows the work mode first, above personality and instructions, then memory and capabilities, and nothing in a dialog', async () => {
     openAgent({ strategy: 'single', roles: [MAIN] })
-    const headings = await screen.findAllByText(/^(Personality & style|Instructions|Work mode|Memory|Capabilities|Run limits|Heartbeat)$/, {
+    const headings = await screen.findAllByText(/^(Personality & style|Instructions|Work mode|Memory|Capabilities|Run limits|Always on)$/, {
       selector: '.text-base',
     })
     expect(headings.map((h) => h.textContent)).toEqual([
@@ -170,7 +171,7 @@ describe('the autonomous agent page', () => {
       'Memory',
       'Capabilities',
       'Run limits',
-      'Heartbeat',
+      'Always on',
     ])
     // The old layout is gone: models before their mode, cards, "More ways".
     for (const old of ['Models', 'How they work together', 'Agent capabilities', 'More ways']) {

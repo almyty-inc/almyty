@@ -251,9 +251,9 @@ export class RunWorkspaceService {
 
 /**
  * Whose workspace this is. A workspace is always one person's
- * (WorkspaceService.findForDispatch): the run's user, or the owner of the
- * private or team gateway the run came through. An org-wide gateway's run
- * has no one to hold it.
+ * (WorkspaceService.findForDispatch): the run's user, the owner of the
+ * private or team gateway the run came through, or the owner of an agent
+ * acting as itself. An org-wide gateway's run has no one to hold it.
  */
 function ownerOf(input: AcquireRunWorkspaceInput): string {
   const p = input.principal;
@@ -263,6 +263,15 @@ function ownerOf(input: AcquireRunWorkspaceInput): string {
     throw new RunnerCallError(
       RUNNER_CALL_ERRORS.WORKSPACE_REQUIRED,
       'this run came through an org-wide gateway, and a workspace belongs to one person; call the tool with a workspaceId or run the agent as a user',
+    );
+  }
+  // An agent acting as itself works on its owner's runner, in a workspace
+  // made for the agent (findForDispatch matches it by agentId).
+  if (p?.kind === 'agent') {
+    if (p.ownerUserId) return p.ownerUserId;
+    throw new RunnerCallError(
+      RUNNER_CALL_ERRORS.WORKSPACE_REQUIRED,
+      'this agent acts as itself and has no recorded owner whose machine it could work on; call the tool with a workspaceId',
     );
   }
   if (!p && input.callerUserId) return input.callerUserId;

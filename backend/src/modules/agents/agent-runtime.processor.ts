@@ -8,11 +8,15 @@ import { Workspace } from '../../entities/workspace.entity';
 import { releaseRunWorkspaces } from '../workspace/run-end-release';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { Agent } from '../../entities/agent.entity';
-import { AgentMode, AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
+import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { runWithRequestContext } from '../../common/request-context';
-import { agentOwnerUserId } from './agent-owner';
-import { userPrincipal } from '../../common/authorization/execution-access.service';
 import { AgentSchedulerService } from './agent-scheduler.service';
+import {
+  ALWAYS_ON_TICK_JOB,
+  ALWAYS_ON_WAKE_JOB,
+  AlwaysOnService,
+  LEGACY_HEARTBEAT_JOB,
+} from './always-on/always-on.service';
 
 /**
  * A run in one of these is finished; a late queue failure must not
@@ -45,6 +49,10 @@ export class AgentRuntimeProcessor {
     // Optional for the positional unit tests.
     @Optional()
     private readonly scheduler?: AgentSchedulerService,
+    // Always on: its timer and wake jobs run here, and a finished run of a
+    // standing thread reports through it. Optional for the positional tests.
+    @Optional()
+    private readonly alwaysOn?: AlwaysOnService,
   ) {}
 
   @Process('next-step')
@@ -98,7 +106,7 @@ export class AgentRuntimeProcessor {
             // runner workspaces are released now, freeing the runner.
             await releaseRunWorkspaces(this.workspaceRepository, runId, this.runRepository);
             // A scheduled run's result goes where its schedule said.
-            await this.scheduler?.deliverScheduledRun(runId);
+            await this.finished(runId);
           }
         } catch (error) {
           this.logger.error(`Step processing failed for run ${runId}: ${error.message}`, error.stack);
@@ -108,76 +116,42 @@ export class AgentRuntimeProcessor {
     );
   }
 
-  @Process('heartbeat')
-  async handleHeartbeat(job: Job<{ agentId: string; organizationId: string }>) {
+  /**
+   * Always on's timer (docs/always-on.md). The tick only writes a wake; the
+   * wake job decides whether that becomes a run, so a timer and a webhook
+   * arriving together are one run on the standing thread, not two.
+   */
+  @Process(ALWAYS_ON_TICK_JOB)
+  async handleAlwaysOnTick(job: Job<{ agentId: string; organizationId: string }>) {
     const { agentId, organizationId } = job.data;
-    this.logger.log(`Processing heartbeat for agent ${agentId}`);
-
-    try {
-      const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId } });
-      if (!agent || !agent.heartbeat?.enabled || !agent.heartbeat?.prompt) {
-        this.logger.warn(`Heartbeat skipped for agent ${agentId}: not configured or disabled`);
-        return;
-      }
-
-      // The run is the agent's owner's: startRun writes the user onto the
-      // run's conversation, whose userId is a uuid referencing users. This
-      // passed the string 'system', which Postgres refuses in that column,
-      // so every heartbeat failed before its run existed. An agent with no
-      // recorded owner runs as nobody -- and a private or team one is then
-      // refused, the same as any caller outside its scope. So does one
-      // whose createdBy is not a user id at all (a temporary agent's
-      // 'system').
-      //
-      // Authorized at fire time, as the owner now: an owner who has left the
-      // agent's team (or the organization) stops the heartbeat with a
-      // failed run that says why, instead of a job that fails and retries
-      // every interval with "Agent not found".
-      const principal = userPrincipal(agentOwnerUserId(agent), 'heartbeat');
-      const access = await this.runtimeService.executionAccess.canExecute(principal, agent);
-      if (!access.allowed) {
-        const message = principal.userId
-          ? `Heartbeat refused: the agent's owner (${principal.userId}) can no longer run this agent (${access.reason}). The heartbeat has been disabled.`
-          : `Heartbeat refused: this agent has no owner who can run it (${access.reason}). The heartbeat has been disabled.`;
-        await this.runRepository.save(
-          this.runRepository.create({
-            agentId,
-            organizationId,
-            userId: principal.userId,
-            mode: AgentMode.AUTONOMOUS,
-            status: AgentRunStatus.FAILED,
-            // What the heartbeat would have sent, as startRun records it.
-            input: agent.heartbeat.prompt as any,
-            steps: [],
-            error: message,
-            principal,
-            metadata: { triggerType: 'heartbeat', refusedBy: 'execution_access' },
-          }),
-        );
-        // Recorded on the agent too, so its page says why the heartbeat is off.
-        await this.runtimeService.disableHeartbeat(agentId, organizationId, {
-          code: 'OWNER_CANNOT_RUN',
-          message,
-          detectedAt: new Date().toISOString(),
-        });
-        this.logger.warn(`Heartbeat for agent ${agentId} stopped: ${message}`);
-        return;
-      }
-      await this.runtimeService.startRun(
-        agentId,
-        organizationId,
-        principal.userId,
-        agent.heartbeat.prompt,
-        { maxSteps: 10, principal },
-      );
-
-      this.logger.log(`Heartbeat run started for agent ${agentId}`);
-    } catch (error) {
-      this.logger.error(`Heartbeat failed for agent ${agentId}: ${error.message}`, error.stack);
-      throw error;
-    }
+    if (!this.alwaysOn) return;
+    await this.alwaysOn.tick(agentId, organizationId);
   }
 
+  /**
+   * A heartbeat job left in Redis from before Always on: it fires as a tick.
+   * Boot removes these (AlwaysOnService.restoreTimers); this catches one
+   * that fires first.
+   */
+  @Process(LEGACY_HEARTBEAT_JOB)
+  async handleLegacyHeartbeat(job: Job<{ agentId: string; organizationId: string }>) {
+    return this.handleAlwaysOnTick(job);
+  }
+
+  /** Turn an always-on agent's queued wakes into a run on its standing thread. */
+  @Process(ALWAYS_ON_WAKE_JOB)
+  async handleAlwaysOnWake(job: Job<{ agentId: string; organizationId: string }>) {
+    const { agentId, organizationId } = job.data;
+    if (!this.alwaysOn) return;
+    const outcome = await this.alwaysOn.process(agentId, organizationId);
+    this.logger.debug(`Always on for agent ${agentId}: ${outcome}`);
+  }
+
+  /** Everything a finished run hands on: its scheduled result, its always-on report. */
+  private async finished(runId: string): Promise<void> {
+    await this.scheduler?.deliverScheduledRun(runId);
+    await this.alwaysOn?.onRunFinished(runId);
+  }
   @Process('timeout-check')
   async handleTimeoutCheck(job: Job<{ runId: string }>) {
     const { runId } = job.data;
@@ -188,7 +162,7 @@ export class AgentRuntimeProcessor {
       const result = await this.runtimeService.processStep(runId);
       if (result === 'done') {
         await releaseRunWorkspaces(this.workspaceRepository, runId, this.runRepository);
-        await this.scheduler?.deliverScheduledRun(runId);
+        await this.finished(runId);
       }
     } catch (error) {
       // Rethrow. Swallowing this made a failing timeout check disappear
@@ -232,7 +206,7 @@ export class AgentRuntimeProcessor {
 
     const runId = (job?.data as any)?.runId;
     if (!runId) {
-      // A heartbeat job has no run of its own — the log line above is the
+      // A timer or wake job has no run of its own: the log line above is the
       // whole record, and there is no row to put it on.
       return;
     }
@@ -291,7 +265,7 @@ export class AgentRuntimeProcessor {
     }
 
     await releaseRunWorkspaces(this.workspaceRepository, runId, this.runRepository);
-    await this.scheduler?.deliverScheduledRun(runId);
+    await this.finished(runId);
     this.logger.error(`Run ${runId} marked FAILED after exhausted retries: ${error?.message}`);
   }
 }

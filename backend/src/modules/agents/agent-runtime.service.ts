@@ -24,7 +24,6 @@ import { Message, MessageContent } from '../../entities/message.entity';
 import { withAttachedFiles } from './attached-files';
 import { AgentRuntimeBuilders } from './agent-runtime-builders';
 import { AgentCollaborationHelper } from './agent-collaboration.helper';
-import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentBuiltInToolsHelper } from './agent-builtin-tools.helper';
 import { AgentRuntimeEventsHelper } from './agent-runtime-events.helper';
 import { AgentRuntimeMiscHelper } from './agent-runtime-misc.helper';
@@ -185,7 +184,6 @@ export class AgentRuntimeService implements OnModuleInit {
     readonly memoryService: CanonicalMemoryService,
     @InjectRedis() readonly redis: Redis,
     readonly builders: AgentRuntimeBuilders,
-    readonly heartbeat: AgentHeartbeatHelper,
     @Inject(forwardRef(() => AgentCollaborationHelper))
     readonly collaboration: AgentCollaborationHelper,
     @Inject(forwardRef(() => AgentBuiltInToolsHelper))
@@ -270,6 +268,11 @@ export class AgentRuntimeService implements OnModuleInit {
        * only worker while its child waits in the queue behind it.
        */
       inline?: boolean;
+      /**
+       * Take the agent's own run limits (Always on) instead of this call's
+       * maxSteps / maxCostCents / maxDurationMs and their defaults.
+       */
+      agentLimits?: boolean;
     },
 
   ): Promise<AgentRun> {
@@ -403,6 +406,13 @@ export class AgentRuntimeService implements OnModuleInit {
     );
     await this.messageRepository.save(userMessage);
 
+    // An always-on wake runs on the agent's own limits: the agent's, the
+    // organization's and the install's, resolved the way every step resolves
+    // them, not the fixed defaults below (which cap a run at 50 steps and $1
+    // whatever the agent says).
+    const agentLimits = options?.agentLimits
+      ? await this.misc.resolveLimits({ organizationId, agent, limits: {} } as unknown as AgentRun)
+      : null;
     const run = this.runRepository.create({
       agentId,
       organizationId,
@@ -415,13 +425,17 @@ export class AgentRuntimeService implements OnModuleInit {
       input,
       steps: [],
       currentStep: 0,
-      maxSteps: options?.maxSteps || 50,
-      limits: {
-        maxSteps: options?.maxSteps || 50,
-        maxDurationMs: options?.maxDurationMs || 3600000, // 1 hour
-        maxCostCents: options?.maxCostCents || 100,       // $1
-        maxToolCalls: 100,
-      },
+      // A run on its agent's own limits asks for nothing itself; the rest
+      // keep the defaults they always had.
+      maxSteps: agentLimits ? agentLimits.maxSteps : options?.maxSteps || 50,
+      limits: agentLimits
+        ? {}
+        : {
+            maxSteps: options?.maxSteps || 50,
+            maxDurationMs: options?.maxDurationMs || 3600000, // 1 hour
+            maxCostCents: options?.maxCostCents || 100,       // $1
+            maxToolCalls: 100,
+          },
       parentRunId: options?.parentRunId || null,
       // Whose scope the run executes in, for every step the queue worker
       // processes later: child runs and tool calls are authorized against
@@ -671,9 +685,6 @@ export class AgentRuntimeService implements OnModuleInit {
   // ── Delegations to AgentRuntimeMiscHelper ──
   waitForRun(...args: Parameters<AgentRuntimeMiscHelper['waitForRun']>) { return this.misc.waitForRun(...args); }
 
-  // ── Delegations to AgentHeartbeatHelper
-  enableHeartbeat(...args: Parameters<AgentHeartbeatHelper['enableHeartbeat']>) { return this.heartbeat.enableHeartbeat(...args); }
-  disableHeartbeat(...args: Parameters<AgentHeartbeatHelper['disableHeartbeat']>) { return this.heartbeat.disableHeartbeat(...args); }
 
   /**
    * React to an approval decision. On 'approved' the run is moved

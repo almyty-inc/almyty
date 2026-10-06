@@ -21,6 +21,7 @@ import { parseLabelRequirements } from '../runner/runner-labels';
 import { AgentMemoryConfig, memoryConfigProblems, memorySettings, retentionSeconds, NATIVE_MEMORY_ACCOUNT } from './agent-memory-settings';
 import { capabilityProblems, normaliseCapabilities } from './agent-capabilities';
 import { toolModeProblems } from './agent-tool-mode';
+import { AgentIdentityService, runAsProblems } from './agent-identity';
 import { MemoryAccountsService } from '../memory/canonical/memory-accounts.service';
 import { Api } from '../../entities/api.entity';
 import { Runner } from '../../entities/runner.entity';
@@ -61,7 +62,6 @@ export interface CreateAgentInput {
   pipeline?: AgentPipeline;
   instructions?: string;
   personality?: string;
-  heartbeat?: { enabled: boolean; intervalMinutes: number; prompt: string };
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
   memoryConfig?: AgentMemoryConfig;
@@ -85,7 +85,6 @@ export interface UpdateAgentInput {
   pipeline?: AgentPipeline;
   instructions?: string;
   personality?: string;
-  heartbeat?: { enabled: boolean; intervalMinutes: number; prompt: string };
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
   memoryConfig?: AgentMemoryConfig;
@@ -163,7 +162,7 @@ export const AGENT_LIST_COLUMNS = [
   'mode',
   'instructions',
   'personality',
-  'heartbeat',
+  'alwaysOn',
   'toolIds',
   'modelConfig',
   'memoryConfig',
@@ -212,6 +211,8 @@ export class AgentsService {
     // To reach AgentChannelsService when an agent is deleted. Resolved
     // lazily: AgentChannels imports Gateways, which imports this module.
     @Optional() private readonly moduleRef?: ModuleRef,
+    // Whether the organization may let an agent act as itself (agent_identity).
+    @Optional() private readonly identity?: AgentIdentityService,
   ) {}
 
   /** See the call sites: an agent's own memory account must be one the agent may use. */
@@ -260,6 +261,7 @@ export class AgentsService {
     const capability = capabilityProblems(agentConfig);
     problems.push(...capability);
     problems.push(...toolModeProblems(agentConfig as Record<string, any> | null | undefined));
+    problems.push(...runAsProblems(agentConfig));
     if (!capability.length && agentConfig) {
       const callable = (agentConfig.callableAgentIds ?? []).filter((id) => id !== selfId);
       if (agentConfig.callableAgentIds?.includes(selfId ?? '')) problems.push('An agent cannot call itself');
@@ -479,6 +481,7 @@ export class AgentsService {
       this.assertModels(createDto.models);
       await this.assertToolsInOrg(createDto.toolIds, organizationId);
       await this.assertMemoryAndCapabilities(createDto.memoryConfig, createDto.agentConfig, organizationId);
+      await (this.identity ?? new AgentIdentityService()).assertMaySave(organizationId, createDto.agentConfig);
 
       // Verify organization
       const organization = await this.organizationRepository.findOne({
@@ -560,7 +563,6 @@ export class AgentsService {
         pipeline: createDto.pipeline || { nodes: [], edges: [] },
         instructions: createDto.instructions || null,
         personality: createDto.personality || null,
-        heartbeat: createDto.heartbeat || null,
         toolIds: createDto.toolIds || [],
         modelConfig: next.modelConfig,
         models: next.models,
@@ -774,6 +776,8 @@ export class AgentsService {
       agent.organizationId,
       agent.id,
     );
+    // Acting as itself is Business (agent_identity); refused when newly turned on without it.
+    await (this.identity ?? new AgentIdentityService()).assertMaySave(agent.organizationId, updateDto.agentConfig, agent.agentConfig);
     const retentionBefore = retentionSeconds(memorySettings(agent.memoryConfig as AgentMemoryConfig));
 
     // An autonomous agent's main role and its modelConfig say the same

@@ -15,6 +15,7 @@ import { BUILT_IN_TOOLS } from './agent-runtime.service';
 import { isOthersPrivate } from '../../common/authorization/private-visibility';
 import { usableProviders } from '../llm-providers/private-provider';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { readAlwaysOn } from './always-on/always-on.types';
 
 // ── Document shape ──
 
@@ -113,7 +114,7 @@ export interface AgentTechnicalDocumentation {
     inputs: {
       webhook: { configured: boolean };
       schedule: { enabled: boolean; intervalMinutes: number | null };
-      heartbeat: { enabled: boolean; intervalMinutes: number | null };
+      alwaysOn: { enabled: boolean; intervalMinutes: number | null };
     };
   };
   loggingAndTraceability: {
@@ -319,9 +320,9 @@ export class AgentTechDocHelper {
             enabled: !!schedule?.enabled,
             intervalMinutes: schedule?.intervalMinutes ?? null,
           },
-          heartbeat: {
-            enabled: !!agent.heartbeat?.enabled,
-            intervalMinutes: agent.heartbeat?.intervalMinutes ?? null,
+          alwaysOn: {
+            enabled: !!readAlwaysOn(agent.alwaysOn)?.enabled,
+            intervalMinutes: readAlwaysOn(agent.alwaysOn)?.wakeOn.timer?.everyMinutes ?? null,
           },
         },
       },
@@ -489,7 +490,7 @@ export class AgentTechDocHelper {
       `- Schedule: ${d.inputs.schedule.enabled ? `every ${d.inputs.schedule.intervalMinutes} minutes` : 'disabled'}`,
     );
     lines.push(
-      `- Heartbeat: ${d.inputs.heartbeat.enabled ? `every ${d.inputs.heartbeat.intervalMinutes} minutes` : 'disabled'}`,
+      `- Always on: ${d.inputs.alwaysOn.enabled ? (d.inputs.alwaysOn.intervalMinutes ? `wakes every ${d.inputs.alwaysOn.intervalMinutes} minutes and on events` : 'wakes on events') : 'off'}`,
     );
     lines.push('');
 

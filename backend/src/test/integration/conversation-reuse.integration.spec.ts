@@ -16,7 +16,6 @@ import { AgentStepProcessor } from '../../modules/agents/agent-step-processor';
 import { AgentVerifierHelper } from '../../modules/agents/agent-verifier.helper';
 import { AgentContextCompactor } from '../../modules/agents/agent-context-compactor.helper';
 import { AgentConstraintsService } from '../../modules/agent-constraints/agent-constraints.service';
-import { AgentHeartbeatHelper } from '../../modules/agents/agent-heartbeat.helper';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
@@ -198,7 +197,6 @@ describe('Conversation reuse (integration)', () => {
         AgentBuiltInToolsHelper,
         { provide: ApprovalsService, useValue: { create: jest.fn().mockResolvedValue({ id: 'a-stub' }) } },
         { provide: BudgetsService, useValue: { enforceForRun: jest.fn().mockResolvedValue(undefined) } },
-        AgentHeartbeatHelper,
         AgentRuntimeEventsHelper,
         AgentRuntimeMiscHelper,
         AgentStepProcessor,

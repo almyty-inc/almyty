@@ -162,7 +162,7 @@
       "title": "How the model sees its tools",
       "path": "screenshots/agent-tool-mode.png",
       "capturedAt": "2026-10-02T00:13:43.000Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "08cad43e567a1ba701b8450469df206b27d749bf044929d82cd32f7d351ef320",
       "source": {
         "kind": "browser",
@@ -176,7 +176,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "349fe9ec190837827c99354ae89199f696bd2c230a76e1514edc70600b2b241e",
-      "notes": "Local stack, local test user; the benchmark's mock Pet Store API and a local model."
+      "notes": "Local stack, local test user; the benchmark's mock Pet Store API and a local model.",
+      "reason": "frontend/src/components/agents changed: Capabilities gained an \"Acts as\" section (agent_identity), the builder's Heartbeat card became the Always on card, and the agent page gained an Always on card. Recapture against the current UI and re-register."
     },
     {
       "id": "agent-work-mode-panel",
@@ -476,7 +477,7 @@
       "title": "A Code step in the builder",
       "path": "screenshots/builder-code-step.png",
       "capturedAt": "2026-10-02T03:15:53.785Z",
-      "status": "current",
+      "status": "needs-recapture",
       "sha256": "97b174567acb8d26ead36e2625f07edd4a45ffab018583945996cb86bd974e1f",
       "source": {
         "kind": "browser",
@@ -490,7 +491,8 @@
         "frontend/src/index.css"
       ],
       "sourceDigest": "30e691b2e74909b365cf184fc31cc3b5747fb2350844b0af8c50fa46a60367ad",
-      "notes": "Local stack, local test user; a workflow agent over the benchmark's mock Pet Store API."
+      "notes": "Local stack, local test user; a workflow agent over the benchmark's mock Pet Store API.",
+      "reason": "frontend/src/components/agents changed: Capabilities gained an \"Acts as\" section (agent_identity), the builder's Heartbeat card became the Always on card, and the agent page gained an Always on card. Recapture against the current UI and re-register."
     },
     {
       "id": "channel-branding-rules",
@@ -811,7 +813,8 @@
       "title": "How apps see a gateway's tools",
       "path": "screenshots/gateway-exposure.png",
       "capturedAt": "2026-10-02T02:24:27.824Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "capabilities-section.tsx changed: Capabilities gained an \"Acts as\" section at its end (agent_identity). This view does not show it; recapture against the current UI and re-register.",
       "sha256": "fe6e42fc2517f21534ea82d5a1ab052101d5c6f394adb0fa4389f8c768660772",
       "source": {
         "kind": "browser",
