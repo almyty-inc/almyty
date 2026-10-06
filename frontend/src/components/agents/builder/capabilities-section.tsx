@@ -544,7 +544,7 @@ export function WhatItCannotReach({ agentId }: { agentId?: string }) {
             </div>
             {item.canGrant && (
               <Button type="button" size="sm" variant="outline" disabled={give.isPending} onClick={() => give.mutate(item)}>
-                Let this agent use {item.scope === 'personal' ? 'my ' : ''}{item.name}
+                Let this agent use {item.scope === 'personal' && !/^my\s/i.test(item.name) ? 'my ' : ''}{item.name}
               </Button>
             )}
           </li>
