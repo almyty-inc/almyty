@@ -63,6 +63,8 @@ export function assertProviderUsableBy(
  *   its owner is judged as its owner. This is the rule
  *   ExecutionAccessService.canGatewayExecute applies to agents and tools;
  * - nobody (null) gets organization-wide providers only.
+ * - an agent acting as itself gets the organization's providers plus,
+ *   for a team agent, its team's; never a private one.
  *
  * The caller's org role and teams are looked up once, and only when a
  * team provider is among the rows. With no policy wired a team provider
@@ -86,6 +88,17 @@ export async function usableProviders<T extends ProviderScopeLike>(
       (p) =>
         isOrgWide(p) ||
         (p.visibility === 'team' && principal.visibility === 'team' && !!principal.teamId && p.teamId === principal.teamId),
+    );
+  }
+  // An agent acting as itself: the organization's providers, and its own
+  // team's when it is a team agent. Never a private one, its owner's
+  // included: the agent does not act as its owner.
+  if (principal.kind === 'agent') {
+    return rows.filter(
+      (p) =>
+        p.organizationId === principal.organizationId &&
+        (isOrgWide(p) ||
+          (p.visibility === 'team' && principal.visibility === 'team' && !!principal.teamId && p.teamId === principal.teamId)),
     );
   }
   const userId = principal.userId;
@@ -139,7 +152,7 @@ export class ProviderNotUsableError extends NotFoundException {
     super({
       code: 'PROVIDER_NOT_USABLE',
       message:
-        `Provider not found for the ${principal.kind === 'gateway' ? 'gateway' : 'user'} this call acts as (${described}). ` +
+        `Provider not found for the ${principal.kind} this call acts as (${described}). ` +
         'A private provider is usable by its owner only, and a team provider by members of its team only.',
       error: 'Not Found',
       statusCode: 404,

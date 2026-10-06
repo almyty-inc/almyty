@@ -243,7 +243,10 @@ export class CredentialRefResolver {
     // allowed this use applies here too.
     if (credential.connectorKey && this.governance) {
       const gateway = execution?.kind === 'gateway' ? execution : null;
-      const agentId = opts.context?.resourceType === 'agent' ? opts.context.resourceId : undefined;
+      // An agent acting as itself is the agent the rules see, whatever the
+      // call's context names.
+      const asAgent = execution?.kind === 'agent' ? execution : null;
+      const agentId = asAgent ? asAgent.agentId : opts.context?.resourceType === 'agent' ? opts.context.resourceId : undefined;
       const workspaceId = opts.context?.resourceType === 'workspace' ? opts.context.resourceId : undefined;
       await this.governance.beforeUse(
         organizationId,
@@ -253,14 +256,17 @@ export class CredentialRefResolver {
           ...(agentId ? { agentId } : {}),
           ...(workspaceId ? { workspaceId } : {}),
           ...(gateway ? { gatewayId: gateway.gatewayId, teamIds: gateway.teamId ? [gateway.teamId] : [] } : {}),
+          ...(asAgent?.teamId ? { teamIds: [asAgent.teamId] } : {}),
         },
         {
           purpose: opts.context?.purpose,
           resourceType: opts.context?.resourceType,
           resourceId: opts.context?.resourceId,
           // Which scope rules apply to a gateway with no user behind it
-          // (gatewayKinds): a team gateway is a team principal.
+          // (gatewayKinds): a team gateway is a team principal. An agent
+          // acting as itself is an agent principal and nothing else.
           ...(gateway && !principal ? { principalKinds: CredentialRefResolver.gatewayKinds(gateway, agentId, workspaceId) } : {}),
+          ...(asAgent ? { principalKinds: ['agent' as const] } : {}),
         },
         decision ? (decision as Parameters<ConnectionsGovernanceHook['beforeUse']>[4]) : undefined,
       );

@@ -47,6 +47,7 @@ import { NamedTool, readableToolName } from '../tools/tool-readable-name';
 import { capPersistedPayload } from './persist-cap';
 import { canReference } from '../../common/authorization/private-visibility';
 import { describePrincipal, principalOfRun } from '../../common/authorization/execution-access.service';
+import { updateRequestContext } from '../../common/request-context';
 import { Model } from '../../entities/model.entity';
 import { Api } from '../../entities/api.entity';
 import { ToolDiscoveryService } from '../tool-discovery/tool-discovery.service';
@@ -282,6 +283,9 @@ export class AgentStepProcessor {
     // agent moved to another team -- stops here with a reason instead of
     // carrying on in a scope it no longer has.
     const principal = principalOfRun(run);
+    // An agent acting as itself is the actor of every audit row this step
+    // writes (AuditLogService reads it from the scope).
+    updateRequestContext({ actor: principal.kind === 'agent' ? { kind: 'agent', agentId: principal.agentId } : null });
     const agentAccess = await this.s.executionAccess.canExecute(principal, agent);
     if (!agentAccess.allowed) {
       run.status = AgentRunStatus.FAILED;

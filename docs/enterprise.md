@@ -45,6 +45,7 @@ token resolves to community, never to allowed.
 | `compliance_pack` | Org-enforced plugin policy — PII filtering and the security scanner applied to every run rather than per agent. |
 | `audit_export` | Bulk export of the org's audit trail as CSV or JSON, lifting the in-app 200-row cap, plus streaming to a customer SIEM. |
 | `credentials_governance` | Policy over which connectors may be connected, by whom, and how their grants are used. |
+| `agent_identity` | An agent can act as itself instead of as the person who made it: it uses only the connections granted to it, and the audit log names the agent as the one who acted. Turned on per agent under Capabilities → Acts as. See [Agents that act as themselves](#agents-that-act-as-themselves). |
 
 ## Enterprise
 
@@ -79,6 +80,62 @@ server when the channel is saved and when it is published, and the
 entitlement is re-read when a web chat page is served, so a web chat published under
 Enterprise and then downgraded gets the mark and the disclosure back rather
 than keeping them off indefinitely.
+
+## Agents that act as themselves
+
+Normally, when an agent works on its own (on a schedule, say), it acts as
+the person who made it. It can use whatever that person can use: their
+connections, their tools, their model providers. The audit log names that
+person.
+
+On Business and Enterprise an agent can act as itself instead. Open the
+agent, go to **Capabilities → Acts as**, and pick **Itself, with its own
+access**. From then on:
+
+- It uses only the connections you give it. Give one under Credentials, in
+  "Who can use each credential": pick the credential, then add the agent.
+  Your own personal and private connections are never used, even though you
+  own the agent.
+- It reaches tools, model providers and machines the way a team or the
+  organization would: what is shared with the whole organization, what
+  belongs to the agent's own team if it is a team agent, and what is private
+  to you only if the agent itself is private to you. Model providers private
+  to you are never used.
+- The audit log names the agent as the one who acted, with no person
+  attached.
+
+If the plan stops including it, the agent keeps the setting but its runs go
+back to acting as its owner until the plan includes it again. Turning it on
+without the plan is refused when you save.
+
+Today this applies to scheduled runs. Runs someone starts by hand, through
+a channel or from the API act as whoever started them, as before.
+
+### For developers
+
+- The setting is `agents.agentConfig.runAs` (`'owner'` | `'agent'`),
+  checked on save by `AgentIdentityService.assertMaySave` (only when it is
+  newly turned on, so an agent saved before a downgrade can still be edited).
+- `unattendedPrincipal(agent, licensed, source)` in
+  `backend/src/modules/agents/agent-identity.ts` returns the principal an
+  unattended run acts as; `AgentIdentityService.principalFor(agent, source)`
+  reads the entitlement for you. The scheduler uses it; the run row then has
+  `userId = null`.
+- The principal is `AgentPrincipal` (`kind: 'agent'`) in
+  `common/authorization/execution-access.service.ts`.
+  `ExecutionAccessService.canAgentExecute` mirrors the gateway rule: the
+  agent itself, org resources, its own team's resources, and private
+  resources only when the agent is private to the same owner.
+  `actingUserId` is null for it, so private credentials never resolve.
+- Connections: `GrantsUsePolicy` judges it as
+  `agentGrantPrincipal` (no user, no role, its team for a team agent, its
+  own id pinned as the agent a grant may name), so only `agent` grants (and
+  team grants for a team agent) let it use a connection. Org governance sees
+  it as principal kind `agent`.
+- Audit: the step processor and the workflow engine put
+  `actor: { kind: 'agent', agentId }` in the request scope, and
+  `AuditLogService` writes it as `details.actor` on every row written in
+  that scope.
 
 ## What is deliberately not gated
 

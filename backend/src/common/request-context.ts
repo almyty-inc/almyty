@@ -29,6 +29,12 @@ export interface RequestContextStore {
   /** The agent whose run this is, set with runId. */
   agentId?: string | null;
   /**
+   * Who acts in this scope when it is not a person: an agent acting as
+   * itself (agent_identity). Audit rows written in the scope record it as
+   * their actor (AuditLogService.log), next to a userId that stays empty.
+   */
+  actor?: { kind: 'agent'; agentId: string } | null;
+  /**
    * The run whose runner workspaces this one works in: the run itself, or
    * for a workflow sub-agent the top-level run (RunWorkspaceService).
    */

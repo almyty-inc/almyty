@@ -10,6 +10,7 @@ import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
 import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
 import { agentOwnerUserId } from './agent-owner';
+import { AgentIdentityService, runUserOf } from './agent-identity';
 import { AgentExecution, AgentExecutionStatus } from '../../entities/agent-execution.entity';
 import {
   ExecutionAccessService,
@@ -181,6 +182,9 @@ export class AgentSchedulerService implements OnModuleInit {
     private readonly runRepo?: Repository<AgentRun>,
     @Optional()
     private readonly webhooks?: AgentWebhookService,
+    // Who an unattended run acts as: the owner, or the agent itself (agent_identity).
+    @Optional()
+    private readonly identity?: AgentIdentityService,
   ) {}
 
   async onModuleInit() {
@@ -730,12 +734,19 @@ export class AgentSchedulerService implements OnModuleInit {
       // Then the scope: the owner, as they are now, must still be allowed
       // to run this agent (a team agent whose owner left the team stops,
       // visibly, instead of running for somebody outside it).
-      const principal = userPrincipal(owner ?? null, 'schedule');
-      const access = await this.executionAccess.canExecute(principal, agent);
+      const ownerPrincipal = userPrincipal(owner ?? null, 'schedule');
+      const access = await this.executionAccess.canExecute(ownerPrincipal, agent);
       if (!access.allowed) {
-        await this.pauseForLostAccess(agent, principal, access.reason);
+        await this.pauseForLostAccess(agent, ownerPrincipal, access.reason);
         return;
       }
+      // Who the run acts as: its owner, as always, or the agent itself when
+      // it is set to act as itself and the organization has agent_identity
+      // (agent-identity.ts). Acting as itself the run records no user: it
+      // is not a person, and it reaches only what is granted to the agent.
+      const acting = this.identity ? await this.identity.principalFor(agent, 'schedule') : ownerPrincipal;
+      const principal = acting.kind === 'agent' ? acting : ownerPrincipal;
+      const runUser = runUserOf(principal);
 
       // A result bound for a channel is only worth a run the channel can
       // take: one switched off, or whose spend limit is reached, would
@@ -759,7 +770,7 @@ export class AgentSchedulerService implements OnModuleInit {
       // pipeline, which finished at once with no output.
       if (runsOnAutonomousRuntime(agent)) {
         if (!this.runtime) throw new Error('The autonomous runtime is not available on this server');
-        await this.runtime.startRun(agent.id, organizationId, owner, scheduledTask(input), {
+        await this.runtime.startRun(agent.id, organizationId, runUser, scheduledTask(input), {
           principal,
           // Where the result goes is decided now and carried by the run, so
           // it is posted when the run finishes (deliverScheduledRun), on
@@ -772,7 +783,7 @@ export class AgentSchedulerService implements OnModuleInit {
       const execution = await this.executionEngine.execute(
         agent,
         organizationId,
-        owner,
+        runUser,
         {
           input,
           metadata: { triggerType: 'scheduled' },

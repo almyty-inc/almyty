@@ -214,6 +214,13 @@ export class Agent {
      */
     runnerLabels?: Record<string, string>;
     /**
+     * Who the agent's unattended runs act as (a schedule; Always on once it
+     * lands): its owner (default), or the agent itself, with its own
+     * connection grants and its own audit actor. 'agent' needs the
+     * agent_identity entitlement (agents/agent-identity.ts).
+     */
+    runAs?: 'owner' | 'agent';
+    /**
      * Autonomous verify: a refute-only checker panel reviews the agent's final
      * answer. On failure (within the revision budget) the failures are fed back
      * as synthetic user feedback and the agent loops again. Checkers pick their

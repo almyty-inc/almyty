@@ -13,6 +13,7 @@
  *    machines that have them.
  *  - Temporary agents: whether it may create them, and how many per run
  *    and at once.
+ *  - Acts as: its owner, or itself with its own access (Business).
  */
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -31,6 +32,7 @@ import { RunnerLabelsField, parseRunnerLabels } from '@/components/agents/builde
 import { apisApi, runnersApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
+import { useEntitlement } from '@/hooks/use-entitlement'
 import type { Agent, CodeWriteAction } from '@/types'
 
 type AgentConfig = NonNullable<Agent['agentConfig']> & { runnerLabels?: Record<string, string> | string }
@@ -87,6 +89,7 @@ export function CapabilitiesSection({
         />
         <Machine value={agentConfig.runnerLabels} onChange={(runnerLabels) => set({ runnerLabels })} />
         <TemporaryAgents agentConfig={agentConfig} onChange={set} />
+        <ActsAs agentConfig={agentConfig} onChange={set} />
       </CardContent>
     </Card>
   )
@@ -413,6 +416,56 @@ function TemporaryAgents({ agentConfig, onChange }: { agentConfig: AgentConfig; 
           </div>
         </div>
       )}
+    </section>
+  )
+}
+
+/* ── Acts as ────────────────────────────────────────────────────────── */
+
+export const ACTS_AS_ENTITLEMENT = 'agent_identity'
+
+/**
+ * Who the agent's runs that nobody starts by hand (a schedule) act as:
+ * its owner, or the agent itself (backend agents/agent-identity.ts). As
+ * itself it uses only the connections given to it, and the audit log names
+ * the agent. Business plan; the server refuses turning it on without it.
+ */
+export function ActsAs({ agentConfig, onChange }: { agentConfig: AgentConfig; onChange: (patch: Partial<AgentConfig>) => void }) {
+  const { enabled, isLoading } = useEntitlement(ACTS_AS_ENTITLEMENT)
+  const value = agentConfig.runAs === 'agent' ? 'agent' : 'owner'
+  const locked = !isLoading && !enabled
+  return (
+    <section className="space-y-3" data-testid="capability-acts-as">
+      <SectionHeading
+        title="Acts as"
+        hint="Who the agent is when it works on its own, for example on a schedule."
+      />
+      <div className="space-y-1.5">
+        <Label htmlFor="agent-acts-as" className="sr-only">Acts as</Label>
+        <Select value={value} onValueChange={(v) => onChange({ runAs: v as 'owner' | 'agent' })}>
+          <SelectTrigger id="agent-acts-as" className="h-9 sm:w-64">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="owner">You, its owner</SelectItem>
+            <SelectItem value="agent" disabled={locked && value !== 'agent'}>Itself, with its own access</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground" data-testid="acts-as-hint">
+          {value === 'agent'
+            ? 'It uses only the connections given to it, never yours, and the audit log names the agent as the one who acted.'
+            : 'It uses what you can use, and the audit log names you.'}
+        </p>
+        {locked && (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="acts-as-locked">
+            <Badge variant="outline" className="border-primary/40 text-primary text-[10px] px-1.5 py-0">Business</Badge>
+            {value === 'agent'
+              ? 'Your plan does not include this any more, so its runs act as you until it does.'
+              : 'An agent that acts as itself is part of the Business plan.'}
+            <Link to="/settings/billing" className="text-primary hover:underline">See plans</Link>
+          </p>
+        )}
+      </div>
     </section>
   )
 }

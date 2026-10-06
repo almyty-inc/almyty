@@ -473,7 +473,8 @@ export class RunnerService {
     const runner = await this.runners.findOne({ where: { id: runnerId } });
     if (!runner) throw new NotFoundException('runner not found');
     const visibility = runner.visibility ?? 'org';
-    if (isExecutionPrincipal(caller) && caller.kind === 'gateway') {
+    // A gateway, and an agent acting as itself, by its own scope.
+    if (isExecutionPrincipal(caller) && (caller.kind === 'gateway' || caller.kind === 'agent')) {
       const decision = this.executionAccess ? await this.executionAccess.canExecute(caller, runner) : null;
       if (!(decision?.allowed ?? visibility === 'org')) throw new NotFoundException('runner not found');
     } else {
