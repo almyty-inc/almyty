@@ -19,6 +19,7 @@ import { Organization } from '../../entities/organization.entity';
 import { Credential } from '../../entities/credential.entity';
 import { ApprovalPolicy } from '../../entities/approval-policy.entity';
 import { Agent } from '../../entities/agent.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
 import { ApprovalRequest } from '../../entities/approval-request.entity';
 import { ToolApprovalGateService } from './tool-approval-gate.service';
 
@@ -66,6 +67,8 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
       ApprovalPolicy,
       ApprovalRequest,
       Agent,
+      // An always-on run's ask-first list (ToolApprovalGateService).
+      AgentRun,
     ]),
     JsonSchemaTranslatorModule,
     NodeSandboxModule,

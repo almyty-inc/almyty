@@ -49,6 +49,11 @@ export interface OrganizationSettings {
    * maxCodeChars. A number above the install's is ignored.
    */
   codeMode?: Partial<Record<string, number>>;
+  /**
+   * Tighter Always on limits than the plan's (agents/always-on/always-on-capacity.ts):
+   * timerFloorMinutes (longer only), maxWakesPerHour and includedAgents (fewer only).
+   */
+  alwaysOn?: { timerFloorMinutes?: number; maxWakesPerHour?: number; includedAgents?: number };
 }
 
 @Entity('organizations')

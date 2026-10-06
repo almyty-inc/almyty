@@ -36,7 +36,7 @@ import { ToolExecution } from '../../entities/tool-execution.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { sanitizeToolParameters } from '../../common/security/input-sanitizer';
-import { ToolApprovalGateService } from './tool-approval-gate.service';
+import { ToolApprovalGateService, hitDetail } from './tool-approval-gate.service';
 import { verifyToolIntegrity } from '../../common/security/tool-integrity';
 import { decideToolCaller } from '../../common/security/gateway-tool-permissions';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -423,7 +423,7 @@ export class ToolExecutorService {
               approvalRequired: hit,
               ...extra,
             });
-            const why = hit.value === null ? `${hit.argument} is not a number` : `${hit.argument} is ${hit.value}`;
+            const why = hitDetail(hit);
             if (options.holdForApproval === 'caller') {
               if (!options.approvedGate) await this.approvalGate.record(hit, gateContext, 'held');
               return answer(`Needs approval: ${hit.summary} (${why}). The call was not made.`);

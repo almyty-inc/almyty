@@ -31,6 +31,7 @@ export type PrincipalSource =
   | 'api_key'
   | 'schedule'
   | 'heartbeat'
+  | 'always_on'
   | 'system_gateway'
   | 'replay';
 

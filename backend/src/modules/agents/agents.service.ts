@@ -60,7 +60,6 @@ export interface CreateAgentInput {
   pipeline?: AgentPipeline;
   instructions?: string;
   personality?: string;
-  heartbeat?: { enabled: boolean; intervalMinutes: number; prompt: string };
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
   memoryConfig?: AgentMemoryConfig;
@@ -84,7 +83,6 @@ export interface UpdateAgentInput {
   pipeline?: AgentPipeline;
   instructions?: string;
   personality?: string;
-  heartbeat?: { enabled: boolean; intervalMinutes: number; prompt: string };
   toolIds?: string[];
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
   memoryConfig?: AgentMemoryConfig;
@@ -161,7 +159,7 @@ export const AGENT_LIST_COLUMNS = [
   'mode',
   'instructions',
   'personality',
-  'heartbeat',
+  'alwaysOn',
   'toolIds',
   'modelConfig',
   'memoryConfig',
@@ -550,7 +548,6 @@ export class AgentsService {
         pipeline: createDto.pipeline || { nodes: [], edges: [] },
         instructions: createDto.instructions || null,
         personality: createDto.personality || null,
-        heartbeat: createDto.heartbeat || null,
         toolIds: createDto.toolIds || [],
         modelConfig: next.modelConfig,
         models: next.models,
