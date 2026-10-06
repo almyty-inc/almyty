@@ -60,7 +60,7 @@ describe('outside protected methods', () => {
     await user.type(screen.getByLabelText('Allowed email domains'), 'acme.example, partner.example')
     await user.type(screen.getByLabelText('Allowed groups'), 'Support, Operators')
     await user.click(screen.getByRole('button', { name: 'Save company sign-in' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Choose a Google Directory credential')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Choose a Google directory credential')
     expect(gatewaysApi.createAuthConfig).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: 'Choose Directory credential' }))
     await user.type(screen.getByLabelText('Delegated administrator email'), 'admin@acme.example')

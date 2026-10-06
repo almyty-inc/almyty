@@ -1009,8 +1009,6 @@ export interface RunnerSetupInput {
 export const runnersApi = {
   getAll: () => apiGet('/runners'),
   getById: (id: string) => apiGet(`/runners/${id}`),
-  /** The pending record the setup page creates before the daemon connects. */
-  create: (data: RunnerSetupInput) => apiPost('/runners', data),
   update: (id: string, data: Partial<RunnerSetupInput>) => apiPatch(`/runners/${id}`, data),
   unregister: (id: string) => apiDel(`/runners/${id}`),
 }

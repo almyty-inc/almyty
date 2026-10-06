@@ -40,9 +40,9 @@ export function RunnerNewPage() {
       <Card>
         <CardHeader><CardTitle className="text-base">Connect this machine</CardTitle></CardHeader>
         <CardContent className="space-y-5">
-          <CommandBlock label="1. Install once" command={RUNNER_INSTALL_COMMAND} />
-          <CommandBlock label="2. Log in" command={RUNNER_LOGIN_COMMAND} hint="Sign in as yourself. If you belong to more than one organization, choose which one to use." />
-          <CommandBlock label="3. Start the runner" command={runnerStartCommand()} hint="Keep this terminal open while the runner is running. Work runs as your user on this machine." />
+          <CommandBlock label="Install once" command={RUNNER_INSTALL_COMMAND} />
+          <CommandBlock label="Log in" command={RUNNER_LOGIN_COMMAND} hint="Sign in as yourself. If you belong to more than one organization, choose which one to use." />
+          <CommandBlock label="Start the runner" command={runnerStartCommand()} hint="Keep this terminal open while the runner is running. Work runs as your user on this machine." />
           <p className="text-sm text-muted-foreground">Your runner takes the machine's hostname automatically. You can rename it and change who can use it on its runner page. Labels are available there under Advanced.</p>
           {ownRunner ? (
             <p className="rounded-md border p-3 text-sm">

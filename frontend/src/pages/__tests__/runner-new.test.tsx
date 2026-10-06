@@ -3,7 +3,7 @@ import { screen } from '@testing-library/react'
 import { render } from '../../test/setup'
 import { RunnerNewPage } from '../runner-new'
 
-vi.mock('../../lib/api', () => ({ runnersApi: { getAll: vi.fn(), create: vi.fn(), unregister: vi.fn() } }))
+vi.mock('../../lib/api', () => ({ runnersApi: { getAll: vi.fn(), unregister: vi.fn() } }))
 vi.mock('../../store/organization', () => ({ useOrganizationStore: () => ({ currentOrganization: { id: 'o1', name: 'Org' } }) }))
 vi.mock('../../store/auth', () => ({ useAuthStore: () => ({ user: { id: 'me' } }) }))
 vi.mock('../../store/app', () => ({ useNotifications: () => ({ success: vi.fn() }) }))
@@ -23,7 +23,6 @@ describe('RunnerNewPage', () => {
     expect(screen.getByText(/hostname automatically/)).toBeInTheDocument()
     expect(screen.getByText(/more than one organization/)).toBeInTheDocument()
     await screen.findByText(/Once connected/)
-    expect(runnersApi.create).not.toHaveBeenCalled()
     expect(runnersApi.unregister).not.toHaveBeenCalled()
   })
   it('links to the existing runner rather than requiring it to be deleted', async () => {
@@ -31,6 +30,5 @@ describe('RunnerNewPage', () => {
     render(<RunnerNewPage />)
     expect(await screen.findByRole('link', { name: 'build-box' })).toHaveAttribute('href', '/runners/r1')
     expect(screen.getByText(/Starting it again reconnects/)).toBeInTheDocument()
-    expect(runnersApi.create).not.toHaveBeenCalled()
   })
 })

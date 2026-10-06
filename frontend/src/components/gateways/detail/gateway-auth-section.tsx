@@ -155,7 +155,7 @@ function MethodForm({ type, configuration, onSave, onCancel, saving }: { type: S
     delete out.hasClientSecret; delete out.redirectUri; delete out.credentialId
     if (!out.clientSecret) delete out.clientSecret
     for (const key of ['allowedEmailDomains', 'allowedGroups']) if (typeof out[key] === 'string') out[key] = out[key].split(',').map((value: string) => value.trim()).filter(Boolean)
-    if (type === 'company_signin' && out.preset === 'google' && out.allowedGroups?.length && (!out.directoryCredentialId || !out.directoryAdminEmail)) { setError('Choose a Google Directory credential and enter its delegated administrator email to check groups.'); return }
+    if (type === 'company_signin' && out.preset === 'google' && out.allowedGroups?.length && (!out.directoryCredentialId || !out.directoryAdminEmail)) { setError('Choose a Google directory credential and enter its delegated administrator email to check groups.'); return }
     if (type === 'jwt') delete out.preset
     onSave(out)
   }
@@ -176,7 +176,7 @@ function MethodForm({ type, configuration, onSave, onCancel, saving }: { type: S
       {list('allowedEmailDomains', 'Allowed email domains', 'Optional, separated by commas. Leave empty to allow every domain.')}
       {list('allowedGroups', 'Allowed groups', 'Optional group names or IDs, separated by commas.')}
       {values.preset === 'google' && (Array.isArray(values.allowedGroups) ? values.allowedGroups.length > 0 : Boolean(values.allowedGroups?.trim())) && <>
-        <CredentialPicker id="company-directory-credential" label="Google Directory credential" kind="cloud" connectorKey="gcp" value={values.directoryCredentialId ?? ''} onChange={credential => set('directoryCredentialId', credential?.id ?? '')} hint="Use a Google service account with Workspace domain-wide delegation for reading group membership." />
+        <CredentialPicker id="company-directory-credential" label="Google directory credential" kind="cloud" connectorKey="gcp" value={values.directoryCredentialId ?? ''} onChange={credential => set('directoryCredentialId', credential?.id ?? '')} hint="Use a Google service account with Workspace domain-wide delegation for reading group membership." />
         {input('directoryAdminEmail', 'Delegated administrator email', 'A Workspace administrator the service account may act as.')}
       </>}
       <Disclosure title="Advanced" summary="Sign-in settings">
