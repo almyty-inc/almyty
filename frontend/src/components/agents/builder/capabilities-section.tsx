@@ -457,13 +457,13 @@ export function ActsAs({ agentConfig, onChange }: { agentConfig: AgentConfig; on
             : 'It uses what you can use, and the audit log names you.'}
         </p>
         {locked && (
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="acts-as-locked">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-testid="acts-as-locked">
             <Badge variant="outline" className="border-primary/40 text-primary text-[10px] px-1.5 py-0">Business</Badge>
             {value === 'agent'
               ? 'Your plan does not include this any more, so its runs act as you until it does.'
               : 'An agent that acts as itself is part of the Business plan.'}
             <Link to="/settings/billing" className="text-primary hover:underline">See plans</Link>
-          </p>
+          </div>
         )}
       </div>
     </section>

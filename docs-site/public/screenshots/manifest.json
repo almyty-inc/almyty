@@ -169,7 +169,8 @@
       "title": "How the model sees its tools",
       "path": "screenshots/agent-tool-mode.png",
       "capturedAt": "2026-10-02T00:13:43.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "capabilities-section.tsx changed: Capabilities gained an \"Acts as\" section at its end (agent_identity). This view does not show it; recapture against the current UI and re-register.",
       "sha256": "08cad43e567a1ba701b8450469df206b27d749bf044929d82cd32f7d351ef320",
       "source": {
         "kind": "browser",
@@ -493,7 +494,8 @@
       "title": "A Code step in the builder",
       "path": "screenshots/builder-code-step.png",
       "capturedAt": "2026-10-02T03:15:53.785Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "capabilities-section.tsx changed: Capabilities gained an \"Acts as\" section at its end (agent_identity). This view does not show it; recapture against the current UI and re-register.",
       "sha256": "97b174567acb8d26ead36e2625f07edd4a45ffab018583945996cb86bd974e1f",
       "source": {
         "kind": "browser",
@@ -828,7 +830,8 @@
       "title": "How apps see a gateway's tools",
       "path": "screenshots/gateway-exposure.png",
       "capturedAt": "2026-10-02T02:24:27.824Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "capabilities-section.tsx changed: Capabilities gained an \"Acts as\" section at its end (agent_identity). This view does not show it; recapture against the current UI and re-register.",
       "sha256": "fe6e42fc2517f21534ea82d5a1ab052101d5c6f394adb0fa4389f8c768660772",
       "source": {
         "kind": "browser",
