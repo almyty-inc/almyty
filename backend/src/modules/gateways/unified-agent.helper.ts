@@ -1,3 +1,5 @@
+import { GatewayAuthService } from './gateway-auth.service';
+import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
 import { HttpException, HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -33,7 +35,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /** Whose scope a unified-endpoint agent request runs in: the key's or JWT's user. */
 export function unifiedPrincipal(apiKey: Pick<ApiKey, 'userId'>): ExecutionPrincipal {
-  return userPrincipal(apiKey.userId ?? null, 'api_key');
+  return (apiKey as any).endpointPrincipal ?? userPrincipal(apiKey.userId ?? null, 'api_key');
 }
 
 @Injectable()
@@ -53,6 +55,7 @@ export class UnifiedAgentHelper {
     // silently shift the ones after it.
     @Optional()
     private readonly cancellations?: AgentExecutionCancellationService,
+    @Optional() private readonly gatewayAuth?: GatewayAuthService,
   ) {}
 
   async handleAgentRequest(
@@ -171,6 +174,14 @@ export class UnifiedAgentHelper {
    * ApiKey-like object for JWT auth with the user's ID and org.
    */
   async authenticate(req: Request, agent: Agent): Promise<ApiKey> {
+    if (agent.apiGatewayId) {
+      const target = await this.agentRepository.manager.getRepository(Gateway).findOne({ where: { id: agent.apiGatewayId, organizationId: agent.organizationId, agentId: agent.id, status: GatewayStatus.ACTIVE }, relations: { authConfigs: true } });
+      if (!target || !this.gatewayAuth) throw new HttpException('Agent API access unavailable', HttpStatus.FORBIDDEN);
+      const configs = target.authConfigs.map(c => Object.assign(c, { gateway: target }));
+      const auth = await this.gatewayAuth.authenticateRequest(target.id, req.headers as any, req.query as any, req.body, req.ip, configs, req);
+      if (!auth.isValid) throw new HttpException(auth.error || 'Authentication required', auth.errorCode?.includes('MISSING') ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN);
+      return { userId: auth.userId ?? null, organizationId: agent.organizationId, agentId: agent.id, gatewayId: target.id, endpointPrincipal: gatewayPrincipal(target, auth.userId) } as unknown as ApiKey;
+    }
     const authHeader = (req.headers?.authorization as string) || '';
     if (!authHeader.startsWith('Bearer ')) {
       throw new HttpException(

@@ -49,6 +49,8 @@ function insertsGateways(src: string): boolean {
 
 /** Files that insert Gateway rows outside the quota, with the reason. */
 const EXEMPT: Record<string, string> = {
+  // One agent API auth target per agent; an A2A support row, outside the MCP/UTCP/Skills quota.
+  [join('modules', 'agents', 'agent-api-access.service.ts')]: 'agent API authentication target, not counted',
   // Operator script run by hand against staging to seed a lifecycle
   // fixture; not reachable from any tenant request.
   [join('scripts', 'lifecycle-staging-verify.ts')]: 'operator verification script',
@@ -84,6 +86,13 @@ describe('every Gateway insert is behind the gateway quota', () => {
     expect(unguarded).toEqual([]);
   });
 
+  it('the agent API exemption only creates its bound A2A target under a per-agent lock', () => {
+    const src = files.find(f => f.rel === join('modules', 'agents', 'agent-api-access.service.ts'))!.src;
+    expect(src).toMatch(/type: GatewayType.A2A/);
+    expect(src).toMatch(/agentApiTarget: true/);
+    expect(src).toMatch(/pg_advisory_xact_lock/);
+    expect(src).toMatch(/current.apiGatewayId/);
+  });
   it('the exempt runtime path only ever creates the system gateway', () => {
     const src = files.find((f) => f.rel === join('modules', 'gateways', 'gateway-init.helper.ts'))!.src;
     const creates = src.match(/gatewayRepository\.create\(\{[\s\S]*?\}\)/g) ?? [];

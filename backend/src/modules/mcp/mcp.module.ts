@@ -1,3 +1,4 @@
+import { CompanySigninController } from './controllers/company-signin.controller';
 import { Module, forwardRef } from '@nestjs/common';
 import { ToolDiscoveryModule } from '../tool-discovery/tool-discovery.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -77,7 +78,7 @@ import { jwtSecretOrDevFallback } from '../auth/dev-jwt-secret';
       },
     }),
   ],
-  controllers: [McpOAuthDiscoveryController, McpOAuthController, McpController, McpTransportController],
+  controllers: [CompanySigninController, McpOAuthDiscoveryController, McpOAuthController, McpController, McpTransportController],
   providers: [
     McpToolHandler,
     McpContentHandler,

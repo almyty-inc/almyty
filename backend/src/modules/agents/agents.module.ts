@@ -1,3 +1,6 @@
+import { GatewaysModule } from '../gateways/gateways.module';
+import { AgentApiAccessService } from './agent-api-access.service';
+import { AgentApiAccessController } from './agent-api-access.controller';
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
@@ -113,14 +116,15 @@ import { BudgetsModule } from '../budgets/budgets.module';
     forwardRef(() => MemoryModule),
     forwardRef(() => A2AModule),
     forwardRef(() => ApprovalsModule),
+    forwardRef(() => GatewaysModule),
     AuthorizationModule,
     AgentConstraintsModule,
     BudgetsModule,
   ],
-  providers: [AgentReadinessService, AgentRunReaperService, AgentExecutionReaperService, OrchestratorService, StrategyPipelineResolver,
+  providers: [AgentApiAccessService, AgentReadinessService, AgentRunReaperService, AgentExecutionReaperService, OrchestratorService, StrategyPipelineResolver,
     AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService],
-  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController],
-  exports: [
+  controllers: [AgentApiAccessController, AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController],
+  exports: [AgentApiAccessService,
     AgentRolesService, AgentsService, AgentExecutionEngine, AgentRuntimeService, AgentExecutionCancellationService],
 })
 export class AgentsModule {}

@@ -657,10 +657,11 @@ describe('GatewayAuthService - Real Business Logic', () => {
 
       const result = await service.createGatewayAuth('gateway-1', dto, 'org-1');
 
-      expect(result).toBe(createdAuth);
+      expect(result).toEqual(createdAuth);
       expect(gatewayAuthRepository.create).toHaveBeenCalledWith({
         gatewayId: 'gateway-1',
         ...dto,
+        id: expect.any(String),
       });
       expect(gatewayAuthRepository.save).toHaveBeenCalledWith(createdAuth);
     });

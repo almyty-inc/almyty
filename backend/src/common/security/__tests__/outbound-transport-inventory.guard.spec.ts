@@ -74,6 +74,7 @@ const INVENTORY: Record<string, [Kind, string]> = {
   'src/modules/gateways/channels/adapters/irc.adapter.ts': ['gated', 'bridge webhook_url: assertEgress + egressInit'],
   'src/modules/gateways/channels/adapters/microsoft-teams.adapter.ts': ['gated', 'activity service_url: assertEgress + egressInit; JWKS/token are Microsoft constants'],
   'src/modules/gateways/channels/visitor-oauth.service.ts': ['gated', 'openid-client token/JWKS/userinfo: customFetch = safeFetch'],
+  'src/modules/gateways/company-signin.service.ts': ['gated', 'Company OIDC discovery/token/JWKS: customFetch = safeFetch, every issuer URL gated and pinned'],
   'ee/modules/sso/sso.service.ts': ['gated', 'org OIDC issuer discovery + token/JWKS: customFetch = safeFetch (SSO_ALLOW_PRIVATE_URLS exempts the issuer host only)'],
   'ee/modules/audit-export/audit-stream.service.ts': ['gated', 'SIEM endpoint: decideEgress at save, pinned + redirect error at delivery'],
 

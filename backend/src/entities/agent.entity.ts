@@ -1,3 +1,4 @@
+import type { AccessScope } from '../modules/gateways/gateway-access';
 import type { RoutingPolicy } from '../modules/model-catalog/routing/model-router';
 import type { AgentCollaboration } from '../modules/agents/collaboration-participants';
 import type { AgentModels } from '../modules/agents/autonomous-models';
@@ -102,6 +103,15 @@ export class Agent {
 
   @Column({ type: 'uuid', nullable: true })
   teamId: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  apiGatewayId: string | null;
+
+  @Column({ type: 'varchar', length: 24, default: 'org' })
+  apiAccessScope: AccessScope;
+
+  @Column({ type: 'uuid', nullable: true })
+  apiAccessTeamId: string | null;
 
   @Column({
     type: 'varchar',

@@ -1,3 +1,5 @@
+import { CompanySigninService } from '../../gateways/company-signin.service';
+import { GatewayAuthType } from '../../../entities/gateway-auth.entity';
 import {
   Controller,
   Get,
@@ -13,6 +15,7 @@ import {
   Logger,
   Header,
   UseGuards,
+  Optional,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
@@ -44,6 +47,7 @@ export class McpOAuthController {
   constructor(
     private readonly mcpOAuthService: McpOAuthService,
     private readonly resolve: McpOAuthResolveHelper,
+    @Optional() private readonly companySignin?: CompanySigninService,
   ) {}
 
   /**
@@ -224,6 +228,15 @@ export class McpOAuthController {
         },
         HttpStatus.BAD_REQUEST,
       );
+    }
+
+    if (gateway.accessScope === 'external_protected' && gateway.authConfigs?.some(a => a.type === GatewayAuthType.COMPANY_SIGNIN && a.isActive)) {
+      this.checkResource(orgSlug, gatewaySlug, resource);
+      this.assertClientAccepted(gateway, clientId);
+      const info = await this.mcpOAuthService.getConsentInfo(clientId, gateway.id, redirectUri, scope);
+      if (!this.companySignin) throw new HttpException('Company sign-in unavailable', HttpStatus.SERVICE_UNAVAILABLE);
+      const url = await this.companySignin.begin(gateway.id, req, res, { clientId, redirectUri, codeChallenge, codeChallengeMethod, scope: info.scopes.join(' '), state, resource, clientName: info.clientName });
+      return res.redirect(302, url);
     }
 
     // --- Check if user is authenticated (JWT cookie or Bearer token) ---

@@ -553,7 +553,7 @@ export class McpToolHandler {
     if (gatewayId) {
       const gateway = await this.gatewayToolRepository.manager.getRepository(Gateway).findOne({
         where: { id: gatewayId, organizationId },
-        select: { id: true, organizationId: true, visibility: true, teamId: true, ownerUserId: true, isSystem: true },
+        select: { id: true, organizationId: true, type: true, accessScope: true, accessTeamId: true, visibility: true, teamId: true, ownerUserId: true, isSystem: true },
       });
       if (!gateway) {
         throw this.unknownTool(params.name);
