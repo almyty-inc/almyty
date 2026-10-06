@@ -33,7 +33,10 @@ the builder), then **Set up always on**. You choose:
 - **Talk to it yourself.** Pick one of its channels and your own address
   there (your Slack member ID, your email address). Your messages on that
   channel join its conversation, and it answers you there. Nobody else's
-  messages do.
+  messages do. On an email channel there is one more choice, off by
+  default: **Treat email from my address as me**. Anyone can put your
+  address on an email, while Slack and Teams messages can't be faked that
+  way, so with it off your emails reach the agent like anyone else's.
 - **What it may do on its own.**
   - *Looks things up, and asks you before it changes anything* (the
     default). Every tool that may change something waits for your OK in

@@ -64,7 +64,7 @@ describe('the Always on form', () => {
   it('needs your own address when you talk to it on a channel', () => {
     const form = { ...formFromView(empty as any), brief: 'x', ownerChannelId: 'c-slack' }
     expect(inputFromForm(form, 15).error).toBe('Enter your own address on the channel you talk to it on.')
-    expect(inputFromForm({ ...form, ownerAddress: ' U123 ' }, 15).input!.ownerChannel).toEqual({ channelId: 'c-slack', address: 'U123' })
+    expect(inputFromForm({ ...form, ownerAddress: ' U123 ' }, 15).input!.ownerChannel).toEqual({ channelId: 'c-slack', address: 'U123', trustEmail: false })
   })
 })
 
@@ -129,5 +129,32 @@ describe('/agents/:id/always-on', () => {
     expect(list).toBeInTheDocument()
     expect(screen.getByLabelText('issue_refund')).toBeChecked()
     expect(screen.getByLabelText(/list_refunds/)).not.toBeChecked()
+  })
+
+  it('offers "treat email from my address as me" only for an email channel, off, with why', async () => {
+    vi.mocked(agentChannelsApi.list).mockResolvedValue([
+      { id: 'c-slack', type: 'slack', name: 'Support Slack' },
+      { id: 'c-mail', type: 'email', name: 'Inbox' },
+    ] as any)
+    vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue({
+      ...empty,
+      alwaysOn: {
+        enabled: true, brief: 'x', wakeOn: { timer: { everyMinutes: 30 } }, actMode: 'propose', askFirstToolIds: [], report: 'when_acted',
+        ownerChannel: { channelId: 'c-slack', address: 'U1' },
+      },
+    } as any)
+    vi.mocked(agentsApi.setAlwaysOn).mockResolvedValue(empty as any)
+    open()
+    await screen.findByText('Talk to it yourself')
+    expect(screen.queryByTestId('always-on-trust-email')).toBeNull()
+    await userEvent.click(screen.getByLabelText('Channel'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Inbox (Email)' }))
+    const box = screen.getByLabelText('Treat email from my address as me')
+    expect(box).not.toBeChecked()
+    expect(screen.getByTestId('always-on-trust-email')).toHaveTextContent("Slack and Teams messages can't be faked this way")
+    await userEvent.click(box)
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(agentsApi.setAlwaysOn).toHaveBeenCalled())
+    expect(vi.mocked(agentsApi.setAlwaysOn).mock.calls[0][1].ownerChannel).toEqual({ channelId: 'c-mail', address: 'U1', trustEmail: true })
   })
 })

@@ -53,6 +53,8 @@ export interface AlwaysOnForm {
   connectionEvents: ConnectionWakeEvent[]
   ownerChannelId: string
   ownerAddress: string
+  /** On an email channel: mail from the owner's address counts as the owner. Off by default. */
+  ownerTrustEmail: boolean
   actMode: AlwaysOnActMode
   askFirstToolIds: string[]
   reportChannelId: string
@@ -74,6 +76,7 @@ export function formFromView(view: AlwaysOnView | undefined): AlwaysOnForm {
     connectionEvents: c?.wakeOn?.connectionEvents ?? [],
     ownerChannelId: c?.ownerChannel?.channelId ?? NO_CHANNEL,
     ownerAddress: c?.ownerChannel?.address ?? '',
+    ownerTrustEmail: c?.ownerChannel?.trustEmail === true,
     actMode: c?.actMode ?? 'propose',
     // Pre-filled with what may change something, for when they choose "act".
     askFirstToolIds: c ? c.askFirstToolIds ?? [] : (view?.tools ?? []).filter((t) => !t.readOnly).map((t) => t.id),
@@ -110,7 +113,9 @@ export function inputFromForm(form: AlwaysOnForm, floorMinutes: number): { input
         channelIds: form.channelIds,
         connectionEvents: form.connectionEvents,
       },
-      ownerChannel: owner ? { channelId: form.ownerChannelId, address: form.ownerAddress.trim() } : null,
+      ownerChannel: owner
+        ? { channelId: form.ownerChannelId, address: form.ownerAddress.trim(), trustEmail: form.ownerTrustEmail }
+        : null,
       actMode: form.actMode,
       askFirstToolIds: form.actMode === 'act' ? form.askFirstToolIds : [],
       reportTo: reports
@@ -183,6 +188,7 @@ function AlwaysOnPage({
   const floor = view?.capacity.timerFloorMinutes ?? 15
   const tools = view?.tools ?? []
   const writeChannels = channels.filter((c) => c.type !== 'webhook')
+  const ownerChannel = channels.find((c) => c.id === form.ownerChannelId)
   const reportChannel = destinations?.channels.find((c) => c.channelId === form.reportChannelId)
 
   const wakes = useQuery({
@@ -356,6 +362,24 @@ function AlwaysOnPage({
             </Field>
           )}
         </div>
+        {ownerChannel?.type === 'email' && (
+          <div className="flex items-start gap-3" data-testid="always-on-trust-email">
+            <Checkbox
+              id="always-on-trust-email"
+              checked={form.ownerTrustEmail}
+              onCheckedChange={(v) => set({ ownerTrustEmail: v === true })}
+            />
+            <div>
+              <Label htmlFor="always-on-trust-email" className="block text-sm font-normal">
+                Treat email from my address as me
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Anyone can put your address on an email, so turn this on only if you accept that. Slack and Teams
+                messages can't be faked this way. Off, your emails reach it like anyone else's.
+              </p>
+            </div>
+          </div>
+        )}
       </FormSection>
 
       <FormSection title="What it may do on its own" description="Your approval rules, like amounts over a limit, apply either way.">

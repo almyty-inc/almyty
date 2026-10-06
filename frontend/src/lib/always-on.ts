@@ -20,7 +20,7 @@ export interface AlwaysOnConfig {
     channelIds?: string[]
     connectionEvents?: ConnectionWakeEvent[]
   }
-  ownerChannel?: { channelId: string; address: string } | null
+  ownerChannel?: { channelId: string; address: string; trustEmail?: boolean } | null
   actMode: AlwaysOnActMode
   askFirstToolIds: string[]
   reportTo?: Extract<ScheduleDelivery, { kind: 'channel' }> | null

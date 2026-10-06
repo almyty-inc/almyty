@@ -40,6 +40,12 @@ export interface AlwaysOnWakeOn {
 export interface AlwaysOnOwnerChannel {
   channelId: string;
   address: string;
+  /**
+   * On an email channel, treat mail from `address` as the owner. Off by
+   * default: an email sender can be faked, while Slack, Teams and the other
+   * platforms sign who wrote. Off, the owner's emails count as anyone's.
+   */
+  trustEmail?: boolean;
 }
 
 /**
@@ -193,7 +199,7 @@ export function mergeAlwaysOn(current: AlwaysOnConfig | null, input: AlwaysOnInp
       if (typeof address !== 'string' || !address.trim() || address.length > 255) {
         throw new BadRequestException('Enter your own address on that channel.');
       }
-      next.ownerChannel = { channelId, address: address.trim() };
+      next.ownerChannel = { channelId, address: address.trim(), trustEmail: input.ownerChannel.trustEmail === true };
     }
   }
   if (input.actMode !== undefined) {

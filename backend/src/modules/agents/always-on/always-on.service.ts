@@ -140,6 +140,47 @@ export function sameAddress(sender: string | null | undefined, address: string |
   return norm(sender) === norm(address);
 }
 
+/**
+ * A webhook delivery as one plain line for people: `Webhook "GitHub":
+ * opened, "Refund NW-7 never arrived"`. The words come from the fields
+ * deliveries usually carry (an action or event, a title or subject, a
+ * message or body), never the raw JSON; the agent gets what was sent in
+ * full (wakeMessage).
+ */
+export function describeWebhook(channelName: string, text: string): string {
+  const name = `Webhook "${bounded(channelName, 60)}"`;
+  const raw = String(text ?? '').trim();
+  if (!raw) return `${name} received a delivery`;
+  let body: any = null;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    body = null;
+  }
+  if (!body || typeof body !== 'object') {
+    const firstLine = raw.split('\n')[0];
+    return `${name}: ${bounded(firstLine, 140)}`;
+  }
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  const pick = (o: any, keys: string[]): string | null => {
+    if (!o || typeof o !== 'object') return null;
+    for (const k of keys) {
+      const v = str(o[k]);
+      if (v) return v;
+    }
+    return null;
+  };
+  const nested = [body, ...Object.values(body).filter((v) => v && typeof v === 'object' && !Array.isArray(v))];
+  const what = pick(body, ['action', 'event', 'type', 'status', 'state']);
+  let detail: string | null = null;
+  for (const o of nested) {
+    detail = pick(o, ['title', 'subject', 'name', 'summary', 'message', 'text', 'body', 'description']);
+    if (detail) break;
+  }
+  const words = [what?.replace(/[_.]+/g, ' '), detail ? `"${bounded(detail, 100)}"` : null].filter(Boolean).join(', ');
+  return words ? `${name}: ${words}` : `${name} received a delivery`;
+}
+
 function clock(at: Date): string {
   return at.toISOString().slice(11, 16) + ' UTC';
 }
@@ -150,12 +191,6 @@ function clock(at: Date): string {
  * quoted in full; everything else is the one line the wake carries.
  */
 export function wakeMessage(brief: string, wakes: Array<Pick<AgentWake, 'source' | 'summary' | 'payload' | 'createdAt'>>): string {
-  const lines = wakes.map((w) => {
-    const owner = w.payload?.ownerMessage?.text;
-    return owner
-      ? `- ${clock(w.createdAt)}, your owner wrote: ${owner}`
-      : `- ${clock(w.createdAt)}, ${w.summary}`;
-  });
   return [
     'You are always on, and something woke you.',
     '',
@@ -163,21 +198,26 @@ export function wakeMessage(brief: string, wakes: Array<Pick<AgentWake, 'source'
     brief || '(no standing instructions)',
     '',
     'What happened since you last worked (oldest first):',
-    ...(lines.length ? lines : ['- nothing new']),
+    ...(wakes.length ? wakes.map(wakeLine) : ['- nothing new']),
     '',
     'Do what needs doing now. If nothing does, say so in one line.',
   ].join('\n');
 }
 
+/**
+ * One wake as the agent reads it: the owner's words in full; any other
+ * wake's line, and for a webhook what was sent (the line is for people).
+ */
+function wakeLine(w: Pick<AgentWake, 'source' | 'summary' | 'payload' | 'createdAt'>): string {
+  const owner = w.payload?.ownerMessage?.text;
+  if (owner) return `- ${clock(w.createdAt)}, your owner wrote: ${owner}`;
+  const sent = w.source === 'webhook' && typeof w.payload?.text === 'string' ? `\n  What was sent: ${w.payload.text}` : '';
+  return `- ${clock(w.createdAt)}, ${w.summary}${sent}`;
+}
+
 /** The note a live run gets when wakes arrive while it works. */
 export function whileYouWereWorking(wakes: Array<Pick<AgentWake, 'source' | 'summary' | 'payload' | 'createdAt'>>): string {
-  return [
-    'While you were working:',
-    ...wakes.map((w) => {
-      const owner = w.payload?.ownerMessage?.text;
-      return owner ? `- ${clock(w.createdAt)}, your owner wrote: ${owner}` : `- ${clock(w.createdAt)}, ${w.summary}`;
-    }),
-  ].join('\n');
+  return ['While you were working:', ...wakes.map(wakeLine)].join('\n');
 }
 
 /**
@@ -1059,15 +1099,22 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     if (channel.type === ChannelType.WEBHOOK) {
       if (!role.listed) return 'continue';
       await this.wake(msg.agentId, msg.organizationId, 'webhook', {
-        summary: `the webhook "${channel.name}" received: ${bounded(msg.text, 300)}`,
+        summary: describeWebhook(channel.name, msg.text),
         dedupeKey: `webhook:${key}`,
         sourceRef: channel.id,
+        // What was sent, for the agent (wakeMessage); the summary is the line people read.
         payload: { channelId: channel.id, text: bounded(msg.text, 4000) },
       });
       return 'consumed';
     }
 
-    if (role.ownerChannel && sameAddress(msg.senderId, role.config.ownerChannel!.address)) {
+    // Email senders can be faked; Slack, Teams and the other platforms sign
+    // who wrote. So email from the owner's address counts as the owner only
+    // when they said so (ownerChannel.trustEmail); otherwise it is a note
+    // like anyone else's.
+    const ownerAddress = role.ownerChannel && sameAddress(msg.senderId, role.config.ownerChannel!.address);
+    const untrustedEmail = channel.type === ChannelType.EMAIL && !role.config.ownerChannel?.trustEmail;
+    if (ownerAddress && !untrustedEmail) {
       await this.wake(msg.agentId, msg.organizationId, 'channel', {
         summary: `your owner wrote on ${channel.name}`,
         dedupeKey: `owner:${key}`,
@@ -1080,7 +1127,7 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
       return 'consumed';
     }
 
-    if (role.listed) {
+    if (role.listed || ownerAddress) {
       const who = msg.senderName ? bounded(msg.senderName, 60) : 'someone';
       await this.wake(msg.agentId, msg.organizationId, 'channel', {
         summary: `${who} wrote on ${channel.name} (they have their own chat; you do not see it here)`,
