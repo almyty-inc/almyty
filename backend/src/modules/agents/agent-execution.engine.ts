@@ -255,7 +255,14 @@ export class AgentExecutionEngine {
     // workspaceRunId is the run whose runner workspaces this one works in:
     // its own, or for a sub-agent the top-level run's (one job, one folder).
     const workspaceRunId = internalOptions?.workspaceRunId ?? execution.id;
-    updateRequestContext({ runId: execution.id, agentId: agent.id, organizationId, workspaceRunId });
+    updateRequestContext({
+      runId: execution.id,
+      agentId: agent.id,
+      organizationId,
+      workspaceRunId,
+      // An agent acting as itself is the actor of the audit rows this run writes.
+      actor: principal.kind === 'agent' ? { kind: 'agent', agentId: principal.agentId } : null,
+    });
 
     // Emit execution started
     this.state.emitEvent(onEvent, {

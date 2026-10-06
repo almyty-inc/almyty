@@ -13,9 +13,10 @@
  *    machines that have them.
  *  - Temporary agents: whether it may create them, and how many per run
  *    and at once.
+ *  - Acts as: its owner, or itself with its own access (Business).
  */
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Bot, ChevronDown, ChevronRight, Search, Wrench, X } from 'lucide-react'
 
@@ -28,9 +29,13 @@ import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { RunnerLabelsField, parseRunnerLabels } from '@/components/agents/builder/runner-labels-field'
-import { apisApi, runnersApi } from '@/lib/api'
+import { apiGet, apisApi, runnersApi } from '@/lib/api'
+import { connectionsApi } from '@/lib/connections-api'
+import { getApiErrorMessage } from '@/lib/api-error'
+import { Button } from '@/components/ui/button'
 import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
+import { useEntitlement } from '@/hooks/use-entitlement'
 import type { Agent, CodeWriteAction } from '@/types'
 
 type AgentConfig = NonNullable<Agent['agentConfig']> & { runnerLabels?: Record<string, string> | string }
@@ -87,6 +92,7 @@ export function CapabilitiesSection({
         />
         <Machine value={agentConfig.runnerLabels} onChange={(runnerLabels) => set({ runnerLabels })} />
         <TemporaryAgents agentConfig={agentConfig} onChange={set} />
+        <ActsAs agentId={agentId} agentConfig={agentConfig} onChange={set} />
       </CardContent>
     </Card>
   )
@@ -414,6 +420,138 @@ function TemporaryAgents({ agentConfig, onChange }: { agentConfig: AgentConfig; 
         </div>
       )}
     </section>
+  )
+}
+
+/* ── Acts as ────────────────────────────────────────────────────────── */
+
+export const ACTS_AS_ENTITLEMENT = 'agent_identity'
+
+/**
+ * Who the agent's runs that nobody starts by hand (a schedule) act as:
+ * its owner, or the agent itself (backend agents/agent-identity.ts). As
+ * itself it uses only the connections given to it, and the audit log names
+ * the agent. Business plan; the server refuses turning it on without it.
+ */
+export function ActsAs({ agentId, agentConfig, onChange }: { agentId?: string; agentConfig: AgentConfig; onChange: (patch: Partial<AgentConfig>) => void }) {
+  const { enabled, isLoading } = useEntitlement(ACTS_AS_ENTITLEMENT)
+  const value = agentConfig.runAs === 'agent' ? 'agent' : 'owner'
+  const locked = !isLoading && !enabled
+  return (
+    <section className="space-y-3" data-testid="capability-acts-as">
+      <SectionHeading
+        title="Acts as"
+        hint="Who the agent is when it works on its own, for example on a schedule."
+      />
+      <div className="space-y-1.5">
+        <Label htmlFor="agent-acts-as" className="sr-only">Acts as</Label>
+        <Select value={value} onValueChange={(v) => onChange({ runAs: v as 'owner' | 'agent' })}>
+          <SelectTrigger id="agent-acts-as" className="h-9 sm:w-64">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="owner">You, its owner</SelectItem>
+            <SelectItem value="agent" disabled={locked && value !== 'agent'}>Itself, with its own access</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground" data-testid="acts-as-hint">
+          {value === 'agent'
+            ? "It uses only the organization's model providers and the connections given to it, never yours, and the audit log names the agent as the one who acted."
+            : 'It uses what you can use, and the audit log names you.'}
+        </p>
+        {locked && (
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-testid="acts-as-locked">
+            <Badge variant="outline" className="border-primary/40 text-primary text-[10px] px-1.5 py-0">Business</Badge>
+            {value === 'agent'
+              ? 'Your plan does not include this any more, so its runs are paused rather than run as you. Switch it back to you, or upgrade.'
+              : 'An agent that acts as itself is part of the Business plan.'}
+            <Link to="/settings/billing" className="text-primary hover:underline">See plans</Link>
+          </div>
+        )}
+        {value === 'agent' && <WhatItCannotReach agentId={agentId} />}
+      </div>
+    </section>
+  )
+}
+
+/** One thing an agent acting as itself would not reach (backend agents/agent-identity-reach.ts). */
+export interface UnreachableItem {
+  kind: 'provider' | 'connection'
+  id: string
+  name: string
+  neededFor: string
+  scope: 'private' | 'personal' | 'team' | 'organization'
+  canGrant: boolean
+  note?: string
+}
+
+const SCOPE_WORDS: Record<UnreachableItem['scope'], string> = {
+  private: 'private',
+  personal: 'personal',
+  team: "a team's",
+  organization: "the organization's",
+}
+
+/**
+ * What the agent's own settings point at that it would no longer reach as
+ * itself: private or team model providers, and connections not given to it.
+ * Each connection a grant can open has its own button; nothing is given
+ * without that click.
+ */
+export function WhatItCannotReach({ agentId }: { agentId?: string }) {
+  const queryClient = useQueryClient()
+  const key = ['agents', agentId, 'identity', 'unreachable']
+  const query = useQuery<UnreachableItem[]>({
+    queryKey: key,
+    queryFn: () => apiGet<UnreachableItem[]>(`/agents/${agentId}/identity/unreachable`),
+    enabled: !!agentId,
+  })
+  const [error, setError] = useState<string | null>(null)
+  const give = useMutation({
+    mutationFn: (item: UnreachableItem) => connectionsApi.addGrant(item.id, { principalType: 'agent', principalId: agentId! }),
+    onSuccess: () => {
+      setError(null)
+      queryClient.invalidateQueries({ queryKey: key })
+    },
+    onError: (err) => setError(getApiErrorMessage(err, 'Could not give it to the agent.')),
+  })
+  if (!agentId) {
+    return <p className="text-xs text-muted-foreground" data-testid="acts-as-unsaved">Save the agent to see what it would not reach as itself.</p>
+  }
+  if (query.isLoading) return null
+  const items = Array.isArray(query.data) ? query.data : []
+  if (query.isError) {
+    return <p className="text-xs text-destructive" data-testid="acts-as-reach-error">Could not check what it reaches.</p>
+  }
+  if (items.length === 0) {
+    return <p className="text-xs text-muted-foreground" data-testid="acts-as-reach-ok">Everything its settings use is open to it as itself.</p>
+  }
+  return (
+    <div className="space-y-2" data-testid="acts-as-unreachable">
+      <p className="text-xs font-medium">As itself it would not reach these, from the agent as last saved:</p>
+      <ul className="divide-y rounded-md border">
+        {items.map((item) => (
+          <li key={`${item.kind}-${item.id}`} className="flex flex-wrap items-center justify-between gap-2 p-2" data-testid={`unreachable-${item.id}`}>
+            <div className="min-w-0">
+              <p className="text-sm">
+                {item.name}{' '}
+                <span className="text-xs text-muted-foreground">
+                  ({SCOPE_WORDS[item.scope]} {item.kind === 'provider' ? 'model provider' : 'connection'})
+                </span>
+              </p>
+              <p className="text-xs text-muted-foreground">{item.neededFor}</p>
+              {!item.canGrant && item.note && <p className="text-xs text-muted-foreground">{item.note}</p>}
+            </div>
+            {item.canGrant && (
+              <Button type="button" size="sm" variant="outline" disabled={give.isPending} onClick={() => give.mutate(item)}>
+                Let this agent use {item.scope === 'personal' && !/^my\s/i.test(item.name) ? 'my ' : ''}{item.name}
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+    </div>
   )
 }
 

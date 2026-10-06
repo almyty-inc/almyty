@@ -61,7 +61,48 @@ export interface GatewayPrincipal {
   ownerUserId: string | null;
 }
 
-export type ExecutionPrincipal = UserPrincipal | GatewayPrincipal;
+/**
+ * An agent acting as itself (the `agent_identity` entitlement, an agent
+ * whose `agentConfig.runAs` is 'agent'). It is not a person: it has no
+ * user id, so it never reaches its owner's personal or private
+ * connections, providers or tools. What it may run is bounded by the
+ * agent's own scope, the way a gateway's is (see canAgentExecute), and the
+ * connections it may use are the ones granted to it (principal type
+ * `agent` on connection_grants).
+ */
+export interface AgentPrincipal {
+  kind: 'agent';
+  agentId: string;
+  organizationId: string;
+  visibility: ResourceVisibility;
+  teamId: string | null;
+  /** The agent's owner. Recorded for scope decisions only; the agent never acts as them. */
+  ownerUserId: string | null;
+}
+
+export type ExecutionPrincipal = UserPrincipal | GatewayPrincipal | AgentPrincipal;
+
+/** What agentPrincipal needs of an agent. */
+export interface AgentScopeLike {
+  id: string;
+  organizationId: string;
+  visibility?: ResourceVisibility | null;
+  teamId?: string | null;
+  createdBy?: string | null;
+}
+
+/** The principal of an agent acting as itself. */
+export function agentPrincipal(agent: AgentScopeLike): AgentPrincipal {
+  const visibility = agent.visibility ?? 'org';
+  return {
+    kind: 'agent',
+    agentId: agent.id,
+    organizationId: agent.organizationId,
+    visibility,
+    teamId: visibility === 'team' ? (agent.teamId ?? null) : null,
+    ownerUserId: typeof agent.createdBy === 'string' && UUID_RE.test(agent.createdBy) ? agent.createdBy : null,
+  };
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -120,7 +161,7 @@ export function principalOfRun(run: {
   principal?: ExecutionPrincipal | null;
   userId?: string | null;
 }): ExecutionPrincipal {
-  if (run.principal && (run.principal.kind === 'user' || run.principal.kind === 'gateway')) {
+  if (run.principal && isExecutionPrincipal(run.principal)) {
     return run.principal;
   }
   return userPrincipal(run.userId ?? null);
@@ -129,6 +170,7 @@ export function principalOfRun(run: {
 /** Who a principal is, in words, for a run error. */
 export function describePrincipal(principal: ExecutionPrincipal): string {
   if (principal.kind === 'gateway') return `gateway ${principal.gatewayId}`;
+  if (principal.kind === 'agent') return `agent ${principal.agentId} (acting as itself)`;
   if (!principal.userId) return 'an anonymous caller';
   return `user ${principal.userId}`;
 }
@@ -142,7 +184,7 @@ export type ActingAs = string | { id: string } | ExecutionPrincipal | null | und
 
 export function isExecutionPrincipal(value: unknown): value is ExecutionPrincipal {
   const kind = (value as { kind?: unknown } | null | undefined)?.kind;
-  return kind === 'user' || kind === 'gateway';
+  return kind === 'user' || kind === 'gateway' || kind === 'agent';
 }
 
 /**
@@ -159,10 +201,13 @@ export function asPrincipal(who: ActingAs): ExecutionPrincipal {
 /**
  * The user a principal is judged as. A user principal is that user. A
  * gateway private to its owner acts as that owner (canGatewayExecute
- * decides the same way); any other gateway is no user at all.
+ * decides the same way); any other gateway is no user at all. An agent
+ * acting as itself is never a user, not even its owner: what it reaches
+ * is what is granted to it.
  */
 export function actingUserId(principal: ExecutionPrincipal): string | null {
   if (principal.kind === 'user') return principal.userId;
+  if (principal.kind === 'agent') return null;
   return principal.visibility === 'private' ? principal.ownerUserId : null;
 }
 
@@ -183,10 +228,12 @@ export class ExecutionAccessService {
    *   because they are the same call.
    * - private: the owner and nobody else, admins included.
    *
-   * Gateways: see canGatewayExecute.
+   * Gateways: see canGatewayExecute. Agents acting as themselves: see
+   * canAgentExecute.
    */
   async canExecute(principal: ExecutionPrincipal, resource: ResourceLike): Promise<AccessDecision> {
     if (principal.kind === 'gateway') return this.canGatewayExecute(principal, resource);
+    if (principal.kind === 'agent') return this.canAgentExecute(principal, resource);
     const visibility = resource.visibility ?? 'org';
     if (!principal.userId) {
       return visibility === 'org'
@@ -194,6 +241,38 @@ export class ExecutionAccessService {
         : { allowed: false, reason: `${visibility} resource needs a known user` };
     }
     return this.accessPolicy.canAccess({ id: principal.userId }, resource, 'use');
+  }
+
+  /**
+   * The agent rule. An agent acting as itself is no person, so no user's
+   * membership is consulted, its owner's included. What it may run is
+   * bounded by the agent's own scope, the shape of the gateway rule:
+   *
+   * - the agent itself: always (same organization).
+   * - org resource: any agent of the same organization.
+   * - team resource: an agent of that same team only.
+   * - private resource: only an agent private to the resource's own owner.
+   *
+   * Evaluated on every call, so an agent moved to another team, or made
+   * org-wide, stops reaching the resources of its old scope.
+   */
+  private canAgentExecute(principal: AgentPrincipal, resource: ResourceLike & { id?: string }): AccessDecision {
+    if (resource.organizationId !== principal.organizationId) {
+      return { allowed: false, reason: 'resource belongs to another organization' };
+    }
+    if (resource.id && resource.id === principal.agentId) return { allowed: true, reason: 'the agent itself' };
+    const visibility = resource.visibility ?? 'org';
+    if (visibility === 'org') return { allowed: true, reason: 'org-wide resource' };
+    if (visibility === 'private') {
+      const owner = resourceOwnerId(resource);
+      return principal.visibility === 'private' && !!owner && principal.ownerUserId === owner
+        ? { allowed: true, reason: 'agent private to the resource owner' }
+        : { allowed: false, reason: 'private resource, and the agent is not private to its owner' };
+    }
+    if (!resource.teamId) return { allowed: false, reason: 'team-scoped resource without teamId' };
+    return principal.visibility === 'team' && principal.teamId === resource.teamId
+      ? { allowed: true, reason: 'agent of the resource team' }
+      : { allowed: false, reason: 'team resource, and the agent is not of that team' };
   }
 
   /**

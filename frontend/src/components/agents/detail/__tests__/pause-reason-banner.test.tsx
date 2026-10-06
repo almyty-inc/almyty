@@ -79,6 +79,19 @@ describe('PauseReasonBanner', () => {
     expect(alert).toHaveTextContent('Once they are an active member again, resume the schedule')
   })
 
+  it('explains a schedule paused because the plan no longer lets the agent act as itself', () => {
+    const lapsed = {
+      code: 'IDENTITY_LAPSED' as const,
+      message: 'This agent acts as itself, which needs the Business plan. It was paused instead of running as you.',
+      detectedAt,
+    }
+    renderIt(agent({ settings: { schedule: { enabled: false, intervalMinutes: 30, input: {}, pausedReason: lapsed } } }))
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('acts as itself, which needs the Business plan')
+    expect(alert).toHaveTextContent('It was not run as its owner instead.')
+    expect(alert).toHaveTextContent('switch Acts as back to its owner under Capabilities')
+  })
+
   it('resumes the schedule with the interval and input it had', async () => {
     vi.mocked(agentsApi.schedule).mockResolvedValue({} as any)
     renderIt(

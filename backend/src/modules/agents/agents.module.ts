@@ -45,6 +45,8 @@ import { AgentVerifierHelper } from './agent-verifier.helper';
 import { AgentContextCompactor } from './agent-context-compactor.helper';
 import { AlwaysOnService } from './always-on/always-on.service';
 import { AlwaysOnController } from './always-on/always-on.controller';
+import { AgentIdentityService } from './agent-identity';
+import { AgentIdentityReachController, AgentIdentityReachService } from './agent-identity-reach';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
 import { AgentRunReaperService } from './agent-run-reaper.service';
 import { AgentExecutionReaperService } from './agent-execution-reaper.service';
@@ -125,11 +127,14 @@ import { BudgetsModule } from '../budgets/budgets.module';
     BudgetsModule,
   ],
   providers: [AgentReadinessService, AgentRunReaperService, AgentExecutionReaperService, OrchestratorService, StrategyPipelineResolver,
+    AgentIdentityService, AgentIdentityReachService,
     AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AlwaysOnService, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService],
-  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController, AlwaysOnController],
+  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController, AlwaysOnController,
+    AgentIdentityReachController],
   exports: [
     AgentRolesService, AgentsService, AgentExecutionEngine, AgentRuntimeService, AgentExecutionCancellationService,
     // Channels and connections wake always-on agents through it.
-    AlwaysOnService],
+    AlwaysOnService,
+    AgentIdentityService],
 })
 export class AgentsModule {}
