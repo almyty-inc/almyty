@@ -116,4 +116,18 @@ describe('/agents/:id/always-on', () => {
     })
     expect(await screen.findByText('at /agents/a1')).toBeInTheDocument()
   })
+
+  it('starts the ask-first list with what may change something when it switches to acting on its own', async () => {
+    vi.mocked(agentsApi.getAlwaysOn).mockResolvedValue({
+      ...empty,
+      alwaysOn: { enabled: true, brief: 'x', wakeOn: { timer: { everyMinutes: 30 } }, actMode: 'propose', askFirstToolIds: [], report: 'when_acted' },
+    } as any)
+    open()
+    await userEvent.click(await screen.findByLabelText('On its own, it'))
+    await userEvent.click(await screen.findByRole('option', { name: /Does things, and asks you first/ }))
+    const list = await screen.findByTestId('always-on-ask-first')
+    expect(list).toBeInTheDocument()
+    expect(screen.getByLabelText('issue_refund')).toBeChecked()
+    expect(screen.getByLabelText(/list_refunds/)).not.toBeChecked()
+  })
 })

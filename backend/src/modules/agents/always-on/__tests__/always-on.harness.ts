@@ -150,6 +150,8 @@ export function world(options: { plan?: string; agent?: Record<string, any> | nu
     admit: jest.fn(async () => ({ ok: true })),
     post: jest.fn(async (_agent: any, result: any, delivery: any) => {
       posted.push({ delivery, text: typeof result.output === 'string' ? result.output : JSON.stringify(result.output) });
+      // Recorded on the run, as ScheduledPostService.record does: the result's metadata plus the outcome.
+      if (result.kind === 'run') await runs.update({ id: result.id }, { metadata: { ...(result.metadata ?? {}), channelDelivery: { status: 'delivered', channelId: delivery.channelId } } });
       return { status: 'delivered', channelId: delivery.channelId, at: new Date().toISOString() };
     }),
   };

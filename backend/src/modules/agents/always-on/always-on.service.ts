@@ -130,8 +130,10 @@ export interface InboundForAlwaysOn {
 export function sameAddress(sender: string | null | undefined, address: string | null | undefined): boolean {
   if (!sender || !address) return false;
   const norm = (v: string) => {
-    const m = /<([^>]+)>/.exec(v);
-    return (m ? m[1] : v).trim().toLowerCase();
+    const open = v.lastIndexOf('<');
+    const close = v.lastIndexOf('>');
+    const inner = open >= 0 && close > open ? v.slice(open + 1, close) : v;
+    return inner.trim().toLowerCase();
   };
   return norm(sender) === norm(address);
 }
@@ -488,7 +490,7 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
     }
     const bucket = Math.floor(firedAt.getTime() / 60_000);
     return this.wake(agentId, organizationId, 'timer', {
-      summary: `the timer (every ${minutes} minutes)`,
+      summary: minutes === 1 ? 'the timer (every minute)' : `the timer (every ${minutes} minutes)`,
       dedupeKey: `timer:${bucket}`,
       sourceRef: null,
     });
@@ -914,7 +916,9 @@ export class AlwaysOnService implements OnModuleInit, OnModuleDestroy {
       seen.add(key);
       await poster.post(
         agent,
-        { kind: 'run', id: run.id, status: 'completed', output: text, userId: run.userId ?? null, metadata: {} },
+        // The run's own metadata: the poster records its outcome onto the
+        // run, and a stub here would wipe what the run carries (its trigger).
+        { kind: 'run', id: run.id, status: 'completed', output: text, userId: run.userId ?? null, metadata: run.metadata ?? {} },
         delivery,
       );
     }

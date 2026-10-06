@@ -85,8 +85,7 @@ export function describeWakes(config: AlwaysOnConfig | null | undefined, effecti
   if (config.wakeOn?.channelIds?.length || config.ownerChannel) parts.push('when a message arrives')
   if (config.wakeOn?.connectionEvents?.length) parts.push('when a connection needs attention')
   if (!parts.length) return 'Nothing wakes it yet'
-  const [first, ...rest] = parts
-  const text = rest.length ? `${first}, and ${rest.join(' and ')}` : first
+  const text = parts.length > 1 ? `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}` : parts[0]
   return `Wakes ${text}`
 }
 

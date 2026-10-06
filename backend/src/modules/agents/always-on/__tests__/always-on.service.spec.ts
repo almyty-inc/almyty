@@ -4,7 +4,6 @@ import {
   AGENT,
   GW_HOOK,
   GW_SLACK,
-  HOOK,
   ORG,
   OWNER,
   SLACK,
@@ -275,6 +274,8 @@ describe('Always on: reporting', () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(w.posted).toHaveLength(1);
     expect(w.posted[0].text).toContain('waiting for your OK');
+    // The notice is recorded on the run the way a post is, and the run keeps what it carries.
+    expect(w.runs.row('run-1')!.metadata).toMatchObject({ triggerType: 'always_on', channelDelivery: { status: 'delivered' } });
     w.service.onModuleDestroy();
   });
 });

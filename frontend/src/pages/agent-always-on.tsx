@@ -360,7 +360,18 @@ function AlwaysOnPage({
 
       <FormSection title="What it may do on its own" description="Your approval rules, like amounts over a limit, apply either way.">
         <Field id="always-on-act-mode" label="On its own, it">
-          <Select value={form.actMode} onValueChange={(v) => set({ actMode: v as AlwaysOnActMode })}>
+          <Select
+            value={form.actMode}
+            onValueChange={(v) =>
+              set({
+                actMode: v as AlwaysOnActMode,
+                // Switching to "act" with nothing on the list starts it with what may change something.
+                ...(v === 'act' && form.askFirstToolIds.length === 0
+                  ? { askFirstToolIds: tools.filter((t) => !t.readOnly).map((t) => t.id) }
+                  : {}),
+              })
+            }
+          >
             <SelectTrigger id="always-on-act-mode">
               <SelectValue />
             </SelectTrigger>
