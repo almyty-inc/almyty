@@ -6,10 +6,11 @@ registries then use the credential. Model providers, deployment clouds,
 buckets, chat platforms: all of them are services in the same catalog.
 
 ```sh
-npx @almyty/auth login
-npx @almyty/credentials services --kind inference
-npx @almyty/credentials add openrouter --open
-npx @almyty/credentials list
+npm i -g @almyty/cli
+almyty login
+almyty credentials services --kind inference
+almyty credentials add openrouter --open
+almyty credentials list
 ```
 
 ## What a credential is
@@ -55,14 +56,14 @@ unless `--method` names another. `services` lists them.
 **Sign-in** (OpenRouter and Slack today) is the best path: nothing to paste.
 
 ```sh
-npx @almyty/credentials add openrouter --open
+almyty credentials add openrouter --open
 ```
 
 On a machine with no browser, ask for the headless flow and the provider shows
 a code:
 
 ```sh
-npx @almyty/credentials add openrouter --headless
+almyty credentials add openrouter --headless
 # -> Open this URL to continue: https://…
 #    The provider will show you a code. Paste it with:
 #      almyty credentials complete openrouter --state st-… --code <code>
@@ -76,7 +77,7 @@ whose state the redirect has already consumed.
 the page where the key is created:
 
 ```sh
-npx @almyty/credentials add huggingface --owner user
+almyty credentials add huggingface --owner user
 # Get a key at: https://huggingface.co/settings/tokens
 # Access token: ······
 ```
@@ -129,9 +130,9 @@ In order of preference:
 4. **`--input-stdin`** — the same object on stdin.
 
 ```sh
-npx @almyty/credentials add channel-telegram --input-file bot.json
+almyty credentials add channel-telegram --input-file bot.json
 pass show telegram/bot | jq -Rn '{bot_token: input}' \
-  | npx @almyty/credentials add channel-telegram --input-stdin
+  | almyty credentials add channel-telegram --input-stdin
 ```
 
 `--input '<json>'` still works for the fields a service does **not** mark
@@ -165,9 +166,9 @@ Every chat channel is a service like any other, so a Slack, Discord or
 Telegram token is added here instead of pasted into a gateway form:
 
 ```sh
-npx @almyty/credentials services --kind channel
-npx @almyty/credentials add channel-slack --open
-npx @almyty/credentials add channel-telegram
+almyty credentials services --kind channel
+almyty credentials add channel-slack --open
+almyty credentials add channel-telegram
 ```
 
 The service key is `channel-<gateway type>` with underscores dasherized
@@ -191,7 +192,7 @@ to get it, and how it is validated.
 | 0 | success |
 | 1 | unexpected error |
 | 2 | usage error (bad flags, missing argument, unknown command, a secret on argv) |
-| 3 | not authenticated — run `npx @almyty/auth login` |
+| 3 | not authenticated — run `almyty login` |
 | 4 | not found |
 | 5 | the operation ran and failed (a `validate` whose health is not `valid`) |
 
@@ -206,6 +207,6 @@ turned into tools, served over MCP, A2A, UTCP and Agent Skills.
 - Design notes: `docs/connections.md` in the almyty repository
 - Source: https://github.com/almyty-inc/almyty
 
-Run `npx @almyty/credentials --help` for the full surface.
+Run `almyty credentials --help` for the full surface.
 
 Apache-2.0 © Almyty Inc.

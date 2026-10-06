@@ -49,7 +49,7 @@ export function claudeCodeCommand(gateway: ConnectableGateway, orgSlug: string, 
 
 /** The install command for a Skills gateway. The server resolves the ref by the gateway's address, so the address slug is what goes in it. */
 export function skillsInstallCommand(gateway: ConnectableGateway, orgSlug: string): string {
-  return `npx @almyty/skills install @${orgSlug}/${gatewaySlugOf(gateway)}`
+  return `almyty skills install @${orgSlug}/${gatewaySlugOf(gateway)}`
 }
 
 /**
@@ -188,8 +188,8 @@ export function clientSnippets(
     {
       id: 'skills',
       label: 'Skills',
-      hint: 'Installs one SKILL.md per tool into your coding agent. Sign in first with npx @almyty/auth login.',
-      value: `npx @almyty/skills install @${orgSlug}/${gatewaySlugOf(gateway)}`,
+      hint: 'Installs one SKILL.md per tool into your coding agent. Sign in first with almyty login.',
+      value: `almyty skills install @${orgSlug}/${gatewaySlugOf(gateway)}`,
       language: 'bash',
     },
   ]

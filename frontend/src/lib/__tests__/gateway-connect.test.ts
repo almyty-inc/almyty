@@ -30,7 +30,7 @@ describe('gateway connect commands', () => {
   it('picks the command by protocol, and none where there is no one-liner', () => {
     expect(connectCommandFor(gw, 'acme', 'https://x')).toMatch(/^claude mcp add /)
     expect(connectCommandFor({ ...gw, type: 'skills' }, 'acme')).toBe(skillsInstallCommand(gw, 'acme'))
-    expect(skillsInstallCommand(gw, 'acme')).toBe('npx @almyty/skills install @acme/weather-api')
+    expect(skillsInstallCommand(gw, 'acme')).toBe('almyty skills install @acme/weather-api')
     expect(connectCommandFor({ ...gw, type: 'a2a' }, 'acme')).toBeNull()
   })
 
@@ -76,7 +76,7 @@ describe('gateway connect commands', () => {
   it('installs Skills by the address the server resolves, not the display name', () => {
     // GET /gateways/resolve/:org/:slug matches the endpoint first.
     const skills = { name: 'Swagger Petstore - OpenAPI 3.0', type: 'skills', endpoint: '/petstore-skills' }
-    expect(skillsInstallCommand(skills, 'acme')).toBe('npx @almyty/skills install @acme/petstore-skills')
+    expect(skillsInstallCommand(skills, 'acme')).toBe('almyty skills install @acme/petstore-skills')
   })
 
   it('leaves no hand-rolled name slug in the gateway screens', () => {
@@ -117,7 +117,7 @@ describe('one protocol per gateway', () => {
 
   it('points the Skills setup at the CLI and its sign-in, never at a URL to fetch with the key', () => {
     const [skills] = gatewaySnippets({ ...gw, type: 'skills' }, 'acme', null, 'https://x')
-    expect(skills.hint).toContain('npx @almyty/auth login')
+    expect(skills.hint).toContain('almyty login')
     expect(skills.hint).not.toContain('/skills')
   })
 })

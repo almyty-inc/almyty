@@ -225,11 +225,13 @@ describe('loadConfig', () => {
       hostname: () => 'Franes-MacBook-Pro.local',
     });
     expect(cfg.name).toBe('franes-macbook-pro');
+    expect(cfg.explicitName).toBe(false);
   });
 
   it('a configured name wins over the hostname', () => {
     const cfg = loadConfig({ env: {}, exists: () => false, readFile: () => '', flags: { name: 'build-box' }, hostname: () => 'ignored' });
     expect(cfg.name).toBe('build-box');
+    expect(cfg.explicitName).toBe(true);
   });
 
   it('turns any hostname into a valid runner name', () => {
@@ -274,5 +276,15 @@ describe('loadConfig', () => {
       projectPath: '/no.json',
       flags: { name: 'r' },
     })).toThrow(/failed to parse \/global\.json/);
+  });
+  it('takes organization and backend defaults from login but respects configured overrides', () => {
+    const credentials = { url: 'http://127.0.0.1:4238', organizationId: 'chosen-org' };
+    const defaults = loadConfig({ credentials, env: {}, exists: () => false, hostname: () => 'studio' });
+    expect(defaults.organizationId).toBe('chosen-org');
+    expect(defaults.backendUrl).toBe(credentials.url);
+    const configured = loadConfig({ credentials, env: {}, exists: path => path === '/global.json', globalPath: '/global.json', readFile: () => JSON.stringify({ organizationId: 'config-org' }), hostname: () => 'studio' });
+    expect(configured.organizationId).toBe('config-org');
+    const flagged = loadConfig({ credentials, env: { ALMYTY_ORG_ID: 'env-org' }, exists: () => false, flags: { organizationId: 'flag-org' }, hostname: () => 'studio' });
+    expect(flagged.organizationId).toBe('flag-org');
   });
 });

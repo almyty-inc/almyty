@@ -19,6 +19,7 @@ export interface StoredCredentials {
   expiresAt?: string;
   // The frontend origin used to acquire this token (for browser flow).
   frontendUrl?: string;
+  organizationId?: string;
 }
 
 export function loadCredentials(): StoredCredentials | null {
@@ -118,6 +119,7 @@ export function expiryState(
 export function credentialSummary(creds: StoredCredentials): {
   url: string;
   frontendUrl?: string;
+  organizationId?: string;
   email?: string;
   tokenPreview: string;
 } {
@@ -128,6 +130,7 @@ export function credentialSummary(creds: StoredCredentials): {
       : `${'*'.repeat(Math.max(0, token.length))}`;
   return {
     url: creds.url,
+    ...(creds.organizationId ? { organizationId: creds.organizationId } : {}),
     ...(creds.frontendUrl ? { frontendUrl: creds.frontendUrl } : {}),
     ...(creds.email ? { email: creds.email } : {}),
     tokenPreview: preview,

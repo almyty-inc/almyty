@@ -9,10 +9,11 @@ more — plus the universal `.agents/skills/` convention.
 ## Quick start
 
 ```bash
-$ npx @almyty/auth login
-$ npx @almyty/skills gateways
-$ npx @almyty/skills install org/gateway --dry-run   # see the exact files
-$ npx @almyty/skills install org/gateway
+$ npm i -g @almyty/cli
+$ almyty login
+$ almyty skills gateways
+$ almyty skills install org/gateway --dry-run   # see the exact files
+$ almyty skills install org/gateway
 ```
 
 ## Commands
@@ -43,8 +44,8 @@ and installs only when it matches exactly one skill; an ambiguous name
 lists the matches and exits `2` rather than guessing.
 
 ```bash
-$ npx @almyty/skills install acme/petstore
-$ npx @almyty/skills run acme/petstore/get-pet --id 123
+$ almyty skills install acme/petstore
+$ almyty skills run acme/petstore/get-pet --id 123
 ```
 
 ## Where skills get installed
@@ -68,7 +69,7 @@ about to write to before it writes anything, reports how many files it
 replaced, and `--dry-run` lists every path and writes nothing:
 
 ```bash
-$ npx @almyty/skills install acme/petstore --dry-run
+$ almyty skills install acme/petstore --dry-run
 
 acme/petstore (12 skill(s)) — dry run, nothing will be written:
   Codex: /work/proj/.codex/skills
@@ -111,14 +112,14 @@ Re-run without --dry-run to write them.
 | `--dry-run` | Print every file `install` would write, and write nothing. |
 
 ```bash
-$ npx @almyty/skills install acme/petstore                     # interactive picker
-$ npx @almyty/skills install acme/petstore --all               # every project-detected
-$ npx @almyty/skills install acme/petstore --all --global      # project AND home detected
-$ npx @almyty/skills install acme/petstore --global            # only home-detected agents
-$ npx @almyty/skills install acme/petstore -a codex            # codex, at whichever scope it lives
-$ npx @almyty/skills install acme/petstore -a codex --global   # force ~/.codex/skills
-$ npx @almyty/skills install acme/petstore --agent '*' -y      # every known agent, project scope
-$ npx @almyty/skills install acme/petstore -p ./agents/skills  # a directory you name
+$ almyty skills install acme/petstore                     # interactive picker
+$ almyty skills install acme/petstore --all               # every project-detected
+$ almyty skills install acme/petstore --all --global      # project AND home detected
+$ almyty skills install acme/petstore --global            # only home-detected agents
+$ almyty skills install acme/petstore -a codex            # codex, at whichever scope it lives
+$ almyty skills install acme/petstore -a codex --global   # force ~/.codex/skills
+$ almyty skills install acme/petstore --agent '*' -y      # every known agent, project scope
+$ almyty skills install acme/petstore -p ./agents/skills  # a directory you name
 ```
 
 `src/agents.ts` is the registry: each entry maps a detection directory
@@ -149,7 +150,7 @@ other read command prints for humans by default and takes `--json`.
 | `0` | success |
 | `1` | unexpected error |
 | `2` | usage error (bad flags, unknown command, ambiguous ref) |
-| `3` | not authenticated — run `npx @almyty/auth login` |
+| `3` | not authenticated — run `almyty login` |
 | `4` | no such gateway or skill |
 | `5` | the skill ran and failed |
 
@@ -174,7 +175,7 @@ other read command prints for humans by default and takes `--json`.
 | `interval` | `daemon`/`watch` poll interval, in seconds |
 
 There is **no credential key**. The token lives only in
-`~/.almyty/credentials.json` (written by `npx @almyty/auth login`) or in
+`~/.almyty/credentials.json` (written by `almyty login`) or in
 `ALMYTY_TOKEN`.
 
 ## Environment variables
@@ -190,7 +191,7 @@ There is **no credential key**. The token lives only in
 
 ## Authentication
 
-Run `npx @almyty/auth login` once. `search` and `list` are org-scoped —
+Run `almyty login` once. `search` and `list` are org-scoped —
 they look through the gateways your account can see, so there is no
 credential-free public index to search. With no credential, every
 command that talks to the API prints the login instruction and exits

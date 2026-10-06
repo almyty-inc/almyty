@@ -5,8 +5,9 @@ router may pick and **why not** when it may not, what a routing policy would
 choose right now, what everything costs, and where self-hosted weights run.
 
 ```sh
-npx @almyty/auth login
-npx @almyty/models list
+npm i -g @almyty/cli
+almyty login
+almyty models list
 ```
 
 ## What makes a model usable
@@ -58,7 +59,7 @@ lists. `sync` is the same import by hand.
 same policy an `llm_call` node carries, and **calls nothing** — it plans.
 
 ```sh
-npx @almyty/models route --objective cheapest --tier private_cloud \
+almyty models route --objective cheapest --tier private_cloud \
   --regions eu-central --needs tools --budget-headroom 500
 ```
 
@@ -112,9 +113,9 @@ run a model that already lives somewhere.
 Naming the model is configuration, so it is the positional argument:
 
 ```sh
-npx @almyty/models host hf://Qwen/Qwen3-0.6B@main --adapter huggingface-endpoints
-npx @almyty/models host fireworks://accounts/acme/models/qwen3-tuned --adapter fireworks
-npx @almyty/models host --model-version <id> --adapter modal --desired '{"replicas":1}'
+almyty models host hf://Qwen/Qwen3-0.6B@main --adapter huggingface-endpoints
+almyty models host fireworks://accounts/acme/models/qwen3-tuned --adapter fireworks
+almyty models host --model-version <id> --adapter modal --desired '{"replicas":1}'
 ```
 
 An **artifact** reference points at bytes and is pinned, so the hosted model is
@@ -134,16 +135,16 @@ a secret as a flag value.
 provider account once and name the connection.
 
 ```sh
-npx @almyty/credentials add huggingface
-npx @almyty/models host hf://Qwen/Qwen3-0.6B@main \
+almyty credentials add huggingface
+almyty models host hf://Qwen/Qwen3-0.6B@main \
   --adapter huggingface-endpoints --credential <connectionId>
 ```
 
 Otherwise pass the object from a file or stdin:
 
 ```sh
-npx @almyty/models host hf://Qwen/Qwen3-0.6B@main --adapter huggingface-endpoints --config-file hf.json
-cat hf.json | npx @almyty/models host hf://Qwen/Qwen3-0.6B@main --adapter huggingface-endpoints --config-stdin
+almyty models host hf://Qwen/Qwen3-0.6B@main --adapter huggingface-endpoints --config-file hf.json
+cat hf.json | almyty models host hf://Qwen/Qwen3-0.6B@main --adapter huggingface-endpoints --config-stdin
 ```
 
 `--config` still works for the fields an adapter does **not** mark secret, and
@@ -173,7 +174,7 @@ says where a number came from: `feed:litellm`, `feed:openrouter`, `native`,
 | 0 | success |
 | 1 | unexpected error |
 | 2 | usage error (bad flags, missing argument, unknown command) |
-| 3 | not authenticated — run `npx @almyty/auth login` |
+| 3 | not authenticated — run `almyty login` |
 | 4 | not found |
 | 5 | the operation ran and failed (a check that did not pass, a policy that resolves to nothing) |
 
@@ -188,6 +189,6 @@ turned into tools, served over MCP, A2A, UTCP and Agent Skills.
 - Design notes: `docs/models.md` in the almyty repository
 - Source: https://github.com/almyty-inc/almyty
 
-Run `npx @almyty/models --help` for the full surface.
+Run `almyty models --help` for the full surface.
 
 Apache-2.0 © Almyty Inc.

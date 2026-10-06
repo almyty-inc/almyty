@@ -19,15 +19,15 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import { CredentialPicker } from '@/components/credentials/credential-picker'
+import { AddMemoryAccountFlow } from '@/components/memory/memory-accounts'
+import { useConnectionOptions } from '@/components/connections/connection-select'
 import { memoryBackendName } from '@/components/memory/memory-words'
 import { memoriesApi } from '@/lib/api'
-import { memoryConnectionsQuery } from '@/components/memory/memory-connections'
 import type { Connection } from '@/types/connections'
 import type { AgentMemoryConfig, MemoryAccount, MemorySave, MemoryWhose } from '@/types/agent-models'
 
 export const NATIVE_MEMORY_ACCOUNT = 'almyty-native'
-const NATIVE: MemoryAccount = { id: NATIVE_MEMORY_ACCOUNT, name: "almyty's own memory", canExpire: true, expiresItself: true }
+const NATIVE: MemoryAccount = { id: NATIVE_MEMORY_ACCOUNT, name: 'almyty', canExpire: true, expiresItself: true }
 
 export const WHOSE_LABELS: Record<MemoryWhose, string> = {
   person: 'Each person has their own',
@@ -83,7 +83,7 @@ export interface MemorySectionProps {
 }
 
 /** The Select value of the agent's own account (a connection of its own). */
-const OWN_ACCOUNT = '__own__'
+const CONNECTION_PREFIX = 'connection:'
 
 export function MemorySection({ value, onChange }: MemorySectionProps) {
   const accountsQ = useMemoryAccounts()
@@ -92,7 +92,10 @@ export function MemorySection({ value, onChange }: MemorySectionProps) {
   const [justConnected, setJustConnected] = useState<Connection | null>(null)
   const accountId = value.account || NATIVE_MEMORY_ACCOUNT
   const ownConnection = value.credentialId || null
-  const ownName = useConnectionName(ownConnection, justConnected)
+  const connectionOptions = useConnectionOptions({ kind: 'memory' })
+  const connections = justConnected && !connectionOptions.connections.some(c => c.id === justConnected.id)
+    ? [justConnected, ...connectionOptions.connections] : connectionOptions.connections
+  const ownName = connections.find(c => c.id === ownConnection)?.name
   // The account in use: the agent's own connection for a service, or the organization's.
   const account: MemoryAccount | undefined = ownConnection
     ? {
@@ -131,11 +134,19 @@ export function MemorySection({ value, onChange }: MemorySectionProps) {
         {value.enabled && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2" data-testid="memory-fields">
             <div className="space-y-1.5">
-              <Label htmlFor="memory-account">Memory account</Label>
+              <Label htmlFor="memory-account">Keep memories in</Label>
               <Select
-                value={ownConnection ? OWN_ACCOUNT : accountId}
+                value={ownConnection ? `${CONNECTION_PREFIX}${ownConnection}` : accountId}
                 onValueChange={(v) => {
-                  if (v === OWN_ACCOUNT) return
+                  if (v.startsWith(CONNECTION_PREFIX)) {
+                    const connection = connections.find(c => c.id === v.slice(CONNECTION_PREFIX.length))
+                    if (connection) {
+                      const backend = connection.connectorKey
+                      const canExpire = servicesQ.data?.find(b => b.id === backend)?.canExpire ?? true
+                      set({ account: backend, credentialId: connection.id, ...(canExpire ? {} : { retentionDays: null }) })
+                    }
+                    return
+                  }
                   const next = accounts.find((a) => a.id === v)
                   // The organization's account for a service; a time limit it cannot keep is not carried over.
                   set({ account: v, credentialId: null, ...(next && !next.canExpire ? { retentionDays: null } : {}) })
@@ -146,7 +157,8 @@ export function MemorySection({ value, onChange }: MemorySectionProps) {
                   {accounts.map((a) => (
                     <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                   ))}
-                  {ownConnection && <SelectItem value={OWN_ACCOUNT}>{account?.name}</SelectItem>}
+                  {connections.map(c => <SelectItem key={c.id} value={`${CONNECTION_PREFIX}${c.id}`}>{c.name} ({memoryBackendName(c.connectorKey)})</SelectItem>)}
+                  {ownConnection && !connections.some(c => c.id === ownConnection) && <SelectItem value={`${CONNECTION_PREFIX}${ownConnection}`}>{account?.name} (unavailable)</SelectItem>}
                   {!ownConnection && !account && <SelectItem value={accountId}>{memoryBackendName(accountId)} (not set up)</SelectItem>}
                 </SelectContent>
               </Select>
@@ -252,43 +264,25 @@ function retentionHint(account: MemoryAccount | undefined, keepsForDays: boolean
  */
 function AddMemoryAccount({ onAdded }: { onAdded: (service: string, connection: Connection) => void }) {
   const [open, setOpen] = useState(false)
-  const [service, setService] = useState('')
+  const [service, setService] = useState<string | null>(null)
   const backendsQ = useMemoryServices(open)
-  const services = (backendsQ.data ?? []).filter((b) => b.id !== NATIVE_MEMORY_ACCOUNT && b.modes.includes('memory'))
-
-  if (!open) {
-    return (
-      <Button type="button" variant="link" size="sm" className="h-auto px-0 text-xs" onClick={() => setOpen(true)}>
-        Add a memory account
-      </Button>
-    )
-  }
+  const services = (backendsQ.data ?? []).filter(b => b.id !== NATIVE_MEMORY_ACCOUNT && b.modes.includes('memory'))
+  if (!open) return <Button type="button" variant="link" size="sm" className="h-auto px-0 text-xs" onClick={() => setOpen(true)}>Connect account</Button>
   return (
     <div className="space-y-2 rounded-md border p-3" data-testid="add-memory-account">
-      <Label htmlFor="memory-new-service" className="text-xs">Memory service</Label>
-      <Select value={service} onValueChange={setService}>
-        <SelectTrigger id="memory-new-service"><SelectValue placeholder="Choose a service" /></SelectTrigger>
-        <SelectContent>
-          {services.map((b) => (
-            <SelectItem key={b.id} value={b.id}>{memoryBackendName(b.id)}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {service && (
-        <CredentialPicker
-          id="memory-new-account"
-          label={`${memoryBackendName(service)} account`}
-          value=""
-          kind="memory"
-          connectorKey={service}
-          onChange={(connection) => {
-            if (!connection) return
-            onAdded(service, connection)
-            setOpen(false)
-          }}
-        />
-      )}
-      <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+      <AddMemoryAccountFlow
+        services={services}
+        service={service}
+        onPickService={setService}
+        embedded
+        onConnected={connection => {
+          onAdded(connection.connectorKey, connection)
+          setOpen(false)
+          setService(null)
+        }}
+        onCancel={() => setOpen(false)}
+      />
+      {!service && <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>}
     </div>
   )
 }
@@ -303,12 +297,4 @@ function useMemoryServices(enabled = true) {
     },
     enabled,
   })
-}
-
-/** The name of the agent's own connection, from the organization's memory connections. */
-function useConnectionName(credentialId: string | null | undefined, justConnected: Connection | null) {
-  const q = useQuery({ ...memoryConnectionsQuery, enabled: !!credentialId })
-  if (!credentialId) return null
-  if (justConnected?.id === credentialId) return justConnected.name
-  return q.data?.find((c) => c.id === credentialId)?.name ?? null
 }

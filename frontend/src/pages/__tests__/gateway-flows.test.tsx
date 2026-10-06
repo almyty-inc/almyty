@@ -223,7 +223,7 @@ describe('/gateways/new: create gateway', () => {
     await waitFor(() => expect(gatewaysApi.create).toHaveBeenCalledWith(expect.objectContaining({ type: 'skills', configuration: { format: 'skill-md' } })))
     await waitFor(() => expect(where()).toBe('/gateways/gw-9'))
     const skills = await screen.findByTestId('snippet-skills')
-    expect(skills).toHaveTextContent('npx @almyty/skills install @acme/petstore')
+    expect(skills).toHaveTextContent('almyty skills install @acme/petstore')
     expect(screen.queryByTestId('key-placeholder-note')).toBeNull()
   })
 

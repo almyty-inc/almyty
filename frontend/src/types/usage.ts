@@ -287,6 +287,8 @@ export interface Agent {
     codeMode?: CodeModeConfig
     /** Machine label requirements for runner-backed tools; the server stores an object, a save may send text. */
     runnerLabels?: Record<string, string> | string
+    /** Pin runner-backed work to one machine. */
+    runnerId?: string | null
     verify?: {
       enabled?: boolean
       checkers?: Array<{ name?: string; providerId?: string; model?: string; instructions?: string }>

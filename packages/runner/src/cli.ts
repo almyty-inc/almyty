@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * almyty-runner CLI.
+ * almyty runner CLI.
  *
- *   almyty-runner start [--name X] [--org ORG_ID] [--label k=v]... [--config path] [--url URL]
- *   almyty-runner status
- *   almyty-runner stop
+ *   almyty runner start [--name X] [--org ORG_ID] [--label k=v]... [--config path] [--url URL]
+ *   almyty runner status
+ *   almyty runner stop
  *
  * Auth: ALMYTY_TOKEN env or ~/.almyty/credentials.json (run
- * `almyty-auth login` first if neither is configured). The runner is
+ * `almyty login` first if neither is configured). The runner is
  * registered to whoever that login belongs to; the name is only a label.
  */
 
@@ -18,16 +18,16 @@ import { parseArgs } from './cli-args.js';
 export { parseArgs, COMMANDS, type ParsedFlags } from './cli-args.js';
 
 function printHelp(): void {
-  process.stdout.write(`almyty-runner v${RUNNER_VERSION}
+  process.stdout.write(`almyty runner v${RUNNER_VERSION}
 
 Usage:
-  almyty-runner start [options]    Register and run the daemon
-  almyty-runner status             Show local daemon status
-  almyty-runner stop               Send SIGTERM to the local daemon
+  almyty runner start [options]    Register and run the daemon
+  almyty runner status             Show local daemon status
+  almyty runner stop               Send SIGTERM to the local daemon
 
 Options for start:
   --name <name>           Runner name (matches [a-zA-Z0-9_-]{1,64}), unique in the org; defaults to this machine's hostname
-  --org <org-id>          Organization to register in (needed if you belong to several)
+  --org <org-id>          Override the organization saved by login
   --label key=value       Add a descriptive label; repeat for multiple
   --config <path>         Path to a JSON config file (overrides global+project)
   --url <backend-url>     Override backend URL (e.g. https://api.almyty.com)
@@ -42,7 +42,7 @@ Exit codes:
   2  usage error (unknown command, bad flags)
 
 Auth:
-  ALMYTY_TOKEN env or ~/.almyty/credentials.json (\`almyty-auth login\`).
+  ALMYTY_TOKEN env or ~/.almyty/credentials.json (\`almyty login\`).
   The runner belongs to the user that login is for. Nobody else can
   attach to it, whatever name they pick.
 `);

@@ -85,7 +85,7 @@ export function CapabilitiesSection({
           everyAgent={!!agentConfig.canCallAgents && !Array.isArray(agentConfig.callableAgentIds)}
           onChange={(callableAgentIds) => set({ callableAgentIds, canCallAgents: callableAgentIds.length > 0 })}
         />
-        <Machine value={agentConfig.runnerLabels} onChange={(runnerLabels) => set({ runnerLabels })} />
+        <Machine value={agentConfig.runnerLabels} runnerId={agentConfig.runnerId} onChange={(runnerLabels) => set({ runnerLabels })} onRunnerChange={(runnerId) => set({ runnerId })} />
         <TemporaryAgents agentConfig={agentConfig} onChange={set} />
       </CardContent>
     </Card>
@@ -332,22 +332,33 @@ interface RunnerRow {
   labels: Record<string, string>
 }
 
-function Machine({ value, onChange }: { value: Record<string, string> | string | undefined; onChange: (text: string) => void }) {
+function Machine({ value, runnerId, onChange, onRunnerChange }: { value: Record<string, string> | string | undefined; runnerId?: string | null; onChange: (text: string) => void; onRunnerChange: (id: string | null) => void }) {
   const orgId = useOrganizationStore((s) => s.currentOrganization?.id)
   const runnersQ = useQuery<RunnerRow[]>({ queryKey: ['runners', orgId], queryFn: () => runnersApi.getAll(), enabled: !!orgId })
   const wanted = parseRunnerLabels(value)
   const keys = Object.keys(wanted)
   const runners = Array.isArray(runnersQ.data) ? runnersQ.data : []
-  const matching = keys.length ? runners.filter((r) => keys.every((k) => r.labels?.[k] === wanted[k])) : []
+  const matching = keys.length ? runners.filter((r) => (!runnerId || r.id === runnerId) && keys.every((k) => r.labels?.[k] === wanted[k])) : []
   const online = matching.filter((r) => r.state === 'online' || r.state === 'busy')
   return (
     <section className="space-y-3" data-testid="capability-machine">
-      <SectionHeading title="Machine" hint="Where its tools that run on your machines run." />
+      <Label htmlFor="agent-runner">Runs on</Label>
+      <Select value={runnerId || '__any__'} onValueChange={(id) => onRunnerChange(id === '__any__' ? null : id)}>
+        <SelectTrigger id="agent-runner"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__any__">Any of my runners</SelectItem>
+          {runners.map(r => <SelectItem key={r.id} value={r.id}>{r.name} ({r.state})</SelectItem>)}
+          {runnerId && !runners.some(r => r.id === runnerId) && <SelectItem value={runnerId}>Selected runner (unavailable)</SelectItem>}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">{runnerId ? 'Runner work stays on this machine. It runs only when this runner is available; another machine is never substituted.' : 'Runner tools use their connected machine. Work needing a runner can use an available one.'}</p>
+      <details open={keys.length > 0} className="space-y-3">
+        <summary className="cursor-pointer text-sm font-medium">Advanced</summary>
       <RunnerLabelsField
         id="agent-runner-labels"
         value={value}
         onChange={onChange}
-        hint="Work goes to an online machine with all of these labels, and nowhere else. Leave empty to use each tool's own machine."
+        hint="Require these labels on the selected runner, or use them to choose an online runner when any runner is allowed."
       />
       {keys.length > 0 && (
         <p className="text-xs text-muted-foreground" data-testid="capability-machine-matches">
@@ -356,6 +367,7 @@ function Machine({ value, onChange }: { value: Record<string, string> | string |
             : `${pluralized(matching.length, 'machine')} with these labels: ${matching.map((r) => `${r.name}${online.includes(r) ? ' (online)' : ''}`).join(', ')}.`}
         </p>
       )}
+      </details>
     </section>
   )
 }

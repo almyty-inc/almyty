@@ -63,8 +63,8 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
   if (gatewayType === 'skills') {
     const gatewaySlug = gatewaySlugOf(gateway)
     const installCommand = skillsInstallCommand(gateway, orgSlug)
-    const watchCommand = `npx @almyty/skills watch @${orgSlug}/${gatewaySlug}`
-    const loginCommand = `npx @almyty/auth login`
+    const watchCommand = `almyty skills watch @${orgSlug}/${gatewaySlug}`
+    const loginCommand = `almyty login`
 
     // Extract the actual SKILL.md markdown content
     const skillMarkdown = (() => {
