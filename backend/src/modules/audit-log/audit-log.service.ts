@@ -17,6 +17,21 @@ function withTrace(metadata: Record<string, any> | undefined): Record<string, an
   return { ...(metadata ?? {}), trace };
 }
 
+/** Who acted, when it was not a person: an agent acting as itself. */
+export type AuditActor = { kind: 'agent'; agentId: string };
+
+/**
+ * Add the non-person actor of this row as `details.actor`: the one the
+ * caller names, else the one the scope carries (an agent acting as itself,
+ * set by the run that wrote the row). A row with no such actor is
+ * unchanged, and a caller's own `details.actor` is never overwritten.
+ */
+function withActor(details: Record<string, any> | undefined, explicit?: AuditActor | null): Record<string, any> | undefined {
+  const actor = explicit ?? getRequestContext()?.actor ?? null;
+  if (!actor || details?.actor) return details;
+  return { ...(details ?? {}), actor };
+}
+
 export interface AuditLogOptions {
   organizationId: string;
   userId?: string;
@@ -33,6 +48,8 @@ export interface AuditLogOptions {
   duration?: number;
   cost?: number;
   metadata?: Record<string, any>;
+  /** A non-person actor (an agent acting as itself); else the scope's, if any. Written as details.actor. */
+  actor?: AuditActor | null;
 }
 
 export interface AuditLogFilters {
@@ -90,7 +107,7 @@ export class AuditLogService {
         resourceType: options.resourceType,
         resourceId: options.resourceId,
         resourceName: options.resourceName,
-        details: options.details,
+        details: withActor(options.details, options.actor),
         changes: options.changes,
         ipAddress: options.ipAddress,
         userAgent: options.userAgent,
@@ -127,7 +144,8 @@ export class AuditLogService {
       userEmail = user?.email;
     }
     const repository = manager.getRepository(AuditLog);
-    return repository.save(repository.create({ ...options, userEmail, metadata: withTrace(options.metadata) }));
+    const { actor, ...row } = options;
+    return repository.save(repository.create({ ...row, details: withActor(row.details, actor), userEmail, metadata: withTrace(options.metadata) }));
   }
 
   /** Stream rows written by logInTransaction once their transaction committed. */

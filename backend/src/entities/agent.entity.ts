@@ -67,9 +67,12 @@ export interface AgentPipeline {
  *   someone else).
  * - OWNER_NOT_MEMBER: the owner is no longer an active member of the org.
  * - RESTORE_FAILED: the schedule could not be restored after a restart.
+ * - IDENTITY_LAPSED: the agent acts as itself (agentConfig.runAs 'agent')
+ *   and the organization no longer has agent_identity; it is paused rather
+ *   than run as its owner.
  */
 export interface AgentPauseReason {
-  code: 'MODEL_NOT_FOUND' | 'OWNER_CANNOT_RUN' | 'OWNER_NOT_MEMBER' | 'RESTORE_FAILED';
+  code: 'MODEL_NOT_FOUND' | 'OWNER_CANNOT_RUN' | 'OWNER_NOT_MEMBER' | 'RESTORE_FAILED' | 'IDENTITY_LAPSED';
   message: string;
   detectedAt: string;
 }
@@ -213,6 +216,13 @@ export class Agent {
      * (RunnerService.resolveByLabels). Absent: the tool's own runner.
      */
     runnerLabels?: Record<string, string>;
+    /**
+     * Who the agent's unattended runs act as (a schedule; Always on once it
+     * lands): its owner (default), or the agent itself, with its own
+     * connection grants and its own audit actor. 'agent' needs the
+     * agent_identity entitlement (agents/agent-identity.ts).
+     */
+    runAs?: 'owner' | 'agent';
     /**
      * Autonomous verify: a refute-only checker panel reviews the agent's final
      * answer. On failure (within the revision budget) the failures are fed back

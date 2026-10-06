@@ -196,7 +196,7 @@ export interface AgentModelIssue {
  * backend/src/entities/agent.entity.ts.
  */
 export interface AgentPauseReason {
-  code: 'OWNER_CANNOT_RUN' | 'OWNER_NOT_MEMBER' | 'RESTORE_FAILED'
+  code: 'OWNER_CANNOT_RUN' | 'OWNER_NOT_MEMBER' | 'RESTORE_FAILED' | 'IDENTITY_LAPSED'
   message: string
   detectedAt: string
 }
@@ -287,6 +287,12 @@ export interface Agent {
     codeMode?: CodeModeConfig
     /** Machine label requirements for runner-backed tools; the server stores an object, a save may send text. */
     runnerLabels?: Record<string, string> | string
+    /**
+     * Who its unattended runs (a schedule) act as: its owner (default), or
+     * the agent itself, with only the connections granted to it and its own
+     * name in the audit log. 'agent' needs the agent_identity entitlement.
+     */
+    runAs?: 'owner' | 'agent'
     verify?: {
       enabled?: boolean
       checkers?: Array<{ name?: string; providerId?: string; model?: string; instructions?: string }>
