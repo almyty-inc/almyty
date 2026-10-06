@@ -127,10 +127,12 @@ const SUPPORT = [
     await h.go('/dashboard')
     await h.link('Models')
     await h.link('Connect a provider')
-    await page.getByRole('button', { name: /OpenAI$/ }).first().click()
-    await page.locator('#connect-api-key').fill('sk-demo-openai-0000000000')
-    await h.click('Connect')
-    await page.getByText(/is connected/).waitFor({ timeout: 20000 })
+    await page.getByLabel('Provider', { exact: true }).click()
+    await page.getByRole('option', { name: /^OpenAI/ }).first().click()
+    await page.locator('#connect-name').fill('Northwind OpenAI')
+    await page.getByLabel('API key', { exact: true }).fill('sk-demo-openai-0000000000')
+    await h.click('Save', { exact: true })
+    await page.waitForURL(/\/models\/providers\/[0-9a-f-]{36}/, { timeout: 20000 })
     await h.settle()
   }],
   ['support-2-connect-orders', 'Connect your order system', src('frontend/src/pages/api-new.tsx', 'frontend/src/pages/api-new-description.tsx', 'frontend/src/components/apis'), async (page, h) => {
@@ -163,7 +165,7 @@ const SUPPORT = [
     await h.show('Capabilities')
   }],
   ['support-6-activate', 'Save and turn the agent on', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents'), async (page, h) => {
-    await h.click('Save')
+    await h.click('Save', { exact: true })
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}\/edit/, { timeout: 20000 })
     await h.click('Back to agents')
     await h.link('Customer support assistant')
@@ -311,7 +313,7 @@ const SALES = [
     await h.show('Capabilities')
   }],
   ['sales-3-brief', 'A brief before the call', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents'), async (page, h) => {
-    await h.click('Save')
+    await h.click('Save', { exact: true })
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}\/edit/, { timeout: 20000 })
     await h.click('Back to agents')
     await h.link('Sales assistant')
@@ -342,6 +344,7 @@ const SALES = [
     // Placeholder Slack app keys, shaped like real ones; nothing is sent to Slack until someone installs it.
     await page.getByLabel('Client ID').first().fill('4312876501.7719203348121')
     await page.getByRole('textbox', { name: 'Client secret' }).first().fill('demo0client0secret0000000')
+    await page.getByTestId('credential-form').getByLabel('Name', { exact: true }).fill('Northwind Slack app')
     await page.getByRole('textbox', { name: 'Signing secret' }).first().fill('demo0signing0secret000000')
     await page.getByRole('button', { name: 'Save', exact: true }).first().click()
     await h.settle(1500)
@@ -381,7 +384,7 @@ const MARKETING = [
     await h.show('Capabilities')
   }],
   ['marketing-3-try', 'An answer with its source', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents'), async (page, h) => {
-    await h.click('Save')
+    await h.click('Save', { exact: true })
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}\/edit/, { timeout: 20000 })
     await h.click('Back to agents')
     await h.link('Product questions')
@@ -466,7 +469,7 @@ const OPERATIONS = [
     await h.show('Capabilities')
   }],
   ['ops-3-try', 'A test run writes the report', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents'), async (page, h) => {
-    await h.click('Save')
+    await h.click('Save', { exact: true })
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}\/edit/, { timeout: 20000 })
     await h.click('Back to agents')
     await h.link('Nightly systems check')
@@ -574,7 +577,7 @@ const HELPDESK = [
     await h.show('Remember between conversations')
   }],
   ['helpdesk-4-leave', 'A question answered from the HR system', src('frontend/src/pages/agent-detail.tsx', 'frontend/src/components/agents'), async (page, h) => {
-    await h.click('Save')
+    await h.click('Save', { exact: true })
     await page.waitForURL(/\/agents\/[0-9a-f-]{36}\/edit/, { timeout: 20000 })
     await h.click('Back to agents')
     await h.link('Ask HR and IT')
@@ -621,14 +624,11 @@ const DEVELOPERS = [
   ['dev-3-runner', 'Start a runner on your own machine', src('frontend/src/pages/runner-new.tsx', 'frontend/src/components/runners'), async (page, h) => {
     await h.link('Runners')
     await h.click('Start a runner')
-    await page.locator('#name').fill('build-server')
-    await h.click('Add label')
-    await page.getByPlaceholder('key').last().fill('os')
-    await page.getByPlaceholder('value').last().fill('linux')
+    await page.getByText('npm i -g @almyty/cli', { exact: true }).waitFor()
     await h.settle()
   }],
   ['dev-4-runner-command', 'The commands to run on the machine', src('frontend/src/pages/runner-new.tsx', 'frontend/src/components/runners'), async (page, h) => {
-    await h.click('Generate command')
+    await page.getByText('almyty runner start', { exact: true }).waitFor()
     await h.settle(1500)
   }],
 ]

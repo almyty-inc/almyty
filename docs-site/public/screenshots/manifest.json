@@ -6,9 +6,9 @@
       "id": "agent-builder-autonomous",
       "title": "Autonomous agent: work mode",
       "path": "screenshots/agent-builder-autonomous.png",
-      "capturedAt": "2026-10-01T06:49:00.541Z",
-      "status": "needs-recapture",
-      "sha256": "077e7cf0a3ae49e2d49762a9ea520da001b9b9981283b2f7f3e64b75f4e3f24a",
+      "capturedAt": "2026-10-06T11:52:42.755Z",
+      "status": "current",
+      "sha256": "a9258170db3ef69bf5ea74b985c531207b2faba64324407b08a36aaf15e53298",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -21,17 +21,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
+      "sourceDigest": "53ec51ee187d0009cd45f12c0093951b2bfeaf04446450abf78472a848d132fe",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-builder-node-palette",
       "title": "Steps palette",
       "path": "screenshots/agent-builder-node-palette.png",
-      "capturedAt": "2026-10-01T06:49:08.859Z",
-      "status": "needs-recapture",
-      "sha256": "16ed372b8779633c72addd328d2f8dd2adc8f8b263b09737d417c2bf07f6f256",
+      "capturedAt": "2026-10-06T11:52:51.268Z",
+      "status": "current",
+      "sha256": "b21fd2f1e59dc4a10e4854c7db7d7fb66a4626ffd0ac63707538b3192faa9d47",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -44,17 +43,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
+      "sourceDigest": "53ec51ee187d0009cd45f12c0093951b2bfeaf04446450abf78472a848d132fe",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-builder",
       "title": "Workflow builder",
       "path": "screenshots/agent-builder.png",
-      "capturedAt": "2026-10-01T06:49:06.211Z",
-      "status": "needs-recapture",
-      "sha256": "7101205493af213b7b6dbbc67eb4730a8a9980de53c6384df3a440cf03dd1e06",
+      "capturedAt": "2026-10-06T11:52:48.553Z",
+      "status": "current",
+      "sha256": "5e960408371dfd85cf7cce3e48718d0f5b1d7a6feb5115021fb1327500c90f64",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -67,17 +65,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
+      "sourceDigest": "53ec51ee187d0009cd45f12c0093951b2bfeaf04446450abf78472a848d132fe",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-channels",
       "title": "An agent's Channels tab",
       "path": "screenshots/agent-channels.png",
-      "capturedAt": "2026-10-01T16:11:09.415Z",
-      "status": "needs-recapture",
-      "sha256": "2d9e051b9f8ba2624e3ac368df45d7f0f341fc79926ba534e12a1fa50d7a6e35",
+      "capturedAt": "2026-10-06T11:53:06.956Z",
+      "status": "current",
+      "sha256": "f736c35eebedc41070caddbee828a4b06e4ab0dac5e109084edc693614b5193a",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -91,17 +88,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "91be8c898939c774b39ad0e675cbd38483029d9fd09f3e6c74c53129def00677",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+      "sourceDigest": "5a75e31b622007db7ecb5e1b3e4697795bec3ad1f24df71eb1ff3dd853fe09a3",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-constraints",
       "title": "Agent constraints",
       "path": "screenshots/agent-constraints.png",
-      "capturedAt": "2026-10-01T16:11:12.061Z",
-      "status": "needs-recapture",
-      "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
+      "capturedAt": "2026-10-06T11:52:31.702Z",
+      "status": "current",
+      "sha256": "f9a709575d099aa80167b21a701676c96bc3f9e6568adcb4672da21e01d360a8",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -114,17 +110,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+      "sourceDigest": "7e7e4bceaeb63dc809f1faa42dd244fbedd3ae37e9d7223527a50bb35e71001a",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-detail-overview",
       "title": "Autonomous agent overview",
       "path": "screenshots/agent-detail-overview.png",
-      "capturedAt": "2026-10-01T16:11:14.752Z",
-      "status": "needs-recapture",
-      "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
+      "capturedAt": "2026-10-06T11:52:26.364Z",
+      "status": "current",
+      "sha256": "9db96d261bdbd28d3672afeb6c2bcc1b52415e1191072e96fd9c0b850c415bfb",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -137,17 +132,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+      "sourceDigest": "7e7e4bceaeb63dc809f1faa42dd244fbedd3ae37e9d7223527a50bb35e71001a",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-skill-viewer",
       "title": "Agent skills",
       "path": "screenshots/agent-skill-viewer.png",
-      "capturedAt": "2026-10-01T16:11:17.331Z",
-      "status": "needs-recapture",
-      "sha256": "4a5001c21f8e0b27a887d60d6778cef722dfecf52e81bc70bf9f510dfcf41c79",
+      "capturedAt": "2026-10-06T11:52:39.639Z",
+      "status": "current",
+      "sha256": "7ead53fa5383ef6a47119ce928bfcf7838be0142dc5d5776c73dc55af22ef97c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -160,9 +154,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+      "sourceDigest": "7e7e4bceaeb63dc809f1faa42dd244fbedd3ae37e9d7223527a50bb35e71001a",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agent-tool-mode",
@@ -189,9 +182,9 @@
       "id": "agent-work-mode-panel",
       "title": "Panel work mode",
       "path": "screenshots/agent-work-mode-panel.png",
-      "capturedAt": "2026-10-01T06:49:03.651Z",
-      "status": "needs-recapture",
-      "sha256": "472eceef77a0d801d628b27c6d94382300690462de91cd2aca8f40681c2c8108",
+      "capturedAt": "2026-10-06T11:52:45.928Z",
+      "status": "current",
+      "sha256": "bbbb1168e2c0329913c902a7ce48ff70f43d2249346cdb64d3ff21734aedc9d7",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -204,17 +197,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b1ff1e8f990f49681e79beff619ad74075d5f277727831c509dc90548e132a67",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
+      "sourceDigest": "53ec51ee187d0009cd45f12c0093951b2bfeaf04446450abf78472a848d132fe",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "agents-list",
       "title": "Agents list",
       "path": "screenshots/agents-list.png",
-      "capturedAt": "2026-10-01T06:48:41.254Z",
-      "status": "needs-recapture",
-      "sha256": "6d7908e9e7d374cba03ef445f6ea71ce0e5b23e9da84168f9b57858f3362eb02",
+      "capturedAt": "2026-10-06T11:52:22.587Z",
+      "status": "current",
+      "sha256": "1f8152e172eb40e49a74c1d2f5beb3cf5c6c2ef9997ef318353ad10137ea712f",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -227,17 +219,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "6a16b38d1fec1f68742a5b6a1f97039fe20b65393ff1c8b26b90610653a3a311",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "frontend/src/components/agents/builder changed: Capabilities gained \"How the model sees its tools\" (tool mode, threshold, pinned tools). Recapture where the page shows Capabilities, and re-register."
+      "sourceDigest": "f088351943de5097e7b730282995793745a4a8733ec926514fac6d5ae5a797d4",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-agents",
       "title": "Analytics: agents",
       "path": "screenshots/analytics-agents.png",
-      "capturedAt": "2026-10-01T16:11:19.993Z",
-      "status": "needs-recapture",
-      "sha256": "c76b798f222ef734b16382f4483601c14a6a7b0b3a75a66f693d637b43554a57",
+      "capturedAt": "2026-10-06T11:54:39.179Z",
+      "status": "current",
+      "sha256": "b0bb5978a574fee8ad2c8088d1fdd7ae2579ba283fe6fbe7a7c17130abdbfe83",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -250,17 +241,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
+      "sourceDigest": "d6307c17a181e6b32e9a9535d7eb0c2295654d958f04793e7cb633efd0e4b88e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-audit",
       "title": "Audit trail",
       "path": "screenshots/analytics-audit.png",
-      "capturedAt": "2026-10-01T16:11:22.526Z",
-      "status": "needs-recapture",
-      "sha256": "a7af888214f7a172480a7f2c58a301ed97b1ec43f30f9d7a6a0343a514b13d23",
+      "capturedAt": "2026-10-06T11:54:46.824Z",
+      "status": "current",
+      "sha256": "956610cbd5bfeff8dfff54a34b0686990e5cab74e53b14adc2c39c22fe5a1b09",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -273,17 +263,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
+      "sourceDigest": "d6307c17a181e6b32e9a9535d7eb0c2295654d958f04793e7cb633efd0e4b88e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-chargeback-locked",
       "title": "Chargeback (Enterprise, locked)",
       "path": "screenshots/analytics-chargeback-locked.png",
-      "capturedAt": "2026-10-01T16:11:25.056Z",
-      "status": "needs-recapture",
-      "sha256": "f7ec69cb930d2b5eea3a339271cd2e9e326661421d1a821ca3305cd1cb214bd0",
+      "capturedAt": "2026-10-06T11:54:49.339Z",
+      "status": "current",
+      "sha256": "8c644f2b84cb35036bc42fe919b39e8cac9dfdaaa694a2e1c1af32630fa57f19",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -296,17 +285,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
+      "sourceDigest": "d6307c17a181e6b32e9a9535d7eb0c2295654d958f04793e7cb633efd0e4b88e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-gateways",
       "title": "Analytics: gateways",
       "path": "screenshots/analytics-gateways.png",
-      "capturedAt": "2026-10-01T16:11:27.584Z",
-      "status": "needs-recapture",
-      "sha256": "88aa07490ff5133741a23fd2dfe69f586f9eabc30b941b17f47e334adb901cc3",
+      "capturedAt": "2026-10-06T11:54:44.217Z",
+      "status": "current",
+      "sha256": "8d1cc895cba4cb195ea28f562f7d63f53276930bae7bd00f2f7734a663a88e60",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -319,17 +307,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
+      "sourceDigest": "d6307c17a181e6b32e9a9535d7eb0c2295654d958f04793e7cb633efd0e4b88e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-overview",
       "title": "Analytics overview",
       "path": "screenshots/analytics-overview.png",
-      "capturedAt": "2026-10-01T16:11:30.163Z",
-      "status": "needs-recapture",
-      "sha256": "92d0924f996fdd498ed6ee5fb004d4dba1310a0485a8b71b04411284bc3911ef",
+      "capturedAt": "2026-10-06T11:54:36.434Z",
+      "status": "current",
+      "sha256": "4b2e64c6a8c29ba18ff1f363d4e266c5588388708ec95aea606208788681ef8c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -342,17 +329,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
+      "sourceDigest": "d6307c17a181e6b32e9a9535d7eb0c2295654d958f04793e7cb633efd0e4b88e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "analytics-tools",
       "title": "Analytics: tools",
       "path": "screenshots/analytics-tools.png",
-      "capturedAt": "2026-10-01T16:11:32.674Z",
-      "status": "needs-recapture",
-      "sha256": "9679040f9e76d6b855531f5dbc2dcc2e3f86e2de2582157c91555fe2674e003f",
+      "capturedAt": "2026-10-06T11:54:41.586Z",
+      "status": "current",
+      "sha256": "fba92498084836353d9d0b4c7ed8fc268530114b1e856843ab15040204260ea3",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -365,17 +351,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c1cf4e0a79eb36e0b26d26eaa8a4d4cc3c4d48c15f1f100fd948dd6a2a28dced",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "The analytics Tools tab gained script usage (code mode), which moved the sources of every analytics capture. Recapture against the current UI and re-register."
+      "sourceDigest": "d6307c17a181e6b32e9a9535d7eb0c2295654d958f04793e7cb633efd0e4b88e",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "apis-list",
       "title": "APIs list",
       "path": "screenshots/apis-list.png",
-      "capturedAt": "2026-10-01T06:49:57.792Z",
+      "capturedAt": "2026-10-06T11:53:40.936Z",
       "status": "current",
-      "sha256": "81e7de7b9f19a44a139fcfa01c22eb535f7e5e9e478a0b767c74ce931cc072d4",
+      "sha256": "cd0b7b436b4112e65c84f3d3c1831128642633d56da79c53c91a51bb413196ea",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -388,16 +373,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "511c56d3fd150904241da7a485344a20059dc4b0e96f0072d8c21228e86e76b4",
+      "sourceDigest": "7f92878972232bd33602ee76b8e4dd29804725c6fd821b28332eaa1b7bd8c158",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "approval-refund-820",
       "title": "Refund approval",
       "path": "screenshots/approval-refund-820.png",
-      "capturedAt": "2026-10-01T06:50:45.392Z",
-      "status": "needs-recapture",
-      "sha256": "7f8ca2057a650dbe8db99a32594e32f74ff32fcd46fc80389754995857861798",
+      "capturedAt": "2026-10-06T11:54:28.470Z",
+      "status": "current",
+      "sha256": "9bca8040fbc71c3dc428fa9f90565c973796ab82a5dd8ae4878ca06bbfb5c8b7",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -410,9 +395,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4bec482e40fb46550c821b8346cca9620d5976bfd6eea947f01291f91e27ad3b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Approvals gained the change-set view for scripts (code mode), which moved this capture's sources. Recapture against the current UI and re-register."
+      "sourceDigest": "ea219d732c97d8de43254816d3df38465362e43b3773ee1e6952a029319884eb",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "approvals-change-set",
@@ -439,9 +423,9 @@
       "id": "approvals-pending",
       "title": "Pending approvals",
       "path": "screenshots/approvals-pending.png",
-      "capturedAt": "2026-10-01T06:50:42.290Z",
-      "status": "needs-recapture",
-      "sha256": "7f8ca2057a650dbe8db99a32594e32f74ff32fcd46fc80389754995857861798",
+      "capturedAt": "2026-10-06T11:54:25.470Z",
+      "status": "current",
+      "sha256": "9bca8040fbc71c3dc428fa9f90565c973796ab82a5dd8ae4878ca06bbfb5c8b7",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -454,9 +438,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4bec482e40fb46550c821b8346cca9620d5976bfd6eea947f01291f91e27ad3b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Approvals gained the change-set view for scripts (code mode), which moved this capture's sources. Recapture against the current UI and re-register."
+      "sourceDigest": "ea219d732c97d8de43254816d3df38465362e43b3773ee1e6952a029319884eb",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "apps-hosted-chat-routing-failure",
@@ -471,7 +454,7 @@
       "id": "auth-register",
       "title": "Create account",
       "path": "screenshots/auth-register.png",
-      "capturedAt": "2026-10-01T06:51:36.201Z",
+      "capturedAt": "2026-10-06T11:55:19.433Z",
       "status": "current",
       "sha256": "0fd0ae6cb048a83098acac5ce38ccac627a4dd850110428e20666f1a23b3b4f6",
       "source": {
@@ -485,7 +468,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "7244e25336678d3611903a9077a1076dab3882e8e0cf992072f99e7a63044e6a",
+      "sourceDigest": "407992f985c9722ef0b7e15bc0a60da9283384e505d7b2fa7ca4d7e9bab60a56",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -513,9 +496,9 @@
       "id": "channel-branding-rules",
       "title": "Branding and visitor rules",
       "path": "screenshots/channel-branding-rules.png",
-      "capturedAt": "2026-10-01T16:11:35.294Z",
+      "capturedAt": "2026-10-06T11:53:10.062Z",
       "status": "current",
-      "sha256": "5fe3919689b49ac17afb25e0b3c21b321e1f2dd3f63d68cfec96dd7944aa8033",
+      "sha256": "4b2e98eb10ffe5d460f64a8eece25fd32e7376dd3bce38fc04dadf9af0264752",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -528,16 +511,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "efa026afef612c503df01efc731e583d89877dba429adadf9336eca3f3e6e605",
+      "sourceDigest": "93e2d796430d31d4e0cd187eae48b781676f2fb07d9fb580ef91f1e1793412ba",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-slack-keys",
       "title": "Slack channel keys",
       "path": "screenshots/channel-slack-keys.png",
-      "capturedAt": "2026-10-01T16:11:38.913Z",
+      "capturedAt": "2026-10-06T11:53:15.514Z",
       "status": "current",
-      "sha256": "7d07d38b1fc8db0875a2be862d966c508e2cff6c3c2e7255bff18a234803f802",
+      "sha256": "0ede65570ee4223ddd7e57b597d78e78c7baa17b6ccdf66b588cb94c3368a8a4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -550,16 +533,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "sourceDigest": "b1967f23f5d56e23daae9dc7f1d9108dc72fa06077e584e1bfedf2ea20710569",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-slack-live",
       "title": "Published Slack channel",
       "path": "screenshots/channel-slack-live.png",
-      "capturedAt": "2026-10-01T16:11:41.968Z",
+      "capturedAt": "2026-10-06T11:53:18.645Z",
       "status": "current",
-      "sha256": "c067e90b5f9ab9288449c8c2ded46b3927b365aaa676108c1857ecd9294d8847",
+      "sha256": "2a2b9af1edba99aea33a7d0ee6281a22cdd0a6609fab76d84148e625701e56c0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -572,16 +555,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "sourceDigest": "b1967f23f5d56e23daae9dc7f1d9108dc72fa06077e584e1bfedf2ea20710569",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-terminal-build",
       "title": "Terminal app channel",
       "path": "screenshots/channel-terminal-build.png",
-      "capturedAt": "2026-10-01T16:11:44.594Z",
+      "capturedAt": "2026-10-06T11:53:21.588Z",
       "status": "current",
-      "sha256": "81db9c8408d17de95edf28458b79f099a72aa46ea3d4d25fef2d76adeebb4067",
+      "sha256": "cd399860d2b9e6581cdb0aea2122b6f6b2b13f9b921a40dab89bcce689a4e4a5",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -594,16 +577,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "sourceDigest": "b1967f23f5d56e23daae9dc7f1d9108dc72fa06077e584e1bfedf2ea20710569",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "channel-web-published",
       "title": "Published web chat channel",
       "path": "screenshots/channel-web-published.png",
-      "capturedAt": "2026-10-01T16:11:47.211Z",
+      "capturedAt": "2026-10-06T11:53:12.745Z",
       "status": "current",
-      "sha256": "ed18f83d07bef8b1484cf0040a39442cbd0298d8f6e0b15af696079653326c7a",
+      "sha256": "1cdadb2fc705e5c4a7b143ca83ca02a41eda9d810c88dc4eb41fecd125bb4b59",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -616,7 +599,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "sourceDigest": "b1967f23f5d56e23daae9dc7f1d9108dc72fa06077e584e1bfedf2ea20710569",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -661,9 +644,9 @@
       "id": "cli-auth-help",
       "title": "Auth CLI 1.5.2 help",
       "path": "screenshots/cli/auth-help.png",
-      "capturedAt": "2026-10-01T15:53:35.000Z",
+      "capturedAt": "2026-10-06T12:05:23.248Z",
       "status": "current",
-      "sha256": "39bc7f145aa707cd9b856c6b630649584fd3dd59b2f90553292cb6ee906093a4",
+      "sha256": "dade8f209ef3f57e45dcf77c47be67c30c4992503862ad701223e7fd5cd79627",
       "source": {
         "kind": "published-cli",
         "package": "@almyty/auth@1.5.2",
@@ -673,8 +656,8 @@
         "packages/auth-cli/src",
         "packages/auth-cli/package.json"
       ],
-      "sourceDigest": "91ddd74baab7465a16b9613ca283f107ed225f4eca8674127b3bfa27d99ac53c",
-      "notes": "Rendered from the published binary using freeze. HOME set to a placeholder and normalized to ~ before rendering; no machine path published."
+      "sourceDigest": "e0744659421355c64909a6a63c011187d80eef5259a7c13e90be0e2129dd6244",
+      "notes": "Rendered from actual published CLI help output; local home path normalized to ~."
     },
     {
       "id": "cli-chat-help",
@@ -738,13 +721,13 @@
       "id": "credentials-connect-provider",
       "title": "Connect a provider",
       "path": "screenshots/credentials-connect-provider.png",
-      "capturedAt": "2026-10-01T06:50:32.101Z",
+      "capturedAt": "2026-10-06T11:54:15.284Z",
       "status": "current",
-      "sha256": "17eff1ae55d6c6f71e81612ef2a7c1d7738ee6ac661224c74718d46e1931ebdb",
+      "sha256": "a31653370fb3ef72949f89305d1e05be4e54b7bb78ff8078f49f7a1a1bd146e8",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
-        "route": "/credentials/providers/new"
+        "route": "/models/providers/new"
       },
       "sources": [
         "frontend/src/pages/models-connect.tsx",
@@ -753,16 +736,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b38c432c5abf5a1f87ba952a5aae70f1448eaac4f3608aea4aaae48f1138681f",
+      "sourceDigest": "3b8f8a9828e1799d475e170de391dcd61f346cccf1d1561dee00901783c7dd4e",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "credentials-vault",
       "title": "Credentials",
       "path": "screenshots/credentials-vault.png",
-      "capturedAt": "2026-10-01T06:50:29.664Z",
+      "capturedAt": "2026-10-06T11:54:12.681Z",
       "status": "current",
-      "sha256": "d81477b07cbcbf8a07061daeea9bf8c2b5bcbb33cfe74fb09ef79e51b146b2b6",
+      "sha256": "3e67d96e38bdcfd2363ed132cca935a5d9d0d338899dfaaff0342411468fc7f6",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -776,16 +759,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c6ff08b197d87223444d02f6613e0ae3a6028da98f36d23c67900bfcb143c8ba",
+      "sourceDigest": "27aa55dc5e33bd187b3c06a233f0189033bff9b1f07e267f34d92988e4ac61c9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-detail-tools",
       "title": "Gateway tool scoping",
       "path": "screenshots/gateway-detail-tools.png",
-      "capturedAt": "2026-10-02T05:20:21.250Z",
+      "capturedAt": "2026-10-06T11:53:55.349Z",
       "status": "current",
-      "sha256": "20842928dcea1a4d4790f2a87bf52daaf04c75cbc424dfd915f4aa06f495ff9f",
+      "sha256": "d302e5cbf4884a3b1b122e2d491f888eebb0d979d893f749aae847e714439884",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -798,16 +781,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "sourceDigest": "0832ca6af739a660fd6a36250ef80c68511f1845692712c747b1227bddbb0508",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-detail",
       "title": "Gateway detail",
       "path": "screenshots/gateway-detail.png",
-      "capturedAt": "2026-10-02T05:20:18.272Z",
+      "capturedAt": "2026-10-06T11:53:52.278Z",
       "status": "current",
-      "sha256": "7e3613dc1952d220912bd04ea61e4819c58f09a35ddc9d24251331f9cbbdaa9d",
+      "sha256": "088d520ce395b935ae566dca9fc2daa87a1d18ded4755e2a95157b26f60c82da",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -820,7 +803,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "sourceDigest": "0832ca6af739a660fd6a36250ef80c68511f1845692712c747b1227bddbb0508",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -849,9 +832,9 @@
       "id": "gateway-petstore-config",
       "title": "Petstore gateway",
       "path": "screenshots/gateway-petstore-config.png",
-      "capturedAt": "2026-10-02T05:20:23.850Z",
+      "capturedAt": "2026-10-06T11:53:58.048Z",
       "status": "current",
-      "sha256": "6e87207b33d863c00415c21c72168e1cf6e8104660a46a915cc154ccc2a50eed",
+      "sha256": "8e88af17f8312b3c9f0df10fbb64f1ea13c6f03c2df4f4224dac57e48dc4ada4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -864,16 +847,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "sourceDigest": "0832ca6af739a660fd6a36250ef80c68511f1845692712c747b1227bddbb0508",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "gateway-petstore-integration",
       "title": "Gateway integrations",
       "path": "screenshots/gateway-petstore-integration.png",
-      "capturedAt": "2026-10-02T05:20:29.534Z",
+      "capturedAt": "2026-10-06T11:54:03.743Z",
       "status": "current",
-      "sha256": "ca2d0dd8408c2da6197252bd05761b865781835cd4629108016d06a218e505a9",
+      "sha256": "5030a8a20a0a044217a3ed60072d7af09cdfc3081f4f720b927aab1f7f006b86",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -886,7 +869,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "sourceDigest": "0832ca6af739a660fd6a36250ef80c68511f1845692712c747b1227bddbb0508",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -1931,7 +1914,7 @@
       "id": "hosted-chat-privacy",
       "title": "Hosted chat: visitor data",
       "path": "screenshots/hosted-chat-privacy.png",
-      "capturedAt": "2026-10-01T06:49:55.086Z",
+      "capturedAt": "2026-10-06T11:53:38.232Z",
       "status": "current",
       "sha256": "11208187d15885d3bb4a0b0785cc47b8ca759b24348c76cd76071e5742eba010",
       "source": {
@@ -1946,14 +1929,14 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "677c063efc0b021aceb3a5ccd6a6f217590bad20584fa35b42621ca65916770b",
+      "sourceDigest": "ccf10a8e4d3a317714109d8820d08c7c9df878ec6aeac038f7acebbcd2069bb9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "hosted-chat",
       "title": "Hosted web chat",
       "path": "screenshots/hosted-chat.png",
-      "capturedAt": "2026-10-01T06:49:50.573Z",
+      "capturedAt": "2026-10-06T11:53:33.730Z",
       "status": "current",
       "sha256": "8f2479f7c99e114f697b5ff8aa02d2ec29ca5c03a9d8a8f2b53cc76799c8ad24",
       "source": {
@@ -1968,16 +1951,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "677c063efc0b021aceb3a5ccd6a6f217590bad20584fa35b42621ca65916770b",
+      "sourceDigest": "ccf10a8e4d3a317714109d8820d08c7c9df878ec6aeac038f7acebbcd2069bb9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "interfaces-channel-config",
       "title": "Add channel",
       "path": "screenshots/interfaces-channel-config.png",
-      "capturedAt": "2026-10-01T16:12:00.860Z",
+      "capturedAt": "2026-10-06T11:53:23.970Z",
       "status": "current",
-      "sha256": "aa6a65aabbf701d494218a1311d013f4bc5cd7d662e8e8477d18684631b06957",
+      "sha256": "622611c851e35415979951249992408f2a539653340404c57996a55b8112d2ac",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -1990,16 +1973,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "a0a51d00e703c9516d8692b14905fbef867bf90baf3c8c74b73bbd63f706ab8e",
+      "sourceDigest": "cc506cb775bd48a0126f83b6ab13c4ca9ef97dce960c334a15eee80fc6c1c377",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "interfaces-channel-setup",
       "title": "Microsoft Teams channel",
       "path": "screenshots/interfaces-channel-setup.png",
-      "capturedAt": "2026-10-01T16:12:03.499Z",
+      "capturedAt": "2026-10-06T11:53:26.669Z",
       "status": "current",
-      "sha256": "5aa653839576d6ce4ea671e5f2fd701d0896c08f9fcf5b6acda1e22f9154355d",
+      "sha256": "96fdfb4829b22463303b5b15e216cfaddc167e60d41fedde367d976cc1c02275",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2012,16 +1995,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c63eacb030c15eb3375e53b311d0e6135c05f47e31d9ba9fe4b3a3079e9aacd3",
+      "sourceDigest": "b1967f23f5d56e23daae9dc7f1d9108dc72fa06077e584e1bfedf2ea20710569",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "memory-write",
       "title": "Add memory",
       "path": "screenshots/memory-write.png",
-      "capturedAt": "2026-10-01T06:50:39.845Z",
+      "capturedAt": "2026-10-06T11:54:22.959Z",
       "status": "current",
-      "sha256": "7786413e5bfedd08a2b08cb2da55b620839935778e23326012324d20444f9443",
+      "sha256": "ffedbf76ddec1079e8045283e2f0f3fc0bce4e059150f1323e86b375cccc6c99",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2034,16 +2017,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b264e12680eff3dc27f385ce41f02a386522c887c8cf08276cf141d1846d13ed",
+      "sourceDigest": "05924e502ffe045b91d654c3a2d7272974a1ade008143a3b7bcc15541b580d32",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "memory",
       "title": "Memory",
       "path": "screenshots/memory.png",
-      "capturedAt": "2026-10-01T06:50:37.453Z",
+      "capturedAt": "2026-10-06T11:54:20.546Z",
       "status": "current",
-      "sha256": "e63f6b06ac3332949b7509b1654a981f245aaf83459cf3b120f7fae0b52aab40",
+      "sha256": "efa5732fdbc6098d3e8222341ed2111329931098c5fd52115b95bb3828a02867",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2056,16 +2039,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8d9d523bf5ec7d7013b7a32bac345f4dba2f8b8a2ae095055a513008ef30b306",
+      "sourceDigest": "0d7b92f406388519dc441cc360c3f99d8831081fc549634a1eccdb47b2b7e229",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "models",
       "title": "Model catalog",
       "path": "screenshots/models.png",
-      "capturedAt": "2026-10-01T06:50:34.720Z",
+      "capturedAt": "2026-10-06T11:54:17.937Z",
       "status": "current",
-      "sha256": "69d454fd8eab70ef2b795281cba2d58bd6354b6132c8ba127c5edce184e6915e",
+      "sha256": "66b5272f2996d48c6154f402f7a8d30ec18df34f7a83da63b2f457138047bf60",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2078,16 +2061,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "fd1a05a1aa4becde25b5e7b27f4266b4b7fa07d2deab1ba7ba269977567c624e",
+      "sourceDigest": "38ca57c73cfe48e47ea78558bc91915c5e7dae423ab36211b5e6b91599c3a2f9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-api-imported",
       "title": "Imported API",
       "path": "screenshots/quickstart-api-imported.png",
-      "capturedAt": "2026-10-01T06:50:00.413Z",
+      "capturedAt": "2026-10-06T11:53:43.562Z",
       "status": "current",
-      "sha256": "e915b3cd315ad4d7af5c7a7ba6b0a337fbdca296fc9c2cc4352128b49b192a27",
+      "sha256": "3ceefb2cb85f5a2f2bcbf0f7d0e2fc8ee81f41285fe40237a139afeda4d4dff5",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2100,16 +2083,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9ac4e6e1f36fd1b595b9fdeff891c2d8693598622eb918e62a35b1dcc2975213",
+      "sourceDigest": "79323e81eaa2a442e60074cec3c6c5b15e8bb068c88878cc5e3e7b363af11272",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-claude-config",
       "title": "Client setup",
       "path": "screenshots/quickstart-claude-config.png",
-      "capturedAt": "2026-10-02T05:20:35.525Z",
+      "capturedAt": "2026-10-06T11:54:09.971Z",
       "status": "current",
-      "sha256": "8bde6ebba51f6ca75de929a0bb419376a3640eef1b2f66fa9da1b78db33eeb45",
+      "sha256": "0f68d6a39e700554ccf661b1d7069899f9c7cd69e680ada4c10cef5b35823757",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2122,16 +2105,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "sourceDigest": "0832ca6af739a660fd6a36250ef80c68511f1845692712c747b1227bddbb0508",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-gateway-mcp",
       "title": "Petstore MCP gateway",
       "path": "screenshots/quickstart-gateway-mcp.png",
-      "capturedAt": "2026-10-02T05:20:26.489Z",
+      "capturedAt": "2026-10-06T11:54:00.677Z",
       "status": "current",
-      "sha256": "a03657674275c4ac9ff008502609c7e024d257a25141b56048c43961c0e0b19d",
+      "sha256": "15865e2c2a4b2e316064c9e90cb85a5df4697425b0c397bc602ae3d7b8624aeb",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2144,16 +2127,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "sourceDigest": "0832ca6af739a660fd6a36250ef80c68511f1845692712c747b1227bddbb0508",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "quickstart-mcp-endpoints",
       "title": "MCP endpoints",
       "path": "screenshots/quickstart-mcp-endpoints.png",
-      "capturedAt": "2026-10-02T05:20:32.531Z",
+      "capturedAt": "2026-10-06T11:54:06.903Z",
       "status": "current",
-      "sha256": "92c770313c9256d76b272ae5ff885038fba59c0ec20fa5913833b4bbcec35268",
+      "sha256": "ad13ffef599cba46c0f7f959d46e17ba6e6154a2b19f362648cb4f19ec4d0438",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2166,7 +2149,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b0bba46f6f4751ba145f4e3fc07b38edb3042f397ab1adc9a8fe764a403eab70",
+      "sourceDigest": "0832ca6af739a660fd6a36250ef80c68511f1845692712c747b1227bddbb0508",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2195,9 +2178,9 @@
       "id": "runner-detail",
       "title": "Runner detail",
       "path": "screenshots/runner-detail.png",
-      "capturedAt": "2026-10-01T06:50:50.583Z",
+      "capturedAt": "2026-10-06T11:54:33.617Z",
       "status": "current",
-      "sha256": "d8e6c348308efc524a62094e4d1888c91c75ca37050bda9171a69c4f81a54799",
+      "sha256": "940eed10d08289bba690f3e5d38baca0f1d00f574a9523d44f4cce50fe0ebbbc",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2211,16 +2194,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "8d1e49beb4a74cc9c96bf09f71d19156d37d0ca158bf788700a928c3616bec5f",
+      "sourceDigest": "ef3a127e0613b9c8078f809957170f5d0572526f077dc165cb53e40649a8f526",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "runners-list",
       "title": "Runners",
       "path": "screenshots/runners-list.png",
-      "capturedAt": "2026-10-01T06:50:47.975Z",
+      "capturedAt": "2026-10-06T11:54:30.942Z",
       "status": "current",
-      "sha256": "b68c31157a171c62180e3d5c3d3dd284a5a8f5c58d2dcba05f335fb6870593f4",
+      "sha256": "840e22df6b211c3b03928cf655a68989a90454560270903daa23fa93ca8b5b74",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2234,16 +2217,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "daa92cae05a4e3d140e9d0e756f528cdd00c0a870a3c593632101feb7e2b0640",
+      "sourceDigest": "9f41be39798083675418f4a7452b8ab34103e4deedc98aafde87f5cbd414e0e0",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "schedule-config",
       "title": "Schedule card",
       "path": "screenshots/schedule-config.png",
-      "capturedAt": "2026-10-01T16:12:16.287Z",
-      "status": "needs-recapture",
-      "sha256": "2c8b41462aa6c362ca3e818965a9e4556001439fb5906b2a9c732a5915e037c9",
+      "capturedAt": "2026-10-06T11:52:54.552Z",
+      "status": "current",
+      "sha256": "4eb34acd8bd078196ae230679e91bd32a8099707676821abc2a2138786998ecd",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2256,9 +2239,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+      "sourceDigest": "7e7e4bceaeb63dc809f1faa42dd244fbedd3ae37e9d7223527a50bb35e71001a",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "self-hosting-compose",
@@ -2273,9 +2255,9 @@
       "id": "settings-approval-policies-enabled",
       "title": "Approval policies",
       "path": "screenshots/settings-approval-policies-enabled.png",
-      "capturedAt": "2026-10-01T06:51:23.501Z",
+      "capturedAt": "2026-10-06T11:55:06.588Z",
       "status": "current",
-      "sha256": "4654abcbce0e5df9f6253d933fb52c284d05a678706759baae0acb3138eacbd1",
+      "sha256": "9af08fbb33a5b43e586cee5452c827b9df1131e848a71beeb7226e2dc249ea6d",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2289,16 +2271,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "950c607e540c55bb650e62e7e9afafd43c11f97f1a2bcb227e808758d49fe40a",
+      "sourceDigest": "59c7e8263360b01ed52c54a117055c2fc8a330e77c26705a72dbcbb9b3524d25",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-approval-policy-new",
       "title": "New approval policy",
       "path": "screenshots/settings-approval-policy-new.png",
-      "capturedAt": "2026-10-01T06:51:26.130Z",
+      "capturedAt": "2026-10-06T11:55:09.313Z",
       "status": "current",
-      "sha256": "881347549e4cdd0d304720189e23f270338b8540667c0e14ef07fc3504c69ae1",
+      "sha256": "ae4d058f80195ef310210f30279001aabc93fdc4897cd1996a2e301b409f181a",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2311,16 +2293,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "4df9da13c43d5513b942056c8b0b55ea321abab0930a6f25d436f99bd2e2ecf5",
+      "sourceDigest": "382a96f241e6a663ae6f1b8e1dcbc0cdd07dc1988bab8000c118e1dc355b8000",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-audit-streams-enabled",
       "title": "Audit streaming",
       "path": "screenshots/settings-audit-streams-enabled.png",
-      "capturedAt": "2026-10-01T06:51:31.418Z",
+      "capturedAt": "2026-10-06T11:55:14.603Z",
       "status": "current",
-      "sha256": "2814af83e89ad903c7d8c2878fa6800e5c288e6a761e914d489f570afb5c8696",
+      "sha256": "df9587104ebf8287eba4a195d37d5b53548df666e31bb420f48d2168c0ce5103",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2333,16 +2315,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "sourceDigest": "a45cfca33586e1b8c7e59add850491bb878da1a700ecdfdba4cfe85a371ffac5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-compliance-enabled",
       "title": "Compliance",
       "path": "screenshots/settings-compliance-enabled.png",
-      "capturedAt": "2026-10-01T06:51:28.832Z",
+      "capturedAt": "2026-10-06T11:55:11.986Z",
       "status": "current",
-      "sha256": "b332d4756ae97808a2f4c1a58213786ad3fb604a38880a0a16207d871a3240a3",
+      "sha256": "780cf9a0bc0d8d138cdcd8794bc17c3950cefb849688711a7c56828f6cef07e4",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2355,16 +2337,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "sourceDigest": "a45cfca33586e1b8c7e59add850491bb878da1a700ecdfdba4cfe85a371ffac5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-encryption-locked",
       "title": "Encryption (Enterprise, locked)",
       "path": "screenshots/settings-encryption-locked.png",
-      "capturedAt": "2026-10-01T06:51:33.975Z",
+      "capturedAt": "2026-10-06T11:55:17.138Z",
       "status": "current",
-      "sha256": "ca3f57182b20332d233e278098c2f9300ef16aa966a92ca58c1f1feb521024a7",
+      "sha256": "a9f9a77948364d2815ac9ad9a0f68ed8d3a0676a069e04c89f8af585acc65e80",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2377,16 +2359,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "sourceDigest": "a45cfca33586e1b8c7e59add850491bb878da1a700ecdfdba4cfe85a371ffac5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-enabled",
       "title": "Roles",
       "path": "screenshots/settings-rbac-enabled.png",
-      "capturedAt": "2026-10-01T06:51:11.389Z",
+      "capturedAt": "2026-10-06T11:54:54.606Z",
       "status": "current",
-      "sha256": "67bc2b8e69f6153b3f42b8311a78756be6fc5f17ba31e2823297f919f6b25550",
+      "sha256": "bb8923f0ee445c1cb488aa55638d1968eb7e8a5956dec873533210e5ef25c17a",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2399,16 +2381,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "sourceDigest": "a45cfca33586e1b8c7e59add850491bb878da1a700ecdfdba4cfe85a371ffac5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-new-policy",
       "title": "New access policy",
       "path": "screenshots/settings-rbac-new-policy.png",
-      "capturedAt": "2026-10-01T06:51:18.103Z",
+      "capturedAt": "2026-10-06T11:55:01.190Z",
       "status": "current",
-      "sha256": "3cc722b28c931573030004cfe046ae2ba5f7a6349a825584fd5a2eb3f5de3323",
+      "sha256": "6ba82e7f63b62cab2dda82bff776156bfbfe80c2d17e242f928826dd5d5d7b99",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2421,16 +2403,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "sourceDigest": "a45cfca33586e1b8c7e59add850491bb878da1a700ecdfdba4cfe85a371ffac5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-rbac-new-role",
       "title": "New role",
       "path": "screenshots/settings-rbac-new-role.png",
-      "capturedAt": "2026-10-01T06:51:14.741Z",
+      "capturedAt": "2026-10-06T11:54:57.888Z",
       "status": "current",
-      "sha256": "4372359444cf418eba043e752eca0bb06f51e33ebf79e01a8f6e456edb289e0f",
+      "sha256": "aadcb9544d1798c892ec94ae3f49b0aa09f0e8e19a6262e78b8c30d09b129337",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2443,16 +2425,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "sourceDigest": "a45cfca33586e1b8c7e59add850491bb878da1a700ecdfdba4cfe85a371ffac5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-sso-enabled",
       "title": "Single sign-on",
       "path": "screenshots/settings-sso-enabled.png",
-      "capturedAt": "2026-10-01T06:51:20.801Z",
+      "capturedAt": "2026-10-06T11:55:03.916Z",
       "status": "current",
-      "sha256": "339d5078a61e7093f33ea8c3299add6025effe0d01185b86e14088def496ea68",
+      "sha256": "195f6e8a6f2c328d3804a0584a920274cbbfc1f0b19960a6d89685af1fd14c37",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2465,16 +2447,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "c4a404b8e4382300bab22e55a6d8842cc0e308f3219a0bef712adbfdcddab06b",
+      "sourceDigest": "a45cfca33586e1b8c7e59add850491bb878da1a700ecdfdba4cfe85a371ffac5",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "settings-teams",
       "title": "Members and teams",
       "path": "screenshots/settings-teams.png",
-      "capturedAt": "2026-10-01T06:51:08.798Z",
+      "capturedAt": "2026-10-06T11:54:52.001Z",
       "status": "current",
-      "sha256": "39d8f050fffd3db55c942d730ec8d6ec6de78d9822eae5eb543580501979b1f1",
+      "sha256": "02f8f0731b6293d2ffb8027edd94ed9171aa4da864f1e29b779f5238e5a5bfe9",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2488,16 +2470,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "70ab2349a3922c15273d719ea14ef388d1b1667e48ff816b81e093e24ce4671b",
+      "sourceDigest": "4dfb72f6ef3baa4ff85fd76efa8d051cb961e3ee06a0304f36a2ccde4631b4d9",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-constraints",
       "title": "Support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
-      "capturedAt": "2026-10-01T16:12:18.902Z",
-      "status": "needs-recapture",
-      "sha256": "0bc81816c396515b3f27f9a4292f78131b235008a896ed33c1c6c357c623a984",
+      "capturedAt": "2026-10-06T11:52:34.364Z",
+      "status": "current",
+      "sha256": "f9a709575d099aa80167b21a701676c96bc3f9e6568adcb4672da21e01d360a8",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2510,17 +2492,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+      "sourceDigest": "7e7e4bceaeb63dc809f1faa42dd244fbedd3ae37e9d7223527a50bb35e71001a",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-overview",
       "title": "Support agent overview",
       "path": "screenshots/support-agent-overview.png",
-      "capturedAt": "2026-10-01T16:12:21.560Z",
-      "status": "needs-recapture",
-      "sha256": "e5254d36b549718e0f8c60e28ac2a8ead3640630fbfe740ae01d1db1b21f26e0",
+      "capturedAt": "2026-10-06T11:52:29.067Z",
+      "status": "current",
+      "sha256": "9db96d261bdbd28d3672afeb6c2bcc1b52415e1191072e96fd9c0b850c415bfb",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2533,17 +2514,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+      "sourceDigest": "7e7e4bceaeb63dc809f1faa42dd244fbedd3ae37e9d7223527a50bb35e71001a",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "support-agent-runs",
       "title": "Support agent runs",
       "path": "screenshots/support-agent-runs.png",
-      "capturedAt": "2026-10-01T16:12:24.190Z",
-      "status": "needs-recapture",
-      "sha256": "a0be00def5dc7bd3c7b5fa9ab1d9a45749dad44dc02854aa94d0d0056fbf98e1",
+      "capturedAt": "2026-10-06T11:52:37.038Z",
+      "status": "current",
+      "sha256": "64a18abdac6780ddc336e5676b3ee5fea41db4febfbf3b23b3fb7be08dfdf3b0",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2556,17 +2536,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+      "sourceDigest": "7e7e4bceaeb63dc809f1faa42dd244fbedd3ae37e9d7223527a50bb35e71001a",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "tool-detail",
       "title": "Tool test",
       "path": "screenshots/tool-detail.png",
-      "capturedAt": "2026-10-02T00:12:52.738Z",
+      "capturedAt": "2026-10-06T11:53:49.567Z",
       "status": "current",
-      "sha256": "7e5a3724291982fdccec0691962a367aedeea933d2d828920c33e9b147315551",
+      "sha256": "313e3b0d95d7b2f9350dc6268766a78a31014c17a4b385c6db65f8399eda73e1",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2579,7 +2558,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "24cd1039c596709f5e0600482da7cc55df49d64e5dc68a30317e24683672fb60",
+      "sourceDigest": "43910a773aa8780e42b5a5d032b1def57c98b1127e2682d0a7eb25ffd2f20e9f",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
@@ -2608,9 +2587,9 @@
       "id": "tools-list",
       "title": "Tools list",
       "path": "screenshots/tools-list.png",
-      "capturedAt": "2026-10-02T00:12:44.037Z",
+      "capturedAt": "2026-10-06T11:53:46.197Z",
       "status": "current",
-      "sha256": "fd031f67bff1d7520d1464dc45eee80486cba1ec17efd1b9c158f35a8134bcd4",
+      "sha256": "847832bba999e27564fe2e4f05a5f348b9a2c131986f3d4ceb6d7df0f0bed108",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2623,16 +2602,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "2a490942adbfacb561a82718defd1e0d7e8ec263ee9e841514e4fec66960422d",
+      "sourceDigest": "b51e91a0f85575f34b52e16fb8050a2ae59742e396a449c13534e6b24bf8cd05",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "versioning-history",
       "title": "Change history",
       "path": "screenshots/versioning-history.png",
-      "capturedAt": "2026-10-01T16:12:33.067Z",
-      "status": "needs-recapture",
-      "sha256": "1412a28e636399b379ef04c5ace5c821cf270a42504735ebd7d0dc589786d1c4",
+      "capturedAt": "2026-10-06T11:53:04.263Z",
+      "status": "current",
+      "sha256": "437911529dcf5cf3ddf4ca21780e5814eaf2f62f9cd87fa49530c8898c2867be",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2645,17 +2624,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+      "sourceDigest": "7e7e4bceaeb63dc809f1faa42dd244fbedd3ae37e9d7223527a50bb35e71001a",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "versioning",
       "title": "Pipeline versions",
       "path": "screenshots/versioning.png",
-      "capturedAt": "2026-10-01T16:12:36.112Z",
-      "status": "needs-recapture",
-      "sha256": "21972b07aeee8a95fe59f92283f13315116b9552678e4590d767464abccac52b",
+      "capturedAt": "2026-10-06T11:53:00.926Z",
+      "status": "current",
+      "sha256": "c4604d7d7c4e638b82a4bd9ca674705dd62f107a811127ab1956c9b28109f48f",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2668,9 +2646,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+      "sourceDigest": "7e7e4bceaeb63dc809f1faa42dd244fbedd3ae37e9d7223527a50bb35e71001a",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "visitor-data-request",
@@ -2698,9 +2675,9 @@
       "id": "webhook-config",
       "title": "Webhook card",
       "path": "screenshots/webhook-config.png",
-      "capturedAt": "2026-10-01T16:12:39.461Z",
-      "status": "needs-recapture",
-      "sha256": "2c8b41462aa6c362ca3e818965a9e4556001439fb5906b2a9c732a5915e037c9",
+      "capturedAt": "2026-10-06T11:52:57.746Z",
+      "status": "current",
+      "sha256": "4eb34acd8bd078196ae230679e91bd32a8099707676821abc2a2138786998ecd",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2713,17 +2690,16 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "9287f1ea34467565ed396fd3c4fc93d6ffb7ab607f1c11d4b6d30ee5248c841b",
-      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data.",
-      "reason": "Its sources changed after this capture (the side-effect class on tool pages, the tool-mode section under Capabilities, and other UI updates since). Recapture against the current UI and re-register."
+      "sourceDigest": "7e7e4bceaeb63dc809f1faa42dd244fbedd3ae37e9d7223527a50bb35e71001a",
+      "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     },
     {
       "id": "widget-builder",
       "title": "Website widget channel",
       "path": "screenshots/widget-builder.png",
-      "capturedAt": "2026-10-01T16:12:45.147Z",
+      "capturedAt": "2026-10-06T11:53:29.749Z",
       "status": "current",
-      "sha256": "ce07dc4f3fc8e51c2d82bc47d7635aaffe6d9650b203c971ec18665e5635fb21",
+      "sha256": "9eb9357eeb243ceb74ef21e546bd87c5ab133717f141d290f70156ba3040c64c",
       "source": {
         "kind": "browser",
         "environment": "local-demo",
@@ -2737,7 +2713,7 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "824cb7760d4a2a28193c3c1783ff5d184a319ce8d1c6b59d63370a5e3d798f25",
+      "sourceDigest": "e421093268690c0b7804de26e59870363c525bbe224348d18e931a29d44a3e51",
       "notes": "Local seeded Northwind AI demo stack (scripts/demo-seed), fake model vendors and company APIs; not staging or production data."
     }
   ]
