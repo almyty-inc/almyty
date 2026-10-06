@@ -48,6 +48,17 @@ each channel through its gateway after the effective period, with the files sent
 data **longer** than the organization policy — the shorter of the two
 wins.
 
+## An always-on agent's standing conversation
+
+An always-on agent keeps one conversation for as long as it exists
+([always-on.md](always-on.md)). The sweep never deletes that conversation as
+a whole. It deletes its messages older than `conversationsDays` inside it,
+and the summary the agent keeps of older turns carries the gist. What woke
+the agent (`agent_wakes`, whose one-line summaries can name who wrote) goes
+with the conversations: rows older than `conversationsDays` are deleted,
+except wakes still waiting. If the sweep cannot read which conversations
+are standing ones, it deletes no conversations that run rather than guess.
+
 ## Attachments that were never sent
 
 A file a web chat or widget visitor uploads waits, with no conversation, for the message that names it; a channel attachment is stored before its run starts and filed under the run's conversation once it has one. An attachment that never reached a conversation (uploaded and not sent, or stored for a run that was refused) belongs to no policy, so it is removed deployment-wide a day after it was stored, on the same hourly tick. Erasing a web chat visitor or a widget thread removes that visitor's unsent uploads at once.
