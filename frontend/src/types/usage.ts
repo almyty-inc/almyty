@@ -196,7 +196,7 @@ export interface AgentModelIssue {
  * backend/src/entities/agent.entity.ts.
  */
 export interface AgentPauseReason {
-  code: 'OWNER_CANNOT_RUN' | 'OWNER_NOT_MEMBER' | 'RESTORE_FAILED'
+  code: 'OWNER_CANNOT_RUN' | 'OWNER_NOT_MEMBER' | 'RESTORE_FAILED' | 'IDENTITY_LAPSED'
   message: string
   detectedAt: string
 }

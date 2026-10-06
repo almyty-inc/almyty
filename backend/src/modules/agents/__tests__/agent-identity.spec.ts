@@ -20,12 +20,17 @@ import { fakeAudit, fakeRepo } from '../../connections/__tests__/test-support';
 import { EE_ENTITLEMENTS } from '../../licensing/license.constants';
 import { usableProviders } from '../../llm-providers/private-provider';
 import {
+  AGENT_IDENTITY_LAPSED_MESSAGE,
   AGENT_IDENTITY_NOT_INCLUDED,
   AgentIdentityService,
+  isLapsed,
+  resolveUnattendedPrincipal,
   runAsProblems,
   runUserOf,
-  unattendedPrincipal,
 } from '../agent-identity';
+import { AgentIdentityReachService } from '../agent-identity-reach';
+import { memoryScopeFor } from '../agent-memory-settings';
+import { agentScopeId, userScopeId } from '../../memory/canonical/canonical-memory.helpers';
 import { AgentSchedulerService } from '../agent-scheduler.service';
 import { membershipFixture } from '../../../test/execution-access.fixture';
 import { fakeRepository } from '../../../test/fake-repository';
@@ -83,7 +88,7 @@ describe('the agent execution principal', () => {
     expect(asPrincipal(stored)).toEqual(agentPrincipal(teamAgent));
   });
 
-  it("is offered the organization's and its team's model providers, never a private one", async () => {
+  it("is offered the organization's model providers only: never a private one, and no team's", async () => {
     const rows = [
       { id: 'org', organizationId: ORG, visibility: 'org', ownerUserId: null },
       { id: 'team', organizationId: ORG, visibility: 'team', teamId: TEAM, ownerUserId: null },
@@ -91,7 +96,7 @@ describe('the agent execution principal', () => {
       { id: 'owners-own', organizationId: ORG, visibility: 'private', ownerUserId: OWNER },
     ] as any[];
     const ids = (await usableProviders(null, ORG, agentPrincipal(teamAgent), rows)).map((p) => p.id);
-    expect(ids).toEqual(['org', 'team']);
+    expect(ids).toEqual(['org']);
   });
 });
 
@@ -111,7 +116,7 @@ describe('connections an agent acting as itself may use', () => {
     };
     const grant = (connectionId: string, principalType: string, principalId: string) =>
       grants.rows.push(Object.assign(new ConnectionGrant(), { id: randomUUID(), organizationId: ORG, connectionId, principalType, principalId, permission: 'use' }) as any);
-    const use = (credential: Credential, agent: typeof orgAgent | typeof privateAgent = orgAgent, context: Record<string, any> = { purpose: 'llm_call' }) =>
+    const use = (credential: Credential, agent: any = orgAgent, context: Record<string, any> = { purpose: 'llm_call' }) =>
       policy.assertCanUse({ organizationId: ORG, credential: credential as any, execution: agentPrincipal(agent), context: context as any });
     return { connection, grant, use };
   }
@@ -144,6 +149,14 @@ describe('connections an agent acting as itself may use', () => {
     await expect(h.use(personal)).rejects.toMatchObject({ code: 'CONNECTION_NOT_GRANTED' });
     await expect(h.use(privateConn, privateAgent)).rejects.toThrow();
   });
+
+  it('is not a member of its team: a team connection stays out of reach, even granted', async () => {
+    const h = harness();
+    const teamConn = h.connection({ visibility: 'team', teamId: TEAM });
+    h.grant(teamConn.id, 'agent', AGENT);
+    h.grant(teamConn.id, 'team', TEAM);
+    await expect(h.use(teamConn, teamAgent)).rejects.toThrow();
+  });
 });
 
 describe('the audit actor', () => {
@@ -171,10 +184,30 @@ describe('the audit actor', () => {
 describe('who an unattended run acts as', () => {
   const runsAsItself = { ...orgAgent, agentConfig: { runAs: 'agent' as const } };
 
-  it('is the agent itself only when it asks to and the organization has the entitlement', () => {
-    expect(unattendedPrincipal(runsAsItself, true, 'schedule')).toEqual(agentPrincipal(orgAgent));
-    expect(unattendedPrincipal(runsAsItself, false, 'schedule')).toEqual({ kind: 'user', userId: OWNER, source: 'schedule' });
-    expect(unattendedPrincipal(orgAgent, true, 'schedule')).toEqual({ kind: 'user', userId: OWNER, source: 'schedule' });
+  it('is the agent itself when it asks to and the organization has the entitlement', () => {
+    expect(resolveUnattendedPrincipal(runsAsItself, true, 'schedule')).toEqual({ principal: agentPrincipal(orgAgent) });
+  });
+
+  it('is reported lapsed, never its owner, when the organization no longer has the entitlement', () => {
+    const now = new Date('2026-10-06T12:00:00Z');
+    const r = resolveUnattendedPrincipal(runsAsItself, false, 'schedule', now);
+    expect(r).toEqual({
+      lapsed: true,
+      reason: { code: 'IDENTITY_LAPSED', message: AGENT_IDENTITY_LAPSED_MESSAGE, detectedAt: now.toISOString() },
+    });
+    expect(isLapsed(r)).toBe(true);
+  });
+
+  it('is the owner for an agent that acts as its owner, plan or no plan', () => {
+    expect(resolveUnattendedPrincipal(orgAgent, true, 'schedule')).toEqual({ principal: { kind: 'user', userId: OWNER, source: 'schedule' } });
+    expect(resolveUnattendedPrincipal(orgAgent, false, 'schedule')).toEqual({ principal: { kind: 'user', userId: OWNER, source: 'schedule' } });
+  });
+
+  it('reads the entitlement for the agent organization', async () => {
+    const licenses = { hasForOrg: jest.fn(async () => true) };
+    await expect(new AgentIdentityService(licenses as any).resolve(runsAsItself, 'schedule')).resolves.toEqual({ principal: agentPrincipal(orgAgent) });
+    expect(licenses.hasForOrg).toHaveBeenCalledWith(ORG, EE_ENTITLEMENTS.AGENT_IDENTITY);
+    await expect(new AgentIdentityService().resolve(runsAsItself, 'schedule')).resolves.toMatchObject({ lapsed: true });
   });
 
   it('accepts only owner or agent as a setting', () => {
@@ -200,19 +233,22 @@ describe('who an unattended run acts as', () => {
 });
 
 describe('a scheduled run of an agent that acts as itself', () => {
-  function build(agent: Record<string, any>, licensed: boolean) {
+  function build(agent: Record<string, any>, licensed: boolean, wired = true) {
     const execute = jest.fn(async () => ({ nodeResults: [] }));
     const users = fakeRepository<any>([
       { id: OWNER, isActive: true, organizationMemberships: [{ organizationId: ORG, role: 'member', isActive: true }] },
     ]);
     const m = membershipFixture();
     m.member(ORG, OWNER);
-    const identity = new AgentIdentityService({ hasForOrg: async () => licensed } as any);
+    const identity = wired ? new AgentIdentityService({ hasForOrg: async () => licensed } as any) : undefined;
+    const agents = fakeRepository<any>([agent]);
+    const queue = { getRepeatableJobs: async () => [], removeRepeatableByKey: async () => undefined };
+    const notifications = { emit: jest.fn(async () => undefined) };
     const scheduler = new AgentSchedulerService(
-      {} as any, { execute } as any, fakeRepository<any>([agent]) as any, {} as any, m.executionAccess,
-      fakeRepository<any>([]) as any, users as any, undefined, undefined, undefined, undefined, undefined, identity,
+      {} as any, { execute } as any, agents as any, queue as any, m.executionAccess,
+      fakeRepository<any>([]) as any, users as any, undefined, notifications as any, undefined, undefined, undefined, identity,
     );
-    return { scheduler, execute };
+    return { scheduler, execute, notifications, agents };
   }
   const agent = {
     ...orgAgent,
@@ -229,11 +265,100 @@ describe('a scheduled run of an agent that acts as itself', () => {
     expect(call[3].principal).toEqual(agentPrincipal(orgAgent));
   });
 
-  it('runs as its owner without the entitlement', async () => {
-    const { scheduler, execute } = build(agent, false);
+  it('pauses, and tells the owner, without the entitlement: never runs as its owner instead', async () => {
+    const { scheduler, execute, notifications, agents } = build(agent, false);
+    await scheduler.handleScheduledExecution({ data: { agentId: AGENT, organizationId: ORG, input: {} } } as any);
+    expect(execute).not.toHaveBeenCalled();
+    const saved = agents.rows().find((a: any) => a.id === AGENT);
+    expect(saved.settings.schedule.enabled).toBe(false);
+    expect(saved.settings.schedule.pausedReason).toMatchObject({ code: 'IDENTITY_LAPSED', message: AGENT_IDENTITY_LAPSED_MESSAGE });
+    expect(notifications.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'run.failed', userIds: [OWNER], body: AGENT_IDENTITY_LAPSED_MESSAGE }));
+  });
+
+  it('pauses too when no licensing is wired at all', async () => {
+    const { scheduler, execute } = build(agent, false, false);
+    await scheduler.handleScheduledExecution({ data: { agentId: AGENT, organizationId: ORG, input: {} } } as any);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('still runs an agent set to act as its owner as that owner', async () => {
+    const { scheduler, execute } = build({ ...agent, agentConfig: { runAs: 'owner' } }, false);
     await scheduler.handleScheduledExecution({ data: { agentId: AGENT, organizationId: ORG, input: {} } } as any);
     const call = execute.mock.calls[0] as any[];
     expect(call[2]).toBe(OWNER);
     expect(call[3].principal).toEqual({ kind: 'user', userId: OWNER, source: 'schedule' });
+  });
+});
+
+describe('memory of an agent that acts as itself', () => {
+  const personMemory = { id: AGENT, memoryConfig: { enabled: true, whose: 'person' } } as any;
+
+  it("keeps \"per person\" memories in the agent's own scope, never its owner's", () => {
+    const run = { organizationId: ORG, userId: null, endUserId: null, principal: agentPrincipal(orgAgent) };
+    expect(memoryScopeFor(personMemory, run as any)).toEqual({ scope_type: 'agent', scope_id: agentScopeId(ORG, AGENT) });
+  });
+
+  it("keeps a person's run in that person's scope", () => {
+    const run = { organizationId: ORG, userId: OWNER, endUserId: null, principal: { kind: 'user', userId: OWNER, source: 'session' } };
+    expect(memoryScopeFor(personMemory, run as any)).toEqual({ scope_type: 'user', scope_id: userScopeId(ORG, OWNER) });
+  });
+});
+
+describe('what an agent would not reach acting as itself', () => {
+  const PROVIDER_PRIVATE = randomUUID();
+  const PROVIDER_ORG = randomUUID();
+  const PROVIDER_TEAM = randomUUID();
+  const KEY_PERSONAL = randomUUID();
+  const KEY_GRANTED = randomUUID();
+  const MEMORY_PRIVATE = randomUUID();
+  const API = randomUUID();
+  const API_CONN = randomUUID();
+  const PLAIN_ORG = randomUUID();
+
+  function build() {
+    const providers = fakeRepository<any>([
+      { id: PROVIDER_PRIVATE, organizationId: ORG, name: 'My Claude', visibility: 'private', ownerUserId: OWNER, credentialId: null },
+      { id: PROVIDER_ORG, organizationId: ORG, name: 'Company OpenAI', visibility: 'org', ownerUserId: null, credentialId: KEY_PERSONAL },
+      { id: PROVIDER_TEAM, organizationId: ORG, name: 'Team Mistral', visibility: 'team', teamId: TEAM, ownerUserId: null, credentialId: KEY_GRANTED },
+    ]);
+    const credentials = fakeRepository<any>([
+      { id: KEY_PERSONAL, organizationId: ORG, name: 'My OpenAI key', connectorKey: 'openai', visibility: 'org', ownerUserId: OWNER, metadata: null },
+      { id: KEY_GRANTED, organizationId: ORG, name: 'Mistral key', connectorKey: 'mistral', visibility: 'org', ownerUserId: null, metadata: null },
+      { id: MEMORY_PRIVATE, organizationId: ORG, name: 'My mem0', connectorKey: 'mem0', visibility: 'private', ownerUserId: OWNER, metadata: null },
+      { id: API_CONN, organizationId: ORG, name: 'Payments token', connectorKey: 'http', visibility: 'org', ownerUserId: OWNER, apiId: API, metadata: null },
+      { id: PLAIN_ORG, organizationId: ORG, name: 'Plain key', connectorKey: null, visibility: 'org', ownerUserId: null, apiId: API, metadata: null },
+    ]);
+    const grants = fakeRepository<any>([
+      { id: randomUUID(), connectionId: KEY_GRANTED, principalType: 'agent', principalId: AGENT, expiresAt: null },
+    ]);
+    const tools = fakeRepository<any>([{ id: 't-1', organizationId: ORG, apiId: API }]);
+    const manager = {
+      getRepository: (entity: any) => (entity === Credential ? credentials : entity === ConnectionGrant ? grants : null),
+    };
+    const reach = new AgentIdentityReachService({ manager } as any, providers as any, tools as any);
+    return { reach };
+  }
+
+  it('lists private and team providers and every ungranted connection, and offers a grant only where one can open it', async () => {
+    const { reach } = build();
+    const agent = {
+      ...orgAgent,
+      toolIds: ['t-1'],
+      modelConfig: { providerId: PROVIDER_ORG },
+      models: { strategy: 'single', roles: [{ name: 'checker', purpose: 'checker', kind: 'model', providerId: PROVIDER_PRIVATE }, { name: 'p', purpose: 'panelist', kind: 'model', providerId: PROVIDER_TEAM }] },
+      memoryConfig: { enabled: true, credentialId: MEMORY_PRIVATE },
+      agentConfig: {},
+    } as any;
+    const items = await reach.unreachable(agent);
+    const byId = Object.fromEntries(items.map((i) => [i.id, i]));
+    expect(byId[PROVIDER_PRIVATE]).toMatchObject({ kind: 'provider', scope: 'private', canGrant: false });
+    expect(byId[PROVIDER_TEAM]).toMatchObject({ kind: 'provider', scope: 'team', canGrant: false });
+    expect(byId[PROVIDER_ORG]).toBeUndefined();
+    expect(byId[KEY_PERSONAL]).toMatchObject({ kind: 'connection', scope: 'personal', canGrant: true, neededFor: 'The key for its model (Company OpenAI)' });
+    expect(byId[MEMORY_PRIVATE]).toMatchObject({ scope: 'private', canGrant: false, neededFor: 'Its memory' });
+    expect(byId[API_CONN]).toMatchObject({ scope: 'personal', canGrant: true, neededFor: 'An API it uses' });
+    // Already granted, and a plain organization credential that needs no grant.
+    expect(byId[KEY_GRANTED]).toBeUndefined();
+    expect(byId[PLAIN_ORG]).toBeUndefined();
   });
 });

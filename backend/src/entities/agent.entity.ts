@@ -67,9 +67,12 @@ export interface AgentPipeline {
  *   someone else).
  * - OWNER_NOT_MEMBER: the owner is no longer an active member of the org.
  * - RESTORE_FAILED: the schedule could not be restored after a restart.
+ * - IDENTITY_LAPSED: the agent acts as itself (agentConfig.runAs 'agent')
+ *   and the organization no longer has agent_identity; it is paused rather
+ *   than run as its owner.
  */
 export interface AgentPauseReason {
-  code: 'MODEL_NOT_FOUND' | 'OWNER_CANNOT_RUN' | 'OWNER_NOT_MEMBER' | 'RESTORE_FAILED';
+  code: 'MODEL_NOT_FOUND' | 'OWNER_CANNOT_RUN' | 'OWNER_NOT_MEMBER' | 'RESTORE_FAILED' | 'IDENTITY_LAPSED';
   message: string;
   detectedAt: string;
 }

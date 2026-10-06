@@ -7,6 +7,7 @@ import {
   agentPrincipal,
   userPrincipal,
 } from '../../common/authorization/execution-access.service';
+import type { AgentPauseReason } from '../../entities/agent.entity';
 import { EE_ENTITLEMENTS } from '../licensing/license.constants';
 import { OrgLicenseResolver } from '../licensing/org-license.resolver';
 import { agentOwnerUserId } from './agent-owner';
@@ -20,6 +21,10 @@ import { agentOwnerUserId } from './agent-owner';
  * and private ones included), it runs what its own scope reaches, and the
  * audit rows its runs write name it as the actor. It is the Business
  * entitlement `agent_identity`; set per agent as `agentConfig.runAs`.
+ *
+ * An agent set to act as itself never falls back to its owner: when the
+ * organization no longer has the entitlement, its unattended runs are
+ * paused with IDENTITY_LAPSED instead (resolveUnattendedPrincipal).
  */
 export const AGENT_RUN_AS = ['owner', 'agent'] as const;
 export type AgentRunAs = (typeof AGENT_RUN_AS)[number];
@@ -27,6 +32,10 @@ export type AgentRunAs = (typeof AGENT_RUN_AS)[number];
 /** What a save hears when it turns this on without the plan. */
 export const AGENT_IDENTITY_NOT_INCLUDED =
   'An agent that acts as itself is part of the Business plan. Upgrade, or leave it acting as its owner.';
+
+/** Why an agent that acts as itself was paused when the plan no longer includes it. */
+export const AGENT_IDENTITY_LAPSED_MESSAGE =
+  'This agent acts as itself, which needs the Business plan. It was paused instead of running as you.';
 
 /** Problems with a saved `runAs`, in words. */
 export function runAsProblems(agentConfig: unknown): string[] {
@@ -43,18 +52,34 @@ export function actsAsItself(agent: { agentConfig?: { runAs?: string | null } | 
   return agent.agentConfig?.runAs === 'agent';
 }
 
+/** Who an unattended run acts as, or why it may not run at all. */
+export type UnattendedResolution =
+  | { principal: ExecutionPrincipal }
+  | { lapsed: true; reason: AgentPauseReason };
+
+/** Narrows an UnattendedResolution to the lapsed case. */
+export function isLapsed(r: UnattendedResolution): r is { lapsed: true; reason: AgentPauseReason } {
+  return 'lapsed' in r && r.lapsed === true;
+}
+
 /**
- * The principal an unattended run of `agent` acts as. The agent itself when
- * it asks to and its organization has `agent_identity`; otherwise its owner
- * as the row stands now (agentOwnerUserId), the way schedules always ran.
+ * Who an unattended run of `agent` acts as. An agent that acts as itself
+ * is its own principal while the organization has `agent_identity`, and is
+ * reported lapsed (never run as its owner) when it has not. Any other agent
+ * runs as its owner as the row stands now (agentOwnerUserId).
  */
-export function unattendedPrincipal(
+export function resolveUnattendedPrincipal(
   agent: AgentScopeLike & { agentConfig?: { runAs?: string | null } | null },
   licensed: boolean,
   source: PrincipalSource,
-): ExecutionPrincipal {
-  if (licensed && actsAsItself(agent)) return agentPrincipal(agent);
-  return userPrincipal(agentOwnerUserId(agent), source);
+  now: Date = new Date(),
+): UnattendedResolution {
+  if (!actsAsItself(agent)) return { principal: userPrincipal(agentOwnerUserId(agent), source) };
+  if (licensed) return { principal: agentPrincipal(agent) };
+  return {
+    lapsed: true,
+    reason: { code: 'IDENTITY_LAPSED', message: AGENT_IDENTITY_LAPSED_MESSAGE, detectedAt: now.toISOString() },
+  };
 }
 
 /**
@@ -76,19 +101,20 @@ export class AgentIdentityService {
     return this.licenses.hasForOrg(organizationId, EE_ENTITLEMENTS.AGENT_IDENTITY).catch(() => false);
   }
 
-  /** unattendedPrincipal with the organization's entitlement read for you. */
-  async principalFor(
+  /** resolveUnattendedPrincipal with the organization's entitlement read for you. */
+  async resolve(
     agent: AgentScopeLike & { agentConfig?: { runAs?: string | null } | null },
     source: PrincipalSource,
-  ): Promise<ExecutionPrincipal> {
+  ): Promise<UnattendedResolution> {
     const licensed = actsAsItself(agent) ? await this.licensed(agent.organizationId) : false;
-    return unattendedPrincipal(agent, licensed, source);
+    return resolveUnattendedPrincipal(agent, licensed, source);
   }
 
   /**
    * Refuse a save that turns acting-as-itself on without the plan. One that
    * was already on is left alone, so an agent saved before a downgrade can
-   * still be edited (its runs then act as its owner again).
+   * still be edited (its unattended runs stay paused until the plan includes
+   * it again or it is switched back to its owner).
    */
   async assertMaySave(
     organizationId: string,

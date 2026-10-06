@@ -5,12 +5,12 @@ import { IsNull, Repository } from 'typeorm';
 import { InjectQueue, Process, Processor } from '@nestjs/bull';
 import { Job, Queue } from 'bull';
 
-import { Agent, AgentStatus } from '../../entities/agent.entity';
+import { Agent, AgentPauseReason, AgentStatus } from '../../entities/agent.entity';
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
 import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
 import { agentOwnerUserId } from './agent-owner';
-import { AgentIdentityService, runUserOf } from './agent-identity';
+import { AgentIdentityService, isLapsed, runUserOf } from './agent-identity';
 import { AgentExecution, AgentExecutionStatus } from '../../entities/agent-execution.entity';
 import {
   ExecutionAccessService,
@@ -467,6 +467,47 @@ export class AgentSchedulerService implements OnModuleInit {
     this.logger.warn(`[SCHEDULED_RUN] Paused schedule for agent ${agent.id}: ${message}`);
   }
 
+  /**
+   * Stop a schedule of an agent that acts as itself once the organization's
+   * plan no longer includes agent_identity. It is never run as its owner
+   * instead: a failed run says why, the schedule is paused with
+   * IDENTITY_LAPSED, and the owner is told.
+   */
+  async pauseForLapsedIdentity(agent: Agent, owner: string | null, reason: AgentPauseReason): Promise<void> {
+    try {
+      await this.executionRepo.save(
+        this.executionRepo.create({
+          agentId: agent.id,
+          organizationId: agent.organizationId,
+          userId: null,
+          status: AgentExecutionStatus.FAILED,
+          input: {},
+          error: reason.message,
+          metadata: { triggerType: 'scheduled', refusedBy: 'agent_identity' },
+        }),
+      );
+    } catch (err: any) {
+      this.logger.error(`[SCHEDULED_RUN] Could not record the paused run for agent ${agent.id}: ${err.message}`);
+    }
+    const settings = { ...(agent.settings || {}) };
+    if (settings.schedule) settings.schedule = { ...settings.schedule, enabled: false, pausedReason: reason };
+    agent.settings = settings;
+    await this.agentRepo.save(agent);
+    await this.removeRepeatableJob(agent.id);
+    this.logger.warn(`[SCHEDULED_RUN] Paused schedule for agent ${agent.id}: ${reason.message}`);
+    if (!owner || !this.notifications) return;
+    await this.notifications
+      .emit({
+        type: 'run.failed',
+        organizationId: agent.organizationId,
+        userIds: [owner],
+        title: `Schedule paused: ${agent.name}`,
+        body: reason.message,
+        link: `/agents/${agent.id}`,
+      })
+      .catch(() => undefined);
+  }
+
   async unscheduleAgent(agentId: string, organizationId: string): Promise<Agent> {
 
     const agent = await this.agentsService.getAgent(agentId, organizationId);
@@ -744,8 +785,14 @@ export class AgentSchedulerService implements OnModuleInit {
       // it is set to act as itself and the organization has agent_identity
       // (agent-identity.ts). Acting as itself the run records no user: it
       // is not a person, and it reaches only what is granted to the agent.
-      const acting = this.identity ? await this.identity.principalFor(agent, 'schedule') : ownerPrincipal;
-      const principal = acting.kind === 'agent' ? acting : ownerPrincipal;
+      // One set to act as itself whose plan no longer includes it is paused,
+      // never run as its owner instead.
+      const resolution = await (this.identity ?? new AgentIdentityService()).resolve(agent, 'schedule');
+      if (isLapsed(resolution)) {
+        await this.pauseForLapsedIdentity(agent, owner, resolution.reason);
+        return;
+      }
+      const principal = resolution.principal.kind === 'agent' ? resolution.principal : ownerPrincipal;
       const runUser = runUserOf(principal);
 
       // A result bound for a channel is only worth a run the channel can

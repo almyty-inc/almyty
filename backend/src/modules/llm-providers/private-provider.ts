@@ -63,8 +63,8 @@ export function assertProviderUsableBy(
  *   its owner is judged as its owner. This is the rule
  *   ExecutionAccessService.canGatewayExecute applies to agents and tools;
  * - nobody (null) gets organization-wide providers only.
- * - an agent acting as itself gets the organization's providers plus,
- *   for a team agent, its team's; never a private one.
+ * - an agent acting as itself gets the organization's providers only:
+ *   never a private one, and no team's.
  *
  * The caller's org role and teams are looked up once, and only when a
  * team provider is among the rows. With no policy wired a team provider
@@ -90,16 +90,11 @@ export async function usableProviders<T extends ProviderScopeLike>(
         (p.visibility === 'team' && principal.visibility === 'team' && !!principal.teamId && p.teamId === principal.teamId),
     );
   }
-  // An agent acting as itself: the organization's providers, and its own
-  // team's when it is a team agent. Never a private one, its owner's
-  // included: the agent does not act as its owner.
+  // An agent acting as itself: the organization's providers only. Never a
+  // private one, its owner's included (it does not act as its owner), and no
+  // team's: a team agent is not a member of its team.
   if (principal.kind === 'agent') {
-    return rows.filter(
-      (p) =>
-        p.organizationId === principal.organizationId &&
-        (isOrgWide(p) ||
-          (p.visibility === 'team' && principal.visibility === 'team' && !!principal.teamId && p.teamId === principal.teamId)),
-    );
+    return rows.filter((p) => p.organizationId === principal.organizationId && isOrgWide(p));
   }
   const userId = principal.userId;
   const privateOk = rows.filter((p) => providerUsableBy(p, userId));

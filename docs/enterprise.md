@@ -95,17 +95,28 @@ access**. From then on:
 - It uses only the connections you give it. Give one under Credentials, in
   "Who can use each credential": pick the credential, then add the agent.
   Your own personal and private connections are never used, even though you
-  own the agent.
-- It reaches tools, model providers and machines the way a team or the
-  organization would: what is shared with the whole organization, what
-  belongs to the agent's own team if it is a team agent, and what is private
-  to you only if the agent itself is private to you. Model providers private
-  to you are never used.
+  own the agent, and neither are a team's: a team agent is not a member of
+  its team.
+- It uses only model providers shared with the whole organization. A model
+  provider private to you, or one belonging to a team, is never used.
+- Tools and machines it reaches the way the organization would: what is
+  shared with everyone, its own team's if it is a team agent, and what is
+  private to you only if the agent itself is private to you.
+- Memory kept "per person" is the agent's own, never yours.
 - The audit log names the agent as the one who acted, with no person
   attached.
 
-If the plan stops including it, the agent keeps the setting but its runs go
-back to acting as its owner until the plan includes it again. Turning it on
+When you pick **Itself**, the page lists what the agent's settings use that
+it would no longer reach: a private or team model provider, the key for its
+model, its memory account, the connections of the APIs it uses. Next to each
+connection you can give it, there is a button, "Let this agent use my …".
+Nothing is given to the agent until you press it. A private model provider
+or a private connection cannot be given to an agent at all; the list says
+so, and you pick one shared with the organization instead.
+
+If the plan stops including it, the agent is paused rather than run as you:
+its schedule stops, the agent page says why, and you are told. Switch it
+back to acting as you, or upgrade, then resume the schedule. Turning it on
 without the plan is refused when you save.
 
 Today this applies to scheduled runs. Runs someone starts by hand, through
@@ -116,22 +127,31 @@ a channel or from the API act as whoever started them, as before.
 - The setting is `agents.agentConfig.runAs` (`'owner'` | `'agent'`),
   checked on save by `AgentIdentityService.assertMaySave` (only when it is
   newly turned on, so an agent saved before a downgrade can still be edited).
-- `unattendedPrincipal(agent, licensed, source)` in
-  `backend/src/modules/agents/agent-identity.ts` returns the principal an
-  unattended run acts as; `AgentIdentityService.principalFor(agent, source)`
-  reads the entitlement for you. The scheduler uses it; the run row then has
-  `userId = null`.
+- `resolveUnattendedPrincipal(agent, licensed, source)` in
+  `backend/src/modules/agents/agent-identity.ts` returns
+  `{ principal }` or `{ lapsed: true, reason }` (an `IDENTITY_LAPSED`
+  AgentPauseReason); it never falls back to the owner for an agent set to
+  act as itself. `AgentIdentityService.resolve(agent, source)` reads the
+  entitlement for you; `isLapsed` narrows the result. The scheduler pauses
+  on a lapse (`pauseForLapsedIdentity`, a `run.failed` notification to the
+  owner); otherwise the run row has `userId = null`.
+- `GET /agents/:agentId/identity/unreachable` (`agent-identity-reach.ts`)
+  lists what the agent's settings use that it would not reach as itself;
+  the page grants a connection with the existing
+  `POST /credentials/:id/grants` (`principalType: 'agent'`).
 - The principal is `AgentPrincipal` (`kind: 'agent'`) in
   `common/authorization/execution-access.service.ts`.
   `ExecutionAccessService.canAgentExecute` mirrors the gateway rule: the
   agent itself, org resources, its own team's resources, and private
   resources only when the agent is private to the same owner.
-  `actingUserId` is null for it, so private credentials never resolve.
-- Connections: `GrantsUsePolicy` judges it as
-  `agentGrantPrincipal` (no user, no role, its team for a team agent, its
-  own id pinned as the agent a grant may name), so only `agent` grants (and
-  team grants for a team agent) let it use a connection. Org governance sees
-  it as principal kind `agent`.
+  `actingUserId` is null for it, so private credentials never resolve, and
+  `CredentialRefResolver` refuses it a team-scoped credential.
+- Connections: `GrantsUsePolicy` judges it as `agentGrantPrincipal` (no
+  user, no role, no team, its own id pinned as the agent a grant may name),
+  so only `agent` grants let it use a connection. Org governance sees it as
+  principal kind `agent`. `usableProviders` gives it org-wide providers only.
+- Memory: `memoryScopeFor` puts a "person" scope of a run whose principal is
+  an agent in the agent's own scope.
 - Audit: the step processor and the workflow engine put
   `actor: { kind: 'agent', agentId }` in the request scope, and
   `AuditLogService` writes it as `details.actor` on every row written in

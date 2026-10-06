@@ -22,9 +22,9 @@ import { GrantsService } from './grants.service';
  *   gives. The resolver has already applied the team rule, so a team
  *   connection reaches only a gateway of that team.
  * - an agent acting as itself (agent_identity): the agent. No user, no
- *   role, no owner: only a grant to that agent (and, for a team agent, to
- *   its team) lets it use a connection. Its owner's personal and private
- *   connections stay out of reach.
+ *   role, no owner, no team: only a grant to that agent lets it use a
+ *   connection. Its owner's personal and private connections stay out of
+ *   reach.
  * - nobody (a scheduler, the reconcile loop): a system path. It may use an
  *   organization connection, never someone's personal one, because there
  *   is no one whose grant could be checked.
@@ -85,15 +85,17 @@ export class GrantsUsePolicy implements ConnectionUsePolicy {
 
   /**
    * An agent acting as itself, as the grant check sees it: no user (the id
-   * names the agent and matches no user grant or owner), no role, its team
-   * when it is a team agent, and itself as the agent a grant may name.
+   * names the agent and matches no user grant or owner), no role, no team
+   * (a team agent is not a member of its team), and itself as the agent a
+   * grant may name.
    */
   static agentGrantPrincipal(agent: { agentId: string; visibility: string; teamId: string | null }): GrantPrincipal {
     return {
       userId: `agent:${agent.agentId}`,
       roles: [],
       permissions: [],
-      teamIds: agent.visibility === 'team' && agent.teamId ? [agent.teamId] : [],
+      // Not its team's: a team agent is no member of the team (Frane, 2026-10-06).
+      teamIds: [],
       agentId: agent.agentId,
     };
   }

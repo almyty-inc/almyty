@@ -256,7 +256,6 @@ export class CredentialRefResolver {
           ...(agentId ? { agentId } : {}),
           ...(workspaceId ? { workspaceId } : {}),
           ...(gateway ? { gatewayId: gateway.gatewayId, teamIds: gateway.teamId ? [gateway.teamId] : [] } : {}),
-          ...(asAgent?.teamId ? { teamIds: [asAgent.teamId] } : {}),
         },
         {
           purpose: opts.context?.purpose,
@@ -434,6 +433,9 @@ export class CredentialRefResolver {
       if (visibility === 'private') {
         const userId = actingUserId(principal);
         if (credential.ownerUserId && userId && userId === credential.ownerUserId) return;
+      } else if (principal.kind === 'agent') {
+        // An agent acting as itself is no member of its team: a team row is
+        // out of its reach, whatever team the agent is in.
       } else if (this.executionAccess && (await this.executionAccess.canExecute(principal, credential)).allowed) {
         return;
       }

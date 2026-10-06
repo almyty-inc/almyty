@@ -37,6 +37,12 @@ const COPY: Record<AgentPauseReason['code'], { what: (kind: Kind) => string; fix
     what: (kind) => `The ${kind} was paused because it could not be restored when the service restarted.`,
     fix: (kind) => `Nothing about the agent needs to change. ${kind === 'schedule' ? 'Resume the schedule' : 'Turn the heartbeat back on'} to start it again.`,
   },
+  IDENTITY_LAPSED: {
+    what: (kind) =>
+      `The ${kind} was ${stopped(kind)} because this agent acts as itself, which needs the Business plan, and the plan no longer includes it. It was not run as its owner instead.`,
+    fix: (kind) =>
+      `Upgrade to Business and ${restart(kind)}, or switch Acts as back to its owner under Capabilities and ${restart(kind)}.`,
+  },
 }
 
 const known = (reason: unknown): reason is AgentPauseReason =>
