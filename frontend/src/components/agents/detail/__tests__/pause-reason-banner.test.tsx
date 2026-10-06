@@ -9,7 +9,7 @@ import { agentsApi } from '@/lib/api'
 import type { Agent } from '@/types'
 
 vi.mock('@/lib/api', () => ({
-  agentsApi: { schedule: vi.fn(), setHeartbeat: vi.fn() },
+  agentsApi: { schedule: vi.fn(), setAlwaysOn: vi.fn() },
 }))
 
 const detectedAt = '2026-09-24T08:00:00.000Z'
@@ -22,6 +22,14 @@ const ownerNotMember = {
   code: 'OWNER_NOT_MEMBER' as const,
   message: 'The member who owns this agent is no longer active in the organization, so its schedule was paused.',
   detectedAt,
+}
+const ALWAYS_ON = {
+  enabled: true,
+  brief: 'check in',
+  wakeOn: { timer: { everyMinutes: 15 } },
+  actMode: 'act' as const,
+  askFirstToolIds: [],
+  report: 'when_acted' as const,
 }
 
 const agent = (overrides: Partial<Agent> = {}): Agent =>
@@ -95,22 +103,35 @@ describe('PauseReasonBanner', () => {
     )
   })
 
-  it('explains a heartbeat switched off for the same reason, and turns it back on as it was', async () => {
-    vi.mocked(agentsApi.setHeartbeat).mockResolvedValue({} as any)
-    renderIt(agent({ heartbeat: { enabled: false, intervalMinutes: 15, prompt: 'check in', pausedReason: ownerCannotRun } }))
+  it('explains Always on switched off for the same reason, and turns it back on as it was', async () => {
+    vi.mocked(agentsApi.setAlwaysOn).mockResolvedValue({} as any)
+    renderIt(agent({ alwaysOn: { ...ALWAYS_ON, enabled: false, pausedReason: ownerCannotRun } }))
     const alert = screen.getByRole('alert')
-    expect(alert).toHaveTextContent("The heartbeat was switched off because this agent's owner can no longer run it.")
-    expect(alert).toHaveTextContent("Heartbeat runs act as the agent's owner")
-    await userEvent.click(within(alert).getByRole('button', { name: 'Turn heartbeat back on' }))
-    await waitFor(() =>
-      expect(agentsApi.setHeartbeat).toHaveBeenCalledWith('a1', { enabled: true, intervalMinutes: 15, prompt: 'check in' }),
-    )
+    expect(alert).toHaveTextContent("The Always on setting was switched off because this agent's owner can no longer run it.")
+    expect(alert).toHaveTextContent("Always-on runs act as the agent's owner")
+    await userEvent.click(within(alert).getByRole('button', { name: 'Turn it back on' }))
+    await waitFor(() => expect(agentsApi.setAlwaysOn).toHaveBeenCalledWith('a1', { enabled: true }))
   })
 
-  it('shows both when the schedule and the heartbeat were both stopped', () => {
+  it('says why an always-on agent paused itself after waking too often', () => {
     renderIt(
       agent({
-        heartbeat: { enabled: false, intervalMinutes: 15, prompt: 'p', pausedReason: ownerCannotRun },
+        alwaysOn: {
+          ...ALWAYS_ON,
+          enabled: false,
+          pausedReason: { code: 'WAKE_LOOP', message: 'It woke 6 times in the last hour.', detectedAt: '2026-10-06T10:00:00Z' },
+        },
+      }),
+    )
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('Always on was paused because the agent woke more often in an hour than it may.')
+    expect(alert).toHaveTextContent('It woke 6 times in the last hour.')
+  })
+
+  it('shows both when the schedule and Always on were both stopped', () => {
+    renderIt(
+      agent({
+        alwaysOn: { ...ALWAYS_ON, enabled: false, pausedReason: ownerCannotRun },
         settings: { schedule: { enabled: false, intervalMinutes: 30, input: {}, pausedReason: ownerCannotRun } },
       }),
     )

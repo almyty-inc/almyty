@@ -272,7 +272,7 @@ describe('a scheduled run of an agent that acts as itself', () => {
     const saved = agents.rows().find((a: any) => a.id === AGENT);
     expect(saved.settings.schedule.enabled).toBe(false);
     expect(saved.settings.schedule.pausedReason).toMatchObject({ code: 'IDENTITY_LAPSED', message: AGENT_IDENTITY_LAPSED_MESSAGE });
-    expect(notifications.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'run.failed', userIds: [OWNER], body: AGENT_IDENTITY_LAPSED_MESSAGE }));
+    expect(notifications.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'agent.paused', userIds: [OWNER], body: AGENT_IDENTITY_LAPSED_MESSAGE }));
   });
 
   it('pauses too when no licensing is wired at all', async () => {

@@ -3,6 +3,7 @@ import type { AgentCollaboration } from '../modules/agents/collaboration-partici
 import type { AgentModels } from '../modules/agents/autonomous-models';
 import type { ChannelBranding, VisitorRules } from './agent-channel.entity';
 import type { CodeModeConfig } from '../modules/code-mode/code-write-policy';
+import type { AlwaysOnConfig } from '../modules/agents/always-on/always-on.types';
 export type {
   AgentCollaboration,
   CollaborationParticipant,
@@ -55,24 +56,32 @@ export interface AgentPipeline {
   nodes: AgentPipelineNode[];
   edges: AgentPipelineEdge[];
 }
-
 /**
- * Why the system switched an agent's schedule or heartbeat off on its own,
- * recorded on it (`settings.schedule.pausedReason`, `heartbeat.pausedReason`)
+ * Why the system switched an agent's schedule or Always on off on its own,
+ * recorded on it (`settings.schedule.pausedReason`, `alwaysOn.pausedReason`)
  * so the agent page can say what happened. Turning it back on clears it.
  *
  * - MODEL_NOT_FOUND: the vendor retired the configured model.
- * - OWNER_CANNOT_RUN: the owner, whom scheduled and heartbeat runs act as,
+ * - OWNER_CANNOT_RUN: the owner, whom scheduled and always-on runs act as,
  *   can no longer run the agent (left its team, or it became private to
  *   someone else).
  * - OWNER_NOT_MEMBER: the owner is no longer an active member of the org.
- * - RESTORE_FAILED: the schedule could not be restored after a restart.
+ * - RESTORE_FAILED: the schedule or timer could not be restored after a restart.
+ * - WAKE_LOOP: an always-on agent woke more often in an hour than it may.
+ * - CAPACITY_EXHAUSTED: the plan has no room for another wake.
  * - IDENTITY_LAPSED: the agent acts as itself (agentConfig.runAs 'agent')
  *   and the organization no longer has agent_identity; it is paused rather
  *   than run as its owner.
  */
 export interface AgentPauseReason {
-  code: 'MODEL_NOT_FOUND' | 'OWNER_CANNOT_RUN' | 'OWNER_NOT_MEMBER' | 'RESTORE_FAILED' | 'IDENTITY_LAPSED';
+  code:
+    | 'MODEL_NOT_FOUND'
+    | 'OWNER_CANNOT_RUN'
+    | 'OWNER_NOT_MEMBER'
+    | 'RESTORE_FAILED'
+    | 'WAKE_LOOP'
+    | 'CAPACITY_EXHAUSTED'
+    | 'IDENTITY_LAPSED';
   message: string;
   detectedAt: string;
 }
@@ -136,14 +145,13 @@ export class Agent {
   @Column({ type: 'text', nullable: true })
   personality: string;
 
+  /**
+   * Always on (modules/agents/always-on/always-on.types.ts): the agent keeps
+   * working in the background, woken by a timer and by events, on one
+   * standing thread. Read it through readAlwaysOn.
+   */
   @Column({ type: 'json', nullable: true })
-  heartbeat: {
-    enabled: boolean;
-    intervalMinutes: number;
-    prompt: string;
-    /** Set when the system turned the heartbeat off on its own; see AgentPauseReason. */
-    pausedReason?: AgentPauseReason;
-  };
+  alwaysOn: AlwaysOnConfig | null;
 
   @Column({ type: 'uuid', array: true, default: '{}' })
   toolIds: string[];

@@ -18,6 +18,9 @@ import { Message } from '../../entities/message.entity';
 import { ApprovalRequest } from '../../entities/approval-request.entity';
 import { AgentFile } from '../../entities/file.entity';
 import { Workspace } from '../../entities/workspace.entity';
+import { AgentWake } from '../../entities/agent-wake.entity';
+import { AgentChannel } from '../../entities/agent-channel.entity';
+import { ConnectionGrant } from '../../entities/connection-grant.entity';
 
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
@@ -40,9 +43,10 @@ import { AgentStepProcessor } from './agent-step-processor';
 import { AgentSubAgentExecutors } from './agent-subagent-executors.helper';
 import { AgentVerifierHelper } from './agent-verifier.helper';
 import { AgentContextCompactor } from './agent-context-compactor.helper';
+import { AlwaysOnService } from './always-on/always-on.service';
+import { AlwaysOnController } from './always-on/always-on.controller';
 import { AgentIdentityService } from './agent-identity';
 import { AgentIdentityReachController, AgentIdentityReachService } from './agent-identity-reach';
-import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
 import { AgentRunReaperService } from './agent-run-reaper.service';
 import { AgentExecutionReaperService } from './agent-execution-reaper.service';
@@ -96,6 +100,9 @@ import { BudgetsModule } from '../budgets/budgets.module';
       ApprovalRequest,
       AgentFile,
       Workspace,
+      AgentWake,
+      AgentChannel,
+      ConnectionGrant,
     ]),
     BullModule.registerQueue({ name: 'agent-scheduler' }),
     BullModule.registerQueue({ name: 'agent-runtime' }),
@@ -121,11 +128,13 @@ import { BudgetsModule } from '../budgets/budgets.module';
   ],
   providers: [AgentReadinessService, AgentRunReaperService, AgentExecutionReaperService, OrchestratorService, StrategyPipelineResolver,
     AgentIdentityService, AgentIdentityReachService,
-    AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService],
-  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController,
+    AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, CompatAgentInvoker, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AlwaysOnService, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService],
+  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController, AlwaysOnController,
     AgentIdentityReachController],
   exports: [
     AgentRolesService, AgentsService, AgentExecutionEngine, AgentRuntimeService, AgentExecutionCancellationService,
+    // Channels and connections wake always-on agents through it.
+    AlwaysOnService,
     AgentIdentityService],
 })
 export class AgentsModule {}

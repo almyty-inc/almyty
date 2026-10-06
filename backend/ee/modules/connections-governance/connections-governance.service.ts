@@ -43,6 +43,7 @@ import {
   ConnectionRotator,
   GovernanceUseContext,
 } from './seams';
+import { publishForNotification } from '../../../src/modules/connections/connection-events';
 
 /** How long an org's enabled policy list is served from memory. */
 export const POLICY_CACHE_TTL_MS = 30_000;
@@ -706,6 +707,8 @@ export class ConnectionsGovernanceService {
   }
 
   private async notifyOwners(connection: Credential, type: NotificationEventType, title: string, body: string, params: Record<string, unknown>): Promise<void> {
+    // Always on: agents granted this connection can be woken by it.
+    publishForNotification(type, connection);
     if (!this.notifications) return;
     // A private connection is news for its owner only; with no owner on
     // record there is nobody to tell (never fall back to the admins).

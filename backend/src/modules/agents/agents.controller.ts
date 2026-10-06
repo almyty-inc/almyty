@@ -76,39 +76,6 @@ export class AgentsController {
     @InjectRepository(AgentRole) private readonly agentRoles: Repository<AgentRole>,
   ) {}
 
-  /**
-   * Make the queue agree with the heartbeat the agent was just saved with.
-   *
-   * The builder puts `heartbeat` on the ordinary create/update payload and
-   * the service persists it, but the repeatable job is only ever enqueued
-   * by PATCH /agents/:id/heartbeat -- which no frontend code calls. So the
-   * row said heartbeat enabled, the builder reloaded it as enabled, and
-   * the agent never woke up. Nothing restores heartbeat jobs at boot
-   * either, unlike schedules.
-   *
-   * Best-effort: a queue that is briefly unreachable must not fail the
-   * save that already succeeded, and the next save reconciles again.
-   */
-  private async reconcileHeartbeat(agent: any, organizationId: string, dtoHeartbeat: unknown): Promise<void> {
-    if (dtoHeartbeat === undefined) return;
-    try {
-      const heartbeat = agent?.heartbeat;
-      if (heartbeat?.enabled && heartbeat.intervalMinutes) {
-        await this.runtimeService.enableHeartbeat(
-          agent.id,
-          organizationId,
-          heartbeat.intervalMinutes,
-          heartbeat.prompt ?? '',
-        );
-      } else {
-        await this.runtimeService.disableHeartbeat(agent.id, organizationId);
-      }
-    } catch (err: any) {
-      this.logger.warn(`Could not reconcile heartbeat for agent ${agent?.id}: ${err?.message ?? err}`);
-    }
-  }
-
-
   @Post()
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Create a new agent' })
@@ -135,7 +102,6 @@ export class AgentsController {
         organizationId,
         userId,
       );
-      await this.reconcileHeartbeat(agent, organizationId, createAgentDto.heartbeat);
 
       return {
         success: true,
@@ -314,7 +280,6 @@ export class AgentsController {
 
       const userId = req.user.sub || req.user.id;
       const agent = await this.agentsService.updateAgent(id, updateAgentDto, organizationId, userId);
-      await this.reconcileHeartbeat(agent, organizationId, (updateAgentDto as any).heartbeat);
 
       return {
         success: true,

@@ -498,7 +498,8 @@ export class AgentSchedulerService implements OnModuleInit {
     if (!owner || !this.notifications) return;
     await this.notifications
       .emit({
-        type: 'run.failed',
+        // A pause, not a failed run: nothing runs until someone looks (email on by default).
+        type: 'agent.paused',
         organizationId: agent.organizationId,
         userIds: [owner],
         title: `Schedule paused: ${agent.name}`,

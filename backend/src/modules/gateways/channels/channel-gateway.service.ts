@@ -18,6 +18,7 @@ import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRun } from '../../../entities/agent-run.entity';
 import { ChannelEvent, ChannelEventStatus, InboundMessageRecord } from '../../../entities/channel-event.entity';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
+import { AlwaysOnService } from '../../agents/always-on/always-on.service';
 import { AdapterResponse, BaseAdapter, NormalizedMessage } from './adapters/base.adapter';
 import { ChatWidgetAdapter } from './adapters/chat-widget.adapter';
 import { SlackAdapter } from './adapters/slack.adapter';
@@ -129,6 +130,9 @@ export class ChannelGatewayService {
     private readonly visitorData?: VisitorDataService,
     // Records a widget visitor's erasure. Optional for positional specs.
     @Optional() private readonly auditLog?: AuditLogService,
+    // Always on: webhook deliveries and the owner's own messages wake the
+    // agent's standing thread (AlwaysOnService.routeInbound).
+    @Optional() private readonly alwaysOn?: AlwaysOnService,
   ) {
 
     this.adapters = new Map<string, BaseAdapter>([
@@ -343,6 +347,35 @@ export class ChannelGatewayService {
       await this.replyWithoutRun(gateway, adapter, normalized, SPEND_CAP_MESSAGES[reached.reached], effectiveConfig);
       await this.markInboundOutcome(claim, { status: 'failed', errorMessage: 'spend limit reached' });
       return;
+    }
+
+    // Always on (docs/always-on.md): a Webhook channel the agent wakes on,
+    // and the owner writing on their own channel, become wakes of the
+    // agent's standing thread instead of conversations of their own. Anyone
+    // else keeps their own chat below; the agent only gets a line saying
+    // they wrote.
+    if (this.alwaysOn) {
+      const raw = body?.event ?? body;
+      const routed = await this.alwaysOn
+        .routeInbound({
+          organizationId: gateway.organizationId,
+          agentId: gateway.agentId ?? null,
+          gatewayId: gateway.id,
+          senderId: senderId,
+          senderName: normalized.sender?.name ?? null,
+          text: normalized.text ?? '',
+          deliveryId,
+          fromBot: !!(raw?.bot_id || raw?.subtype === 'bot_message' || normalized.metadata?.fromBot),
+        })
+        .catch((err: any) => {
+          this.logger.warn(`Always on could not look at a message for gateway ${gateway.id}: ${err?.message ?? err}`);
+          return 'continue' as const;
+        });
+      if (routed === 'consumed') {
+        await this.markInboundOutcome(claim, { status: 'processed' });
+        await this.incrementRequestCount(gateway.id);
+        return;
+      }
     }
 
     // What the agent reads: the text, prefixed with who wrote it in a group

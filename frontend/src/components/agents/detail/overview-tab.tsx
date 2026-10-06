@@ -56,6 +56,7 @@ import { IntegrationSnippets } from './integration-snippets'
 import { AgentConfigPanel } from './agent-config-panel'
 import { ExecutionRouting } from './routing-attribution'
 import { DeliveryNote, HeldCallNote, ScheduleCard } from './schedule-card'
+import { AlwaysOnCard } from './always-on-card'
 import { modelsApi } from '@/lib/models-api'
 import { invokeAndSettle, runOutcome } from '@/lib/agent-run'
 import type { Agent, AgentExecution, AgentRun, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
@@ -305,6 +306,9 @@ export function OverviewTab({
 
         {/* Schedule */}
         <ScheduleCard agent={agent} />
+
+        {/* Always on: autonomous agents only */}
+        {agent.mode === 'autonomous' && <AlwaysOnCard agentId={agent.id} />}
       </div>
 
       {/* Recent Runs */}

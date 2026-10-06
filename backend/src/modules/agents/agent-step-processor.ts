@@ -22,7 +22,7 @@ import { answerCallMessages, composesFinalAnswer } from './final-answer';
 import { AgentRoleCall, ModelRoleCall, Team, TeamRole, stampOf, teamOf, teammateToolName } from './autonomous-team';
 import { AutonomousStrategyRunner, answeredBy, chargeRole, checkedBy } from './autonomous-strategy.runner';
 import type { ResolvedRunLimits } from './run-limits';
-import type { ApprovalGateHit } from '../tools/tool-approval-gate.service';
+import { hitDetail, type ApprovalGateHit } from '../tools/tool-approval-gate.service';
 import { NamedTool, readableToolName } from '../tools/tool-readable-name';
 
 
@@ -60,6 +60,7 @@ import { codeModeLimits } from '../code-mode/code-mode.settings';
 import { CodeModeConfig, grantsLeftFor } from '../code-mode/code-write-policy';
 import { buildExtract } from '../code-mode/code-extract';
 import { CodeResultForModel, changeSetOutcomeForModel, codeResultForModel } from '../code-mode/code-result';
+import { AlwaysOnService } from './always-on/always-on.service';
 
 /** One line per namespace a script can use: `petstore (19 functions)`. */
 function namespaceSummary(tools: Tool[]): string[] {
@@ -102,7 +103,7 @@ export const AGENT_STEP_COLUMNS = {
   mode: true,
   instructions: true,
   personality: true,
-  heartbeat: true,
+  alwaysOn: true,
   toolIds: true,
   modelConfig: true,
   memoryConfig: true,
@@ -195,6 +196,9 @@ export class AgentStepProcessor {
     @Optional() discovery?: ToolDiscoveryService,
     // run_code (code mode); without it the code tool mode answers that it is not available.
     @Optional() private readonly codeMode?: CodeModeService,
+    // Always on: wakes that arrive while a standing-thread run works are
+    // handed to it before its next model call.
+    @Optional() @Inject(forwardRef(() => AlwaysOnService)) private readonly alwaysOn?: AlwaysOnService,
   ) {
     this.discovery = discovery ?? new ToolDiscoveryService();
   }
@@ -398,6 +402,17 @@ export class AgentStepProcessor {
           'records, files, results, dead ends. Report what you found, with specifics, rather than a finished answer.';
       }
 
+      // Always on: wakes that came in while this run of the standing thread
+      // was working join it here, as one message, before the model is asked
+      // anything (AlwaysOnService.drainInto). A no-op for any other run.
+      if (this.alwaysOn && run.metadata?.triggerType === 'always_on') {
+        try {
+          await this.alwaysOn.drainInto(run);
+        } catch (err: any) {
+          this.s.logger.warn(`Could not hand queued wakes to run ${runId}: ${err?.message ?? err}`);
+        }
+      }
+
       // Build messages for the LLM, reusing the organization loaded above.
       // In code mode the prompt names the namespaces a script can call
       // (a line per API), never the functions: those are found as needed.
@@ -406,7 +421,11 @@ export class AgentStepProcessor {
 
       // Compact long-running context (off unless the agent opts in). Folds the
       // old prefix into a summary so per-step token cost doesn't grow unbounded.
-      const compaction = agent.modelConfig?.compaction;
+      // An always-on standing thread lives for months, so it is always
+      // compacted, with the agent's own settings when it has them.
+      const compaction = run.metadata?.triggerType === 'always_on'
+        ? { ...(agent.modelConfig?.compaction ?? {}), enabled: true }
+        : agent.modelConfig?.compaction;
       if (compaction?.enabled) {
         const compacted = await this.compactor.compact(
           messages,
@@ -1974,14 +1993,12 @@ export class AgentStepProcessor {
       runId: run.id,
       agentId: agent.id,
       toolCallId: toolCall.id,
-      reason:
-        hit.value === null
-          ? `${hit.summary}. On this call ${hit.argument} is not a number.`
-          : `${hit.summary}. On this call ${hit.argument} is ${hit.value}.`,
+      reason: hit.kind === 'tool_call' ? `${hit.summary}.` : `${hit.summary}. On this call ${hitDetail(hit)}.`,
       payload: {
         tool: readableToolName(tool as NamedTool),
         parameters,
         _gate: {
+          kind: hit.kind ?? 'tool_amount',
           policyId: hit.policyId,
           toolId: hit.toolId,
           argument: hit.argument,
